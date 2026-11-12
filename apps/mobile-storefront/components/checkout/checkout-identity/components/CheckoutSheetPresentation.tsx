@@ -50,6 +50,7 @@ export function CheckoutSheetPresentation({
       onRequestClose={onClose}
       statusBarTranslucent
       accessibilityViewIsModal
+      accessibilityLabel="Checkout sign-in options"
     >
       {children}
     </Modal>

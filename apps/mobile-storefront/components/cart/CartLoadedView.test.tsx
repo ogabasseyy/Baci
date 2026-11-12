@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
-import { Modal } from 'react-native';
+import { Modal, StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
@@ -197,12 +197,16 @@ describe('CartLoadedView', () => {
     const { rerender, props, UNSAFE_root } = renderView();
 
     expect(
-      UNSAFE_root.findByProps({ testID: 'cart-content' }).props.pointerEvents
+      StyleSheet.flatten(
+        UNSAFE_root.findByProps({ testID: 'cart-content' }).props.style
+      ).pointerEvents
     ).toBe('auto');
     expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
     rerender(<CartLoadedView {...props} isIdentityModalOpen />);
     expect(
-      UNSAFE_root.findByProps({ testID: 'cart-content' }).props.pointerEvents
+      StyleSheet.flatten(
+        UNSAFE_root.findByProps({ testID: 'cart-content' }).props.style
+      ).pointerEvents
     ).toBe('none');
     expect(screen.queryByRole('button', { name: 'Back to home' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Clear cart' })).toBeNull();

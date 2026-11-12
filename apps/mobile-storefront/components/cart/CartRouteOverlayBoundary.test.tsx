@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { CartRouteOverlayBoundary } from './CartRouteOverlayBoundary';
 
 it('blocks and hides every route sibling when an inline overlay is open', () => {
@@ -37,7 +37,9 @@ it('blocks and hides every route sibling when an inline overlay is open', () => 
   const contentLayer = UNSAFE_root.findByProps({
     importantForAccessibility: 'no-hide-descendants',
   });
-  expect(contentLayer.props.pointerEvents).toBe('none');
+  expect(StyleSheet.flatten(contentLayer.props.style).pointerEvents).toBe(
+    'none'
+  );
   expect(
     screen.queryByRole('button', { name: 'Shared cart status action' })
   ).toBeNull();

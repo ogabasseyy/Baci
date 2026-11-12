@@ -45,6 +45,9 @@ it('keeps the native Modal presentation on iOS without a BackHandler listener', 
   expect(screen.queryByTestId('checkout-identity-inline-overlay')).toBeNull();
   expect(screen.getByText('Checkout form')).toBeTruthy();
   expect(view.UNSAFE_root.findAllByType(Modal)).toHaveLength(1);
+  expect(view.UNSAFE_root.findByType(Modal).props.accessibilityLabel).toBe(
+    'Checkout sign-in options'
+  );
   expect(listener).not.toHaveBeenCalled();
   jest.restoreAllMocks();
 });

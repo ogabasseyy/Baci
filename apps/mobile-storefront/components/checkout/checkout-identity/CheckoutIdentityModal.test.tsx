@@ -5,6 +5,7 @@ import { getCheckoutIdentityTheme } from './colors';
 
 const mockSendCode = jest.fn();
 const mockVerifyCode = jest.fn();
+let mockSocialBusy = false;
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (select: (state: unknown) => unknown) =>
     select({ signInWithOtp: mockSendCode, verifyOtp: mockVerifyCode }),
@@ -12,7 +13,7 @@ jest.mock('@/stores/auth-store', () => ({
 jest.mock('./hooks', () => ({
   useBottomSheetAnimation: () => ({}),
   useHapticFeedback: () => ({ triggerHaptic: jest.fn() }),
-  useSignInForm: () => ({}),
+  useSignInForm: () => ({ isLoading: mockSocialBusy }),
 }));
 jest.mock('@/components/ui/AppKeyboardContainer', () => ({
   __esModule: true,
@@ -24,6 +25,7 @@ jest.mock('expo-router', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSocialBusy = false;
   mockSendCode.mockResolvedValue({ success: true });
   mockVerifyCode.mockResolvedValue({ success: true });
 });
@@ -74,6 +76,18 @@ it('keeps guest checkout available when the code cannot be sent', async () => {
   fireEvent.press(screen.getByRole('button', { name: 'Continue as Guest' }));
   expect(close).toHaveBeenCalledTimes(1);
   expect(router.push).toHaveBeenCalledWith('/checkout');
+});
+
+it('blocks guest checkout while social sign-in is pending', () => {
+  mockSocialBusy = true;
+  const close = jest.fn();
+  render(<CheckoutIdentityModal isOpen onClose={close} />);
+  const guest = screen.getByRole('button', { name: 'Continue as Guest' });
+
+  expect(guest).toBeDisabled();
+  fireEvent.press(guest);
+  expect(close).not.toHaveBeenCalled();
+  expect(router.push).not.toHaveBeenCalled();
 });
 
 it('highlights the email field and enables email sign-in only for a complete address', () => {
@@ -183,7 +197,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
     await enterVerificationCode();
     expect(
       screen.getByRole('button', {
-        name: 'You can resend a code after 60 seconds.',
+        name: 'Resend code unavailable during cooldown.',
       })
     ).toBeDisabled();
 
@@ -195,7 +209,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
     expect(mockSendCode).toHaveBeenCalledTimes(2);
     expect(
       screen.getByRole('button', {
-        name: 'You can resend a code after 60 seconds.',
+        name: 'Resend code unavailable during cooldown.',
       })
     ).toBeDisabled();
   } finally {

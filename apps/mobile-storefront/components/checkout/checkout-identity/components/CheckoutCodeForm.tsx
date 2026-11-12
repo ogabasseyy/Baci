@@ -193,7 +193,7 @@ export function CheckoutCodeForm({
             >
               {resendAfter === null
                 ? 'Resend code'
-                : 'You can resend a code after 60 seconds.'}
+                : 'Resend code unavailable during cooldown.'}
             </Text>
           </Pressable>
           <Pressable

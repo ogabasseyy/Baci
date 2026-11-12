@@ -146,8 +146,10 @@ export default function CartLoadedView({
     <View style={styles.container}>
       <View
         testID="cart-content"
-        style={styles.container}
-        pointerEvents={isIdentityModalOpen ? 'none' : 'auto'}
+        style={[
+          styles.container,
+          { pointerEvents: isIdentityModalOpen ? 'none' : 'auto' },
+        ]}
         importantForAccessibility={
           isIdentityModalOpen ? 'no-hide-descendants' : 'auto'
         }

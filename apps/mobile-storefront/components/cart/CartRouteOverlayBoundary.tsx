@@ -14,8 +14,10 @@ export function CartRouteOverlayBoundary({
   return (
     <View style={styles.root}>
       <View
-        style={styles.content}
-        pointerEvents={overlayVisible ? 'none' : 'auto'}
+        style={[
+          styles.content,
+          { pointerEvents: overlayVisible ? 'none' : 'auto' },
+        ]}
         importantForAccessibility={
           overlayVisible ? 'no-hide-descendants' : 'auto'
         }

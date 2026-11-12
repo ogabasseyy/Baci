@@ -74,7 +74,7 @@ function CheckoutIdentitySheet({
   };
 
   const handleGuestCheckout = () => {
-    if (otpBusy.current) return;
+    if (otpBusy.current || isSocialAuthLoading) return;
     triggerHaptic('light');
     Keyboard.dismiss();
     onClose();
@@ -181,8 +181,10 @@ function CheckoutIdentitySheet({
             />
             <Pressable
               onPress={handleGuestCheckout}
-              disabled={isOtpBusy}
-              accessibilityState={{ disabled: isOtpBusy }}
+              disabled={isOtpBusy || isSocialAuthLoading}
+              accessibilityState={{
+                disabled: isOtpBusy || isSocialAuthLoading,
+              }}
               style={styles.guestLink}
               accessibilityRole="button"
             >

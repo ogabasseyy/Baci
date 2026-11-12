@@ -44,6 +44,15 @@ const nudge = (routes, overrides = {}) => {
 const posted = (client) => client.calls.filter((call) => call.startsWith('POST'));
 
 describe('nudgePullRequest', () => {
+  it('does not rerun either heavy workflow for a clean draft, then releases both when ready', async () => {
+    const draft = await nudge(routesFor({ pr: pullRequest({ draft: true }) }));
+    assert.equal(draft.result.action, 'wait');
+    assert.equal(posted(draft.client).some((call) => call.includes('/rerun')), false);
+    const ready = await nudge(routesFor({ pr: pullRequest({ draft: false }) }));
+    assert.equal(ready.result.action, 'rerun');
+    assert.equal(posted(ready.client).filter((call) => call.includes('/rerun')).length, 2);
+  });
+
   it('re-runs the pull-request run and the browser regression once Codex is clean', async () => {
     const { result, client } = await nudge(routesFor());
     assert.equal(result.action, 'rerun');

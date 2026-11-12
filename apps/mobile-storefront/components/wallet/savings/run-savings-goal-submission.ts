@@ -6,6 +6,7 @@ import {
   cancelSavingsReminderNotification,
   scheduleSavingsReminderNotification,
 } from '@/services/savings-reminder-notifications';
+import { handOffToWallet } from './hand-off-to-wallet';
 import {
   getSavingsReminderScheduledAt,
   type SavingsFrequency,
@@ -20,6 +21,9 @@ import {
   isInsufficientWalletError,
 } from './start-savings-controller.utils';
 import type { ContributionRail } from './stored-contribution-operation';
+
+export { PLAN_CREATED_HEAD_START_PENDING } from './hand-off-to-wallet';
+
 export type FundingAccount = {
   account_number: string;
 } | null;
@@ -30,6 +34,14 @@ export type UseStartSavingsSubmitInput = {
   contributionValue: number;
   createdGoalId?: string | null;
   deferInitialContribution?: boolean;
+  /**
+   * With a deferred first contribution: instead of the bank-transfer sheet,
+   * hand the created goal and its head start to the wallet, which moves the
+   * money through PiggyVest.
+   */
+  onContinueInWallet?: (goalId: string, amount: number) => void;
+  /** The plan exists but its hand-off could not finish (wallet not loaded). */
+  onHandOffPending?: (goalId: string) => void;
   effectiveInitialContribution: number;
   frequency: SavingsFrequency;
   fundingAccount: FundingAccount;
@@ -59,6 +71,8 @@ export type UseStartSavingsSubmitInput = {
   startDate: string;
   targetValue: number;
   variantId?: string | null;
+  /** The account that submitted; goal creation is refused for any other. */
+  submittingUserId?: string;
 };
 
 type ValidatedSavingsInput = {
@@ -97,6 +111,7 @@ export async function runSavingsGoalSubmission(
     const result = await createSavingsGoal({
       goalIdempotencyKey: requestGoalKey,
       autoDebitAuthorized: input.sourceMode === 'auto_debit' ? true : undefined,
+      expectedUserId: input.submittingUserId,
       contributionAmount: input.contributionValue,
       contributionFrequency: input.frequency,
       initialContributionAmount: requestInitialContribution,
@@ -119,6 +134,11 @@ export async function runSavingsGoalSubmission(
     });
     if (result.success !== true) {
       throw new Error('Unable to create savings plan.');
+    }
+    // The plan exists now: record it before anything can cut this short (a
+    // form edit or reload in flight), so a later submit never creates another.
+    if (input.deferInitialContribution && input.onContinueInWallet) {
+      input.onHandOffPending?.(result.goalId);
     }
     if (requestIdempotencyKey) {
       input.setInitialContributionIdempotencyKey((currentKey) =>
@@ -157,6 +177,17 @@ export async function runSavingsGoalSubmission(
       }
     }
     if (!isCurrent()) return;
+    if (input.deferInitialContribution && input.onContinueInWallet) {
+      input.setShowFundingModal(false);
+      input.setShowPreviewModal(false);
+      input.setFormError(null);
+      // Load the new goal into the wallet data first: the wallet opens the
+      // goal by id and falls back to an older active plan when it is not
+      // there yet. Without the reload, never prefill a head start that could
+      // land on the wrong plan.
+      await handOffToWallet(input, result.goalId, isCurrent);
+      return;
+    }
     if (input.deferInitialContribution) {
       input.setCreatedGoalId?.(result.goalId);
       input.setShowFundingModal(false);

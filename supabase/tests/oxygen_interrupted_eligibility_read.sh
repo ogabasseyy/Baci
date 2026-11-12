@@ -20,5 +20,6 @@ if [[ ${OXYGEN_ELIGIBILITY_TEST_BEFORE_FIX:-0} == 1 ]]; then
  psql -Xq -v ON_ERROR_STOP=1 -c "CREATE FUNCTION oxygen_private.retire_stale_executing_eligibility(uuid) RETURNS void LANGUAGE sql AS 'SELECT';"
 else
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261104120000_oxygen_interrupted_eligibility_read.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111193000_oxygen_recover_booked_offer_read.sql
 fi
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/oxygen_interrupted_eligibility_read.sql

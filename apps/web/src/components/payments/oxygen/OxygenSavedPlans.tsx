@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { bookedPlanIsOffered } from '@/lib/payments/oxygen/booked-plan-offer';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
 import { OxygenApprovalCode } from './OxygenApprovalCode';
 import { OxygenComparisonSummary } from './OxygenComparisonSummary';
@@ -7,7 +8,9 @@ import summaryStyles from './OxygenComparisonSummary.module.css';
 import { OxygenDownPayment } from './OxygenDownPayment';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
 import { OxygenTenurePicker } from './OxygenTenurePicker';
+import { OxygenUnavailablePlanRecovery } from './OxygenUnavailablePlanRecovery';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
+import { oxygenPlanLimits } from './plan-limits';
 import { useOxygenSavedPlans } from './use-oxygen-saved-plans';
 
 export function OxygenSavedPlans({
@@ -20,6 +23,9 @@ export function OxygenSavedPlans({
   approvalBusy = false,
   resumeQueuedApproval = false,
   onAccept,
+  refreshOffers,
+  approvalCodeStarted = false,
+  cancelUnavailablePlan,
 }: {
   workflowId: string;
   state: OxygenProviderState;
@@ -35,6 +41,9 @@ export function OxygenSavedPlans({
   approvalBusy?: boolean;
   resumeQueuedApproval?: boolean;
   onAccept?: (reference: string) => void;
+  refreshOffers?: () => Promise<boolean>;
+  approvalCodeStarted?: boolean;
+  cancelUnavailablePlan?: () => Promise<boolean>;
 }) {
   const [signingReference, setSigningReference] = useState<string>();
   const { data, selected, error, select, reload, quote, quoting } =
@@ -76,7 +85,31 @@ export function OxygenSavedPlans({
     12,
     state.maxTenure ?? Math.max(1, ...plans.map((p) => p.tenure))
   );
-  const tenures = Array.from({ length: maxTenure }, (_, i) => i + 1);
+  const tenures = [
+    ...new Set([
+      ...(state.offers
+        ?.filter((offer) => offer.tenure <= maxTenure)
+        .map((offer) => offer.tenure) ?? []),
+      ...plans.map((plan) => plan.tenure),
+    ]),
+  ].sort((a, b) => a - b);
+  function offered(value: number | null, months: number) {
+    const offer = state.offers?.find((item) => item.tenure === months);
+    const limit = oxygenPlanLimits(
+      chosen?.productAmount,
+      offer && state.eligibleAmount !== undefined
+        ? Math.min(offer.loanAmount, state.eligibleAmount)
+        : undefined,
+      state.minimumAmount
+    );
+    return (
+      value !== null &&
+      months <= maxTenure &&
+      limit.kind === 'available' &&
+      value >= limit.min &&
+      value <= limit.max
+    );
+  }
   function requestPlan(
     value: number | null,
     months = tenure,
@@ -84,13 +117,20 @@ export function OxygenSavedPlans({
   ) {
     if (value === null || quoting) return;
     if (updateSelection) choose(value, months);
-    if (!plans.some((p) => p.equityPercentage === value && p.tenure === months))
+    if (
+      !plans.some((p) => p.equityPercentage === value && p.tenure === months) &&
+      offered(value, months)
+    )
       void quote(value, months);
   }
   const percentages = [...new Set(plans.map((p) => p.equityPercentage))];
 
   const approvalPlan = approvalReference ?? signingReference;
-  if (approvalPlan && approvalPlan === state.bookingReference) {
+  if (
+    approvalPlan &&
+    approvalPlan === state.bookingReference &&
+    bookedPlanIsOffered(state)
+  ) {
     return (
       <OxygenApprovalCode
         key={`${workflowId}:${approvalPlan}`}
@@ -119,15 +159,22 @@ export function OxygenSavedPlans({
             percentage={percentage}
             extraPercentages={percentages}
             onChange={choose}
-            disabled={quoting}
+            disabled={quoting || approvalCodeStarted}
             onCommit={(value) => requestPlan(value, tenure, false)}
           />
           <OxygenTenurePicker
             months={tenures}
             value={tenure}
-            disabled={quoting}
+            disabled={quoting || approvalCodeStarted}
             onChange={(months) => requestPlan(percentage, months)}
           />
+          {!confirmed && !offered(percentage, tenure) && (
+            <p role="status">
+              {state.offers
+                ? 'Adjust your down payment or choose an available repayment period to see another plan.'
+                : 'Your saved plan is available. New payment options are temporarily unavailable.'}
+            </p>
+          )}
         </>
       )}
       {!ready ? (
@@ -143,6 +190,42 @@ export function OxygenSavedPlans({
           tenure={tenure}
         />
       )}
+      {refreshOffers && !bookedPlanIsOffered(state) && (
+        <div className="grid gap-2 text-sm">
+          <p>
+            Update your payment options to check your saved plan before
+            continuing.
+          </p>
+          <button
+            type="button"
+            className="min-h-11 font-semibold text-store-primary underline"
+            disabled={approvalBusy || quoting}
+            onClick={() => void refreshOffers()}
+          >
+            Update payment options
+          </button>
+        </div>
+      )}
+      {approvalCodeStarted &&
+        cancelUnavailablePlan &&
+        state.bookingReference &&
+        !bookedPlanIsOffered(state) && (
+          <OxygenUnavailablePlanRecovery
+            busy={approvalBusy || quoting}
+            cancel={cancelUnavailablePlan}
+            offersMissing={!state.offers}
+          />
+        )}
+      {confirmed &&
+        !offered(percentage, tenure) &&
+        !(approvalCodeStarted && cancelUnavailablePlan) &&
+        state.offers && (
+          <p role="status">
+            {approvalCodeStarted
+              ? 'We could not confirm this saved plan. Please contact support for help.'
+              : 'This saved plan is no longer available. Choose another down payment or repayment period.'}
+          </p>
+        )}
       {ready && (
         <div className={summaryStyles.footer}>
           {confirmed && (
@@ -159,6 +242,8 @@ export function OxygenSavedPlans({
               quoting ||
               percentage === null ||
               Boolean(error) ||
+              (!confirmed && !offered(percentage, tenure)) ||
+              (Boolean(confirmed) && !offered(percentage, tenure)) ||
               (Boolean(confirmed) &&
                 ((!onAccept && !requestApprovalCode) ||
                   (!onAccept &&

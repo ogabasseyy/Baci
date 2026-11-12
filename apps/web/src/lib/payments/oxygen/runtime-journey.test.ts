@@ -77,6 +77,8 @@ it('runs the real staging adapter through onboarding, booking, address and appro
           max_loan_amount: 400000,
           minimum_loan_amount: 10000,
           max_tenure: 12,
+          tenure_unit: 'Monthly',
+          offers: [{ loan_amount: 400000, tenor: 3 }],
         });
       if (path.endsWith('/kyc/status')) return Response.json(kyc());
       if (path.endsWith('/book-loan')) return Response.json(booking);

@@ -105,8 +105,9 @@ export async function parkForReview(
 
 /**
  * The stored bytes verified (or were admitted) but the parser rejects them,
- * so no key set can change the outcome: only a parser fix plus a resend can
- * make them processable.
+ * so no key set can change the outcome: only a parser fix plus an operator
+ * replay of this stored capture can make them processable. PiggyVest has no
+ * resend endpoint (confirmed 2026-11-11), so the capture is the only copy.
  */
 export function parkContentQuarantined(
   deps: DrainDeps,
@@ -116,7 +117,7 @@ export function parkContentQuarantined(
     deps,
     row,
     'REPLAY_CONTENT_QUARANTINED',
-    'body rejected by the parser; request a resend after the fix'
+    'body rejected by the parser; replay this capture after the fix (no provider resend exists)'
   );
 }
 

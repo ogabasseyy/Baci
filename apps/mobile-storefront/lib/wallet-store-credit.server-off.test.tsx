@@ -13,6 +13,13 @@ describe('isWalletStoreCredit with the server off', () => {
     expect(isWalletStoreCredit(null)).toBe(false);
   });
 
+  it('ignores a malformed PiggyVest balance', () => {
+    expect(isWalletStoreCredit({ primary_balance_kobo: Number.NaN })).toBe(
+      false
+    );
+    expect(isWalletStoreCredit({ primary_balance_kobo: -1 })).toBe(false);
+  });
+
   it('is true for a ready PiggyVest wallet, including a zero balance', () => {
     expect(isWalletStoreCredit({ primary_balance_kobo: 0 })).toBe(true);
     expect(isWalletStoreCredit({ primary_balance_kobo: 500_000 })).toBe(true);

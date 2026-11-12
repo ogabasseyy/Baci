@@ -160,6 +160,7 @@ export async function fundWallet({
   // A transient probe failure blocks with a retry affordance instead of a
   // dead end: the retry re-runs funding (and the probe) with these params.
   const rail = await resolveFundWalletRail(activeMerchantId, {
+    walletReturnTo,
     onRetry: () => {
       void fundWallet({
         activeMerchantId,

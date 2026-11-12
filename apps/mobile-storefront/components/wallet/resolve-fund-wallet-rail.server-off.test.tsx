@@ -1,0 +1,32 @@
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
+
+const mockGetCapability = jest.fn<(...args: unknown[]) => Promise<boolean>>();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockGetCapability(...args),
+}));
+jest.mock('@/lib/piggyvest-primary-capability-cache', () => ({
+  readObservedPiggyvestPrimaryCapability: () => null,
+}));
+
+const MERCHANT = '11111111-1111-4111-8111-111111111111';
+
+describe('wallet top-up rail with the server keeping PiggyVest off', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // The server answers "PiggyVest off" for this merchant.
+    mockGetCapability.mockResolvedValue(false);
+  });
+
+  it('uses the regular wallet for a plain top-up', async () => {
+    await expect(resolveFundWalletRail(MERCHANT)).resolves.toBe('legacy');
+  });
+
+  it('uses the regular wallet for a purchase top-up without asking the server', async () => {
+    await expect(
+      resolveFundWalletRail(MERCHANT, { walletReturnTo: '/imei-check' })
+    ).resolves.toBe('legacy');
+    expect(mockGetCapability).not.toHaveBeenCalled();
+  });
+});

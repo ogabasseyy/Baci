@@ -83,3 +83,26 @@ describe('resolveFundWalletRail', () => {
     }
   });
 });
+
+describe('bugfix: store credit top-up funded the PiggyVest savings wallet', () => {
+  it('routes an IMEI or utility top-up to the legacy rail for the pilot merchant', async () => {
+    await expect(
+      resolveFundWalletRail(PILOT, { walletReturnTo: '/imei-check' })
+    ).resolves.toBe('legacy');
+    await expect(
+      resolveFundWalletRail(PILOT, {
+        walletReturnTo: '/utilities/airtime?repeatAmount=500',
+      })
+    ).resolves.toBe('legacy');
+    expect(mockGetCapability).not.toHaveBeenCalled();
+  });
+
+  it('keeps savings and plain top-ups on the primary rail', async () => {
+    await expect(
+      resolveFundWalletRail(PILOT, { walletReturnTo: '/wallet/savings/start' })
+    ).resolves.toBe('primary');
+    await expect(
+      resolveFundWalletRail(PILOT, { walletReturnTo: '/wallet?action=savings' })
+    ).resolves.toBe('primary');
+  });
+});

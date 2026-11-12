@@ -63,8 +63,10 @@ export function UtilityWalletTransferNudge({
     navigateToWalletFunding(returnToHref);
   };
 
+  // A PiggyVest customer is never sent to bank transfer (it would fund the
+  // savings wallet); without a return link there is no store credit path.
   const visible =
-    (storeCredit || canFundByBankTransfer) &&
+    (storeCredit || (canFundByBankTransfer && !walletIsStoreCredit)) &&
     walletIsLoading !== true &&
     walletIsSettled !== false &&
     !walletError &&

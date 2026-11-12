@@ -52,6 +52,18 @@ describe('utility funding nudge', () => {
     );
   });
 
+  it('shows no bank transfer nudge to a PiggyVest customer without a return link', () => {
+    render(
+      <UtilityWalletTransferNudge
+        {...baseProps}
+        returnToHref={undefined}
+        walletIsStoreCredit
+      />
+    );
+
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
   it('still offers store credit when bank-transfer funding is off', () => {
     render(
       <UtilityWalletTransferNudge

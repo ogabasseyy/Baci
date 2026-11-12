@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
 
@@ -22,8 +23,11 @@ import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-
  */
 export async function resolveFundWalletRail(
   activeMerchantId?: string,
-  options?: { onRetry?: () => void }
+  options?: { onRetry?: () => void; walletReturnTo?: string }
 ): Promise<'primary' | 'legacy' | 'blocked'> {
+  // A top-up for a purchase (IMEI check, utilities) adds store credit: those
+  // purchases spend the legacy balance, never the PiggyVest savings wallet.
+  if (isWalletPurchaseReturnHref(options?.walletReturnTo)) return 'legacy';
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) return 'primary';
   if (
     activeMerchantId &&

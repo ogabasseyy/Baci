@@ -11,5 +11,7 @@ interface WalletPrimaryLike {
 export function isWalletStoreCredit(
   wallet: WalletPrimaryLike | null | undefined
 ): boolean {
-  return typeof wallet?.primary_balance_kobo === 'number';
+  // A malformed balance (NaN, negative) is not a PiggyVest answer.
+  const kobo = wallet?.primary_balance_kobo;
+  return typeof kobo === 'number' && Number.isFinite(kobo) && kobo >= 0;
 }

@@ -70,6 +70,13 @@ describe('WalletFundModal card option with the PiggyVest wallet ready', () => {
     expect(screen.queryByText('9814644749')).toBeNull();
   });
 
+  it('keeps the start-savings return on the PiggyVest account, without card', () => {
+    renderModal(true, '/wallet/savings/start');
+    expect(screen.getByText('9814644749')).toBeOnTheScreen();
+    expect(screen.queryByText('Add store credit')).toBeNull();
+    expect(screen.queryByRole('button', { name: CARD })).toBeNull();
+  });
+
   it('offers the same store credit top-up for a utility purchase return', () => {
     renderModal(true, '/utilities/airtime?repeatAmount=500');
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();

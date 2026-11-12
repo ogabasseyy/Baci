@@ -4,6 +4,7 @@ import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
@@ -58,12 +59,13 @@ export function WalletFundModal({
   // savings shortfall or a plain top-up) lose the card option; any other
   // return flow (e.g. IMEI check) still spends the legacy balance.
   const primaryReady = useWalletPrimaryReady();
-  const hideCardFunding =
-    primaryReady && (!fundReturnTo || isWalletSavingsReturnHref(fundReturnTo));
   // A purchase return (IMEI check, utilities) spends store credit, which
   // only a card top-up adds: the PiggyVest account would fund savings.
   const storeCreditTopUp =
-    primaryReady && !!fundReturnTo && !isWalletSavingsReturnHref(fundReturnTo);
+    primaryReady && isWalletPurchaseReturnHref(fundReturnTo);
+  // Every other PiggyVest top-up (plain, savings plan, start savings) funds
+  // the savings wallet by bank transfer, never by card.
+  const hideCardFunding = primaryReady && !storeCreditTopUp;
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and

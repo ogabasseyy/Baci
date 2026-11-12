@@ -13,6 +13,8 @@ import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribu
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
+const COMPACT_SNAP_POINTS = ['64%', '92%'];
+
 type WalletColors = (typeof Colors)['light'];
 
 type WalletSavingsProgressModalProps = {
@@ -70,6 +72,11 @@ export function WalletSavingsProgressModal({
   const canAddToSavings =
     (goal.source_mode === 'manual' || usesPlanFunding) &&
     goal.status !== 'completed';
+  const canChangeDevice =
+    canAddToSavings ||
+    (goal.selection_unresolved &&
+      (goal.status !== 'completed' ||
+        !goal.variant_resolution_options?.length));
   const unavailableContributionMessage =
     goal.status === 'completed'
       ? 'This savings goal is complete.'
@@ -79,6 +86,9 @@ export function WalletSavingsProgressModal({
     <SavingsBottomSheet
       visible={visible}
       colors={colors}
+      // Nothing saved yet means no progress card: open shorter so the sheet
+      // does not end in empty space. It still expands on drag.
+      snapPoints={goal.current_amount > 0 ? undefined : COMPACT_SNAP_POINTS}
       onClose={onClose}
       overlay={overlay}
     >
@@ -86,6 +96,18 @@ export function WalletSavingsProgressModal({
         <>
           <View style={styles.header}>
             <View style={styles.titleRow}>
+              <View
+                style={[
+                  styles.titleIcon,
+                  { backgroundColor: colors.primaryLowOpacity },
+                ]}
+              >
+                <Ionicons
+                  name={canAddToSavings ? 'wallet-outline' : 'flag-outline'}
+                  size={16}
+                  color={colors.primary}
+                />
+              </View>
               <Text
                 accessibilityRole="header"
                 style={[styles.title, { color: colors.primary }]}
@@ -113,6 +135,7 @@ export function WalletSavingsProgressModal({
             <SavingsGoalSummary
               colors={colors}
               goal={goal}
+              onChangeDevice={canChangeDevice ? onChangeDevice : undefined}
               onResolveVariant={onResolveVariant}
             />
             {hasPendingContribution ? (
@@ -145,41 +168,16 @@ export function WalletSavingsProgressModal({
                 {unavailableContributionMessage}
               </Text>
             )}
-            {canAddToSavings ||
-            (goal.selection_unresolved &&
-              (goal.status !== 'completed' ||
-                !goal.variant_resolution_options?.length)) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Change savings device"
-                onPress={onChangeDevice}
-                style={[
-                  styles.changeDeviceButton,
-                  { backgroundColor: colors.muted },
-                ]}
-              >
-                <Ionicons
-                  name="swap-horizontal-outline"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.changeDeviceButtonText,
-                    { color: colors.textSecondary },
-                  ]}
-                >
-                  Change device
-                </Text>
-              </Pressable>
-            ) : null}
-            <GoalLifecycleEntry
-              colors={colors}
-              goal={goal}
-              hasPendingContribution={hasPendingContribution}
-              onBeforeNavigate={onClose}
-              walletUpdatedAt={walletUpdatedAt}
-            />
+            {/* Cancelling stays available but quiet, under the main button. */}
+            <View style={styles.footerLinks}>
+              <GoalLifecycleEntry
+                colors={colors}
+                goal={goal}
+                hasPendingContribution={hasPendingContribution}
+                onBeforeNavigate={onClose}
+                walletUpdatedAt={walletUpdatedAt}
+              />
+            </View>
           </BottomSheetScrollView>
         </>
       )}

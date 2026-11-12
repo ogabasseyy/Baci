@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAndroidBenchmarkGradleInit } from './android-benchmark-gradle.mjs';
 import { resolveBenchmarkIdentity } from './android-benchmark-identity.mjs';
+import { validateBenchmarkApk } from './android-benchmark-native-check.mjs';
 import { redactPrivateValues } from './android-benchmark-redaction.mjs';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -177,7 +178,9 @@ try {
     if (testBackup && !existsSync(testFile)) writeFileSync(testFile, testBackup, { flag: 'wx' });
   }
   execute('Building release benchmark APK', join(appDir, 'android/gradlew'), ['--init-script', initFile, ':app:assembleRelease', '-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8', '-PreactNativeArchitectures=arm64-v8a', '-Pandroid.enableMinifyInReleaseBuilds=true', '-Pandroid.enableShrinkResourcesInReleaseBuilds=true', '--max-workers=2', '--console=plain'], join(appDir, 'android'));
-  console.log(`Benchmark APK: ${join(appDir, 'android/app/build/outputs/apk/release/app-release.apk')}`);
+  const benchmarkApk = join(appDir, 'android/app/build/outputs/apk/release/app-release.apk');
+  validateBenchmarkApk({ appDir, artifactPath: benchmarkApk, execute });
+  console.log(`Benchmark APK: ${benchmarkApk}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Android benchmark build failed.');
   process.exitCode = 1;

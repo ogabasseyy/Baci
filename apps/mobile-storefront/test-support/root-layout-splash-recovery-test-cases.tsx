@@ -170,7 +170,7 @@ export function registerRootLayoutSplashRecoveryTests({
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
   });
 
-  it('returns to navigation when the recovery screen gets a delayed layout', async () => {
+  it('keeps recovery visible when only the recovery screen lays out', async () => {
     setAutoLayout(false);
     initializeStorage.mockResolvedValue(undefined);
 
@@ -185,9 +185,8 @@ export function registerRootLayoutSplashRecoveryTests({
 
     fireEvent(screen.getByTestId('startup-recovery'), 'layout');
 
-    await waitFor(() =>
-      expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen()
-    );
+    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
+    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
   });
 
   it('shows recovery and releases the splash when startup storage is not ready', async () => {

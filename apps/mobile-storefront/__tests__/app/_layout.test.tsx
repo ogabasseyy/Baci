@@ -8,6 +8,7 @@ import {
   mockCancelScopeSavingsReminders,
 } from '@/test-support/root-layout-reminder-mock';
 import { registerRootLayoutReminderTests } from '@/test-support/root-layout-reminder-test-cases';
+import { registerRootLayoutSplashContractTests } from '@/test-support/root-layout-splash-contract-test-cases';
 import { registerRootLayoutSplashRecoveryTests } from '@/test-support/root-layout-splash-recovery-test-cases';
 
 const mockHideSplash = jest.fn<(options: unknown) => Promise<void>>();
@@ -251,6 +252,16 @@ describe('RootLayout storage boot gate', () => {
     setAutoLayout: (enabled) => {
       mockAutoLayout = enabled;
     },
+    finishNativeSplash,
+  });
+
+  registerRootLayoutSplashContractTests({
+    RootLayout,
+    authState: mockAuthState,
+    initializeStorage: mockInitializeStorage,
+    hideSplash: mockHideSplash,
+    waitForIntro: mockWaitForIntro,
+    usePushNotifications: mockUsePushNotifications,
     finishNativeSplash,
   });
 

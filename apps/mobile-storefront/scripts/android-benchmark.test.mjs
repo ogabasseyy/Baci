@@ -21,7 +21,7 @@ function withFile(content, action) {
     mkdirSync(join(dir, 'node_modules'));
     const require = createRequire(import.meta.url);
     symlinkSync(dirname(require.resolve('dotenv/package.json')), join(dir, 'node_modules', 'dotenv'), 'junction');
-    for (const name of ['android-benchmark.mjs', 'android-benchmark-gradle.mjs', 'android-benchmark-identity.mjs', 'android-benchmark-redaction.mjs']) {
+    for (const name of ['android-benchmark.mjs', 'android-benchmark-gradle.mjs', 'android-benchmark-identity.mjs', 'android-benchmark-native-check.mjs', 'android-benchmark-redaction.mjs']) {
       copyFileSync(new URL(name, import.meta.url), join(dir, 'scripts', name));
     }
     writeFileSync(file, content, { mode: 0o600 });

@@ -117,7 +117,6 @@ export function RootLayoutNav({
                         <MobileUpdateController />
                         <SharedCartBridge />
                         <NativeCartPairingPanel />
-                        <CartWriteNotice />
                         {/*
                          * No custom `header` function in screenOptions — that would
                          * make react-native-screens NativeStack reserve a header zone
@@ -154,6 +153,7 @@ export function RootLayoutNav({
                     {enableNegotiationModal ? <NegotiationModal /> : null}
                     {enableDrawerMenu ? <DrawerMenu /> : null}
                   </CheckoutIdentityOverlayProvider>
+                  <CartWriteNotice />
                 </View>
               </ThemeProvider>
             </AppKeyboardProvider>

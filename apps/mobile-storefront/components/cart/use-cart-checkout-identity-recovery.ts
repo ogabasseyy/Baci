@@ -6,6 +6,7 @@ export function useCartCheckoutIdentityRecovery(
 ) {
   const checkoutRecoveryRef = useRef<(() => Promise<void>) | null>(null);
   const [resumeCheckoutAfterAuth, setResumeCheckoutAfterAuth] = useState(false);
+  const resumeExpiryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLayoutEffect(() => {
     checkoutRecoveryRef.current = recoverCheckout;
@@ -13,9 +14,25 @@ export function useCartCheckoutIdentityRecovery(
 
   useEffect(() => {
     if (!resumeCheckoutAfterAuth || !isAuthenticated) return;
+    if (resumeExpiryRef.current) clearTimeout(resumeExpiryRef.current);
+    resumeExpiryRef.current = null;
     setResumeCheckoutAfterAuth(false);
     void checkoutRecoveryRef.current?.();
   }, [isAuthenticated, resumeCheckoutAfterAuth]);
 
-  return () => setResumeCheckoutAfterAuth(true);
+  useEffect(
+    () => () => {
+      if (resumeExpiryRef.current) clearTimeout(resumeExpiryRef.current);
+    },
+    []
+  );
+
+  return () => {
+    if (resumeExpiryRef.current) clearTimeout(resumeExpiryRef.current);
+    setResumeCheckoutAfterAuth(true);
+    resumeExpiryRef.current = setTimeout(() => {
+      resumeExpiryRef.current = null;
+      setResumeCheckoutAfterAuth(false);
+    }, 60_000);
+  };
 }

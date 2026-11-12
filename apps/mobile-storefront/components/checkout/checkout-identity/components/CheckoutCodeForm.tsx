@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   type TextInputInstance,
@@ -11,97 +10,17 @@ import {
 import { checkoutIdentityEmailSchema } from '@/schemas/checkout-identity-email';
 import { useAuthStore } from '@/stores/auth-store';
 import type { CheckoutIdentityTheme } from '../colors';
+import { styles } from './CheckoutCodeForm.styles';
+import { CheckoutCodeFormActions } from './CheckoutCodeFormActions';
+import type { OtpSendResult } from './checkout-otp-state';
 import {
-  MAX_OTP_EMAIL_ENTRIES,
-  OTP_CODE_EXPIRY_MS,
-  OTP_RESEND_COOLDOWN_MS,
-} from '../constants';
+  getInFlightOtpSend,
+  getResendCooldown,
+  hasPendingOtp,
+  pendingOtpEmails,
+  sendOtpOnce,
+} from './checkout-otp-state';
 import { ErrorAlert } from './ErrorAlert';
-
-const resendCooldownsByEmail = new Map<string, number>();
-const pendingOtpEmails = new Map<string, number>();
-const inFlightOtpSends = new Map<string, Promise<OtpSendOutcome>>();
-
-type OtpSendResult = { success: boolean; error?: string };
-type OtpSendOutcome = {
-  result: OtpSendResult;
-  cooldownUntil: number | null;
-};
-
-function getResendCooldown(email: string): number | null {
-  const until = resendCooldownsByEmail.get(email);
-  if (!until) return null;
-  if (until > Date.now()) return until;
-  return null;
-}
-
-function startResendCooldown(email: string): number {
-  const now = Date.now();
-  const until = now + OTP_RESEND_COOLDOWN_MS;
-  for (const [cooldownEmail, expiresAt] of resendCooldownsByEmail) {
-    if (expiresAt <= now) resendCooldownsByEmail.delete(cooldownEmail);
-  }
-  resendCooldownsByEmail.delete(email);
-  if (resendCooldownsByEmail.size >= MAX_OTP_EMAIL_ENTRIES) {
-    const oldestEmail = resendCooldownsByEmail.keys().next().value;
-    if (oldestEmail) resendCooldownsByEmail.delete(oldestEmail);
-  }
-  resendCooldownsByEmail.set(email, until);
-  const otpExpiresAt = now + OTP_CODE_EXPIRY_MS;
-  for (const [pendingEmail, expiresAt] of pendingOtpEmails) {
-    if (expiresAt <= now) pendingOtpEmails.delete(pendingEmail);
-  }
-  pendingOtpEmails.delete(email);
-  if (pendingOtpEmails.size >= MAX_OTP_EMAIL_ENTRIES) {
-    const oldestEmail = pendingOtpEmails.keys().next().value;
-    if (oldestEmail) pendingOtpEmails.delete(oldestEmail);
-  }
-  pendingOtpEmails.set(email, otpExpiresAt);
-  setTimeout(() => {
-    if (resendCooldownsByEmail.get(email) === until) {
-      resendCooldownsByEmail.delete(email);
-    }
-  }, OTP_RESEND_COOLDOWN_MS);
-  return until;
-}
-
-function hasPendingOtp(email: string): boolean {
-  const expiresAt = pendingOtpEmails.get(email);
-  if (expiresAt === undefined) return false;
-  if (expiresAt > Date.now()) return true;
-  return false;
-}
-
-function sendOtpOnce(
-  email: string,
-  sendCode: (address: string) => Promise<OtpSendResult>
-): Promise<OtpSendOutcome> {
-  const existing = inFlightOtpSends.get(email);
-  if (existing) return existing;
-  if (inFlightOtpSends.size >= MAX_OTP_EMAIL_ENTRIES) {
-    return Promise.resolve({
-      result: {
-        success: false,
-        error: 'Please wait before requesting another code.',
-      },
-      cooldownUntil: null,
-    });
-  }
-
-  let request: Promise<OtpSendOutcome>;
-  request = sendCode(email)
-    .then((result) => ({
-      result,
-      cooldownUntil: result.success ? startResendCooldown(email) : null,
-    }))
-    .finally(() => {
-      if (inFlightOtpSends.get(email) === request) {
-        inFlightOtpSends.delete(email);
-      }
-    });
-  inFlightOtpSends.set(email, request);
-  return request;
-}
 
 export function CheckoutCodeForm({
   renderSocial,
@@ -143,9 +62,7 @@ export function CheckoutCodeForm({
     checkoutIdentityEmailSchema.safeParse(normalizedEmail).success;
   const activeEmail = sentTo || normalizedEmail;
   const canResumeOtp = !sentTo && hasPendingOtp(normalizedEmail);
-  const pendingSend = !sentTo
-    ? inFlightOtpSends.get(normalizedEmail)
-    : undefined;
+  const pendingSend = !sentTo ? getInFlightOtpSend(normalizedEmail) : undefined;
   const isSendInProgress = pendingSend !== undefined;
   const resendAfter =
     resendAfterByEmail[activeEmail] ?? getResendCooldown(activeEmail);
@@ -342,73 +259,20 @@ export function CheckoutCodeForm({
           {busy ? (sentTo ? 'Verifying code…' : 'Sending code…') : submitLabel}
         </Text>
       </Pressable>
-      {sentTo ? (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy || resendAfter !== null}
-            accessibilityState={{
-              disabled: busy || resendAfter !== null,
-            }}
-            onPress={() => void submit(true)}
-          >
-            <Text
-              style={[
-                styles.changeEmail,
-                {
-                  color: resendAfter === null ? theme.primary : theme.mutedText,
-                },
-              ]}
-            >
-              {resendAfter === null
-                ? 'Resend code'
-                : 'Resend code unavailable during cooldown.'}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy || socialBusy}
-            accessibilityState={{ disabled: busy || socialBusy }}
-            onPress={() => {
-              setSentTo('');
-              setCode('');
-              setError(null);
-            }}
-          >
-            <Text style={[styles.changeEmail, { color: theme.text }]}>
-              Use a different email
-            </Text>
-          </Pressable>
-        </>
-      ) : (
-        renderSocial(busy)
-      )}
+      <CheckoutCodeFormActions
+        busy={busy}
+        onResend={() => void submit(true)}
+        onUseDifferentEmail={() => {
+          setSentTo('');
+          setCode('');
+          setError(null);
+        }}
+        renderSocial={renderSocial}
+        resendAfter={resendAfter}
+        sentTo={sentTo}
+        socialBusy={socialBusy}
+        theme={theme}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  form: { gap: 12 },
-  field: { gap: 6 },
-  label: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  helpText: { fontFamily: 'Inter_400Regular' },
-  input: {
-    minHeight: 44,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    fontFamily: 'Inter_400Regular',
-  },
-  submit: {
-    minHeight: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  changeEmail: {
-    paddingVertical: 12,
-    textDecorationLine: 'underline',
-    fontFamily: 'Inter_400Regular',
-  },
-});

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SavingsContributionSection } from './SavingsContributionSection';
-import { SavingsHowYouSaveSection } from './SavingsHowYouSaveSection';
+import {
+  howYouSaveLine,
+  SavingsHowYouSaveSection,
+} from './SavingsHowYouSaveSection';
 import { SavingsSetupHero } from './SavingsSetupHero';
 import { SavingsStep } from './SavingsStep';
 import { StartSavingsProductFields } from './StartSavingsProductFields';
@@ -118,7 +121,7 @@ export function StartSavingsForm(
               number={3}
               title="How you’ll save"
               icon="wallet-outline"
-              cheer="Last step. Then your savings journey begins."
+              cheer={howYouSaveLine(props.controller.sourceMode)}
               state={!scheduleReady ? 'later' : howReady ? 'done' : 'current'}
               last
             >

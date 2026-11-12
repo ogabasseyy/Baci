@@ -1,14 +1,12 @@
 import { Pressable, Text, View } from 'react-native';
-import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { StartSavingsAutoDebitFundingContent } from './StartSavingsAutoDebitFundingContent';
 import { StartSavingsManualFundingContent } from './StartSavingsManualFundingContent';
-import { savingsPaceWords } from './savings-pace-words';
+import { StartSavingsReviewPlan } from './StartSavingsReviewPlan';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 import { handleSavingsModalActionError } from './start-savings-modal-action-error';
-import { SummaryRow } from './start-savings-modal-parts';
 
 type Props = {
   colors: StartSavingsColors;
@@ -34,62 +32,16 @@ export function StartSavingsReviewContent({ colors, controller }: Props) {
   const busy = controller.isSubmitting || controller.isAuthorizingCard;
   return (
     <>
-      <Text style={[styles.modalTitle, { color: colors.text }]}>
+      <View style={styles.sheetHandle} />
+      <Text style={[styles.reviewEyebrow, { color: colors.textSecondary }]}>
         Check your plan
       </Text>
-      <View
-        style={[
-          styles.reviewCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        <Text style={[styles.reviewProduct, { color: colors.text }]}>
-          {controller.selectedProduct?.name ?? 'Your phone'}
+      <StartSavingsReviewPlan colors={colors} controller={controller} />
+      {headStart > 0 ? (
+        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+          Head start: {formatNgnCurrency(headStart)}
         </Text>
-        <Text style={[styles.reviewTarget, { color: colors.text }]}>
-          {formatNgnCurrency(controller.targetValue)}
-        </Text>
-        <View style={[styles.reviewDivider, { borderColor: colors.border }]}>
-          <SummaryRow
-            colors={colors}
-            label="You save"
-            value={`${formatNgnCurrency(controller.contributionValue)} ${savingsPaceWords(controller.frequency)}`}
-          />
-          <SummaryRow
-            colors={colors}
-            label="Starting"
-            value={formatDateTimeDisplay(controller.startDate, 'date')}
-          />
-          <SummaryRow
-            colors={colors}
-            label="Done by about"
-            value={formatDateTimeDisplay(controller.maturityDate, 'date')}
-          />
-          {headStart > 0 ? (
-            <SummaryRow
-              colors={colors}
-              label="Head start"
-              value={formatNgnCurrency(headStart)}
-            />
-          ) : null}
-          <SummaryRow
-            colors={colors}
-            label="How you save"
-            value={
-              controller.sourceMode === 'auto_debit'
-                ? 'Automatically, by card'
-                : 'From your wallet, when you choose'
-            }
-          />
-          {controller.askInterest && controller.interestChoice !== null ? (
-            <SummaryRow
-              colors={colors}
-              label="Earns interest"
-              value={controller.interestChoice ? 'Yes' : 'No'}
-            />
-          ) : null}
-        </View>
-      </View>
+      ) : null}
       {chooseHeadStartFunding ? (
         <>
           <Text style={[styles.sectionLabel, { color: colors.text }]}>

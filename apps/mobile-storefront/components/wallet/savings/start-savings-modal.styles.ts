@@ -145,6 +145,15 @@ export const startSavingsModalStyles = {
   modalCloseText: {
     fontSize: 11,
   },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: palette.red[200],
+    marginBottom: 4,
+  },
+  reviewEyebrow: { fontSize: 13, fontWeight: '600' },
   reviewCard: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 6 },
   reviewProduct: { fontSize: 15, fontWeight: '600' },
   reviewTarget: { fontSize: 27, fontWeight: '700' },

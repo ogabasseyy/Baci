@@ -12,6 +12,8 @@ export const startSavingsStyles = StyleSheet.create({
   ...startSavingsModalStyles,
   container: { flex: 1 },
   steps: { marginTop: SPACING.sm },
+  /** More air between blocks, rather than more words. */
+  roomyBlocks: { gap: 24 },
   amountInput: { fontSize: 27, fontWeight: '700', minHeight: 62 },
   scrollContent: {
     paddingHorizontal: SPACING.md,

@@ -1,8 +1,8 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeImage } from '@/components/ui/SafeImage';
 import { BRAND, palette } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { SavingsProductThumb } from './SavingsProductThumb';
 import type {
   SavingsProductChoice,
   StartSavingsColors,
@@ -28,13 +28,7 @@ export function SavingsSelectedPhoneCard({
   const priced = !product.requiresVariantSelection && product.price > 0;
   return (
     <View style={[styles.card, { borderColor: colors.border }]}>
-      <View style={styles.thumb}>
-        <SafeImage
-          source={{ uri: imageUri }}
-          style={styles.image}
-          contentFit="contain"
-        />
-      </View>
+      <SavingsProductThumb uri={imageUri} title={product.name} />
       <View style={styles.copy}>
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
           {product.name}

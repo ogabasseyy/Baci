@@ -77,7 +77,7 @@ describe('StartSavingsForm', () => {
       ).toBeNull();
       expect(
         screen.getByText(
-          'You add money from your wallet whenever you like. We’ll remind you on your saving days.'
+          'Add from your wallet anytime. We’ll remind you on saving days.'
         )
       ).toBeOnTheScreen();
     } finally {

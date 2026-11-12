@@ -12,9 +12,6 @@ describe('SavingsHowYouSaveSection with PiggyVest off', () => {
     render(
       <SavingsHowYouSaveSection colors={Colors.light} controller={controller} />
     );
-    expect(
-      screen.getByText(/You add money from your wallet whenever you like/)
-    ).toBeOnTheScreen();
     expect(screen.queryByText(/Manual debit uses wallet balance/)).toBeNull();
     fireEvent.press(
       screen.getByRole('radio', { name: 'Use auto debit for savings' })
@@ -62,15 +59,24 @@ describe('SavingsHowYouSaveSection for a PiggyVest wallet', () => {
       />
     );
     expect(
-      screen.getByText(/Let your money grow while you save/)
+      screen.getByText('Grow your money while you save.')
     ).toBeOnTheScreen();
     expect(screen.getByText('No, savings only')).toBeOnTheScreen();
     expect(
-      screen.getByText(
-        'Cancel early and you keep your savings, but not the interest.'
-      )
+      screen.getByText('Cancel early and lose your interest.')
     ).toBeOnTheScreen();
     // No rate or amount promises while the rate is unconfirmed.
     expect(screen.queryByText(/%|per annum|p\.a\./i)).toBeNull();
+  });
+
+  it('keeps the step short: no extra wallet row or choose-once row', () => {
+    render(
+      <SavingsHowYouSaveSection
+        colors={Colors.light}
+        controller={createPrimaryStartSavingsController()}
+      />
+    );
+    expect(screen.queryByText(/Add from your wallet anytime/)).toBeNull();
+    expect(screen.queryByText(/You choose once/)).toBeNull();
   });
 });

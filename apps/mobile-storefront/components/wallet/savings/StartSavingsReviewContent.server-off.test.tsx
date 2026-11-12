@@ -46,7 +46,7 @@ describe('StartSavingsReviewContent with PiggyVest off', () => {
       />
     );
     expect(screen.getByText('Pay your head start with')).toBeOnTheScreen();
-    expect(screen.getByText('₦5,000')).toBeOnTheScreen();
+    expect(screen.getByText('Head start: ₦5,000')).toBeOnTheScreen();
   });
 });
 
@@ -64,6 +64,21 @@ describe('StartSavingsReviewContent for a PiggyVest wallet', () => {
     );
     expect(screen.queryByText('Pay your head start with')).toBeNull();
     expect(screen.getByText('Earns interest')).toBeOnTheScreen();
-    expect(screen.getByText('Yes')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Cancel early and lose your interest.')
+    ).toBeOnTheScreen();
+  });
+
+  it('says Savings only, with no interest note, when they chose No', () => {
+    render(
+      <StartSavingsReviewContent
+        colors={Colors.light}
+        controller={createPrimaryStartSavingsController({
+          interestChoice: false,
+        })}
+      />
+    );
+    expect(screen.getByText('Savings only')).toBeOnTheScreen();
+    expect(screen.queryByText(/lose your interest/)).toBeNull();
   });
 });

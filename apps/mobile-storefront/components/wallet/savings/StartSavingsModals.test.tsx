@@ -15,7 +15,10 @@ const mockLogError = jest.fn();
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
+    debug: jest.fn(),
     error: (...args: unknown[]) => mockLogError(...args),
+    info: jest.fn(),
+    warn: jest.fn(),
   }),
 }));
 

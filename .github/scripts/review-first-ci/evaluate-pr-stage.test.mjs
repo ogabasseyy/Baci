@@ -20,6 +20,14 @@ const evaluate = (client, overrides = {}) =>
   });
 
 describe('evaluatePullRequestStage', () => {
+  it('reads live draft state and defers without querying review evidence', async () => {
+    const client = fakeGithub(codexRoutes({ pr: pullRequest({ draft: true, labels: [{ name: 'ci-now' }] }), issueComments: [summaryClean] }));
+    const { decision } = await evaluate(client, { ageMinutes: 600 });
+    assert.equal(decision.stage, 'quick');
+    assert.equal(decision.code, 'draft');
+    assert.deepEqual(client.calls, [`GET /repos/${REPO}/pulls/7`]);
+  });
+
   it('starts the full CI when the summary comment is clean for the head commit', async () => {
     const client = fakeGithub(codexRoutes({ issueComments: [summaryClean] }));
     const { decision } = await evaluate(client);

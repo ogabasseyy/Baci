@@ -12,7 +12,10 @@ const input = {
   eventType: 'bank-transfer.inflow.success',
   eventCategory: 'bank-transfer',
   customerId: 'customer-001',
-  details: { transaction_id: 'transaction-001' },
+  details: {
+    pvb_reference: 'PVB01INBOX001',
+    transaction_id: 'transaction-001',
+  },
 };
 const storedEnvelope = {
   event_type: input.eventType,
@@ -54,39 +57,107 @@ function mockClient(
 
 describe('recordPiggyvestEvent', () => {
   it.each([
-    ['payout-001', 'duplicate'],
-    ['payout-002', 'conflict'],
+    ['PVB01INBOX001', 'duplicate'],
+    ['PVB01INBOX002', 'conflict'],
     [undefined, 'conflict'],
-  ])('binds reused interest event IDs to stored payout identity %s', async (storedPayoutId, outcome) => {
+  ])('binds reused interest event IDs to stored pvb_reference %s', async (storedReference, outcome) => {
     const payout = {
       ...input,
       eventType: 'interest-payout.success',
       eventCategory: 'interest_payout',
-      details: { payout_id: 'payout-001' },
+      details: { pvb_reference: 'PVB01INBOX001', payout_id: 'payout-001' },
     };
     const { client } = mockClient([], null, {
       ...storedEnvelope,
       event_type: payout.eventType,
       event_category: payout.eventCategory,
-      event_details: { payout_id: storedPayoutId },
+      event_details: {
+        pvb_reference: storedReference,
+        payout_id: 'payout-001',
+      },
     });
     await expect(recordPiggyvestEvent(client, payout)).resolves.toBe(outcome);
   });
-  it('rejects reused event IDs with a different provider transaction', async () => {
+  it('rejects reused event IDs with a different pvb_reference', async () => {
     const { client } = mockClient([]);
     await expect(
       recordPiggyvestEvent(client, {
         ...input,
-        details: { transaction_id: 'transaction-002' },
+        details: { pvb_reference: 'PVB01INBOX002' },
       })
     ).resolves.toBe('conflict');
   });
-  it('fails closed when a stored inflow lacks transaction evidence', async () => {
+  it('fails closed when neither the stored details nor the row carry pvb_reference', async () => {
     const { client } = mockClient([], null, {
       ...storedEnvelope,
       event_details: null,
     });
     await expect(recordPiggyvestEvent(client, input)).resolves.toBe('conflict');
+  });
+  describe('bugfix: a same-event retry with changed money fields was a duplicate', () => {
+    it.each([
+      [
+        'bank-transfer.inflow.success',
+        'bank-transfer',
+        { fee: 50 },
+        { fee: 75 },
+      ],
+      [
+        'interest-payout.success',
+        'interest_payout',
+        { gross_interest_payout: 100, withholding_tax: 10 },
+        { gross_interest_payout: 110, withholding_tax: 20 },
+      ],
+    ])('%s conflicts when a stored money field differs', async (eventType, eventCategory, storedMoney, incomingMoney) => {
+      const { client } = mockClient([], null, {
+        ...storedEnvelope,
+        event_type: eventType,
+        event_category: eventCategory,
+        event_details: { pvb_reference: 'PVB01INBOX001', ...storedMoney },
+      });
+      await expect(
+        recordPiggyvestEvent(client, {
+          ...input,
+          eventType,
+          eventCategory,
+          details: { pvb_reference: 'PVB01INBOX001', ...incomingMoney },
+        })
+      ).resolves.toBe('conflict');
+    });
+  });
+  describe('bugfix: same-event retry with a rotated internal id was quarantined', () => {
+    it.each([
+      ['bank-transfer.inflow.success', 'bank-transfer', 'transaction_id'],
+      ['interest-payout.success', 'interest_payout', 'payout_id'],
+    ])('%s with the same pvb_reference and a new %s is a duplicate', async (eventType, eventCategory, idField) => {
+      const { client } = mockClient([], null, {
+        ...storedEnvelope,
+        event_type: eventType,
+        event_category: eventCategory,
+        event_details: {
+          pvb_reference: 'PVB01INBOX001',
+          [idField]: 'internal-1',
+        },
+      });
+      await expect(
+        recordPiggyvestEvent(client, {
+          ...input,
+          eventType,
+          eventCategory,
+          details: { pvb_reference: 'PVB01INBOX001', [idField]: 'internal-2' },
+        })
+      ).resolves.toBe('duplicate');
+    });
+    it('falls back to the stored reference column for older rows', async () => {
+      const { client } = mockClient([], null, {
+        ...storedEnvelope,
+        reference: 'PVB01INBOX001',
+        event_details: { transaction_id: 'transaction-001' },
+      });
+      await expect(
+        recordPiggyvestEvent(client, { ...input, reference: 'PVB01INBOX001' })
+      ).resolves.toBe('duplicate');
+    });
   });
   it.each([
     [[{ event_id: input.eventId }], 'new'],

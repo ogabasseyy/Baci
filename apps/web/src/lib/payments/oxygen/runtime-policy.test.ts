@@ -1,0 +1,189 @@
+// @vitest-environment node
+import { expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
+
+import type { OxygenProviderContext } from '@/schemas/oxygen-runtime';
+import { oxygenActionAllowed } from './runtime-policy';
+
+const id = '60000000-0000-4000-8000-000000000001';
+const booking = {
+  loan_reference: id,
+  status: 'BOOKED' as const,
+  product_amount: 400000,
+  equity_percentage: 35,
+  equity_amount: 140000,
+  loan_amount: 260000,
+  loan_tenure: 3,
+};
+const context: OxygenProviderContext = {
+  workflowId: id,
+  orderId: id,
+  version: 1,
+  stage: 'approval_required',
+  environment: 'staging',
+  partnerReference: 'partner',
+  merchantReference: null,
+  productAmount: 400000,
+  orderPhone: '08012345678',
+  productName: 'Test',
+  address: 'Test address',
+  state: {
+    applicationReference: id,
+    bookingReference: id,
+    phone: '2348012345678',
+    validated: true,
+    eligible: true,
+    eligibleAmount: 400000,
+    minimumAmount: 10000,
+    maxTenure: 12,
+    offers: [{ tenure: 6, loanAmount: 400000 }],
+    kyc: {
+      bvn_status: 'DONE',
+      nin_status: 'DONE',
+      bank_status: 'DONE',
+      phone_status: 'DONE',
+      selfie_status: 'DONE',
+      address_status: 'DONE',
+    },
+    booking,
+    quotedCharges: 5000,
+    schedule: [
+      {
+        period: 1,
+        dueDate: [2026, 11, 27],
+        principal: 260000,
+        interest: 10000,
+        amount: 270000,
+      },
+    ],
+  },
+};
+const action = { action: 'book' as const, equityPercentage: 35, tenure: 6 };
+it('rejects booking admission when the selected tenure has no offer', () => {
+  expect(oxygenActionAllowed(context, { ...action, tenure: 5 })).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...context, state: { ...context.state, offers: undefined } },
+      action
+    )
+  ).toBe(false);
+});
+it('does not start or submit approval for a booked plan without a matching offer', () => {
+  const legacy = { ...context, state: { ...context.state, offers: undefined } };
+  expect(oxygenActionAllowed(legacy, { action: 'trigger_approval_otp' })).toBe(
+    false
+  );
+  expect(
+    oxygenActionAllowed(legacy, {
+      action: 'approve_booking',
+      otp: '123456',
+      accepted: true,
+    })
+  ).toBe(false);
+});
+
+it('only allows approval when the booked principal fits its tenure and overall caps', () => {
+  const withOffer = (loanAmount: number, eligibleAmount = 400000) => ({
+    ...context,
+    state: {
+      ...context.state,
+      eligibleAmount,
+      offers: [{ tenure: 3, loanAmount }],
+    },
+  });
+  const approve = { action: 'trigger_approval_otp' as const };
+  expect(oxygenActionAllowed(withOffer(260000), approve)).toBe(true);
+  expect(oxygenActionAllowed(withOffer(259999), approve)).toBe(false);
+  expect(oxygenActionAllowed(withOffer(400000, 259999), approve)).toBe(false);
+});
+it('allows an unapproved legacy booking to refresh offers but protects approval and payment states', () => {
+  const refresh = { action: 'refresh_eligibility' as const };
+  const legacy = { ...context, state: { ...context.state, offers: undefined } };
+  expect(oxygenActionAllowed(legacy, refresh)).toBe(true);
+  expect(
+    oxygenActionAllowed(
+      {
+        ...context,
+        state: {
+          ...context.state,
+          offers: [{ tenure: 3, loanAmount: 100000 }],
+        },
+      },
+      refresh
+    )
+  ).toBe(true);
+  expect(
+    oxygenActionAllowed(
+      {
+        ...context,
+        state: {
+          ...context.state,
+          offers: [{ tenure: 3, loanAmount: 400000 }],
+        },
+      },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, state: { ...legacy.state, activityToken: 'pending' } },
+      refresh
+    )
+  ).toBe(true);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, state: { ...legacy.state, paymentComplete: true } },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, state: { ...legacy.state, setupComplete: true } },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      {
+        ...legacy,
+        state: { ...legacy.state, booking: { ...booking, status: 'APPROVED' } },
+      },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, stage: 'reconciliation_required' },
+      refresh
+    )
+  ).toBe(false);
+});
+it('allows a changed tenure on an unapproved booking but rejects duplicate, approved, OTP-active and uncertain bookings', () => {
+  expect(oxygenActionAllowed(context, action)).toBe(true);
+  expect(oxygenActionAllowed(context, { ...action, tenure: 3 })).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...context, stage: 'reconciliation_required' },
+      action
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...context, state: { ...context.state, activityToken: 'synthetic' } },
+      action
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      {
+        ...context,
+        state: {
+          ...context.state,
+          booking: { ...booking, status: 'APPROVED' },
+        },
+      },
+      action
+    )
+  ).toBe(false);
+});

@@ -5,6 +5,14 @@ import type {
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
 
+import { primaryHeadStartRefusal } from './start-savings-wallet-balance';
+
+export {
+  PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
+  PRIMARY_HEAD_START_SHORT_MESSAGE,
+} from './start-savings-wallet-balance';
+
 /**
  * Form-flow handlers for the start-savings form: preview validation,
  * funding continuation (manual vs auto-debit vs bank transfer), source
@@ -17,6 +25,7 @@ export function useStartSavingsFormFlow({
   contributionValue,
   initialContributionEnabled,
   initialContributionValue,
+  primaryWallet = false,
   refetch,
   selectedFundingOption,
   selectedPaymentMethodId,
@@ -38,6 +47,8 @@ export function useStartSavingsFormFlow({
   contributionValue: number;
   initialContributionEnabled: boolean;
   initialContributionValue: number;
+  /** The customer's spendable wallet is their PiggyVest main wallet. */
+  primaryWallet?: boolean;
   refetch: () => Promise<unknown>;
   selectedFundingOption: SavingsFundingOption;
   selectedPaymentMethodId: string | null | undefined;
@@ -54,6 +65,8 @@ export function useStartSavingsFormFlow({
   sourceMode: SavingsSourceMode;
   submitSavingsGoal: (options?: {
     deferInitialContribution?: boolean;
+    continueInWallet?: boolean;
+    confirmPrimaryBalance?: boolean;
   }) => Promise<void>;
   targetValue: number;
 }) {
@@ -106,6 +119,38 @@ export function useStartSavingsFormFlow({
 
     if (selectedFundingOption === 'bank_transfer') {
       await submitSavingsGoal({ deferInitialContribution: true });
+      return;
+    }
+
+    // Plan creation can only debit the legacy wallet. A PiggyVest head start
+    // is moved after the plan exists, from the wallet's Add to savings sheet
+    // (which sets up the plan's savings wallet and asks for the wallet PIN).
+    if (
+      primaryWallet &&
+      initialContributionEnabled &&
+      initialContributionValue > 0
+    ) {
+      // Refuse up front rather than create a plan whose head start cannot
+      // move: the legacy path fails atomically, so this path must too. The
+      // plan is created without the head start, so check the target bound
+      // the creation request would otherwise have enforced.
+      // Whole naira (no silent rounding) and within the target, as the
+      // submit step checks again on its own input.
+      const refusal = primaryHeadStartRefusal(
+        initialContributionValue,
+        targetValue
+      );
+      if (refusal) {
+        setFormError(refusal);
+        return;
+      }
+      // The balance is confirmed fresh inside the guarded submission, so
+      // a stand-in figure never refuses or allows the head start.
+      await submitSavingsGoal({
+        deferInitialContribution: true,
+        continueInWallet: true,
+        confirmPrimaryBalance: true,
+      });
       return;
     }
 

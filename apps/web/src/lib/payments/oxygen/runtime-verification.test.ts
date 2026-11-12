@@ -6,6 +6,7 @@ import {
   type OxygenProviderContext,
   oxygenKycSchema,
 } from '@/schemas/oxygen-runtime';
+import { refreshOxygenEligibility } from './runtime-eligibility';
 import { executeOxygenAction } from './runtime-executor';
 
 const app = '60000000-0000-4000-8000-000000000001';
@@ -36,6 +37,24 @@ const context: OxygenProviderContext = {
     },
   },
 };
+it('rejects provider offer amounts with more than two decimal places', async () => {
+  const call = vi.fn().mockResolvedValue({
+    loan_request_reference: app,
+    partner_reference: 'partner',
+    status: 'COMPLETED',
+    is_eligible: true,
+    message: 'Eligible',
+    eligible_amount: 400000,
+    max_loan_amount: 400000,
+    minimum_loan_amount: 10000,
+    max_tenure: 3,
+    tenure_unit: 'Monthly',
+    offers: [{ loan_amount: 189000.001, tenor: 3 }],
+  });
+  await expect(
+    refreshOxygenEligibility(context, { ...context.state }, { call })
+  ).rejects.toThrow('Invalid eligibility offers');
+});
 it('retains an eligibility service failure without treating it as pending or a decline, and clears stale terms', async () => {
   const call = vi.fn().mockResolvedValue({
     loan_request_reference: app,

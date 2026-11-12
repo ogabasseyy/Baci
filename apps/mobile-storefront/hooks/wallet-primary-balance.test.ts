@@ -7,16 +7,38 @@ import {
   jest,
 } from '@jest/globals';
 import {
+  beginPrimaryRead,
+  forgetRememberedPrimaryFundingAccounts,
+  rememberPrimaryFundingAccount,
+} from './primary-funding-account-memory';
+import {
   PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS,
   primaryBalanceField,
+  primaryStaleField,
   primaryUnavailableField,
   readPrimaryFundingAccountSoon,
 } from './wallet-primary-balance';
+
+/** Remembers an answer as the newest read, as a fresh read would. */
+const _rememberNow = (
+  value: Parameters<typeof rememberPrimaryFundingAccount>[2]
+) => rememberPrimaryFundingAccount('m', 'u', value, beginPrimaryRead('m', 'u'));
 
 const mockRead = jest.fn<() => Promise<unknown>>();
 jest.mock('./resolve-wallet-funding-account', () => ({
   readPrimaryFundingAccount: () => mockRead(),
 }));
+let mockAuthUserId: string | null = 'u';
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({ user: mockAuthUserId ? { id: mockAuthUserId } : null }),
+  },
+}));
+
+/** Lets a late answer run through the read's settle and store steps. */
+async function _flushAnswer() {
+  for (let i = 0; i < 5; i += 1) await Promise.resolve();
+}
 
 const account = {
   accountName: 'Verified',
@@ -57,6 +79,8 @@ describe('readPrimaryFundingAccountSoon', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockRead.mockReset();
+    mockAuthUserId = 'u';
+    forgetRememberedPrimaryFundingAccounts();
   });
   afterEach(() => {
     jest.useRealTimers();
@@ -69,11 +93,36 @@ describe('readPrimaryFundingAccountSoon', () => {
     });
   });
 
+  it('clears its budget timer when the probe fails', async () => {
+    mockRead.mockRejectedValueOnce(new Error('network'));
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).rejects.toThrow(
+      'network'
+    );
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('settles a stalled probe as unavailable after the budget', async () => {
     mockRead.mockReturnValue(new Promise(() => undefined));
     const settled = readPrimaryFundingAccountSoon('m', 'u');
     jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
     await expect(settled).resolves.toEqual({ status: 'unavailable' });
+  });
+});
+
+describe('primaryStaleField', () => {
+  it('marks only a recalled stand-in, never a fresh answer', () => {
+    expect(
+      primaryStaleField({
+        status: 'ready',
+        account,
+        balanceKobo: 1,
+        recalled: true,
+      })
+    ).toEqual({ primary_stale: true });
+    expect(
+      primaryStaleField({ status: 'ready', account, balanceKobo: 1 })
+    ).toEqual({});
+    expect(primaryStaleField({ status: 'unavailable' })).toEqual({});
   });
 });
 

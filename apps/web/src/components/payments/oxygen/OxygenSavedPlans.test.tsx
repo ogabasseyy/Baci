@@ -226,9 +226,16 @@ it('shows all eligible months, retrieves an uncached tenure once and reuses it a
     <OxygenSavedPlans
       workflowId={id}
       state={
-        { ...plan(ref25, 25).state, maxTenure: 12 } as Parameters<
-          typeof OxygenSavedPlans
-        >[0]['state']
+        {
+          ...plan(ref25, 25).state,
+          maxTenure: 12,
+          eligibleAmount: 400000,
+          minimumAmount: 10000,
+          offers: Array.from({ length: 12 }, (_, i) => ({
+            tenure: i + 1,
+            loanAmount: 400000,
+          })),
+        } as Parameters<typeof OxygenSavedPlans>[0]['state']
       }
     />
   );

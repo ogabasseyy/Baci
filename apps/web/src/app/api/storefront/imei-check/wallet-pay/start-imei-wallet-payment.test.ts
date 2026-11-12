@@ -91,13 +91,13 @@ describe('startImeiWalletPayment', () => {
     );
   });
 
-  it('is unavailable (nothing created) when wallet pay is off', async () => {
+  it('is unavailable (503, like the PIN and pay steps; nothing created) when wallet pay is off', async () => {
     const i = input();
     const response = await startImeiWalletPayment(
       i,
       deps({ readRuntime: vi.fn(() => null) })
     );
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
       code: 'PIGGYVEST_PAY_UNAVAILABLE',
     });

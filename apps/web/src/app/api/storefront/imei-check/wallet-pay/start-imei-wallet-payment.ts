@@ -80,7 +80,15 @@ export async function startImeiWalletPayment(
       503
     );
   }
-  if (!runtime || runtime.merchantId !== input.merchantId)
+  // Switched off (or the kill switch): retryable 503, like the PIN and pay
+  // steps. Another merchant is a definitive 409.
+  if (!runtime)
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
+  if (runtime.merchantId !== input.merchantId)
     return refuse(
       'PIGGYVEST_PAY_UNAVAILABLE',
       'Paying from your PiggyVest wallet is not available yet.',

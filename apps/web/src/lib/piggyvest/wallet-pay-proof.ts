@@ -53,10 +53,13 @@ export function verifyWalletPayProof(
     );
   if (!parsed.success) return { status: 'unverified' };
   const actual = parsed.data.data;
+  // PiggyVest documents 'success' and returns 'successful'; both settle.
   const terminal =
-    actual.status === 'successful' || actual.status === 'failed'
-      ? actual.status
-      : null;
+    actual.status === 'successful' || actual.status === 'success'
+      ? 'successful'
+      : actual.status === 'failed'
+        ? 'failed'
+        : null;
   if (
     terminal === null ||
     actual.internal_reference !== actual.id ||

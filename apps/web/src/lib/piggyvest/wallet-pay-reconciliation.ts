@@ -16,7 +16,8 @@ export type WalletPayReconciliation =
 export interface WalletPayReconciliationPorts {
   loadDispatched: (
     kind: WalletPayTransferKind,
-    operationId: string
+    operationId: string,
+    reference?: string
   ) => Promise<unknown>;
   queryProvider: (selection: {
     reference: string;
@@ -48,12 +49,21 @@ function settled(answer: string): WalletPayReconciliation {
  * is 'pending' and changes nothing; nothing here ever sends money.
  */
 export async function reconcileWalletPayTransfer(
-  input: { kind: WalletPayTransferKind; operationId: unknown },
+  input: {
+    kind: WalletPayTransferKind;
+    operationId: unknown;
+    // A webhook's exact refund attempt (see loadDispatched).
+    reference?: string;
+  },
   ports: WalletPayReconciliationPorts
 ): Promise<WalletPayReconciliation> {
   const operationId = schemas.operationId.parse(input.operationId);
   try {
-    const stored = await ports.loadDispatched(input.kind, operationId);
+    const stored = await ports.loadDispatched(
+      input.kind,
+      operationId,
+      input.reference
+    );
     if (stored === null) return 'pending';
     const reservation =
       input.kind === 'payment'
@@ -68,12 +78,21 @@ export async function reconcileWalletPayTransfer(
     if (verdict.status === 'unverified') return 'pending';
     if (verdict.status === 'failed') {
       const answer = await ports.release(input.kind, verdict.proof);
+      // A failed record that charged a fee is held for review, not released.
+      if (answer === 'needs_review') return 'needs_review';
       return answer === 'released' || answer === 'duplicate'
         ? 'released'
         : 'pending';
     }
     return settled(await ports.settle(input.kind, verdict.proof));
-  } catch {
+  } catch (error) {
+    // Nothing is concluded; the next poll, webhook or drain retries. Logged
+    // (no ids or provider bodies) so a persistent failure is visible.
+    console.warn(
+      '[PiggyVest wallet pay] reconciliation inconclusive:',
+      input.kind,
+      error instanceof Error ? error.name : typeof error
+    );
     return 'pending';
   }
 }

@@ -40,6 +40,7 @@ const referenceStatements = new Set<string>([
   GOAL_CANCEL_STATEMENTS.findByReference,
   GOAL_COMPLETE_STATEMENTS.findByReference,
   walletPay.findByReference,
+  walletPay.readRefundAttempt,
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication

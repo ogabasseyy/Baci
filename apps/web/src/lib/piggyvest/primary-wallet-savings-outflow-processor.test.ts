@@ -79,3 +79,17 @@ it('stays retryable when wallet pay attribution is inconclusive', async () => {
     reconcileSavingsOutflowReferences(['pvb-pay-x'], { savingsRuntime })
   ).rejects.toThrow('inconclusive');
 });
+
+it('still attributes savings references when wallet pay is inconclusive, then stays retryable', async () => {
+  mockWalletPay.mockRejectedValue(new Error('wallet pay inconclusive'));
+  mockReconcile.mockResolvedValue('confirmed');
+  await expect(
+    reconcileSavingsOutflowReferences(['pvb-pay-x', 'pvb-save-y'], {
+      savingsRuntime,
+    })
+  ).resolves.toBe('confirmed');
+  mockReconcile.mockResolvedValue('unmatched');
+  await expect(
+    reconcileSavingsOutflowReferences(['pvb-pay-x'], { savingsRuntime })
+  ).rejects.toThrow('wallet pay inconclusive');
+});

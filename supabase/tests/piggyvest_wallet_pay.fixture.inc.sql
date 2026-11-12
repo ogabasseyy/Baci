@@ -160,8 +160,13 @@ $$;
 CREATE FUNCTION pg_temp.wp_claim(p_op text) RETURNS jsonb LANGUAGE sql AS $$
   SELECT piggyvest_primary.claim_wallet_payment_fulfilment('f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', p_op::uuid);
 $$;
+-- Finishes with the CURRENT claim token (what the live claimant holds).
 CREATE FUNCTION pg_temp.wp_finish(p_op text, p_outcome text) RETURNS text LANGUAGE sql AS $$
-  SELECT piggyvest_primary.finish_wallet_payment_fulfilment('f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', p_op::uuid, p_outcome);
+  SELECT piggyvest_primary.finish_wallet_payment_fulfilment('f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', p_op::uuid, p_outcome,
+    (SELECT fulfilment_claim_token FROM piggyvest_primary.wallet_payments WHERE id = p_op::uuid));
+$$;
+CREATE FUNCTION pg_temp.wp_finish_with(p_op text, p_outcome text, p_token uuid) RETURNS text LANGUAGE sql AS $$
+  SELECT piggyvest_primary.finish_wallet_payment_fulfilment('f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', p_op::uuid, p_outcome, p_token);
 $$;
 CREATE FUNCTION pg_temp.wp_refunds(p_op text) RETURNS integer LANGUAGE sql AS $$
   SELECT pg_catalog.count(*)::integer FROM piggyvest_primary.wallet_payment_refunds WHERE payment_id = p_op::uuid;

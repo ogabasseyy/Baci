@@ -23,6 +23,8 @@ const wallets: Record<string, unknown> = {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 250000,
   },
   'collection-wallet': {
@@ -30,6 +32,8 @@ const wallets: Record<string, unknown> = {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 0,
   },
 };
@@ -237,5 +241,47 @@ describe('submitWalletPayment', () => {
       status: 'pending',
     });
     expect(p.transfer).toHaveBeenCalledTimes(1);
+  });
+  it('releases cleanly when PiggyVest answers 403 "Outbound transfers are paused"', async () => {
+    // Observed on PiggyVest staging, 2026-11-12: a paused account refuses the
+    // POST with 403 before anything moves. That is a definite "no transfer".
+    const paused = new PiggyvestApiError(
+      'PIGGYVEST_AUTH_ERROR',
+      'Outbound transfers are paused, please contact support',
+      403
+    );
+    const p = ports({ transfer: vi.fn(async () => Promise.reject(paused)) });
+    await expect(submitWalletPayment({ operationId: OP }, p)).resolves.toEqual({
+      status: 'released',
+    });
+    expect(p.releaseAfterRejection).toHaveBeenCalledWith(OP);
+  });
+  it('answers pending (never insufficient) when the reservation can not be released', async () => {
+    const poor = { ...(wallets['main-wallet'] as object), balance: 1 };
+    const p = ports({
+      retrieveWallet: vi.fn(async (id: string) =>
+        id === 'main-wallet' ? poor : wallets[id]
+      ),
+      cancelBeforeDispatch: vi.fn(async () => Promise.reject(new Error('db'))),
+    });
+    await expect(submitWalletPayment({ operationId: OP }, p)).resolves.toEqual({
+      status: 'pending',
+    });
+    expect(p.transfer).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when PiggyVest omits the freeze or lien flag', async () => {
+    const { is_frozen: _omitted, ...unflagged } = wallets['main-wallet'] as {
+      is_frozen: boolean;
+    };
+    const p = ports({
+      retrieveWallet: vi.fn(async (id: string) =>
+        id === 'main-wallet' ? unflagged : wallets[id]
+      ),
+    });
+    await expect(submitWalletPayment({ operationId: OP }, p)).resolves.toEqual({
+      status: 'unavailable',
+    });
+    expect(p.transfer).not.toHaveBeenCalled();
   });
 });

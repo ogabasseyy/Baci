@@ -153,7 +153,7 @@ async function applyEvent(
         ? 'failed'
         : 'succeeded',
   });
-  await reconcileSavingsOutflowReferences(references, deps);
+  await reconcileSavingsOutflowReferences(references, deps, event);
 }
 
 function poisonReason(error: unknown): string | null {

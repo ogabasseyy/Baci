@@ -20,12 +20,14 @@ export const WALLET_PAY_WORKER_STATEMENTS = {
   claim:
     'SELECT piggyvest_primary.claim_wallet_payment_fulfilment($1::uuid,$2::text,$3::uuid) AS result',
   finish:
-    'SELECT piggyvest_primary.finish_wallet_payment_fulfilment($1::uuid,$2::text,$3::uuid,$4::text) AS result',
+    'SELECT piggyvest_primary.finish_wallet_payment_fulfilment($1::uuid,$2::text,$3::uuid,$4::text,$5::uuid) AS result',
   readOwedRefund:
     'SELECT piggyvest_primary.read_owed_wallet_refund($1::uuid,$2::text,$3::uuid) AS result',
   manageRefund:
     'SELECT piggyvest_primary.manage_wallet_refund($1::uuid,$2::text,$3::uuid,$4::text) AS result',
   work: 'SELECT piggyvest_primary.list_wallet_pay_work($1::uuid,$2::text,$3::integer) AS result',
+  releaseStale:
+    'SELECT piggyvest_primary.release_stale_wallet_payment($1::uuid,$2::text,$3::uuid) AS result',
 } as const;
 
 /** Evidence login, (integration id, environment, one value). */
@@ -34,6 +36,8 @@ export const WALLET_PAY_EVIDENCE_STATEMENTS = {
     'SELECT piggyvest_primary.read_dispatched_wallet_payment($1::uuid,$2::text,$3::uuid) AS result',
   readDispatchedRefund:
     'SELECT piggyvest_primary.read_dispatched_wallet_refund($1::uuid,$2::text,$3::uuid) AS result',
+  readRefundAttempt:
+    'SELECT piggyvest_primary.read_wallet_refund_attempt($1::uuid,$2::text,$3::text) AS result',
   findByReference:
     'SELECT piggyvest_primary.find_wallet_pay_transfer_by_reference($1::uuid,$2::text,$3::text) AS result',
   settlePayment:

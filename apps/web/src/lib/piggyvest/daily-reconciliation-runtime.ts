@@ -16,6 +16,16 @@ import {
   pageReasonOf,
   renderReconciliationEmail,
 } from './daily-reconciliation-report';
+import {
+  deliverReconciliationEmail,
+  withEmailLines,
+} from './daily-reconciliation-send';
+import {
+  readWalletPaySummary,
+  type WalletPaySummary,
+  walletPayEmailLines,
+  walletPayPageReason,
+} from './daily-reconciliation-wallet-pay';
 import { isPiggyvestFeatureFlagSet } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
@@ -132,6 +142,7 @@ function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
       expired,
     });
   return {
+    execute,
     creditGap,
     loadSnapshot: async () => {
       const { rows } = await execute(SNAPSHOT_STATEMENT, [
@@ -201,6 +212,8 @@ export async function runPiggyvestDailyReconciliation(
   const deps = { ...defaultDeps(), ...options.deps };
   let report: ReconciliationReport;
   let runtime: NullableRuntime = null;
+  // undefined: not run (no runtime); null: wallet pay could not be read.
+  let walletPay: WalletPaySummary | null | undefined;
   try {
     runtime = deps.readRuntime(env);
   } catch {
@@ -246,6 +259,10 @@ export async function runPiggyvestDailyReconciliation(
             reason: 'snapshot_unavailable' as const,
           }));
           report = withCreditGap(completed, gap);
+          walletPay = await readWalletPaySummary({
+            execute: ports.execute,
+            ...runtime.configuration,
+          }).catch(() => null);
         }
       } catch {
         // The configuration was fine; the run itself threw.
@@ -257,31 +274,20 @@ export async function runPiggyvestDailyReconciliation(
       }
     }
   }
-  const address = schemas.reportEmail.safeParse(
-    env.PIGGYVEST_RECONCILIATION_REPORT_EMAIL
-  );
-  let emailed = false;
-  if (address.success) {
-    const email = renderReconciliationEmail(report);
-    try {
-      emailed =
-        (
-          await deps.sendEmail({
-            to: address.data,
-            subject: email.subject,
-            textContent: email.text,
-            htmlContent: email.html,
-          })
-        ).success === true;
-    } catch {
-      emailed = false;
-    }
-  }
+  const emailed = await deliverReconciliationEmail({
+    address: env.PIGGYVEST_RECONCILIATION_REPORT_EMAIL,
+    email: withEmailLines(
+      renderReconciliationEmail(report),
+      walletPay === undefined ? [] : walletPayEmailLines(walletPay)
+    ),
+    sendEmail: deps.sendEmail,
+  });
   // The email-failure marker goes first: the alert reason is clipped at
   // 120 characters and must never lose it behind a long count list.
   const reasons = [
     emailed ? null : 'report_email_failed',
     pageReasonOf(report),
+    walletPay === undefined ? null : walletPayPageReason(walletPay),
   ];
   const reason = reasons.filter(Boolean).join(' ');
   if (reason) deps.emitAlert('PIGGYVEST_RECONCILIATION_MISMATCH', { reason });

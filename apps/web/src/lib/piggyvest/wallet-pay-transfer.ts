@@ -114,8 +114,13 @@ export async function submitWalletPayment(
   const wallets = await checkWallets(reservation, ports);
   if (wallets !== 'ok') {
     // Nothing was sent; free the reservation so the customer can try again.
-    await ports.cancelBeforeDispatch(operationId).catch(() => false);
-    return { status: wallets };
+    // If the release itself fails the reservation still holds the spent PIN
+    // proof: report pending (the stale sweep releases it), never a final
+    // "insufficient" the customer could act on while it is still reserved.
+    const freed = await ports
+      .cancelBeforeDispatch(operationId)
+      .catch(() => false);
+    return { status: freed ? wallets : 'pending' };
   }
   const outcome = await sendWalletPayTransferOnce(reservation, {
     claimDispatch: () => ports.claimDispatch(operationId),

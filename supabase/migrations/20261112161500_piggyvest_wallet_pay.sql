@@ -82,6 +82,9 @@ CREATE TABLE piggyvest_primary.wallet_payments (
   dispatched_at timestamptz,
   settled_at timestamptz,
   fulfilment_claimed_at timestamptz,
+  -- A fresh token per claim: only the current claimant may finish delivery,
+  -- so a worker that outlived its lease can not overwrite a reclaim.
+  fulfilment_claim_token uuid,
   fulfilment_finished_at timestamptz,
   CHECK (state IN ('issued', 'released') OR (
     reference IS NOT NULL AND source_wallet_id IS NOT NULL
@@ -201,6 +204,17 @@ SET search_path = ''
 AS $$
   SELECT p_state IN ('reserved', 'dispatched', 'needs_review')
     OR (p_state = 'confirmed' AND p_fulfilment IN ('awaiting', 'claimed', 'fulfilled'));
+$$;
+
+-- Rotating order for bounded work lists: a different slice each minute, so
+-- items that stay inconclusive can never starve newer work.
+CREATE FUNCTION piggyvest_primary.wallet_pay_rotation(p_id uuid)
+RETURNS text
+LANGUAGE sql
+VOLATILE
+SET search_path = ''
+AS $$
+  SELECT pg_catalog.md5(p_id::text || pg_catalog.to_char(pg_catalog.clock_timestamp(), 'YYYYMMDDHH24MI'));
 $$;
 
 -- The PIN binding text, in one place (lower-case UUID on both sides).
@@ -561,6 +575,7 @@ AS $$
 DECLARE
   v_payment piggyvest_primary.wallet_payments%ROWTYPE;
   v_now timestamptz;
+  v_reclaim boolean;
 BEGIN
   PERFORM piggyvest_primary.assert_wallet_pay_worker(
     claim_wallet_payment_fulfilment.integration_id, claim_wallet_payment_fulfilment.environment);
@@ -579,12 +594,16 @@ BEGIN
   IF v_payment.fulfilment NOT IN ('awaiting', 'claimed') THEN
     RETURN pg_catalog.jsonb_build_object('status', v_payment.fulfilment);
   END IF;
-  UPDATE piggyvest_primary.wallet_payments SET fulfilment = 'claimed', fulfilment_claimed_at = v_now
-   WHERE id = v_payment.id;
+  v_reclaim := v_payment.fulfilment = 'claimed';
+  UPDATE piggyvest_primary.wallet_payments
+     SET fulfilment = 'claimed', fulfilment_claimed_at = v_now,
+         fulfilment_claim_token = pg_catalog.gen_random_uuid()
+   WHERE id = v_payment.id
+   RETURNING * INTO v_payment;
   RETURN pg_catalog.jsonb_build_object(
-    'status', CASE WHEN v_payment.fulfilment = 'claimed' THEN 'reclaimed' ELSE 'claimed' END,
+    'status', CASE WHEN v_reclaim THEN 'reclaimed' ELSE 'claimed' END,
     'purpose', v_payment.purpose, 'purchaseRef', v_payment.purchase_ref,
-    'amountKobo', v_payment.amount_kobo);
+    'amountKobo', v_payment.amount_kobo, 'claimToken', v_payment.fulfilment_claim_token);
 END;
 $$;
 
@@ -592,7 +611,7 @@ $$;
 -- the first refund attempt is opened in the same transaction. Replays answer
 -- 'duplicate'; anything else is a conflict and changes nothing.
 CREATE FUNCTION piggyvest_primary.finish_wallet_payment_fulfilment(
-  integration_id uuid, environment text, operation_id uuid, outcome text)
+  integration_id uuid, environment text, operation_id uuid, outcome text, claim_token uuid)
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -617,7 +636,10 @@ BEGIN
     OR (outcome = 'failed' AND v_payment.fulfilment = 'refunded') THEN
     RETURN 'duplicate';
   END IF;
-  IF v_payment.fulfilment <> 'claimed' THEN RETURN 'conflict'; END IF;
+  IF v_payment.fulfilment <> 'claimed'
+    OR v_payment.fulfilment_claim_token IS DISTINCT FROM finish_wallet_payment_fulfilment.claim_token THEN
+    RETURN 'conflict';
+  END IF;
   UPDATE piggyvest_primary.wallet_payments
      SET fulfilment = v_target, fulfilment_finished_at = pg_catalog.clock_timestamp()
    WHERE id = v_payment.id
@@ -626,6 +648,27 @@ BEGIN
     PERFORM piggyvest_primary.open_wallet_payment_refund(v_payment);
   END IF;
   RETURN v_target;
+END;
+$$;
+
+-- A reservation older than 5 minutes was never sent (a live submission moves
+-- it to dispatched within seconds): the drain releases it. Nothing moved.
+CREATE FUNCTION piggyvest_primary.release_stale_wallet_payment(
+  integration_id uuid, environment text, operation_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM piggyvest_primary.assert_wallet_pay_worker(
+    release_stale_wallet_payment.integration_id, release_stale_wallet_payment.environment);
+  UPDATE piggyvest_primary.wallet_payments AS payment SET state = 'released'
+   WHERE payment.id = release_stale_wallet_payment.operation_id
+     AND payment.integration_id = release_stale_wallet_payment.integration_id
+     AND payment.state = 'reserved'
+     AND payment.reserved_at <= pg_catalog.clock_timestamp() - interval '5 minutes';
+  RETURN FOUND;
 END;
 $$;
 
@@ -706,6 +749,12 @@ SET search_path = ''
 AS $$
 BEGIN
   UPDATE piggyvest_primary.wallet_payment_refunds SET state = 'released' WHERE id = p_refund.id;
+  -- A late refund success (or any other review reason) freezes retries: a
+  -- person decides whether anything is still owed.
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
+              WHERE payment.id = p_refund.payment_id AND payment.review_reason IS NOT NULL) THEN
+    RETURN;
+  END IF;
   IF p_refund.attempt >= 20 THEN
     UPDATE piggyvest_primary.wallet_payments SET review_reason = 'refund_attempts_exhausted'
      WHERE id = p_refund.payment_id;
@@ -743,21 +792,24 @@ BEGIN
            AND (payment.fulfilment = 'awaiting'
                 OR (payment.fulfilment = 'claimed'
                     AND payment.fulfilment_claimed_at <= v_now - interval '10 minutes'))
-         ORDER BY payment.settled_at LIMIT v_limit) AS work), '[]'::jsonb),
+         ORDER BY piggyvest_primary.wallet_pay_rotation(payment.id) LIMIT v_limit) AS work), '[]'::jsonb),
     'refund', COALESCE((SELECT pg_catalog.jsonb_agg(work.payment_id) FROM (
         SELECT refund.payment_id FROM piggyvest_primary.wallet_payment_refunds AS refund
          WHERE refund.integration_id = list_wallet_pay_work.integration_id
            AND refund.state IN ('owed', 'dispatched')
-         ORDER BY refund.created_at LIMIT v_limit) AS work), '[]'::jsonb),
+         ORDER BY piggyvest_primary.wallet_pay_rotation(refund.id) LIMIT v_limit) AS work), '[]'::jsonb),
     'settle', COALESCE((SELECT pg_catalog.jsonb_agg(work.id) FROM (
         SELECT payment.id FROM piggyvest_primary.wallet_payments AS payment
          WHERE payment.integration_id = list_wallet_pay_work.integration_id
            AND (payment.state = 'dispatched'
                 OR (payment.state = 'reserved' AND payment.reserved_at <= v_now - interval '5 minutes')
-                -- A late success may still be indexed after a release.
-                OR (payment.state = 'released' AND payment.dispatched_at > v_now - interval '2 days'
-                    AND payment.provider_transaction_id IS NULL))
-         ORDER BY payment.reserved_at LIMIT v_limit) AS work), '[]'::jsonb));
+                -- A late success may still be indexed after a release; one
+                -- proven while another attempt was unresolved stays listed
+                -- until it is decided.
+                OR (payment.state = 'released' AND payment.provider_transaction_id IS NULL
+                    AND (payment.dispatched_at > v_now - interval '2 days'
+                         OR payment.review_reason = 'late_success_deferred')))
+         ORDER BY piggyvest_primary.wallet_pay_rotation(payment.id) LIMIT v_limit) AS work), '[]'::jsonb));
 END;
 $$;
 
@@ -818,7 +870,39 @@ BEGIN
      AND refund.integration_id = v_binding.id
      AND (refund.state = 'dispatched' OR (refund.state = 'released' AND refund.dispatched_at IS NOT NULL))
      AND intent.provider_wallet_id = refund.destination_wallet_id
-   ORDER BY refund.attempt DESC LIMIT 1;
+   ORDER BY (refund.state = 'dispatched') DESC, refund.attempt DESC LIMIT 1;
+  RETURN v_result;
+END;
+$$;
+
+-- One refund attempt by its exact reference (webhook attribution: a late
+-- success of an earlier attempt must be judged as THAT attempt).
+CREATE FUNCTION piggyvest_primary.read_wallet_refund_attempt(
+  integration_id uuid, environment text, reference text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+  v_result jsonb;
+BEGIN
+  v_binding := piggyvest_primary.assert_wallet_pay_evidence(
+    read_wallet_refund_attempt.integration_id, read_wallet_refund_attempt.environment);
+  SELECT pg_catalog.jsonb_build_object(
+      'refundId', refund.id, 'operationId', refund.payment_id, 'amountKobo', refund.amount_kobo,
+      'sourceWalletId', refund.source_wallet_id, 'destinationWalletId', refund.destination_wallet_id,
+      'reference', refund.reference, 'businessId', v_binding.business_id,
+      'providerCustomerId', intent.provider_customer_id)
+    INTO v_result
+    FROM piggyvest_primary.wallet_payment_refunds AS refund
+    JOIN piggyvest_primary.wallet_payments AS payment ON payment.id = refund.payment_id
+    JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = payment.intent_id
+   WHERE refund.reference = read_wallet_refund_attempt.reference
+     AND refund.integration_id = v_binding.id
+     AND (refund.state = 'dispatched' OR (refund.state = 'released' AND refund.dispatched_at IS NOT NULL))
+     AND intent.provider_wallet_id = refund.destination_wallet_id;
   RETURN v_result;
 END;
 $$;
@@ -837,13 +921,20 @@ DECLARE
 BEGIN
   v_binding := piggyvest_primary.assert_wallet_pay_evidence(
     find_wallet_pay_transfer_by_reference.integration_id, find_wallet_pay_transfer_by_reference.environment);
-  SELECT pg_catalog.jsonb_build_object('kind', 'payment', 'operationId', payment.id) INTO v_result
+  SELECT pg_catalog.jsonb_build_object('kind', 'payment', 'operationId', payment.id,
+      'reference', payment.reference,
+      -- Already concluded by the status path: the webhook is acknowledged.
+      'settled', payment.state IN ('confirmed', 'needs_review') AND payment.provider_transaction_id IS NOT NULL)
+    INTO v_result
     FROM piggyvest_primary.wallet_payments AS payment
    WHERE payment.integration_id = v_binding.id
      AND payment.reference = find_wallet_pay_transfer_by_reference.reference
      AND payment.dispatched_at IS NOT NULL;
   IF v_result IS NOT NULL THEN RETURN v_result; END IF;
-  SELECT pg_catalog.jsonb_build_object('kind', 'refund', 'operationId', refund.payment_id) INTO v_result
+  SELECT pg_catalog.jsonb_build_object('kind', 'refund', 'operationId', refund.payment_id,
+      'reference', refund.reference,
+      'settled', refund.state IN ('confirmed', 'needs_review'))
+    INTO v_result
     FROM piggyvest_primary.wallet_payment_refunds AS refund
    WHERE refund.integration_id = v_binding.id
      AND refund.reference = find_wallet_pay_transfer_by_reference.reference
@@ -927,6 +1018,8 @@ BEGIN
       -- now. The drain re-checks released-after-dispatch payments, and once
       -- the other attempt resolves this one settles as a duplicate (refund)
       -- or as the payment.
+      UPDATE piggyvest_primary.wallet_payments SET review_reason = 'late_success_deferred'
+       WHERE id = v_payment.id;
       RETURN 'deferred';
     END IF;
     IF v_other_state = 'confirmed' THEN
@@ -956,7 +1049,7 @@ BEGIN
   END IF;
   UPDATE piggyvest_primary.wallet_payments
      SET state = 'confirmed', provider_transaction_id = proof ->> 'providerTransactionId',
-         settled_at = pg_catalog.clock_timestamp()
+         settled_at = pg_catalog.clock_timestamp(), review_reason = NULL
    WHERE id = v_payment.id;
   RETURN 'confirmed';
 END;
@@ -989,7 +1082,20 @@ BEGIN
     RETURN 'conflict';
   END IF;
   IF v_payment.state = 'released' THEN RETURN 'duplicate'; END IF;
+  IF v_payment.state = 'needs_review' THEN
+    RETURN CASE WHEN v_payment.provider_transaction_id = proof ->> 'providerTransactionId'
+                THEN 'duplicate' ELSE 'conflict' END;
+  END IF;
   IF v_payment.state <> 'dispatched' THEN RETURN 'conflict'; END IF;
+  -- A failed record that still charged a fee moved money: never released
+  -- (a retry could charge again); a person decides.
+  IF COALESCE((proof ->> 'feeKobo')::bigint, 0) > 0 THEN
+    UPDATE piggyvest_primary.wallet_payments
+       SET state = 'needs_review', provider_transaction_id = proof ->> 'providerTransactionId',
+           settled_at = pg_catalog.clock_timestamp(), review_reason = 'failed_with_fee'
+     WHERE id = v_payment.id;
+    RETURN 'needs_review';
+  END IF;
   UPDATE piggyvest_primary.wallet_payments SET state = 'released' WHERE id = v_payment.id;
   RETURN 'released';
 END;
@@ -1103,7 +1209,20 @@ BEGIN
     RETURN 'conflict';
   END IF;
   IF v_refund.state = 'released' THEN RETURN 'duplicate'; END IF;
+  IF v_refund.state = 'needs_review' THEN
+    RETURN CASE WHEN v_refund.provider_transaction_id = proof ->> 'providerTransactionId'
+                THEN 'duplicate' ELSE 'conflict' END;
+  END IF;
   IF v_refund.state <> 'dispatched' THEN RETURN 'conflict'; END IF;
+  IF COALESCE((proof ->> 'feeKobo')::bigint, 0) > 0 THEN
+    UPDATE piggyvest_primary.wallet_payment_refunds
+       SET state = 'needs_review', provider_transaction_id = proof ->> 'providerTransactionId',
+           review_reason = 'failed_with_fee', settled_at = pg_catalog.clock_timestamp()
+     WHERE id = v_refund.id;
+    UPDATE piggyvest_primary.wallet_payments SET review_reason = 'refund_failed_with_fee'
+     WHERE id = v_refund.payment_id;
+    RETURN 'needs_review';
+  END IF;
   PERFORM piggyvest_primary.next_wallet_refund_attempt(v_refund);
   RETURN 'released';
 END;
@@ -1151,7 +1270,7 @@ BEGIN
                  'reviewReason', payment.review_reason) AS row_data
           FROM piggyvest_primary.wallet_payments AS payment
          WHERE payment.integration_id = read_wallet_pay_reconciliation.integration_id
-           AND (payment.state = 'needs_review' OR EXISTS (
+           AND (payment.state = 'needs_review' OR payment.review_reason IS NOT NULL OR EXISTS (
              SELECT 1 FROM piggyvest_primary.wallet_payment_refunds AS refund
               WHERE refund.payment_id = payment.id AND refund.state = 'needs_review'))
          ORDER BY payment.issued_at LIMIT 200) AS review), '[]'::jsonb));
@@ -1172,8 +1291,17 @@ BEGIN
     SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
     JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = payment.intent_id
     WHERE intent.customer_id = OLD.id
-      AND (payment.state IN ('reserved', 'dispatched')
-           OR (payment.state = 'confirmed' AND payment.fulfilment IN ('awaiting', 'claimed', 'refund_owed')))
+      AND (payment.state IN ('reserved', 'dispatched', 'needs_review')
+           OR payment.review_reason IS NOT NULL
+           OR (payment.state = 'confirmed' AND payment.fulfilment IN ('awaiting', 'claimed', 'refund_owed'))
+           -- A released send can still be indexed as a late success.
+           OR (payment.state = 'released' AND payment.dispatched_at > pg_catalog.clock_timestamp() - interval '2 days'
+               AND payment.provider_transaction_id IS NULL)
+           OR EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payment_refunds AS refund
+                       WHERE refund.payment_id = payment.id
+                         AND (refund.state IN ('owed', 'dispatched', 'needs_review')
+                              OR (refund.state = 'released'
+                                  AND refund.dispatched_at > pg_catalog.clock_timestamp() - interval '2 days'))))
   ) THEN
     RAISE EXCEPTION 'cannot delete customer with unsettled wallet payments' USING ERRCODE = 'P0001';
   END IF;
@@ -1199,12 +1327,15 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.manage_wallet_payment(jsonb, uuid, text),
   piggyvest_primary.read_wallet_payment_status(jsonb, uuid),
   piggyvest_primary.claim_wallet_payment_fulfilment(uuid, text, uuid),
-  piggyvest_primary.finish_wallet_payment_fulfilment(uuid, text, uuid, text),
+  piggyvest_primary.finish_wallet_payment_fulfilment(uuid, text, uuid, text, uuid),
   piggyvest_primary.read_owed_wallet_refund(uuid, text, uuid),
   piggyvest_primary.manage_wallet_refund(uuid, text, uuid, text),
   piggyvest_primary.list_wallet_pay_work(uuid, text, integer),
+  piggyvest_primary.release_stale_wallet_payment(uuid, text, uuid),
+  piggyvest_primary.wallet_pay_rotation(uuid),
   piggyvest_primary.read_dispatched_wallet_payment(uuid, text, uuid),
   piggyvest_primary.read_dispatched_wallet_refund(uuid, text, uuid),
+  piggyvest_primary.read_wallet_refund_attempt(uuid, text, text),
   piggyvest_primary.find_wallet_pay_transfer_by_reference(uuid, text, text),
   piggyvest_primary.settle_wallet_payment(uuid, text, jsonb),
   piggyvest_primary.release_failed_wallet_payment(uuid, text, jsonb),
@@ -1221,14 +1352,16 @@ GRANT EXECUTE ON FUNCTION
   piggyvest_primary.manage_wallet_payment(jsonb, uuid, text),
   piggyvest_primary.read_wallet_payment_status(jsonb, uuid),
   piggyvest_primary.claim_wallet_payment_fulfilment(uuid, text, uuid),
-  piggyvest_primary.finish_wallet_payment_fulfilment(uuid, text, uuid, text),
+  piggyvest_primary.finish_wallet_payment_fulfilment(uuid, text, uuid, text, uuid),
   piggyvest_primary.read_owed_wallet_refund(uuid, text, uuid),
   piggyvest_primary.manage_wallet_refund(uuid, text, uuid, text),
-  piggyvest_primary.list_wallet_pay_work(uuid, text, integer)
+  piggyvest_primary.list_wallet_pay_work(uuid, text, integer),
+  piggyvest_primary.release_stale_wallet_payment(uuid, text, uuid)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION
   piggyvest_primary.read_dispatched_wallet_payment(uuid, text, uuid),
   piggyvest_primary.read_dispatched_wallet_refund(uuid, text, uuid),
+  piggyvest_primary.read_wallet_refund_attempt(uuid, text, text),
   piggyvest_primary.find_wallet_pay_transfer_by_reference(uuid, text, text),
   piggyvest_primary.settle_wallet_payment(uuid, text, jsonb),
   piggyvest_primary.release_failed_wallet_payment(uuid, text, jsonb),

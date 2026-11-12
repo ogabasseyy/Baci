@@ -47,10 +47,11 @@ const parameterCounts = new Map<string, number>([
 // are the configured integration id and environment.
 const workerParameterCounts = new Map<string, number>([
   [walletPayWorker.claim, 3],
-  [walletPayWorker.finish, 4],
+  [walletPayWorker.finish, 5],
   [walletPayWorker.readOwedRefund, 3],
   [walletPayWorker.manageRefund, 4],
   [walletPayWorker.work, 3],
+  [walletPayWorker.releaseStale, 3],
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication

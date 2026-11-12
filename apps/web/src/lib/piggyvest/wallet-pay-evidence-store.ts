@@ -26,8 +26,18 @@ export function createWalletPayEvidenceStore(input: {
     return result.rows;
   }
   return {
-    async loadDispatched(kind: WalletPayTransferKind, operationId: string) {
+    // A refund webhook names one attempt: its reference loads exactly that
+    // attempt. Without it, the attempt in flight (else the latest) is used.
+    async loadDispatched(
+      kind: WalletPayTransferKind,
+      operationId: string,
+      reference?: string
+    ) {
       const id = schemas.operationId.parse(operationId);
+      if (kind === 'refund' && reference !== undefined)
+        return schemas.refundDispatchedRows.parse(
+          await run(sql.readRefundAttempt, schemas.reference.parse(reference))
+        )[0].result;
       if (kind === 'payment')
         return schemas.paymentDispatchedRows.parse(
           await run(sql.readDispatchedPayment, id)

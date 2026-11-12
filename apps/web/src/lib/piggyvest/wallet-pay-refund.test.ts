@@ -23,6 +23,8 @@ const wallets: Record<string, unknown> = {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 0,
   },
   'collection-wallet': {
@@ -30,6 +32,8 @@ const wallets: Record<string, unknown> = {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 500000,
   },
 };
@@ -168,5 +172,19 @@ describe('driveWalletRefund', () => {
       'unavailable'
     );
     expect(p.transfer).not.toHaveBeenCalled();
+  });
+  it('releases cleanly when PiggyVest answers 403 "Outbound transfers are paused"', async () => {
+    // Observed on PiggyVest staging, 2026-11-12: a paused account refuses the
+    // POST with 403 before anything moves. That is a definite "no transfer".
+    const paused = new PiggyvestApiError(
+      'PIGGYVEST_AUTH_ERROR',
+      'Outbound transfers are paused, please contact support',
+      403
+    );
+    const p = ports({ transfer: vi.fn(async () => Promise.reject(paused)) });
+    await expect(driveWalletRefund({ paymentId: OP }, p)).resolves.toBe(
+      'released'
+    );
+    expect(p.releaseAfterRejection).toHaveBeenCalledWith(REFUND);
   });
 });

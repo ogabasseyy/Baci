@@ -224,11 +224,11 @@ it('admits wallet pay worker statements only for the configured integration', as
   const operationId = '55555555-5555-4555-8555-555555555555';
   await createPrimaryWalletSavingsExecutor(config)(
     WALLET_PAY_WORKER_STATEMENTS.finish,
-    [integrationId, 'staging', operationId, 'failed']
+    [integrationId, 'staging', operationId, 'failed', operationId]
   );
   expect(mocks.query).toHaveBeenLastCalledWith(
     WALLET_PAY_WORKER_STATEMENTS.finish,
-    [integrationId, 'staging', operationId, 'failed']
+    [integrationId, 'staging', operationId, 'failed', operationId]
   );
   vi.clearAllMocks();
   const execute = createPrimaryWalletSavingsExecutor(config);

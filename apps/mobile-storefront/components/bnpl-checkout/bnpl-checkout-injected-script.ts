@@ -39,6 +39,10 @@ export const BNPL_INJECTED_JAVASCRIPT = `
       }
 
       const summary = { payloadType: 'object' };
+      const closeLike = function(value) {
+        return typeof value === 'string' && /\\b(close|closed|dismiss|dismissed|cancel|cancelled|canceled)\\b/i.test(value);
+      };
+      const closeLikeValues = [data.type, data.status, data.name, data.message];
       ['type', 'status', 'name', 'gateway'].forEach(function(key) {
         if (typeof data[key] === 'string') summary[key] = data[key];
       });
@@ -47,6 +51,7 @@ export const BNPL_INJECTED_JAVASCRIPT = `
       }
 
       if (data.data && typeof data.data === 'object') {
+        closeLikeValues.push(data.data.type, data.data.status, data.data.name, data.data.message);
         ['type', 'status', 'name', 'gateway'].forEach(function(key) {
           if (typeof data.data[key] === 'string') summary[key] = data.data[key];
         });
@@ -55,6 +60,7 @@ export const BNPL_INJECTED_JAVASCRIPT = `
         }
       }
 
+      if (closeLikeValues.some(closeLike)) summary.closeLike = true;
       return summary;
     };
 
@@ -156,13 +162,13 @@ export const BNPL_INJECTED_JAVASCRIPT = `
       });
     });
 
-    const allowedMessageTypes = new Set(['checkoutStatus', 'paymentResult', 'bnpl_log', 'bnpl_error_log', 'bnpl_close', 'navigation']);
+    const allowedMessageTypes = new Set(['bnpl_log', 'bnpl_error_log', 'bnpl_close', 'navigation']);
     window.addEventListener('message', function(event) {
       if (isProviderOrigin(event.origin)) {
         const summary = getMessageSummary(event.data);
         // The native handler also consumes provider-close summaries.
         const isClose = [summary.type, summary.status, summary.name, summary.message].includes('checkout.widget.closed');
-        const isCloseLike = [summary.type, summary.status, summary.name, summary.message].some(function(value) {
+        const isCloseLike = summary.closeLike === true || [summary.type, summary.status, summary.name, summary.message].some(function(value) {
           return typeof value === 'string' && /\\b(close|closed|dismiss|dismissed|cancel|cancelled|canceled)\\b/i.test(value);
         });
         // Keep unusual provider close/cancel shapes observable without treating

@@ -80,6 +80,15 @@ test('skips routine provider diagnostics in production and preserves checkout si
   });
   emit({ origin: provider, data: { type: 'checkout closed by customer' } });
   emit({ origin, data: { type: 'checkoutStatus', status: 'pending' } });
+  emit({ origin, data: { type: 'paymentResult', status: 'success' } });
+  emit({
+    origin: provider,
+    data: { type: 'notification', message: 'checkout dismissed' },
+  });
+  emit({
+    origin: provider,
+    data: { type: 'notification', data: { message: 'checkout cancelled' } },
+  });
 
   expect(
     postMessage.mock.calls.map(([message]) => JSON.parse(message))
@@ -98,9 +107,19 @@ test('skips routine provider diagnostics in production and preserves checkout si
     }),
     expect.objectContaining({
       type: 'bnpl_log',
-      summary: expect.objectContaining({ type: 'checkout closed by customer' }),
+      summary: expect.objectContaining({
+        type: 'checkout closed by customer',
+        closeLike: true,
+      }),
     }),
-    { type: 'checkoutStatus', status: 'pending' },
+    expect.objectContaining({
+      type: 'bnpl_log',
+      summary: expect.objectContaining({ closeLike: true }),
+    }),
+    expect.objectContaining({
+      type: 'bnpl_log',
+      summary: expect.objectContaining({ closeLike: true }),
+    }),
   ]);
 });
 

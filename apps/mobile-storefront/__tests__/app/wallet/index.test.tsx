@@ -57,8 +57,8 @@ import {
 } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Alert, Text, View } from 'react-native';
-import { WALLET_TAB_SCROLL_PADDING_BOTTOM } from '@/components/wallet/wallet-tab.constants';
 import { SPACING } from '@/constants/Colors';
+import { getHomeContentBottomPadding } from '@/constants/layout';
 
 type MockStorefrontScreenShellProps = {
   children?: ReactNode;
@@ -479,6 +479,7 @@ describe('WalletScreen', () => {
     });
     mockUseStorefrontInsets.mockReturnValue({
       getScrollContentStyle: mockGetScrollContentStyle,
+      insets: { top: 0, right: 0, bottom: 34, left: 0 },
     });
     mockUseRequireAuth.mockReturnValue({
       isLoading: false,
@@ -909,8 +910,8 @@ describe('WalletScreen', () => {
     expect(shellProps?.edges).toEqual(['top']);
     expect(screen.getByText('Wallet & Loyalty')).toBeOnTheScreen();
     expect(mockGetScrollContentStyle).toHaveBeenCalledWith({
-      includeBottomInset: true,
-      paddingBottom: WALLET_TAB_SCROLL_PADDING_BOTTOM,
+      includeBottomInset: false,
+      paddingBottom: getHomeContentBottomPadding(34, true),
     });
   });
 

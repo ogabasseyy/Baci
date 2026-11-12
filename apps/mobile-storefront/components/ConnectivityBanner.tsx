@@ -53,8 +53,9 @@ export function ConnectivityBanner() {
     };
 
     const hideBanner = () => {
+      // Slides back up: the banner sits in the layout above every screen.
       translateY.set(
-        withTiming(100, {
+        withTiming(-100, {
           duration: 300,
           easing: Easing.in(Easing.cubic),
         })
@@ -122,6 +123,9 @@ export function ConnectivityBanner() {
   const isOffline = bannerState === 'offline';
   const bannerColors = isOffline ? BANNER_COLORS.offline : BANNER_COLORS.online;
   const isVisible = bannerState !== 'hidden';
+  // In the layout flow, so it pushes every screen (and its header) down
+  // instead of covering it; takes no space while hidden.
+  if (!isVisible) return null;
 
   return (
     <Animated.View
@@ -132,7 +136,6 @@ export function ConnectivityBanner() {
           backgroundColor: bannerColors.background,
         },
         animatedStyle,
-        { pointerEvents: isVisible ? 'auto' : 'none' },
       ]}
     >
       <View style={styles.content}>
@@ -178,10 +181,6 @@ export function useConnectivity() {
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     zIndex: 1000,
     paddingHorizontal: 16,
     paddingBottom: 12,

@@ -75,6 +75,7 @@ export const test = base.extend<{
         // target-origin rejection is covered by the no-disclosure assertion,
         // not by console output or wording.
         if (
+          message.type() === 'error' &&
           chatwootBridgeFixtureVisited &&
           isChatwootCrossOriginPostMessageError(message.text())
         )

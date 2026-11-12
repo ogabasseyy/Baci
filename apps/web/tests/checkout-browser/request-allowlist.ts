@@ -32,6 +32,7 @@ export function isChatwootBridgeFixtureRequest({
       url.origin
     ) &&
     url.pathname === '/widget' &&
+    url.searchParams.size === 0 &&
     method === 'GET'
   )
     return true;

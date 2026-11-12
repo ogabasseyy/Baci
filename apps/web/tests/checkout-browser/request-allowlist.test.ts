@@ -29,6 +29,9 @@ it('limits Chatwoot harness traffic to its exact origins, paths, methods, and vi
     'https://untrusted.example.test',
   ])
     expect(request(`${origin}/widget`, 'GET')).toBe(true);
+  expect(request('https://support.example.test/widget?anything=1', 'GET')).toBe(
+    false
+  );
   for (const endpoint of ['challenge', 'verify', 'authorize'])
     expect(
       request(

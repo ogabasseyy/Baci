@@ -394,7 +394,7 @@ run against PiggyVest for this flow.
 | `POST /transfer/wallet` answers 202 "processing", never success | confirmed | §5 probes; transfers.ts. Payment and refund are "submitted" until a TSQ record settles them. |
 | TSQ answers 404 for a just-accepted transfer before indexing | confirmed | contract evidence 2026-10-31 P2. A 404 is never proof of absence; only a definitive POST rejection plus `not_found` releases. |
 | A business wallet carries no `api_customer_id` | confirmed (sandbox) | 2026-11-02 `house_wallet_unbound_to_customer = yes`. The send step refuses a collection wallet that names a customer. |
-| A customer main wallet may send to a business (collection) wallet via the API | **assumed** (docs: transfers are "from one wallet to another wallet under your account") | Never exercised, not even in sandbox. If PiggyVest refuses, the POST's definitive rejection (400) releases the payment and nothing moves. |
+| A customer main wallet may send to a business (collection) wallet via the API | **unproven: staging accepted (202) but never processed it** (probe below) | Docs: transfers are "from one wallet to another wallet under your account". If PiggyVest refuses, the POST's definitive rejection (400) releases the payment and nothing moves. |
 | A business wallet may send back to a customer main wallet (refund) | sandbox-observed | Evidence 2026-11-02-2 P8 "Collection to main": worked; the destination row carries our reference and GET /transaction/:id resolves from both sides. Not confirmed for production. |
 | Fee on either direction | **unknown** for production; sandbox 0 | Sandbox P6: the record carries a fee field, `transfer_fee_kobo` 0, exact amounts both sides. Docs: `PATCH /api/v1/business/api-fee-wallet-settings` charges a fee wallet when its flag is set, else the source wallet; an invalid fee wallet "may fail silently". No amounts are published and no fee wallet is known to be set. A record with `fee > 0` is never settled clean: it is recorded `needs_review` and nothing is delivered. |
 | TSQ record for these transfers carries our reference in `third_party_reference`, both wallets, `internal_reference = id` | assumed from savings | Same shape as main→goal (evidence 2026-11-04 S12). `customer_id` may be the business id, as there. |
@@ -404,6 +404,34 @@ run against PiggyVest for this flow.
 | Per-customer limits on API-initiated debits | **unknown** | No evidence (P4 withdrawal counter inconclusive). The only documented refusal is 400 "Insufficient funds", which releases cleanly. |
 | Freeze / lien on a wallet | **unknown** whether it blocks business-initiated transfers | Wallets expose `is_frozen` and `has_an_active_lien`; wallet pay refuses to send from or into a flagged wallet (fail closed). |
 | A collection (house) wallet exists | sandbox-observed; production: none yet | Sandbox P3 `house_wallet_unbound_to_customer` = yes. The owner must create or designate a production collection wallet; it must not reuse the interest payout wallet without the owner's OK. |
+
+### Staging probe — 2026-11-12 (owner-approved, test money, QA customer only)
+
+One ₦1 round trip on `staging.piggyvest.business`, between the QA customer's main
+wallet and the business settlement wallet (no API customer). Masked output only.
+
+- `POST /transfer/wallet` customer main → business wallet: **202 "Wallet
+  transfer processing"**, then nothing. For 15 minutes: TSQ on the sender wallet
+  stayed HTTP 404 with only `processing_status` in `data`, neither balance
+  moved, and neither wallet's transaction list showed a row. So staging accepts
+  this direction and then neither settles nor fails it. Wallet pay holds such a
+  payment `dispatched` (never delivered, never re-posted); the daily report
+  lists it after 30 minutes. **Owner question #1 for PiggyVest: are customer →
+  business transfers supported, and why does a 202 leave no record?**
+- Reusing the same reference: **400 "Reference already passed, Please try again
+  in a few minutes"**. The wording suggests a time window, not uniqueness
+  forever. Wallet pay never reuses one.
+- Business → customer refund while the business wallet held 0: **400
+  "Insufficient funds"**, nothing moved. This is a definitive no-transfer
+  refusal; the refund stays owed and the drain retries (`unfunded`).
+- Wallet reads: the business wallet answers `type: "settlement"`,
+  `api_customer_id: null`, `interest_payout_wallet: null` and no
+  `withdrawal_count`. Customer and business wallets both carry `is_frozen` and
+  `has_an_active_lien` (false here). **Bug found and fixed**: `retrievePiggyvestWallet`
+  rejected `null` and a missing `withdrawal_count`, so every wallet payment
+  would have been refused as unavailable.
+- Not observed (no transfer completed): the fee on a completed transfer, the
+  TSQ record shape for these directions, and webhooks.
 
 Read-only checks before go-live: the collection wallet row and env agree; a
 staging round trip (pay ₦100, force a failed delivery, see one refund) with

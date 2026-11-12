@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { createBNPLLoadHandlers } from './bnpl-load-handlers';
 import type { BNPLCheckoutStatus } from './use-bnpl-checkout-controller';
+
+jest.mock('@/lib/crash-diagnostics', () => ({
+  recordCrashBreadcrumb: jest.fn(),
+}));
 
 function createInput(status: BNPLCheckoutStatus) {
   const statusRef = { current: status };
@@ -34,6 +39,9 @@ describe('createBNPLLoadHandlers', () => {
     expect(input.setErrorMessage).toHaveBeenCalledWith(null);
     expect(input.scheduleLoadTimeout).toHaveBeenCalledTimes(1);
     expect(input.setCheckoutStatus).toHaveBeenCalledWith('loading');
+    expect(recordCrashBreadcrumb).toHaveBeenCalledWith(
+      'bnpl:webview:load_start'
+    );
   });
 
   it('ignores load start once the checkout reached a terminal status', () => {
@@ -53,6 +61,7 @@ describe('createBNPLLoadHandlers', () => {
     handleLoadEnd();
 
     expect(input.clearPendingLoadTimeout).toHaveBeenCalledTimes(1);
+    expect(recordCrashBreadcrumb).toHaveBeenCalledWith('bnpl:webview:load_end');
     const transition = input.setCheckoutStatus.mock.calls[0][0] as (
       current: BNPLCheckoutStatus
     ) => BNPLCheckoutStatus;

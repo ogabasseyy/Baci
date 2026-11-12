@@ -105,6 +105,19 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
   });
 
+  it('holds bank transfer to wallet while the PiggyVest check is unknown', () => {
+    // Arrange: the PiggyVest check timed out, so the wallet may be PiggyVest.
+    mockWallet = { balance: 0, primary_unavailable: true };
+
+    // Act
+    const { result } = renderController();
+
+    // Assert: wording stays as today, but no transfer into a wallet that may
+    // route to PiggyVest savings.
+    expect(result.current.walletIsStoreCredit).toBe(false);
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+
   it('keeps existing store credit spendable for a PiggyVest customer', () => {
     mockWallet = { balance: 2_000, primary_balance_kobo: 500_000 };
 

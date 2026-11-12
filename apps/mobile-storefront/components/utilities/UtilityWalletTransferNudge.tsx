@@ -35,6 +35,8 @@ interface UtilityWalletTransferNudgeProps {
   walletIsLoading?: boolean;
   /** PiggyVest customer: utilities spend store credit, added by card. */
   walletIsStoreCredit?: boolean;
+  /** PiggyVest check failed: no bank-transfer nudge until it retries. */
+  walletPrimaryUnknown?: boolean;
   /**
    * False while the wallet query is disabled with no data: the
    * funding nudge must stay hidden (a missing balance is not a zero
@@ -53,6 +55,7 @@ export function UtilityWalletTransferNudge({
   walletIsLoading,
   walletIsSettled,
   walletIsStoreCredit = false,
+  walletPrimaryUnknown = false,
 }: UtilityWalletTransferNudgeProps) {
   const storeCredit = walletIsStoreCredit && Boolean(returnToHref);
   const handlePress = () => {
@@ -66,7 +69,10 @@ export function UtilityWalletTransferNudge({
   // A PiggyVest customer is never sent to bank transfer (it would fund the
   // savings wallet); without a return link there is no store credit path.
   const visible =
-    (storeCredit || (canFundByBankTransfer && !walletIsStoreCredit)) &&
+    (storeCredit ||
+      (canFundByBankTransfer &&
+        !walletIsStoreCredit &&
+        !walletPrimaryUnknown)) &&
     walletIsLoading !== true &&
     walletIsSettled !== false &&
     !walletError &&

@@ -11,7 +11,10 @@ import {
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
-import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
+import {
+  isWalletPrimaryUnknown,
+  isWalletStoreCredit,
+} from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
@@ -141,6 +144,10 @@ export function useUtilityPayment() {
     // Spread so the key stays optional: absent means today's wallet wording.
     ...(isWalletStoreCredit(wallet.data?.wallet)
       ? { walletIsStoreCredit: true as const }
+      : {}),
+    // PiggyVest check failed: hold bank-transfer top-ups until it retries.
+    ...(isWalletPrimaryUnknown(wallet.data?.wallet)
+      ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):
     // the readiness gate invokes this after the settlement-gate

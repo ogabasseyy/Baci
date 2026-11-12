@@ -12,6 +12,7 @@ export function isEligibleForWalletFundedBankTransfer({
   walletBalance,
   walletIsStoreCredit = false,
   walletOrderAutoDebitEnabled,
+  walletPrimaryUnknown = false,
 }: {
   customerId?: string | null;
   customerPhone?: string | null;
@@ -20,9 +21,12 @@ export function isEligibleForWalletFundedBankTransfer({
   walletBalance: number;
   walletIsStoreCredit?: boolean;
   walletOrderAutoDebitEnabled: boolean;
+  /** PiggyVest check failed: hold the offer until it is retried. */
+  walletPrimaryUnknown?: boolean;
 }) {
   return (
     !walletIsStoreCredit &&
+    !walletPrimaryUnknown &&
     walletOrderAutoDebitEnabled &&
     isAuthenticated &&
     Boolean(customerId) &&

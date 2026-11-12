@@ -64,6 +64,14 @@ describe('utility funding nudge', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
+  it('shows no bank transfer nudge while the PiggyVest check is unknown', () => {
+    render(<UtilityWalletTransferNudge {...baseProps} walletPrimaryUnknown />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Pay with Bank Transfer' })
+    ).toBeNull();
+  });
+
   it('still offers store credit when bank-transfer funding is off', () => {
     render(
       <UtilityWalletTransferNudge

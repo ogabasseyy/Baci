@@ -21,6 +21,8 @@ interface UtilityPaymentOptionsProps {
   walletIsLoading?: boolean;
   /** PiggyVest customer: the wallet balance is store credit. */
   walletIsStoreCredit?: boolean;
+  /** PiggyVest check failed: the funding nudge waits for a retry. */
+  walletPrimaryUnknown?: boolean;
   /**
    * False while the wallet query is disabled (owner resolving,
    * session hydration, account switch): TanStack reports
@@ -45,6 +47,7 @@ export function UtilityPaymentOptions({
   walletIsLoading,
   walletIsSettled,
   walletIsStoreCredit = false,
+  walletPrimaryUnknown,
 }: UtilityPaymentOptionsProps) {
   const payLabel = walletIsStoreCredit
     ? 'Pay with store credit'
@@ -79,6 +82,7 @@ export function UtilityPaymentOptions({
         walletIsLoading={walletIsLoading}
         walletIsSettled={walletIsSettled}
         walletIsStoreCredit={walletIsStoreCredit}
+        walletPrimaryUnknown={walletPrimaryUnknown}
       />
 
       {isChecking ? (

@@ -19,7 +19,10 @@ import {
 } from '@/lib/klump-checkout';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
-import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
+import {
+  isWalletPrimaryUnknown,
+  isWalletStoreCredit,
+} from '@/lib/wallet-store-credit';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
@@ -185,6 +188,7 @@ export function useCheckoutPaymentController({
       walletBalance,
       walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
+      walletPrimaryUnknown: isWalletPrimaryUnknown(walletQuery.data?.wallet),
     });
   const storeCreditCompatible = isStoreCreditCompatiblePayment({
     paymentTab,

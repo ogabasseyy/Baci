@@ -249,6 +249,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletIsLoading={payment.walletIsLoading}
             walletIsSettled={payment.isWalletSettled()}
             walletIsStoreCredit={payment.walletIsStoreCredit}
+            walletPrimaryUnknown={payment.walletPrimaryUnknown}
           />
         </View>
       </ScrollView>

@@ -30,6 +30,15 @@ describe('bank transfer to wallet eligibility', () => {
     ).toBe(false);
   });
 
+  it('is held while the PiggyVest check is unknown', () => {
+    expect(
+      isEligibleForWalletFundedBankTransfer({
+        ...eligible,
+        walletPrimaryUnknown: true,
+      })
+    ).toBe(false);
+  });
+
   it('is not offered when the wallet already covers the order', () => {
     expect(
       isEligibleForWalletFundedBankTransfer({

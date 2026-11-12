@@ -430,6 +430,16 @@ wallet and the business settlement wallet (no API customer). Masked output only.
   `has_an_active_lien` (false here). **Bug found and fixed**: `retrievePiggyvestWallet`
   rejected `null` and a missing `withdrawal_count`, so every wallet payment
   would have been refused as unavailable.
+- Docs check after the probe (2026-11-12): no page says which wallet types may
+  send or receive `POST /transfer/wallet`. The wallet list endpoint documents
+  only `api` wallets, the fee settings speak of "API wallet" transfers, and
+  our business wallet is `type: "settlement"`. Likely cause, not confirmed:
+  `/transfer/wallet` only settles between `api` wallets, and a settlement
+  wallet destination is accepted (202) and then dropped. The fix would then be
+  an `api`-type collection wallet owned by the business (no API customer), or
+  PiggyVest enabling settlement-wallet transfers. TSQ's documented statuses are
+  `success`/`pending`/`failed`; `GET /transaction/:id` adds `partial`.
+  `processing_status` (what our 404 carried) is not documented anywhere.
 - Not observed (no transfer completed): the fee on a completed transfer, the
   TSQ record shape for these directions, and webhooks.
 

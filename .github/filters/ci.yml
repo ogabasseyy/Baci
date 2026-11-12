@@ -37,6 +37,8 @@ mobile_storefront:
   - '.github/scripts/check-mobile-gem-floors.test.sh'
   - '.github/scripts/android-storefront-release.sh'
   - '.github/scripts/android-storefront-release.test.sh'
+  - '.github/scripts/android-native-library-check.mjs'
+  - '.github/scripts/android-native-library-check.test.mjs'
   - '.github/scripts/ios-storefront-release.sh'
   - '.github/scripts/ios-storefront-release.test.sh'
   - '.github/scripts/verify-ios-expo-jsi-symbols.mjs'

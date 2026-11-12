@@ -5,7 +5,7 @@ import { errorBoundaryStyles as styles } from '@/components/error-boundary.style
 import Colors from '@/constants/Colors';
 
 interface StartupRecoveryScreenProps {
-  onLayout: () => void;
+  onLayout?: () => void;
 }
 
 export function StartupRecoveryScreen({

@@ -612,6 +612,9 @@ importers:
       '@tanstack/react-query-persist-client':
         specifier: ^5.101.0
         version: 5.101.0(@tanstack/react-query@5.101.0(react@19.3.0))(react@19.3.0)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       expo:
         specifier: ~58.0.19
         version: 58.0.19(6453cad46d3af710dcb67047360e3f04)

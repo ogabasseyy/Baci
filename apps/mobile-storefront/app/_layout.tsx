@@ -106,7 +106,7 @@ export default function RootLayout() {
     registeredUserId,
     isLoading: isPushLoading,
   } = usePushNotifications({
-    navigationReady: !showSplash && loaded && isStorageReady,
+    navigationReady: !showSplash && loaded && isStorageReady && isInitialized,
   });
   useEffect(() => {
     if (!showSplash) void verifyBenchmarkTelemetry();
@@ -270,10 +270,14 @@ export default function RootLayout() {
     hideFailed ||
     (timedOut && (!shouldRenderApp || !loaded || !isStorageReady || !hasLayout))
   ) {
-    return <StartupRecoveryScreen onLayout={onFirstLayout} />;
+    return <StartupRecoveryScreen />;
   }
 
-  if (!shouldRenderApp) return <View style={styles.startupPlaceholder} />;
+  if (!shouldRenderApp) {
+    return (
+      <View testID="startup-placeholder" style={styles.startupPlaceholder} />
+    );
+  }
 
   if (!loaded) {
     return null;
@@ -291,4 +295,6 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({ startupPlaceholder: { flex: 1 } });
+const styles = StyleSheet.create({
+  startupPlaceholder: { backgroundColor: '#20000b', flex: 1 },
+});

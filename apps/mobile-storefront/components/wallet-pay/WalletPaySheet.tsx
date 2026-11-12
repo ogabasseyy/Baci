@@ -46,8 +46,8 @@ function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: busy }}
-      disabled={busy}
+      accessibilityState={{ disabled: busy || !ready }}
+      disabled={busy || !ready}
       onPress={onPress}
       style={[
         styles.primary,
@@ -186,6 +186,13 @@ export function WalletPaySheet<Result>({
                 colors={colors}
                 label="Check again"
                 onPress={() => void sheet.recheck()}
+              />
+            ) : null}
+            {notice.action === 'try_again' ? (
+              <Button
+                colors={colors}
+                label="Try again"
+                onPress={() => void sheet.retryStart()}
               />
             ) : null}
             {notice.action === 'open_wallet' ? (

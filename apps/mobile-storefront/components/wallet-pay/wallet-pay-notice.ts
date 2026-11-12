@@ -11,7 +11,7 @@ export type WalletPayNotice = {
   message: string;
   tone: WalletPayNoticeTone;
   /** A follow-up the sheet offers besides "Done". */
-  action: 'check_again' | 'open_wallet' | 'sign_in' | null;
+  action: 'check_again' | 'try_again' | 'open_wallet' | 'sign_in' | null;
 };
 
 const amountText = (amountKobo: number | null) =>
@@ -85,6 +85,13 @@ export function walletPayNotice(
       message: 'Your session ended. Nothing was taken.',
       tone: 'info',
       action: 'sign_in',
+    },
+    not_started: {
+      title: "Couldn't reach PiggyVest",
+      message:
+        'Nothing was taken from your PiggyVest wallet. Check your connection and try again.',
+      tone: 'info',
+      action: 'try_again',
     },
     failed: {
       title: 'Something went wrong',

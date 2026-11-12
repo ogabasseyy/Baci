@@ -33,6 +33,7 @@ function sheetState(
     recheck: jest.fn(async () => undefined),
     close: jest.fn(),
     back: jest.fn(),
+    retryStart: jest.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -109,5 +110,27 @@ describe('WalletPaySheet', () => {
     );
     fireEvent.press(screen.getByRole('button', { name: 'Open wallet' }));
     expect(onOpenWallet).toHaveBeenCalled();
+  });
+
+  it('keeps Pay disabled until the PIN has 4 digits', () => {
+    const sheet = sheetState({ pin: '12' });
+    renderSheet(sheet);
+    const pay = screen.getByRole('button', { name: 'Pay ₦300' });
+    expect(pay).toBeDisabled();
+    fireEvent.press(pay);
+    expect(sheet.submit).not.toHaveBeenCalled();
+  });
+
+  it('offers to try again when PiggyVest never answered the start', () => {
+    const sheet = sheetState({
+      step: 'outcome',
+      outcome: { kind: 'not_started' },
+    });
+    renderSheet(sheet);
+    expect(screen.getByTestId('wallet-pay-notice')).toHaveTextContent(
+      /Nothing was taken/
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(sheet.retryStart).toHaveBeenCalledTimes(1);
   });
 });

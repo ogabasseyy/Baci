@@ -13,6 +13,8 @@ export type WalletPayOutcomeKind =
   | 'pin_locked'
   | 'pin_setup'
   | 'sign_in'
+  // The start never answered: nothing was paid, the same start can be retried.
+  | 'not_started'
   | 'failed';
 
 export type WalletPayOutcome = {

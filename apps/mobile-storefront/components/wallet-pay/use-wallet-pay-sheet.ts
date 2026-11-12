@@ -46,6 +46,8 @@ export function useWalletPaySheet<Result>({
   // True while a start, PIN check or pay call is out: a second open, a
   // second submit or a re-check never overlaps it.
   const inFlight = useRef(false);
+  // The last purchase opened, so a start that never answered can be retried.
+  const lastAdapter = useRef<WalletPayAdapter<Result> | null>(null);
 
   const current = (mine: number) => mine === generation.current;
 
@@ -87,6 +89,7 @@ export function useWalletPaySheet<Result>({
     // A double tap must not start a second payment over the first.
     if (inFlight.current) return;
     inFlight.current = true;
+    lastAdapter.current = next;
     generation.current += 1;
     const mine = generation.current;
     adapter.current = next;
@@ -100,7 +103,7 @@ export function useWalletPaySheet<Result>({
     setStep('starting');
     const started = await next.start().catch(() => ({
       kind: 'outcome' as const,
-      outcome: { kind: 'failed' as const },
+      outcome: { kind: 'not_started' as const },
     }));
     if (!current(mine)) return;
     inFlight.current = false;
@@ -183,6 +186,10 @@ export function useWalletPaySheet<Result>({
     open,
     submit,
     recheck,
+    /** Runs the same start again (same purchase key) after it never answered. */
+    retryStart: async () => {
+      if (lastAdapter.current) await open(lastAdapter.current);
+    },
     close,
     /** Back while the sheet is open: close it, or stay while a payment is sent. */
     back: () => {

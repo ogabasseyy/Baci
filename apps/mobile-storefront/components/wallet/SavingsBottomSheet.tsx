@@ -2,7 +2,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Modal, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,6 +78,12 @@ export function SavingsBottomSheet({
     pinCancel.current = cancel;
     setPinActive(cancel !== null);
   };
+  // When the content grows or shrinks after opening (a list finishes
+  // loading), move the open sheet to the new fitted height.
+  const fittedHeight = fitted?.[0];
+  useEffect(() => {
+    if (fittedHeight !== undefined) sheet.current?.snapToIndex(0);
+  }, [fittedHeight]);
   const dismiss = () => sheet.current?.close();
   const close = () => {
     const cancel = pinCancel.current;

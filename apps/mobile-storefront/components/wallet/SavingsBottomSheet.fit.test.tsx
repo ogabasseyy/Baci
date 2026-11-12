@@ -4,6 +4,7 @@ import Colors from '@/constants/Colors';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 
 const mockSnapPoints: unknown[] = [];
+const mockSnapToIndex = jest.fn();
 jest.mock('@gorhom/bottom-sheet', () => {
   const { forwardRef } = require('react');
   const { View } = require('react-native');
@@ -12,6 +13,11 @@ jest.mock('@gorhom/bottom-sheet', () => {
     default: forwardRef(
       (props: { snapPoints: unknown; children: unknown }, _ref: unknown) => {
         mockSnapPoints.push(props.snapPoints);
+        const { useImperativeHandle } = require('react');
+        useImperativeHandle(_ref, () => ({
+          snapToIndex: mockSnapToIndex,
+          close: jest.fn(),
+        }));
         return <View>{props.children as never}</View>;
       }
     ),
@@ -49,6 +55,33 @@ describe('bugfix: savings sheet left empty space below short content', () => {
   it('never grows past nearly full screen for tall content', () => {
     const [height] = renderSheet(5000) as number[];
     expect(height).toBeLessThan(5000);
+  });
+
+  it('moves an open sheet to the new height when its content changes', () => {
+    mockSnapToIndex.mockClear();
+    const { rerender } = render(
+      <SavingsBottomSheet
+        colors={Colors.light}
+        contentHeight={120}
+        onClose={jest.fn()}
+        visible
+      >
+        <Text>loading</Text>
+      </SavingsBottomSheet>
+    );
+    const before = mockSnapToIndex.mock.calls.length;
+    rerender(
+      <SavingsBottomSheet
+        colors={Colors.light}
+        contentHeight={480}
+        onClose={jest.fn()}
+        visible
+      >
+        <Text>loaded list</Text>
+      </SavingsBottomSheet>
+    );
+    expect(mockSnapToIndex.mock.calls.length).toBeGreaterThan(before);
+    expect(mockSnapToIndex).toHaveBeenLastCalledWith(0);
   });
 
   it('keeps the given heights until the content is measured', () => {

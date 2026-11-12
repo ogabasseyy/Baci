@@ -70,7 +70,11 @@ export function SavingsPhoneSwapStep({
 
   const shown = resolved?.query === searchValue ? [resolved.product] : products;
   const rows = shown.flatMap(savingsPhoneRows);
-  const affordable = rows.filter(
+  // The phone saved for now is not a choice to switch to.
+  const isCurrent = (row: SavingsPhoneRow) =>
+    row.title === goal.title && row.price === goal.target_amount;
+  const choices = rows.filter((row) => !isCurrent(row));
+  const affordable = choices.filter(
     (row) => row.product.searchPreview || row.price >= goal.current_amount
   );
 
@@ -99,7 +103,7 @@ export function SavingsPhoneSwapStep({
     <SavingsPhonePickList
       colors={colors}
       goal={goal}
-      hiddenCount={rows.length - affordable.length}
+      hiddenCount={choices.length - affordable.length}
       loading={swap.isSavingsDeviceLoading || loadingPreview}
       loadError={loadError}
       onBack={() => swap.setShowSavingsDeviceSwap(false)}

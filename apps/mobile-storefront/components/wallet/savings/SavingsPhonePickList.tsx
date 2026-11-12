@@ -112,7 +112,9 @@ export function SavingsPhonePickList({
         />
       ) : rows.length === 0 ? (
         <Text style={[styles.note, { color: colors.textSecondary }]}>
-          No matching phones.
+          {searchValue.trim()
+            ? 'No matching phones.'
+            : 'No other phones to switch to yet.'}
         </Text>
       ) : (
         rows.map((row) => {

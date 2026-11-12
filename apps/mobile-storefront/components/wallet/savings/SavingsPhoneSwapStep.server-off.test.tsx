@@ -167,6 +167,15 @@ describe('Change phone inside the savings sheet, server off', () => {
     ).toHaveAccessibilityState({ disabled: true, busy: true });
   });
 
+  it('does not offer the phone already being saved for', () => {
+    renderStep({}, { ...goal, title: 'iPhone 15 Pro', target_amount: 650000 });
+    expect(
+      screen.queryByRole('button', {
+        name: 'Choose iPhone 15 Pro Storage: 256GB',
+      })
+    ).toBeNull();
+  });
+
   it('Back returns to the savings view', () => {
     const { swap } = renderStep();
     fireEvent.press(screen.getByRole('button', { name: 'Back to savings' }));

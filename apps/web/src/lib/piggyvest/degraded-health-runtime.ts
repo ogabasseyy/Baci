@@ -6,6 +6,12 @@ import {
   type DegradedAlert,
   decideDegradedAlerts,
 } from './degraded-health-decision';
+import {
+  claimDegradedPage,
+  claimSharedPage,
+  resetDegradedPageClaims,
+  type SharedPageClaim,
+} from './degraded-health-page-claim';
 import { isPiggyvestFeatureFlagSet } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { readPrimaryWalletSavingsRecoveryRuntime } from './primary-wallet-savings-runtime';
@@ -29,15 +35,14 @@ const SNAPSHOT_STATEMENT =
 const GOAL_WALLET_STATEMENT =
   'SELECT piggyvest_primary.read_goal_wallet_setup_health($1::uuid,$2::text,$3::jsonb) AS result';
 const MS_PER_HOUR = 3_600_000;
-const CLAIM_CAPACITY = 64;
-
-const claimedPages = new Set<string>();
 
 export interface DegradedHealthDeps {
   readRuntime: typeof readPrimaryWalletSavingsRecoveryRuntime;
   createExecutor: typeof createPrimaryWalletEvidenceExecutor;
   emitAlert: typeof emitPiggyvestWebhookAlert;
   nowMs: () => number;
+  /** Shared (cross-instance) page claim; null answers fall back locally. */
+  claimShared: SharedPageClaim;
 }
 
 function defaultDeps(): DegradedHealthDeps {
@@ -46,6 +51,7 @@ function defaultDeps(): DegradedHealthDeps {
     createExecutor: createPrimaryWalletEvidenceExecutor,
     emitAlert: emitPiggyvestWebhookAlert,
     nowMs: () => Date.now(),
+    claimShared: claimSharedPage,
   };
 }
 
@@ -107,17 +113,6 @@ function readStalledGoalWallets(
   });
 }
 
-function claimPage(reason: string, hour: number): boolean {
-  const key = `${reason}:${hour}`;
-  if (claimedPages.has(key)) return false;
-  claimedPages.add(key);
-  if (claimedPages.size > CLAIM_CAPACITY) {
-    const oldest = claimedPages.values().next().value;
-    if (oldest !== undefined) claimedPages.delete(oldest);
-  }
-  return true;
-}
-
 export async function runPiggyvestDegradedHealth(
   options: { env?: NodeJS.ProcessEnv; deps?: Partial<DegradedHealthDeps> } = {}
 ): Promise<DegradedHealthResult> {
@@ -141,7 +136,8 @@ export async function runPiggyvestDegradedHealth(
   const hour = Math.floor(deps.nowMs() / MS_PER_HOUR);
   let paged = 0;
   for (const alert of alerts) {
-    if (!claimPage(alert.reason, hour)) continue;
+    if (!(await claimDegradedPage(alert.reason, hour, deps.claimShared)))
+      continue;
     paged += 1;
     deps.emitAlert('PIGGYVEST_DEGRADED', {
       reason: alert.reason,
@@ -151,7 +147,10 @@ export async function runPiggyvestDegradedHealth(
   }
   // A check that cannot read must not look healthy: page that too (same
   // hourly throttle), so an outage of the read itself is seen.
-  if (readFailed && claimPage('health_read_failed', hour)) {
+  if (
+    readFailed &&
+    (await claimDegradedPage('health_read_failed', hour, deps.claimShared))
+  ) {
     paged += 1;
     deps.emitAlert('PIGGYVEST_DEGRADED', {
       reason: 'health_read_failed',
@@ -168,7 +167,7 @@ export async function runPiggyvestDegradedHealth(
   };
 }
 
-/** Test-only: forget which pages were already sent. */
+/** Test-only: forget which pages were already sent in this copy. */
 export function resetDegradedHealthClaims(): void {
-  claimedPages.clear();
+  resetDegradedPageClaims();
 }

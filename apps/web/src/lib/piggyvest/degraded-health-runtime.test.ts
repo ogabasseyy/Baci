@@ -51,6 +51,7 @@ function deps(
     createExecutor: vi.fn(() => execute),
     emitAlert,
     nowMs: () => 1_800_000_000_000,
+    claimShared: vi.fn(async () => null),
     ...over,
   } as unknown as DegradedHealthDeps;
   return { value, emitAlert, execute };
@@ -207,6 +208,26 @@ describe('runPiggyvestDegradedHealth', () => {
         'PIGGYVEST_DEGRADED',
         expect.objectContaining({ reason: 'health_read_failed' })
       );
+    });
+  });
+
+  describe('bugfix: several server copies paged the same hour', () => {
+    it('pages once across copies that share the claim', async () => {
+      const taken = new Set<string>();
+      const claimShared = vi.fn(async (key: string) => {
+        if (taken.has(key)) return false;
+        taken.add(key);
+        return true;
+      });
+      const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+      const first = deps({ stuck: 4, claimShared });
+      await runPiggyvestDegradedHealth({ env, deps: first.value });
+      // A second copy has its own memory but the same shared claim.
+      resetDegradedHealthClaims();
+      const second = deps({ stuck: 4, claimShared });
+      await runPiggyvestDegradedHealth({ env, deps: second.value });
+      expect(first.emitAlert).toHaveBeenCalledTimes(1);
+      expect(second.emitAlert).not.toHaveBeenCalled();
     });
   });
 });

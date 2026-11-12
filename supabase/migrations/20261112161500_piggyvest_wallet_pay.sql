@@ -1110,8 +1110,9 @@ END;
 $$;
 
 -- Daily reconciliation: read-only lists (ids and ages only) of everything
--- that should have finished by now.
-CREATE FUNCTION piggyvest_primary.read_wallet_pay_reconciliation(integration_id uuid, environment text)
+-- that should have finished by now. options is reserved (pass {}), so the
+-- evidence executor can call it with its fixed three-parameter shape.
+CREATE FUNCTION piggyvest_primary.read_wallet_pay_reconciliation(integration_id uuid, environment text, options jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1209,7 +1210,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.release_failed_wallet_payment(uuid, text, jsonb),
   piggyvest_primary.settle_wallet_refund(uuid, text, jsonb),
   piggyvest_primary.release_failed_wallet_refund(uuid, text, jsonb),
-  piggyvest_primary.read_wallet_pay_reconciliation(uuid, text),
+  piggyvest_primary.read_wallet_pay_reconciliation(uuid, text, jsonb),
   piggyvest_primary.block_unsettled_wallet_pay_customer_deletion()
   FROM PUBLIC, anon, authenticated, service_role;
 
@@ -1233,7 +1234,7 @@ GRANT EXECUTE ON FUNCTION
   piggyvest_primary.release_failed_wallet_payment(uuid, text, jsonb),
   piggyvest_primary.settle_wallet_refund(uuid, text, jsonb),
   piggyvest_primary.release_failed_wallet_refund(uuid, text, jsonb),
-  piggyvest_primary.read_wallet_pay_reconciliation(uuid, text)
+  piggyvest_primary.read_wallet_pay_reconciliation(uuid, text, jsonb)
   TO piggyvest_primary_evidence;
 
 COMMIT;

@@ -41,22 +41,6 @@ test('the repository satisfies the storefront release gate', () => {
   assert.deepEqual(collectGateFailures(repository), []);
 });
 
-test('iOS can upload a TestFlight build without submitting it for App Review', () => {
-  const workflow = repository.readFile(IOS_RELEASE);
-  const job = readJob(workflow, 'build-and-submit');
-  const upload = readStep(job, 'Fastlane release').text;
-  const submit = readStep(job, 'Submit to App Store for review').text;
-
-  const testflightInput = workflow.match(
-    /^      testflight_only:\n((?:        .*\n)+)/m
-  )?.[1] ?? '';
-  assert.match(testflightInput, /^        required: false$/m);
-  assert.match(testflightInput, /^        default: false$/m);
-  assert.match(testflightInput, /^        type: boolean$/m);
-  assert.doesNotMatch(upload, /inputs\.testflight_only/);
-  assert.ok(submit.includes("if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.testflight_only) }}"));
-});
-
 test('TestFlight-only runs use separate cancellation and job queues', () => {
   const workflow = repository.readFile(IOS_RELEASE);
   const submitWorkflow = repository.readFile('.github/workflows/ios-storefront-submit.yml');

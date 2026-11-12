@@ -76,7 +76,9 @@ Check the submit step's
 result even when the workflow succeeds. In the separate "iOS Storefront Submit
 for Review" workflow, submission is skipped if another build occupies the App
 Review slot unless the owner explicitly selects `cancel_review_for_resubmit`
-to withdraw the existing review.
+to withdraw the existing review. The production workflow summary distinguishes
+TestFlight-only runs, actual App Review submissions, and uploads skipped
+because the App Store version slot is occupied.
 
 To resubmit a build that is already on TestFlight, run "iOS Storefront Submit
 for Review".

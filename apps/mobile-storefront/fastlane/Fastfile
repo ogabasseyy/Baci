@@ -18,6 +18,15 @@ NOTES
 # with no basepath to resolve against).
 import("asc_version_slot.rb")
 
+def record_github_app_store_submission(status)
+  output_path = ENV["GITHUB_OUTPUT"].to_s
+  return if output_path.empty?
+
+  File.open(output_path, "a") do |output|
+    output.puts("app_store_submission=#{status}")
+  end
+end
+
 def ensure_required_env!(keys)
   missing = keys.select { |key| ENV[key].to_s.strip.empty? }
   return if missing.empty?
@@ -245,6 +254,7 @@ platform :ios do
     # otherwise try to create a version Apple refuses to create.
     unless app_store_version_slot_ready?(app_version: app_version, build_number: build_number)
       UI.important("Skipping App Store submission; the binary is already on TestFlight.")
+      record_github_app_store_submission("skipped")
       next
     end
 
@@ -256,5 +266,6 @@ platform :ios do
     update_app_review_notes!(review_notes_text, app_version: app_version)
 
     deliver(deliver_opts)
+    record_github_app_store_submission("submitted")
   end
 end

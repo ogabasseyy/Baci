@@ -323,6 +323,7 @@ jobs:
       # gate is now driven by the App Store's actual live state via the
       # `ios-live-build-sync` cron reconciler (App Store Connect API).
       - name: Submit to App Store for review
+        id: submit
         # !cancelled() drops the implicit success() so a transient failure of the
         # preceding artifact-upload step can't skip submission once the build is
         # already on TestFlight; gate purely on the fastlane release outcome.
@@ -349,6 +350,20 @@ jobs:
           # replace lives in ios-storefront-submit.yml, whose run is never
           # cancelled by a competing one.
         run: bundle exec fastlane ios submit
+
+      - name: Record release mode
+        if: ${{ always() && steps.fastlane_release.outcome == 'success' }}
+        env:
+          TESTFLIGHT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+          SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
+        run: |
+          if [ "$TESTFLIGHT_ONLY" = "true" ]; then
+            echo 'This run uploaded a TestFlight build only. App Store submission was intentionally skipped.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_RESULT" = "submitted" ]; then
+            echo 'This run uploaded the iOS build and submitted it for App Store review.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_RESULT" = "skipped" ]; then
+            echo 'This run uploaded a TestFlight build, but App Store submission was skipped because the App Store version slot is occupied.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Clean up secrets
         if: always()

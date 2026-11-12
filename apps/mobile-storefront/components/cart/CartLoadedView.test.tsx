@@ -195,10 +195,16 @@ describe('CartLoadedView', () => {
   });
 
   it('hides the cart controls from accessibility while the checkout sheet is open', () => {
-    const { rerender, props } = renderView();
+    const { rerender, props, UNSAFE_root } = renderView();
 
+    expect(
+      UNSAFE_root.findByProps({ testID: 'cart-content' }).props.pointerEvents
+    ).toBe('auto');
     expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
     rerender(<CartLoadedView {...props} isIdentityModalOpen />);
+    expect(
+      UNSAFE_root.findByProps({ testID: 'cart-content' }).props.pointerEvents
+    ).toBe('none');
     expect(screen.queryByRole('button', { name: 'Back to home' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Clear cart' })).toBeNull();
     rerender(<CartLoadedView {...props} isIdentityModalOpen={false} />);

@@ -53,4 +53,24 @@ describe('SavingsHowYouSaveSection for a PiggyVest wallet', () => {
       screen.getByText('Earn interest on your savings?')
     ).toBeOnTheScreen();
   });
+
+  it('explains interest upbeat, with a respectful No and the early-cancel rule', () => {
+    render(
+      <SavingsHowYouSaveSection
+        colors={Colors.light}
+        controller={createPrimaryStartSavingsController()}
+      />
+    );
+    expect(
+      screen.getByText(/Let your money grow while you save/)
+    ).toBeOnTheScreen();
+    expect(screen.getByText('No, savings only')).toBeOnTheScreen();
+    expect(
+      screen.getByText(
+        'Cancel early and you keep your savings, but not the interest.'
+      )
+    ).toBeOnTheScreen();
+    // No rate or amount promises while the rate is unconfirmed.
+    expect(screen.queryByText(/%|per annum|p\.a\./i)).toBeNull();
+  });
 });

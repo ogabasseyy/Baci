@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND, palette } from '@/constants/Colors';
-import { PIGGYVEST_SLOWDOWN_MESSAGE } from '../PiggyvestSlowdownNotice';
 
 type Props = {
   colors: (typeof Colors)['light'];
@@ -32,7 +31,8 @@ export function SavingsPlanGettingReady({ colors, slow, onCheckNow }: Props) {
           </Text>
           <Text style={[styles.body, { color: colors.textSecondary }]}>
             {slow
-              ? `${PIGGYVEST_SLOWDOWN_MESSAGE} We’ll keep going, and there’s nothing you need to do.`
+              ? // The shared slowdown notice above says why; don't repeat it.
+                'This is taking longer than usual. We’ll keep going, and there’s nothing you need to do.'
               : 'This usually takes about a minute. You can leave this screen. We’ll keep going.'}
           </Text>
         </View>

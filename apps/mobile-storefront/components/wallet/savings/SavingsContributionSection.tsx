@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 import { SavingsAmountInput } from './SavingsAmountInput';
 import { SavingsChoiceCards } from './SavingsChoiceCards';
+import { SavingsIconLabel } from './SavingsIconLabel';
 import { SavingsScheduleFields } from './SavingsScheduleFields';
 import { SavingsTimelinePreview } from './SavingsTimelinePreview';
 import { startSavingsStyles as styles } from './start-savings.styles';
@@ -9,8 +10,18 @@ import type { StartSavingsController } from './start-savings-controller.types';
 import { contributionAboveTargetMessage } from './start-savings-controller.utils';
 
 const HEAD_START_OPTIONS = [
-  { value: true, label: 'Yes', accessibilityLabel: 'Initial contribution Yes' },
-  { value: false, label: 'No', accessibilityLabel: 'Initial contribution No' },
+  {
+    value: true,
+    label: 'Yes',
+    accessibilityLabel: 'Initial contribution Yes',
+    icon: 'flash-outline',
+  },
+  {
+    value: false,
+    label: 'No',
+    accessibilityLabel: 'Initial contribution No',
+    icon: 'calendar-outline',
+  },
 ] as const;
 
 /** Step 2: how often and how much, the timeline, and an optional head start. */
@@ -54,8 +65,13 @@ export function SavingsContributionSection({
           initialContributionEnabled={controller.initialContributionEnabled}
         />
       )}
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        Want to give it a head start?
+      <SavingsIconLabel
+        icon="rocket-outline"
+        text="Want to give it a head start?"
+        color={colors.text}
+      />
+      <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+        A little extra now gets you to your phone sooner.
       </Text>
       <SavingsChoiceCards
         accessibilityLabel="Give it a head start"

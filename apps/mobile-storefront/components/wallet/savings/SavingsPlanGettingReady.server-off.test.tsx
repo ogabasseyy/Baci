@@ -20,11 +20,9 @@ describe('SavingsPlanGettingReady with PiggyVest off', () => {
         onCheckNow={onCheckNow}
       />
     );
-    expect(
-      screen.getByText(
-        /Savings are running slowly right now\. Your money is safe\./
-      )
-    ).toBeOnTheScreen();
+    expect(screen.getByText(/taking longer than usual/)).toBeOnTheScreen();
+    // The shared notice carries the slowdown message; the card never repeats it.
+    expect(screen.queryByText(/running slowly/)).toBeNull();
     fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
     expect(onCheckNow).toHaveBeenCalled();
   });

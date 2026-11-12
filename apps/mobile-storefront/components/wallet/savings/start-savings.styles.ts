@@ -172,6 +172,7 @@ export const startSavingsStyles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2,
   },
+  checkboxIcon: { marginTop: 2 },
   checkboxLabel: {
     flex: 1,
     fontSize: 10,

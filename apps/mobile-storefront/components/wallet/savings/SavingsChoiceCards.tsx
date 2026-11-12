@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BRAND, palette } from '@/constants/Colors';
 import type { StartSavingsColors } from './start-savings.types';
@@ -8,6 +9,8 @@ export type SavingsChoice<T> = {
   label: string;
   /** Read out in full; defaults to the label. */
   accessibilityLabel?: string;
+  /** Optional icon shown before the label (replaced by the tick when chosen). */
+  icon?: ComponentProps<typeof Ionicons>['name'];
 };
 
 type Props<T> = {
@@ -58,6 +61,8 @@ export function SavingsChoiceCards<T extends string | boolean>({
               <View style={styles.tick}>
                 <Ionicons name="checkmark" size={12} color={BRAND.primary} />
               </View>
+            ) : option.icon ? (
+              <Ionicons name={option.icon} size={16} color={BRAND.primary} />
             ) : null}
             <Text
               style={[

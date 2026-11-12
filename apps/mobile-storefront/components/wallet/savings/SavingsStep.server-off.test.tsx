@@ -45,4 +45,29 @@ describe('SavingsStep with PiggyVest off', () => {
     );
     expect(screen.queryByText('2')).toBeNull();
   });
+
+  it('shows the encouraging line once the step is open, not before', () => {
+    const { rerender } = render(
+      <SavingsStep
+        colors={Colors.light}
+        number={1}
+        title="Pick"
+        state="later"
+        icon="phone-portrait-outline"
+        cheer="Every saving gets you closer."
+      />
+    );
+    expect(screen.queryByText('Every saving gets you closer.')).toBeNull();
+    rerender(
+      <SavingsStep
+        colors={Colors.light}
+        number={1}
+        title="Pick"
+        state="current"
+        icon="phone-portrait-outline"
+        cheer="Every saving gets you closer."
+      />
+    );
+    expect(screen.getByText('Every saving gets you closer.')).toBeOnTheScreen();
+  });
 });

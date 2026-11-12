@@ -93,4 +93,24 @@ describe('StartSavingsForm for a PiggyVest wallet', () => {
       screen.getByLabelText('Step 3, How you’ll save, done')
     ).toBeOnTheScreen();
   });
+
+  describe('bugfix: step 2 showed done with a saving bigger than the phone', () => {
+    it('keeps step 2 current and hides step 3 until the amount fits', () => {
+      render(
+        <StartSavingsForm
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            contributionAmount: '82000000',
+            contributionValue: 82_000_000,
+          })}
+        />
+      );
+      expect(
+        screen.getByLabelText('Step 2, Make it a habit, current step')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByLabelText('Step 3, How you’ll save, not started')
+      ).toBeOnTheScreen();
+    });
+  });
 });

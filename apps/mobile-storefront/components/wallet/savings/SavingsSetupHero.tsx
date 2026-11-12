@@ -1,7 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import { BRAND, palette } from '@/constants/Colors';
-import { SavingsProviderPreview } from '../SavingsProviderPreview';
 
 // Brand palette: soft red tint, dark text, red accents.
 const INK = palette.gray[900];
@@ -54,7 +53,6 @@ export function SavingsSetupHero() {
           Small steps. Main character upgrade.
         </Text>
       </View>
-      <SavingsProviderPreview />
     </View>
   );
 }

@@ -11,6 +11,7 @@ import type {
   LocalSavingsFormController,
   StartSavingsController,
 } from './start-savings-controller.types';
+import { contributionAboveTargetMessage } from './start-savings-controller.utils';
 
 type StartSavingsFormProps = {
   onSearchFocusChange?: (focused: boolean) => void;
@@ -41,6 +42,11 @@ export function StartSavingsForm(
     deviceReady &&
     Number.isFinite(props.controller.contributionValue) &&
     props.controller.contributionValue > 0 &&
+    // A saving bigger than the phone's price is not a finished step.
+    !contributionAboveTargetMessage(
+      props.controller.contributionValue,
+      props.controller.targetValue
+    ) &&
     (!props.controller.initialContributionEnabled ||
       (Number.isFinite(props.controller.effectiveInitialContribution) &&
         props.controller.effectiveInitialContribution > 0));
@@ -70,6 +76,8 @@ export function StartSavingsForm(
               ? 'Pick your phone (draft only)'
               : 'Pick your phone'
           }
+          icon="phone-portrait-outline"
+          cheer="Every saving gets you closer to your new phone."
           state={deviceReady ? 'done' : 'current'}
           last={props.mode === 'draft'}
         >
@@ -94,6 +102,8 @@ export function StartSavingsForm(
               colors={colors}
               number={2}
               title="Make it a habit"
+              icon="calendar-outline"
+              cheer="Small, steady amounts add up faster than you think."
               state={
                 !deviceReady ? 'later' : scheduleReady ? 'done' : 'current'
               }
@@ -107,6 +117,8 @@ export function StartSavingsForm(
               colors={colors}
               number={3}
               title="How you’ll save"
+              icon="wallet-outline"
+              cheer="Last step. Then your savings journey begins."
               state={!scheduleReady ? 'later' : howReady ? 'done' : 'current'}
               last
             >

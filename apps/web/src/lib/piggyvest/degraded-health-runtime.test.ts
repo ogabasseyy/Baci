@@ -41,13 +41,17 @@ function deps(over: Partial<DegradedHealthDeps> & { stuck?: number } = {}) {
   return { value, emitAlert, execute };
 }
 
+/** A test environment: only the variables a case sets. */
+const testEnv = (values: Record<string, string> = {}) =>
+  values as unknown as NodeJS.ProcessEnv;
+
 describe('runPiggyvestDegradedHealth', () => {
   beforeEach(resetDegradedHealthClaims);
 
   it('does nothing and reads nothing while the switch is off', async () => {
     const d = deps({ stuck: 9 });
     const result = await runPiggyvestDegradedHealth({
-      env: {},
+      env: testEnv(),
       deps: d.value,
     });
     expect(result).toEqual({ status: 'disabled' });
@@ -57,7 +61,7 @@ describe('runPiggyvestDegradedHealth', () => {
 
   it('pages once per hour per reason with a counts-only detail', async () => {
     const d = deps({ stuck: 4, readStalledGoalWallets: async () => 2 });
-    const env = { PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' };
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
     const first = await runPiggyvestDegradedHealth({ env, deps: d.value });
     const second = await runPiggyvestDegradedHealth({ env, deps: d.value });
     expect(first).toMatchObject({ alerts: 2, paged: 2 });
@@ -77,7 +81,7 @@ describe('runPiggyvestDegradedHealth', () => {
   it('pages again in the next hour', async () => {
     let now = 1_800_000_000_000;
     const d = deps({ stuck: 3, nowMs: () => now });
-    const env = { PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' };
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
     await runPiggyvestDegradedHealth({ env, deps: d.value });
     now += 3_600_000;
     await runPiggyvestDegradedHealth({ env, deps: d.value });
@@ -91,7 +95,7 @@ describe('runPiggyvestDegradedHealth', () => {
       }) as never,
     });
     const result = await runPiggyvestDegradedHealth({
-      env: { PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' },
+      env: testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' }),
       deps: d.value,
     });
     expect(result).toMatchObject({ indeterminateTransfers: null, paged: 0 });

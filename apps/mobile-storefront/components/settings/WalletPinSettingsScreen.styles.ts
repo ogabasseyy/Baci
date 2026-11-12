@@ -18,6 +18,7 @@ export const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   badge: {
     alignItems: 'center',
+    alignSelf: 'center',
     borderRadius: 30,
     height: 60,
     justifyContent: 'center',

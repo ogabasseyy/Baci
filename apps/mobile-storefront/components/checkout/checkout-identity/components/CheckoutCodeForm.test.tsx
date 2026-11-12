@@ -112,4 +112,14 @@ it('does not update busy state after an in-flight request is unmounted', async (
 
   await act(async () => complete({ success: true }));
   expect(onBusyChange).toHaveBeenCalledTimes(1);
+
+  renderForm();
+  fireEvent.changeText(
+    screen.getByLabelText('Email address'),
+    'unmount-form@example.com'
+  );
+  expect(
+    screen.getByRole('button', { name: 'Continue with email' })
+  ).toBeDisabled();
+  expect(mockSendCode).toHaveBeenCalledTimes(1);
 });

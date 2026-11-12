@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { z } from 'zod';
+import { checkoutIdentityEmailSchema } from '@/schemas/checkout-identity-email';
 import { useAuthStore } from '@/stores/auth-store';
 import type { CheckoutIdentityTheme } from '../colors';
 import { ErrorAlert } from './ErrorAlert';
 
-const emailSchema = z.email();
 const resendCooldownsByEmail = new Map<string, number>();
 
 function getResendCooldown(email: string): number | null {
@@ -50,6 +49,7 @@ export function CheckoutCodeForm({
     Record<string, number>
   >({});
   const [busy, setBusy] = useState(false);
+  const [, setCooldownVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const active = useRef(false);
   const pending = useRef(false);
@@ -62,7 +62,8 @@ export function CheckoutCodeForm({
   }, []);
 
   const normalizedEmail = email.trim().toLowerCase();
-  const isEmailValid = emailSchema.safeParse(normalizedEmail).success;
+  const isEmailValid =
+    checkoutIdentityEmailSchema.safeParse(normalizedEmail).success;
   const activeEmail = sentTo || normalizedEmail;
   const resendAfter =
     resendAfterByEmail[activeEmail] ?? getResendCooldown(activeEmail);
@@ -74,11 +75,14 @@ export function CheckoutCodeForm({
     const timer = setTimeout(
       () => {
         setResendAfterByEmail((current) => {
-          if (current[activeEmail] !== resendAfter) return current;
-          const next = { ...current };
-          delete next[activeEmail];
-          return next;
+          if (current[activeEmail] === resendAfter) {
+            const next = { ...current };
+            delete next[activeEmail];
+            return next;
+          }
+          return current;
         });
+        setCooldownVersion((version) => version + 1);
       },
       Math.max(0, resendAfter - Date.now())
     );
@@ -89,7 +93,7 @@ export function CheckoutCodeForm({
     if (
       pending.current ||
       socialBusy ||
-      (resend && resendAfter !== null) ||
+      (resend && resendAfter !== null && resendAfter > Date.now()) ||
       (!resend &&
         !sentTo &&
         (getResendCooldown(normalizedEmail) ?? 0) > Date.now())
@@ -106,18 +110,24 @@ export function CheckoutCodeForm({
         sentTo && !resend
           ? await verifyCode(sentTo, code)
           : await sendCode(sentTo || normalizedEmail);
+      const sentEmail = sentTo || normalizedEmail;
+      const successfulSendCooldown =
+        result.success && (sentTo.length === 0 || resend)
+          ? startResendCooldown(sentEmail)
+          : null;
       if (!active.current) return;
       if (!result.success) {
         setError(result.error || 'Unable to sign in. Please try again.');
       } else if (sentTo && !resend) {
         onVerified();
       } else {
-        setSentTo(sentTo || normalizedEmail);
+        setSentTo(sentEmail);
         setCode('');
-        const resendAfter = startResendCooldown(sentTo || normalizedEmail);
+        const resendAfter = successfulSendCooldown;
+        if (resendAfter === null) return;
         setResendAfterByEmail((current) => ({
           ...current,
-          [sentTo || normalizedEmail]: resendAfter,
+          [sentEmail]: resendAfter,
         }));
       }
     } catch {

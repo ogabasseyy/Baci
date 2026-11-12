@@ -48,4 +48,19 @@ describe('utility payment row', () => {
       screen.getByRole('button', { name: 'Add store credit' })
     ).toBeOnTheScreen();
   });
+
+  it('names store credit when a PiggyVest balance fails to load', () => {
+    render(
+      <UtilityPaymentOptions
+        amount={500}
+        returnToHref={RETURN_TO}
+        walletError={new Error('offline')}
+        walletIsSettled
+        walletIsStoreCredit
+      />
+    );
+
+    expect(screen.getByText('Store credit unavailable')).toBeOnTheScreen();
+    expect(screen.queryByText('Wallet unavailable')).toBeNull();
+  });
 });

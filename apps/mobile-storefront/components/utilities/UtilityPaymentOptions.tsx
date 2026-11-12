@@ -4,6 +4,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SPACING } from '@/constants/Colors';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { UtilityWalletTransferNudge } from './UtilityWalletTransferNudge';
+import { getUtilityWalletCopy } from './utility-wallet-copy';
 
 interface UtilityPaymentOptionsProps {
   amount: number;
@@ -49,9 +50,8 @@ export function UtilityPaymentOptions({
   walletIsStoreCredit = false,
   walletPrimaryUnknown,
 }: UtilityPaymentOptionsProps) {
-  const payLabel = walletIsStoreCredit
-    ? 'Pay with store credit'
-    : 'Pay with wallet';
+  const copy = getUtilityWalletCopy(walletIsStoreCredit);
+  const payLabel = copy.pay;
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   // Unsettled (query disabled, no data yet) renders as checking even
@@ -92,15 +92,15 @@ export function UtilityPaymentOptions({
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
           accessibilityRole="text"
-          accessibilityLabel="Wallet. Checking wallet balance"
+          accessibilityLabel={copy.checkingLabel}
         >
           <ActivityIndicator color={BRAND.primary} />
           <View style={styles.walletCopy}>
             <Text style={[styles.walletTitle, { color: colors.text }]}>
-              Wallet
+              {copy.title}
             </Text>
             <Text style={[styles.walletMeta, { color: colors.textSecondary }]}>
-              Checking wallet balance…
+              {copy.checking}
             </Text>
           </View>
         </View>
@@ -111,7 +111,7 @@ export function UtilityPaymentOptions({
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
           accessibilityRole="text"
-          accessibilityLabel="Wallet unavailable. Could not load your wallet balance"
+          accessibilityLabel={copy.unavailableLabel}
         >
           <View
             style={[
@@ -127,10 +127,10 @@ export function UtilityPaymentOptions({
           </View>
           <View style={styles.walletCopy}>
             <Text style={[styles.walletTitle, { color: colors.text }]}>
-              Wallet unavailable
+              {copy.unavailable}
             </Text>
             <Text style={[styles.walletMeta, { color: colors.textSecondary }]}>
-              Could not load your wallet balance. Please try again.
+              {copy.unavailableBody}
             </Text>
           </View>
         </View>

@@ -117,3 +117,22 @@ it('answers 503 with a stable code when the database fails', async () => {
   expect(res.status).toBe(503);
   expect(await res.json()).toMatchObject({ code: 'PIN_UNAVAILABLE' });
 });
+
+it('tells the app to confirm it is you first when the sign-in is too old', async () => {
+  mocks.rpc.mockImplementation((name: string) =>
+    Promise.resolve(
+      name === 'has_recent_wallet_pin_sign_in'
+        ? { data: false, error: null }
+        : { data: { status: 'not_set' }, error: null }
+    )
+  );
+  const res = await get();
+  expect(await res.json()).toEqual({
+    primary: true,
+    hasPin: false,
+    resetRequired: false,
+    available: true,
+    signInConfirmationRequired: true,
+  });
+  expect(mocks.rpc).toHaveBeenCalledWith('has_recent_wallet_pin_sign_in', {});
+});

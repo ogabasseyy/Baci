@@ -49,3 +49,7 @@
 **Learning:** Hardcoded `#FFFFFF` for text/icons on primary backgrounds in React Native ignores the theme system's `textOnPrimary` token which guarantees correct contrast in both modes.
 **Action:** Read `DARK_COLORS` and `LIGHT_COLORS` in `constants/theme.ts` to find the correct token (e.g. `textOnPrimary`) and apply it dynamically.
 **Source:** apps/mobile-admin/constants/theme.ts
+## 2024-10-31 — Saved Tab Hardcoded Colors Fix
+**Learning:** Hardcoded `#FFF` for primary button text and `#F3F4F6` for placeholder image backgrounds were used in the Stylesheet instead of utilizing the `BRAND.onPrimary` and `colors.muted` tokens respectively.
+**Action:** Pass dynamic `BRAND.onPrimary` and `colors.muted` tokens inline and remove static color declarations.
+**Source:** `apps/mobile-storefront/constants/Colors.ts`

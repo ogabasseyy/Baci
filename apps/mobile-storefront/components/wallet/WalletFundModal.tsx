@@ -59,10 +59,18 @@ export function WalletFundModal({
   // savings shortfall or a plain top-up) lose the card option; any other
   // return flow (e.g. IMEI check) still spends the legacy balance.
   const primaryReady = useWalletPrimaryReady();
+  // PiggyVest merchant whose primary wallet the server hasn't ruled out.
+  const piggyvestMerchant =
+    !!merchantId &&
+    isPiggyvestPrimaryMerchant(merchantId) &&
+    primaryCapability !== false;
   // A purchase return (IMEI check, utilities) spends store credit, which
   // only a card top-up adds: the PiggyVest account would fund savings.
+  // Also when the PiggyVest read is unknown (timed out) or not set up yet,
+  // so the purchase never detours into PiggyVest setup.
   const storeCreditTopUp =
-    primaryReady && isWalletPurchaseReturnHref(fundReturnTo);
+    isWalletPurchaseReturnHref(fundReturnTo) &&
+    (primaryReady || piggyvestMerchant);
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
   const hideCardFunding = primaryReady && !storeCreditTopUp;
@@ -72,9 +80,7 @@ export function WalletFundModal({
   // fallback once setup completes.
   const showPrimarySetup =
     !storeCreditTopUp &&
-    !!merchantId &&
-    isPiggyvestPrimaryMerchant(merchantId) &&
-    primaryCapability !== false &&
+    piggyvestMerchant &&
     fundingAccount?.provider !== 'piggyvest';
   // Keep the panel rendered while the card slides down on close, so the
   // exit animation shows the sheet instead of an empty card; it unmounts

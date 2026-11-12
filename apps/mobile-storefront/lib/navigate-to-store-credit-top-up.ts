@@ -13,10 +13,11 @@ export function navigateToStoreCreditTopUp(
   shortfall: number,
   returnToHref: WalletReturnHref
 ): void {
-  const requiredAmount = Math.max(
-    WALLET_TOP_UP_MIN_AMOUNT,
-    Math.ceil(shortfall)
-  );
+  // An unknown shortfall (not a positive number) opens with no prefill.
+  const requiredAmount =
+    Number.isFinite(shortfall) && shortfall > 0
+      ? Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall))
+      : 0;
   router.push(
     `/wallet?action=fund&requiredAmount=${requiredAmount}&returnTo=${encodeURIComponent(returnToHref)}`
   );

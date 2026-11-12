@@ -72,7 +72,8 @@ export function WalletHeroSection({
   totalBalance,
 }: WalletHeroSectionProps) {
   const visibleTier = formatTierLabel(loyaltyTier);
-  // PiggyVest money funds savings goals only: never call it spendable.
+  // PiggyVest money (main wallet plus goals) funds savings only: never call
+  // it spendable.
   const primaryReady = useWalletPrimaryReady();
   // Utility shortcuts appear only when there is money to pay with; legacy
   // wallets always show them, as before.
@@ -96,7 +97,7 @@ export function WalletHeroSection({
       <View style={styles.balanceAndAccountRow}>
         <View style={styles.balanceBlock}>
           <Text style={styles.balanceLabel}>
-            {primaryReady ? 'Savings wallet · NGN' : 'Total Balance · NGN'}
+            {primaryReady ? 'Total savings · NGN' : 'Total Balance · NGN'}
           </Text>
           <Text
             style={styles.balanceAmount}

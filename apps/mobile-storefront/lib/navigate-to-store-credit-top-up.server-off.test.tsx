@@ -29,4 +29,15 @@ describe('navigateToStoreCreditTopUp with the server off', () => {
       `/wallet?action=fund&requiredAmount=${WALLET_TOP_UP_MIN_AMOUNT}&returnTo=%2Futilities%2Fairtime%3FrepeatAmount%3D100`
     );
   });
+
+  it('opens with no prefill when the shortfall is unknown', () => {
+    navigateToStoreCreditTopUp(
+      Number.NaN,
+      '/utilities/airtime?repeatAmount=100' as WalletReturnHref
+    );
+
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=0&returnTo=%2Futilities%2Fairtime%3FrepeatAmount%3D100'
+    );
+  });
 });

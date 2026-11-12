@@ -1,9 +1,13 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import {
+  type PiggyvestShortfallVerdict,
+  promptPiggyvestUtilityShortfall,
+} from './prompt-piggyvest-utility-shortfall';
 import type { WalletReturnHref } from './sanitize-wallet-return-to';
 import { promptUtilityWalletFunding } from './utility-wallet-funding-prompt';
 
-interface UtilityWalletReadinessPayment {
+interface UtilityWalletReadinessPayment extends PiggyvestShortfallVerdict {
   canFundByBankTransfer: boolean;
   /**
    * Raw auth user id at gate time — NOT session presence. Startup can
@@ -141,6 +145,17 @@ export function ensureUtilityWalletReady({
   // Read the balance at gate time, not from the pre-await snapshot.
   const walletBalance = payment.getWalletBalance();
   if (!isRetainedReplay && walletBalance < amount) {
+    if (
+      promptPiggyvestUtilityShortfall({
+        amount,
+        balance: walletBalance,
+        refetchWallet: payment.refetchWallet,
+        returnToHref,
+        verdict: payment,
+      })
+    ) {
+      return false;
+    }
     promptUtilityWalletFunding({
       amount,
       balance: walletBalance,

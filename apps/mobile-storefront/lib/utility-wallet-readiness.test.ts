@@ -337,4 +337,58 @@ describe('ensureUtilityWalletReady', () => {
     );
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
+
+  describe('bugfix: Pay button shortfall for PiggyVest customers', () => {
+    const returnToHref = '/utilities/airtime' as WalletReturnHref;
+
+    it('offers a store credit card top-up, never bank transfer funding', () => {
+      const ready = ensureUtilityWalletReady({
+        amount: 1000,
+        payment: paymentState({
+          getWalletBalance: () => 200,
+          walletIsStoreCredit: true,
+        }),
+        returnToHref,
+      });
+
+      expect(ready).toBe(false);
+      expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+      const [title, , buttons] = (Alert.alert as jest.Mock).mock.calls[0];
+      expect(title).toBe('Not enough store credit');
+      buttons[0].onPress();
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        `/wallet?action=fund&requiredAmount=800&returnTo=${encodeURIComponent(returnToHref)}`
+      );
+    });
+
+    it('holds funding when the PiggyVest check is unknown', () => {
+      const refetchWallet = jest.fn();
+      const ready = ensureUtilityWalletReady({
+        amount: 1000,
+        payment: paymentState({
+          getWalletBalance: () => 200,
+          refetchWallet,
+          walletPrimaryUnknown: true,
+        }),
+        returnToHref,
+      });
+
+      expect(ready).toBe(false);
+      expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+      const [title, , buttons] = (Alert.alert as jest.Mock).mock.calls[0];
+      expect(title).toBe('Wallet unavailable');
+      buttons[0].onPress();
+      expect(refetchWallet).toHaveBeenCalled();
+    });
+
+    it('still pays from store credit that covers the amount', () => {
+      expect(
+        ensureUtilityWalletReady({
+          amount: 1000,
+          payment: paymentState({ walletIsStoreCredit: true }),
+          returnToHref,
+        })
+      ).toBe(true);
+    });
+  });
 });

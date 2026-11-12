@@ -25,6 +25,8 @@ export const walletPinSchemas = {
       status: z.enum(['unavailable', 'not_set', 'reset_required']),
     }),
   ]),
+  // has_recent_wallet_pin_sign_in(): a bare boolean.
+  recentSignIn: z.boolean(),
   setResult: z.discriminatedUnion('status', [
     z.strictObject({
       status: z.enum([

@@ -74,6 +74,10 @@ describe('the notice after saving a PIN for a goal action', () => {
   it('is short, so the confirmation can still name the action', async () => {
     status({ hasPin: false });
     jest.mocked(submitWalletPin).mockResolvedValue(undefined as never);
+    // The straight-away approval fails, so the customer is asked once more.
+    jest
+      .mocked(verifyGoalActionPin)
+      .mockRejectedValue(fail('PIN_BUSY', 'Please try again.'));
     const { result } = await open();
     expect(result.current.step).toBe('set');
     act(() => {

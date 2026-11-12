@@ -11,6 +11,7 @@ import {
 
 type RpcName =
   | 'get_wallet_pin_state'
+  | 'has_recent_wallet_pin_sign_in'
   | 'set_wallet_pin'
   | 'change_wallet_pin'
   | 'reset_wallet_pin';
@@ -45,6 +46,9 @@ export type WalletPinStatus = {
   hasPin: boolean;
   resetRequired: boolean;
   available: boolean;
+  // True when setting or resetting a PIN now would be refused for an old
+  // sign-in, so the app can ask the customer to confirm it's them first.
+  signInConfirmationRequired: boolean;
 };
 
 // The server derives every hash and signs every request; the database
@@ -75,13 +79,36 @@ export async function readWalletPinStatus(input: {
   merchantId: string;
 }): Promise<WalletPinStatus> {
   const pepper = readyPepper();
-  if (!pepper) return { hasPin: false, resetRequired: false, available: false };
+  if (!pepper)
+    return {
+      hasPin: false,
+      resetRequired: false,
+      available: false,
+      signInConfirmationRequired: false,
+    };
   const state = await readState(input.rpc, input.merchantId, pepper);
+  const available = state.status !== 'unavailable';
   return {
-    hasPin: state.status !== 'not_set' && state.status !== 'unavailable',
+    hasPin: state.status !== 'not_set' && available,
     resetRequired: state.status === 'reset_required',
-    available: state.status !== 'unavailable',
+    available,
+    signInConfirmationRequired:
+      available && !(await readRecentSignIn(input.rpc)),
   };
+}
+
+// The same answer set and reset will enforce (has_recent_authentication), read
+// ahead of time. Only a hint: when the read itself fails it reports "recent",
+// which is the old behaviour, and a save that is then refused still sends the
+// customer to the confirm step.
+async function readRecentSignIn(rpc: Rpc): Promise<boolean> {
+  try {
+    const result = await rpc('has_recent_wallet_pin_sign_in', {});
+    if (result.error) return true;
+    return walletPinSchemas.recentSignIn.parse(result.data);
+  } catch {
+    return true;
+  }
 }
 
 export async function setWalletPin(

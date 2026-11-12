@@ -31,14 +31,17 @@ describe('SavingsGoalSummary', () => {
     expect(screen.queryByText('₦0 saved')).toBeNull();
     expect(screen.queryByText('Every naira counts')).toBeNull();
     expect(screen.queryByText(/no image/i)).toBeNull();
-    // Screen readers still hear the target and that nothing is saved yet.
-    // The target is shown, not only read out, beside the weekly pace.
+    // Saved-of-target and the weekly pace side by side, read as one.
     expect(
-      screen.getByText('Nothing saved yet toward your ₦250,000 target.')
+      screen.getByLabelText(
+        /^₦0 of ₦250,000 saved\. ₦62,500 a week to finish by /
+      )
     ).toBeOnTheScreen();
     expect(
-      screen.getByText(/^Save about ₦62,500 a week to reach this by /)
+      screen.getByText('₦62,500 a week · until 3 Dec 2026')
     ).toBeOnTheScreen();
+    expect(screen.getByText('₦0 of ₦250,000')).toBeOnTheScreen();
+    expect(screen.queryByText('SAVING TOWARDS')).toBeNull();
   });
 
   it('uses the compact condition, capacity and colour arrangement', () => {
@@ -94,11 +97,10 @@ describe('SavingsGoalSummary', () => {
         goal={{ ...goal, maturity_date: '' }}
       />
     );
-    expect(screen.queryByText(/a week to reach this by/)).toBeNull();
-    // No blank gap: with no pace, the zero-saved status shows instead.
-    expect(
-      screen.getByText('Nothing saved yet toward your ₦250,000 target.')
-    ).toBeOnTheScreen();
+    expect(screen.queryByText(/a week to finish by/)).toBeNull();
+    // No blank gap: with no pace, the zero-saved status shows alone.
+    expect(screen.getByLabelText('₦0 of ₦250,000 saved')).toBeOnTheScreen();
+    expect(screen.queryByText(/\/week|due by/)).toBeNull();
   });
 
   it.each([
@@ -142,6 +144,6 @@ describe('SavingsGoalSummary', () => {
       />
     );
     expect(screen.getByText('Goal reached!')).toBeOnTheScreen();
-    expect(screen.queryByText(/a week to reach this by/)).toBeNull();
+    expect(screen.queryByText(/a week to finish by/)).toBeNull();
   });
 });

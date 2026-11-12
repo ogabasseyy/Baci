@@ -1,5 +1,5 @@
 import { resolveSavingsGoalVariant } from '@/lib/customer-savings';
-import { resolveCompletedSavingsGoalVariant } from './wallet-screen-savings.handlers';
+import { resolveCompletedSavingsGoalVariant } from './savings-variant-resolution.handlers';
 
 jest.mock('@/lib/customer-savings', () => ({
   ...jest.requireActual('@/lib/customer-savings'),

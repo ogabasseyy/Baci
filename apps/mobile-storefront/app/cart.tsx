@@ -30,7 +30,11 @@ import { getTemplateConfig } from '@/lib/templates';
 import { formatPrice, useCartStore } from '@/stores/cart-store';
 import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
-export default function CartScreen() {
+export default function CartScreen({
+  onStartShopping = () => router.dismissTo('/'),
+}: {
+  onStartShopping?: () => void;
+}) {
   // Reconcile lines stamped pending while the setting was unknown: a
   // cold deep link to /cart never mounts the tab layout's warm-up.
   useWarmMerchantPaymentSettings();
@@ -198,7 +202,7 @@ export default function CartScreen() {
         colors={colors}
         isRetrying={isRetryingCartLoad}
         onRetry={handleRetryCartLoad}
-        onStartShopping={() => router.push('/')}
+        onStartShopping={onStartShopping}
       />
     );
   }
@@ -211,7 +215,7 @@ export default function CartScreen() {
         colorScheme={colorScheme}
         colors={colors}
         onRetry={handleRetryCartLoad}
-        onStartShopping={() => router.push('/')}
+        onStartShopping={onStartShopping}
       />
     );
   }

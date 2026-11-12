@@ -3,7 +3,7 @@ import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
@@ -60,10 +60,10 @@ export function WalletFundModal({
   // return flow (e.g. IMEI check) still spends the legacy balance.
   const primaryReady = useWalletPrimaryReady();
   // PiggyVest merchant whose primary wallet the server hasn't ruled out.
-  const piggyvestMerchant =
-    !!merchantId &&
-    isPiggyvestPrimaryMerchant(merchantId) &&
-    primaryCapability !== false;
+  const piggyvestMerchant = isPiggyvestCardOnlyMerchant(
+    merchantId,
+    primaryCapability
+  );
   // A purchase return (IMEI check, utilities) spends store credit, which
   // only a card top-up adds: the PiggyVest account would fund savings.
   // Also when the PiggyVest read is unknown (timed out) or not set up yet,
@@ -80,6 +80,7 @@ export function WalletFundModal({
   // fallback once setup completes.
   const showPrimarySetup =
     !storeCreditTopUp &&
+    !!merchantId &&
     piggyvestMerchant &&
     fundingAccount?.provider !== 'piggyvest';
   // Keep the panel rendered while the card slides down on close, so the

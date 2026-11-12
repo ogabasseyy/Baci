@@ -25,11 +25,18 @@ jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
   };
 });
 
+const mockHasRetained = jest.fn<(...args: unknown[]) => Promise<boolean>>();
+jest.mock('./has-retained-primary-card-funding', () => ({
+  hasRetainedPrimaryCardFunding: (...args: unknown[]) =>
+    mockHasRetained(...args),
+}));
+
 const PILOT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockReadObserved.mockReturnValue(false);
+  mockHasRetained.mockResolvedValue(false);
 });
 
 describe('resolveFundWalletRail', () => {
@@ -104,5 +111,28 @@ describe('bugfix: store credit top-up funded the PiggyVest savings wallet', () =
     await expect(
       resolveFundWalletRail(PILOT, { walletReturnTo: '/wallet?action=savings' })
     ).resolves.toBe('primary');
+  });
+});
+
+describe('bugfix: purchase top-up skipped a saved PiggyVest card funding', () => {
+  it('recovers a saved PiggyVest card funding before any new charge', async () => {
+    mockHasRetained.mockResolvedValue(true);
+
+    await expect(
+      resolveFundWalletRail(PILOT, {
+        userId: 'user-1',
+        walletReturnTo: '/imei-check',
+      })
+    ).resolves.toBe('primary');
+    expect(mockHasRetained).toHaveBeenCalledWith(PILOT, 'user-1');
+  });
+
+  it('uses store credit when nothing is saved', async () => {
+    await expect(
+      resolveFundWalletRail(PILOT, {
+        userId: 'user-1',
+        walletReturnTo: '/utilities/airtime',
+      })
+    ).resolves.toBe('legacy');
   });
 });

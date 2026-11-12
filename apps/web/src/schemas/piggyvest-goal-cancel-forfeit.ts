@@ -78,6 +78,21 @@ export const piggyvestGoalCancelForfeitSchemas = {
       })
     )
     .length(1),
+  workRows: z
+    .array(
+      z.strictObject({
+        result: z
+          .array(
+            z.strictObject({
+              operationId: z.uuid(),
+              state: z.enum(['reserved', 'dispatched']),
+              alert: z.boolean(),
+            })
+          )
+          .max(200),
+      })
+    )
+    .length(1),
   releaseRows: z
     .array(
       z.strictObject({

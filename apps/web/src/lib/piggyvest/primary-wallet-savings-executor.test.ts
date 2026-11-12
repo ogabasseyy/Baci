@@ -213,3 +213,39 @@ it('permits the five goal complete statements with their exact parameter counts 
       execute(text, [JSON.stringify(scope), id, id])
     ).rejects.toThrow('Savings statement unavailable');
 });
+
+it('binds the forfeit worker statements to this integration and environment, with no customer scope', async () => {
+  const execute = createPrimaryWalletSavingsExecutor(config);
+  const id = '55555555-5555-4555-8555-555555555555';
+  for (const text of [
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
+  ]) {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    });
+    mocks.query.mockResolvedValueOnce({ rows: [{ result: null }] });
+    const parameters = [config.integrationId, config.environment, id];
+    await execute(text, parameters);
+    expect(mocks.query).toHaveBeenLastCalledWith(text, parameters);
+    await expect(
+      execute(text, [
+        '99999999-9999-4999-8999-999999999999',
+        config.environment,
+        id,
+      ])
+    ).rejects.toThrow('Savings binding unavailable');
+    await expect(
+      execute(text, [config.integrationId, 'production', id])
+    ).rejects.toThrow('Savings binding unavailable');
+  }
+});

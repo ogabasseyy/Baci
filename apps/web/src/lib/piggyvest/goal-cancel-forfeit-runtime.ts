@@ -3,11 +3,8 @@ import {
   driveGoalCancelForfeit,
   type GoalCancelForfeitOutcome,
 } from './goal-cancel-forfeit';
-import { runGoalCancelForfeitReconciliation } from './goal-cancel-forfeit-reconciliation';
+import { forfeitDriverPorts } from './goal-cancel-forfeit-ports';
 import type { createGoalCancelStore } from './goal-cancel-store';
-import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
-import { transferToWallet } from './transfers';
-import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Store = ReturnType<typeof createGoalCancelStore>;
 
@@ -15,9 +12,9 @@ type Store = ReturnType<typeof createGoalCancelStore>;
  * Sends the interest of an early-cancelled goal to Ogabassey's interest
  * wallet once the customer's principal is confirmed (owner decision
  * 2026-11-12). Best effort and never throws: the customer's answer never
- * depends on this leg, and an unsent forfeit is retried by the next status
- * check (the daily reconciliation also flags a goal wallet that still holds
- * the interest). Pages a person when the leg cannot finish by itself.
+ * depends on this leg. A forfeit this misses is sent by the next status check
+ * or by the daily worker sweep (goal-cancel-forfeit-sweep). Pages a person
+ * when the leg cannot finish by itself.
  */
 export async function sweepGoalCancelForfeit(input: {
   store: Store;
@@ -27,72 +24,16 @@ export async function sweepGoalCancelForfeit(input: {
 }): Promise<GoalCancelForfeitOutcome | 'failed'> {
   const { store, provider, evidence, operationId } = input;
   try {
-    const outcome = await driveGoalCancelForfeit(operationId, {
-      claim: async (id) => {
-        const claim = await store.claimForfeit(id);
-        // The database stamps the first report of a stuck forfeit, so a
-        // person is paged once, not on every customer status poll.
-        if (
-          (claim.status === 'needs_review' || claim.status === 'unavailable') &&
-          claim.alert === true
-        )
-          emitPiggyvestWebhookAlert(
-            claim.status === 'needs_review'
-              ? 'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW'
-              : 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
-            {
-              reason:
-                claim.status === 'needs_review'
-                  ? 'forfeit_needs_review'
-                  : 'interest_wallet_disabled',
-              operationId,
-            }
-          );
-        return claim;
-      },
-      transfer: async (forfeit) =>
-        await transferToWallet(provider, {
-          amountKobo: forfeit.amountKobo,
-          sourceWalletId: forfeit.sourceWalletId,
-          destinationWalletId: forfeit.destinationWalletId,
-          reference: forfeit.reference,
-          narration: 'Savings goal cancelled early: interest forfeited',
-        }),
-      lookupTransfer: async (forfeit) =>
-        await lookupSavingsTransferReference({
-          reference: forfeit.reference,
-          walletId: forfeit.sourceWalletId,
-          amountKobo: forfeit.amountKobo,
-          destinationWalletId: forfeit.destinationWalletId,
-          token: provider.token,
-          baseUrl: provider.baseUrl,
-        }),
-      release: async (id) => {
-        const released = await store.releaseForfeit(id);
-        // The third rejection: the database moved it to review and stamped
-        // it as alerted, so this is the one page for it.
-        if (released === 'needs_review')
-          emitPiggyvestWebhookAlert(
-            'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
-            {
-              reason: 'forfeit_rejected_three_times',
-              operationId,
-            }
-          );
-        return released;
-      },
-      ...(evidence === null
-        ? {}
-        : {
-            reconcile: async (forfeitId: string) =>
-              await runGoalCancelForfeitReconciliation({
-                configuration: evidence,
-                providerToken: provider.token,
-                operationId: forfeitId,
-              }),
-          }),
-    });
-    return outcome;
+    return await driveGoalCancelForfeit(
+      operationId,
+      forfeitDriverPorts({
+        claim: (id) => store.claimForfeit(id),
+        release: (id) => store.releaseForfeit(id),
+        provider,
+        evidence,
+        operationId,
+      })
+    );
   } catch {
     return 'failed';
   }

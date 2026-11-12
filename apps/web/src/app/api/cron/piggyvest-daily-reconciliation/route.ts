@@ -1,19 +1,25 @@
 import { NextResponse } from 'next/server';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { runPiggyvestDailyReconciliation } from '@/lib/piggyvest/daily-reconciliation-runtime';
+import { runScheduledGoalCancelForfeitSweep } from '@/lib/piggyvest/goal-cancel-forfeit-cron';
 
 export const maxDuration = 300;
 
 // Daily PiggyVest reconciliation (read-only). Inert until the owner sets
 // PIGGYVEST_RECONCILIATION_ENABLED=true; then it emails the report and pages
 // on a mismatch. The response carries counts only, never wallet or transfer
-// detail.
+// detail. It also runs the early-cancel interest forfeit sweep (inert until
+// the PiggyVest savings credentials exist; never fails the report).
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const forfeitSweep = await runScheduledGoalCancelForfeitSweep();
   try {
-    return NextResponse.json(await runPiggyvestDailyReconciliation());
+    const report = await runPiggyvestDailyReconciliation();
+    return NextResponse.json(
+      forfeitSweep === null ? report : { ...report, forfeitSweep }
+    );
   } catch {
     return NextResponse.json(
       { error: 'Reconciliation failed' },

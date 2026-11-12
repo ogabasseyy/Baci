@@ -239,6 +239,9 @@ async function claimTransferAmount(
     split.principalKobo > balanceKobo ||
     split.principalKobo + split.forfeitedInterestKobo !== balanceKobo
   )
-    throw new Error('Goal cancel split unavailable');
+    // The attempt is already dispatched in the database, so throwing would
+    // strand it with nothing sent. Send nothing and hand it to a person (the
+    // runtime pages for an inconsistent split before it gets here).
+    return { status: 'needs_review' };
   return split.principalKobo;
 }

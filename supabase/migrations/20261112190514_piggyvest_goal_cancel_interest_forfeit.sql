@@ -530,27 +530,25 @@ $$;
 --   unavailable                            interest wallet no longer enabled
 -- needs_review and unavailable carry "alert": true the first time they are
 -- reported for a forfeit (alerted_at is stamped), so the caller pages once.
-CREATE FUNCTION piggyvest_primary.claim_goal_cancel_forfeit(scope jsonb, operation_id uuid)
+-- The claim itself, shared by the customer path and the worker sweep. The
+-- caller has resolved the attempt's authority and holds the intent lock.
+CREATE FUNCTION piggyvest_primary.claim_goal_cancel_forfeit_core(
+  p_operation_id uuid,
+  p_business_id text,
+  p_provider_customer_id text
+)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  v_intent_id uuid;
   v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
   v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
-  v_intent piggyvest_primary.onboarding_intents%ROWTYPE;
+  v_wallet text;
 BEGIN
-  IF operation_id IS NULL THEN
-    RAISE EXCEPTION 'invalid goal cancel forfeit claim' USING ERRCODE = '22023';
-  END IF;
-  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('primary-savings:' || v_intent_id::text, 0));
   SELECT op.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS op
-   WHERE op.id = claim_goal_cancel_forfeit.operation_id AND op.intent_id = v_intent_id
-     AND op.integration_id = (scope ->> 'integrationId')::uuid;
+   WHERE op.id = p_operation_id;
   IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('status', 'none'); END IF;
   SELECT forfeit.* INTO v_forfeit FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.cancel_operation_id = v_operation.id
@@ -569,24 +567,57 @@ BEGIN
   IF v_operation.state <> 'confirmed' THEN
     RETURN pg_catalog.jsonb_build_object('status', 'waiting');
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
-                  WHERE wallet.integration_id = v_forfeit.integration_id AND wallet.enabled
-                    AND wallet.provider_wallet_id = v_forfeit.destination_wallet_id) THEN
+  SELECT wallet.provider_wallet_id INTO v_wallet
+    FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
+   WHERE wallet.integration_id = v_forfeit.integration_id AND wallet.enabled
+     AND wallet.provider_wallet_id <> v_forfeit.source_wallet_id
+     AND wallet.provider_wallet_id <> v_operation.destination_wallet_id
+     FOR SHARE;
+  IF NOT FOUND THEN
     RETURN piggyvest_primary.report_stuck_goal_cancel_forfeit(v_forfeit.id, 'unavailable');
   END IF;
-  SELECT intent.* INTO v_intent FROM piggyvest_primary.onboarding_intents AS intent
-   WHERE intent.id = v_intent_id;
+  -- Nothing has been sent for a reserved forfeit, so it follows the wallet
+  -- the operator has configured now (a rotation never strands it).
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-     SET state = 'dispatched', dispatched_at = pg_catalog.clock_timestamp()
+     SET state = 'dispatched', dispatched_at = pg_catalog.clock_timestamp(),
+         destination_wallet_id = v_wallet
    WHERE id = v_forfeit.id;
   RETURN pg_catalog.jsonb_build_object(
     'status', 'claimed',
     'forfeit', pg_catalog.jsonb_build_object(
       'operationId', v_forfeit.id, 'goalId', v_forfeit.goal_id, 'amountKobo', v_forfeit.amount_kobo,
       'sourceWalletId', v_forfeit.source_wallet_id,
-      'destinationWalletId', v_forfeit.destination_wallet_id,
-      'reference', v_forfeit.reference, 'businessId', scope ->> 'businessId',
-      'providerCustomerId', v_intent.provider_customer_id));
+      'destinationWalletId', v_wallet,
+      'reference', v_forfeit.reference, 'businessId', p_business_id,
+      'providerCustomerId', p_provider_customer_id));
+END;
+$$;
+
+CREATE FUNCTION piggyvest_primary.claim_goal_cancel_forfeit(scope jsonb, operation_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_intent_id uuid;
+  v_intent piggyvest_primary.onboarding_intents%ROWTYPE;
+BEGIN
+  IF operation_id IS NULL THEN
+    RAISE EXCEPTION 'invalid goal cancel forfeit claim' USING ERRCODE = '22023';
+  END IF;
+  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('primary-savings:' || v_intent_id::text, 0));
+  IF NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS op
+                  WHERE op.id = claim_goal_cancel_forfeit.operation_id AND op.intent_id = v_intent_id
+                    AND op.integration_id = (scope ->> 'integrationId')::uuid) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'none');
+  END IF;
+  SELECT intent.* INTO v_intent FROM piggyvest_primary.onboarding_intents AS intent
+   WHERE intent.id = v_intent_id;
+  RETURN piggyvest_primary.claim_goal_cancel_forfeit_core(
+    operation_id, scope ->> 'businessId', v_intent.provider_customer_id);
 END;
 $$;
 
@@ -615,6 +646,137 @@ BEGIN
      AND forfeit.integration_id = (scope ->> 'integrationId')::uuid
      FOR UPDATE;
   IF NOT FOUND OR v_forfeit.state <> 'dispatched' THEN RETURN 'not_released'; END IF;
+  RETURN piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
+END;
+$$;
+
+-- 6b. Forfeit leg, worker side (authorizer login with the integration's
+-- savings authority, no customer scope): the scheduled sweep that sends
+-- forfeits nobody's status check picked up (for example a cancel confirmed by
+-- the outflow webhook after the customer closed the app), and reports
+-- in-flight forfeits so they are settled or paged.
+CREATE FUNCTION piggyvest_primary.assert_goal_cancel_worker(integration_id uuid, environment text)
+RETURNS piggyvest_primary.integrations
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+BEGIN
+  SELECT candidate.* INTO v_binding FROM piggyvest_primary.integrations AS candidate
+    JOIN piggyvest_primary.savings_authorities AS authority ON authority.integration_id = candidate.id
+   WHERE candidate.id = assert_goal_cancel_worker.integration_id
+     AND candidate.environment = assert_goal_cancel_worker.environment
+     AND candidate.enabled AND authority.enabled AND authority.executor_login = SESSION_USER
+     FOR SHARE OF candidate, authority;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'forfeit worker authority unavailable' USING ERRCODE = '42501';
+  END IF;
+  RETURN v_binding;
+END;
+$$;
+
+-- Up to p_limit cancel attempts whose forfeit needs the sweep: reserved behind
+-- a confirmed principal (to send), or dispatched (to settle). A forfeit still
+-- dispatched a day after it was sent is stamped and returned with
+-- "alert": true once, so a person is paged about it.
+CREATE FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(
+  integration_id uuid,
+  environment text,
+  p_limit integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+  v_result jsonb;
+BEGIN
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION 'invalid forfeit work limit' USING ERRCODE = '22023';
+  END IF;
+  v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
+  WITH work AS (
+    SELECT forfeit.id, forfeit.cancel_operation_id, forfeit.state,
+           forfeit.state = 'dispatched' AND forfeit.alerted_at IS NULL
+             AND forfeit.dispatched_at < pg_catalog.clock_timestamp() - interval '1 day' AS overdue
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+      JOIN piggyvest_primary.goal_cancel_operations AS cancel ON cancel.id = forfeit.cancel_operation_id
+     WHERE forfeit.integration_id = v_binding.id
+       AND (forfeit.state = 'dispatched' OR (forfeit.state = 'reserved' AND cancel.state = 'confirmed'))
+     ORDER BY forfeit.reserved_at, forfeit.id
+     LIMIT p_limit
+  ), stamped AS (
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+       SET alerted_at = pg_catalog.clock_timestamp()
+      FROM work WHERE forfeit.id = work.id AND work.overdue
+    RETURNING forfeit.id
+  )
+  SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'operationId', work.cancel_operation_id, 'state', work.state,
+      'alert', work.id IN (SELECT stamped.id FROM stamped)) ORDER BY work.cancel_operation_id), '[]'::jsonb)
+    INTO v_result FROM work;
+  RETURN v_result;
+END;
+$$;
+
+CREATE FUNCTION piggyvest_primary.claim_goal_cancel_forfeit_worker(
+  integration_id uuid,
+  environment text,
+  operation_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+  v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
+  v_intent piggyvest_primary.onboarding_intents%ROWTYPE;
+BEGIN
+  v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
+  SELECT op.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS op
+   WHERE op.id = claim_goal_cancel_forfeit_worker.operation_id AND op.integration_id = v_binding.id;
+  IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('status', 'none'); END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('primary-savings:' || v_operation.intent_id::text, 0));
+  SELECT intent.* INTO v_intent FROM piggyvest_primary.onboarding_intents AS intent
+   WHERE intent.id = v_operation.intent_id AND intent.integration_id = v_binding.id;
+  IF NOT FOUND OR v_intent.provider_customer_id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'none');
+  END IF;
+  RETURN piggyvest_primary.claim_goal_cancel_forfeit_core(
+    v_operation.id, v_binding.business_id, v_intent.provider_customer_id);
+END;
+$$;
+
+CREATE FUNCTION piggyvest_primary.release_goal_cancel_forfeit_worker(
+  integration_id uuid,
+  environment text,
+  forfeit_id uuid
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+  v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
+BEGIN
+  v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
+  SELECT forfeit.* INTO v_forfeit FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+   WHERE forfeit.id = release_goal_cancel_forfeit_worker.forfeit_id AND forfeit.integration_id = v_binding.id;
+  IF NOT FOUND THEN RETURN 'not_released'; END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('primary-savings:' || v_forfeit.intent_id::text, 0));
+  SELECT forfeit.* INTO v_forfeit FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+   WHERE forfeit.id = v_forfeit.id FOR UPDATE;
+  IF v_forfeit.state <> 'dispatched' THEN RETURN 'not_released'; END IF;
   RETURN piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
 END;
 $$;
@@ -669,7 +831,10 @@ BEGIN
     JOIN piggyvest_primary.onboarding_intents AS intent
       ON intent.id = forfeit.intent_id AND intent.integration_id = forfeit.integration_id
    WHERE forfeit.id = read_dispatched_goal_cancel_forfeit.forfeit_id
-     AND forfeit.integration_id = v_binding.id AND forfeit.state = 'dispatched';
+     AND forfeit.integration_id = v_binding.id
+     -- A released forfeit that WAS sent may still succeed late; reading it
+     -- lets reconciliation see that (settlement then pages, never settles).
+     AND (forfeit.state = 'dispatched' OR (forfeit.state = 'released' AND forfeit.dispatched_at IS NOT NULL));
   RETURN v_result;
 END;
 $$;
@@ -693,7 +858,7 @@ BEGIN
     FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.integration_id = v_binding.id
      AND forfeit.reference = find_dispatched_goal_cancel_forfeit_by_reference.reference
-     AND forfeit.state = 'dispatched';
+     AND (forfeit.state = 'dispatched' OR (forfeit.state = 'released' AND forfeit.dispatched_at IS NOT NULL));
   RETURN v_result;
 END;
 $$;
@@ -848,8 +1013,8 @@ CREATE TRIGGER release_unsent_goal_cancel_forfeit
   FOR EACH ROW WHEN (NEW.state IN ('released', 'reviewed') AND OLD.state IS DISTINCT FROM NEW.state)
   EXECUTE FUNCTION piggyvest_primary.release_unsent_goal_cancel_forfeit();
 
--- A customer may not be deleted while a forfeit transfer is in flight:
--- settlement joins the live intent.
+-- A customer may not be deleted while a forfeit is planned or in flight:
+-- sending and settlement join the live intent and customer.
 CREATE FUNCTION piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -860,9 +1025,9 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
     JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = forfeit.intent_id
-    WHERE intent.customer_id = OLD.id AND forfeit.state = 'dispatched'
+    WHERE intent.customer_id = OLD.id AND forfeit.state IN ('reserved', 'dispatched')
   ) THEN
-    RAISE EXCEPTION 'cannot delete customer with an in-flight goal interest forfeit' USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'cannot delete customer with an unsettled goal interest forfeit' USING ERRCODE = 'P0001';
   END IF;
   RETURN OLD;
 END;
@@ -881,6 +1046,11 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.release_goal_cancel_forfeit_row(uuid),
   piggyvest_primary.report_stuck_goal_cancel_forfeit(uuid, text),
   piggyvest_primary.claim_goal_cancel_forfeit(jsonb, uuid),
+  piggyvest_primary.claim_goal_cancel_forfeit_core(uuid, text, text),
+  piggyvest_primary.assert_goal_cancel_worker(uuid, text),
+  piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer),
+  piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid, text, uuid),
+  piggyvest_primary.release_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text),
   piggyvest_primary.assert_goal_cancel_evidence(uuid, text),
   piggyvest_primary.read_dispatched_goal_cancel_forfeit(uuid, text, uuid),
@@ -901,6 +1071,12 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.read_goal_cancel_amounts(jsonb, uuid
 GRANT EXECUTE ON FUNCTION piggyvest_primary.claim_goal_cancel_forfeit(jsonb, uuid)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text)
+  TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer)
+  TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid, text, uuid)
+  TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.release_goal_cancel_forfeit_worker(uuid, text, uuid)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.settle_goal_cancel(uuid, text, jsonb)
   TO piggyvest_primary_evidence;

@@ -33,11 +33,20 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_STATEMENTS.amounts, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.manage, 3],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerList, 3],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim, 3],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease, 3],
   [GOAL_COMPLETE_STATEMENTS.issue, 2],
   [GOAL_COMPLETE_STATEMENTS.reserve, 3],
   [GOAL_COMPLETE_STATEMENTS.manage, 4],
   [GOAL_COMPLETE_STATEMENTS.status, 2],
   [GOAL_COMPLETE_STATEMENTS.checkIssued, 3],
+]);
+// The goal cancel forfeit sweep (integration id, environment, selection).
+const workerStatements = new Set<string>([
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -60,14 +69,25 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
       )
     )
       throw new Error('Savings statement unavailable');
-    const scope = piggyvestPrimaryWalletStoreSchemas.scope.parse(
-      JSON.parse(parameters[0])
-    );
-    if (
-      scope.integrationId !== config.integrationId ||
-      scope.environment !== config.environment
-    )
-      throw new Error('Savings binding unavailable');
+    if (workerStatements.has(statement)) {
+      // Worker statements carry no customer scope: they are bound to this
+      // integration and environment, and the database checks the login's
+      // savings authority for it.
+      if (
+        parameters[0] !== config.integrationId ||
+        parameters[1] !== config.environment
+      )
+        throw new Error('Savings binding unavailable');
+    } else {
+      const scope = piggyvestPrimaryWalletStoreSchemas.scope.parse(
+        JSON.parse(parameters[0])
+      );
+      if (
+        scope.integrationId !== config.integrationId ||
+        scope.environment !== config.environment
+      )
+        throw new Error('Savings binding unavailable');
+    }
     const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,

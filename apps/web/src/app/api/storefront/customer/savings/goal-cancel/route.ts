@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { goalCancelAmountFields } from '@/lib/piggyvest/goal-cancel-amount-fields';
+import { goalCancelForfeitTransfersAllowed } from '@/lib/piggyvest/goal-cancel-forfeit-cron';
 import {
   checkPrimaryWalletGoalCancelStatus,
   issuePrimaryWalletGoalCancel,
@@ -183,6 +184,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       goalId: input.goalId,
       operationId: input.operationId,
       pinProof: input.pinProof,
+      allowForfeitTransfers: goalCancelForfeitTransfersAllowed(),
     });
     switch (result.status) {
       case 'pin_refused':
@@ -270,6 +272,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       providerToken: runtime.providerToken,
       scope,
       operationId: body.data.operationId,
+      allowForfeitTransfers: goalCancelForfeitTransfersAllowed(),
     });
     if (result.status === 'not_found')
       return refuse('Cancellation not found.', 'CANCEL_NOT_FOUND', 404);

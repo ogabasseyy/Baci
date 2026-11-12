@@ -323,6 +323,100 @@ BEGIN
 END
 $replace$;
 
+-- 14. The scheduled worker sweep: lists forfeits nobody's status check picked
+--     up, sends them (following a rotated wallet), pages an overdue one once;
+--     a late success of a released forfeit is found and refused; the
+--     customer can not be deleted while a forfeit is planned.
+DO $worker$
+DECLARE
+  c_goal constant text := 'f3860000-0000-4000-8000-000000000005';
+  c_integration constant uuid := 'f3860000-0000-4000-8000-000000000006';
+  v_scope jsonb := pg_temp.gc_scope();
+  v_op text;
+  v_forfeit text;
+  v_old_ref text;
+  v_result jsonb;
+BEGIN
+  DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits;
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+   WHERE id = c_goal::uuid;
+  v_op := pg_temp.gc_reserved('worker');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'worker split');
+  -- Nothing to do while the principal is still in flight.
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) = '[]'::jsonb,
+    'the sweep listed a forfeit behind an unconfirmed principal');
+  -- The customer can not be deleted while the forfeit is planned.
+  BEGIN
+    DELETE FROM public.customers WHERE id = 'f3860000-0000-4000-8000-000000000003';
+    RAISE EXCEPTION 'a customer with a planned forfeit was deleted' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN NULL;
+  END;
+  PERFORM pg_temp.gc_assert(pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed',
+    'worker principal settle');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10)
+      = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('operationId', v_op, 'state', 'reserved', 'alert', false)),
+    'the sweep did not list the unsent forfeit');
+  BEGIN
+    PERFORM piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 0);
+    RAISE EXCEPTION 'an invalid sweep limit was accepted' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
+  BEGIN
+    PERFORM piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'production', 10);
+    RAISE EXCEPTION 'a foreign environment was swept' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+  -- The operator rotated the interest wallet before the forfeit was sent.
+  UPDATE piggyvest_primary.goal_interest_forfeit_wallets
+     SET provider_wallet_id = 'synthetic-goalcancel-interest-wallet-2'
+   WHERE integration_id = c_integration;
+  v_result := piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid);
+  PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'claimed'
+    AND v_result #>> '{forfeit,destinationWalletId}' = 'synthetic-goalcancel-interest-wallet-2'
+    AND v_result #>> '{forfeit,businessId}' = 'synthetic-goalcancel-business'
+    AND pg_temp.gf_forfeit(v_op, 'destination_wallet_id') = 'synthetic-goalcancel-interest-wallet-2',
+    'the worker claim did not follow the rotated wallet: ' || v_result::text);
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid) ->> 'status' = 'pending',
+    'a dispatched forfeit was claimed twice by the worker');
+  v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+  -- An in-flight forfeit is listed for settlement; a day overdue pages once.
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+     SET dispatched_at = pg_catalog.clock_timestamp() - interval '2 days' WHERE id = v_forfeit::uuid;
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) -> 0 ->> 'alert' = 'true'
+    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) -> 0 ->> 'alert' = 'false',
+    'an overdue forfeit did not page exactly once');
+  -- A definitive rejection through the worker releases and replaces it.
+  v_old_ref := pg_temp.gf_forfeit(v_op, 'reference');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.release_goal_cancel_forfeit_worker(c_integration, 'staging', v_forfeit::uuid) = 'released'
+    AND piggyvest_primary.release_goal_cancel_forfeit_worker(c_integration, 'staging', v_forfeit::uuid) = 'not_released',
+    'the worker release answered wrongly');
+  -- PiggyVest later reports the released reference successful: it is found
+  -- and readable, and settlement refuses it (pages) instead of settling.
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.find_dispatched_goal_cancel_forfeit_by_reference(c_integration, 'staging', v_old_ref)
+      = pg_catalog.jsonb_build_object('operationId', v_forfeit)
+    AND piggyvest_primary.read_dispatched_goal_cancel_forfeit(c_integration, 'staging', v_forfeit::uuid) IS NOT NULL,
+    'a late success of a released forfeit is unreachable');
+  PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
+      pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict',
+    'a late success of a released forfeit settled automatically');
+  PERFORM pg_temp.gc_assert(
+    has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer)', 'EXECUTE')
+    AND has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
+    AND has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
+    AND NOT has_function_privilege('piggyvest_primary_evidence', 'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
+    AND NOT has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.claim_goal_cancel_forfeit_core(uuid,text,text)', 'EXECUTE'),
+    'the worker functions are granted to the wrong roles');
+END
+$worker$;
+
 -- 13. Catalog: both new tables are row-level-secured and closed; every new
 --     function is SECURITY DEFINER with an empty search_path and not PUBLIC.
 DO $catalog$
@@ -340,6 +434,11 @@ BEGIN
     'piggyvest_primary.release_goal_cancel_forfeit_row(uuid)',
     'piggyvest_primary.report_stuck_goal_cancel_forfeit(uuid,text)',
     'piggyvest_primary.claim_goal_cancel_forfeit(jsonb,uuid)',
+    'piggyvest_primary.claim_goal_cancel_forfeit_core(uuid,text,text)',
+    'piggyvest_primary.assert_goal_cancel_worker(uuid,text)',
+    'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer)',
+    'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)',
+    'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.manage_goal_cancel_forfeit(jsonb,uuid,text)',
     'piggyvest_primary.assert_goal_cancel_evidence(uuid,text)',
     'piggyvest_primary.read_dispatched_goal_cancel_forfeit(uuid,text,uuid)',

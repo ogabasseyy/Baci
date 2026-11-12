@@ -67,6 +67,7 @@ const submitInput = {
   goalId,
   operationId,
   pinProof,
+  allowForfeitTransfers: true,
 };
 const statusInput = {
   configuration,
@@ -74,6 +75,7 @@ const statusInput = {
   scope,
   providerToken,
   operationId,
+  allowForfeitTransfers: true,
 };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -211,4 +213,33 @@ it('answers without amounts for an attempt made before the split', async () => {
   expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
     status: 'confirmed',
   });
+});
+
+it('pages and sends nothing when the database ever answers an inconsistent split', async () => {
+  dbAnswers(
+    { status: 'claimed', reservation },
+    { status: 'dispatched', principalKobo: 250000, forfeitedInterestKobo: 1 }
+  );
+  expect(await submitPrimaryWalletGoalCancel(submitInput)).toEqual({
+    status: 'needs_review',
+  });
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    {
+      reason: 'split_inconsistent',
+      operationId,
+    }
+  );
+});
+
+it('sends no new interest transfer while PiggyVest savings are switched off', async () => {
+  dbAnswers('confirmed', amounts);
+  expect(
+    await checkPrimaryWalletGoalCancelStatus({
+      ...statusInput,
+      allowForfeitTransfers: false,
+    })
+  ).toEqual({ status: 'confirmed', amounts });
+  expect(mocks.transfer).not.toHaveBeenCalled();
 });

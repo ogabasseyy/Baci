@@ -116,6 +116,10 @@ export async function submitPrimaryWalletGoalCancel(input: {
   goalId: unknown;
   operationId: unknown;
   pinProof: unknown;
+  // True only while PiggyVest savings are switched on: the cancel itself
+  // ignores the flags (nobody is trapped in a goal), Ogabassey's interest
+  // leg does not, so a rollback stops new interest transfers.
+  allowForfeitTransfers?: boolean;
 }) {
   const { configuration, scope, store, token } = bind(input);
   if (token === null) throw new Error('Goal cancel provider unavailable');
@@ -153,6 +157,20 @@ export async function submitPrimaryWalletGoalCancel(input: {
       store.claimDispatch(operationId, amountKobo),
     splitDispatch: async (operationId, balanceKobo) => {
       const split = await store.splitDispatch(operationId, balanceKobo);
+      // The database never answers an inconsistent split; if it ever did,
+      // the attempt is dispatched with nothing sent, so a person is paged
+      // and nothing moves.
+      if (
+        split.status === 'dispatched' &&
+        (split.principalKobo > balanceKobo ||
+          split.principalKobo + split.forfeitedInterestKobo !== balanceKobo)
+      ) {
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+          reason: 'split_inconsistent',
+          operationId,
+        });
+        return { status: 'needs_review' as const };
+      }
       if (split.status === 'needs_review')
         emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
           reason: 'provider_balance_below_principal',
@@ -206,6 +224,7 @@ export async function submitPrimaryWalletGoalCancel(input: {
     provider,
     evidence,
     operationId: request.operationId,
+    allowForfeitTransfers: input.allowForfeitTransfers === true,
   });
 }
 
@@ -221,9 +240,13 @@ async function finish<T extends { status: string }>(
     provider: { token: string; baseUrl: string };
     evidence: unknown | null;
     operationId: string;
+    allowForfeitTransfers: boolean;
   }
 ) {
-  if (result.status === 'confirmed') await sweepGoalCancelForfeit(input);
+  // With savings switched off the daily worker sweep still settles in-flight
+  // forfeits; nothing new is sent from here.
+  if (result.status === 'confirmed' && input.allowForfeitTransfers)
+    await sweepGoalCancelForfeit(input);
   return await withGoalCancelAmounts(input.store, input.operationId, result);
 }
 
@@ -237,6 +260,7 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
   scope: unknown;
   providerToken: unknown;
   operationId: unknown;
+  allowForfeitTransfers?: boolean;
 }) {
   const { configuration, store, token } = bind(input);
   if (token === null) throw new Error('Goal cancel provider unavailable');
@@ -252,6 +276,12 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
   };
   return await finish(
     await readGoalCancelStatus(store, evidence, token, operationId),
-    { store, provider, evidence, operationId }
+    {
+      store,
+      provider,
+      evidence,
+      operationId,
+      allowForfeitTransfers: input.allowForfeitTransfers === true,
+    }
   );
 }

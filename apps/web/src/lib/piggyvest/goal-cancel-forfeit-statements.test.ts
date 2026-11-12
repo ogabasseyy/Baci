@@ -9,6 +9,9 @@ it('calls only the forfeit functions of migration 20261112190514', () => {
   ).toEqual([
     'claim_goal_cancel_forfeit',
     'manage_goal_cancel_forfeit',
+    'list_goal_cancel_forfeit_work',
+    'claim_goal_cancel_forfeit_worker',
+    'release_goal_cancel_forfeit_worker',
     'read_dispatched_goal_cancel_forfeit',
     'find_dispatched_goal_cancel_forfeit_by_reference',
     'settle_goal_cancel_forfeit',

@@ -84,15 +84,17 @@ it.each([
   expect(p.cancelBeforeDispatch).not.toHaveBeenCalled();
 });
 
-it('never sends when the split answers a principal above the balance read', async () => {
+it('never sends, and never throws, when the split answers a principal above the balance read', async () => {
   const p = ports();
   p.splitDispatch.mockResolvedValue({
     status: 'dispatched',
     principalKobo: BALANCE + 1,
     forfeitedInterestKobo: 0,
   });
-  await expect(submitGoalCancel(request, p)).rejects.toThrow(
-    'Goal cancel split unavailable'
-  );
+  // The attempt is already dispatched: a throw would strand it, so it is
+  // answered needs_review for a person instead.
+  expect(await submitGoalCancel(request, p)).toEqual({
+    status: 'needs_review',
+  });
   expect(p.transfer).not.toHaveBeenCalled();
 });

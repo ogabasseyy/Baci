@@ -18,7 +18,9 @@ const proof = {
 };
 const rows = (result: unknown) => ({ rows: [{ result }] });
 function store(answer: unknown) {
-  const execute = vi.fn(async () => rows(answer));
+  const execute = vi.fn(
+    async (_statement: string, _parameters: readonly string[]) => rows(answer)
+  );
   return {
     execute,
     store: createWalletPayEvidenceStore({

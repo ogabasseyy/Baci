@@ -4,7 +4,10 @@ import {
   type WalletPayRefundReservation,
 } from '@/schemas/piggyvest-wallet-pay';
 import type { TransferReferenceLookup } from './transfer-reference-lookup';
-import { sendWalletPayTransferOnce } from './wallet-pay-send-once';
+import {
+  isRestricted,
+  sendWalletPayTransferOnce,
+} from './wallet-pay-send-once';
 
 export interface WalletRefundPorts {
   // From server configuration only; must equal the refund's source.
@@ -40,7 +43,8 @@ async function checkWallets(
       main.id === refund.destinationWalletId &&
       main.api_customer_id === refund.providerCustomerId &&
       main.business_id === refund.businessId;
-    if (!bound) return 'unavailable';
+    if (!bound || isRestricted(collection) || isRestricted(main))
+      return 'unavailable';
     return collection.balance >= refund.amountKobo ? 'ok' : 'unfunded';
   } catch {
     return 'unavailable';

@@ -108,6 +108,32 @@ read from the payment row inside the function, never passed in.
   stays with the existing VTU pending/requery machinery and is never refunded
   until it is definitively failed.
 
+### 4a. VTU: only the customer's payment source changes (owner, 2026-11-12)
+
+- Ogabassey sells airtime/data/bills from a **prefunded float in its own
+  Monnify wallet**; Kuda is the backup. Wallet pay never moves customer money
+  to Monnify or Kuda: the customer pays PiggyVest main wallet → Ogabassey's
+  PiggyVest collection wallet, and fulfilment then runs exactly as today
+  against the float. Topping the float up is the owner's separate operation.
+- Provider choice stays untouched. It is decided when the VTU row is prepared
+  (`resolveVtuProvider` in `lib/vtu-pending-transaction.ts`, Monnify preferred
+  where it has the product) and a rejected Monnify airtime vend falls back to
+  Kuda inside fulfilment (`lib/vtu-monnify-kuda-fallback.ts`,
+  `fulfillPendingVtuTransaction` in `lib/vtu-fulfillment.ts`). The VTU PR only
+  replaces the legacy wallet debit (`redeem_vtu_wallet_payment`, phase B.5)
+  with "the wallet payment is confirmed and claimed" for PiggyVest-paid rows,
+  and replaces the legacy refund branches with `finish(..., 'failed')`.
+- **Float too low.** Monnify answers a business failure ("Insufficient
+  Balance"), which the existing code treats as terminal; airtime then tries
+  Kuda. If no provider can vend, the row ends `failed`, the payment's delivery
+  is finished as `failed`, and the database opens exactly one refund to the
+  customer's main wallet. A `pending`/processing vend is never refunded: it
+  stays with the existing requery cron until it is definitively successful or
+  failed. We do not take the payment and hold it: the order is "pay, then
+  vend at once", so a low float shows up as a quick refund, not a stuck
+  payment. Pre-checking the float before taking the payment needs a Monnify
+  balance read we do not have wired; listed as a follow-up, not a blocker.
+
 ### 5. Refunds (collection wallet → customer main wallet), exactly once
 
 - Created only by the database, from a confirmed payment whose fulfilment is

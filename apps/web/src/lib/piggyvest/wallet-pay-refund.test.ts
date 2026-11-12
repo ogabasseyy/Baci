@@ -151,4 +151,22 @@ describe('driveWalletRefund', () => {
     await expect(driveWalletRefund({ paymentId: OP }, p)).rejects.toThrow();
     expect(p.transfer).not.toHaveBeenCalled();
   });
+  it.each([
+    ['main', 'is_frozen'],
+    ['main', 'has_an_active_lien'],
+    ['collection', 'is_frozen'],
+    ['collection', 'has_an_active_lien'],
+  ])('fails closed when the %s wallet reports %s', async (which, flag) => {
+    const id = `${which}-wallet`;
+    const blocked = { ...(wallets[id] as object), [flag]: true };
+    const p = ports({
+      retrieveWallet: vi.fn(async (walletId: string) =>
+        walletId === id ? blocked : wallets[walletId]
+      ),
+    });
+    await expect(driveWalletRefund({ paymentId: OP }, p)).resolves.toBe(
+      'unavailable'
+    );
+    expect(p.transfer).not.toHaveBeenCalled();
+  });
 });

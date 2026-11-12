@@ -379,3 +379,32 @@ drain runner is scheduled before live inflows; on the first live payout,
 confirm whether `destination_wallet` is stable, and if not stop pinning it
 in the paid-interest crosswalk (or alert when `prerequisite` recurs for an
 already-mapped `pvb_wallet`).
+
+## 9. Pay from the PiggyVest wallet (wallet pay) — 2026-11-12, dark
+
+Design: `docs/superpowers/plans/2026-11-12-piggyvest-pay-from-wallet.md`.
+Migration `20261112161500_piggyvest_wallet_pay`, flag
+`PIGGYVEST_WALLET_PAY_ENABLED` (default off; also stopped by
+`PIGGYVEST_KILL_SWITCH`), collection wallet `PIGGYVEST_COLLECTION_WALLET_ID`
+(must equal the `piggyvest_primary.collection_wallets` row). Nothing has been
+run against PiggyVest for this flow.
+
+| Contract point | Status | Source / what the code does |
+| --- | --- | --- |
+| `POST /transfer/wallet` answers 202 "processing", never success | confirmed | §5 probes; transfers.ts. Payment and refund are "submitted" until a TSQ record settles them. |
+| TSQ answers 404 for a just-accepted transfer before indexing | confirmed | contract evidence 2026-10-31 P2. A 404 is never proof of absence; only a definitive POST rejection plus `not_found` releases. |
+| A business wallet carries no `api_customer_id` | confirmed (sandbox) | 2026-11-02 `house_wallet_unbound_to_customer = yes`. The send step refuses a collection wallet that names a customer. |
+| A customer main wallet may send to a business (collection) wallet via the API | **assumed** (docs: transfers are "from one wallet to another wallet under your account") | Never exercised, not even in sandbox. If PiggyVest refuses, the POST's definitive rejection (400) releases the payment and nothing moves. |
+| A business wallet may send back to a customer main wallet (refund) | sandbox-observed | Evidence 2026-11-02-2 P8 "Collection to main": worked; the destination row carries our reference and GET /transaction/:id resolves from both sides. Not confirmed for production. |
+| Fee on either direction | **unknown** for production; sandbox 0 | Sandbox P6: the record carries a fee field, `transfer_fee_kobo` 0, exact amounts both sides. Docs: `PATCH /api/v1/business/api-fee-wallet-settings` charges a fee wallet when its flag is set, else the source wallet; an invalid fee wallet "may fail silently". No amounts are published and no fee wallet is known to be set. A record with `fee > 0` is never settled clean: it is recorded `needs_review` and nothing is delivered. |
+| TSQ record for these transfers carries our reference in `third_party_reference`, both wallets, `internal_reference = id` | assumed from savings | Same shape as main→goal (evidence 2026-11-04 S12). `customer_id` may be the business id, as there. |
+| Refund reporting (which webhook, which side) | docs: sender side only | Docs list `wallet-transfer.outflow.success` (sender) and no wallet-transfer inflow event; whether the receiver gets anything is unknown (P8 had no receiver). Refunds therefore settle from the collection wallet's outflow event plus the TSQ re-query on the sending wallet. The docs sample carries two differing reference-like fields (`initiator_reference`, `pvb_third_party_reference`), so which one echoes ours is unconfirmed; only the TSQ record settles. |
+| A reference is unique forever | **unknown** window; sandbox rejects reuse | Sandbox P2: a reused reference is refused (400) with no second movement or record. We never re-post a reference anyway: payments are `pvb-pay-<id>` (one per attempt) and a refund retry takes `pvb-refund-<paymentId>-<n>`. |
+
+| Per-customer limits on API-initiated debits | **unknown** | No evidence (P4 withdrawal counter inconclusive). The only documented refusal is 400 "Insufficient funds", which releases cleanly. |
+| Freeze / lien on a wallet | **unknown** whether it blocks business-initiated transfers | Wallets expose `is_frozen` and `has_an_active_lien`; wallet pay refuses to send from or into a flagged wallet (fail closed). |
+| A collection (house) wallet exists | sandbox-observed; production: none yet | Sandbox P3 `house_wallet_unbound_to_customer` = yes. The owner must create or designate a production collection wallet; it must not reuse the interest payout wallet without the owner's OK. |
+
+Read-only checks before go-live: the collection wallet row and env agree; a
+staging round trip (pay ₦100, force a failed delivery, see one refund) with
+the sandbox key; `read_wallet_pay_reconciliation` empty after it.

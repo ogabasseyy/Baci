@@ -24,13 +24,14 @@ const rows = (result: unknown) => ({ rows: [{ result }] });
 
 describe('createWalletPayCustomerStore', () => {
   it('issues with the server-priced request under the customer scope', async () => {
-    const execute = vi.fn(async () =>
-      rows({
-        status: 'issued',
-        operationId: OP,
-        amountKobo: 100000,
-        expiresAt: 'x',
-      })
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows({
+          status: 'issued',
+          operationId: OP,
+          amountKobo: 100000,
+          expiresAt: 'x',
+        })
     );
     const store = createWalletPayCustomerStore({ scope, execute });
     await expect(
@@ -63,8 +64,9 @@ describe('createWalletPayCustomerStore', () => {
   });
 
   it('reserves with the PIN proof and parses every answer', async () => {
-    const execute = vi.fn(async () =>
-      rows({ status: 'pin_refused', reason: 'mismatch' })
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows({ status: 'pin_refused', reason: 'mismatch' })
     );
     const store = createWalletPayCustomerStore({ scope, execute });
     await expect(store.reserve(OP, 'a'.repeat(64))).resolves.toEqual({
@@ -79,22 +81,28 @@ describe('createWalletPayCustomerStore', () => {
   });
 
   it('sends an empty proof as the missing proof (the database refuses it)', async () => {
-    const execute = vi.fn(async () =>
-      rows({ status: 'pin_refused', reason: 'missing' })
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows({ status: 'pin_refused', reason: 'missing' })
     );
     const store = createWalletPayCustomerStore({ scope, execute });
     await store.reserve(OP, '');
-    expect(execute.mock.calls[0][1][2]).toBe('');
+    expect(execute.mock.calls[0]?.[1][2]).toBe('');
   });
 
   it('throws on an unexpected database answer', async () => {
-    const execute = vi.fn(async () => rows({ status: 'claimed' }));
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows({ status: 'claimed' })
+    );
     const store = createWalletPayCustomerStore({ scope, execute });
     await expect(store.reserve(OP, '')).rejects.toThrow();
   });
 
   it('manages transitions with a fixed action list', async () => {
-    const execute = vi.fn(async () => rows(true));
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(true)
+    );
     const store = createWalletPayCustomerStore({ scope, execute });
     await expect(store.manage(OP, 'dispatch')).resolves.toBe(true);
     expect(execute).toHaveBeenCalledWith(customerSql.manage, [
@@ -107,13 +115,14 @@ describe('createWalletPayCustomerStore', () => {
 
 describe('createWalletPayWorkerStore', () => {
   it('binds every call to the configured integration and environment', async () => {
-    const execute = vi.fn(async () =>
-      rows({
-        status: 'claimed',
-        purpose: 'vtu',
-        purchaseRef: 'vtu-1',
-        amountKobo: 5000,
-      })
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows({
+          status: 'claimed',
+          purpose: 'vtu',
+          purchaseRef: 'vtu-1',
+          amountKobo: 5000,
+        })
     );
     const store = createWalletPayWorkerStore({
       integrationId: INTEGRATION,
@@ -129,7 +138,10 @@ describe('createWalletPayWorkerStore', () => {
   });
 
   it('finishes with only fulfilled or failed', async () => {
-    const execute = vi.fn(async () => rows('refund_owed'));
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows('refund_owed')
+    );
     const store = createWalletPayWorkerStore({
       integrationId: INTEGRATION,
       environment: 'staging',

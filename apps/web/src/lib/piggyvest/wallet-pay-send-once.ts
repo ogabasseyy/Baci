@@ -2,6 +2,14 @@ import 'server-only';
 import { isDefinitiveNoTransferRejection } from './primary-wallet-savings-transfer';
 import type { TransferReferenceLookup } from './transfer-reference-lookup';
 
+/** A freeze or lien on either wallet: wallet pay fails closed. */
+export function isRestricted(wallet: {
+  is_frozen?: boolean | null;
+  has_an_active_lien?: boolean | null;
+}): boolean {
+  return wallet.is_frozen === true || wallet.has_an_active_lien === true;
+}
+
 export interface SendOncePorts<R> {
   claimDispatch: () => Promise<boolean>;
   transfer: (reservation: R) => Promise<{ accepted: true }>;

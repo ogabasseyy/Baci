@@ -188,6 +188,11 @@ export const piggyvestWalletPaySchemas = {
     currency: z.literal('NGN'),
     status: z.literal('active'),
     balance: z.int().nonnegative(),
+    // A frozen wallet or one under a lien can not pay or be paid: whether
+    // PiggyVest blocks business-initiated transfers on them is unknown, so
+    // wallet pay fails closed.
+    is_frozen: z.boolean().nullable().optional(),
+    has_an_active_lien: z.boolean().nullable().optional(),
   }),
 };
 

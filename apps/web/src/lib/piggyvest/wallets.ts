@@ -52,6 +52,10 @@ const retrieveWalletDataSchema = z.object({
   // whose customer declined interest.
   interest_enabled: z.boolean().nullable().optional(),
   interest_payout_wallet: z.string().min(1).nullable().optional(),
+  // Restriction flags (freeze / lien). Optional so unrelated consumers stay
+  // liberal; wallet pay refuses to move money from or into a flagged wallet.
+  is_frozen: z.boolean().nullable().optional(),
+  has_an_active_lien: z.boolean().nullable().optional(),
 });
 
 export type RetrievePiggyvestWalletResult = z.infer<

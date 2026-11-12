@@ -4,6 +4,7 @@ import {
   readPrimaryWalletSavingsRecoveryRuntime,
   readPrimaryWalletSavingsRuntime,
 } from './primary-wallet-savings-runtime';
+import { reconcileWalletPayOutflowReferences } from './wallet-pay-outflow';
 
 export interface SavingsOutflowProcessorDeps {
   savingsRuntime?: {
@@ -46,6 +47,10 @@ export async function reconcileSavingsOutflowReferences(
     deps.savingsRuntime === undefined
       ? readSavingsRuntimeForOutflow()
       : deps.savingsRuntime;
+  // Wallet pay (pvb-pay-/pvb-refund-) has its own runtime and references, so
+  // it is attributed first and independently of the savings runtime.
+  const walletPay = await reconcileWalletPayOutflowReferences(references);
+  if (walletPay !== 'unmatched') return walletPay;
   if (!savings) return 'unmatched';
   const outcome = await runPrimaryWalletSavingsOutflowReconciliation({
     configuration: savings.reconciliationConfiguration,

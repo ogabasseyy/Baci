@@ -462,7 +462,7 @@ wallet and the business settlement wallet (no API customer). Masked output only.
   customer API wallet cannot pay ANY business-owned (non-API) wallet; only
   API-wallet ↔ API-wallet transfers (main ↔ goal) are proven.
 - Creating a new API customer for Ogabassey fails for every BVN except the
-  taken all-zeros one: `11111111111`, `12345678901`, `22222222222`, random
+  taken all-zeros one: `11111111111`, `12345678901`, `22222222222`, the docs' cURL example `22112200222`, random
   values, minimal bodies, local/international phones, and with a NIN all
   answer 400 "An error occurred creating customer". Staging appears to verify
   BVNs; Option B needs a sandbox BVN PiggyVest staging accepts (never a real

@@ -1,12 +1,17 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import { SearchOverlay } from './SearchOverlay';
 
 const mockRouterPush = jest.fn();
 const mockDismissKeyboardForNavigation = jest.fn(() => Promise.resolve());
+const mockAddListener = jest.fn(() => jest.fn());
 let mockCategories: { slug: string; name: string }[] = [];
 
 jest.mock('expo-router', () => ({
-  useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
+  useNavigation: () => ({
+    isFocused: () => true,
+    addListener: () => mockAddListener(),
+  }),
   useRouter: jest.fn(() => ({ push: mockRouterPush })),
   useIsFocused: () => true,
 }));
@@ -61,6 +66,7 @@ const mockOnClose = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAddListener.mockReturnValue(jest.fn());
   mockCategories = [];
 });
 
@@ -145,6 +151,35 @@ describe('SearchOverlay', () => {
       pathname: '/category/[slug]',
       params: { slug: 'phones' },
     });
+  });
+
+  it('cancels category navigation if the app backgrounds while the keyboard closes', async () => {
+    mockCategories = [{ slug: 'phones', name: 'Phones' }];
+    let finishKeyboardDismissal!: () => void;
+    let onAppStateChange: ((state: string) => void) | undefined;
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishKeyboardDismissal = resolve;
+      })
+    );
+    const listenerSpy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_event, listener) => {
+        onAppStateChange = listener as (state: string) => void;
+        return { remove: jest.fn() };
+      });
+    try {
+      render(<SearchOverlay isVisible onClose={mockOnClose} />);
+      fireEvent.press(screen.getByRole('button', { name: 'Phones' }));
+
+      act(() => onAppStateChange?.('background'));
+      await act(async () => finishKeyboardDismissal());
+
+      expect(mockOnClose).not.toHaveBeenCalled();
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    } finally {
+      listenerSpy.mockRestore();
+    }
   });
 
   it('returns null when not visible', () => {

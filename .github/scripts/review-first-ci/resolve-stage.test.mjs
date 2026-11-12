@@ -60,6 +60,8 @@ describe('runResolveStage', () => {
     assert.equal(t.outputs().code, 'waiting');
     assert.ok(t.logs.some((line) => line.startsWith('::notice')));
     assert.match(t.summary(), /ci-now/);
+    assert.match(t.summary(), /Drafts run safeguards only/);
+    assert.doesNotMatch(t.summary(), /Drafts stay quick/);
   });
 
   it('prints a warning annotation when it fails closed', async () => {

@@ -847,7 +847,7 @@ jobs:
     # While review-first CI defers the full stage this job is skipped under a DIFFERENT name:
     # a skipped job named "Quality Gate" would count as a passed required check. The name and
     # the condition below must stay the same predicate (ci-workflow-contract.test.mjs).
-    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Quality Gate' || 'Quality Gate (deferred until Codex review)' }}
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Quality Gate' || 'Quality Gate (deferred until ready and review)' }}
     needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, quality-disposable-sql, quality-quiz-approval, mobile-quality, silent-revert-guard]
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') }}
     # Aggregate must not depend on `changes` outputs: if `changes` fails it still has to report.
@@ -908,7 +908,7 @@ jobs:
 
   build:
     # Deferred under a different name for the same reason as `quality` above.
-    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Build' || 'Build (deferred until Codex review)' }}
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Build' || 'Build (deferred until ready and review)' }}
     # Only `changes` outputs are consumed below. Running in parallel with the
     # quality jobs (instead of after them) halves the critical path of every
     # PR head: max(test, build) instead of test-then-build.

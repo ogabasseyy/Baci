@@ -35,7 +35,7 @@ describe('a required check name never belongs to a skipped job', () => {
         assert.equal(runs, !scenario.deferred, `job ${jobId} should ${scenario.deferred ? 'be skipped' : 'run'}`);
         if (scenario.deferred) {
           assert.equal(REQUIRED_CONTEXTS.has(name), false, `a skipped job must not carry the required name, got "${name}"`);
-          assert.match(name, /deferred/i);
+          assert.match(name, /deferred until ready and review/i);
         } else {
           assert.equal(name, jobId === 'build' ? 'Build' : 'Quality Gate');
         }

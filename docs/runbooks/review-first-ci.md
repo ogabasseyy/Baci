@@ -6,12 +6,12 @@ The main-CI gate applies to same-repository PRs selected by `BACI_REVIEW_FIRST_C
 
 ## In plain language
 
-1. Draft pushes run AI reviews and essential safeguards: the unconditional `changes` job (capability checks, workflow contracts and change detection), the silent-revert guard, secret scanning, and independent workflow guards. They do **not** run lint, typecheck, application tests, miscellaneous validation tests, mobile guardrails, builds, browser regression or Semgrep. Small local checks remain the agent's responsibility.
+1. Draft pushes run AI reviews and essential safeguards: the unconditional `changes` job (capability checks, workflow contracts and change detection), the silent-revert guard, secret scanning, and independent workflow guards. They do **not** run lint, typecheck, application tests, miscellaneous validation tests, mobile guardrails, builds, browser regression or Semgrep. Small local checks remain the agent's responsibility. The review-first CI self-tests, migration guards and iOS patch tests inside `quality-misc` deliberately wait for full validation too; the separate base-owned Capability Gate Contract remains active on draft pushes. Agents changing this CI policy run its focused tests locally before pushing. This trades later CI self-test feedback for fewer draft minutes; it does not disable those tests before merge.
 2. Deferred `Build`, `Quality Gate`, and `Semgrep SAST` use different check names, so skipped draft jobs cannot turn the required contexts green. Draft status itself also prevents merging.
 3. After both reviewers are clean, mark ready. `Review-first CI nudge` releases the existing PR-context CI and browser runs through the Codex gate. These validation jobs did not execute in the draft pass: only the small safeguards repeat. `Security` listens directly to `ready_for_review` and runs the applicable Semgrep scan. This is not a promise of zero Actions minutes during drafting.
 4. If validation fails, fix the failure while draft, refresh affected review evidence and mark ready again. A changed commit needs its own CI evidence. Do not mark ready merely to trigger CI before the required reviews, or automatically rerun successful validation on the same head.
 
-The helper remains necessary because the base-owned capability contract requires an unconditional `changes` job and forbids a `types` filter on the main CI trigger. Adding native `ready_for_review` there would fail that contract. Keeping the helper avoids weakening it and preserves required PR-context checks. Returning to draft does not guarantee cancellation of validation already running; the Security conversion event cancels its prior PR run, but the main CI gate controls future evaluations only.
+The helper remains necessary because the base-owned capability contract requires an unconditional `changes` job and forbids a `types` filter on the main CI trigger. Adding native `ready_for_review` there would fail that contract. Keeping the helper avoids weakening it and preserves required PR-context checks. Returning to draft does not guarantee cancellation of validation already running; the Security conversion event cancels its prior PR run, but the main CI gate controls future evaluations only. After a ready → draft → ready cycle, wait for the fresh ready-triggered Semgrep run; a cancelled earlier scan is not validation evidence.
 
 ## Options considered
 
@@ -68,7 +68,7 @@ Use the existing output contract in `.github/scripts/muse-review/post.sh`; a suc
 ## When the heavy stage starts anyway
 
 * **Break-glass:** add the label `ci-now` to the pull request (or comment `/ci-now` as a maintainer). On a ready PR, the next
-  evaluation starts the full suite immediately; drafts remain quick. GitHub only lets people with triage or write access label a pull
+  evaluation starts the full suite immediately; drafts remain safeguards-only. GitHub only lets people with triage or write access label a pull
   request, and `/ci-now` is honoured only from the owner, members and collaborators. The label **stays until it is
   removed**: every later push of that pull request then runs the full CI at once (a warning shows on the `changes`
   job each time), so remove it when Codex is back. Agents may use it when Codex is down, rate limited, or when the

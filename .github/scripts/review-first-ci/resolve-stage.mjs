@@ -20,7 +20,7 @@ function summaryFor(decision, headSha, timeoutMinutes) {
       'Lint, typecheck, miscellaneous tests, mobile guardrails, test shards, mobile and shared tests, `Build`, DB replay and the browser regression start only once the PR is ready and Codex reports no major findings for this exact commit. `Build` and `Quality Gate` are deferred: GitHub shows them as missing, so merging stays blocked.',
       '',
       `* Wait: keep the PR draft until Codex and Muse are clean, then mark ready; full CI starts on its own.`,
-      `* Break-glass (Codex down, or a finding was answered): on a ready PR, add the label \`${BREAK_GLASS_LABEL}\`. Drafts stay quick.`,
+      `* Break-glass (Codex down, or a finding was answered): on a ready PR, add the label \`${BREAK_GLASS_LABEL}\`. Drafts run safeguards only.`,
       `* No Codex verdict after ${timeoutMinutes} minutes on a ready PR starts the full CI anyway. Drafts never time out.`,
       ''
     );

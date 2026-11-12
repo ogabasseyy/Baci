@@ -43,6 +43,9 @@ export function useWalletPaySheet<Result>({
   // Bumped on every open and close: a late answer for an older sheet is
   // dropped instead of changing the one on screen.
   const generation = useRef(0);
+  // True while a start, PIN check or pay call is out: a second open, a
+  // second submit or a re-check never overlaps it.
+  const inFlight = useRef(false);
 
   const current = (mine: number) => mine === generation.current;
 
@@ -67,6 +70,7 @@ export function useWalletPaySheet<Result>({
     const id = operationId.current;
     const active = adapter.current;
     if (!id || !active) return;
+    inFlight.current = true;
     setStep('paying');
     const answer = await active.pay(id, proof).catch(
       (): WalletPayPayAnswer<Result> => ({
@@ -74,10 +78,15 @@ export function useWalletPaySheet<Result>({
         outcome: { kind: 'pending' },
       })
     );
-    if (current(mine)) finish(answer);
+    if (!current(mine)) return;
+    inFlight.current = false;
+    finish(answer);
   };
 
   const open = async (next: WalletPayAdapter<Result>) => {
+    // A double tap must not start a second payment over the first.
+    if (inFlight.current) return;
+    inFlight.current = true;
     generation.current += 1;
     const mine = generation.current;
     adapter.current = next;
@@ -87,12 +96,14 @@ export function useWalletPaySheet<Result>({
     setOutcome(null);
     setAmountKobo(null);
     setRechecks(0);
+    setBusy(false);
     setStep('starting');
     const started = await next.start().catch(() => ({
       kind: 'outcome' as const,
       outcome: { kind: 'failed' as const },
     }));
     if (!current(mine)) return;
+    inFlight.current = false;
     if (started.kind === 'outcome') {
       setOutcome(started.outcome);
       setStep('outcome');
@@ -107,7 +118,7 @@ export function useWalletPaySheet<Result>({
   const submit = async () => {
     const id = operationId.current;
     const active = adapter.current;
-    if (busy || step !== 'enter' || !id || !active) return;
+    if (inFlight.current || step !== 'enter' || !id || !active) return;
     if (!/^[0-9]{4,6}$/.test(pin)) {
       setError(PIN_FORMAT);
       return;
@@ -116,12 +127,14 @@ export function useWalletPaySheet<Result>({
     const typed = pin;
     setPinState('');
     setError(null);
+    inFlight.current = true;
     setBusy(true);
     const answer = await active.verifyPin(id, typed).catch(() => ({
       kind: 'retry' as const,
       message: 'Could not check your PIN. Please try again.',
     }));
     if (!current(mine)) return;
+    inFlight.current = false;
     setBusy(false);
     if (answer.kind === 'retry') return setError(answer.message);
     if (answer.kind === 'outcome') {
@@ -132,12 +145,14 @@ export function useWalletPaySheet<Result>({
   };
 
   const recheck = async () => {
+    if (inFlight.current) return;
     setRechecks((count) => count + 1);
     await pay('');
   };
 
   const close = () => {
     generation.current += 1;
+    inFlight.current = false;
     adapter.current = null;
     operationId.current = null;
     setPinState('');
@@ -169,6 +184,10 @@ export function useWalletPaySheet<Result>({
     submit,
     recheck,
     close,
+    /** Back while the sheet is open: close it, or stay while money moves. */
+    back: () => {
+      if (step !== 'starting' && step !== 'paying') close();
+    },
   };
 }
 

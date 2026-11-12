@@ -32,6 +32,7 @@ function sheetState(
     submit: jest.fn(async () => undefined),
     recheck: jest.fn(async () => undefined),
     close: jest.fn(),
+    back: jest.fn(),
     ...overrides,
   };
 }

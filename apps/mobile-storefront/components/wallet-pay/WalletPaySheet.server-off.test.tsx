@@ -34,6 +34,7 @@ describe('WalletPaySheet with the server keeping PiggyVest off', () => {
           submit: jest.fn(),
           recheck: jest.fn(),
           close: jest.fn(),
+          back: jest.fn(),
         }}
         onOpenWallet={jest.fn()}
         onSignIn={jest.fn()}

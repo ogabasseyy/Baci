@@ -1,4 +1,4 @@
-import { imeiWalletPayApi } from './imei-wallet-pay-api';
+import { imeiWalletPayApi, WALLET_PAY_TIMEOUT_MS } from './imei-wallet-pay-api';
 
 const LOOKUP = '11111111-1111-4111-8111-111111111111';
 const OP = '22222222-2222-4222-8222-222222222222';
@@ -99,5 +99,31 @@ describe('imeiWalletPayApi', () => {
       }
     );
     expect(reply).toEqual({ httpStatus: 502, body: {} });
+  });
+});
+
+describe('bugfix: a hung wallet pay request held the sheet on "Paying..." (Muse review)', () => {
+  it('gives up after the timeout so the sheet can show "confirming"', async () => {
+    jest.useFakeTimers();
+    const fetchImpl = jest.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new Error('aborted'))
+          );
+        })
+    ) as unknown as typeof fetch;
+    const reply = imeiWalletPayApi.pay(
+      { apiBaseUrl: 'https://api.test', accessToken: 'token', fetchImpl },
+      {
+        lookupId: LOOKUP,
+        operationId: OP,
+        pinProof: '',
+        imei: '356938035643809',
+      }
+    );
+    jest.advanceTimersByTime(WALLET_PAY_TIMEOUT_MS);
+    await expect(reply).rejects.toThrow('aborted');
+    jest.useRealTimers();
   });
 });

@@ -12,15 +12,23 @@ export type WalletPayConnection = {
   fetchImpl?: typeof fetch;
 };
 
+/** Same limit as the store credit IMEI request. */
+export const WALLET_PAY_TIMEOUT_MS = 30_000;
+
 async function post(
   connection: WalletPayConnection,
   path: string,
   body: Record<string, unknown>,
   idempotencyKey?: string
 ): Promise<WalletPayReply> {
+  // A hung request rejects instead of holding the sheet on "Paying...":
+  // the caller treats it as unknown (pending) and re-checks.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WALLET_PAY_TIMEOUT_MS);
   const response = await (connection.fetchImpl ?? fetch)(
     `${connection.apiBaseUrl}${path}`,
     {
+      signal: controller.signal,
       body: JSON.stringify(body),
       headers: {
         ...(connection.accessToken
@@ -31,7 +39,7 @@ async function post(
       },
       method: 'POST',
     }
-  );
+  ).finally(() => clearTimeout(timer));
   const parsed: unknown = await response.json().catch(() => null);
   return {
     httpStatus: response.status,

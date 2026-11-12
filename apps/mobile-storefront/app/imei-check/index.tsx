@@ -237,9 +237,9 @@ export default function ImeiCheckerScreen() {
     setError(null);
   };
 
-  usePreventRemove(result !== null, () => {
-    handleReset();
-  });
+  usePreventRemove(result !== null || walletPay.sheet.step !== 'closed', () =>
+    walletPay.sheet.step !== 'closed' ? walletPay.sheet.back() : handleReset()
+  );
 
   return (
     <StorefrontScreenShell

@@ -288,8 +288,8 @@ describe('bugfix: auto-retry ran behind the BVN field', () => {
   });
 });
 
-describe('auto-retry and a required BVN wherever the note is shown', () => {
-  it('never retries by itself when a parent supplies a BVN-required status', () => {
+describe('auto-retry when a parent supplies the status', () => {
+  it('still retries by itself: a stale BVN flag shows no BVN field there', () => {
     status('setup_retryable', true);
     render(
       <SavingsPlanStatusNote
@@ -300,7 +300,6 @@ describe('auto-retry and a required BVN wherever the note is shown', () => {
         funding={mockFunding()}
       />
     );
-    expect(retry).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeOnTheScreen();
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });

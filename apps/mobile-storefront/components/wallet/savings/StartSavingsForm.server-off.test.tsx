@@ -113,4 +113,19 @@ describe('StartSavingsForm for a PiggyVest wallet', () => {
       ).toBeOnTheScreen();
     });
   });
+
+  it('keeps step 2 open while the head start is above the phone price', () => {
+    render(
+      <StartSavingsForm
+        colors={Colors.light}
+        controller={createStartSavingsController({
+          initialContributionEnabled: true,
+          effectiveInitialContribution: 500_000,
+        })}
+      />
+    );
+    expect(
+      screen.getByLabelText('Step 2, Make it a habit, current step')
+    ).toBeOnTheScreen();
+  });
 });

@@ -52,7 +52,10 @@ export function StartSavingsForm(
     ) &&
     (!props.controller.initialContributionEnabled ||
       (Number.isFinite(props.controller.effectiveInitialContribution) &&
-        props.controller.effectiveInitialContribution > 0));
+        props.controller.effectiveInitialContribution > 0 &&
+        // Same rule as submit: a head start above the price is not done.
+        props.controller.effectiveInitialContribution <=
+          props.controller.targetValue));
   const howReady =
     props.mode !== 'draft' &&
     scheduleReady &&

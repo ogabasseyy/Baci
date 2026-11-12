@@ -142,6 +142,23 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(result.current.goal).toBeNull();
   });
 
+  it('keeps a held step when the sheet is reopened before the action settles', () => {
+    const { result, rerender } = renderHook(
+      ({ visible }: { visible: boolean }) =>
+        useInSheetGoalCancel(goal, undefined, visible),
+      { initialProps: { visible: true } }
+    );
+    act(() => result.current.start());
+    mockStep.current = 'submitting';
+    rerender({ visible: true });
+    act(() => result.current.closed());
+    rerender({ visible: false });
+    rerender({ visible: true });
+    mockStep.current = 'timed_out';
+    rerender({ visible: true });
+    expect(result.current.goal?.id).toBe('goal-1');
+  });
+
   it('drops a finished or untouched step on close without refreshing', () => {
     const refresh = jest.fn();
     const { result, rerender } = renderHook(() =>

@@ -13,7 +13,9 @@ const IN_FLIGHT = new Set(['submitting', 'polling']);
  */
 export function useInSheetGoalCancel(
   goal: WalletActiveSavingsGoal | null,
-  refreshWallet?: () => unknown
+  refreshWallet?: () => unknown,
+  /** Whether the savings sheet is showing; reopening keeps a held step. */
+  sheetVisible = true
 ) {
   const userId = useAuthStore((state) => state.user?.id);
   const [held, setHeld] = useState<{
@@ -41,8 +43,12 @@ export function useInSheetGoalCancel(
   // "Check again" refreshes again, once.
   const refreshed = useRef<string | null>(null);
   const outcomeKey = settled ? `${attempt}:${flow.step}` : null;
-  // A sheet closed mid-save keeps its goal only until the action settles.
+  // A sheet closed mid-save keeps its goal only until the action settles,
+  // unless it is opened again first (then its status stays on screen).
   const closedInFlight = useRef<number | null>(null);
+  useEffect(() => {
+    if (sheetVisible) closedInFlight.current = null;
+  }, [sheetVisible]);
   useEffect(() => {
     if (!outcomeKey || refreshed.current === outcomeKey) return;
     refreshed.current = outcomeKey;

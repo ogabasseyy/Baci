@@ -74,7 +74,7 @@ export function WalletSavingsProgressModal({
     primaryForeground: BRAND.onPrimary,
     primaryLowOpacity: BRAND.primaryAlpha12,
   };
-  const cancel = useInSheetGoalCancel(goal, onRefreshWallet);
+  const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
   // The sheet is sized to what it shows, so it never ends in empty space.
   const [cancelHeight, setCancelHeight] = useState(0);
   const [swapHeight, setSwapHeight] = useState(0);
@@ -158,6 +158,7 @@ export function WalletSavingsProgressModal({
             setSwapHeight(Math.ceil(height))
           }
         >
+          <SavingsNoticeCard colors={colors} />
           {phoneSwapStep}
         </BottomSheetScrollView>
       </SavingsBottomSheet>

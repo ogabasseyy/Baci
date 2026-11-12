@@ -152,6 +152,18 @@ describe('useGoalWalletSetupPoll', () => {
       expect(reread).toHaveBeenCalledTimes(2);
     });
 
+    it('never raises the slowdown signal from an errored read', async () => {
+      act(() => usePiggyvestSlowdownStore.getState().markSlow('wallet-read'));
+      const { result, reread } = setup({ phase: 'error' });
+      await ticks(12);
+      expect(reread).toHaveBeenCalledTimes(12);
+      expect(result.current.slow).toBe(true);
+      // Only a pending setup reports itself slow: no self-latching.
+      expect(
+        usePiggyvestSlowdownStore.getState().signals['goal-setup']
+      ).toBeUndefined();
+    });
+
     it('does not poll an errored read when PiggyVest is not slow', async () => {
       const { reread } = setup({ phase: 'error' });
       await ticks(2);

@@ -78,7 +78,9 @@ export function useGoalWalletSetupPoll({
   }, [active, count, scopeKey]);
 
   const slow = active && count >= FAST_ATTEMPTS;
-  useReportPiggyvestSlow('goal-setup', slow);
+  // Only a still-pending setup raises the signal: an errored read kept alive
+  // by the signal must never renew it, or it would latch itself on.
+  useReportPiggyvestSlow('goal-setup', phase === 'pending' && slow);
   // Reads once right away and starts the quick checks again.
   const checkAgain = () => {
     setAttempt({ scopeKey, count: 0 });

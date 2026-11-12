@@ -141,6 +141,8 @@ export async function PATCH(request: NextRequest) {
       .from('customers')
       .update(updateData)
       .eq('id', customer.id)
+      .eq('merchant_id', merchantId)
+      .eq('user_id', user.id)
       .is('deleted_at', null)
       .select('id')
       .maybeSingle();

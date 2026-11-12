@@ -52,18 +52,12 @@ function mockChain(returnValue: { data: unknown; error: unknown }) {
 // `matched` is the live row the write returned (null => no live row matched, i.e.
 // the customer was soft-deleted between the lookup and the update).
 function mockUpdateChain(matched: { id: string } | null) {
-  const update = vi.fn().mockReturnValue({
-    eq: vi.fn().mockReturnValue({
-      is: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          maybeSingle: vi
-            .fn()
-            .mockResolvedValue({ data: matched, error: null }),
-        }),
-      }),
-    }),
-  });
-  return { update };
+  const chain: Record<string, unknown> = {};
+  chain.eq = vi.fn().mockReturnValue(chain);
+  chain.is = vi.fn().mockReturnValue(chain);
+  chain.select = vi.fn().mockReturnValue(chain);
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data: matched, error: null });
+  return { update: vi.fn().mockReturnValue(chain) };
 }
 
 // --- Tests ---
@@ -252,6 +246,46 @@ describe('PATCH /api/storefront/customer', () => {
         saved_addresses: [validAddress],
       })
     );
+  });
+
+  it('[data integrity fix] rejects update if merchant or user ID is mismatched during read-modify-write', async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+      error: null,
+    });
+
+    const merchantChain = mockChain({
+      data: { id: 'merchant-1' },
+      error: null,
+    });
+    // The customer lookup succeeds
+    const customerChain = mockChain({
+      data: { id: 'customer-1' },
+      error: null,
+    });
+    // But the concurrent/race mutation update fails to match the row (returns null)
+    const updateChain = mockUpdateChain(null);
+
+    let fromCallCount = 0;
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'merchants') return merchantChain;
+      if (table === 'customers') {
+        fromCallCount++;
+        return fromCallCount === 1 ? customerChain : updateChain;
+      }
+      return merchantChain;
+    });
+
+    const request = makeRequest({
+      merchantSlug: 'test-store',
+      first_name: 'John',
+    });
+    const response = await PATCH(request);
+    const json = await response.json();
+
+    // The endpoint should fail safely if the scoped update hits zero rows
+    expect(response.status).toBe(404);
+    expect(json.error).toBe('Customer not found');
   });
 
   it('returns 400 on malformed JSON body', async () => {

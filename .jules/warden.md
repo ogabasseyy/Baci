@@ -50,3 +50,7 @@ Source: Baci Monorepo Context Guidelines
 **Learning:** Supabase/PostgREST update filters compose, so adding `.eq('merchant_id', merchantId)` to an `.update(...).eq('id', ...).eq('updated_at', ...)` chain is a low-cost defense-in-depth guard against guessed row ids.
 **Action:** User-facing tenant writes should include the tenant predicate even when the row id was fetched through a tenant-scoped read.
 **Source:** Supabase JavaScript update/filter docs, verified 2026-06-28.
+2025-03-08 — Defense-in-depth scoping on read-modify-write
+Learning: Even when reading a row securely first, the subsequent write mutation must also explicitly re-scope by tenant (`merchant_id`) and owner (`user_id`) to prevent race conditions or forged updates, acting as defense-in-depth even with RLS enabled.
+Action: Always add `.eq('merchant_id', ...)` and `.eq('user_id', ...)` to mutation queries (insert/update/delete) in addition to `.eq('id', ...)`.
+Source: codebase convention / AGENTS.md

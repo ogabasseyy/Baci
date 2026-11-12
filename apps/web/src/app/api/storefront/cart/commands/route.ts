@@ -5,8 +5,8 @@ import {
   upgradeLegacySessionPrincipal,
 } from '@/lib/cart/grant-operations';
 import {
+  cachedCartMerchantLookups,
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -63,15 +63,15 @@ async function applyCommand(
 
     // Authenticate before reading the body: protected-route work and
     // response selection must not be driven by unauthenticated payloads.
-    const loadFeatures = createAnonMerchantFeatureLookup(createAnonClient());
+    const cached = cachedCartMerchantLookups(createAnonClient());
     const context = await timer.measure('auth', () =>
       resolveCartRequestContext(request, {
         merchant: {
           resolveAlias: getCurrentSlugForAlias,
-          rpcClient: createAnonClient(),
+          rpcClient: cached.rpcClient,
           // `auth-features` runs inside `auth`: the two overlap, never sum them.
           loadMerchantFeatures: (id) =>
-            timer.measure('auth-features', () => loadFeatures(id)),
+            timer.measure('auth-features', () => cached.features(id)),
         },
         requireScope: 'session',
         verify: (proof) =>

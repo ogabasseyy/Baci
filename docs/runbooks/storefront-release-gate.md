@@ -69,9 +69,10 @@ version if the tested version has already gone live.
 [Apple's build selection rules](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit/).
 
 Check the submit step's
-result even when the workflow succeeds. If another build occupies the App
-Review slot, submission is skipped unless the owner explicitly selects
-`cancel_review_for_resubmit` to withdraw the existing review.
+result even when the workflow succeeds. In the separate "iOS Storefront Submit
+for Review" workflow, submission is skipped if another build occupies the App
+Review slot unless the owner explicitly selects `cancel_review_for_resubmit`
+to withdraw the existing review.
 
 To resubmit a build that is already on TestFlight, run "iOS Storefront Submit
 for Review".

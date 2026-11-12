@@ -101,4 +101,31 @@ describe('Change phone search previews, server off', () => {
       )
     ).toBeOnTheScreen();
   });
+
+  it('applies the price filter to a loaded preview', async () => {
+    const cheap = { ...iphone, price: 1, variants: [], searchPreview: true };
+    renderStep({
+      resolveProduct: jest.fn(async () => ({
+        ...iphone,
+        searchPreview: true,
+        variants: [
+          {
+            attributes: { storage: '64GB' },
+            condition: 'used' as const,
+            id: 'v-low',
+            name: '64GB',
+            price: 50000,
+          },
+        ],
+      })),
+      savingsDeviceProducts: [cheap],
+    });
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Choose iPhone 15 Pro' })
+    );
+    expect(
+      await screen.findByText(/are hidden. You've already saved more./)
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /64GB/ })).toBeNull();
+  });
 });

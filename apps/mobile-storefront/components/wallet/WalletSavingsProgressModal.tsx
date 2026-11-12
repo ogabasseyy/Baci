@@ -114,7 +114,9 @@ export function WalletSavingsProgressModal({
                 onNotNow={cancel.keep}
                 onSignIn={() => {
                   dismiss();
-                  router.push('/auth/login?returnTo=%2Fwallet');
+                  router.push(
+                    `/auth/login?returnTo=${encodeURIComponent(`/wallet?action=savings&savingsGoalId=${cancelGoal.id}`)}`
+                  );
                 }}
               />
             ) : (
@@ -126,7 +128,9 @@ export function WalletSavingsProgressModal({
                 onKeep={cancel.keep}
                 onSignIn={() => {
                   dismiss();
-                  router.push('/auth/login?returnTo=%2Fwallet');
+                  router.push(
+                    `/auth/login?returnTo=${encodeURIComponent(`/wallet?action=savings&savingsGoalId=${cancelGoal.id}`)}`
+                  );
                 }}
               />
             )}

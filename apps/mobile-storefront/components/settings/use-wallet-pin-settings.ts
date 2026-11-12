@@ -192,7 +192,10 @@ export function useWalletPinSettings() {
     const code = codeOf(failure);
     if (code === 'PIN_ALREADY_SET') {
       switchMode('change');
-      gate.refresh();
+      // Background re-read; a failure must not surface as an unhandled one.
+      void Promise.resolve()
+        .then(() => gate.refresh())
+        .catch(() => undefined);
     } else if (code === 'PIN_NOT_SET') {
       switchMode('set');
     } else if (code === 'PIN_RESET_REQUIRED') {

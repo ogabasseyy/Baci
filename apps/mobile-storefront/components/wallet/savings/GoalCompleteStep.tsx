@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { palette, withAlpha } from '@/constants/Colors';
+import { withAlpha } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { GoalCancelRow as Row } from './GoalCancelRow';
@@ -177,9 +177,12 @@ export function GoalCompleteStep({
           {COPY.next.map((line, index) => (
             <View key={line} style={styles.nextRow}>
               <View
-                style={[styles.nextDot, { backgroundColor: palette.red[50] }]}
+                style={[
+                  styles.nextDot,
+                  { backgroundColor: colors.primaryLowOpacity },
+                ]}
               >
-                <Text style={[styles.nextNum, { color: palette.red[800] }]}>
+                <Text style={[styles.nextNum, { color: colors.primary }]}>
                   {index + 1}
                 </Text>
               </View>

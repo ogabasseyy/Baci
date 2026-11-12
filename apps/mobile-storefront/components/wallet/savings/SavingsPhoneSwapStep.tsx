@@ -70,7 +70,12 @@ export function SavingsPhoneSwapStep({
       />
     );
 
-  const shown = resolved?.query === searchValue ? [resolved.product] : products;
+  // A loaded preview has real options and prices now, so the price filter
+  // applies to it like any other phone.
+  const shown =
+    resolved?.query === searchValue
+      ? [{ ...resolved.product, searchPreview: false }]
+      : products;
   const rows = shown.flatMap(savingsPhoneRows);
   // The phone saved for now is not a choice to switch to.
   const isCurrent = (row: SavingsPhoneRow) =>

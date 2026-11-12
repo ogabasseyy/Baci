@@ -86,7 +86,7 @@ export default function ImeiCheckerScreen() {
     accessToken: session?.access_token,
     apiBaseUrl: API_BASE_URL,
     device: selectedDevice,
-    wallet: walletQuery.data?.wallet,
+    walletQuery,
     onDelivered: (paid) => showResult(paid.tier, paid.lookupId, paid.result),
   });
 

@@ -5,8 +5,12 @@ import {
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { useRef } from 'react';
+import { useState } from 'react';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
+import {
+  trackWalletPayPurchase,
+  walletPayPurchaseKeys,
+} from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import {
   isWalletStoreCredit,
@@ -17,20 +21,34 @@ import {
   type ImeiWalletPayResult,
 } from './imei-wallet-pay-adapter';
 
+type PayingWallet = WalletPrimaryLike & {
+  balance?: number;
+  /** A remembered PiggyVest balance served when a fresh read failed. */
+  primary_stale?: boolean | null;
+};
+
 /**
  * True when this check should be paid from the PiggyVest wallet: paying from
- * it is switched on, the customer is PiggyVest-ready, store credit can't
- * cover the check and the PiggyVest wallet can. Store credit still pays
- * first whenever it covers the price, exactly as before.
+ * it is switched on, the tier is one the server can bill to it, the customer
+ * is PiggyVest-ready with a fresh balance, store credit can't cover the check
+ * and the PiggyVest wallet can. Store credit still pays first whenever it
+ * covers the price, exactly as before.
  */
 export function imeiWalletPayCovers(input: {
   canPay: boolean;
-  wallet: (WalletPrimaryLike & { balance?: number }) | null | undefined;
+  wallet: PayingWallet | null | undefined;
   tier: ImeiServiceTierKey;
+  refusedTiers?: readonly ImeiServiceTierKey[];
 }) {
-  const { wallet } = input;
+  const { wallet, tier } = input;
   if (!input.canPay || !wallet || !isWalletStoreCredit(wallet)) return false;
-  const price = IMEI_SERVICE_TIERS[input.tier].price;
+  // Only Sickw-backed checks can be paid this way (server rule).
+  if (IMEI_SERVICE_TIERS[tier].providerServiceId === 'petrock-only')
+    return false;
+  if (input.refusedTiers?.includes(tier)) return false;
+  if (wallet.primary_stale === true || wallet.primary_pending === true)
+    return false;
+  const price = IMEI_SERVICE_TIERS[tier].price;
   const priceKobo = Math.round(price * 100);
   return (
     (wallet.balance ?? 0) < price &&
@@ -47,28 +65,24 @@ export function useImeiWalletPay({
   accessToken,
   apiBaseUrl,
   device,
-  wallet,
+  walletQuery,
   onDelivered,
   canPay = SAVINGS_WALLET_CAN_PAY,
 }: {
   accessToken: string | undefined;
   apiBaseUrl: string;
   device: ImeiDeviceCategory;
-  wallet: (WalletPrimaryLike & { balance?: number }) | null | undefined;
+  walletQuery: {
+    data?: { wallet?: PayingWallet | null };
+    refetch?: () => unknown;
+  };
   onDelivered: (result: ImeiWalletPayResult) => void;
   /** Tests pass true to preview the switch-on. */
   canPay?: boolean;
 }) {
   const sheet = useWalletPaySheet<ImeiWalletPayResult>({ onDelivered });
-  // A start whose answer was lost (network, timeout) retries with the same
-  // Idempotency-Key, so the server finds the lookup it may have created
-  // instead of opening a second one. Any server answer spends the key.
-  const startKey = useRef<{ purchase: string; key: string } | null>(null);
-  const keyFor = (purchase: string) => {
-    if (startKey.current?.purchase !== purchase)
-      startKey.current = { purchase, key: Crypto.randomUUID() };
-    return startKey.current.key;
-  };
+  const wallet = walletQuery.data?.wallet;
+  const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();
     router.push(href);
@@ -85,20 +99,29 @@ export function useImeiWalletPay({
       onSignIn: signIn,
     },
     covers: (tier: ImeiServiceTierKey) =>
-      imeiWalletPayCovers({ canPay, wallet, tier }),
+      imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
     open: (tier: ImeiServiceTierKey, imei: string) => {
-      const purchase = `${device}|${tier}|${imei}`;
+      // One key per purchase until it settles: a lost, pending or
+      // under-review payment is resumed by the next tap, never paid again.
+      const purchase = `imei|${device}|${tier}|${imei}`;
+      const adapter = createImeiWalletPayAdapter({
+        connection: { apiBaseUrl, accessToken },
+        device,
+        tier,
+        imei,
+        idempotencyKey: walletPayPurchaseKeys.keyFor(
+          purchase,
+          Crypto.randomUUID
+        ),
+        onTierRefused: () =>
+          setRefusedTiers((tiers) =>
+            tiers.includes(tier) ? tiers : [...tiers, tier]
+          ),
+      });
+      // Settled purchases may have moved money: show the new balance.
       return sheet.open(
-        createImeiWalletPayAdapter({
-          connection: { apiBaseUrl, accessToken },
-          device,
-          tier,
-          imei,
-          idempotencyKey: keyFor(purchase),
-          onStartAnswered: () => {
-            if (startKey.current?.purchase === purchase)
-              startKey.current = null;
-          },
+        trackWalletPayPurchase(adapter, purchase, () => {
+          void walletQuery.refetch?.();
         })
       );
     },

@@ -11,7 +11,9 @@ describe('useImeiWalletPay while paying from PiggyVest is switched off', () => {
         accessToken: 'token',
         apiBaseUrl: 'https://api.test',
         device: 'smartphone',
-        wallet: { balance: 0, primary_balance_kobo: 10_000_000 },
+        walletQuery: {
+          data: { wallet: { balance: 0, primary_balance_kobo: 10_000_000 } },
+        },
         onDelivered: jest.fn(),
       })
     );
@@ -25,7 +27,7 @@ describe('useImeiWalletPay while paying from PiggyVest is switched off', () => {
         accessToken: 'token',
         apiBaseUrl: 'https://api.test',
         device: 'smartphone',
-        wallet: { balance: 0 },
+        walletQuery: { data: { wallet: { balance: 0 } } },
         onDelivered: jest.fn(),
         canPay: true,
       })

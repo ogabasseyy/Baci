@@ -100,15 +100,16 @@ export function createImeiWalletPayAdapter(input: {
   tier: ImeiServiceTierKey;
   imei: string;
   idempotencyKey: string;
-  /** Called once the server answered the start (the key is spent). */
-  onStartAnswered?: () => void;
+  /** The server can't take this tier from the PiggyVest wallet. */
+  onTierRefused?: () => void;
 }): WalletPayAdapter<ImeiWalletPayResult> {
   let lookupId: string | null = null;
   const { connection, tier, imei } = input;
   return {
     async start() {
       const reply = await imeiWalletPayApi.start(connection, input);
-      input.onStartAnswered?.();
+      if (codeOf(reply) === 'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER')
+        input.onTierRefused?.();
       const payment = issued.safeParse(reply.body);
       if (reply.httpStatus === 202 && payment.success) {
         lookupId = payment.data.lookupId;

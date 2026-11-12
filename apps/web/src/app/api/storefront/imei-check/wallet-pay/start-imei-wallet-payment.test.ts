@@ -226,4 +226,49 @@ describe('startImeiWalletPayment', () => {
       expect(d.issue).not.toHaveBeenCalled();
     });
   });
+  describe('replay after the payment moved on', () => {
+    const existing = {
+      id: LOOKUP,
+      status: 'pending',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-1',
+      imei_hash: 'a'.repeat(64),
+      tier: 'simLock',
+      device_category: 'smartphone',
+      amount_ngn: 400,
+      cached_response: null,
+      cached_status: null,
+    };
+    const replay = () =>
+      input({
+        supabaseAdmin: {
+          insertPending: vi.fn(async () => ({
+            data: null,
+            error: { code: '23505' },
+          })),
+          readReplay: vi.fn(async () => ({ data: existing, error: null })),
+        },
+      });
+
+    it('re-asks at the price recorded on the lookup, not today’s price', async () => {
+      const d = deps();
+      await startImeiWalletPayment(replay(), d);
+      expect(d.issue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({ amountKobo: 40000 }),
+        })
+      );
+    });
+
+    it('never issues a second payment once the first was confirmed', async () => {
+      const d = deps({
+        findForPurchase: vi.fn(async () => ({
+          operationId: OP,
+          state: 'confirmed' as const,
+        })),
+      });
+      await startImeiWalletPayment(replay(), d);
+      expect(d.issue).not.toHaveBeenCalled();
+    });
+  });
 });

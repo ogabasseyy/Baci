@@ -1,8 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { WalletPaymentMismatchError } from './deliver-paid-imei-lookup';
 import { payImeiWalletPayment } from './pay-imei-wallet-payment';
 
 vi.mock('server-only', () => ({}));
+vi.mock('../route-cache-helpers', () => ({}));
 
 const LOOKUP = '11111111-1111-4111-8111-111111111111';
 const OP = '5b0f2a40-1c1d-4e6b-9a51-2f3c4d5e6f70';
@@ -89,7 +91,7 @@ describe('payImeiWalletPayment', () => {
     }
   });
 
-  it('refuses an IMEI that is not the one the lookup was created for', async () => {
+  it('refuses an IMEI that is not the one the lookup was created for, before any payment', async () => {
     const d = deps();
     const response = await payImeiWalletPayment(
       {
@@ -101,6 +103,37 @@ describe('payImeiWalletPayment', () => {
     );
     expect(response.status).toBe(409);
     expect(d.pay).not.toHaveBeenCalled();
+  });
+
+  it('still reconciles a status re-check with a mismatched IMEI, but never delivers it', async () => {
+    const d = deps();
+    const response = await payImeiWalletPayment(
+      {
+        lookupId: LOOKUP,
+        body: { ...body, pinProof: '', imei: '490154203237518' },
+        auth: {} as never,
+      },
+      d
+    );
+    expect(d.pay).toHaveBeenCalled();
+    expect(response.status).toBe(409);
+    expect(d.deliver).not.toHaveBeenCalled();
+  });
+
+  it('answers a wrong-purchase claim with a definite 409', async () => {
+    const d = deps({
+      deliver: vi.fn(async () =>
+        Promise.reject(new WalletPaymentMismatchError())
+      ),
+    });
+    const response = await payImeiWalletPayment(
+      { lookupId: LOOKUP, body, auth: {} as never },
+      d
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_OPERATION_INVALID',
+    });
   });
 
   it('refuses a payment that belongs to another purchase', async () => {

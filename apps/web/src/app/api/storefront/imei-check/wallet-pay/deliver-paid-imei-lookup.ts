@@ -71,6 +71,14 @@ const NOT_COMPLETED: Outcome = {
   notFound: false,
 };
 
+/** A definitive wrong-purchase answer (409), never a transient unknown. */
+export class WalletPaymentMismatchError extends Error {
+  constructor() {
+    super('Wallet payment does not belong to this IMEI lookup');
+    this.name = 'WalletPaymentMismatchError';
+  }
+}
+
 const pending = (status: string) =>
   NextResponse.json(
     { status },
@@ -152,6 +160,14 @@ export async function deliverPaidImeiLookup(
         .catch(() => 'conflict');
     return cached(lookup);
   }
+  // Refunded: retry any refund still owed (exactly once in the database).
+  if (
+    lookup.status === 'refunded_error' ||
+    lookup.status === 'refunded_not_found'
+  ) {
+    await deps.refund(operationId).catch(() => 'pending');
+    return cached(lookup);
+  }
   if (lookup.status !== 'pending') return cached(lookup);
 
   const claim = await deps.claim(operationId);
@@ -166,7 +182,7 @@ export async function deliverPaidImeiLookup(
   if (claim.status !== 'claimed' && claim.status !== 'reclaimed')
     return cached(lookup);
   if (claim.purpose !== 'imei_check' || claim.purchaseRef !== lookup.id)
-    throw new Error('Wallet payment does not belong to this IMEI lookup');
+    throw new WalletPaymentMismatchError();
   // A previous delivery died mid-flight. Sickw has no lookup by reference,
   // so re-submitting could buy the check twice: refund instead.
   if (claim.status === 'reclaimed')

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deliverPaidImeiLookup } from './deliver-paid-imei-lookup';
+import {
+  deliverPaidImeiLookup,
+  WalletPaymentMismatchError,
+} from './deliver-paid-imei-lookup';
 
 vi.mock('server-only', () => ({}));
 const cache = vi.hoisted(() => ({ success: vi.fn(), response: vi.fn() }));
@@ -141,7 +144,9 @@ describe('deliverPaidImeiLookup', () => {
         claimToken: 'tok-1',
       })),
     });
-    await expect(deliverPaidImeiLookup(base, d)).rejects.toThrow();
+    await expect(deliverPaidImeiLookup(base, d)).rejects.toBeInstanceOf(
+      WalletPaymentMismatchError
+    );
     expect(submit).not.toHaveBeenCalled();
   });
 
@@ -246,5 +251,23 @@ describe('deliverPaidImeiLookup', () => {
     const response = await deliverPaidImeiLookup(base, d);
     expect(response.status).toBe(502);
     expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
+  });
+  it('retries a refund still owed when the customer returns to a refunded check', async () => {
+    const d = deps();
+    const response = await deliverPaidImeiLookup(
+      {
+        ...base,
+        lookup: {
+          ...lookup,
+          status: 'refunded_error',
+          cached_response: { status: 'error' } as never,
+          cached_status: 502,
+        },
+      },
+      d
+    );
+    expect(response.status).toBe(502);
+    expect(d.refund).toHaveBeenCalledWith(OP);
+    expect(d.claim).not.toHaveBeenCalled();
   });
 });

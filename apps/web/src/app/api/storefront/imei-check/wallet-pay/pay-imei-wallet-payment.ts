@@ -5,6 +5,7 @@ import type { WalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import type { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
 import { hashImei, type ImeiLookupRow } from '../route-helpers';
+import { WalletPaymentMismatchError } from './deliver-paid-imei-lookup';
 import { normalizeForLookup } from './normalize-for-lookup';
 
 type Identity = { merchantId: string; customerId: string; userId: string };
@@ -134,13 +135,18 @@ export async function payImeiWalletPayment(
       503
     );
   // The same normalisation and hash the IMEI route used to create the lookup.
+  // A mismatch blocks spending a new PIN and delivery, never a status check:
+  // money already sent still settles, and an undeliverable payment is refunded
+  // by the wallet pay drain.
   const normalizedImei = normalizeForLookup(body.imei, lookup);
-  if (hashImei(normalizedImei, salt) !== lookup.imei_hash)
-    return refuse(
+  const matches = hashImei(normalizedImei, salt) === lookup.imei_hash;
+  const mismatch = () =>
+    refuse(
       'This IMEI does not match the check you paid for.',
       'IMEI_MISMATCH',
       409
     );
+  if (!matches && body.pinProof !== '') return mismatch();
   const scope = walletPayScope(runtime, identity);
   const payment = await deps.check({
     runtime,
@@ -161,11 +167,22 @@ export async function payImeiWalletPayment(
   });
   if (result.status !== 'confirmed')
     return payResponse(result, body.operationId);
-  return await deps.deliver({
-    runtime,
-    identity,
-    lookup,
-    operationId: body.operationId,
-    normalizedImei,
-  });
+  if (!matches) return mismatch();
+  try {
+    return await deps.deliver({
+      runtime,
+      identity,
+      lookup,
+      operationId: body.operationId,
+      normalizedImei,
+    });
+  } catch (error) {
+    if (error instanceof WalletPaymentMismatchError)
+      return refuse(
+        'This payment is not for this IMEI check.',
+        'PAYMENT_OPERATION_INVALID',
+        409
+      );
+    throw error;
+  }
 }

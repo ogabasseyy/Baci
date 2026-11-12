@@ -31,19 +31,28 @@ STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+  -- Judged on the NEWEST attempt that moved or holds money (issued and
+  -- released attempts never did), so an older refunded attempt can not
+  -- outrank a newer payment that is being delivered.
   SELECT CASE
-    WHEN bool_or(payment.fulfilment IN ('refund_owed', 'refunded')) THEN 'refund_owed'
-    WHEN bool_or(payment.state = 'confirmed' AND payment.fulfilment = 'claimed') THEN 'delivering'
-    WHEN bool_or(payment.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')) THEN 'charged'
+    WHEN latest.fulfilment IN ('refund_owed', 'refunded') THEN 'refund_owed'
+    WHEN latest.state = 'confirmed' AND latest.fulfilment = 'claimed' THEN 'delivering'
+    WHEN latest.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review') THEN 'charged'
     ELSE NULL END
-  FROM piggyvest_primary.wallet_payments AS payment
-  JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = payment.intent_id
-  WHERE payment.purpose = 'imei_check'
-    AND payment.purchase_ref = p_lookup_id::text
-    AND intent.customer_id = p_customer_id
-    AND intent.merchant_id = p_merchant_id
-    AND payment.amount_kobo = (p_amount_ngn * 100)::bigint
-    AND p_amount_ngn * 100 = trunc(p_amount_ngn * 100);
+  FROM (
+    SELECT payment.state, payment.fulfilment
+      FROM piggyvest_primary.wallet_payments AS payment
+      JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = payment.intent_id
+     WHERE payment.purpose = 'imei_check'
+       AND payment.purchase_ref = p_lookup_id::text
+       AND intent.customer_id = p_customer_id
+       AND intent.merchant_id = p_merchant_id
+       AND payment.amount_kobo = (p_amount_ngn * 100)::bigint
+       AND p_amount_ngn * 100 = trunc(p_amount_ngn * 100)
+       AND payment.state NOT IN ('issued', 'released')
+     ORDER BY COALESCE(payment.reserved_at, payment.issued_at) DESC
+     LIMIT 1
+  ) AS latest;
 $$;
 REVOKE ALL ON FUNCTION piggyvest_primary.imei_wallet_payment_state(uuid, uuid, uuid, numeric)
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;

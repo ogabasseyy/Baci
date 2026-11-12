@@ -104,7 +104,7 @@ export async function startImeiWalletPayment(
       409
     );
 
-  const amount = input.serviceTier.price;
+  let amount = input.serviceTier.price;
   let lookupId: string;
   const inserted = await input.supabaseAdmin.insertPending({
     amount_ngn: amount,
@@ -144,8 +144,13 @@ export async function startImeiWalletPayment(
       purpose: 'imei_check',
       purchaseRef: String(existing.id),
     });
-    if (!owned) return mapExistingLookup(existing, input.replayContext);
+    // Only a payment still open (not yet settled) is re-asked: a confirmed or
+    // refunded one must never be followed by a second payment for the check.
+    if (!owned || !['issued', 'reserved', 'dispatched'].includes(owned.state))
+      return mapExistingLookup(existing, input.replayContext);
     lookupId = String(existing.id);
+    // The price recorded on the lookup, never today's tier price.
+    amount = Number(existing.amount_ngn);
   } else {
     if (!inserted.data) throw new Error('IMEI pending insert returned no row');
     lookupId = String(inserted.data.id);

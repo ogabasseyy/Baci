@@ -46,9 +46,15 @@ BEGIN
   PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_state(c_lookup::uuid, c_customer, c_merchant, 1000) = 'refund_owed',
     'a failed delivery owes no refund');
   -- Only the IMEI purpose counts.
-  v_late := pg_temp.wp_issue(c_lookup, 100000, 'vtu') ->> 'operationId';
+  PERFORM pg_temp.wp_issue(c_lookup, 100000, 'vtu');
   PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_state(c_lookup::uuid, c_customer, c_merchant, 1000) = 'refund_owed',
     'a VTU payment changed the IMEI state');
+  -- A newer payment being delivered outranks an older refunded attempt.
+  v_late := pg_temp.wp_dispatched(c_lookup);
+  PERFORM pg_temp.wp_settle(pg_temp.wp_pay_proof(v_late, 'txn-imei-2'));
+  PERFORM pg_temp.wp_claim(v_late);
+  PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_state(c_lookup::uuid, c_customer, c_merchant, 1000) = 'delivering',
+    'an older refunded attempt outranked the payment being delivered');
   -- Client roles can not call it.
   PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('authenticated',
     'piggyvest_primary.imei_wallet_payment_state(uuid,uuid,uuid,numeric)', 'EXECUTE'), 'authenticated can read state');

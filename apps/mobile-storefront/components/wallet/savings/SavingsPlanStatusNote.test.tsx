@@ -22,8 +22,9 @@ jest.mock('./use-savings-goal-setup', () => ({
   useSavingsGoalSetup: (...args: unknown[]) => mockSetup(...args),
 }));
 const mockIsPrimary = jest.fn();
+const mockCheckAgain = jest.fn();
 jest.mock('./use-goal-wallet-setup-poll', () => ({
-  useGoalWalletSetupPoll: () => ({ slow: false, checkAgain: jest.fn() }),
+  useGoalWalletSetupPoll: () => ({ slow: false, checkAgain: mockCheckAgain }),
 }));
 
 jest.mock('./use-savings-plan-funding', () => ({
@@ -137,7 +138,7 @@ describe('SavingsPlanStatusNote', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('offers a status-only retry when the lookup failed', () => {
+  it('offers a status-only retry that restarts the checks when the lookup failed', () => {
     const fetchExistingPlanFunding = jest.fn();
     const fetchPlanFunding = jest.fn();
     mockHook.mockReturnValue({
@@ -153,8 +154,10 @@ describe('SavingsPlanStatusNote', () => {
       )
     ).toBeTruthy();
     expect(screen.queryByText('Getting your plan ready')).toBeNull();
+    mockCheckAgain.mockClear();
     fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
-    expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
+    // Restarts the full check cycle (which re-reads at once), never a setup.
+    expect(mockCheckAgain).toHaveBeenCalledTimes(1);
     expect(fetchPlanFunding).not.toHaveBeenCalled();
   });
 

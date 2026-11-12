@@ -160,7 +160,10 @@ function StatusNoteView({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Try again"
-          onPress={() => void funding.fetchExistingPlanFunding()}
+          // Restart the full check cycle when the parent runs one.
+          onPress={
+            onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
+          }
           style={styles.retry}
         >
           <Text style={[styles.action, { color: colors.primary }]}>

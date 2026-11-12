@@ -50,7 +50,11 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           {savingsPaceWords(controller.frequency)}
         </Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>
-          {yoursLine(daysToGo, controller.maturityDate)}
+          {yoursLine(
+            daysToGo,
+            controller.maturityDate,
+            headStartShare(controller)
+          )}
         </Text>
       </View>
       <View accessible accessibilityLabel={timelineLabel(controller)}>
@@ -104,9 +108,31 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
   );
 }
 
-/** "Yours today", "Yours in about 124 days", or the date when unknown. */
-function yoursLine(daysToGo: number | null, maturityDate: string) {
-  if (daysToGo === 0) return 'Yours today';
+/** How much of the target the head start covers: none, part or all. */
+function headStartShare(
+  controller: StartSavingsController
+): 'none' | 'part' | 'all' {
+  const headStart =
+    controller.sourceMode === 'auto_debit'
+      ? 0
+      : controller.effectiveInitialContribution;
+  if (!(headStart > 0)) return 'none';
+  return headStart >= controller.targetValue ? 'all' : 'part';
+}
+
+/**
+ * "Yours today", "Yours in about 124 days", or the date when unknown. The
+ * plan's end date is worked out from the full price, so with a partial head
+ * start the line says the estimate is before it (it will likely be sooner).
+ */
+function yoursLine(
+  daysToGo: number | null,
+  maturityDate: string,
+  headStart: 'none' | 'part' | 'all' = 'none'
+) {
+  if (headStart === 'all' || daysToGo === 0) return 'Yours today';
+  if (headStart === 'part' && daysToGo !== null)
+    return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}, before your head start`;
   if (daysToGo === null)
     return `Yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
   return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;

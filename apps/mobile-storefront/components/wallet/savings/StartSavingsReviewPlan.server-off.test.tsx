@@ -61,4 +61,31 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       expect(screen.getByText('Yours today')).toBeOnTheScreen();
     });
   });
+  describe('bugfix: the review date ignored the head start', () => {
+    it('says today when the head start covers the whole phone', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            effectiveInitialContribution: 250000,
+          })}
+        />
+      );
+      expect(screen.getByText('Yours today')).toBeOnTheScreen();
+    });
+
+    it('says the estimate is before a partial head start', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            effectiveInitialContribution: 50000,
+          })}
+        />
+      );
+      expect(
+        screen.getByText('Yours in about 125 days, before your head start')
+      ).toBeOnTheScreen();
+    });
+  });
 });

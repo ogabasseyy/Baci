@@ -18,9 +18,10 @@ export function useNativeSplashHandoff({
 }: NativeSplashHandoffOptions) {
   const [showSplash, setShowSplash] = useState(initialVisible);
   const [timedOut, setTimedOut] = useState(false);
+  const [hideFailed, setHideFailed] = useState(false);
   const [hasLayout, setHasLayout] = useState(false);
   const firstLayoutRecorded = useRef(false);
-  const hidePromiseRef = useRef<Promise<void> | null>(null);
+  const hidePromiseRef = useRef<Promise<boolean> | null>(null);
   const intro = useNativeSplashIntro(initialVisible);
 
   useEffect(() => {
@@ -47,15 +48,24 @@ export function useNativeSplashHandoff({
           })
         )
         .then(
-          () => markStartupTiming('splash_hide_completed'),
+          () => {
+            markStartupTiming('splash_hide_completed');
+            return true;
+          },
           () => {
             recordCrashBreadcrumb('root_layout:native_splash_hide_failed');
             markStartupTiming('splash_hide_failed');
+            return false;
           }
         );
     }
-    void hidePromiseRef.current.then(() => {
-      if (active) setShowSplash(false);
+    void hidePromiseRef.current.then((hidden) => {
+      if (!active) return;
+      if (hidden) {
+        setShowSplash(false);
+      } else {
+        setHideFailed(true);
+      }
     });
     return () => {
       active = false;
@@ -75,5 +85,6 @@ export function useNativeSplashHandoff({
     shouldRenderApp: intro.settled,
     timedOut,
     hasLayout,
+    hideFailed,
   };
 }

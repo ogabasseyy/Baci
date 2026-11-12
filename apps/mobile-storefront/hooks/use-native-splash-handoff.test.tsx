@@ -79,6 +79,20 @@ it('holds the final scene until the app has laid out, then fades without another
   expect(result.current.showSplash).toBe(false);
 });
 
+it('keeps the JS splash visible and exposes recovery when native hide fails', async () => {
+  mockHide.mockRejectedValue(new Error('native hide failed'));
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: true })
+  );
+
+  await act(async () => intro.resolve(true));
+  act(() => result.current.onFirstLayout());
+  await waitFor(() => expect(result.current.hideFailed).toBe(true));
+
+  expect(result.current.showSplash).toBe(true);
+  expect(SplashMotion.hide).toHaveBeenCalledTimes(1);
+});
+
 it('keeps holding after intro and layout while initialization is not ready', async () => {
   const { result, rerender } = renderHook(
     ({ ready }: { ready: boolean }) =>

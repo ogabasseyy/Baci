@@ -43,7 +43,6 @@ export function derivePlatformRootDomain(
 
 export function redirectSystemPath({
   path,
-  initial,
 }: {
   path: string;
   initial: boolean;
@@ -51,10 +50,7 @@ export function redirectSystemPath({
   // A custom-scheme launcher root has no route. Query/fragment-only roots
   // still launch Home; a valid pairing link must include the /cart route.
   const launcherRoot = path.split(/[?#]/, 1)[0].toLowerCase();
-  if (
-    initial &&
-    (launcherRoot === 'ogabassey://' || launcherRoot === 'ogabassey:///')
-  )
+  if (launcherRoot === 'ogabassey://' || launcherRoot === 'ogabassey:///')
     return '/';
 
   let apiHostname = '';

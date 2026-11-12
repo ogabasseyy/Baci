@@ -382,21 +382,20 @@ describe('RootLayout storage boot gate', () => {
     expect(mockVerifyBenchmarkTelemetry).toHaveBeenCalledTimes(1);
   });
 
-  it('unblocks startup if the native hide request rejects', async () => {
+  it('keeps startup recovery visible if the native hide request rejects', async () => {
     mockInitializeStorage.mockResolvedValue(undefined);
     mockHideSplash.mockRejectedValue(new Error('native splash unavailable'));
 
     render(<RootLayout />);
 
     await waitFor(() =>
-      expect(mockUseAppTrackingTransparency).toHaveBeenLastCalledWith({
-        enabled: true,
-      })
+      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
     );
     expect(mockHideSplash).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      /persistence:true/
-    );
+    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
+    expect(mockUseAppTrackingTransparency).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
   });
 
   it('shows recovery and releases the native splash when navigation never lays out', async () => {

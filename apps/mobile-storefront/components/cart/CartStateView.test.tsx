@@ -12,6 +12,7 @@ jest.mock('@/components/storefront/GadgetPattern', () => {
 describe('CartStateView', () => {
   it('renders the unavailable state and invokes retry', () => {
     const onRetry = jest.fn();
+    const onStartShopping = jest.fn();
 
     render(
       <CartStateView
@@ -20,13 +21,14 @@ describe('CartStateView', () => {
         colors={Colors.light}
         isRetrying={false}
         onRetry={onRetry}
-        onStartShopping={jest.fn()}
+        onStartShopping={onStartShopping}
       />
     );
 
     expect(screen.getByText('Unable to load cart')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Retry loading cart' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onStartShopping).not.toHaveBeenCalled();
   });
 
   it('disables the retry action while recovery is in progress', () => {

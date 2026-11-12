@@ -85,7 +85,10 @@ describe('AppKeyboardProvider', () => {
 
   it('falls back to a delayed timer when idle callbacks are unavailable', () => {
     jest.useFakeTimers();
-    delete global.requestIdleCallback;
+    Object.defineProperty(global, 'requestIdleCallback', {
+      configurable: true,
+      value: undefined,
+    });
     render(
       <AppKeyboardProvider startupReady>
         <Text>Storefront app</Text>
@@ -101,7 +104,10 @@ describe('AppKeyboardProvider', () => {
 
   it('cancels the timer fallback when the provider unmounts', () => {
     jest.useFakeTimers();
-    delete global.requestIdleCallback;
+    Object.defineProperty(global, 'requestIdleCallback', {
+      configurable: true,
+      value: undefined,
+    });
     const view = render(
       <AppKeyboardProvider startupReady>
         <Text>Storefront app</Text>

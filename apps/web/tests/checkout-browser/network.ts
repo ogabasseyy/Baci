@@ -1,7 +1,7 @@
 import { test as base, expect } from '@playwright/test';
+import { isChatwootCrossOriginPostMessageError } from './chatwoot-cross-origin-postmessage-error';
 import {
   isChatwootBridgeFixtureRequest,
-  isChatwootCrossOriginPostMessageError,
   isFixtureAssetRequest,
 } from './request-allowlist';
 import { order } from './setup';

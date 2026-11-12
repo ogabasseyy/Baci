@@ -47,16 +47,6 @@ export function isChatwootBridgeFixtureRequest({
   );
 }
 
-export function isChatwootCrossOriginPostMessageError(
-  message: string
-): boolean {
-  return (
-    /post.?message/i.test(message) &&
-    message.includes('https://support.example.test') &&
-    message.includes('https://untrusted.example.test')
-  );
-}
-
 export function isFixtureAssetRequest(request: FixtureRequest): boolean {
   const url = new URL(request.url);
   const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();

@@ -1,0 +1,25 @@
+import { expect, it } from 'vitest';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS as sql } from './goal-cancel-forfeit-statements';
+
+it('calls only the forfeit functions of migration 20261112190514', () => {
+  expect(
+    Object.values(sql).map(
+      (text) => /piggyvest_primary\.(\w+)\(/.exec(text)?.[1]
+    )
+  ).toEqual([
+    'claim_goal_cancel_forfeit',
+    'manage_goal_cancel_forfeit',
+    'read_dispatched_goal_cancel_forfeit',
+    'find_dispatched_goal_cancel_forfeit_by_reference',
+    'settle_goal_cancel_forfeit',
+    'release_failed_goal_cancel_forfeit',
+  ]);
+});
+
+it('binds every value as a parameter, never inline text', () => {
+  for (const text of Object.values(sql)) {
+    expect(text).toMatch(
+      /^SELECT piggyvest_primary\.\w+\((\$\d::\w+,?)+\) AS result$/
+    );
+  }
+});

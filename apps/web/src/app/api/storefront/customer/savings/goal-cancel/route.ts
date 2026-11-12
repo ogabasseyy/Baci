@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { goalCancelAmountFields } from '@/lib/piggyvest/goal-cancel-amount-fields';
 import {
   checkPrimaryWalletGoalCancelStatus,
   issuePrimaryWalletGoalCancel,
@@ -22,11 +23,12 @@ function refuse(error: string, code: string, status: number) {
 }
 
 /**
- * Cancel a goal and refund the whole balance, interest included, to the main
- * wallet. The recovery runtime carries the credentials and ignores the flags
- * and the master kill switch, so a customer is never trapped in a goal: this
- * only returns the customer's own money from their goal wallet to their own
- * main wallet, behind a PIN proof bound to a server-issued operation id. The
+ * Cancel a goal early: the saved principal goes back to the main wallet and
+ * the goal's interest is forfeited to Ogabassey (owner decision 2026-11-12);
+ * answers carry principalKobo / forfeitedInterestKobo from the server once the
+ * attempt is dispatched. The recovery runtime carries the credentials and
+ * ignores the flags and the master kill switch, so a customer is never trapped
+ * in a goal, behind a PIN proof bound to a server-issued operation id. The
  * single exception is the cancel-only off switch (PIGGYVEST_GOAL_CANCEL_DISABLED),
  * which refuses NEW issue/submit steps while status checks keep settling.
  */
@@ -194,14 +196,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           result.reason === 'missing' ? 400 : 403
         );
       case 'confirmed':
-        return respond(
-          { status: 'confirmed', operationId: input.operationId },
-          200
-        );
       case 'pending':
         return respond(
-          { status: 'pending', operationId: input.operationId },
-          202
+          {
+            status: result.status,
+            operationId: input.operationId,
+            ...goalCancelAmountFields(result),
+          },
+          result.status === 'confirmed' ? 200 : 202
         );
       case 'released':
         return REJECTED();
@@ -276,7 +278,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (result.status === 'released') return REJECTED();
     if (!PUBLIC_STATUSES.has(result.status)) return UNAVAILABLE();
     return respond(
-      { status: result.status, operationId: body.data.operationId },
+      {
+        status: result.status,
+        operationId: body.data.operationId,
+        ...goalCancelAmountFields(result),
+      },
       200
     );
   } catch {

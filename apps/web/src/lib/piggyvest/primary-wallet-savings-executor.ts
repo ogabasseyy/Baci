@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { primaryDbLink } from './primary-db-link';
@@ -28,6 +29,10 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_STATEMENTS.manage, 4],
   [GOAL_CANCEL_STATEMENTS.status, 2],
   [GOAL_CANCEL_STATEMENTS.checkIssued, 3],
+  [GOAL_CANCEL_STATEMENTS.splitDispatch, 3],
+  [GOAL_CANCEL_STATEMENTS.amounts, 2],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, 2],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.manage, 3],
   [GOAL_COMPLETE_STATEMENTS.issue, 2],
   [GOAL_COMPLETE_STATEMENTS.reserve, 3],
   [GOAL_COMPLETE_STATEMENTS.manage, 4],

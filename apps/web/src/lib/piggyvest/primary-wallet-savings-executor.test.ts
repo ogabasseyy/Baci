@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
@@ -122,7 +123,7 @@ it('permits the fixed scope-bound pending adoption statement', async () => {
     ])
   ).rejects.toThrow('Savings statement unavailable');
 });
-it('permits the five goal cancel statements with their exact parameter counts', async () => {
+it('permits the goal cancel statements (split and interest forfeit included) with their exact parameter counts', async () => {
   const execute = createPrimaryWalletSavingsExecutor(config);
   const id = '55555555-5555-4555-8555-555555555555';
   const cases = [
@@ -134,6 +135,13 @@ it('permits the five goal cancel statements with their exact parameter counts', 
     ],
     [GOAL_CANCEL_STATEMENTS.status, [JSON.stringify(scope), id]],
     [GOAL_CANCEL_STATEMENTS.checkIssued, [JSON.stringify(scope), id, id]],
+    [GOAL_CANCEL_STATEMENTS.splitDispatch, [JSON.stringify(scope), id, '5']],
+    [GOAL_CANCEL_STATEMENTS.amounts, [JSON.stringify(scope), id]],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, [JSON.stringify(scope), id]],
+    [
+      GOAL_CANCEL_FORFEIT_STATEMENTS.manage,
+      [JSON.stringify(scope), id, 'release'],
+    ],
   ] as const;
   for (const [text, parameters] of cases) {
     mocks.query.mockResolvedValueOnce({

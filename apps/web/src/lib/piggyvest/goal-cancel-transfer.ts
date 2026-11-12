@@ -23,10 +23,31 @@ type Claim =
     }
   | { status: 'pin_refused'; reason: string };
 
+/**
+ * The database's answer to a split dispatch (goal cancel only): it sizes the
+ * customer leg (principal) and plans the interest forfeit from the balance we
+ * read. Anything but 'dispatched' means nothing may be sent; a refused split
+ * is already released by the database.
+ */
+export type GoalCancelSplit =
+  | {
+      status: 'dispatched';
+      principalKobo: number;
+      forfeitedInterestKobo: number;
+    }
+  | { status: 'not_claimed' | 'needs_review' | 'forfeit_unavailable' };
+
 interface Ports {
   reserve: (request: { goalId: string; operationId: string }) => Promise<Claim>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   claimDispatch: (operationId: string, amountKobo: number) => Promise<boolean>;
+  // Goal cancel passes this: the customer leg carries the principal only and
+  // the interest is forfeited by its own leg (owner decision 2026-11-12).
+  // Goal complete leaves it out and moves the whole balance.
+  splitDispatch?: (
+    operationId: string,
+    balanceKobo: number
+  ) => Promise<GoalCancelSplit>;
   cancelBeforeDispatch: (operationId: string) => Promise<boolean>;
   lookupTransfer: (
     reservation: Reservation & { amountKobo: number }
@@ -110,9 +131,11 @@ async function releaseIfDefinitivelyRejected(
 }
 
 /**
- * Cancels a goal by moving its full PiggyVest balance to the main wallet.
- * Goal complete reuses this exact transfer step (same one-shot send, same
- * pending-on-doubt rules) with its own reservation and reference.
+ * Cancels a goal by moving its saved principal to the main wallet (the
+ * interest leg is planned by the split and sent later, see
+ * goal-cancel-forfeit). Goal complete reuses this exact transfer step (same
+ * one-shot send, same pending-on-doubt rules) with its own reservation and
+ * reference, and moves the full balance.
  *
  * The provider reference is per goal ('pvb-cancel-<goalId>'), so a double tap
  * or a retry can never move money twice. It only takes a new suffix after a
@@ -173,16 +196,49 @@ export async function submitGoalCancel(
     await releaseReservation(request.operationId, ports);
     return { status: 'too_large' };
   }
-  if (!(await ports.claimDispatch(request.operationId, amountKobo)))
-    return { status: 'pending' };
+  const claimed = await claimTransferAmount(
+    request.operationId,
+    amountKobo,
+    ports
+  );
+  if (typeof claimed !== 'number') return claimed;
   try {
-    const response = await ports.transfer({ reservation, amountKobo });
+    const response = await ports.transfer({ reservation, amountKobo: claimed });
     if (response.accepted !== true) throw new Error('Invalid acceptance');
   } catch (error) {
-    if (
-      await releaseIfDefinitivelyRejected(reservation, amountKobo, error, ports)
-    )
+    if (await releaseIfDefinitivelyRejected(reservation, claimed, error, ports))
       return { status: 'released' };
   }
   return { status: 'pending' };
+}
+
+/**
+ * Claims the dispatch and returns the amount this attempt's single POST
+ * carries: the whole balance (goal complete), or the principal the database
+ * split off it (goal cancel). A status object means nothing may be sent.
+ */
+async function claimTransferAmount(
+  operationId: string,
+  balanceKobo: number,
+  ports: Pick<Ports, 'claimDispatch' | 'splitDispatch'>
+): Promise<number | { status: 'pending' | 'needs_review' | 'unavailable' }> {
+  if (!ports.splitDispatch)
+    return (await ports.claimDispatch(operationId, balanceKobo))
+      ? balanceKobo
+      : { status: 'pending' };
+  const split = await ports.splitDispatch(operationId, balanceKobo);
+  if (split.status !== 'dispatched') {
+    if (split.status === 'needs_review') return { status: 'needs_review' };
+    if (split.status === 'forfeit_unavailable')
+      return { status: 'unavailable' };
+    return { status: 'pending' };
+  }
+  if (
+    !Number.isSafeInteger(split.principalKobo) ||
+    split.principalKobo < 1 ||
+    split.principalKobo > balanceKobo ||
+    split.principalKobo + split.forfeitedInterestKobo !== balanceKobo
+  )
+    throw new Error('Goal cancel split unavailable');
+  return split.principalKobo;
 }

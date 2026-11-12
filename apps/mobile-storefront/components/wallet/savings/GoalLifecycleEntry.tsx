@@ -90,6 +90,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 44,
+    paddingHorizontal: 16,
   },
   text: { fontSize: 13, fontWeight: '600' },
   // Cancelling is available but deliberately quiet: a text link, not a button.

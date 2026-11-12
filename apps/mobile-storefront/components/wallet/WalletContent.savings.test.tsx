@@ -139,7 +139,7 @@ it('requires an amount before opening wallet payment for an empty spendable wall
   const props = createWalletContentProps();
   const { rerender } = render(<WalletContent {...props} showSavingsProgress />);
 
-  expect(screen.getByText('Available in wallet: ₦0')).toBeOnTheScreen();
+  expect(screen.getByText('₦0 available in wallet')).toBeOnTheScreen();
   expect(
     screen.queryByRole('button', { name: 'Confirm savings top-up' })
   ).toBeNull();

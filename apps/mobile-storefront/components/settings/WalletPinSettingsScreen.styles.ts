@@ -27,4 +27,5 @@ export const styles = StyleSheet.create({
   primaryText: { fontSize: 15, fontWeight: '700' },
   secondary: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
   secondaryText: { fontSize: 14, fontWeight: '600' },
+  identity: { gap: 14 },
 });

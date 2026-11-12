@@ -12,7 +12,8 @@ import {
  * True when a purchase top-up (IMEI check, utilities) should prefill an
  * amount the card form accepts: the customer spends store credit, the
  * PiggyVest read is unknown or pending (Codex: even at a rollout merchant
- * not yet observed), or the merchant's purchase top-ups are card-only.
+ * not yet observed), the wallet owner is unresolved where PiggyVest is
+ * possible, or the merchant's purchase top-ups are card-only.
  */
 export function useCardOnlyPurchaseTopUp(
   merchantId: string | null | undefined,
@@ -24,6 +25,8 @@ export function useCardOnlyPurchaseTopUp(
   return (
     isWalletStoreCredit(wallet) ||
     isWalletPrimaryUnknown(wallet) ||
+    // No customer row yet: unclassified where PiggyVest is possible (Codex).
+    (wallet?.owner_unresolved === true && capability !== false) ||
     isPiggyvestCardOnlyMerchant(activeMerchantId, capability)
   );
 }

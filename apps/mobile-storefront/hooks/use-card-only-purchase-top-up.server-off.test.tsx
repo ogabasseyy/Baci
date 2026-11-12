@@ -71,3 +71,26 @@ describe('bugfix: unobserved rollout merchant with a timed-out PiggyVest read', 
     expect(result.current).toBe(false);
   });
 });
+
+describe('bugfix: IMEI top-up below the card minimum for an unresolved wallet owner', () => {
+  it('is card-only while the owner is unresolved and capability is unknown', () => {
+    // Arrange: rollout merchant, capability probe pending, no customer row.
+    mockCapability = null;
+
+    // Act
+    const { result } = renderHook(() =>
+      useCardOnlyPurchaseTopUp(ROLLOUT, { owner_unresolved: true })
+    );
+
+    // Assert
+    expect(result.current).toBe(true);
+  });
+
+  it("keeps today's exact prefill where the server rules PiggyVest out", () => {
+    mockCapability = false;
+    const { result } = renderHook(() =>
+      useCardOnlyPurchaseTopUp(ROLLOUT, { owner_unresolved: true })
+    );
+    expect(result.current).toBe(false);
+  });
+});

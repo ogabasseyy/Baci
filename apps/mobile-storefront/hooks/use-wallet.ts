@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
+import { useWalletRecheckOnPiggyvest } from './use-wallet-recheck-on-piggyvest';
 import { fetchWalletDataUnbounded } from './wallet-data';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import { walletKeys } from './wallet-query';
@@ -108,6 +109,7 @@ export function useWallet(options: UseWalletOptions = {}) {
     staleTime: cachePolicy.staleTime,
     gcTime: cachePolicy.gcTime,
   });
+  useWalletRecheckOnPiggyvest(queryClient, activeMerchantId, walletQueryKey);
 
   // Real-time sync
   // 2026 Critical Fix: Prevent channel race condition on rapid mount/unmount

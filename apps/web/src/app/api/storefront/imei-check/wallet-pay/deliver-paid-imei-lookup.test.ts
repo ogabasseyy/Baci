@@ -1,0 +1,176 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deliverPaidImeiLookup } from './deliver-paid-imei-lookup';
+
+vi.mock('server-only', () => ({}));
+const cache = vi.hoisted(() => ({ success: vi.fn(), response: vi.fn() }));
+vi.mock('../route-cache-helpers', () => ({
+  cacheSuccessfulLookup: cache.success,
+  cacheLookupResponse: cache.response,
+}));
+
+const LOOKUP = '11111111-1111-4111-8111-111111111111';
+const OP = '5b0f2a40-1c1d-4e6b-9a51-2f3c4d5e6f70';
+const lookup = {
+  id: LOOKUP,
+  amount_ngn: 500,
+  cached_response: null,
+  cached_status: null,
+  customer_id: 'c',
+  merchant_id: 'm',
+  imei_hash: 'h',
+  status: 'pending' as const,
+  tier: 'simLock' as const,
+  device_category: 'smartphone' as const,
+};
+const submit = vi.fn();
+const order: string[] = [];
+function deps(overrides: Record<string, unknown> = {}) {
+  return {
+    claim: vi.fn(async () => ({
+      status: 'claimed' as const,
+      purpose: 'imei_check' as const,
+      purchaseRef: LOOKUP,
+      amountKobo: 50000,
+    })),
+    finish: vi.fn(async (_op: string, outcome: string) => {
+      order.push(`finish:${outcome}`);
+      return outcome === 'fulfilled'
+        ? ('fulfilled' as const)
+        : ('refund_owed' as const);
+    }),
+    refund: vi.fn(async () => {
+      order.push('refund');
+      return 'pending' as const;
+    }),
+    prepare: vi.fn(async () => ({
+      binding: { provider: 'sickw' },
+      provider: { submit },
+      serviceTier: { checksIncluded: [], name: 'SIM lock' },
+    })),
+    ...overrides,
+  };
+}
+const base = {
+  lookup,
+  operationId: OP,
+  normalizedImei: '356938035643809',
+  supabaseAdmin: {} as never,
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  order.length = 0;
+  cache.success.mockImplementation(async () => {
+    order.push('cache:completed');
+    return new Response(JSON.stringify({ status: 'complete' }), {
+      status: 200,
+    });
+  });
+  cache.response.mockImplementation(
+    async ({ terminalStatus }: { terminalStatus: string }) => {
+      order.push(`cache:${terminalStatus}`);
+    }
+  );
+});
+
+describe('deliverPaidImeiLookup', () => {
+  it('runs the lookup once for a confirmed, claimed payment, caching before marking it delivered', async () => {
+    submit.mockResolvedValue({
+      kind: 'complete',
+      body: {},
+      rawResponseText: 'x',
+      providerStatus: 's',
+      status: 200,
+    });
+    const d = deps();
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(200);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['cache:completed', 'finish:fulfilled']);
+    expect(d.refund).not.toHaveBeenCalled();
+  });
+
+  it('refunds exactly once on a definitive lookup failure, opening the refund before caching it', async () => {
+    submit.mockResolvedValue({
+      kind: 'failure',
+      body: { code: 'NOT_FOUND', error: 'x', success: false },
+      providerStatus: 'n',
+      refundReason: 'not_found',
+      status: 404,
+    });
+    const d = deps();
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(404);
+    expect(order).toEqual([
+      'finish:failed',
+      'refund',
+      'cache:refunded_not_found',
+    ]);
+    expect(d.refund).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not deliver an unconfirmed payment', async () => {
+    const d = deps({
+      claim: vi.fn(async () => ({ status: 'not_confirmed' as const })),
+    });
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'payment_pending',
+    });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('never runs a second lookup while another request is delivering', async () => {
+    const d = deps({ claim: vi.fn(async () => ({ status: 'busy' as const })) });
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(202);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('refuses a payment issued for another lookup', async () => {
+    const d = deps({
+      claim: vi.fn(async () => ({
+        status: 'claimed' as const,
+        purpose: 'imei_check' as const,
+        purchaseRef: '99999999-9999-4999-8999-999999999999',
+        amountKobo: 50000,
+      })),
+    });
+    await expect(deliverPaidImeiLookup(base, d)).rejects.toThrow();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('finishes delivery without a second lookup when the result was already saved', async () => {
+    const d = deps();
+    const response = await deliverPaidImeiLookup(
+      {
+        ...base,
+        lookup: {
+          ...lookup,
+          status: 'completed',
+          cached_response: { status: 'complete' } as never,
+          cached_status: 200,
+        },
+      },
+      d
+    );
+    expect(response.status).toBe(200);
+    expect(d.finish).toHaveBeenCalledWith(OP, 'fulfilled');
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('refunds when the tier can no longer be served by Sickw', async () => {
+    const d = deps({
+      prepare: vi.fn(async () => ({
+        binding: { provider: 'petrock' },
+        provider: { submit },
+        serviceTier: {},
+      })),
+    });
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(502);
+    expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
+    expect(submit).not.toHaveBeenCalled();
+  });
+});

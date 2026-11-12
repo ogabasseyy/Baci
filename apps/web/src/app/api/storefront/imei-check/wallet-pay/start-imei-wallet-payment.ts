@@ -140,7 +140,7 @@ export async function startImeiWalletPayment(
       'Paying from your PiggyVest wallet is not available right now.',
       503
     );
-  if (issued.status === 'conflict')
+  if (issued.status === 'conflict' || !('operationId' in issued))
     return refuse('PAYMENT_CONFLICT', 'Please refresh and try again.', 409);
   if (issued.status === 'issued')
     return NextResponse.json(

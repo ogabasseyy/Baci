@@ -65,12 +65,16 @@ if ! [[ "$APT_LIMIT_SECONDS" =~ ^[1-9][0-9]{0,2}$ ]]; then
   echo "APT_LIMIT_SECONDS must be a whole number of seconds from 1 to 999, not '${APT_LIMIT_SECONDS}'." >&2
   exit 1
 fi
-# Fifteen seconds per connection and one try per file, the values the x64 runner image itself configures
-# (images/ubuntu/scripts/build/configure-apt.sh): apt spends every retry on the same URI before it moves on
-# to the next mirror in the list, so a higher count delays the failover this script exists for. Plus up to a
+# Fifteen seconds per connection and no retry of a file: Acquire::Retries counts the retries after the first
+# try, so 0 is a single attempt (the x64 runner image sets 1, images/ubuntu/scripts/build/configure-apt.sh).
+# apt spends every retry on the same URI before it moves on to the next mirror in the list, so each retry delays
+# the failover this script exists for. 0 also removes the retry precondition of CVE-2026-109518 (apt resuming a
+# download after an HTTP redirect, Debian DSA-6607-1, whose mitigation is Acquire::Retries 0), which matters more
+# now that the fallback adds third-party mirrors. The cost is no second chance on a transient reset of the same
+# URI: the PostgreSQL-only refresh then takes the fallback below instead of retrying in place. Plus up to a
 # minute for a dpkg lock that a background apt job on a fresh runner, or a command stopped by the ceiling
 # above, may still hold.
-APT_BOUNDS=(-o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60)
+APT_BOUNDS=(-o Acquire::Retries=0 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60)
 
 # timeout runs under sudo, so its signal, and the kill after ten seconds, goes to apt-get itself. Wrapped around
 # sudo it could stop only sudo and leave apt-get running with the dpkg lock held.

@@ -4,14 +4,15 @@ import test, { describe } from 'node:test';
 import { FINGERPRINT, SCRIPT, install } from './install-postgresql-hosted-harness.mjs';
 
 const BUILD = '18.6-1.pgdg24.04+2';
-// Every apt call is bounded: a few seconds per connection, one try per file, and a ceiling for the whole command. The
-// ceiling (timeout) runs under sudo, so its signal reaches apt-get itself and not just a sudo wrapped around it.
+// Every apt call is bounded: a few seconds per connection, a single attempt per file, and a ceiling for the whole
+// command. The ceiling (timeout) runs under sudo, so its signal reaches apt-get itself and not just a sudo wrapped
+// around it.
 const APT_LIMIT_SECONDS = 180;
 const SUDO_APT = `sudo timeout --kill-after=10 ${APT_LIMIT_SECONDS} apt-get`;
-// One try per file, not more: apt spends every retry on the same URI before it moves to the next mirror in the list,
-// so a higher count delays the very failover this installer exists for. Fifteen seconds per connection and one try
-// are the values the x64 runner image itself configures.
-const APT_BOUNDS = '-o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60';
+// No retry of a file (Acquire::Retries counts the retries after the first try, so 0 is a single attempt): apt spends
+// every retry on the same URI before it moves to the next mirror in the list, so each retry delays the very failover
+// this installer exists for, and a non-zero count is the precondition of CVE-2026-109518. The x64 runner image sets 1.
+const APT_BOUNDS = '-o Acquire::Retries=0 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60';
 // The first refresh reads only the PGDG source, so an unreachable Ubuntu mirror cannot stall the step.
 const PGDG_ONLY = '-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/pgdg.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0';
 const INSTALL = `${SUDO_APT} ${APT_BOUNDS} install -y --no-install-recommends postgresql-18=${BUILD} postgresql-client-18=${BUILD}`;
@@ -143,15 +144,16 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     assert.match(script, /sudo timeout --kill-after=\d+ "\$APT_LIMIT_SECONDS" apt-get/);
   });
 
-  test('tries each file once per mirror, so a dead mirror hands over to the next one without a retry delay', () => {
-    // Acquire::Retries=3 retried the dead Azure URI three times before apt looked at the next mirror in the list.
+  test('never retries a file on the same mirror, so a dead mirror hands over at once and no retry precondition is left', () => {
+    // Acquire::Retries=3 retried the dead Azure URI three times, and the runner image's 1 once, before apt looked at
+    // the next mirror in the list; any non-zero count is also the precondition of CVE-2026-109518.
     const result = install({ FAKE_APT_INSTALL_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
     const apt = result.privileged.filter((line) => line.includes(' apt-get '));
     assert.ok(apt.length >= 4, 'first refresh and install, then the retry refresh and install');
     for (const line of apt) {
-      assert.match(line, / -o Acquire::Retries=1 /, line);
-      assert.doesNotMatch(line, /Acquire::Retries=(?!1 )/, line);
+      assert.match(line, / -o Acquire::Retries=0 /, line);
+      assert.doesNotMatch(line, /Acquire::Retries=(?!0 )/, line);
     }
   });
 

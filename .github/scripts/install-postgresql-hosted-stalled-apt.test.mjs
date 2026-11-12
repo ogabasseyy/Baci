@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { STALL_SECONDS, install, isGone } from './install-postgresql-hosted-harness.mjs';
+import { STALL_SECONDS, install, isGone, processState } from './install-postgresql-hosted-harness.mjs';
 
 // The 2026-11-11 outage did not make apt fail quickly, it made apt wait. The tests in install-postgresql-hosted.test.mjs
 // stand in for a quick failure. Here the real timeout(1) runs around an apt-get stand-in that stalls, so the time
@@ -68,11 +68,13 @@ describe('bugfix: a killed helper that nobody has reaped yet must not fail the h
   // answers signal 0, so the check used to fail although the process cannot hold the dpkg lock.
   test('counts a defunct process as gone and a live one as running', async () => {
     // The shell starts a child that exits at once and then becomes `sleep`, which never waits for it: the child stays defunct.
-    const parent = spawn('sh', ['-c', 'sleep 0 & echo $!; exec sleep 5'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const parent = spawn('sh', ['-c', 'sleep 0 & echo $!; exec sleep 30'], { stdio: ['ignore', 'pipe', 'ignore'] });
     try {
       const [chunk] = await once(parent.stdout, 'data');
       const zombie = Number(String(chunk).trim());
-      await sleep(300);
+      // When the child turns defunct depends on scheduling, so wait for that state instead of a fixed time.
+      for (let waited = 0; waited < 10_000 && processState(zombie) !== 'Z'; waited += 50) await sleep(50);
+      assert.equal(processState(zombie), 'Z', 'the child never became defunct');
       assert.doesNotThrow(() => process.kill(zombie, 0), 'a defunct process still answers signal 0');
       assert.equal(isGone(zombie), true, 'a defunct process holds nothing');
       assert.equal(isGone(parent.pid), false, 'a running process is not gone');

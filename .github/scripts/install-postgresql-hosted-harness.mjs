@@ -104,7 +104,7 @@ stub('dpkg-query', [
 ]);
 
 // State letter of a process (Linux /proc, otherwise ps), or undefined when no such process exists.
-function processState(pid) {
+export function processState(pid) {
   if (existsSync('/proc/self/stat')) {
     try {
       // "pid (name) S ..." — the name can hold spaces and brackets, so cut after the last ") ".

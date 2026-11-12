@@ -1,0 +1,189 @@
+import { imeiWalletPayApi } from '@/lib/wallet-pay/imei-wallet-pay-api';
+import {
+  createImeiWalletPayAdapter,
+  imeiPayAnswer,
+} from './imei-wallet-pay-adapter';
+
+jest.mock('@/lib/wallet-pay/imei-wallet-pay-api', () => ({
+  imeiWalletPayApi: { start: jest.fn(), verifyPin: jest.fn(), pay: jest.fn() },
+}));
+
+const api = imeiWalletPayApi as unknown as Record<
+  'start' | 'verifyPin' | 'pay',
+  jest.Mock
+>;
+const LOOKUP = '11111111-1111-4111-8111-111111111111';
+const OP = '22222222-2222-4222-8222-222222222222';
+const PROOF = 'a'.repeat(64);
+const RESULT = {
+  imei: '356938035643809',
+  device: 'iPhone 15',
+  modelNumber: 'A3090',
+  status: 'Clean',
+  icloud: 'Off',
+  icloudLock: 'Off',
+  simLock: 'Unlocked',
+  blacklistStatus: 'Clean',
+  carrier: 'Unlocked',
+  deviceImage: '',
+  score: 100,
+  deviceType: 'apple',
+  verdict: 'Safe to buy',
+  verdictType: 'safe',
+};
+const reply = (httpStatus: number, body: Record<string, unknown>) => ({
+  httpStatus,
+  body,
+});
+
+function adapter() {
+  return createImeiWalletPayAdapter({
+    connection: { apiBaseUrl: 'https://api.test', accessToken: 'token' },
+    device: 'smartphone',
+    tier: 'basic',
+    imei: '356938035643809',
+    idempotencyKey: OP,
+  });
+}
+
+async function started() {
+  api.start.mockResolvedValue(
+    reply(202, {
+      status: 'payment_required',
+      lookupId: LOOKUP,
+      operationId: OP,
+      amountKobo: 250_000,
+    })
+  );
+  const pay = adapter();
+  await expect(pay.start()).resolves.toEqual({
+    kind: 'pin',
+    operationId: OP,
+    amountKobo: 250_000,
+  });
+  return pay;
+}
+
+beforeEach(() => jest.resetAllMocks());
+
+describe('createImeiWalletPayAdapter (mocked PiggyVest replies)', () => {
+  it('asks for the PIN once the server issues the payment', async () => {
+    await started();
+  });
+
+  it('checks on a payment already sent instead of paying again', async () => {
+    api.start.mockResolvedValue(
+      reply(202, {
+        status: 'payment_pending',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 250_000,
+      })
+    );
+    await expect(adapter().start()).resolves.toMatchObject({ kind: 'recheck' });
+  });
+
+  it('keeps the customer on the PIN step after a wrong PIN, with tries left', async () => {
+    const pay = await started();
+    api.verifyPin.mockResolvedValue(
+      reply(401, { code: 'PIN_INCORRECT', attemptsRemaining: 2 })
+    );
+    await expect(pay.verifyPin(OP, '0000')).resolves.toEqual({
+      kind: 'retry',
+      message: 'That PIN is not right. 2 tries left.',
+    });
+    expect(api.pay).not.toHaveBeenCalled();
+  });
+
+  it('returns the single-use proof for the right PIN', async () => {
+    const pay = await started();
+    api.verifyPin.mockResolvedValue(
+      reply(200, { proof: PROOF, expiresAt: 'x' })
+    );
+    await expect(pay.verifyPin(OP, '1234')).resolves.toEqual({
+      kind: 'proof',
+      proof: PROOF,
+    });
+    expect(api.verifyPin).toHaveBeenCalledWith(expect.anything(), {
+      lookupId: LOOKUP,
+      operationId: OP,
+      pin: '1234',
+    });
+  });
+
+  it('sends a locked or missing PIN to a calm outcome', async () => {
+    const pay = await started();
+    api.verifyPin.mockResolvedValueOnce(reply(423, { code: 'PIN_LOCKED' }));
+    await expect(pay.verifyPin(OP, '1234')).resolves.toMatchObject({
+      outcome: { kind: 'pin_locked' },
+    });
+    api.verifyPin.mockResolvedValueOnce(reply(409, { code: 'PIN_NOT_SET' }));
+    await expect(pay.verifyPin(OP, '1234')).resolves.toMatchObject({
+      outcome: { kind: 'pin_setup' },
+    });
+  });
+
+  it('delivers the check result once the payment is confirmed', async () => {
+    const pay = await started();
+    api.pay.mockResolvedValue(
+      reply(200, {
+        success: true,
+        status: 'complete',
+        lookupId: LOOKUP,
+        data: RESULT,
+      })
+    );
+    await expect(pay.pay(OP, PROOF)).resolves.toEqual({
+      kind: 'delivered',
+      result: { result: RESULT, lookupId: LOOKUP, tier: 'basic' },
+    });
+    expect(api.pay).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('imeiPayAnswer', () => {
+  it('reports a refund when the check could not be completed', () => {
+    expect(
+      imeiPayAnswer(
+        reply(502, {
+          code: 'LOOKUP_NOT_COMPLETED',
+          refund: 'piggyvest_wallet',
+          status: 'error',
+        }),
+        'basic'
+      )
+    ).toEqual({ kind: 'outcome', outcome: { kind: 'refunded' } });
+    expect(
+      imeiPayAnswer(reply(202, { status: 'payment_refunding' }), 'basic')
+    ).toMatchObject({
+      outcome: { kind: 'refunded' },
+    });
+  });
+
+  it('treats anything unknown as still confirming, never failed', () => {
+    expect(
+      imeiPayAnswer(reply(202, { status: 'delivering' }), 'basic')
+    ).toMatchObject({
+      outcome: { kind: 'pending' },
+    });
+    expect(
+      imeiPayAnswer(reply(503, { code: 'PAYMENT_STATUS_UNKNOWN' }), 'basic')
+    ).toMatchObject({ outcome: { kind: 'pending' } });
+  });
+
+  it('asks for the PIN again when the proof was refused', () => {
+    expect(
+      imeiPayAnswer(reply(403, { code: 'PIN_PROOF_REFUSED' }), 'basic')
+    ).toMatchObject({
+      kind: 'pin_again',
+    });
+  });
+
+  it('says nothing was taken when the wallet is short', () => {
+    expect(
+      imeiPayAnswer(reply(409, { code: 'INSUFFICIENT_FUNDS' }), 'basic')
+    ).toMatchObject({
+      outcome: { kind: 'insufficient' },
+    });
+  });
+});

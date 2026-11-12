@@ -90,3 +90,38 @@ describe('bugfix: IMEI check offered PiggyVest money it cannot spend', () => {
     expect(onTopUpWallet).toHaveBeenCalledWith(1000);
   });
 });
+
+describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
+  it('keeps the store credit top-up when wallet pay does not cover the check', () => {
+    const onTopUpWallet = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        onTopUpWallet={onTopUpWallet}
+        walletIsStoreCredit
+        walletPayCovers={() => false}
+      />
+    );
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+    expect(screen.queryByText(/from PiggyVest/)).toBeNull();
+  });
+
+  it('offers to pay from PiggyVest once switched on and covered', () => {
+    const onCheck = jest.fn();
+    const onTopUpWallet = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        imei="356938035643809"
+        onCheck={onCheck}
+        onTopUpWallet={onTopUpWallet}
+        walletIsStoreCredit
+        walletPayCovers={(tier) => tier === 'full'}
+      />
+    );
+    const price = IMEI_SERVICE_TIERS.full.price.toLocaleString('en-NG');
+    fireEvent.press(screen.getByText(`Pay ₦${price} from PiggyVest`));
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    expect(onTopUpWallet).not.toHaveBeenCalled();
+  });
+});

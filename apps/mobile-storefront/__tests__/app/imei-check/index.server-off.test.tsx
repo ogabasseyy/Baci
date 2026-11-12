@@ -136,6 +136,8 @@ describe('bugfix: ₦5,000 PiggyVest customer told they can pay for a check', ()
 
     // Act: the top-up returns here, so the wallet opens "Add store credit".
     fireEvent.press(screen.getByText('Add store credit'));
+    // Paying from the PiggyVest wallet stays switched off: no pay sheet.
+    expect(screen.queryByText('Pay from PiggyVest')).toBeNull();
     expect(router.push).toHaveBeenCalledWith(
       expect.stringMatching(
         /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=\/imei-check$/

@@ -46,6 +46,8 @@ interface ImeiCheckFormViewProps {
   walletBalance: number;
   /** PiggyVest customer: the balance is store credit. */
   walletIsStoreCredit?: boolean;
+  /** True when the PiggyVest wallet pays this check (store credit can't). */
+  walletPayCovers?: (tier: ImeiServiceTierKey) => boolean;
   onBrandSelect: (brand: ImeiBrandFilter) => void;
   onChangeImei: (value: string) => void;
   onCheck: () => void;
@@ -75,6 +77,7 @@ export function ImeiCheckFormView({
   showAllServices,
   walletBalance,
   walletIsStoreCredit = false,
+  walletPayCovers,
   onBrandSelect,
   onChangeImei,
   onCheck,
@@ -89,7 +92,13 @@ export function ImeiCheckFormView({
   const { isKeyboardVisible } = useKeyboard();
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const isWalletReady = !(isWalletLoading || isWalletError);
-  const hasEnoughBalance = isWalletReady && walletBalance >= currentTier.price;
+  const paysFromPiggyvest =
+    selectedTier !== null &&
+    isWalletReady &&
+    walletBalance < currentTier.price &&
+    walletPayCovers?.(selectedTier) === true;
+  const hasEnoughBalance =
+    isWalletReady && (walletBalance >= currentTier.price || paysFromPiggyvest);
   const needsTopUp =
     selectedTier !== null && isWalletReady && !hasEnoughBalance;
   const shortfall = Math.max(0, currentTier.price - walletBalance);
@@ -252,7 +261,9 @@ export function ImeiCheckFormView({
                           ? walletCopy.unavailableButton
                           : needsTopUp
                             ? walletCopy.topUpButton
-                            : `Verify Now - ${formatServicePrice(currentTier.price)}`}
+                            : paysFromPiggyvest
+                              ? `Pay ${formatServicePrice(currentTier.price)} from PiggyVest`
+                              : `Verify Now - ${formatServicePrice(currentTier.price)}`}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />
                 </>

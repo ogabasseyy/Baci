@@ -1,0 +1,41 @@
+import { walletPayNotice } from './wallet-pay-notice';
+
+// Pure wording: the same whether or not the server has PiggyVest on.
+describe('walletPayNotice', () => {
+  it('says a failed purchase is refunded exactly once', () => {
+    const notice = walletPayNotice({ kind: 'refunded' }, 250_000, 'IMEI check');
+    expect(notice.title).toBe('Refunded to your PiggyVest wallet');
+    expect(notice.message).toContain('₦2,500');
+    expect(notice.message).toContain('refunded exactly once');
+    expect(notice.action).toBeNull();
+  });
+
+  it('never calls an unknown answer failed, and offers to check again', () => {
+    const notice = walletPayNotice({ kind: 'pending' }, 250_000, 'IMEI check');
+    expect(notice.title).toBe('Confirming your payment');
+    expect(notice.message).toContain("don't pay again");
+    expect(notice.action).toBe('check_again');
+  });
+
+  it('tells a paused service that nothing was taken', () => {
+    const notice = walletPayNotice({ kind: 'unavailable' }, null, 'IMEI check');
+    expect(notice.message).toContain('Nothing was taken');
+  });
+
+  it('uses the server wording only for a plain failure', () => {
+    expect(
+      walletPayNotice(
+        { kind: 'failed', message: 'This IMEI does not match.' },
+        null,
+        'IMEI check'
+      ).message
+    ).toBe('This IMEI does not match.');
+    expect(
+      walletPayNotice(
+        { kind: 'refunded', message: 'other words' },
+        null,
+        'IMEI check'
+      ).message
+    ).toContain('your payment is going back');
+  });
+});

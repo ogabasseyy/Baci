@@ -20,6 +20,8 @@ interface ImeiCheckPagerProps {
   visitedDevices: Record<ImeiDeviceCategory, boolean>;
   walletBalance: number;
   walletIsStoreCredit?: boolean;
+  /** True when the second wallet can pay this check (see use-imei-wallet-pay). */
+  walletPayCovers?: (tier: ImeiServiceTierKey) => boolean;
   onPageSelected: (event: { nativeEvent: { position: number } }) => void;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
@@ -36,6 +38,7 @@ export function ImeiCheckPager({
   visitedDevices,
   walletBalance,
   walletIsStoreCredit,
+  walletPayCovers,
   onPageSelected,
   onVerify,
   onTopUpWallet,
@@ -60,6 +63,7 @@ export function ImeiCheckPager({
               isWalletLoading={isWalletLoading}
               walletBalance={walletBalance}
               walletIsStoreCredit={walletIsStoreCredit}
+              walletPayCovers={walletPayCovers}
               onVerify={onVerify}
               onTopUpWallet={onTopUpWallet}
             />

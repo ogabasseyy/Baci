@@ -10,6 +10,7 @@ import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wall
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalCancelStep } from './savings/GoalCancelStep';
+import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { WalletPinSheet } from './savings/WalletPinSheet';
@@ -104,17 +105,31 @@ export function WalletSavingsProgressModal({
               setCancelHeight(Math.ceil(height))
             }
           >
-            <GoalCancelStep
-              colors={colors}
-              flow={cancel.flow}
-              goal={cancelGoal}
-              onDone={dismiss}
-              onKeep={cancel.keep}
-              onSignIn={() => {
-                dismiss();
-                router.push('/auth/login?returnTo=%2Fwallet');
-              }}
-            />
+            {cancel.kind === 'complete' ? (
+              <GoalCompleteStep
+                colors={colors}
+                flow={cancel.flow}
+                goal={cancelGoal}
+                onDone={dismiss}
+                onNotNow={cancel.keep}
+                onSignIn={() => {
+                  dismiss();
+                  router.push('/auth/login?returnTo=%2Fwallet');
+                }}
+              />
+            ) : (
+              <GoalCancelStep
+                colors={colors}
+                flow={cancel.flow}
+                goal={cancelGoal}
+                onDone={dismiss}
+                onKeep={cancel.keep}
+                onSignIn={() => {
+                  dismiss();
+                  router.push('/auth/login?returnTo=%2Fwallet');
+                }}
+              />
+            )}
           </BottomSheetScrollView>
         )}
       </SavingsBottomSheet>
@@ -265,7 +280,8 @@ export function WalletSavingsProgressModal({
                 goal={goal}
                 hasPendingContribution={hasPendingContribution}
                 onBeforeNavigate={onClose}
-                onCancel={cancel.start}
+                onCancel={() => cancel.start('cancel')}
+                onComplete={() => cancel.start('complete')}
                 walletUpdatedAt={walletUpdatedAt}
               />
             </View>

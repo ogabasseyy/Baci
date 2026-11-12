@@ -33,6 +33,18 @@ export const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   struck: { textDecorationLine: 'line-through' },
   note: { fontSize: 13, textAlign: 'center' },
+  next: { gap: 8 },
+  nextTitle: { textAlign: 'left' },
+  nextRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  nextDot: {
+    alignItems: 'center',
+    borderRadius: 11,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  nextNum: { fontSize: 12, fontWeight: '700' },
+  nextText: { flex: 1, fontSize: 14 },
   working: { alignItems: 'center', gap: 10, paddingVertical: 16 },
   actions: { gap: 4, marginTop: 8 },
   button: {

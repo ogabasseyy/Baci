@@ -162,11 +162,28 @@ describe('GoalLifecycleEntry', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onBeforeNavigate).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
-    // Complete still opens its own screen.
+    // Without an in-sheet handler, Complete still opens its own screen.
     fireEvent.press(
       screen.getByRole('button', { name: 'Complete savings goal' })
     );
     expect(router.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes inside the sheet when the sheet offers it', () => {
+    const onComplete = jest.fn();
+    render(
+      <GoalLifecycleEntry
+        colors={Colors.light}
+        goal={makeGoal({ current_amount: 5000 })}
+        hasPendingContribution={false}
+        onComplete={onComplete}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Complete savings goal' })
+    );
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it('closes the sheet before pushing the goal actions route', () => {

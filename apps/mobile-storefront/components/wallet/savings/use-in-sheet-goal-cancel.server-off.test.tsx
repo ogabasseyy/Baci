@@ -54,6 +54,16 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('runs the complete action when started for it', () => {
+    const { result } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start('complete'));
+    expect(result.current.kind).toBe('complete');
+    expect(mockLifecycle).toHaveBeenLastCalledWith({
+      kind: 'complete',
+      goalId: 'goal-1',
+    });
+  });
+
   it('keeps the goal on screen after the wallet stops listing it', () => {
     const { result, rerender } = renderHook(
       ({ g }: { g: WalletActiveSavingsGoal | null }) => useInSheetGoalCancel(g),

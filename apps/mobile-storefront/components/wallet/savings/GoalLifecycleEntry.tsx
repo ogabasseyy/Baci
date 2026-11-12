@@ -14,6 +14,8 @@ type Props = {
   onBeforeNavigate?: () => void;
   /** Cancels inside the sheet instead of opening the cancel screen. */
   onCancel?: () => void;
+  /** Completes inside the sheet instead of opening the complete screen. */
+  onComplete?: () => void;
   /** The wallet's last-updated time: re-reads the readiness gate. */
   walletUpdatedAt?: number;
 };
@@ -43,6 +45,7 @@ export function GoalLifecycleEntry({
   hasPendingContribution,
   onBeforeNavigate,
   onCancel,
+  onComplete,
   walletUpdatedAt,
 }: Props) {
   const gate = usePrimaryGoalGate(walletUpdatedAt);
@@ -60,6 +63,7 @@ export function GoalLifecycleEntry({
           accessibilityLabel={GOAL_LIFECYCLE_COPY[kind].entryLabel}
           onPress={() => {
             if (kind === 'cancel' && onCancel) return onCancel();
+            if (kind === 'complete' && onComplete) return onComplete();
             onBeforeNavigate?.();
             router.push({
               pathname: '/wallet/savings/goal-actions',

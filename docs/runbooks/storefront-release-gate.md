@@ -58,8 +58,12 @@ Start from the Actions tab on `main`, or push a tag on a commit that is on
 | Android | "Android Storefront Production Release" with `publish_to_play` on and the `internal` track, to test first. | `v<version code>-storefront`: publishes straight to 100% of production; the number must be higher than every version code already uploaded, including the internal test build |
 
 For an iOS device test, run "iOS Storefront Production Release" on `main`
-with `testflight_only` enabled. It uploads the signed build to TestFlight
-without submitting it for App Review. Select the build in TestFlight on the
+with `testflight_only` enabled. This manual option uploads the signed build to
+TestFlight without submitting it for App Review; tag pushes always submit.
+The automatic build number uses the workflow run number plus the configured
+base, so a TestFlight-only build consumes a number and gaps are expected. A
+tag build number must exceed every previously uploaded build, including these
+TestFlight-only uploads. Select the build in TestFlight on the
 device after processing and tester assignment. Record the tested app version
 and build number. To submit that exact build later, enter both values in
 "iOS Storefront Submit for Review". Check the latest App Store release date

@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import SplashMotion from 'react-native-splash-motion';
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { markStartupTiming } from '@/lib/startup-timing';
-import { useNativeSplashIntro } from './use-native-splash-intro';
+import {
+  SPLASH_TIMEOUT_MS,
+  useNativeSplashIntro,
+} from './use-native-splash-intro';
 
 interface NativeSplashHandoffOptions {
   initialVisible: boolean;
@@ -25,7 +28,7 @@ export function useNativeSplashHandoff({
     const timeout = setTimeout(() => {
       recordCrashBreadcrumb('root_layout:splash_timeout');
       setTimedOut(true);
-    }, 8000);
+    }, SPLASH_TIMEOUT_MS);
     return () => clearTimeout(timeout);
   }, [showSplash]);
 

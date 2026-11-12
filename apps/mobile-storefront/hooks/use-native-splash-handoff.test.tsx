@@ -93,24 +93,6 @@ it('keeps holding after intro and layout while initialization is not ready', asy
   await waitFor(() => expect(mockHide).toHaveBeenCalledTimes(1));
 });
 
-it('does not let the JS readiness timeout cut a still-playing intro short', async () => {
-  const { result } = renderHook(() =>
-    useNativeSplashHandoff({ initialVisible: true, ready: false })
-  );
-  act(() => jest.advanceTimersByTime(8000));
-  expect(result.current.shouldRenderApp).toBe(false);
-  expect(mockHide).not.toHaveBeenCalled();
-  await act(async () => intro.resolve(true));
-  act(() => result.current.onFirstLayout());
-  await waitFor(() =>
-    expect(mockHide).toHaveBeenCalledWith({
-      waitForLoop: false,
-      minDuration: 0,
-      fade: 220,
-    })
-  );
-});
-
 it('releases rendering safely if the native intro API fails', async () => {
   const { result } = renderHook(() =>
     useNativeSplashHandoff({ initialVisible: true, ready: true })
@@ -163,7 +145,7 @@ it('reveals recovery after a stalled native intro and hides the splash without a
   const { result } = renderHook(() =>
     useNativeSplashHandoff({ initialVisible: true, ready: false })
   );
-  act(() => jest.advanceTimersByTime(14999));
+  act(() => jest.advanceTimersByTime(7999));
   expect(result.current.shouldRenderApp).toBe(false);
   act(() => jest.advanceTimersByTime(1));
   expect(result.current.shouldRenderApp).toBe(true);

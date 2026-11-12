@@ -48,12 +48,12 @@ export function redirectSystemPath({
   path: string;
   initial: boolean;
 }): string {
-  // A bare launcher start has no authority, route, query or fragment.
-  // Keep decorated links and later deliveries in pairing validation.
-  const launcherPath = path.toLowerCase();
+  // A custom-scheme launcher root has no route. Query/fragment-only roots
+  // still launch Home; a valid pairing link must include the /cart route.
+  const launcherRoot = path.split(/[?#]/, 1)[0].toLowerCase();
   if (
     initial &&
-    (launcherPath === 'ogabassey://' || launcherPath === 'ogabassey:///')
+    (launcherRoot === 'ogabassey://' || launcherRoot === 'ogabassey:///')
   )
     return '/';
 

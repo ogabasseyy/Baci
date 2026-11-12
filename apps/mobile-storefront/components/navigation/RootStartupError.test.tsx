@@ -39,6 +39,11 @@ jest.mock('../error-boundary-content', () => ({
   logError: jest.fn(),
 }));
 
+afterEach(() => {
+  jest.useRealTimers();
+  jest.clearAllMocks();
+});
+
 it('keeps the native intro until it completes and the error screen lays out', async () => {
   let finishIntro!: (value: boolean) => void;
   jest.mocked(SplashMotion.waitForIntro).mockReturnValue(
@@ -57,6 +62,31 @@ it('keeps the native intro until it completes and the error screen lays out', as
   expect(SplashMotion.hide).not.toHaveBeenCalled();
   fireEvent(screen.getByTestId('root-startup-error'), 'layout', {});
   await waitFor(() => expect(SplashMotion.hide).toHaveBeenCalledTimes(1));
+});
+
+it('releases the native splash at the startup deadline without a second layout', async () => {
+  jest.useFakeTimers();
+  jest.mocked(SplashMotion.waitForIntro).mockReturnValue(
+    new Promise(() => {
+      /* Simulate the error fallback replacing an already-laid-out placeholder. */
+    })
+  );
+  jest.mocked(SplashMotion.hide).mockResolvedValue();
+
+  render(
+    <RootStartupError error={new Error('Broken startup')} retry={jest.fn()} />
+  );
+
+  await act(async () => {
+    jest.advanceTimersByTime(8000);
+  });
+
+  expect(screen.getByText('Something went wrong')).toBeTruthy();
+  expect(SplashMotion.hide).toHaveBeenCalledWith({
+    waitForLoop: false,
+    minDuration: 0,
+    fade: 220,
+  });
 });
 
 it('updates the visible startup error when the system appearance changes', async () => {

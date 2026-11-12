@@ -39,7 +39,11 @@ describe('redirectSystemPath', () => {
     'ogabassey:///',
     'ogabassey://',
     'OGABASSEY:///',
-  ])('keeps the initial bare native launcher root %s on Home', (path) => {
+    'ogabassey://?handoff=secret',
+    'ogabassey://#handoff=secret',
+    'ogabassey:///?handoff=secret',
+    'ogabassey:///#handoff=secret',
+  ])('keeps the initial custom-scheme launcher root %s on Home', (path) => {
     expect(redirectSystemPath({ path, initial: true })).toBe('/');
     expect(mockCapture).not.toHaveBeenCalled();
   });
@@ -47,7 +51,6 @@ describe('redirectSystemPath', () => {
   it('continues validating non-root, decorated, and non-initial URLs', () => {
     for (const value of [
       { path: 'ogabassey:///cart', initial: true },
-      { path: 'ogabassey:///?handoff=secret', initial: true },
       { path: 'ogabassey:///', initial: false },
     ]) {
       expect(redirectSystemPath(value)).toBe('/cart');
@@ -56,7 +59,7 @@ describe('redirectSystemPath', () => {
         expect.anything()
       );
     }
-    expect(mockCapture).toHaveBeenCalledTimes(3);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 
   it('delegates to pairing capture with the configured merchant and platform root', () => {

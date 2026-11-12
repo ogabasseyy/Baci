@@ -83,11 +83,14 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
     onFirstLayout?: () => void;
   }) => {
     const { useEffect } = jest.requireActual<typeof import('react')>('react');
+    const { act } = jest.requireActual<
+      typeof import('@testing-library/react-native')
+    >('@testing-library/react-native');
     const { Text } =
       jest.requireActual<typeof import('react-native')>('react-native');
     useEffect(() => {
       mockRootLayoutNavMount();
-      if (mockAutoLayout) onFirstLayout?.();
+      if (mockAutoLayout) act(() => onFirstLayout?.());
       return () => {
         mockRootLayoutNavUnmount();
       };
@@ -293,14 +296,6 @@ describe('RootLayout storage boot gate', () => {
       expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen()
     );
     expect(mockHideSplash).not.toHaveBeenCalled();
-    act(() => {
-      jest.advanceTimersByTime(7999);
-    });
-    expect(mockHideSplash).not.toHaveBeenCalled();
-    await act(async () => {
-      jest.advanceTimersByTime(1);
-    });
-    expect(mockHideSplash).not.toHaveBeenCalled();
     fireEvent(screen.getByTestId('root-layout-nav'), 'layout');
     await waitFor(() => expect(mockHideSplash).toHaveBeenCalledTimes(1));
     expect(mockHideSplash).toHaveBeenCalledWith({
@@ -326,14 +321,13 @@ describe('RootLayout storage boot gate', () => {
     await act(async () => {
       jest.advanceTimersByTime(4000);
     });
-    expect(mockHideSplash).not.toHaveBeenCalled();
-    fireEvent(screen.getByTestId('root-layout-nav'), 'layout');
     await waitFor(() => expect(mockHideSplash).toHaveBeenCalledTimes(1));
     expect(mockHideSplash).toHaveBeenCalledWith({
       waitForLoop: false,
       minDuration: 0,
       fade: 220,
     });
+    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
   });
 
   it('dismisses when a delayed navigation layout arrives', async () => {
@@ -405,7 +399,25 @@ describe('RootLayout storage boot gate', () => {
     );
   });
 
-  it('does not mount persisted navigation when the splash timeout fires before storage is ready', async () => {
+  it('shows recovery and releases the native splash when navigation never lays out', async () => {
+    mockAutoLayout = false;
+    mockInitializeStorage.mockResolvedValue(undefined);
+
+    render(<RootLayout />);
+    await waitFor(() =>
+      expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen()
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(8000);
+    });
+
+    await waitFor(() => expect(mockHideSplash).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
+    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
+  });
+
+  it('shows recovery and releases the splash when startup storage is not ready', async () => {
     mockInitializeStorage.mockReturnValue(new Promise(() => undefined));
 
     render(<RootLayout />);
@@ -418,8 +430,9 @@ describe('RootLayout storage boot gate', () => {
       jest.advanceTimersByTime(8000);
     });
 
-    expect(mockHideSplash).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockHideSplash).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
+    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
   });
 
   it('keeps the global auth subscription alive when the root view unmounts', async () => {

@@ -168,7 +168,7 @@ PYTHON
 (
   cd "$fixture_root/gradle"
   GRADLE_CAPTURE="$fixture_root/native-args" bash "$script" build-native
-  GRADLE_CAPTURE="$fixture_root/bundle-args" GITHUB_WORKSPACE="$(dirname "$script_dir")/.." bash "$script" build
+  GRADLE_CAPTURE="$fixture_root/bundle-args" bash "$script" build
 )
 rm "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab"
 if (
@@ -178,7 +178,7 @@ if (
   echo 'Expected missing bundle to block release' >&2
   exit 1
 fi
-grep -q 'Native library ABI check failed' "$fixture_root/missing-bundle-log"
+grep -q 'Expected the release bundle at app/build/outputs/bundle/release/app-release.aab' "$fixture_root/missing-bundle-log"
 grep -qx ':react-native:packages:react-native:ReactAndroid:assembleRelease' "$fixture_root/native-args"
 grep -qx ':react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease' "$fixture_root/native-args"
 if grep -q 'app:bundleRelease' "$fixture_root/native-args"; then exit 1; fi

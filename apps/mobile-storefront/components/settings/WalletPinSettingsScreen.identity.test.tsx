@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import {
   confirmIdentityCode,
   sendIdentityCode,
@@ -65,8 +64,6 @@ const ready = (over: object = {}) => {
     refresh: mockRefresh,
   };
 };
-const type = (label: string, value: string) =>
-  fireEvent.changeText(screen.getByLabelText(label), value);
 const press = (name: string) =>
   fireEvent.press(screen.getByRole('button', { name }));
 
@@ -81,22 +78,22 @@ describe('bugfix: Settings > Wallet PIN told customers to sign out', () => {
     jest.resetAllMocks();
     jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
     jest.mocked(confirmIdentityCode).mockResolvedValue(undefined);
-    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
   it('shows "Confirm it\'s you" before the PIN form when the sign-in is old, then the form', async () => {
     ready({ signInConfirmationRequired: true });
     render(<WalletPinSettingsScreen />);
     expect(screen.getByText("Confirm it's you")).toBeTruthy();
-    expect(screen.queryByLabelText('New PIN')).toBeNull();
+    expect(screen.queryByText('Choose a wallet PIN')).toBeNull();
     await confirmWithCode();
     expect(confirmIdentityCode).toHaveBeenCalledWith({
       email: 'bassey@example.com',
       code: '123456',
       expectedUserId: 'user-1',
     });
-    expect(screen.getByText('Set a wallet PIN')).toBeTruthy();
-    expect(screen.getByLabelText('New PIN')).toBeTruthy();
+    expect(
+      screen.getByRole('header', { name: 'Choose a wallet PIN' })
+    ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
   });
 
@@ -110,26 +107,24 @@ describe('bugfix: Settings > Wallet PIN told customers to sign out', () => {
       )
       .mockResolvedValueOnce(undefined);
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '2468');
-    type('Confirm PIN', '2468');
+    for (const digit of '2468') press(digit);
+    press('Continue');
+    for (const digit of '2468') press(digit);
     await act(async () => press('Reset PIN'));
     expect(screen.getByText("Confirm it's you")).toBeTruthy();
     expect(screen.queryByText('Please sign in again to continue.')).toBeNull();
     await confirmWithCode();
     expect(set).toHaveBeenCalledTimes(2);
     expect(set).toHaveBeenLastCalledWith('reset', '2468', 'user-1');
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Your wallet PIN has been reset.',
-      undefined,
-      expect.any(Array),
-      { cancelable: false }
-    );
+    expect(screen.getByRole('header', { name: 'PIN reset' })).toBeTruthy();
   });
 
   it('never asks to confirm for a PIN change', () => {
     ready({ hasPin: true, signInConfirmationRequired: true });
     render(<WalletPinSettingsScreen />);
-    expect(screen.getByText('Change your PIN')).toBeTruthy();
+    expect(
+      screen.getByRole('header', { name: 'Enter your current PIN' })
+    ).toBeTruthy();
     expect(screen.queryByText("Confirm it's you")).toBeNull();
   });
 });

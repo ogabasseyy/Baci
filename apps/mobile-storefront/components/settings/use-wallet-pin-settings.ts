@@ -1,6 +1,5 @@
 import { router, useNavigation } from 'expo-router';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
 import { WalletPinSchemas } from '@/schemas/wallet-pin';
@@ -13,13 +12,13 @@ import {
 export type WalletPinMode = 'set' | 'change' | 'reset';
 
 const FORMAT_ERROR = 'Enter 4 to 6 digits.';
-const MISMATCH_ERROR = 'The two PINs do not match.';
-const SAME_PIN_ERROR = 'Choose a different PIN from your current one.';
+export const MISMATCH_ERROR = 'The two PINs do not match.';
+export const SAME_PIN_ERROR = 'Choose a different PIN from your current one.';
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 const SUCCESS: Record<WalletPinMode, string> = {
-  set: 'Your wallet PIN has been set.',
-  change: 'Your wallet PIN has been changed.',
-  reset: 'Your wallet PIN has been reset.',
+  set: 'PIN set',
+  change: 'PIN changed',
+  reset: 'PIN reset',
 };
 
 const isPin = (value: string) => WalletPinSchemas.pin.safeParse(value).success;
@@ -69,6 +68,12 @@ export function useWalletPinSettings() {
   const [confirmPin, setConfirmPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The saved state shown in place of the form (no system alert). Held per
+  // account: another account signing in never sees this one's confirmation.
+  const [saved, setSaved] = useState<{
+    mode: WalletPinMode;
+    userId: string;
+  } | null>(null);
   // "Confirm it's you" before a new or reset PIN when the sign-in is old:
   // asked up front by the status read, or after a save refused for it (the
   // PIN chosen then is kept in a ref and saved once confirmed).
@@ -120,6 +125,7 @@ export function useWalletPinSettings() {
         setCurrentPin('');
         setNewPin('');
         setConfirmPin('');
+        setSaved(null);
       }
     };
     const unsubscribeBlur = navigation.addListener('blur', () =>
@@ -163,28 +169,18 @@ export function useWalletPinSettings() {
     try {
       void Promise.resolve(gate.refresh()).catch(() => undefined);
     } catch {
-      // A failed background refresh must not escape the native alert callback.
+      // A failed background refresh must not escape the Done handler.
     }
   };
 
-  const onSuccess = (generation: number, requestUserId: string) => {
+  const onSuccess = (
+    generation: number,
+    requestUserId: string,
+    savedMode: WalletPinMode
+  ) => {
     if (!isRequestCurrent(generation, requestUserId)) return;
     setOverride({ mode: 'change', status: gate.status });
-    Alert.alert(
-      SUCCESS[mode],
-      undefined,
-      [
-        {
-          text: 'Done',
-          onPress: () => {
-            if (isRequestCurrent(generation, requestUserId)) leaveScreen();
-          },
-        },
-      ],
-      {
-        cancelable: false,
-      }
-    );
+    setSaved({ mode: savedMode, userId: requestUserId });
   };
 
   const onFailure = (
@@ -226,7 +222,7 @@ export function useWalletPinSettings() {
         : submitWalletPin(attempt.mode, attempt.pin, userId);
     clearFields();
     request
-      .then(() => onSuccess(generation, requestUserId))
+      .then(() => onSuccess(generation, requestUserId, attempt.mode))
       .catch((failure: unknown) =>
         onFailure(failure, generation, requestUserId, attempt)
       )
@@ -266,6 +262,12 @@ export function useWalletPinSettings() {
     setConfirmPin,
     busy,
     error,
+    /** Shows a step's own validation message (the steps hook decides). */
+    showError: setError,
+    /** The confirmation title once a PIN is saved, else null. */
+    savedTitle: saved && saved.userId === userId ? SUCCESS[saved.mode] : null,
+    /** Done on the saved state: back to Settings. */
+    finish: leaveScreen,
     needsIdentity,
     userId,
     submit,

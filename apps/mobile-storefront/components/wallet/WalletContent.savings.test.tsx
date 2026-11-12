@@ -71,16 +71,15 @@ it('passes the exact resolver to completed savings recovery and closes on succes
   fireEvent.press(
     screen.getByRole('button', { name: 'Resolve savings device variant' })
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Resolve savings variant 256GB' })
-  );
+  // Choosing only selects; nothing is saved until the customer confirms.
+  fireEvent.press(screen.getByRole('radio', { name: '256GB' }));
+  expect(props.onResolveSavingsVariant).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Confirm this option' }));
   await waitFor(() =>
     expect(props.onResolveSavingsVariant).toHaveBeenCalledWith('variant-1')
   );
   await waitFor(() =>
-    expect(
-      screen.queryByRole('button', { name: 'Resolve savings variant 256GB' })
-    ).toBeNull()
+    expect(screen.queryByRole('radio', { name: '256GB' })).toBeNull()
   );
 });
 

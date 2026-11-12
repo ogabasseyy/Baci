@@ -9,6 +9,7 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
 import { SavingsPhoneSwapStep } from './savings/SavingsPhoneSwapStep';
+import { SavingsVariantPickStep } from './savings/SavingsVariantPickStep';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -18,7 +19,6 @@ import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
-import { WalletSavingsVariantResolutionModal } from './WalletSavingsVariantResolutionModal';
 import {
   type WalletTransaction,
   WalletTransactionHistory,
@@ -69,7 +69,7 @@ export interface WalletContentProps {
     variantId?: string | null
   ) => Promise<boolean>;
   onChangeSavingsContributionAmount: (value: string) => void;
-  onResolveSavingsVariant: (variantId: string) => Promise<boolean>;
+  onResolveSavingsVariant: (variantId: string) => Promise<true | string>;
   onCloseSavingsProgress: () => void;
   onManageCards: () => void;
   onFundSavingsWallet: () => void;
@@ -249,6 +249,7 @@ export function WalletContent(props: WalletContentProps) {
         onChangeDevice={() => swap.setShowSavingsDeviceSwap(true)}
         onClose={() => {
           swap.setShowSavingsDeviceSwap(false);
+          setShowSavingsVariantResolution(false);
           onCloseSavingsProgress();
         }}
         onFundWallet={onFundSavingsWallet}
@@ -256,7 +257,17 @@ export function WalletContent(props: WalletContentProps) {
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
         overlay={savingsSheetOpen ? props.pinPrompt : null}
         phoneSwapStep={
-          swap.showSavingsDeviceSwap && activeSavingsGoal ? (
+          showSavingsVariantResolution &&
+          activeSavingsGoal?.status === 'completed' &&
+          activeSavingsGoal.selection_unresolved === true ? (
+            <SavingsVariantPickStep
+              colors={colors}
+              goal={activeSavingsGoal}
+              onBack={() => setShowSavingsVariantResolution(false)}
+              onResolve={onResolveSavingsVariant}
+              options={activeSavingsGoal.variant_resolution_options ?? []}
+            />
+          ) : swap.showSavingsDeviceSwap && activeSavingsGoal ? (
             <SavingsPhoneSwapStep
               colors={colors}
               goal={activeSavingsGoal}
@@ -266,17 +277,6 @@ export function WalletContent(props: WalletContentProps) {
         }
         visible={showSavingsProgress}
         walletBalance={spendableBalance}
-      />
-      <WalletSavingsVariantResolutionModal
-        colors={colors}
-        onClose={() => setShowSavingsVariantResolution(false)}
-        onResolve={onResolveSavingsVariant}
-        options={activeSavingsGoal?.variant_resolution_options ?? []}
-        visible={
-          showSavingsVariantResolution &&
-          activeSavingsGoal?.status === 'completed' &&
-          activeSavingsGoal.selection_unresolved === true
-        }
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
       {savingsSheetOpen ? null : props.pinPrompt}

@@ -241,13 +241,17 @@ export async function changeSavingsGoalDevice({
   }
 }
 
+/**
+ * Saves the exact option of a completed goal. True when saved, or a message
+ * the savings sheet shows inline when it was not (no alerts).
+ */
 export async function resolveCompletedSavingsGoalVariant({
   activeMerchantId,
   activeMerchantSlug,
   goal,
   refetchWallet,
   variantId,
-}: ResolveSavingsGoalVariantParams): Promise<boolean> {
+}: ResolveSavingsGoalVariantParams): Promise<true | string> {
   const eligibleVariant = goal?.variant_resolution_options?.find(
     (option) => option.id === variantId
   );
@@ -256,11 +260,7 @@ export async function resolveCompletedSavingsGoalVariant({
     !goal.selection_unresolved ||
     !eligibleVariant
   ) {
-    Alert.alert(
-      'Variant unavailable',
-      'Refresh your savings goal and try again.'
-    );
-    return false;
+    return 'That option is no longer available. Pull to refresh and try again.';
   }
 
   try {
@@ -270,28 +270,13 @@ export async function resolveCompletedSavingsGoalVariant({
       merchantSlug: activeMerchantSlug,
       variantId,
     });
-    try {
-      await refetchWallet();
-    } catch {
-      Alert.alert(
-        'Variant resolved',
-        'Your device variant was saved, but the wallet could not refresh. Pull to refresh before buying.'
-      );
-      return true;
-    }
-    Alert.alert(
-      'Variant resolved',
-      `Your savings goal is now linked to ${eligibleVariant.label}.`
-    );
+    // A failed refresh does not undo the save; the next refresh shows it.
+    await refetchWallet().catch(() => undefined);
     return true;
   } catch (error) {
     await refetchWallet().catch(() => undefined);
-    Alert.alert(
-      'Review savings goal',
-      error instanceof Error
-        ? error.message
-        : 'This savings goal changed. Refresh to review its current status.'
-    );
-    return false;
+    return error instanceof Error && error.message
+      ? error.message
+      : 'This savings goal changed. Pull to refresh to see where it stands.';
   }
 }

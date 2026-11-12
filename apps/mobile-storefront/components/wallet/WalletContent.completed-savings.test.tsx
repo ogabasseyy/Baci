@@ -61,7 +61,7 @@ function createProps(): WalletContentProps {
     needsPhone: false,
     onAddSavingsContribution: jest.fn(),
     onChangeSavingsDevice: jest.fn(async () => true),
-    onResolveSavingsVariant: jest.fn(async () => true),
+    onResolveSavingsVariant: jest.fn(async (): Promise<true | string> => true),
     onChangeFundAmount: jest.fn(),
     onChangeRedeemPoints: jest.fn(),
     onChangeSavingsContributionAmount: jest.fn(),
@@ -109,9 +109,7 @@ describe('WalletContent completed savings goals', () => {
     );
 
     expect(
-      screen.getByRole('button', {
-        name: 'Resolve savings variant 256GB Black',
-      })
+      screen.getByRole('radio', { name: '256GB Black' })
     ).toBeOnTheScreen();
     expect(screen.queryByLabelText('Search phones')).toBeNull();
     expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();

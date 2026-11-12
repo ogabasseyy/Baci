@@ -1,0 +1,3 @@
+supabase/tests/oxygen_tenure_offers.sql
+supabase/tests/oxygen_abandon_legacy_queued_approval.sql
+supabase/tests/oxygen_abandon_legacy_queued_booking.sql

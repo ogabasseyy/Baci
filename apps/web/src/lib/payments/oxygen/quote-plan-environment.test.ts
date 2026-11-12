@@ -35,6 +35,7 @@ it('does not construct a worker when durable enqueue rejects changed booking ter
       minimumAmount: 10000,
       eligibleAmount: 400000,
       maxTenure: 12,
+      offers: [{ tenure: 6, loanAmount: 400000 }],
       kyc,
       bookingReference: reference,
       booking: {
@@ -96,6 +97,7 @@ it.each([
     minimumAmount: 10000,
     eligibleAmount: 400000,
     maxTenure: 12,
+    offers: [{ tenure: 6, loanAmount: 400000 }],
     kyc,
     bookingReference: reference,
     booking: {

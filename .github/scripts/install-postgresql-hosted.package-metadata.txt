@@ -1,0 +1,22 @@
+# Package metadata for the pinned PostgreSQL build, copied from the noble-pgdg package index
+# (https://apt.postgresql.org/pub/repos/apt/dists/noble-pgdg/main/binary-amd64/Packages.gz, checked 2026-11-11).
+# install-postgresql-hosted.sh skips recommended extras (--no-install-recommends) on the strength of this audit.
+# ci-hosted-postgresql-contract.test.mjs fails when PG_BUILD changes without these stanzas being refreshed, so the
+# next audit is a diff of this file: copy the same fields for the new build and re-check Recommends and Provides.
+# --no-install-recommends applies to the whole dependency closure, not just the two packages. Observed install set
+# on the hosted ubuntu-24.04 image, build 20261101.360.1 (CI run 43067584503, 2026-11-11): exactly three new packages,
+# liburing2 2.5-1build1, postgresql-client-18 and postgresql-18 (the others in Depends were already installed).
+# That set belongs to this image build: another build may preinstall more or fewer of the Depends, so look at the
+# packages apt installs in the job log, and note the image build here, whenever this audit is refreshed.
+
+Package: postgresql-18
+Version: 18.6-1.pgdg24.04+2
+Depends: locales | locales-all, postgresql-client-18 (= 18.6-1.pgdg24.04+2), postgresql-common (>= 275~), ssl-cert, tzdata, debconf (>= 0.5) | debconf-2.0, libc6 (>= 2.38), libgssapi-krb5-2 (>= 1.14+dfsg), libicu74 (>= 74.1-1~), libldap2 (>= 2.6.2), liblz4-1 (>= 0.0~r130), libnuma1 (>= 2.0.11), libpam0g (>= 0.99.7.1), libpq5 (>= 17~~), libselinux1 (>= 3.1~), libssl3t64 (>= 3.0.0), libsystemd0, liburing2 (>= 2.5), libuuid1 (>= 2.16), libxml2 (>= 2.7.4), libxslt1.1 (>= 1.1.25), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)
+Recommends: postgresql-18-jit, sysstat
+Provides: postgresql-contrib-18
+
+Package: postgresql-client-18
+Version: 18.6-1.pgdg24.04+2
+Depends: libpq5 (>= 18.6), postgresql-client-common (>= 182~), sensible-utils, libc6 (>= 2.38), liblz4-1 (>= 0.0~r127), libreadline8t64 (>= 6.0), libssl3t64 (>= 3.0.0), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)
+Suggests: postgresql-18, postgresql-doc-18
+Provides: postgresql-client

@@ -1,4 +1,4 @@
-import { getSavingsPace } from './get-savings-pace';
+import { getSavingsPace, paymentsThatFit } from './get-savings-pace';
 
 const now = new Date('2026-11-12T10:00:00Z');
 
@@ -117,6 +117,20 @@ describe('getSavingsPace', () => {
           remaining: 9000,
         })?.short
       ).toBe('₦1,000 a day');
+    });
+  });
+
+  describe('calendar-aware payment counting', () => {
+    it('counts calendar months for monthly plans', () => {
+      // 12 Nov 2026 -> 12 Feb 2027 is 3 calendar months: 4 payments fit.
+      expect(paymentsThatFit('monthly', '2027-02-12', now)).toBe(4);
+      // One day short of the third month: 3 payments fit.
+      expect(paymentsThatFit('monthly', '2027-02-11', now)).toBe(3);
+    });
+
+    it('uses the phone’s own day, not the UTC day', () => {
+      const lateLocal = new Date(2026, 10, 12, 23, 30);
+      expect(paymentsThatFit('daily', '2026-11-13', lateLocal)).toBe(2);
     });
   });
 });

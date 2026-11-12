@@ -3,12 +3,6 @@ import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
-const PERIOD_DAYS: Record<Frequency, number> = {
-  daily: 1,
-  weekly: 7,
-  monthly: 30,
-};
-
 const PER: Record<Frequency, string> = {
   daily: 'a day',
   weekly: 'a week',
@@ -24,18 +18,44 @@ export type SavingsPace = {
 
 const MS_PER_DAY = 86_400_000;
 
-/** Whole days from today (UTC) to the end date; null when unusable. */
+/** The phone's own calendar day (e.g. Lagos), as YYYY-MM-DD. */
+function localDay(now: Date): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** Whole days from the customer's today to the end date; null if unusable. */
 export function daysUntil(
   maturityDate: string | null | undefined,
   now: Date
 ): number | null {
   const end = /^\d{4}-\d{2}-\d{2}/.exec(maturityDate ?? '')?.[0];
-  const today = now.toISOString().slice(0, 10);
   if (!end) return null;
   const days =
-    (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
+    (Date.parse(`${end}T00:00:00Z`) -
+      Date.parse(`${localDay(now)}T00:00:00Z`)) /
     MS_PER_DAY;
   return Number.isFinite(days) && days >= 0 ? days : null;
+}
+
+/**
+ * How many payments fit from today to the end date, today counting as one:
+ * whole days for daily, whole weeks for weekly, calendar months for monthly.
+ */
+export function paymentsThatFit(
+  frequency: Frequency,
+  maturityDate: string | null | undefined,
+  now: Date
+): number {
+  const days = daysUntil(maturityDate, now);
+  if (days === null) return 0;
+  if (frequency === 'daily') return days + 1;
+  if (frequency === 'weekly') return Math.floor(days / 7) + 1;
+  const [ey, em, ed] = (maturityDate ?? '').slice(0, 10).split('-').map(Number);
+  const [ty, tm, td] = localDay(now).split('-').map(Number);
+  const months = (ey - ty) * 12 + (em - tm) - (ed < td ? 1 : 0);
+  return Math.max(0, months) + 1;
 }
 
 /**
@@ -71,13 +91,7 @@ export function getSavingsPace({
     // Only show the end date when this pace can still reach it: a plan that
     // is behind shows its pace alone rather than a date it cannot meet.
     const payments = Math.ceil(remaining / contributionAmount);
-    const days = daysUntil(maturityDate, now);
-    // Payments that fit: one today plus one each full period up to the end
-    // date (exact days, not whole weeks rounded up).
-    const fits =
-      days === null
-        ? 0
-        : Math.floor(days / PERIOD_DAYS[frequency as Frequency]) + 1;
+    const fits = paymentsThatFit(frequency as Frequency, maturityDate, now);
     const reachable = weekly !== null && payments <= fits;
     if (!weekly || !reachable)
       return { short: `${amount} ${per}`, label: `${amount} ${per}` };

@@ -9,6 +9,7 @@ const visitorTokenSha256 = 'b'.repeat(64);
 
 type CapturedRequest = {
   path: string;
+  merchantSlug: string | null;
   method: string;
   origin: string;
   csrfHeader: string | null;
@@ -93,6 +94,7 @@ async function installChatwootFixture(
     async (route) => {
       const url = new URL(route.request().url());
       const endpoint = url.pathname.split('/').at(-1) ?? '';
+      const merchantSlug = url.searchParams.get('merchantSlug');
       const headers = route.request().headers();
       // WebKit omits Cookie from intercepted request headers here, even though
       // the same-origin page can read the seeded cookie and sends its token.
@@ -108,6 +110,7 @@ async function installChatwootFixture(
       if (method !== 'POST' || !csrfValid) {
         requests.push({
           path: endpoint,
+          merchantSlug,
           method,
           origin: url.origin,
           csrfHeader,
@@ -119,6 +122,7 @@ async function installChatwootFixture(
       const body = route.request().postDataJSON() as Record<string, unknown>;
       requests.push({
         path: endpoint,
+        merchantSlug,
         method,
         origin: url.origin,
         csrfHeader,
@@ -200,10 +204,16 @@ test('rejects messages from an untrusted widget iframe', async ({
   await expect(trusted.locator('#cart-result')).toContainText(
     'Canonical server phone'
   );
-  expect(requests.map(({ path, method }) => ({ path, method }))).toEqual([
-    { path: 'challenge', method: 'POST' },
-    { path: 'verify', method: 'POST' },
-    { path: 'authorize', method: 'POST' },
+  expect(
+    requests.map(({ path, merchantSlug, method }) => ({
+      path,
+      merchantSlug,
+      method,
+    }))
+  ).toEqual([
+    { path: 'challenge', merchantSlug: 'ogabassey', method: 'POST' },
+    { path: 'verify', merchantSlug: 'ogabassey', method: 'POST' },
+    { path: 'authorize', merchantSlug: 'ogabassey', method: 'POST' },
   ]);
   await expect(attacker.locator('#cart-result')).toHaveText('');
 });
@@ -229,16 +239,20 @@ test('renders the canonical response from the trusted widget transport', async (
   await expect(result).not.toContainText('Forged local name');
 
   expect(
-    requests.map(({ path, method, origin, csrfHeader, csrfCookie }) => ({
-      path,
-      method,
-      origin,
-      csrfHeader,
-      csrfCookie,
-    }))
+    requests.map(
+      ({ path, merchantSlug, method, origin, csrfHeader, csrfCookie }) => ({
+        path,
+        merchantSlug,
+        method,
+        origin,
+        csrfHeader,
+        csrfCookie,
+      })
+    )
   ).toEqual([
     {
       path: 'challenge',
+      merchantSlug: 'ogabassey',
       method: 'POST',
       origin: harnessOrigin,
       csrfHeader: 'fixture-csrf-token',
@@ -246,6 +260,7 @@ test('renders the canonical response from the trusted widget transport', async (
     },
     {
       path: 'verify',
+      merchantSlug: 'ogabassey',
       method: 'POST',
       origin: harnessOrigin,
       csrfHeader: 'fixture-csrf-token',
@@ -253,6 +268,7 @@ test('renders the canonical response from the trusted widget transport', async (
     },
     {
       path: 'authorize',
+      merchantSlug: 'ogabassey',
       method: 'POST',
       origin: harnessOrigin,
       csrfHeader: 'fixture-csrf-token',

@@ -187,3 +187,24 @@ describe('imeiPayAnswer', () => {
     });
   });
 });
+
+describe('bugfix: server error text reached the outcome card (Muse review)', () => {
+  it('shows only the app wording for a refused start', async () => {
+    api.start.mockResolvedValue(
+      reply(400, { code: 'SOMETHING_NEW', error: 'raw server text' })
+    );
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'failed' },
+    });
+  });
+
+  it('uses the app wording for an IMEI mismatch', () => {
+    const answer = imeiPayAnswer(
+      reply(409, { code: 'IMEI_MISMATCH', error: 'raw server text' }),
+      'basic'
+    );
+    expect(answer).toMatchObject({ outcome: { kind: 'failed' } });
+    expect(JSON.stringify(answer)).not.toContain('raw server text');
+  });
+});

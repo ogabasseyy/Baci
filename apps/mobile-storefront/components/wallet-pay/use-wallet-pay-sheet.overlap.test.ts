@@ -129,4 +129,26 @@ describe('bugfix: overlapping wallet pay calls (Muse review)', () => {
     act(() => hook.result.current.back());
     expect(hook.result.current.step).toBe('closed');
   });
+
+  it('closes on back while the payment is still being set up', async () => {
+    const hook = setup();
+    const gate = deferred<{
+      kind: 'pin';
+      operationId: string;
+      amountKobo: number;
+    }>();
+    const adapter = makeAdapter({
+      start: jest.fn(() => gate.promise) as never,
+    });
+    act(() => {
+      void hook.result.current.open(adapter);
+    });
+    expect(hook.result.current.step).toBe('starting');
+    act(() => hook.result.current.back());
+    expect(hook.result.current.step).toBe('closed');
+    await act(async () => {
+      gate.resolve({ kind: 'pin', operationId: OP, amountKobo: 30_000 });
+    });
+    expect(hook.result.current.step).toBe('closed');
+  });
 });

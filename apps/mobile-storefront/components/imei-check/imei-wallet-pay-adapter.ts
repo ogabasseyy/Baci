@@ -27,8 +27,9 @@ const issued = z.object({
 
 const codeOf = (reply: WalletPayReply) =>
   typeof reply.body.code === 'string' ? reply.body.code : '';
-const messageOf = (reply: WalletPayReply) =>
-  typeof reply.body.error === 'string' ? reply.body.error : undefined;
+// Only the app's own wording reaches the outcome card, never server text.
+const IMEI_MISMATCH_TEXT =
+  'This IMEI does not match the check you started. Nothing more was taken.';
 const outcome = (kind: WalletPayOutcome['kind'], message?: string) => ({
   kind: 'outcome' as const,
   outcome: message ? { kind, message } : { kind },
@@ -85,7 +86,7 @@ export function imeiPayAnswer(
   const code = codeOf(reply);
   if (code === 'PIN_PROOF_REQUIRED' || code === 'PIN_PROOF_REFUSED')
     return { kind: 'pin_again', message: 'Please enter your PIN again.' };
-  if (code === 'IMEI_MISMATCH') return outcome('failed', messageOf(reply));
+  if (code === 'IMEI_MISMATCH') return outcome('failed', IMEI_MISMATCH_TEXT);
   return refusal(reply) ?? outcome('pending');
 }
 
@@ -99,12 +100,15 @@ export function createImeiWalletPayAdapter(input: {
   tier: ImeiServiceTierKey;
   imei: string;
   idempotencyKey: string;
+  /** Called once the server answered the start (the key is spent). */
+  onStartAnswered?: () => void;
 }): WalletPayAdapter<ImeiWalletPayResult> {
   let lookupId: string | null = null;
   const { connection, tier, imei } = input;
   return {
     async start() {
       const reply = await imeiWalletPayApi.start(connection, input);
+      input.onStartAnswered?.();
       const payment = issued.safeParse(reply.body);
       if (reply.httpStatus === 202 && payment.success) {
         lookupId = payment.data.lookupId;
@@ -114,7 +118,7 @@ export function createImeiWalletPayAdapter(input: {
         if (payment.data.status === 'payment_review') return outcome('review');
         return { kind: 'recheck', operationId, amountKobo };
       }
-      return refusal(reply) ?? outcome('failed', messageOf(reply));
+      return refusal(reply) ?? outcome('failed');
     },
     async verifyPin(operationId, pin) {
       if (!lookupId) return outcome('failed');
@@ -147,7 +151,7 @@ export function createImeiWalletPayAdapter(input: {
       if (code === 'PIN_LOCKED') return outcome('pin_locked');
       if (code === 'PIN_NOT_SET' || code === 'PIN_RESET_REQUIRED')
         return outcome('pin_setup');
-      return refusal(reply) ?? outcome('failed', messageOf(reply));
+      return refusal(reply) ?? outcome('failed');
     },
     async pay(operationId, proof) {
       if (!lookupId) return outcome('pending');

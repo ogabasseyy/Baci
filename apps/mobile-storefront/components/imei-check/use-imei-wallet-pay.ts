@@ -5,6 +5,7 @@ import {
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
+import { useRef } from 'react';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import {
@@ -59,6 +60,15 @@ export function useImeiWalletPay({
   canPay?: boolean;
 }) {
   const sheet = useWalletPaySheet<ImeiWalletPayResult>({ onDelivered });
+  // A start whose answer was lost (network, timeout) retries with the same
+  // Idempotency-Key, so the server finds the lookup it may have created
+  // instead of opening a second one. Any server answer spends the key.
+  const startKey = useRef<{ purchase: string; key: string } | null>(null);
+  const keyFor = (purchase: string) => {
+    if (startKey.current?.purchase !== purchase)
+      startKey.current = { purchase, key: Crypto.randomUUID() };
+    return startKey.current.key;
+  };
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();
     router.push(href);
@@ -76,15 +86,21 @@ export function useImeiWalletPay({
     },
     covers: (tier: ImeiServiceTierKey) =>
       imeiWalletPayCovers({ canPay, wallet, tier }),
-    open: (tier: ImeiServiceTierKey, imei: string) =>
-      sheet.open(
+    open: (tier: ImeiServiceTierKey, imei: string) => {
+      const purchase = `${device}|${tier}|${imei}`;
+      return sheet.open(
         createImeiWalletPayAdapter({
           connection: { apiBaseUrl, accessToken },
           device,
           tier,
           imei,
-          idempotencyKey: Crypto.randomUUID(),
+          idempotencyKey: keyFor(purchase),
+          onStartAnswered: () => {
+            if (startKey.current?.purchase === purchase)
+              startKey.current = null;
+          },
         })
-      ),
+      );
+    },
   };
 }

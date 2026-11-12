@@ -94,7 +94,7 @@ export function walletPayNotice(
     },
   };
   const notice = notices[outcome.kind];
-  // The server's wording helps only where it cannot contradict ours.
+  // Callers pass only the app's own wording here, never server text.
   return outcome.message && outcome.kind === 'failed'
     ? { ...notice, message: outcome.message }
     : notice;

@@ -184,9 +184,9 @@ export function useWalletPaySheet<Result>({
     submit,
     recheck,
     close,
-    /** Back while the sheet is open: close it, or stay while money moves. */
+    /** Back while the sheet is open: close it, or stay while a payment is sent. */
     back: () => {
-      if (step !== 'starting' && step !== 'paying') close();
+      if (step !== 'paying') close();
     },
   };
 }

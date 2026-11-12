@@ -143,7 +143,8 @@ describe('runPiggyvestDailyReconciliation failures and budget', () => {
     await runPiggyvestDailyReconciliation({ env, deps });
     const [, detail] = vi.mocked(deps.emitAlert).mock.calls[0];
     expect(detail.reason).toBe(
-      'stuck=1 below_expected=0 unreadable=0 truncated=yes report_email_failed'
+      // The email-failure marker leads so the 120-character clip never drops it.
+      'report_email_failed stuck=1 below_expected=0 unreadable=0 truncated=yes'
     );
   });
 

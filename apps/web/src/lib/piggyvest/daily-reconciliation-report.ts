@@ -77,7 +77,7 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
       report.creditGap.findings.length > 0;
     if (report.status === 'attention') headline = 'NEEDS ATTENTION';
     else if (aboveRecord) headline = 'REVIEW balances above record';
-    else if (creditReview) headline = 'REVIEW recorded interest payouts';
+    else if (creditReview) headline = 'REVIEW PiggyVest credit findings';
     else if (report.deferred.wallets > 0)
       headline = `all clear, ${report.deferred.wallets} wallet(s) deferred to later runs`;
     else headline = 'all clear';

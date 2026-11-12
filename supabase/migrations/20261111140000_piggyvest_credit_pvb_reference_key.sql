@@ -130,10 +130,21 @@ REVOKE ALL ON FUNCTION public.piggyvest_repair_pvb_reference_attribution()
 
 SELECT public.piggyvest_repair_pvb_reference_attribution();
 
-ALTER TABLE public.piggyvest_inflow_credits
-  ADD CONSTRAINT piggyvest_inflow_credits_pvb_reference_key UNIQUE (pvb_reference);
-ALTER TABLE public.piggyvest_interest_payouts
-  ADD CONSTRAINT piggyvest_interest_payouts_pvb_reference_key UNIQUE (pvb_reference);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
+      WHERE conname = 'piggyvest_inflow_credits_pvb_reference_key'
+        AND conrelid = 'public.piggyvest_inflow_credits'::regclass) THEN
+    ALTER TABLE public.piggyvest_inflow_credits
+      ADD CONSTRAINT piggyvest_inflow_credits_pvb_reference_key UNIQUE (pvb_reference);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
+      WHERE conname = 'piggyvest_interest_payouts_pvb_reference_key'
+        AND conrelid = 'public.piggyvest_interest_payouts'::regclass) THEN
+    ALTER TABLE public.piggyvest_interest_payouts
+      ADD CONSTRAINT piggyvest_interest_payouts_pvb_reference_key UNIQUE (pvb_reference);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS piggyvest_inflow_credits_legacy_reference_idx
   ON public.piggyvest_inflow_credits (customer_id) WHERE pvb_reference IS NULL;

@@ -94,6 +94,37 @@ describe('recordPiggyvestEvent', () => {
     });
     await expect(recordPiggyvestEvent(client, input)).resolves.toBe('conflict');
   });
+  describe('bugfix: a same-event retry with changed money fields was a duplicate', () => {
+    it.each([
+      [
+        'bank-transfer.inflow.success',
+        'bank-transfer',
+        { fee: 50 },
+        { fee: 75 },
+      ],
+      [
+        'interest-payout.success',
+        'interest_payout',
+        { gross_interest_payout: 100, withholding_tax: 10 },
+        { gross_interest_payout: 110, withholding_tax: 20 },
+      ],
+    ])('%s conflicts when a stored money field differs', async (eventType, eventCategory, storedMoney, incomingMoney) => {
+      const { client } = mockClient([], null, {
+        ...storedEnvelope,
+        event_type: eventType,
+        event_category: eventCategory,
+        event_details: { pvb_reference: 'PVB01INBOX001', ...storedMoney },
+      });
+      await expect(
+        recordPiggyvestEvent(client, {
+          ...input,
+          eventType,
+          eventCategory,
+          details: { pvb_reference: 'PVB01INBOX001', ...incomingMoney },
+        })
+      ).resolves.toBe('conflict');
+    });
+  });
   describe('bugfix: same-event retry with a rotated internal id was quarantined', () => {
     it.each([
       ['bank-transfer.inflow.success', 'bank-transfer', 'transaction_id'],

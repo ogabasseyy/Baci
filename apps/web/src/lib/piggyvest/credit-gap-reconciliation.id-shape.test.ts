@@ -162,3 +162,28 @@ describe('bugfix: an unmatchable credit id must not be fail-quiet', () => {
     ).toBe(true);
   });
 });
+
+describe('bugfix: a mixed-shape listing does not prove the id namespace', () => {
+  it('reports a missing recorded inflow as unverified when any listed id is not PVB01-shaped', () => {
+    const { findings } = compareWalletCredits(
+      wallet([
+        {
+          reference: 'PVB01RECORDED0000000000001',
+          at: '2026-11-10T12:00:00.000Z',
+        },
+      ]),
+      [
+        credit('PVB01OTHER000000000000001'),
+        credit('01M2TTNT0N08C81J5BEADH3BY8'),
+      ],
+      window
+    );
+
+    expect(findings.map((finding) => finding.kind)).not.toContain(
+      'not_on_provider'
+    );
+    expect(findings.map((finding) => finding.kind)).toContain(
+      'list_namespace_unproven'
+    );
+  });
+});

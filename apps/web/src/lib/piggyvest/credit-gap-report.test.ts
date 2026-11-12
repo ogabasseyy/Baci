@@ -106,10 +106,22 @@ describe('creditGapLines', () => {
     expect(text).toContain('4 older recorded credit(s) have no PVB credit id');
   });
 
-  it('says every credit matched when there are no findings', () => {
+  it('reports no mismatch among compared wallets when there are no findings', () => {
     expect(creditGapLines(checked()).join('\n')).toContain(
-      'Every PiggyVest credit matches a recorded credit.'
+      'No mismatch found among the compared wallet(s).'
     );
+  });
+
+  it('bugfix: claims no match when no wallet was compared', () => {
+    const text = creditGapLines(
+      checked({
+        walletsChecked: 0,
+        unchecked: [{ walletId: 'plan-wallet-b', reason: 'deadline' }],
+      })
+    ).join('\n');
+
+    expect(text).toContain('No wallet could be compared today');
+    expect(text).not.toContain('No mismatch found');
   });
 });
 
@@ -136,7 +148,20 @@ describe('creditGapPageFragment', () => {
           unchecked: [{ walletId: 'plan-wallet-b', reason: 'list_unreadable' }],
         })
       )
-    ).toBe(' unrecorded_credits=1 not_on_provider=1 credit_unchecked=1');
+    ).toBe(' gap_unrec=1 gap_notprov=1 gap_unver=0 gap_ns=0 gap_unchk=1');
+  });
+
+  it('bugfix: states the cause when only id-shape findings page', () => {
+    expect(
+      creditGapPageFragment(
+        checked({
+          findings: [
+            { ...missing, kind: 'unverified_reference' },
+            { ...missing, kind: 'list_namespace_unproven' },
+          ],
+        })
+      )
+    ).toBe(' gap_unrec=0 gap_notprov=0 gap_unver=1 gap_ns=1 gap_unchk=0');
   });
 
   it('names the failure reason', () => {

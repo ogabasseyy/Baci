@@ -66,7 +66,11 @@ export function creditGapLines(creditGap: CreditGapReport | undefined) {
     `Missing-credit check since ${creditGap.windowStart}: ${creditGap.walletsChecked} of ${creditGap.walletsTotal} wallet(s) compared.`,
   ];
   if (creditGap.findings.length === 0)
-    lines.push('Every PiggyVest credit matches a recorded credit.');
+    lines.push(
+      creditGap.walletsChecked === 0
+        ? 'No wallet could be compared today, so no match is claimed.'
+        : 'No mismatch found among the compared wallet(s).'
+    );
   else lines.push(...creditGap.findings.map(findingLine));
   lines.push(
     ...creditGap.unchecked.map(
@@ -98,5 +102,7 @@ export function creditGapPageFragment(
     return ` credit_gap=failed:${creditGap.reason}`;
   const count = (kind: CreditGapFinding['kind']) =>
     creditGap.findings.filter((finding) => finding.kind === kind).length;
-  return ` unrecorded_credits=${count('unrecorded_credit')} not_on_provider=${count('not_on_provider')} credit_unchecked=${creditGap.unchecked.length}`;
+  // Short keys: the alert reason is clipped at 120 characters. Every
+  // paging kind is counted so the page always states its cause.
+  return ` gap_unrec=${count('unrecorded_credit')} gap_notprov=${count('not_on_provider')} gap_unver=${count('unverified_reference')} gap_ns=${count('list_namespace_unproven')} gap_unchk=${creditGap.unchecked.length}`;
 }

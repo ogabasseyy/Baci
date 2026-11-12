@@ -24,7 +24,11 @@ const planWallet = (overrides: Record<string, unknown> = {}) => ({
 const oneWalletLedger = (overrides: Record<string, unknown> = {}) =>
   ledger({ wallets: [planWallet(overrides)], walletsTotal: 1 });
 
-function providerPage(ids: string[], category = 'bank-inflow') {
+function providerPage(
+  ids: string[],
+  category = 'bank-inflow',
+  status = 'successful'
+) {
   return vi.fn(async () => ({
     status: true,
     data: {
@@ -32,7 +36,7 @@ function providerPage(ids: string[], category = 'bank-inflow') {
         id,
         amount: 250000,
         type: 'credit',
-        status: 'successful',
+        status,
         category,
         description: 'Synthetic',
         wallet_id: 'plan-wallet-a',
@@ -72,7 +76,7 @@ describe('daily reconciliation: credits PiggyVest made that we never recorded', 
       'PIGGYVEST_RECONCILIATION_MISMATCH',
       {
         reason: expect.stringContaining(
-          'unrecorded_credits=1 not_on_provider=0 credit_unchecked=0'
+          'gap_unrec=1 gap_notprov=0 gap_unver=0 gap_ns=0 gap_unchk=0'
         ),
       }
     );
@@ -143,5 +147,18 @@ describe('daily reconciliation: credits PiggyVest made that we never recorded', 
       'PIGGYVEST_RECONCILIATION_MISMATCH',
       { reason: expect.stringContaining('credit_gap=failed:snapshot_invalid') }
     );
+  });
+
+  it('bugfix: headlines a partial unrecorded credit as a credit finding, not interest', async () => {
+    const { deps } = depsWith(
+      oneWalletLedger(),
+      providerPage([CREDIT_ID], 'bank-inflow', 'partial')
+    );
+
+    await runPiggyvestDailyReconciliation({ env, deps });
+
+    const email = vi.mocked(deps.sendEmail).mock.calls[0][0];
+    expect(email.subject).toContain('REVIEW PiggyVest credit findings');
+    expect(email.subject).not.toContain('interest');
   });
 });

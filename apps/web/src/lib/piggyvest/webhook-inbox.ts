@@ -120,7 +120,27 @@ export async function recordPiggyvestEvent(
     (typeof incomingIdentity === 'string' &&
       incomingIdentity.length > 0 &&
       storedIdentity === incomingIdentity);
+  // A same-event retry is a duplicate only if its stored money fields agree
+  // too: a processed event returns before the ledger compares them, so a
+  // changed fee or gross/tax split must conflict here. Rows stored before a
+  // field was recorded skip that field.
+  const moneyFields =
+    parsed.eventType === 'bank-transfer.inflow.success'
+      ? ['amount', 'fee']
+      : parsed.eventType === 'interest-payout.success'
+        ? [
+            'amount',
+            'gross_interest_payout',
+            'withholding_tax',
+            'net_interest_payout',
+          ]
+        : [];
+  const moneyMatches = moneyFields.every((field) => {
+    const storedValue = stored.data.event_details?.[field];
+    return storedValue === undefined || storedValue === parsed.details?.[field];
+  });
   const matches =
+    moneyMatches &&
     providerIdentityMatches &&
     stored.data.event_type === parsed.eventType &&
     stored.data.event_category === parsed.eventCategory &&

@@ -25,11 +25,10 @@ import {
  *   `pending` and `failed` credits moved none and are ignored.
  * - `unverified_reference` (pages): the list id does not have the
  *   PVB credit-id shape (`PVB01…`), so the list may use another id namespace
- *   than our `pvb_reference` and a mismatch proves nothing. When a wallet's
- *   settled list rows carry no PVB-shaped id at all, its recorded inflows
- *   missing from the list are downgraded to this kind too, instead of
- *   paging `not_on_provider` for every wallet. Confirm list id ===
- *   pvb_reference on the first live credit.
+ *   than our `pvb_reference` and a mismatch proves nothing. When any settled
+ *   list row lacks a PVB01 id, recorded inflows missing from the list get
+ *   this kind instead of `not_on_provider` (that row may be one of them).
+ *   Confirm list id === pvb_reference on the first live credit.
  * - `list_namespace_unproven` (pages, once per wallet): that downgrade
  *   happened, so recorded inflows could not be matched at all. The check
  *   never goes silent because the list changed shape.
@@ -170,10 +169,11 @@ export function compareWalletCredits(
           at: row.at,
         });
   };
-  // A settled listing with no PVB-shaped id cannot prove an inflow missing.
-  const settled = credits.filter(isSettled);
-  const namespaceUnproven =
-    settled.length > 0 && !settled.some((c) => PVB_CREDIT_ID.test(c.id));
+  // Any settled row with a non-PVB01 id could be a recorded inflow under
+  // another id, so an unmatched inflow cannot be proven missing.
+  const namespaceUnproven = credits.some(
+    (c) => isSettled(c) && !PVB_CREDIT_ID.test(c.id)
+  );
   const before = findings.length;
   reverse(
     wallet.inflow,

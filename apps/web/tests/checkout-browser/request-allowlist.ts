@@ -39,7 +39,17 @@ export function isChatwootBridgeFixtureRequest({
     /^\/api\/storefront\/chatwoot\/context\/(?:challenge|verify|authorize)$/.test(
       url.pathname
     ) &&
+    url.searchParams.size === 1 &&
+    url.searchParams.get('merchantSlug') === 'ogabassey' &&
     method === 'POST'
+  );
+}
+
+export function isChatwootTargetOriginBlockedMessage(message: string): boolean {
+  return (
+    /post.?message/i.test(message) &&
+    message.includes('https://support.example.test') &&
+    message.includes('https://untrusted.example.test')
   );
 }
 

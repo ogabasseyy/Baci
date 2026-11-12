@@ -8,13 +8,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('ignores a valid context request from the untrusted widget source', async () => {
+it('ignores a trusted-origin message from the wrong widget source', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   render(<ChatwootBridgeFixturePage />);
   const untrustedFrame = screen.getByTitle(
     'Untrusted synthetic widget'
   ) as HTMLIFrameElement;
+  const trustedFrame = screen.getByTitle(
+    'Synthetic Chatwoot widget'
+  ) as HTMLIFrameElement;
+  expect(untrustedFrame.contentWindow).not.toBe(trustedFrame.contentWindow);
 
   await waitFor(() => {
     expect(document.documentElement.dataset.chatwootBridgeReady).toBe('true');
@@ -23,7 +27,7 @@ it('ignores a valid context request from the untrusted widget source', async () 
   act(() => {
     window.dispatchEvent(
       new MessageEvent('message', {
-        origin: 'https://untrusted.example.test',
+        origin: 'https://support.example.test',
         source: untrustedFrame.contentWindow,
         data: `baci-commerce-context-request:${JSON.stringify({
           requestId: 'untrusted_request_1',
@@ -35,9 +39,6 @@ it('ignores a valid context request from the untrusted widget source', async () 
     );
   });
 
-  await waitFor(() => {
-    expect(document.documentElement.dataset.untrustedMessageSeen).toBe('true');
-  });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 

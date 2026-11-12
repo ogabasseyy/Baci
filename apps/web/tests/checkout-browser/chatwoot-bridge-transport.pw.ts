@@ -1,18 +1,12 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './network';
+import { isChatwootTargetOriginBlockedMessage } from './request-allowlist';
 
 const widgetOrigin = 'https://support.example.test';
 const untrustedWidgetOrigin = 'https://untrusted.example.test';
 const requestId = 'fixture_context_123456';
 const conversationId = 905;
 const visitorTokenSha256 = 'b'.repeat(64);
-const blockedTargetOriginMessages = [
-  'Unable to post message to https://support.example.test. Recipient has origin https://untrusted.example.test.\n',
-  "Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://support.example.test') does not match the recipient window's origin ('https://untrusted.example.test').",
-];
-
-test.use({ allowedConsoleErrors: blockedTargetOriginMessages });
-
 type CapturedRequest = {
   path: string;
   merchantSlug: string | null;
@@ -222,7 +216,11 @@ async function installChatwootFixture(
     }
   );
 
-  await page.goto('/chatwoot-bridge');
+  await page.goto(
+    options.holdVerify
+      ? '/chatwoot-bridge?target-origin-race=1'
+      : '/chatwoot-bridge'
+  );
   return {
     requests,
     harnessOrigin,
@@ -371,7 +369,7 @@ test('does not disclose authorization to a replacement widget origin', async ({
 }) => {
   const blockedMessages: string[] = [];
   page.on('console', (message) => {
-    if (blockedTargetOriginMessages.includes(message.text()))
+    if (isChatwootTargetOriginBlockedMessage(message.text()))
       blockedMessages.push(message.text());
   });
   const { verifyRequested, verifyResponseSent, releaseVerifyResponse } =
@@ -388,6 +386,7 @@ test('does not disclose authorization to a replacement widget origin', async ({
   await page
     .locator('#chatwoot_live_chat_widget')
     .evaluate((frame: HTMLIFrameElement) => {
+      // The iframe's WindowProxy remains stable as its document navigates.
       frame.src = 'https://untrusted.example.test/widget';
     });
   const replacement = page.frameLocator('#chatwoot_live_chat_widget');
@@ -411,7 +410,4 @@ test('does not disclose authorization to a replacement widget origin', async ({
     'true'
   );
   expect(blockedMessages).toHaveLength(1);
-  expect(blockedMessages[0]).toMatch(
-    /https:\/\/support\.example\.test.*https:\/\/untrusted\.example\.test/s
-  );
 });

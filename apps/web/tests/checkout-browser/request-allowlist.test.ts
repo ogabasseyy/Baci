@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   isChatwootBridgeFixtureRequest,
+  isChatwootTargetOriginBlockedMessage,
   isFixtureAssetRequest,
 } from './request-allowlist';
 
@@ -43,6 +44,18 @@ it('limits Chatwoot harness traffic to its exact origins, paths, methods, and vi
   expect(
     request(`${harnessOrigin}/api/storefront/chatwoot/context/challenge`, 'GET')
   ).toBe(false);
+  expect(
+    request(
+      `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=other`,
+      'POST'
+    )
+  ).toBe(false);
+  expect(
+    request(
+      `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=ogabassey&extra=1`,
+      'POST'
+    )
+  ).toBe(false);
   expect(request('https://support.example.test/widget', 'GET', false)).toBe(
     false
   );
@@ -51,6 +64,24 @@ it('limits Chatwoot harness traffic to its exact origins, paths, methods, and vi
       `${harnessOrigin}/api/storefront/chatwoot/context/challenge`,
       'POST',
       false
+    )
+  ).toBe(false);
+});
+
+it('recognizes blocked postMessage target-origin errors across browser wording', () => {
+  expect(
+    isChatwootTargetOriginBlockedMessage(
+      'Unable to post message to https://support.example.test. Recipient has origin https://untrusted.example.test.'
+    )
+  ).toBe(true);
+  expect(
+    isChatwootTargetOriginBlockedMessage(
+      "Failed to execute 'postMessage': target https://support.example.test does not match https://untrusted.example.test"
+    )
+  ).toBe(true);
+  expect(
+    isChatwootTargetOriginBlockedMessage(
+      'Unable to post message to https://support.example.test'
     )
   ).toBe(false);
 });

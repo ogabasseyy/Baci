@@ -18,9 +18,10 @@ it('refreshes the verified connection cart without exposing its capability', asy
   const server = new McpServer({ name: 'cart-reader', version: '1.0.0' });
   const client = new Client({ name: 'test', version: '1.0.0' });
   const [ct, st] = InMemoryTransport.createLinkedPair();
+  const update = vi.fn();
   registerConnectedCartRead(
     server,
-    { update: vi.fn(), hasToken: async () => true, readConnectionCart: read },
+    { update, hasToken: async () => true, readConnectionCart: read },
     { resolveToken: async () => token },
   );
   await server.connect(st);
@@ -36,6 +37,29 @@ it('refreshes the verified connection cart without exposing its capability', asy
       version: 3,
     });
     expect(JSON.stringify(result)).not.toContain(token);
+    // Recover a reported broken link by reading the same owned cart,
+    // without replaying the earlier add/remove operation.
+    const freshUrl =
+      'https://ogabassey.com/cart#handoff=ch1.fresh.signature&hid=cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    read.mockResolvedValueOnce({
+      cart_token: token,
+      items: [{ product_id: '11111111-1111-4111-8111-111111111111', quantity: 2 }],
+      expires_at: '2099-01-01T00:00:00.000Z',
+      cart_url: freshUrl,
+      canonical_cart_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      version: 3,
+    });
+    const recovered = await client.callTool({ name: 'get_ogabassey_guest_cart', arguments: {} });
+    expect(recovered.structuredContent).toMatchObject({
+      success: true,
+      connection_bound: true,
+      cart_url: freshUrl,
+      items: [{ product_id: '11111111-1111-4111-8111-111111111111', quantity: 2 }],
+      canonical_cart_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      version: 3,
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(JSON.stringify(recovered)).not.toContain(token);
     read.mockRejectedValueOnce(new Error(`private ${token}`));
     const failed = await client.callTool({ name: 'get_ogabassey_guest_cart', arguments: {} });
     expect(failed.isError).toBe(true);

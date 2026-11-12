@@ -80,9 +80,25 @@ it('registers the isolated harness page and origin-scoped context endpoints', as
   const matchesContextRoute = matcher as (url: URL) => boolean;
   expect(
     matchesContextRoute(
-      new URL(`${harnessOrigin}/api/storefront/chatwoot/context/challenge`)
+      new URL(
+        `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=ogabassey`
+      )
     )
   ).toBe(true);
+  expect(
+    matchesContextRoute(
+      new URL(
+        `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=other`
+      )
+    )
+  ).toBe(false);
+  expect(
+    matchesContextRoute(
+      new URL(
+        `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=ogabassey&extra=1`
+      )
+    )
+  ).toBe(false);
   expect(
     matchesContextRoute(
       new URL(

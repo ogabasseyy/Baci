@@ -1,9 +1,6 @@
 import { test as base, expect } from '@playwright/test';
-import { isChatwootCrossOriginPostMessageError } from './chatwoot-cross-origin-postmessage-error';
-import {
-  isChatwootBridgeFixtureRequest,
-  isFixtureAssetRequest,
-} from './request-allowlist';
+import { isChatwootBridgeFixtureRequest } from './chatwoot-bridge-request-allowlist';
+import { isFixtureAssetRequest } from './request-allowlist';
 import { order } from './setup';
 
 export const test = base.extend<{
@@ -71,15 +68,6 @@ export const test = base.extend<{
         ].includes(new URL(page.url()).searchParams.get('qa') ?? '');
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
-        // Browsers report a blocked postMessage differently; this expected
-        // target-origin rejection is covered by the no-disclosure assertion,
-        // not by console output or wording.
-        if (
-          message.type() === 'error' &&
-          chatwootBridgeFixtureVisited &&
-          isChatwootCrossOriginPostMessageError(message.text())
-        )
-          return;
         if (message.type() !== 'error') return;
         const expectedIndex = remainingAllowedErrors.indexOf(message.text());
         if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);

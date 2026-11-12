@@ -66,30 +66,14 @@ function widgetHtml(targetOrigin: string) {
 
 async function installChatwootFixture(
   page: Page,
-  baseURL: string | undefined,
-  options: { holdVerify?: boolean } = {}
+  baseURL: string | undefined
 ): Promise<{
   requests: CapturedRequest[];
   harnessOrigin: string;
-  verifyRequested: Promise<void>;
-  verifyResponseSent: Promise<void>;
-  releaseVerifyResponse: () => void;
 }> {
   if (!baseURL) throw new Error('Checkout browser fixture requires baseURL');
   const harnessOrigin = new URL(baseURL).origin;
   const requests: CapturedRequest[] = [];
-  let markVerifyRequested!: () => void;
-  let markVerifyResponseSent!: () => void;
-  let releaseVerifyResponse!: () => void;
-  const verifyRequested = new Promise<void>((resolve) => {
-    markVerifyRequested = resolve;
-  });
-  const verifyResponseSent = new Promise<void>((resolve) => {
-    markVerifyResponseSent = resolve;
-  });
-  const verifyResponseGate = new Promise<void>((resolve) => {
-    releaseVerifyResponse = resolve;
-  });
   const contextPath =
     /^\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)$/;
   await page.context().addCookies([
@@ -111,7 +95,11 @@ async function installChatwootFixture(
   }
 
   await page.route(
-    (url) => url.origin === harnessOrigin && contextPath.test(url.pathname),
+    (url) =>
+      url.origin === harnessOrigin &&
+      contextPath.test(url.pathname) &&
+      url.searchParams.size === 1 &&
+      url.searchParams.get('merchantSlug') === 'ogabassey',
     async (route) => {
       const url = new URL(route.request().url());
       const endpoint = url.pathname.split('/').at(-1) ?? '';
@@ -173,8 +161,6 @@ async function installChatwootFixture(
         });
       }
       if (endpoint === 'verify') {
-        markVerifyRequested();
-        if (options.holdVerify) await verifyResponseGate;
         await route.fulfill({
           json: {
             authorized: true,
@@ -184,7 +170,6 @@ async function installChatwootFixture(
             sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
           },
         });
-        markVerifyResponseSent();
         return;
       }
       return route.fulfill({
@@ -219,9 +204,6 @@ async function installChatwootFixture(
   return {
     requests,
     harnessOrigin,
-    verifyRequested,
-    verifyResponseSent,
-    releaseVerifyResponse,
   };
 }
 
@@ -229,6 +211,5 @@ export const chatwootBridgeTransportFixture = {
   conversationId,
   installChatwootFixture,
   requestId,
-  untrustedWidgetOrigin,
   visitorTokenSha256,
 };

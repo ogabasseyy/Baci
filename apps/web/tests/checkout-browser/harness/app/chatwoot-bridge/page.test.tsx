@@ -12,12 +12,13 @@ it('ignores a trusted-origin message from the wrong widget source', async () => 
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   render(<ChatwootBridgeFixturePage />);
-  const untrustedFrame = screen.getByTitle(
-    'Untrusted synthetic widget'
-  ) as HTMLIFrameElement;
-  const trustedFrame = screen.getByTitle(
-    'Synthetic Chatwoot widget'
-  ) as HTMLIFrameElement;
+  const untrustedFrame = screen.getByTitle('Untrusted synthetic widget');
+  const trustedFrame = screen.getByTitle('Synthetic Chatwoot widget');
+  if (
+    !(untrustedFrame instanceof HTMLIFrameElement) ||
+    !(trustedFrame instanceof HTMLIFrameElement)
+  )
+    throw new Error('Expected the synthetic widgets to render as iframes');
   expect(untrustedFrame.contentWindow).not.toBe(trustedFrame.contentWindow);
 
   await waitFor(() => {

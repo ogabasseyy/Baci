@@ -291,6 +291,7 @@ export default function RootLayout() {
         <RootLayoutNav
           adTrackingReady={isStartupAdTrackingReady}
           persistenceEnabled={!showSplash}
+          startupReady={!showSplash}
           shouldResumeNavigation={hasCompletedInitialBoot}
         />
       ) : null}

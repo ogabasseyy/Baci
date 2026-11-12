@@ -6,15 +6,15 @@ import {
 
 interface AppKeyboardProviderProps {
   children: ReactNode;
-  preloadAfterStartup?: boolean;
+  startupReady?: boolean;
 }
 
 export default function AppKeyboardProvider({
   children,
-  preloadAfterStartup = false,
+  startupReady = false,
 }: AppKeyboardProviderProps) {
   useEffect(() => {
-    if (!preloadAfterStartup) return;
+    if (!startupReady) return;
 
     let active = true;
     const preload = () => {
@@ -25,7 +25,9 @@ export default function AppKeyboardProvider({
       const idleCallbackId = requestIdleCallback(preload, { timeout: 1200 });
       return () => {
         active = false;
-        cancelIdleCallback?.(idleCallbackId);
+        if (typeof cancelIdleCallback === 'function') {
+          cancelIdleCallback(idleCallbackId);
+        }
       };
     }
 
@@ -34,7 +36,7 @@ export default function AppKeyboardProvider({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [preloadAfterStartup]);
+  }, [startupReady]);
 
   return (
     <KeyboardProvider

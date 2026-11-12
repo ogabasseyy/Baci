@@ -83,10 +83,12 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
     adTrackingReady,
     persistenceEnabled,
     shouldResumeNavigation,
+    startupReady,
   }: {
     adTrackingReady?: boolean;
     persistenceEnabled: boolean;
     shouldResumeNavigation?: boolean;
+    startupReady?: boolean;
   }) => {
     const { useEffect } = jest.requireActual<typeof import('react')>('react');
     const { Text } =
@@ -104,7 +106,8 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
         accessibilityRole="text"
         testID="root-layout-nav"
       >
-        adTracking:{String(adTrackingReady)};persistence:
+        adTracking:{String(adTrackingReady)};startup:{String(startupReady)}
+        ;persistence:
         {String(persistenceEnabled)};resume:
         {String(shouldResumeNavigation)}
       </Text>
@@ -280,7 +283,7 @@ describe('RootLayout storage boot gate', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
+        'adTracking:true;startup:false;persistence:false;resume:false'
       );
     });
     expect(mockRootLayoutNavMount).toHaveBeenCalledTimes(1);
@@ -291,7 +294,7 @@ describe('RootLayout storage boot gate', () => {
       expect(screen.queryByTestId('animated-splash')).toBeNull();
     });
     expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:true;persistence:true;resume:true'
+      'adTracking:true;startup:true;persistence:true;resume:true'
     );
     expect(mockRootLayoutNavMount).toHaveBeenCalledTimes(1);
     expect(mockRootLayoutNavUnmount).not.toHaveBeenCalled();
@@ -312,7 +315,7 @@ describe('RootLayout storage boot gate', () => {
       expect(mockInitializeAdTrackingForStartup).toHaveBeenCalledTimes(1);
     });
     expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:false;persistence:false;resume:false'
+      'adTracking:false;startup:false;persistence:false;resume:false'
     );
 
     await act(async () => {
@@ -321,7 +324,7 @@ describe('RootLayout storage boot gate', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
+        'adTracking:true;startup:false;persistence:false;resume:false'
       );
     });
   });
@@ -347,7 +350,7 @@ describe('RootLayout storage boot gate', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
+        'adTracking:true;startup:false;persistence:false;resume:false'
       );
     });
 
@@ -357,7 +360,7 @@ describe('RootLayout storage boot gate', () => {
       expect(screen.queryByTestId('animated-splash')).toBeNull();
     });
     expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:true;persistence:true;resume:true'
+      'adTracking:true;startup:true;persistence:true;resume:true'
     );
 
     firstRender.unmount();
@@ -365,7 +368,7 @@ describe('RootLayout storage boot gate', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:true;resume:true'
+        'adTracking:true;startup:true;persistence:true;resume:true'
       );
     });
     expect(screen.queryByTestId('animated-splash')).toBeNull();

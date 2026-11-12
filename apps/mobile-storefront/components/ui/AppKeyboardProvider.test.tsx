@@ -43,7 +43,7 @@ describe('AppKeyboardProvider', () => {
 
   it('preloads the keyboard only after startup and when the event loop is idle', async () => {
     const view = render(
-      <AppKeyboardProvider preloadAfterStartup={false}>
+      <AppKeyboardProvider startupReady={false}>
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );
@@ -52,7 +52,7 @@ describe('AppKeyboardProvider', () => {
     expect(KeyboardController.preload).not.toHaveBeenCalled();
 
     view.rerender(
-      <AppKeyboardProvider preloadAfterStartup>
+      <AppKeyboardProvider startupReady>
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );
@@ -69,7 +69,7 @@ describe('AppKeyboardProvider', () => {
 
   it('cancels pending keyboard preload when the provider unmounts', async () => {
     const view = render(
-      <AppKeyboardProvider preloadAfterStartup>
+      <AppKeyboardProvider startupReady>
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );

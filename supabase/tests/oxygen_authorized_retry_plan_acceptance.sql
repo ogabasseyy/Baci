@@ -20,7 +20,7 @@ INSERT INTO oxygen_private.partner_workers(partner_reference,worker_user_id) VAL
 INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_reference,enabled)
  VALUES('efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000003','OXYGEN-RETRY-TEST',true);
 INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES('efad0000-0000-4000-8000-000000000041',
- '{"bookingReference":"efad0000-0000-4000-8000-000000000071","activityToken":"synthetic-only","kyc":{"address_status":"DONE"},"booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED","product_amount":400000}}');
+ '{"bookingReference":"efad0000-0000-4000-8000-000000000071","activityToken":"synthetic-only","eligibleAmount":400000,"minimumAmount":10000,"maxTenure":3,"offers":[{"tenure":3,"loanAmount":400000}],"kyc":{"address_status":"DONE"},"booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED","product_amount":400000}}');
 INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status,started_at,completed_at)
  VALUES('efad0000-0000-4000-8000-000000000081','efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000091',0,'web','{"action":"approve_booking"}','indeterminate',now(),now());
 INSERT INTO oxygen_private.attempt_diagnostics(command_id,workflow_id,diagnostic)
@@ -43,8 +43,28 @@ END $$;
 INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status) VALUES('efad0000-0000-4000-8000-000000000082','efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000093',0,'web','{"action":"trigger_approval_otp"}','succeeded');
 SELECT oxygen_private.authorize_staging_approval_retry('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000081','efad0000-0000-4000-8000-000000000071',0,'Synthetic provider authorization for this test');
 INSERT INTO oxygen_private.saved_plans(workflow_id,booking_reference,product_amount,equity_percentage,tenure,state) VALUES
-('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000071',400000,25,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000071","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED"},"schedule":[]}'),
-('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000072',400000,35,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000072","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000072","status":"BOOKED"},"schedule":[]}');
+('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000071',400000,25,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000071","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED","loan_amount":300000,"loan_tenure":3},"schedule":[]}'),
+('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000072',400000,35,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000072","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000072","status":"BOOKED","loan_amount":260000,"loan_tenure":3},"schedule":[]}');
+-- A single successful eligibility read after authorization must preserve the exact-booking retry.
+INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status,completed_at)
+VALUES('efad0000-0000-4000-8000-000000000085','efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000095',1,'web','{"action":"refresh_eligibility"}','succeeded',now());
+UPDATE public.oxygen_workflows SET version=2 WHERE id='efad0000-0000-4000-8000-000000000041';
+INSERT INTO oxygen_private.history(workflow_id,command_id,stage,version) VALUES('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000085','approval_required',2);
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','efad0000-0000-4000-8000-000000000001',true);
+DO $$ BEGIN
+ PERFORM public.oxygen_accept_saved_plan('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000071',2);
+END $$;
+RESET ROLE;
+UPDATE oxygen_private.commands SET command='{"action":"refresh_kyc"}' WHERE id='efad0000-0000-4000-8000-000000000085';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+ BEGIN PERFORM public.oxygen_accept_saved_plan('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000071',2); RAISE EXCEPTION 'Unrelated command preserved authorization'; EXCEPTION WHEN serialization_failure THEN NULL; END;
+END $$;
+RESET ROLE;
+DELETE FROM oxygen_private.history WHERE command_id='efad0000-0000-4000-8000-000000000085';
+DELETE FROM oxygen_private.commands WHERE id='efad0000-0000-4000-8000-000000000085';
+UPDATE public.oxygen_workflows SET version=1 WHERE id='efad0000-0000-4000-8000-000000000041';
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efad0000-0000-4000-8000-000000000001',true);
 DO $$ DECLARE r jsonb; BEGIN

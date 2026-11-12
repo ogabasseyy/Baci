@@ -172,5 +172,6 @@ export async function resolveCartRequestContext(
   return { merchant: merchant.merchant, ok: true, principal };
 }
 
+export * from './merchant-lookup-cache';
 export * from './merchant-resolution';
 export * from './request-quota';

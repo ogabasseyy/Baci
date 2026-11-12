@@ -34,6 +34,7 @@
     "perf:storefront:validate": "node tools/perf/assert-lighthouse-report.mjs",
     "test:storefront-report": "vitest run tools/perf/assert-lighthouse-report.test.mjs",
     "cost:storefront-origin-budget": "tsx tools/cost/storefront-origin-budget.ts",
+    "piggyvest:capture-replay": "tsx tools/piggyvest-capture-replay/cli.ts",
     "db:replay:capture-ledger": "tsx tools/db/capture-supabase-history-ledger.ts",
     "db:replay:capture-production-effect": "tsx tools/db/capture-production-effect-provenance-cli.ts",
     "db:replay:attest-post-replay": "tsx tools/db/attest-post-replay-production.ts",

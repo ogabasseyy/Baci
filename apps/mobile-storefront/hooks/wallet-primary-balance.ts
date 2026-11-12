@@ -1,32 +1,70 @@
 import {
+  announceLatePrimaryAnswer,
+  beginPrimaryRead,
+  recallPrimaryFundingAccount,
+  rememberPrimaryFundingAccount,
+} from './primary-funding-account-memory';
+import {
   readPrimaryFundingAccount,
   type SettledPrimaryFundingAccount,
 } from './resolve-wallet-funding-account';
 
 // The primary provider probe may take up to its 30s network timeout;
 // the wallet load must never wait that long for one funding rail. A
-// stalled probe settles as unknown (surfaced as no account, never a
-// possibly superseded legacy DVA) while the rest of the load
-// proceeds; the next load refetches.
+// stalled or failed probe settles as unknown (never a possibly superseded
+// legacy DVA) while the rest of the load proceeds. Unknown falls back to
+// the last confirmed account read from moments ago (an earlier load, a late
+// answer, or the setup sheet's own check), so a slow PiggyVest never shows a
+// confirmed customer "Create account number" or a ₦0 balance.
 export const PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS = 5000;
 
-export function readPrimaryFundingAccountSoon(
+export async function readPrimaryFundingAccountSoon(
   merchantId: string,
   userId: string
 ): Promise<SettledPrimaryFundingAccount> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   const timeout = new Promise<SettledPrimaryFundingAccount>((resolve) => {
-    timer = setTimeout(
-      () => resolve({ status: 'unavailable' }),
-      PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
-    );
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve({ status: 'unavailable' });
+    }, PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
   });
-  return Promise.race([
-    readPrimaryFundingAccount(merchantId, userId).finally(() => {
-      if (timer !== undefined) clearTimeout(timer);
-    }),
-    timeout,
-  ]);
+  // Numbered at start: an answer only counts if no newer read has answered.
+  const sequence = beginPrimaryRead(merchantId, userId);
+  const read = readPrimaryFundingAccount(merchantId, userId)
+    // Settled either way: the budget timer is no longer needed.
+    .finally(() => clearTimeout(timer))
+    .then((value) => {
+      const stored = rememberPrimaryFundingAccount(
+        merchantId,
+        userId,
+        value,
+        sequence
+      );
+      // This load already gave up: tell the screen a confirmed answer landed.
+      if (timedOut && stored) announceLatePrimaryAnswer(merchantId, userId);
+      return value;
+    });
+  // Promise.race already handles a read that fails after the budget; the
+  // explicit no-op handler just makes that visible.
+  read.catch(() => undefined);
+  const settled = await Promise.race([read, timeout]);
+  if (settled.status !== 'unavailable') return settled;
+  const recalled = recallPrimaryFundingAccount(merchantId, userId);
+  return recalled ? { ...recalled, recalled: true } : settled;
+}
+
+/**
+ * Marks a balance recalled from moments ago in place of a fresh read, so the
+ * wallet shows it but keeps re-checking until a fresh answer lands.
+ */
+export function primaryStaleField(primary: SettledPrimaryFundingAccount): {
+  primary_stale?: true;
+} {
+  return primary.status === 'ready' && primary.recalled
+    ? { primary_stale: true }
+    : {};
 }
 
 /** Marks a transient primary read failure, as opposed to an authoritative answer. */

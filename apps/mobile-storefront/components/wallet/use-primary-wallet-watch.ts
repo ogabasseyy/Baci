@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { WalletData } from '@/hooks/wallet-query';
 import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
+import { usePrimaryWalletUnknownRetry } from './use-primary-wallet-unknown-retry';
 
 interface PrimaryWalletWatchInput {
   wallet: WalletData | undefined;
@@ -44,8 +45,17 @@ export function usePrimaryWalletWatch({
   }
   const effective =
     wallet && kobo !== null && typeof wallet.primary_balance_kobo !== 'number'
-      ? { ...wallet, primary_balance_kobo: kobo }
+      ? // A kept balance, not a fresh answer: marked so nothing treats it
+        // as current (any money decision re-reads PiggyVest fresh).
+        { ...wallet, primary_balance_kobo: kobo, primary_stale: true }
       : wallet;
+  usePrimaryWalletUnknownRetry({
+    // A recalled balance is shown but still re-checked until fresh.
+    unknown:
+      wallet?.primary_unavailable === true || wallet?.primary_stale === true,
+    scopeKey,
+    refetch,
+  });
   usePrimaryWalletCreditPoll({
     balanceKobo: kobo,
     enabled: showFundPanel && kobo !== null,

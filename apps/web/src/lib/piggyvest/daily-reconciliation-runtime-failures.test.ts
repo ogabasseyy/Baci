@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { runPiggyvestDailyReconciliation } from './daily-reconciliation-runtime';
 import {
   env,
+  executeWith,
   makeDeps,
   runtime,
   snapshot,
@@ -136,19 +137,14 @@ describe('runPiggyvestDailyReconciliation failures and budget', () => {
     const { deps } = makeDeps({
       sendEmail: vi.fn(async () => ({ success: false })),
       createExecutor: vi.fn(() =>
-        vi.fn(async () => ({
-          rows: [
-            {
-              result: snapshot({ stuckTotal: 1, stuckDeferred: 1, stuck: [] }),
-            },
-          ],
-        }))
+        executeWith(snapshot({ stuckTotal: 1, stuckDeferred: 1, stuck: [] }))
       ) as never,
     });
     await runPiggyvestDailyReconciliation({ env, deps });
     const [, detail] = vi.mocked(deps.emitAlert).mock.calls[0];
     expect(detail.reason).toBe(
-      'stuck=1 below_expected=0 unreadable=0 truncated=yes report_email_failed'
+      // The email-failure marker leads so the 120-character clip never drops it.
+      'report_email_failed stuck=1 below_expected=0 unreadable=0 truncated=yes'
     );
   });
 
@@ -164,15 +160,14 @@ describe('runPiggyvestDailyReconciliation failures and budget', () => {
       walletId: `goal-${i}`,
       expectedKobo: 100,
     }));
-    const { deps, execute } = makeDeps({
+    const execute = executeWith(snapshot({ wallets, walletsTotal: 50 }));
+    const { deps } = makeDeps({
+      createExecutor: vi.fn(() => execute) as never,
       nowMs: () => ms,
       retrieveWallet: vi.fn(async (_c: unknown, id: string) => {
         ms += 30_000;
         return { id, business_id: 'synthetic-business', balance: 100 };
       }) as never,
-    });
-    execute.mockResolvedValue({
-      rows: [{ result: snapshot({ wallets, walletsTotal: 50 }) }],
     });
     const result = await runPiggyvestDailyReconciliation({ env, deps });
     // Each batch of five costs 150s of the 200s budget: two batches start.

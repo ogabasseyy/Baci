@@ -7,6 +7,8 @@ describe('bugfix: the cancel copy promised the interest back', () => {
       expect(text).not.toMatch(/including interest/i);
       expect(text).not.toMatch(/whole goal balance/i);
       expect(text).toMatch(/interest .* not refunded/i);
+      // True even for a goal that earned no interest.
+      expect(text).toMatch(/any interest/i);
     }
   });
 

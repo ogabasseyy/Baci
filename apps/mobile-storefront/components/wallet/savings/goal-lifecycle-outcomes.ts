@@ -11,12 +11,12 @@ export const GOAL_LIFECYCLE_COPY = {
     // Owner decision 2026-11-12: cancelling early returns the saved money
     // only; the interest the goal earned is forfeited.
     reviewBody:
-      'The money you saved goes back to your main wallet. Because you are cancelling early, the interest this goal earned is not refunded. This goal will be closed.',
+      'The money you saved goes back to your main wallet. Because you are cancelling early, any interest this goal earned is not refunded. This goal will be closed.',
     primary: 'Continue',
     secondary: 'Keep goal',
     successTitle: 'Goal cancelled',
     successBody:
-      'The money you saved is back in your main wallet. The interest this goal earned was not refunded.',
+      'The money you saved is back in your main wallet. Any interest this goal earned was not refunded.',
     rejected:
       'This cancellation was not completed. Your savings are still in your goal.',
   },

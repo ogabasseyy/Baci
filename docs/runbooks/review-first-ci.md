@@ -1,9 +1,9 @@
-# Review-first CI (quick checks now, full CI after Codex says the commit is clean)
+# Review-first CI (quick checks on drafts, full CI once ready and Codex is clean)
 
 Owner decision, 2026-11-11. On 2026-11-10 there were 262 full CI runs (about 85 job-minutes each, 22,357
 job-minutes) for 15 merged pull requests, because CI started on every push and every reviewer fix started another
 full run. Review-first CI keeps the cheap checks on every push and starts the expensive suite only after the
-required AI reviewer (OpenAI Codex) has said the exact current commit is clean.
+PR is marked ready and the required AI reviewer (OpenAI Codex) has said the exact current commit is clean. Agents verify both Codex and Muse before marking ready.
 
 Status: **built, off by default.** Merging the pull request changes nothing until the repository variable
 `BACI_REVIEW_FIRST_CI` is set (see "Switching it on").
@@ -17,7 +17,7 @@ Status: **built, off by default.** Merging the pull request changes nothing unti
    to `Build (deferred until Codex review)` and `Quality Gate (deferred until Codex review)`. GitHub therefore sees
    no check called `Build` or `Quality Gate` and shows "Expected - waiting for status to be reported". Merging and
    auto-merge stay blocked.
-3. When Codex reports no major findings for that exact commit, a small helper workflow
+3. While the PR is draft, heavy CI stays deferred, even after a clean Codex review or with `ci-now`. Once the PR is marked ready and Codex reports no major findings for that exact commit, a small helper workflow
    (`Review-first CI nudge`) re-runs the same pull-request run ("re-run all jobs"). In the second pass the
    `changes` job re-checks the Codex verdict itself, finds it clean, and lets the heavy jobs run (web test shards,
    mobile and shared tests, `Build`, DB replay, SQL suites, CWV runner contracts, and the checkout browser
@@ -70,8 +70,8 @@ run):
 
 ## When the heavy stage starts anyway
 
-* **Break-glass:** add the label `ci-now` to the pull request (or comment `/ci-now` as a maintainer). The next
-  evaluation starts the full suite immediately. GitHub only lets people with triage or write access label a pull
+* **Break-glass:** add the label `ci-now` to the pull request (or comment `/ci-now` as a maintainer). On a ready PR, the next
+  evaluation starts the full suite immediately; drafts remain quick. GitHub only lets people with triage or write access label a pull
   request, and `/ci-now` is honoured only from the owner, members and collaborators. The label **stays until it is
   removed**: every later push of that pull request then runs the full CI at once (a warning shows on the `changes`
   job each time), so remove it when Codex is back. Agents may use it when Codex is down, rate limited, or when the
@@ -124,11 +124,11 @@ Before running `gh pr ready <pr>`, verify that **both Codex and Muse** have comp
 
 If another code change or base sync is needed after marking ready, convert back to draft (`gh pr ready <pr> --undo`) **before pushing**, so both draft reviewers run again. Recheck both reviewers on the new head. Keep explicitly paused or deprioritized PRs draft until the owner resumes them, even when reviews are clean.
 
-“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. The review-first CI scheduler still uses Codex alone and can start heavy CI while a PR is draft; this rule does not change that scheduler or waive either review when `ci-now` or the timeout starts CI.
+“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. With review-first CI enabled, drafts run quick checks only, even when Codex is clean or `ci-now` is present. Marking ready releases heavy CI through the existing Codex gate; agents must verify both reviewers first. Muse remains an agent readiness requirement, not a machine-enforced verdict gate. On ready PRs, `ci-now` and timeout recovery do not waive either review before merging.
 
 
 Push, then wait. Do not start CI by hand and do not re-run jobs yourself. Codex reviews the new commit
-automatically; when it is clean the full suite starts on its own and the required checks appear. Use
+automatically; once both reviewers are clean, mark ready and the full suite starts on its own and the required checks appear. Use
 `ci-now` only when Codex is unavailable or you have a recorded reason, and say so in the pull-request thread.
 Never arm auto-merge to "wait for Codex": the required checks do not exist before Codex is clean, but a timeout
 or `ci-now` run can make them green without a Codex verdict.

@@ -32,6 +32,10 @@ export const test = base.extend<{
       let redvaultLostCheckoutErrors = 0;
       let redvaultLostNetworkErrors = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
+      const harnessPort = Number(
+        process.env.CHECKOUT_BROWSER_PORT?.trim() || 3217
+      );
+      const harnessOrigin = new URL(`http://127.0.0.1:${harnessPort}`).origin;
       page.on('framenavigated', () => {
         if (new URL(page.url()).pathname === '/chatwoot-bridge')
           chatwootBridgeFixtureVisited = true;
@@ -161,14 +165,14 @@ export const test = base.extend<{
         const isFixtureResumeOrderRead =
           request.method() === 'GET' &&
           url.pathname === `/api/storefront/orders/${order.id}`;
-        const harnessOrigin = `http://127.0.0.1:${process.env.CHECKOUT_BROWSER_PORT?.trim() || '3217'}`;
         const isChatwootBridgeFixturePage =
           url.origin === harnessOrigin &&
           url.pathname === '/chatwoot-bridge' &&
           request.method() === 'GET';
         const isChatwootWidgetFixture =
           chatwootBridgeFixtureVisited &&
-          url.origin === 'https://support.example.test' &&
+          (url.origin === 'https://support.example.test' ||
+            url.origin === 'https://untrusted.example.test') &&
           url.pathname === '/widget' &&
           request.method() === 'GET';
         const isChatwootContextFixture =

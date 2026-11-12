@@ -1,10 +1,21 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from './network';
 
 const widgetOrigin = 'https://support.example.test';
+const untrustedWidgetOrigin = 'https://untrusted.example.test';
 const requestId = 'fixture_context_123456';
 const conversationId = 905;
+const visitorTokenSha256 = 'b'.repeat(64);
 
-const widgetHtml = (targetOrigin: string) => `<!doctype html>
+type CapturedRequest = {
+  path: string;
+  method: string;
+  origin: string;
+  body: unknown;
+};
+
+function widgetHtml(targetOrigin: string) {
+  return `<!doctype html>
 <html><body>
   <button id="request-cart" type="button">Request cart</button>
   <output id="cart-result"></output>
@@ -41,33 +52,54 @@ const widgetHtml = (targetOrigin: string) => `<!doctype html>
         requestId,
         conversationId,
         websiteToken: 'synthetic-widget-token-123456',
-        visitorTokenSha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        visitorTokenSha256: '${visitorTokenSha256}'
       }), targetOrigin);
     });
   </script>
 </body></html>`;
+}
 
-test('mocked browser transport accepts the trusted widget and renders its canonical response', async ({
-  page,
-  baseURL,
-}) => {
-  const requests: Array<{ path: string; body: unknown }> = [];
+async function installChatwootFixture(
+  page: Page,
+  baseURL: string | undefined
+): Promise<{ requests: CapturedRequest[]; harnessOrigin: string }> {
   if (!baseURL) throw new Error('Checkout browser fixture requires baseURL');
   const harnessOrigin = new URL(baseURL).origin;
+  const requests: CapturedRequest[] = [];
+  const contextPath =
+    /^\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)$/;
 
-  await page.route(`${widgetOrigin}/widget`, (route) =>
-    route.fulfill({
-      contentType: 'text/html',
-      body: widgetHtml(harnessOrigin),
-    })
-  );
+  for (const origin of [widgetOrigin, untrustedWidgetOrigin]) {
+    await page.route(`${origin}/widget`, (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: widgetHtml(harnessOrigin),
+      })
+    );
+  }
+
   await page.route(
-    /\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)(?:\?.*)?$/,
+    (url) => url.origin === harnessOrigin && contextPath.test(url.pathname),
     (route) => {
       const url = new URL(route.request().url());
-      const body = route.request().postDataJSON() as Record<string, unknown>;
       const endpoint = url.pathname.split('/').at(-1) ?? '';
-      requests.push({ path: endpoint, body });
+      if (route.request().method() !== 'POST') {
+        requests.push({
+          path: endpoint,
+          method: route.request().method(),
+          origin: url.origin,
+          body: null,
+        });
+        return route.abort('blockedbyclient');
+      }
+
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      requests.push({
+        path: endpoint,
+        method: route.request().method(),
+        origin: url.origin,
+        body,
+      });
 
       if (endpoint === 'challenge') {
         return route.fulfill({
@@ -119,21 +151,57 @@ test('mocked browser transport accepts the trusted widget and renders its canoni
   );
 
   await page.goto('/chatwoot-bridge');
+  await page.waitForFunction(
+    () => document.documentElement.dataset.chatwootBridgeReady === 'true'
+  );
+  return { requests, harnessOrigin };
+}
+
+test('rejects messages from an untrusted widget iframe', async ({
+  page,
+  baseURL,
+}) => {
+  const { requests } = await installChatwootFixture(page, baseURL);
+  const attacker = page.frameLocator('#untrusted-chatwoot-widget');
+
+  await attacker.getByRole('button', { name: 'Request cart' }).click();
+  await page.waitForFunction(
+    () => document.documentElement.dataset.untrustedMessageSeen === 'true'
+  );
+
+  expect(requests).toEqual([]);
+  await expect(
+    page.frameLocator('#chatwoot_live_chat_widget').locator('#cart-result')
+  ).toHaveText('');
+});
+
+test('renders the canonical response from the trusted widget transport', async ({
+  page,
+  baseURL,
+}) => {
+  const { requests, harnessOrigin } = await installChatwootFixture(
+    page,
+    baseURL
+  );
   const widget = page.frameLocator('#chatwoot_live_chat_widget');
+
   await widget.getByRole('button', { name: 'Request cart' }).click();
   const result = widget.locator('#cart-result');
   await expect(result).toContainText('Canonical server phone');
   await expect(result).toContainText('"cartVersion":8');
   await expect(result).not.toContainText('Forged local name');
 
-  expect(requests.map((request) => request.path)).toEqual([
-    'challenge',
-    'verify',
-    'authorize',
+  expect(
+    requests.map(({ path, method, origin }) => ({ path, method, origin }))
+  ).toEqual([
+    { path: 'challenge', method: 'POST', origin: harnessOrigin },
+    { path: 'verify', method: 'POST', origin: harnessOrigin },
+    { path: 'authorize', method: 'POST', origin: harnessOrigin },
   ]);
-  expect(requests[0]?.body).toMatchObject({
+  expect(requests[0]?.body).toEqual({
     conversationId,
     requestId,
+    visitorTokenSha256,
     websiteToken: 'synthetic-widget-token-123456',
   });
   expect(requests[1]?.body).toEqual({
@@ -144,6 +212,5 @@ test('mocked browser transport accepts the trusted widget and renders its canoni
     sessionToken: 'synthetic-session-capability',
     includeCartSnapshot: true,
   });
-  // The harness network guard denies cart writes, orders, and payments here;
-  // only these mocked context endpoints are allowed.
+  // The harness network guard denies cart writes, orders, and payments here.
 });

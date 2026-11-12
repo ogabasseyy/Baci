@@ -4,6 +4,27 @@ import { supabase } from './supabase';
 const OTHER_ACCOUNT =
   'This code belongs to a different account. Please try again.';
 const NOT_CONFIRMED = 'We could not confirm it is you. Please try again.';
+const SECOND_FACTOR_REQUIRED =
+  'This account uses two-step verification. Please sign out and sign in again with it, then set your PIN.';
+
+/**
+ * An emailed code only gives an AAL1 session, and the PIN rule needs AAL2
+ * for an account with a verified second factor. This app has no second-
+ * factor step, so such an account is told so up front: no code is sent and
+ * its current (possibly AAL2) session is never swapped for a weaker one.
+ * If the check itself fails, carry on: the server still enforces the rule.
+ */
+async function refuseSecondFactorAccounts() {
+  let secondFactor = false;
+  try {
+    const { data, error } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    secondFactor = !error && data?.nextLevel === 'aal2';
+  } catch {
+    secondFactor = false;
+  }
+  if (secondFactor) throw new Error(SECOND_FACTOR_REQUIRED);
+}
 
 /** The account a Supabase access token was issued for, or null. */
 export function accessTokenSubject(accessToken: string): string | null {
@@ -26,6 +47,7 @@ export function accessTokenSubject(accessToken: string): string | null {
 
 /** Emails the signed-in customer a 6-digit code (the normal sign-in code). */
 export async function sendIdentityCode(email: string): Promise<void> {
+  await refuseSecondFactorAccounts();
   const result = await sendStorefrontOtp(email);
   if (!result.success) throw new Error(result.error);
 }
@@ -41,6 +63,7 @@ export async function confirmIdentityCode(input: {
   code: string;
   expectedUserId: string;
 }): Promise<void> {
+  await refuseSecondFactorAccounts();
   const result = await verifyStorefrontOtp(input.email, input.code);
   if (!result.success) throw new Error(result.error);
   if (accessTokenSubject(result.data.access_token) !== input.expectedUserId)

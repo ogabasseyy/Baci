@@ -129,3 +129,57 @@ describe('resetting a PIN', () => {
     expect(submitWalletPin).toHaveBeenCalledWith('reset', '4821', undefined);
   });
 });
+
+describe('bugfix: the two-step choose/confirm PIN state', () => {
+  it('keeps the first PIN when the confirmation is too short', async () => {
+    jest
+      .mocked(fetchWalletPinStatus)
+      .mockResolvedValue(status({ hasPin: false }));
+    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
+    jest.mocked(verifyFundPin).mockResolvedValue(proof);
+    const { onProof } = renderSheet();
+    await screen.findByText('Create your wallet PIN');
+    chooseAndSave('Save PIN', '4821', '48');
+    expect(screen.getByText('Enter 4 to 6 digits.')).toBeOnTheScreen();
+    expect(submitWalletPin).not.toHaveBeenCalled();
+    expect(
+      screen.getByLabelText('Confirm PIN, 2 of 6 digits entered')
+    ).toBeOnTheScreen();
+    typePin('21');
+    fireEvent.press(screen.getByRole('button', { name: 'Save PIN' }));
+    await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
+    expect(submitWalletPin).toHaveBeenCalledWith('set', '4821', undefined);
+  });
+
+  it('starts a new request on the first step, not on a blank confirmation', async () => {
+    jest
+      .mocked(fetchWalletPinStatus)
+      .mockResolvedValue(status({ hasPin: false }));
+    const sheet = (open: PinProofRequest | null) => (
+      <WalletPinSheet
+        colors={Colors.light}
+        request={open}
+        onProof={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+    const view = render(sheet(request));
+    await screen.findByText('Create your wallet PIN');
+    typePin('4821');
+    fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
+    expect(
+      screen.getByLabelText('Confirm PIN, 0 of 6 digits entered')
+    ).toBeOnTheScreen();
+    // A replacement request while the sheet is still showing.
+    view.rerender(
+      sheet({
+        ...request,
+        operationId: '44444444-4444-4444-8444-444444444444',
+      })
+    );
+    await screen.findByText('Create your wallet PIN');
+    expect(
+      screen.getByLabelText('New PIN, 0 of 6 digits entered')
+    ).toBeOnTheScreen();
+  });
+});

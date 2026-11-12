@@ -66,6 +66,22 @@ function contextLine(request: WalletPinSheetBinding['request']) {
     : 'Completing this goal';
 }
 
+/**
+ * A new key per request (and on close) remounts the panel, so the two-step
+ * choose/confirm state never carries over to the next request.
+ */
+function requestKey(request: WalletPinSheetBinding['request']) {
+  if (!request) return 'closed';
+  const amount = 'amountKobo' in request ? request.amountKobo : '';
+  return [
+    request.operationId,
+    request.goalId,
+    request.merchantId ?? '',
+    request.action ?? 'fund',
+    amount,
+  ].join('|');
+}
+
 type WalletPinSheetProps = WalletPinSheetBinding & { colors: WalletColors };
 
 /**
@@ -77,7 +93,7 @@ export function WalletPinSheet(props: WalletPinSheetProps) {
   if (inSavingsSheet)
     return props.request ? (
       <EmbeddedPinStep colors={props.colors}>
-        <WalletPinPanel {...props} embedded />
+        <WalletPinPanel key={requestKey(props.request)} {...props} embedded />
       </EmbeddedPinStep>
     ) : null;
   return (
@@ -87,7 +103,7 @@ export function WalletPinSheet(props: WalletPinSheetProps) {
       backdropStyle={styles.backdrop}
       onRequestClose={props.onCancel}
     >
-      <WalletPinPanel {...props} />
+      <WalletPinPanel key={requestKey(props.request)} {...props} />
     </ModalSheet>
   );
 }
@@ -133,6 +149,9 @@ function WalletPinPanel({
       if (sheet.pin.length < 4) return setTooShort(true);
       return setConfirming(true);
     }
+    // A short confirmation is not a mismatch: keep the first PIN and let the
+    // customer finish typing instead of starting over.
+    if (choosing && sheet.confirmPin.length < 4) return setTooShort(true);
     await sheet.submit();
     if (choosing) {
       // Saved, refused or mismatched: start the two steps again if needed.

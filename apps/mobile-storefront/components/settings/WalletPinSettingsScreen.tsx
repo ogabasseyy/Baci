@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import { useColorScheme } from '@/components/useColorScheme';
+import { IdentityConfirmPanel } from '@/components/wallet/identity/IdentityConfirmPanel';
 import Colors from '@/constants/Colors';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
@@ -72,102 +73,102 @@ export function WalletPinSettingsScreen() {
           getScrollContentStyle({ includeBottomInset: false }),
         ]}
       >
-        <Text
-          accessibilityRole="header"
-          style={[styles.title, { color: colors.text }]}
-        >
-          {copy.title}
-        </Text>
-        {copy.body ? (
-          <Text style={[styles.body, { color: colors.textSecondary }]}>
-            {copy.body}
-          </Text>
-        ) : null}
-        {pin.mode === 'change' ? (
-          <WalletPinField
-            colors={colors}
-            label="Current PIN"
-            value={pin.currentPin}
-            editable={!pin.busy}
-            onChange={pin.setCurrentPin}
-          />
-        ) : null}
-        <WalletPinField
-          colors={colors}
-          label="New PIN"
-          value={pin.newPin}
-          editable={!pin.busy}
-          onChange={pin.setNewPin}
-        />
-        <WalletPinField
-          colors={colors}
-          label={confirmLabel}
-          value={pin.confirmPin}
-          editable={!pin.busy}
-          onChange={pin.setConfirmPin}
-        />
-        {pin.error ? (
-          <Text
-            accessibilityRole="alert"
-            style={[styles.message, { color: colors.error }]}
-          >
-            {pin.error}
-          </Text>
-        ) : null}
-        {pin.reauthRequired ? (
-          <View>
+        {pin.needsIdentity ? (
+          <View style={styles.identity}>
+            <IdentityConfirmPanel
+              colors={colors}
+              expectedUserId={pin.userId ?? undefined}
+              onConfirmed={pin.identityConfirmed}
+            />
+          </View>
+        ) : (
+          <>
             <Text
-              accessibilityRole="alert"
-              style={[styles.message, { color: colors.error }]}
+              accessibilityRole="header"
+              style={[styles.title, { color: colors.text }]}
             >
-              For your security, please sign out and sign in again, then come
-              back to reset your PIN.
+              {copy.title}
             </Text>
+            {copy.body ? (
+              <Text style={[styles.body, { color: colors.textSecondary }]}>
+                {copy.body}
+              </Text>
+            ) : null}
+            {pin.mode === 'change' ? (
+              <WalletPinField
+                colors={colors}
+                label="Current PIN"
+                value={pin.currentPin}
+                editable={!pin.busy}
+                onChange={pin.setCurrentPin}
+              />
+            ) : null}
+            <WalletPinField
+              colors={colors}
+              label="New PIN"
+              value={pin.newPin}
+              editable={!pin.busy}
+              onChange={pin.setNewPin}
+            />
+            <WalletPinField
+              colors={colors}
+              label={confirmLabel}
+              value={pin.confirmPin}
+              editable={!pin.busy}
+              onChange={pin.setConfirmPin}
+            />
+            {pin.error ? (
+              <Text
+                accessibilityRole="alert"
+                style={[styles.message, { color: colors.error }]}
+              >
+                {pin.error}
+              </Text>
+            ) : null}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Sign out"
-              onPress={pin.confirmSignOut}
-              style={styles.secondary}
+              accessibilityLabel={copy.action}
+              accessibilityState={{ disabled: pin.busy }}
+              disabled={pin.busy}
+              onPress={pin.submit}
+              style={[styles.primary, { backgroundColor: colors.primary }]}
             >
-              <Text style={[styles.secondaryText, { color: colors.primary }]}>
-                Sign out
-              </Text>
+              {pin.busy ? (
+                <ActivityIndicator
+                  color={colors.primaryForeground}
+                  size="small"
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.primaryText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  {copy.action}
+                </Text>
+              )}
             </Pressable>
-          </View>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={copy.action}
-          accessibilityState={{ disabled: pin.busy }}
-          disabled={pin.busy}
-          onPress={pin.submit}
-          style={[styles.primary, { backgroundColor: colors.primary }]}
-        >
-          {pin.busy ? (
-            <ActivityIndicator color={colors.primaryForeground} size="small" />
-          ) : (
-            <Text
-              style={[styles.primaryText, { color: colors.primaryForeground }]}
-            >
-              {copy.action}
-            </Text>
-          )}
-        </Pressable>
-        {pin.mode === 'change' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Forgot your PIN?"
-            disabled={pin.busy}
-            onPress={pin.forgotPin}
-            style={styles.secondary}
-          >
-            <Text
-              style={[styles.secondaryText, { color: colors.textSecondary }]}
-            >
-              Forgot your PIN?
-            </Text>
-          </Pressable>
-        ) : null}
+            {pin.mode === 'change' ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Forgot your PIN?"
+                disabled={pin.busy}
+                onPress={pin.forgotPin}
+                style={styles.secondary}
+              >
+                <Text
+                  style={[
+                    styles.secondaryText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Forgot your PIN?
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
       </AppKeyboardAwareScrollView>
     </StorefrontScreenShell>
   );

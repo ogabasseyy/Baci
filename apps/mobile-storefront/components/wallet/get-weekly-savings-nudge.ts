@@ -2,6 +2,26 @@ import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display'
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 
 const MS_PER_DAY = 86_400_000;
+const MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/** "2026-12-29" -> "29 Dec 2026", for tight layouts. */
+function shortDate(day: string): string {
+  const [year, month, date] = day.split('-');
+  return `${Number(date)} ${MONTHS[Number(month) - 1]} ${year}`;
+}
 
 /** Computes a weekly savings pace using the goal's own maturity date. */
 export function getWeeklySavingsNudge({
@@ -28,14 +48,18 @@ export function getWeeklySavingsNudge({
     const amountDue = Math.ceil(remaining);
     return {
       amountPerWeek: amountDue,
-      label: `Save ${formatNgnCurrency(amountDue)} by ${formatDateTimeDisplay(maturityDate, 'date')}`,
+      due: true,
+      endsOn: shortDate(endDay),
+      label: `${formatNgnCurrency(amountDue)} due by ${formatDateTimeDisplay(maturityDate, 'date')}`,
       weeks,
     };
   }
   const amountPerWeek = Math.ceil(remaining / Math.max(1, daysRemaining / 7));
   return {
     amountPerWeek,
-    label: `Save about ${formatNgnCurrency(amountPerWeek)} a week to reach this by ${formatDateTimeDisplay(maturityDate, 'date')}`,
+    due: false,
+    endsOn: shortDate(endDay),
+    label: `${formatNgnCurrency(amountPerWeek)} a week to finish by ${formatDateTimeDisplay(maturityDate, 'date')}`,
     weeks,
   };
 }

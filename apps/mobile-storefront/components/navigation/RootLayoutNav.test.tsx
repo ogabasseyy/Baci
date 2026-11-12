@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react-native';
 import type React from 'react';
 import { Platform, Text, View } from 'react-native';
@@ -98,7 +99,9 @@ jest.mock('react-native-gesture-handler', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => children,
+  SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => (
+    <MockView testID="safe-area-provider">{children}</MockView>
+  ),
 }));
 
 jest.mock('@/components/updates/MobileUpdateController', () => ({
@@ -231,6 +234,20 @@ describe('RootLayoutNav', () => {
 
     view.rerender(<RootLayoutNav persistenceEnabled />);
     expect(screen.getByText('startup-motion:on')).toBeTruthy();
+  });
+
+  it('bugfix: puts the offline banner above the screens, so it pushes headers down instead of covering them', () => {
+    render(<RootLayoutNav />);
+
+    const providers = screen.getAllByTestId('safe-area-provider');
+    const screensArea = providers[providers.length - 1];
+    // The screens get their own safe-area provider below the banner...
+    expect(
+      within(screensArea).getByRole('summary', { name: 'root stack' })
+    ).toBeTruthy();
+    // ...and the banner is outside it, in the flow above.
+    expect(within(screensArea).queryByText('connectivity-banner')).toBeNull();
+    expect(screen.getByText('connectivity-banner')).toBeTruthy();
   });
 
   it('passes persistence settings through to the query provider', () => {

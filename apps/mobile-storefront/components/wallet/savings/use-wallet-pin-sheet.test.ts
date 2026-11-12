@@ -119,6 +119,32 @@ describe('a PIN check that is still in flight', () => {
   });
 });
 
+describe('bugfix: a remounted PIN panel', () => {
+  it('drops an answer that arrives after the panel unmounted', async () => {
+    let answerOld: (value: string) => void = () => undefined;
+    jest.mocked(verifyFundPin).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          answerOld = resolve;
+        })
+    );
+    const onProof = jest.fn();
+    const { result, unmount } = renderHook(() =>
+      useWalletPinSheet({ request, onProof })
+    );
+    await waitFor(() => expect(result.current.step).toBe('enter'));
+    act(() => result.current.setPin('4821'));
+    act(() => {
+      void result.current.submit();
+    });
+    unmount();
+    await act(async () => {
+      answerOld(proof);
+    });
+    expect(onProof).not.toHaveBeenCalled();
+  });
+});
+
 describe('request identity', () => {
   it('drops an in-flight answer when the replacement shares the operation id but not the amount', async () => {
     let answerOld: (value: string) => void = () => undefined;

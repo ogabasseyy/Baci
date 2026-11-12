@@ -13,6 +13,9 @@ export const WalletPinSchemas = {
     hasPin: z.boolean(),
     resetRequired: z.boolean(),
     available: z.boolean(),
+    // True when setting or resetting a PIN now needs the customer to confirm
+    // it's them first (their sign-in is too old). Older servers omit it.
+    signInConfirmationRequired: z.boolean().optional(),
   }),
   setRequest: z.object({ pin }).strict(),
   setResponse: z.object({ ok: z.literal(true) }),

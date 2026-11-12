@@ -20,6 +20,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.useRealTimers();
   global.requestIdleCallback = originalRequestIdleCallback;
   global.cancelIdleCallback = originalCancelIdleCallback;
 });
@@ -79,6 +80,37 @@ describe('AppKeyboardProvider', () => {
     expect(cancelIdleCallbackMock).toHaveBeenCalledWith(1);
 
     await act(async () => lateCallback?.());
+    expect(KeyboardController.preload).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a delayed timer when idle callbacks are unavailable', () => {
+    jest.useFakeTimers();
+    delete global.requestIdleCallback;
+    render(
+      <AppKeyboardProvider startupReady>
+        <Text>Storefront app</Text>
+      </AppKeyboardProvider>
+    );
+
+    expect(KeyboardController.preload).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(249));
+    expect(KeyboardController.preload).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(1));
+    expect(KeyboardController.preload).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the timer fallback when the provider unmounts', () => {
+    jest.useFakeTimers();
+    delete global.requestIdleCallback;
+    const view = render(
+      <AppKeyboardProvider startupReady>
+        <Text>Storefront app</Text>
+      </AppKeyboardProvider>
+    );
+
+    view.unmount();
+    act(() => jest.advanceTimersByTime(250));
+
     expect(KeyboardController.preload).not.toHaveBeenCalled();
   });
 });

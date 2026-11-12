@@ -145,3 +145,14 @@ describe('confirm it is you', () => {
     expect(sendStorefrontOtp).toHaveBeenCalledWith('a@b.co');
   });
 });
+
+it('decodes the token without a global atob', () => {
+  const original = globalThis.atob;
+  // @ts-expect-error simulate a runtime with no atob
+  delete globalThis.atob;
+  try {
+    expect(accessTokenSubject(tokenFor('user-1'))).toBe('user-1');
+  } finally {
+    globalThis.atob = original;
+  }
+});

@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
 import { SavingsSheetContext } from './SavingsSheetContext';
+import { SavingsSheetPinCancelContext } from './SavingsSheetPinCancelContext';
 
 const DEFAULT_SNAP_POINTS = ['72%', '92%'];
 
@@ -48,7 +49,19 @@ export function SavingsBottomSheet({
 }) {
   const insets = useSafeAreaInsets();
   const sheet = useRef<BottomSheet>(null);
+  // The embedded PIN step's cancel, if one is showing: closing this sheet
+  // cancels it first so the PIN request never outlives the sheet.
+  const pinCancel = useRef<(() => void) | null>(null);
+  const registerPinCancel = (cancel: (() => void) | null) => {
+    pinCancel.current = cancel;
+  };
   const dismiss = () => sheet.current?.close();
+  const close = () => {
+    const cancel = pinCancel.current;
+    pinCancel.current = null;
+    cancel?.();
+    onClose();
+  };
   if (!visible) return null;
   return (
     <Modal
@@ -60,44 +73,46 @@ export function SavingsBottomSheet({
     >
       <GestureHandlerRootView style={styles.root}>
         <SavingsSheetContext.Provider value={true}>
-          <BottomSheet
-            ref={sheet}
-            index={0}
-            snapPoints={snapPoints}
-            enableDynamicSizing={false}
-            enablePanDownToClose
-            enableBlurKeyboardOnGesture
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            topInset={insets.top}
-            backdropComponent={SavingsBackdrop}
-            onClose={onClose}
-            backgroundStyle={[
-              styles.background,
-              {
-                backgroundColor: colors.background,
-                borderColor: colors.primary,
-              },
-            ]}
-            handleIndicatorStyle={{
-              backgroundColor: colors.primary,
-              width: 40,
-            }}
-          >
-            <View
-              accessibilityViewIsModal
-              style={[
-                styles.content,
-                { paddingBottom: Math.max(insets.bottom, 16) },
+          <SavingsSheetPinCancelContext.Provider value={registerPinCancel}>
+            <BottomSheet
+              ref={sheet}
+              index={0}
+              snapPoints={snapPoints}
+              enableDynamicSizing={false}
+              enablePanDownToClose
+              enableBlurKeyboardOnGesture
+              keyboardBehavior="interactive"
+              keyboardBlurBehavior="restore"
+              android_keyboardInputMode="adjustResize"
+              topInset={insets.top}
+              backdropComponent={SavingsBackdrop}
+              onClose={close}
+              backgroundStyle={[
+                styles.background,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.primary,
+                },
               ]}
+              handleIndicatorStyle={{
+                backgroundColor: colors.primary,
+                width: 40,
+              }}
             >
-              {typeof children === 'function' ? children(dismiss) : children}
-              {/* The PIN step takes over this same sheet rather than opening
+              <View
+                accessibilityViewIsModal
+                style={[
+                  styles.content,
+                  { paddingBottom: Math.max(insets.bottom, 16) },
+                ]}
+              >
+                {typeof children === 'function' ? children(dismiss) : children}
+                {/* The PIN step takes over this same sheet rather than opening
                   a second one on top. */}
-              {overlay}
-            </View>
-          </BottomSheet>
+                {overlay}
+              </View>
+            </BottomSheet>
+          </SavingsSheetPinCancelContext.Provider>
         </SavingsSheetContext.Provider>
       </GestureHandlerRootView>
     </Modal>

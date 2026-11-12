@@ -1,7 +1,8 @@
 import { useBottomSheet } from '@gorhom/bottom-sheet';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { SavingsSheetPinCancelContext } from '../SavingsSheetPinCancelContext';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -15,11 +16,20 @@ const SHEET_CHROME_HEIGHT = 72;
 export function EmbeddedPinStep({
   children,
   colors,
+  onParentClose,
 }: {
   children: ReactNode;
   colors: WalletColors;
+  /** Called when the savings sheet itself is closed under this step. */
+  onParentClose?: () => void;
 }) {
   const { snapToIndex, snapToPosition } = useBottomSheet();
+  const registerCancel = useContext(SavingsSheetPinCancelContext);
+  useEffect(() => {
+    if (!registerCancel || !onParentClose) return;
+    registerCancel(onParentClose);
+    return () => registerCancel(null);
+  }, [registerCancel, onParentClose]);
   const [height, setHeight] = useState(0);
   useEffect(() => {
     if (height > 0) snapToPosition(height + SHEET_CHROME_HEIGHT);

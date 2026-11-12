@@ -92,7 +92,7 @@ export function WalletPinSheet(props: WalletPinSheetProps) {
   const inSavingsSheet = useContext(SavingsSheetContext);
   if (inSavingsSheet)
     return props.request ? (
-      <EmbeddedPinStep colors={props.colors}>
+      <EmbeddedPinStep colors={props.colors} onParentClose={props.onCancel}>
         <WalletPinPanel key={requestKey(props.request)} {...props} embedded />
       </EmbeddedPinStep>
     ) : null;

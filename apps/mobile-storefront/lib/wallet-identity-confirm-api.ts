@@ -1,3 +1,4 @@
+import { decodeBase64UrlToUtf8 } from './cart/base64url';
 import { sendStorefrontOtp, verifyStorefrontOtp } from './storefront-auth-api';
 import { supabase } from './supabase';
 
@@ -31,9 +32,8 @@ export function accessTokenSubject(accessToken: string): string | null {
   const payload = accessToken.split('.')[1];
   if (!payload) return null;
   try {
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-    const claims: unknown = JSON.parse(atob(padded));
+    // No global atob: it is absent in some runtimes.
+    const claims: unknown = JSON.parse(decodeBase64UrlToUtf8(payload));
     return typeof claims === 'object' &&
       claims !== null &&
       'sub' in claims &&

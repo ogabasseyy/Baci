@@ -1,14 +1,16 @@
-# Review-first CI (quick checks now, full CI after Codex says the commit is clean)
+# Review-first CI (quick checks on drafts, full CI once ready and Codex is clean)
 
 Owner decision, 2026-11-11. On 2026-11-10 there were 262 full CI runs (about 85 job-minutes each, 22,357
 job-minutes) for 15 merged pull requests, because CI started on every push and every reviewer fix started another
 full run. Review-first CI keeps the cheap checks on every push and starts the expensive suite only after the
-required AI reviewer (OpenAI Codex) has said the exact current commit is clean.
+PR is marked ready and the required AI reviewer (OpenAI Codex) has said the exact current commit is clean. Agents verify both Codex and Muse before marking ready.
 
 Status: **built, off by default.** Merging the pull request changes nothing until the repository variable
 `BACI_REVIEW_FIRST_CI` is set (see "Switching it on").
 
 ## In plain language
+
+The draft CI gate below applies only to same-repository PRs selected by the switch (`on`, or `pilot` with the `review-first-ci` label). Fork drafts retain full CI; all agents still follow the draft/readiness policy.
 
 1. You push to a pull request from this repository. The normal `CI Quality Gate` run starts and does only the
    quick checks: the change detector, lint, type check, the "misc" guard tests, the mobile admin guardrails and the
@@ -17,7 +19,7 @@ Status: **built, off by default.** Merging the pull request changes nothing unti
    to `Build (deferred until Codex review)` and `Quality Gate (deferred until Codex review)`. GitHub therefore sees
    no check called `Build` or `Quality Gate` and shows "Expected - waiting for status to be reported". Merging and
    auto-merge stay blocked.
-3. When Codex reports no major findings for that exact commit, a small helper workflow
+3. While the PR is draft, heavy CI stays deferred, even after a clean Codex review or with `ci-now`. Once the PR is marked ready and Codex reports no major findings for that exact commit, a small helper workflow
    (`Review-first CI nudge`) re-runs the same pull-request run ("re-run all jobs"). In the second pass the
    `changes` job re-checks the Codex verdict itself, finds it clean, and lets the heavy jobs run (web test shards,
    mobile and shared tests, `Build`, DB replay, SQL suites, CWV runner contracts, and the checkout browser
@@ -68,10 +70,20 @@ run):
 * Formats have changed before. If Codex items exist but none is understood, or the API cannot be read, the run
   fails closed (quick checks only) and says so in a warning on the `changes` job and in the job summary.
 
+## What counts as "Muse is clean"
+
+Use the existing output contract in `.github/scripts/muse-review/post.sh`; a successful workflow alone is insufficient. Fetch all review pages (`gh api repos/ogabasseyy/Baci/pulls/<pr>/reviews --paginate`) and the live PR's `head.sha`, `base.ref` and `base.sha`.
+
+- Require a submitted review from `github-actions[bot]` (`user.type == "Bot"`) whose `commit_id` equals the full current head SHA. Its body must start with `<!-- muse-code-review sha:<full-head-sha> base:<first-10-base-sha> -->` matching the live head and base.
+- Verify the body’s `Workflow:` URL against the repository's actual `muse-code-review.yml` run: same PR, reviewed head and base in the event/evidence, and successful review execution and posting. The bot identity alone is insufficient because other workflows share it. Resolve the abbreviated base against that run's evidence, not against an assumed branch. If evidence cannot be verified, keep draft.
+- Require the generated `## Findings` section to contain only `- No meaningful issues found.` and no inline or summary findings. Also read `## Verdict` and `## Suggested next steps`: contradictory findings, incomplete review, truncation, or unresolved actionable recommendations mean not clean. Reject `<!-- muse-fallback:v1 -->`, failed/skipped/no-output reviews, unknown formats, and quota messages. These checks pin the existing receipt; they do not introduce a new machine-enforced status.
+- Use the newest applicable Muse review and inspect later reviews, inline findings and the linked workflow state. A later finding, fallback or in-flight review means wait; resolving threads on a findings review is not a new clean review. Paginate reviews and threads. Record the review ID, workflow URL, reviewed head, base branch and full base SHA in the review ledger.
+- After a base retarget, obtain fresh Codex and Muse reviews even if the head SHA is unchanged. Do not infer Codex re-reviewed from a new Muse receipt: explicitly request Codex after the retarget and verify the new response targets that request and diff.
+
 ## When the heavy stage starts anyway
 
-* **Break-glass:** add the label `ci-now` to the pull request (or comment `/ci-now` as a maintainer). The next
-  evaluation starts the full suite immediately. GitHub only lets people with triage or write access label a pull
+* **Break-glass:** add the label `ci-now` to the pull request (or comment `/ci-now` as a maintainer). On a ready PR, the next
+  evaluation starts the full suite immediately; drafts remain quick. GitHub only lets people with triage or write access label a pull
   request, and `/ci-now` is honoured only from the owner, members and collaborators. The label **stays until it is
   removed**: every later push of that pull request then runs the full CI at once (a warning shows on the `changes`
   job each time), so remove it when Codex is back. Agents may use it when Codex is down, rate limited, or when the
@@ -86,8 +98,7 @@ run):
   request with Codex findings never times out (someone must fix or override). Draft pull requests never time out, and
   a draft that is marked ready starts its 30 minutes at that moment, not at the push. **This is a deliberate bypass:**
   after the timeout the required checks can go green without a Codex verdict, so the rule "no merge before Codex is
-  clean on the final head" stays a rule for agents and the owner, as it is today. Muse is advisory and does not start
-  anything; if the owner wants a clean Muse review to shorten the wait, that needs Muse's verdict wording pinned first.
+  clean on the final head" stays a rule for agents and the owner, as it is today. Muse does not trigger heavy CI; agents verify its receipt using the checklist below before marking ready.
 * **Kill switch:** delete the variable `BACI_REVIEW_FIRST_CI` (or set it to anything but `on` / `pilot`). The next
   run of every pull request is a normal full run, no code change needed.
 
@@ -116,8 +127,29 @@ then set `on`.
 
 ## For agents
 
+### Draft-first pull requests
+
+<!-- draft-first-policy:start -->
+
+Authoritative source: `.ruler/AGENTS.md`. Keep this marked policy block identical in all agent instructions and the runbook; `.github/scripts/review-first-ci/agent-policy.test.mjs` checks the copies in CI.
+
+Owner decision, 2026-11-12: agents must create pull requests as drafts (`gh pr create --draft`). Keep fixes and review rounds in draft. For same-repository drafts, Codex and Muse automatically review new pushes; reuse current-head reviews or in-flight requests rather than posting duplicate requests.
+
+Before running `gh pr ready <pr>`, verify that **both Codex and Muse** have completed a clean general code review for the exact current `headRefOid`, with no unresolved actionable findings or later contradictory review metadata. Verify reviewer identity and reviewed SHA; a green workflow alone, skipped/failed review, quota message, resolved old thread, or older-head verdict is not a clean review. Fix findings and push while still in draft, then wait for both reviewers again. If either reviewer is unavailable, keep the PR draft and report the blocker; only an explicit owner exception may waive this readiness rule.
+
+Record the reviewed base branch and base commit as well as the head. A base retarget can change the diff without changing `headRefOid`: return to draft and explicitly request a fresh `@codex review` after retargeting (the draft Codex workflow does not automatically handle base edits). Wait for a new Codex receipt after that request and a fresh Muse review for the new base; do not reuse a same-head receipt from the old base. Any base identity change invalidates readiness evidence. Pin Muse provenance, head/base identity and clean wording using the “What counts as Muse is clean” checklist in `docs/runbooks/review-first-ci.md`.
+
+Fork PRs follow the same review requirements, but these secret-bearing automatic reviewers do not run on forks. Report that limitation promptly and keep the PR draft while the owner arranges a trusted same-repository review branch or records a specific reviewer exception. If draft conversion is unavailable, report it promptly, keep auto-merge disabled and do not merge or claim review readiness; request an owner-approved review path. Reviewer outages follow the same escalation path. Never silently waive a reviewer, wait indefinitely without reporting the blocker, or expose secrets to fork code.
+
+If another code change or base sync is needed after marking ready, convert back to draft (`gh pr ready <pr> --undo`) **before pushing**, so both draft reviewers run again. Recheck both reviewers on the new head. Keep explicitly paused or deprioritized PRs draft until the owner resumes them, even when reviews are clean.
+
+“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. For same-repository PRs selected by review-first CI (`on`, or `pilot` with the `review-first-ci` label), drafts run quick checks only, even when Codex is clean or `ci-now` is present. Fork PRs and PRs outside that selection retain their existing full-CI behavior, including while draft; the agent draft/readiness policy still applies to them. Marking ready releases heavy CI through the existing Codex gate; agents must verify both reviewers first. Muse remains an agent readiness requirement, not a machine-enforced verdict gate. On ready PRs, `ci-now` and timeout recovery do not waive either review before merging.
+
+<!-- draft-first-policy:end -->
+
+
 Push, then wait. Do not start CI by hand and do not re-run jobs yourself. Codex reviews the new commit
-automatically; when it is clean the full suite starts on its own and the required checks appear. Use
+automatically; once both reviewers are clean, mark ready and the full suite starts on its own and the required checks appear. Use
 `ci-now` only when Codex is unavailable or you have a recorded reason, and say so in the pull-request thread.
 Never arm auto-merge to "wait for Codex": the required checks do not exist before Codex is clean, but a timeout
 or `ci-now` run can make them green without a Codex verdict.

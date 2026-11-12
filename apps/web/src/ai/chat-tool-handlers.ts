@@ -22,7 +22,6 @@ import { createPublicClient } from '@/lib/supabase/public';
 import type {
   AddToCartParams,
   CheckPaymentStatusParams,
-  CreateVirtualAccountParams,
   GetProductDetailsParams,
   GetRecommendationsParams,
   SearchProductsParams,
@@ -194,33 +193,9 @@ export async function handleGetProductDetails(
   }
 }
 
-// ============================================
-// CREATE VIRTUAL ACCOUNT
-// ============================================
-
-interface VirtualAccountResult {
-  success: boolean;
-  orderId?: string;
-  accountNumber?: string;
-  bankName?: string;
-  accountName?: string;
-  amount?: number;
-  expiresAt?: string;
-  error?: string;
-}
-
-export function handleCreateVirtualAccount(
-  _params: CreateVirtualAccountParams,
-  _sessionId: string
-): Promise<VirtualAccountResult> {
-  // Account generation is not integrated. Do not create a pending order with
-  // model-supplied prices for a payment flow that cannot be completed.
-  return Promise.resolve({
-    success: false,
-    error:
-      'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
-  });
-}
+// Preserve the existing handler import path while keeping the unavailable
+// virtual-account flow isolated from the other chat handlers.
+export { handleCreateVirtualAccount } from './chat-virtual-account-handler';
 
 // ============================================
 // CHECK PAYMENT STATUS

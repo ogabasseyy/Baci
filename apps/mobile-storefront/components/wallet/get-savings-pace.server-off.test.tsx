@@ -92,4 +92,31 @@ describe('getSavingsPace', () => {
       ).toEqual({ short: '₦2,000 a day', label: '₦2,000 a day' });
     });
   });
+
+  describe('end-date boundary (exact days, today counts as one payment)', () => {
+    // now = 2026-11-12; 7 days to 2026-11-19 fit 8 daily payments.
+    it('keeps the date when the payments exactly fit', () => {
+      expect(
+        getSavingsPace({
+          contributionAmount: 1000,
+          frequency: 'daily',
+          maturityDate: '2026-11-19',
+          now,
+          remaining: 8000,
+        })?.short
+      ).toBe('₦1,000 a day · until 19 Nov 2026');
+    });
+
+    it('drops the date when one more payment is needed than fits', () => {
+      expect(
+        getSavingsPace({
+          contributionAmount: 1000,
+          frequency: 'daily',
+          maturityDate: '2026-11-19',
+          now,
+          remaining: 9000,
+        })?.short
+      ).toBe('₦1,000 a day');
+    });
+  });
 });

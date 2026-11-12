@@ -22,6 +22,22 @@ export type SavingsPace = {
   label: string;
 };
 
+const MS_PER_DAY = 86_400_000;
+
+/** Whole days from today (UTC) to the end date; null when unusable. */
+export function daysUntil(
+  maturityDate: string | null | undefined,
+  now: Date
+): number | null {
+  const end = /^\d{4}-\d{2}-\d{2}/.exec(maturityDate ?? '')?.[0];
+  const today = now.toISOString().slice(0, 10);
+  if (!end) return null;
+  const days =
+    (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
+    MS_PER_DAY;
+  return Number.isFinite(days) && days >= 0 ? days : null;
+}
+
 /**
  * The pace shown on a savings plan. It is the plan's own contribution and
  * frequency (what the customer chose), never a recalculated weekly figure,
@@ -55,11 +71,14 @@ export function getSavingsPace({
     // Only show the end date when this pace can still reach it: a plan that
     // is behind shows its pace alone rather than a date it cannot meet.
     const payments = Math.ceil(remaining / contributionAmount);
-    const reachable =
-      weekly !== null &&
-      payments <=
-        Math.floor((weekly.weeks * 7) / PERIOD_DAYS[frequency as Frequency]) +
-          1;
+    const days = daysUntil(maturityDate, now);
+    // Payments that fit: one today plus one each full period up to the end
+    // date (exact days, not whole weeks rounded up).
+    const fits =
+      days === null
+        ? 0
+        : Math.floor(days / PERIOD_DAYS[frequency as Frequency]) + 1;
+    const reachable = weekly !== null && payments <= fits;
     if (!weekly || !reachable)
       return { short: `${amount} ${per}`, label: `${amount} ${per}` };
     return {

@@ -8,9 +8,11 @@ interface AppKeyboardProviderProps {
 export default function AppKeyboardProvider({
   children,
 }: AppKeyboardProviderProps) {
+  // iOS warms the keyboard by focusing a hidden field on the main thread.
   return (
     <KeyboardProvider
       navigationBarTranslucent
+      preload={false}
       preserveEdgeToEdge
       statusBarTranslucent
     >

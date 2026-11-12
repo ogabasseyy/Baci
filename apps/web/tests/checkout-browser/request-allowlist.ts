@@ -22,6 +22,7 @@ export function isChatwootBridgeFixtureRequest({
   if (
     url.origin === harnessOrigin &&
     url.pathname === '/chatwoot-bridge' &&
+    url.searchParams.size === 0 &&
     method === 'GET'
   )
     return true;
@@ -45,7 +46,9 @@ export function isChatwootBridgeFixtureRequest({
   );
 }
 
-export function isChatwootTargetOriginBlockedMessage(message: string): boolean {
+export function isChatwootCrossOriginPostMessageError(
+  message: string
+): boolean {
   return (
     /post.?message/i.test(message) &&
     message.includes('https://support.example.test') &&

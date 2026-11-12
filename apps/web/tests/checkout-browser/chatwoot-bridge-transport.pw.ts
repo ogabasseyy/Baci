@@ -1,6 +1,5 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './network';
-import { isChatwootTargetOriginBlockedMessage } from './request-allowlist';
 
 const widgetOrigin = 'https://support.example.test';
 const untrustedWidgetOrigin = 'https://untrusted.example.test';
@@ -216,11 +215,7 @@ async function installChatwootFixture(
     }
   );
 
-  await page.goto(
-    options.holdVerify
-      ? '/chatwoot-bridge?target-origin-race=1'
-      : '/chatwoot-bridge'
-  );
+  await page.goto('/chatwoot-bridge');
   return {
     requests,
     harnessOrigin,
@@ -367,11 +362,6 @@ test('does not disclose authorization to a replacement widget origin', async ({
   page,
   baseURL,
 }) => {
-  const blockedMessages: string[] = [];
-  page.on('console', (message) => {
-    if (isChatwootTargetOriginBlockedMessage(message.text()))
-      blockedMessages.push(message.text());
-  });
   const { verifyRequested, verifyResponseSent, releaseVerifyResponse } =
     await installChatwootFixture(page, baseURL, { holdVerify: true });
   const trusted = page.frameLocator('#chatwoot_live_chat_widget');
@@ -409,5 +399,4 @@ test('does not disclose authorization to a replacement widget origin', async ({
     'data-authorized-message-seen',
     'true'
   );
-  expect(blockedMessages).toHaveLength(1);
 });

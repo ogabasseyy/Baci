@@ -85,8 +85,9 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // differ. Deduped (never credited twice); paged so a reused pvb_reference
   // or provider bug is seen instead of silently acked.
   'PIGGYVEST_CREDIT_AUDIT_DRIFT',
-  // The degraded-health check (read-only, counts only) saw goal-wallet setup
-  // stalled past ten minutes or several transfers unconfirmed at once.
+  // The degraded-health check (read-only, counts only) saw 3 or more savings
+  // transfers still unconfirmed after ten minutes, or could not read at all.
+  // A stalled goal-wallet-setup reason is a follow-up, not shipped.
   'PIGGYVEST_DEGRADED',
 ] as const;
 

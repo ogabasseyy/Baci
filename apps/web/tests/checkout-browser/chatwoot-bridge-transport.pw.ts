@@ -11,6 +11,8 @@ type CapturedRequest = {
   path: string;
   method: string;
   origin: string;
+  csrfHeader: string | null;
+  csrfCookie: string | null;
   body: unknown;
 };
 
@@ -68,6 +70,14 @@ async function installChatwootFixture(
   const requests: CapturedRequest[] = [];
   const contextPath =
     /^\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)$/;
+  await page.context().addCookies([
+    {
+      name: 'csrf-token',
+      value: 'fixture-csrf-token',
+      url: harnessOrigin,
+      sameSite: 'Lax',
+    },
+  ]);
 
   for (const origin of [widgetOrigin, untrustedWidgetOrigin]) {
     await page.route(`${origin}/widget`, (route) =>
@@ -80,24 +90,39 @@ async function installChatwootFixture(
 
   await page.route(
     (url) => url.origin === harnessOrigin && contextPath.test(url.pathname),
-    (route) => {
+    async (route) => {
       const url = new URL(route.request().url());
       const endpoint = url.pathname.split('/').at(-1) ?? '';
-      if (route.request().method() !== 'POST') {
+      const headers = route.request().headers();
+      // WebKit omits Cookie from intercepted request headers here, even though
+      // the same-origin page can read the seeded cookie and sends its token.
+      const csrfCookie =
+        (await page.context().cookies(harnessOrigin)).find(
+          (cookie) => cookie.name === 'csrf-token'
+        )?.value ?? null;
+      const csrfHeader = headers['x-csrf-token'] ?? null;
+      const csrfValid =
+        csrfHeader === 'fixture-csrf-token' &&
+        csrfCookie === 'fixture-csrf-token';
+      const method = route.request().method();
+      if (method !== 'POST' || !csrfValid) {
         requests.push({
           path: endpoint,
-          method: route.request().method(),
+          method,
           origin: url.origin,
+          csrfHeader,
+          csrfCookie,
           body: null,
         });
-        return route.abort('blockedbyclient');
+        return route.fulfill({ status: 403, json: { error: 'forbidden' } });
       }
-
       const body = route.request().postDataJSON() as Record<string, unknown>;
       requests.push({
         path: endpoint,
-        method: route.request().method(),
+        method,
         origin: url.origin,
+        csrfHeader,
+        csrfCookie,
         body,
       });
 
@@ -151,9 +176,6 @@ async function installChatwootFixture(
   );
 
   await page.goto('/chatwoot-bridge');
-  await page.waitForFunction(
-    () => document.documentElement.dataset.chatwootBridgeReady === 'true'
-  );
   return { requests, harnessOrigin };
 }
 
@@ -164,15 +186,26 @@ test('rejects messages from an untrusted widget iframe', async ({
   const { requests } = await installChatwootFixture(page, baseURL);
   const attacker = page.frameLocator('#untrusted-chatwoot-widget');
 
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-chatwoot-bridge-ready',
+    'true'
+  );
   await attacker.getByRole('button', { name: 'Request cart' }).click();
   await page.waitForFunction(
     () => document.documentElement.dataset.untrustedMessageSeen === 'true'
   );
 
-  expect(requests).toEqual([]);
-  await expect(
-    page.frameLocator('#chatwoot_live_chat_widget').locator('#cart-result')
-  ).toHaveText('');
+  const trusted = page.frameLocator('#chatwoot_live_chat_widget');
+  await trusted.getByRole('button', { name: 'Request cart' }).click();
+  await expect(trusted.locator('#cart-result')).toContainText(
+    'Canonical server phone'
+  );
+  expect(requests.map(({ path, method }) => ({ path, method }))).toEqual([
+    { path: 'challenge', method: 'POST' },
+    { path: 'verify', method: 'POST' },
+    { path: 'authorize', method: 'POST' },
+  ]);
+  await expect(attacker.locator('#cart-result')).toHaveText('');
 });
 
 test('renders the canonical response from the trusted widget transport', async ({
@@ -185,6 +218,10 @@ test('renders the canonical response from the trusted widget transport', async (
   );
   const widget = page.frameLocator('#chatwoot_live_chat_widget');
 
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-chatwoot-bridge-ready',
+    'true'
+  );
   await widget.getByRole('button', { name: 'Request cart' }).click();
   const result = widget.locator('#cart-result');
   await expect(result).toContainText('Canonical server phone');
@@ -192,11 +229,35 @@ test('renders the canonical response from the trusted widget transport', async (
   await expect(result).not.toContainText('Forged local name');
 
   expect(
-    requests.map(({ path, method, origin }) => ({ path, method, origin }))
+    requests.map(({ path, method, origin, csrfHeader, csrfCookie }) => ({
+      path,
+      method,
+      origin,
+      csrfHeader,
+      csrfCookie,
+    }))
   ).toEqual([
-    { path: 'challenge', method: 'POST', origin: harnessOrigin },
-    { path: 'verify', method: 'POST', origin: harnessOrigin },
-    { path: 'authorize', method: 'POST', origin: harnessOrigin },
+    {
+      path: 'challenge',
+      method: 'POST',
+      origin: harnessOrigin,
+      csrfHeader: 'fixture-csrf-token',
+      csrfCookie: 'fixture-csrf-token',
+    },
+    {
+      path: 'verify',
+      method: 'POST',
+      origin: harnessOrigin,
+      csrfHeader: 'fixture-csrf-token',
+      csrfCookie: 'fixture-csrf-token',
+    },
+    {
+      path: 'authorize',
+      method: 'POST',
+      origin: harnessOrigin,
+      csrfHeader: 'fixture-csrf-token',
+      csrfCookie: 'fixture-csrf-token',
+    },
   ]);
   expect(requests[0]?.body).toEqual({
     conversationId,

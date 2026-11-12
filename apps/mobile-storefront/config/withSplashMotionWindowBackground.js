@@ -13,9 +13,15 @@ module.exports = function withSplashMotionWindowBackground(config) {
       'expo-splashscreen'
     );
     if (withoutExpoSplash === null) {
-      throw new Error(
-        'Expected Expo splash-screen registration block before removing its exit listener.'
-      );
+      // The splash-screen plugin is intentionally absent from this app. A
+      // clean prebuild may therefore have nothing to remove. Still fail if a
+      // registration remains, since it would replace SplashMotion ownership.
+      if (source.includes('SplashScreenManager')) {
+        throw new Error(
+          'Expo SplashScreenManager registration remains without a generated block.'
+        );
+      }
+      return innerConfig;
     }
 
     const withoutSplashManagerImport = withoutExpoSplash.replace(

@@ -89,17 +89,11 @@ export default function RootLayout() {
   const [isStorageReady, setIsStorageReady] = useState(
     () => bootstrapState.isStorageReady
   );
-  const {
-    showSplash,
-    onFirstLayout,
-    shouldRenderApp,
-    timedOut,
-    hasLayout,
-    hideFailed,
-  } = useNativeSplashHandoff({
-    initialVisible: !bootstrapState.hasCompletedInitialBoot,
-    ready: loaded && isInitialized && isStorageReady,
-  });
+  const { showSplash, onFirstLayout, shouldRenderApp, timedOut, hideFailed } =
+    useNativeSplashHandoff({
+      initialVisible: !bootstrapState.hasCompletedInitialBoot,
+      ready: loaded && isInitialized && isStorageReady,
+    });
   const {
     register: registerPushNotifications,
     isRegistered: isPushRegistered,
@@ -268,7 +262,7 @@ export default function RootLayout() {
 
   if (
     hideFailed ||
-    (timedOut && (!shouldRenderApp || !loaded || !isStorageReady || !hasLayout))
+    (timedOut && (!shouldRenderApp || !loaded || !isStorageReady))
   ) {
     return <StartupRecoveryScreen />;
   }

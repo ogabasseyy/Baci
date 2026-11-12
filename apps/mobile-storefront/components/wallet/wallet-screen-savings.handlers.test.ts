@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { notifySavings } from './savings/savings-notice';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,
@@ -39,9 +39,10 @@ describe('wallet-screen-savings.handlers', () => {
     expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
     expect(clearIdempotencyKey).not.toHaveBeenCalled();
     expect(cancelSavingsReminder).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Contribution pending',
-      expect.stringContaining('PiggyVest confirms')
+      expect.stringContaining('PiggyVest confirms'),
+      'info'
     );
   });
   it('clears the operation without announcing success for a terminal cancellation', async () => {
@@ -65,13 +66,15 @@ describe('wallet-screen-savings.handlers', () => {
     expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
     expect(cancelSavingsReminder).not.toHaveBeenCalled();
     expect(refetchWallet).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Contribution cancelled',
-      expect.stringContaining('funds were released')
+      expect.stringContaining('funds were released'),
+      'info'
     );
-    expect(Alert.alert).not.toHaveBeenCalledWith(
+    expect(notifySavings).not.toHaveBeenCalledWith(
       'Savings updated',
-      expect.any(String)
+      expect.any(String),
+      expect.anything()
     );
   });
   beforeEach(() => {
@@ -113,9 +116,10 @@ describe('wallet-screen-savings.handlers', () => {
     expect(clearIdempotencyKey).toHaveBeenCalledTimes(1);
     expect(cancelSavingsReminder).not.toHaveBeenCalled();
     expect(refetchWallet).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going!'
+      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going!',
+      'success'
     );
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
   });
@@ -143,13 +147,15 @@ describe('wallet-screen-savings.handlers', () => {
     expect(addSavingsContribution).toHaveBeenCalledTimes(1);
     expect(clearSavingsContributionAmount).toHaveBeenCalledTimes(1);
     expect(clearIdempotencyKey).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going! Pull to refresh your latest balance.'
+      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going! Pull to refresh your latest balance.',
+      'success'
     );
-    expect(Alert.alert).not.toHaveBeenCalledWith(
+    expect(notifySavings).not.toHaveBeenCalledWith(
       'Unable to add savings',
-      expect.any(String)
+      expect.any(String),
+      expect.anything()
     );
   });
 
@@ -189,9 +195,10 @@ describe('wallet-screen-savings.handlers', () => {
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Amount too high',
-      'You only have ₦500 left on this goal.'
+      'You only have ₦500 left on this goal.',
+      'warning'
     );
   });
 
@@ -216,9 +223,10 @@ describe('wallet-screen-savings.handlers', () => {
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Invalid amount',
-      'Enter the amount you want to save.'
+      'Enter the amount you want to save.',
+      'warning'
     );
   });
 
@@ -237,9 +245,10 @@ describe('wallet-screen-savings.handlers', () => {
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'No active savings goal',
-      'Start a savings goal first.'
+      'Start a savings goal first.',
+      'warning'
     );
   });
 
@@ -268,9 +277,10 @@ describe('wallet-screen-savings.handlers', () => {
     expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
     expect(clearIdempotencyKey).not.toHaveBeenCalled();
     expect(refetchWallet).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Unable to add savings',
-      'Contribution failed'
+      'Contribution failed',
+      'warning'
     );
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
   });
@@ -292,9 +302,10 @@ describe('wallet-screen-savings.handlers', () => {
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
     expect(setIsAddingSavingsContribution).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Add money first',
-      'Your wallet has ₦100 available. Fund it before adding ₦500 to savings.'
+      'Your wallet has ₦100 available. Fund it before adding ₦500 to savings.',
+      'warning'
     );
   });
 });

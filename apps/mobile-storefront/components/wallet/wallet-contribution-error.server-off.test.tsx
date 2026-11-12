@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
+import { notifySavings } from './savings/savings-notice';
 import { reportContributionError } from './wallet-contribution-error';
 
-const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
+const noticeSpy = jest.mocked(notifySavings);
 
 beforeEach(() => {
-  alertSpy.mockClear();
+  noticeSpy.mockClear();
 });
 
 // Legacy wallet failures keep their messages and never lose the stored id
@@ -14,7 +15,11 @@ describe('contribution errors with the server off', () => {
   it('reports a plain failure and keeps the stored operation', () => {
     const release = jest.fn();
     reportContributionError(new Error('boom'), release);
-    expect(alertSpy).toHaveBeenCalledWith('Unable to add savings', 'boom');
+    expect(noticeSpy).toHaveBeenCalledWith(
+      'Unable to add savings',
+      'boom',
+      'warning'
+    );
     expect(release).not.toHaveBeenCalled();
   });
 
@@ -24,9 +29,10 @@ describe('contribution errors with the server off', () => {
       Object.assign(new Error('x'), { code: 'INSUFFICIENT_FUNDS' }),
       release
     );
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(noticeSpy).toHaveBeenCalledWith(
       'Not enough money in your wallet',
-      'Add money to your wallet, then try again.'
+      'Add money to your wallet, then try again.',
+      'warning'
     );
     expect(release).not.toHaveBeenCalled();
   });
@@ -42,9 +48,10 @@ describe('contribution errors with the server off', () => {
 
   it('falls back to a generic message for a non-Error rejection', () => {
     reportContributionError('nope');
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(noticeSpy).toHaveBeenCalledWith(
       'Unable to add savings',
-      'Please try again in a moment.'
+      'Please try again in a moment.',
+      'warning'
     );
   });
 });

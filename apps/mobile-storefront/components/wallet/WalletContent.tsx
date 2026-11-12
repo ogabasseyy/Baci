@@ -8,6 +8,7 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { SavingsPhoneSwapStep } from './savings/SavingsPhoneSwapStep';
 import { SavingsVariantPickStep } from './savings/SavingsVariantPickStep';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
@@ -196,6 +197,7 @@ export function WalletContent(props: WalletContentProps) {
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
         />
+        {savingsSheetOpen ? null : <SavingsNoticeCard colors={colors} />}
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard
             colors={colors}

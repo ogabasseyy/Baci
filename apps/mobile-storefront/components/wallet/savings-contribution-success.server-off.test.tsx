@@ -1,11 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import * as Haptics from 'expo-haptics';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { notifySavings } from './savings/savings-notice';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,
@@ -38,12 +38,13 @@ describe('server keeps PiggyVest off', () => {
       setIsAddingSavingsContribution: jest.fn(),
       walletBalance: 5000,
     });
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!"
+      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!",
+      'success'
     );
     expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(jest.mocked(Alert.alert).mock.calls)).not.toMatch(
+    expect(JSON.stringify(jest.mocked(notifySavings).mock.calls)).not.toMatch(
       /PIN|PiggyVest/
     );
   });

@@ -1,13 +1,13 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
+import { notifySavings } from './savings/savings-notice';
 
 const mockCheck = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
   checkPiggyvestPrimarySavingsStatus: (...args: unknown[]) =>
     mockCheck(...args),
 }));
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
 function input() {
   return {
     merchantId: 'merchant',
@@ -27,9 +27,10 @@ it('keeps the operation and amount on pending status even when spendable funds a
   await checkPendingPrimarySavings(props);
   expect(props.clearOperation).not.toHaveBeenCalled();
   expect(props.clearAmount).not.toHaveBeenCalled();
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(notifySavings).toHaveBeenCalledWith(
     'Contribution pending',
-    expect.any(String)
+    expect.any(String),
+    'info'
   );
 });
 it('clears the retained operation only after confirmed settlement', async () => {
@@ -60,9 +61,10 @@ it('releases the operation on authoritative not-found so the next tap re-submits
   expect(props.clearOperation).toHaveBeenCalledTimes(1);
   expect(props.clearAmount).not.toHaveBeenCalled();
   expect(props.setPending).toHaveBeenLastCalledWith(false);
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(notifySavings).toHaveBeenCalledWith(
     'Contribution not received',
-    expect.stringContaining('try again')
+    expect.stringContaining('try again'),
+    'info'
   );
 });
 it('keeps a primary operation when the merchant is reported not primary', async () => {
@@ -74,9 +76,10 @@ it('keeps a primary operation when the merchant is reported not primary', async 
   );
   await checkPendingPrimarySavings(props);
   expect(props.clearOperation).not.toHaveBeenCalled();
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(notifySavings).toHaveBeenCalledWith(
     'Status unavailable',
-    expect.any(String)
+    expect.any(String),
+    'warning'
   );
 });
 const pendingGoal = {
@@ -102,13 +105,15 @@ it('cheers a confirmation found by the status check without guessing amounts', a
     operationId: 'operation',
   });
   await checkPendingPrimarySavings({ ...input(), goal: pendingGoal });
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(notifySavings).toHaveBeenCalledWith(
     'Savings updated',
-    'Nice! PiggyVest confirmed your savings. Every naira gets you closer to your iPhone 13. Keep it going!'
+    'Nice! PiggyVest confirmed your savings. Every naira gets you closer to your iPhone 13. Keep it going!',
+    'success'
   );
-  expect(Alert.alert).not.toHaveBeenCalledWith(
+  expect(notifySavings).not.toHaveBeenCalledWith(
     expect.any(String),
-    expect.stringMatching(/₦|%/)
+    expect.stringMatching(/₦|%/),
+    expect.anything()
   );
 });
 it('keeps the plain confirmation when the goal is unknown', async () => {
@@ -117,17 +122,19 @@ it('keeps the plain confirmation when the goal is unknown', async () => {
     operationId: 'operation',
   });
   await checkPendingPrimarySavings(input());
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(notifySavings).toHaveBeenCalledWith(
     'Savings updated',
-    'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+    'PiggyVest has confirmed your contribution. Your savings balance has been updated.',
+    'success'
   );
 });
 it('does not cheer while the contribution is still pending', async () => {
   mockCheck.mockResolvedValue({ status: 'pending', operationId: 'operation' });
   await checkPendingPrimarySavings({ ...input(), goal: pendingGoal });
-  expect(Alert.alert).not.toHaveBeenCalledWith(
+  expect(notifySavings).not.toHaveBeenCalledWith(
     'Savings updated',
-    expect.any(String)
+    expect.any(String),
+    expect.anything()
   );
 });
 it('never claims the goal is reached on a late confirmation', async () => {
@@ -139,9 +146,10 @@ it('never claims the goal is reached on a late confirmation', async () => {
     ...input(),
     goal: { ...pendingGoal, current_amount: 5000 },
   });
-  expect(Alert.alert).not.toHaveBeenCalledWith(
+  expect(notifySavings).not.toHaveBeenCalledWith(
     'Goal reached! 🎉',
-    expect.any(String)
+    expect.any(String),
+    expect.anything()
   );
 });
 it('adds the refresh hint to the status-check cheer when the wallet refresh fails', async () => {
@@ -154,8 +162,9 @@ it('adds the refresh hint to the status-check cheer when the wallet refresh fail
     goal: pendingGoal,
     refetchWallet: jest.fn(() => Promise.reject(new Error('offline'))),
   });
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(notifySavings).toHaveBeenCalledWith(
     'Savings updated',
-    expect.stringMatching(/Pull to refresh your latest balance\.$/)
+    expect.stringMatching(/Pull to refresh your latest balance\.$/),
+    'success'
   );
 });

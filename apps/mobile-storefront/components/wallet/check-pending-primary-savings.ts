@@ -1,7 +1,7 @@
-import { Alert } from 'react-native';
 import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
+import { notifySavings } from './savings/savings-notice';
 
 export async function checkPendingPrimarySavings(input: {
   /** The goal as it stood before this confirmation. */
@@ -32,28 +32,32 @@ export async function checkPendingPrimarySavings(input: {
       // so the cheer names the goal without an amount or percentage.
       const { goal } = input;
       if (goal) {
-        Alert.alert(
+        notifySavings(
           'Savings updated',
           `Nice! PiggyVest confirmed your savings. Every naira gets you closer to your ${goal.title}. Keep it going!${
             refreshFailed ? ' Pull to refresh your latest balance.' : ''
-          }`
+          }`,
+          'success'
         );
       } else
-        Alert.alert(
+        notifySavings(
           'Savings updated',
-          'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+          'PiggyVest has confirmed your contribution. Your savings balance has been updated.',
+          'success'
         );
     } else if (result.status === 'cancelled') {
       input.clearOperation();
       await input.refetchWallet().catch(() => undefined);
-      Alert.alert(
+      notifySavings(
         'Contribution cancelled',
-        'The transfer was cancelled before submission and your reserved wallet funds were released.'
+        'The transfer was cancelled before submission and your reserved wallet funds were released.',
+        'info'
       );
     } else
-      Alert.alert(
+      notifySavings(
         'Contribution pending',
-        'Your savings will update after PiggyVest confirms the transfer. No new payment has been started.'
+        'Your savings will update after PiggyVest confirms the transfer. No new payment has been started.',
+        'info'
       );
   } catch (error) {
     const code =
@@ -73,15 +77,17 @@ export async function checkPendingPrimarySavings(input: {
       // re-submit. The entered amount is kept. Ambiguous failures still
       // retain the operation for recovery.
       input.clearOperation();
-      Alert.alert(
+      notifySavings(
         'Contribution not received',
-        'PiggyVest has no record of this contribution. You can safely try again.'
+        'PiggyVest has no record of this contribution. You can safely try again.',
+        'info'
       );
       return;
     }
-    Alert.alert(
+    notifySavings(
       'Status unavailable',
-      'Could not confirm this contribution. Refresh its status later before starting another payment.'
+      'Could not confirm this contribution. Refresh its status later before starting another payment.',
+      'warning'
     );
   } finally {
     input.setPending(false);

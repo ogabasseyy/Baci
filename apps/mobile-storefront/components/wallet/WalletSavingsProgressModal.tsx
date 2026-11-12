@@ -12,6 +12,7 @@ import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalCancelStep } from './savings/GoalCancelStep';
 import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
+import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { WalletPinSheet } from './savings/WalletPinSheet';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
@@ -241,6 +242,7 @@ export function WalletSavingsProgressModal({
               setBodyHeight(Math.ceil(height))
             }
           >
+            <SavingsNoticeCard colors={colors} />
             <SavingsGoalSummary
               colors={colors}
               goal={goal}

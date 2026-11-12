@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { useProductSearch } from '@/hooks/use-product-search';
 import type { Product } from '@/types/product';
+import { notifySavings } from './savings/savings-notice';
 
 /** State for the "change savings device" sheet: search, results, and the swap. */
 export function useSavingsDeviceSwap(
@@ -35,7 +35,11 @@ export function useSavingsDeviceSwap(
         setSavingsDeviceSearch('');
       }
     } catch {
-      Alert.alert('Unable to change device', 'Please try again in a moment.');
+      notifySavings(
+        'Unable to change device',
+        'Please try again in a moment.',
+        'warning'
+      );
     }
     setIsChangingSavingsDevice(false);
   };

@@ -1,12 +1,16 @@
-import {
-  type CapturedRequest,
+import { chatwootBridgeTransportFixture } from './chatwoot-bridge-transport-fixture';
+import { expect, test } from './network';
+
+const {
   conversationId,
   installChatwootFixture,
   requestId,
   untrustedWidgetOrigin,
   visitorTokenSha256,
-} from './chatwoot-bridge-transport-fixture';
-import { expect, test } from './network';
+} = chatwootBridgeTransportFixture;
+type CapturedRequest = Awaited<
+  ReturnType<typeof installChatwootFixture>
+>['requests'][number];
 
 function assertCookieHeaderObservation(
   requests: CapturedRequest[],

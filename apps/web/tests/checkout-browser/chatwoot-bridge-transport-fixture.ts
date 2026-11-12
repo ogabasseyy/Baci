@@ -1,12 +1,12 @@
 import type { Page } from '@playwright/test';
 
-export const widgetOrigin = 'https://support.example.test';
-export const untrustedWidgetOrigin = 'https://untrusted.example.test';
-export const requestId = 'fixture_context_123456';
-export const conversationId = 905;
-export const visitorTokenSha256 = 'b'.repeat(64);
+const widgetOrigin = 'https://support.example.test';
+const untrustedWidgetOrigin = 'https://untrusted.example.test';
+const requestId = 'fixture_context_123456';
+const conversationId = 905;
+const visitorTokenSha256 = 'b'.repeat(64);
 
-export type CapturedRequest = {
+type CapturedRequest = {
   path: string;
   merchantSlug: string | null;
   method: string;
@@ -64,7 +64,7 @@ function widgetHtml(targetOrigin: string) {
 </body></html>`;
 }
 
-export async function installChatwootFixture(
+async function installChatwootFixture(
   page: Page,
   baseURL: string | undefined,
   options: { holdVerify?: boolean } = {}
@@ -224,3 +224,11 @@ export async function installChatwootFixture(
     releaseVerifyResponse,
   };
 }
+
+export const chatwootBridgeTransportFixture = {
+  conversationId,
+  installChatwootFixture,
+  requestId,
+  untrustedWidgetOrigin,
+  visitorTokenSha256,
+};

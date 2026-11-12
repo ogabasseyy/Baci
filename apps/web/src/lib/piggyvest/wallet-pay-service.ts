@@ -181,6 +181,19 @@ export async function reconcileWalletPayReferences(input: {
   return 'unmatched' as const;
 }
 
+/** This customer's live wallet payment for one purchase, or null. */
+export async function findWalletPaymentForPurchase(input: {
+  runtime: WalletPayRuntime;
+  scope: unknown;
+  purpose: 'imei_check' | 'vtu';
+  purchaseRef: string;
+}) {
+  const ports = createWalletPayPorts(input.runtime);
+  return await ports
+    .customerStore(input.scope)
+    .readForPurchase(input.purpose, input.purchaseRef);
+}
+
 /** Delivery claim and outcome for confirmed payments (worker side). */
 export function walletPayDelivery(runtime: WalletPayRuntime) {
   const { worker } = createWalletPayPorts(runtime);

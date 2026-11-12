@@ -42,6 +42,7 @@ const parameterCounts = new Map<string, number>([
   [walletPay.reserve, 3],
   [walletPay.manage, 3],
   [walletPay.status, 2],
+  [walletPay.forPurchase, 2],
 ]);
 // Wallet pay worker statements: no customer scope; the first two parameters
 // are the configured integration id and environment.

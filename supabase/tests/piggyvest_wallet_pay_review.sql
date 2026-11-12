@@ -91,6 +91,30 @@ BEGIN
   PERFORM pg_temp.wp_assert(piggyvest_primary.release_stale_wallet_payment(c_integration, 'staging', v_op::uuid)
     AND pg_temp.wp_state(v_op) = 'released', 'a stale reservation was not released');
 
+  -- 6b. The drain's deliver list waits 15 minutes and names the product.
+  v_op := pg_temp.wp_dispatched('rv-6b');
+  PERFORM pg_temp.wp_settle(pg_temp.wp_pay_proof(v_op, 'txn-rv-6b'));
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(
+      piggyvest_primary.list_wallet_pay_work(c_integration, 'staging', 200) -> 'deliver') AS item
+      WHERE item ->> 'operationId' = v_op), 'a just-confirmed payment was handed to the drain');
+  UPDATE piggyvest_primary.wallet_payments SET settled_at = pg_catalog.clock_timestamp() - interval '16 minutes'
+   WHERE id = v_op::uuid;
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(
+      piggyvest_primary.list_wallet_pay_work(c_integration, 'staging', 200) -> 'deliver') AS item
+      WHERE item ->> 'operationId' = v_op AND item ->> 'purpose' = 'imei_check'),
+    'an uncollected confirmed payment was not handed to the drain');
+
+  -- 6c. A product can tell its own wallet-paid purchases apart.
+  PERFORM pg_temp.wp_assert(piggyvest_primary.read_wallet_payment_for_purchase(v_scope,
+      '{"purpose":"imei_check","purchaseRef":"rv-6b"}'::jsonb) ->> 'operationId' = v_op,
+    'the purchase payment was not found');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.read_wallet_payment_for_purchase(v_scope,
+      '{"purpose":"imei_check","purchaseRef":"never-paid"}'::jsonb) IS NULL,
+    'a purchase with no payment reported one');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.read_wallet_payment_for_purchase(v_scope,
+      '{"purpose":"vtu","purchaseRef":"rv-6b"}'::jsonb) IS NULL,
+    'another product matched the purchase');
+
   -- 7. Deletion waits while a released send can still settle late.
   UPDATE piggyvest_primary.wallet_payments SET review_reason = NULL;
   DELETE FROM piggyvest_primary.wallet_payment_refunds;

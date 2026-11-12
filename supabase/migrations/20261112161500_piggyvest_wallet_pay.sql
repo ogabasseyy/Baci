@@ -560,6 +560,41 @@ BEGIN
 END;
 $$;
 
+-- The newest payment of this customer for one purchase that is not a dead
+-- attempt (issued-and-expired or released), or NULL. Lets a product tell its
+-- own wallet-paid purchases from ones started another way.
+CREATE FUNCTION piggyvest_primary.read_wallet_payment_for_purchase(scope jsonb, request jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_intent_id uuid;
+  v_result jsonb;
+BEGIN
+  IF request IS NULL OR pg_catalog.jsonb_typeof(request) <> 'object'
+    OR (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(request)) <> 2
+    OR request ->> 'purpose' NOT IN ('imei_check', 'vtu')
+    OR COALESCE(request ->> 'purchaseRef', '') !~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$' THEN
+    RAISE EXCEPTION 'invalid wallet payment request' USING ERRCODE = '22023';
+  END IF;
+  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
+  SELECT pg_catalog.jsonb_build_object('operationId', payment.id, 'state', payment.state)
+    INTO v_result
+    FROM piggyvest_primary.wallet_payments AS payment
+   WHERE payment.integration_id = (scope ->> 'integrationId')::uuid
+     AND payment.intent_id = v_intent_id
+     AND payment.purpose = request ->> 'purpose'
+     AND payment.purchase_ref = request ->> 'purchaseRef'
+     AND (payment.state NOT IN ('issued', 'released')
+          OR (payment.state = 'issued' AND payment.expires_at > pg_catalog.clock_timestamp()))
+   ORDER BY payment.issued_at DESC
+   LIMIT 1;
+  RETURN v_result;
+END;
+$$;
+
 -- 5. -------------------------------------------------------------------------
 -- Claims delivery of a CONFIRMED payment. Only the winner delivers. A claim
 -- older than 10 minutes can be taken again ('reclaimed'): the product must
@@ -785,11 +820,14 @@ BEGIN
   PERFORM piggyvest_primary.assert_wallet_pay_worker(
     list_wallet_pay_work.integration_id, list_wallet_pay_work.environment);
   RETURN pg_catalog.jsonb_build_object(
-    'deliver', COALESCE((SELECT pg_catalog.jsonb_agg(work.id) FROM (
-        SELECT payment.id FROM piggyvest_primary.wallet_payments AS payment
+    -- Confirmed payments nobody delivered: left 15 minutes for the customer's
+    -- own request first, so the drain never races a customer still waiting.
+    'deliver', COALESCE((SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'operationId', work.id, 'purpose', work.purpose)) FROM (
+        SELECT payment.id, payment.purpose FROM piggyvest_primary.wallet_payments AS payment
          WHERE payment.integration_id = list_wallet_pay_work.integration_id
            AND payment.state = 'confirmed'
-           AND (payment.fulfilment = 'awaiting'
+           AND ((payment.fulfilment = 'awaiting' AND payment.settled_at <= v_now - interval '15 minutes')
                 OR (payment.fulfilment = 'claimed'
                     AND payment.fulfilment_claimed_at <= v_now - interval '10 minutes'))
          ORDER BY piggyvest_primary.wallet_pay_rotation(payment.id) LIMIT v_limit) AS work), '[]'::jsonb),
@@ -1326,6 +1364,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.reserve_wallet_payment_with_pin(jsonb, jsonb, text),
   piggyvest_primary.manage_wallet_payment(jsonb, uuid, text),
   piggyvest_primary.read_wallet_payment_status(jsonb, uuid),
+  piggyvest_primary.read_wallet_payment_for_purchase(jsonb, jsonb),
   piggyvest_primary.claim_wallet_payment_fulfilment(uuid, text, uuid),
   piggyvest_primary.finish_wallet_payment_fulfilment(uuid, text, uuid, text, uuid),
   piggyvest_primary.read_owed_wallet_refund(uuid, text, uuid),
@@ -1351,6 +1390,7 @@ GRANT EXECUTE ON FUNCTION
   piggyvest_primary.reserve_wallet_payment_with_pin(jsonb, jsonb, text),
   piggyvest_primary.manage_wallet_payment(jsonb, uuid, text),
   piggyvest_primary.read_wallet_payment_status(jsonb, uuid),
+  piggyvest_primary.read_wallet_payment_for_purchase(jsonb, jsonb),
   piggyvest_primary.claim_wallet_payment_fulfilment(uuid, text, uuid),
   piggyvest_primary.finish_wallet_payment_fulfilment(uuid, text, uuid, text, uuid),
   piggyvest_primary.read_owed_wallet_refund(uuid, text, uuid),

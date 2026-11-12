@@ -61,6 +61,17 @@ export function createWalletPayCustomerStore(input: {
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },
+    // This customer's live payment for one purchase, or null.
+    async readForPurchase(purpose: 'imei_check' | 'vtu', purchaseRef: string) {
+      const result = await input.execute(customerSql.forPurchase, [
+        scope,
+        JSON.stringify({
+          purpose: schemas.purpose.parse(purpose),
+          purchaseRef: schemas.purchaseRef.parse(purchaseRef),
+        }),
+      ]);
+      return schemas.forPurchaseRows.parse(result.rows)[0].result;
+    },
     async readStatus(operationId: string) {
       const result = await input.execute(customerSql.status, [
         scope,

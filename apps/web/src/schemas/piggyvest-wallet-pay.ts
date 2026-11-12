@@ -131,7 +131,8 @@ const claimResult = z.discriminatedUnion('status', [
 ]);
 
 const workList = z.strictObject({
-  deliver: z.array(z.uuid()).max(200),
+  // Confirmed payments nobody delivered (15 minutes on), with their product.
+  deliver: z.array(z.strictObject({ operationId: z.uuid(), purpose })).max(200),
   refund: z.array(z.uuid()).max(200),
   settle: z.array(z.uuid()).max(200),
 });
@@ -151,6 +152,14 @@ export const piggyvestWalletPaySchemas = {
   issuedRows: oneResultRow(issuedBinding.nullable()),
   manageRows: oneResultRow(z.boolean()),
   statusRows: oneResultRow(paymentStatus.nullable()),
+  forPurchaseRows: oneResultRow(
+    z
+      .strictObject({
+        operationId: z.uuid(),
+        state: paymentStatus.shape.state,
+      })
+      .nullable()
+  ),
   claimRows: oneResultRow(claimResult),
   finishRows: oneResultRow(
     z.enum(['fulfilled', 'refund_owed', 'duplicate', 'conflict'])

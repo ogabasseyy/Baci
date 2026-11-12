@@ -481,6 +481,16 @@ wallet and the business settlement wallet (no API customer). Masked output only.
   its staging worker is not picking them up. **Re-run the probe when staging
   processes transfers again.** Nothing about customer → business is proven
   either way.
+- **Root cause found (16:40 UTC): outbound transfers are paused on the staging
+  account.** History shows p2p transfers settling up to 2026-11-09 11:04 UTC
+  (wallets created the same day sent successfully, so new customers are not the
+  issue) and none since. A control ₦1 from a wallet that sent on 2026-11-08 got
+  **403 "Outbound transfers are paused, please contact support"** at POST time,
+  nothing moved. The QA-wallet transfers were accepted (202) and parked at
+  `initiated` instead. Unpausing is a dashboard or PiggyVest support action. The
+  wallet-pay client maps 403 to PIGGYVEST_AUTH_ERROR, a definitive no-transfer
+  rejection, so a paused account releases the payment cleanly. A 202 that parks
+  at `initiated` stays pending (correct: it may still execute after an unpause).
 - **Five ₦1 test transfers are queued at PiggyVest staging** (QA main → the
   settlement wallet, → the expense wallet, → the all-zeros customer's main
   wallet ×2, → the QA goal wallet). If the worker resumes they may all execute:

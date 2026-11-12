@@ -18,6 +18,7 @@ import { useSavingsPushRegistration } from './use-savings-push-registration';
 type EventSubscription = {
   remove: () => void;
 };
+type NotificationResponse = import('expo-notifications').NotificationResponse;
 
 const STOREFRONT_MERCHANT_ID = pickMerchantId(CONFIG.MERCHANT_ID);
 const log = createLogger('PushNotifications');
@@ -55,6 +56,9 @@ export function usePushNotifications({
   );
   const notificationListener = useRef<EventSubscription | null>(null);
   const responseListener = useRef<EventSubscription | null>(null);
+  const pendingResponse = useRef<NotificationResponse | null>(null);
+  const navigationReadyRef = useRef(navigationReady);
+  navigationReadyRef.current = navigationReady;
   const registration = useSavingsPushRegistration();
   const activeMerchantId = pickMerchantId(merchantId, STOREFRONT_MERCHANT_ID);
 
@@ -92,6 +96,17 @@ export function usePushNotifications({
       ownerId: auth.customer?.id ?? auth.user.id,
     }).catch(() => log.warn('Unable to refresh savings after notification'));
   });
+  const handleNotificationResponse = useEffectEvent(
+    (response: NotificationResponse) => {
+      log.info('Notification tapped');
+      processPushNotificationResponse(
+        response,
+        navigate,
+        () => clearLastNotificationResponse(Notifications),
+        { activeMerchantId, invalidateSavingsWallet }
+      );
+    }
+  );
 
   useEffect(() => {
     const cancelledRef = { current: false };
@@ -114,7 +129,6 @@ export function usePushNotifications({
   }, []);
 
   useEffect(() => {
-    if (!navigationReady) return;
     const cancelledRef = { current: false };
 
     notificationsReady.then(() => {
@@ -123,33 +137,42 @@ export function usePushNotifications({
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener((response) => {
           if (cancelledRef.current) return;
-          log.info('Notification tapped');
-          processPushNotificationResponse(
-            response,
-            navigate,
-            () => clearLastNotificationResponse(Notifications),
-            { activeMerchantId, invalidateSavingsWallet }
-          );
+          if (!navigationReadyRef.current) {
+            pendingResponse.current = response;
+            return;
+          }
+          handleNotificationResponse(response);
         });
-
-      Notifications.getLastNotificationResponseAsync().then((response) => {
-        if (response && !cancelledRef.current) {
-          log.info('App launched from notification');
-          processPushNotificationResponse(
-            response,
-            navigate,
-            () => clearLastNotificationResponse(Notifications),
-            { activeMerchantId, invalidateSavingsWallet }
-          );
-        }
-      });
     });
 
     return () => {
       cancelledRef.current = true;
       responseListener.current?.remove();
     };
-  }, [activeMerchantId, navigationReady]);
+  }, []);
+
+  useEffect(() => {
+    if (!navigationReady) return;
+    const cancelledRef = { current: false };
+
+    notificationsReady.then(() => {
+      if (cancelledRef.current || !Notifications) return;
+      const queuedResponse = pendingResponse.current;
+      pendingResponse.current = null;
+      if (queuedResponse) handleNotificationResponse(queuedResponse);
+
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response && !cancelledRef.current) {
+          log.info('App launched from notification');
+          handleNotificationResponse(response);
+        }
+      });
+    });
+
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [navigationReady]);
 
   return registration;
 }

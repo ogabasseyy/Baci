@@ -143,13 +143,40 @@ describe('usePushNotifications response handling', () => {
       await Promise.resolve();
     });
     expect(mockGetLastNotificationResponse).not.toHaveBeenCalled();
-    expect(mockNotificationResponseCallback).toBeNull();
+    await waitForResponseListener();
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(mockClearLastNotificationResponse).not.toHaveBeenCalled();
 
     view.rerender({ navigationReady: true });
     await waitFor(() => expect(mockRouterPush).toHaveBeenCalledTimes(1));
     expect(mockGetLastNotificationResponse).toHaveBeenCalledTimes(1);
+    expect(mockClearLastNotificationResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues notification taps received during splash until navigation is ready', async () => {
+    mockHandleNotificationResponse.mockImplementation(
+      (_response: unknown, navigate: (screen: string) => void) =>
+        navigate('utility-history')
+    );
+    const view = renderHook(
+      ({ navigationReady }: { navigationReady: boolean }) =>
+        usePushNotifications({ navigationReady }),
+      { initialProps: { navigationReady: false } }
+    );
+    await waitForResponseListener();
+
+    const response = createResponse(
+      'tap-during-splash',
+      { notification_type: 'promotion' },
+      1880
+    );
+    act(() => mockNotificationResponseCallback?.(response));
+    expect(mockHandleNotificationResponse).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    view.rerender({ navigationReady: true });
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledTimes(1));
+    expect(mockHandleNotificationResponse).toHaveBeenCalledTimes(1);
     expect(mockClearLastNotificationResponse).toHaveBeenCalledTimes(1);
   });
 

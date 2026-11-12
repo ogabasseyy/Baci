@@ -7,16 +7,12 @@ import { isCurrentChatwootBridgeTarget } from '@/components/storefront/ogabassey
 import { readChatwootCommerceContextMessage } from '@/components/storefront/ogabassey/components/chat/chatwoot-commerce-context-message';
 import { readChatwootCommerceMessage } from '@/components/storefront/ogabassey/components/chat/chatwoot-commerce-message';
 import { postChatwootCanonicalCartView } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-controls';
-import { buildChatwootInlineReview } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-review';
+import { buildChatwootInlineReviewResponse } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-review-response';
 import { useCart } from '@/hooks/cart';
 
 type ActiveCartState = ReturnType<typeof useCart>;
 
-/**
- * Optional adapter for an already-mounted, trusted Chatwoot widget.
- * It is intentionally not mounted by this change; callers must separately
- * complete the feature-gated storefront integration.
- */
+/** Optional adapter; feature-gated storefront integration remains separate. */
 export function useChatwootInlineCartBridge(
   storeSlug: string,
   widgetOrigin: string
@@ -279,30 +275,14 @@ export function useChatwootInlineCartBridge(
         return;
       }
       if (message.event === 'baci-checkout-review-request') {
-        const review = buildChatwootInlineReview(authorized.snapshot);
-        const remainingTtlMs = Math.min(
-          30 * 60 * 1000,
-          authorized.sessionExpiresAt * 1000 - Date.now()
-        );
         post(
           actionTarget,
           'baci-checkout-review:',
-          review && !review.estimatedTotals && remainingTtlMs > 0
-            ? {
-                requestId,
-                status: 'ready',
-                remainingTtlMs,
-                cartVersion: review.cartVersion,
-                currency: review.currency,
-                subtotalMinor: review.itemsSubtotalMinor,
-                items: review.items.map((item) => ({
-                  name: item.name,
-                  quantity: item.quantity,
-                  unitPriceMinor: item.unitPriceMinor,
-                  lineTotalMinor: item.lineTotalMinor,
-                })),
-              }
-            : { requestId, status: 'unavailable' }
+          buildChatwootInlineReviewResponse(
+            requestId,
+            authorized.snapshot,
+            authorized.sessionExpiresAt
+          )
         );
         return;
       }

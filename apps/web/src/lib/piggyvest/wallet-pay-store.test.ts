@@ -122,6 +122,7 @@ describe('createWalletPayWorkerStore', () => {
           purpose: 'vtu',
           purchaseRef: 'vtu-1',
           amountKobo: 5000,
+          claimToken: '7d2e4f60-1111-4111-8111-111111111111',
         })
     );
     const store = createWalletPayWorkerStore({
@@ -147,8 +148,37 @@ describe('createWalletPayWorkerStore', () => {
       environment: 'staging',
       execute,
     });
-    await expect(store.finish(OP, 'failed')).resolves.toBe('refund_owed');
-    await expect(store.finish(OP, 'refunded' as 'failed')).rejects.toThrow();
+    const token = '7d2e4f60-1111-4111-8111-111111111111';
+    await expect(store.finish(OP, 'failed', token)).resolves.toBe(
+      'refund_owed'
+    );
+    expect(execute).toHaveBeenCalledWith(workerSql.finish, [
+      INTEGRATION,
+      'staging',
+      OP,
+      'failed',
+      token,
+    ]);
+    await expect(
+      store.finish(OP, 'refunded' as 'failed', token)
+    ).rejects.toThrow();
+    await expect(store.finish(OP, 'failed', 'not-a-token')).rejects.toThrow();
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+  it('releases a stale, never-sent reservation through the worker statement', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(true)
+    );
+    const store = createWalletPayWorkerStore({
+      integrationId: INTEGRATION,
+      environment: 'staging',
+      execute,
+    });
+    await expect(store.releaseStale(OP)).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledWith(workerSql.releaseStale, [
+      INTEGRATION,
+      'staging',
+      OP,
+    ]);
   });
 });

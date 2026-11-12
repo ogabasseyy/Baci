@@ -90,11 +90,17 @@ export function createWalletPayWorkerStore(input: {
       ]);
       return schemas.claimRows.parse(result.rows)[0].result;
     },
-    async finish(operationId: string, outcome: 'fulfilled' | 'failed') {
+    // claimToken: from the claim this worker holds; a stale one is refused.
+    async finish(
+      operationId: string,
+      outcome: 'fulfilled' | 'failed',
+      claimToken: string
+    ) {
       const result = await input.execute(workerSql.finish, [
         ...binding,
         schemas.operationId.parse(operationId),
         z.enum(['fulfilled', 'failed']).parse(outcome),
+        z.uuid().parse(claimToken),
       ]);
       return schemas.finishRows.parse(result.rows)[0].result;
     },
@@ -110,6 +116,14 @@ export function createWalletPayWorkerStore(input: {
         ...binding,
         z.uuid().parse(refundId),
         z.enum(['dispatch', 'release']).parse(action),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
+    // Releases a reservation that was never sent (older than 5 minutes).
+    async releaseStale(operationId: string) {
+      const result = await input.execute(workerSql.releaseStale, [
+        ...binding,
+        schemas.operationId.parse(operationId),
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },

@@ -23,6 +23,8 @@ const wallets: Record<string, unknown> = {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 0,
   },
   'collection-wallet': {
@@ -30,6 +32,8 @@ const wallets: Record<string, unknown> = {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 500000,
   },
 };

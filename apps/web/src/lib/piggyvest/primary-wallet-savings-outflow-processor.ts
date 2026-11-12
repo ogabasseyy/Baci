@@ -1,4 +1,5 @@
 import 'server-only';
+import { withEnvelopeReference } from './outflow-envelope-reference';
 import { runPrimaryWalletSavingsOutflowReconciliation } from './primary-wallet-savings-outflow-reconciliation';
 import {
   readPrimaryWalletSavingsRecoveryRuntime,
@@ -40,18 +41,32 @@ function readSavingsRuntimeForOutflow(): SavingsOutflowProcessorDeps['savingsRun
 // proof so an accepted transfer whose client never polls status still
 // confirms; legacy-only references resolve unmatched with no effect.
 export async function reconcileSavingsOutflowReferences(
-  references: readonly string[],
-  deps: SavingsOutflowProcessorDeps
+  eventReferences: readonly string[],
+  deps: SavingsOutflowProcessorDeps,
+  // The webhook envelope: our own reference for a wallet-to-wallet transfer
+  // travels in its pvb_third_party_reference.
+  envelope?: unknown
 ): Promise<'confirmed' | 'cancelled' | 'unmatched'> {
+  const references = withEnvelopeReference(eventReferences, envelope);
   const savings =
     deps.savingsRuntime === undefined
       ? readSavingsRuntimeForOutflow()
       : deps.savingsRuntime;
   // Wallet pay (pvb-pay-/pvb-refund-) has its own runtime and references, so
-  // it is attributed first and independently of the savings runtime.
-  const walletPay = await reconcileWalletPayOutflowReferences(references);
-  if (walletPay !== 'unmatched') return walletPay;
-  if (!savings) return 'unmatched';
+  // it is attributed first and independently of the savings runtime. If it
+  // is inconclusive, savings references in the same delivery are still
+  // attributed before the delivery is left retryable.
+  let walletPayError: unknown = null;
+  try {
+    const walletPay = await reconcileWalletPayOutflowReferences(references);
+    if (walletPay !== 'unmatched') return walletPay;
+  } catch (error) {
+    walletPayError = error;
+  }
+  if (!savings) {
+    if (walletPayError) throw walletPayError;
+    return 'unmatched';
+  }
   const outcome = await runPrimaryWalletSavingsOutflowReconciliation({
     configuration: savings.reconciliationConfiguration,
     providerToken: savings.providerToken,
@@ -65,5 +80,6 @@ export async function reconcileSavingsOutflowReferences(
     // the operation as dispatched with no further trigger.
     throw new Error('Primary savings outflow reconciliation inconclusive');
   }
+  if (outcome === 'unmatched' && walletPayError) throw walletPayError;
   return outcome;
 }

@@ -115,6 +115,8 @@ const claimResult = z.discriminatedUnion('status', [
     purpose,
     purchaseRef,
     amountKobo,
+    // Only the current claimant may finish delivery with it.
+    claimToken: z.uuid(),
   }),
   z.strictObject({
     status: z.enum([
@@ -162,6 +164,9 @@ export const piggyvestWalletPaySchemas = {
       .strictObject({
         kind: z.enum(['payment', 'refund']),
         operationId: z.uuid(),
+        reference,
+        // Already concluded by the status path: acknowledge the webhook.
+        settled: z.boolean(),
       })
       .nullable()
   ),
@@ -178,7 +183,10 @@ export const piggyvestWalletPaySchemas = {
   settleRefundRows: oneResultRow(
     z.enum(['confirmed', 'duplicate', 'conflict', 'needs_review'])
   ),
-  releaseRows: oneResultRow(z.enum(['released', 'duplicate', 'conflict'])),
+  // needs_review: a failed record that still charged a fee.
+  releaseRows: oneResultRow(
+    z.enum(['released', 'duplicate', 'conflict', 'needs_review'])
+  ),
   // A wallet read at PiggyVest. A business (collection) wallet carries no
   // api_customer_id; a customer wallet must.
   wallet: z.object({

@@ -139,4 +139,12 @@ describe('reconcileWalletPayTransfer', () => {
     });
     expect(p.settle).toHaveBeenCalledWith('refund', expect.any(Object));
   });
+  it('holds a failed record that charged a fee for review instead of releasing it', async () => {
+    const p = ports(record('failed', 5000), {
+      release: vi.fn(async () => 'needs_review'),
+    });
+    await expect(
+      reconcileWalletPayTransfer({ kind: 'payment', operationId: OP }, p)
+    ).resolves.toBe('needs_review');
+  });
 });

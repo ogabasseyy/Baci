@@ -86,4 +86,9 @@ describe('verifyWalletPayProof', () => {
       status: 'unverified',
     });
   });
+  it('settles the documented "success" status like "successful"', () => {
+    expect(
+      verifyWalletPayProof(reservation, record({ status: 'success' })).status
+    ).toBe('verified');
+  });
 });

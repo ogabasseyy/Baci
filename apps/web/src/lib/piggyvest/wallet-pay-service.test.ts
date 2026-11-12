@@ -73,6 +73,8 @@ beforeEach(() => {
     business_id: 'business-1',
     currency: 'NGN',
     status: 'active',
+    is_frozen: false,
+    has_an_active_lien: false,
     balance: 500000,
   }));
   ports.customer.manage.mockResolvedValue(true);
@@ -228,6 +230,8 @@ describe('reconcileWalletPayReferences', () => {
     ports.evidence.findByReference.mockResolvedValue({
       kind: 'refund',
       operationId: OP,
+      reference: `pvb-refund-${OP}-1`,
+      settled: false,
     });
     ports.evidence.loadDispatched.mockResolvedValue(null);
     await expect(
@@ -236,6 +240,24 @@ describe('reconcileWalletPayReferences', () => {
         references: [`pvb-refund-${OP}`],
       })
     ).resolves.toBe('pending');
-    expect(ports.evidence.loadDispatched).toHaveBeenCalledWith('refund', OP);
+    // The exact attempt the webhook named is reconciled.
+    expect(ports.evidence.loadDispatched).toHaveBeenCalledWith(
+      'refund',
+      OP,
+      `pvb-refund-${OP}-1`
+    );
+  });
+
+  it('acknowledges a webhook for a transfer the status path already settled', async () => {
+    ports.evidence.findByReference.mockResolvedValue({
+      kind: 'payment',
+      operationId: OP,
+      reference: `pvb-pay-${OP}`,
+      settled: true,
+    });
+    await expect(
+      reconcileWalletPayReferences({ runtime, references: [`pvb-pay-${OP}`] })
+    ).resolves.toBe('confirmed');
+    expect(ports.queryProvider).not.toHaveBeenCalled();
   });
 });

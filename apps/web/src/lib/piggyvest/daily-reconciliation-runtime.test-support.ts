@@ -51,17 +51,31 @@ export function ledger(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** Answers each statement with its own result: the snapshot or the ledger. */
+/** Wallet pay part of the report with nothing outstanding. */
+export const NO_WALLET_PAY_WORK = {
+  stuckPayments: [],
+  undelivered: [],
+  unrefunded: [],
+  needsReview: [],
+};
+
+/**
+ * Answers each statement with its own result: the snapshot, the ledger, or
+ * the wallet pay report (nothing outstanding unless given).
+ */
 export function executeWith(
   snapshotResult: unknown = snapshot(),
-  ledgerResult: unknown = ledger()
+  ledgerResult: unknown = ledger(),
+  walletPayResult: unknown = NO_WALLET_PAY_WORK
 ) {
   return vi.fn(async (statement?: string) => ({
     rows: [
       {
         result: statement?.includes('read_credit_gap_ledger')
           ? ledgerResult
-          : snapshotResult,
+          : statement?.includes('read_wallet_pay_reconciliation')
+            ? walletPayResult
+            : snapshotResult,
       },
     ],
   }));

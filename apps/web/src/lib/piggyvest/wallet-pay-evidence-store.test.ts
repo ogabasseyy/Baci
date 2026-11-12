@@ -75,13 +75,32 @@ describe('createWalletPayEvidenceStore', () => {
   });
 
   it('resolves a webhook reference, skipping references that are not ours', async () => {
-    const found = store({ kind: 'refund', operationId: OP });
+    const found = store({
+      kind: 'refund',
+      operationId: OP,
+      reference: `pvb-refund-${OP}-2`,
+      settled: false,
+    });
     await expect(
       found.store.findByReference(`pvb-refund-${OP}-2`)
     ).resolves.toEqual({
       kind: 'refund',
       operationId: OP,
+      reference: `pvb-refund-${OP}-2`,
+      settled: false,
     });
+  });
+
+  it('loads the exact refund attempt a webhook names', async () => {
+    const attempt = store(null);
+    await expect(
+      attempt.store.loadDispatched('refund', OP, `pvb-refund-${OP}-1`)
+    ).resolves.toBeNull();
+    expect(attempt.execute).toHaveBeenCalledWith(sql.readRefundAttempt, [
+      INTEGRATION,
+      'staging',
+      `pvb-refund-${OP}-1`,
+    ]);
     const foreign = store(null);
     await expect(
       foreign.store.findByReference('pvb-save-123')

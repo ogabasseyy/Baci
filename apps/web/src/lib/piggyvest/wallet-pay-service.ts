@@ -16,10 +16,11 @@ import { submitWalletPayment } from './wallet-pay-transfer';
 function reconcile(
   ports: WalletPayPorts,
   kind: WalletPayTransferKind,
-  operationId: string
+  operationId: string,
+  reference?: string
 ) {
   return reconcileWalletPayTransfer(
-    { kind, operationId },
+    { kind, operationId, reference },
     {
       loadDispatched: ports.evidence.loadDispatched,
       queryProvider: ports.queryProvider,
@@ -162,7 +163,15 @@ export async function reconcileWalletPayReferences(input: {
   const ports = createWalletPayPorts(input.runtime);
   for (const reference of input.references) {
     const found = await ports.evidence.findByReference(reference);
-    if (found) return await reconcile(ports, found.kind, found.operationId);
+    if (!found) continue;
+    // Already concluded (status path won the race): acknowledge the webhook.
+    if (found.settled) return 'confirmed' as const;
+    return await reconcile(
+      ports,
+      found.kind,
+      found.operationId,
+      found.reference
+    );
   }
   return 'unmatched' as const;
 }
@@ -172,7 +181,10 @@ export function walletPayDelivery(runtime: WalletPayRuntime) {
   const { worker } = createWalletPayPorts(runtime);
   return {
     claim: (operationId: string) => worker.claim(operationId),
-    finish: (operationId: string, outcome: 'fulfilled' | 'failed') =>
-      worker.finish(operationId, outcome),
+    finish: (
+      operationId: string,
+      outcome: 'fulfilled' | 'failed',
+      claimToken: string
+    ) => worker.finish(operationId, outcome, claimToken),
   };
 }

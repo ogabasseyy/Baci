@@ -233,6 +233,32 @@ describe('processPiggyvestEvent', () => {
     });
   });
 
+  it('passes the envelope pvb_third_party_reference (our own reference) to attribution only', async () => {
+    mockSavingsOutflow.mockResolvedValue('confirmed');
+    const event = {
+      eventId: 'outflow-005',
+      eventType: 'wallet-transfer.outflow.success',
+      pvb_third_party_reference: 'pvb-save-envelope',
+      eventData: { reference: 'ref-005' },
+    };
+    await expect(
+      processPiggyvestEvent(supabase, event as never, {
+        savingsRuntime: {
+          reconciliationConfiguration: {},
+          providerToken: 'token',
+        },
+      })
+    ).resolves.toBe('processed');
+    expect(mockSavingsOutflow).toHaveBeenCalledWith(
+      expect.objectContaining({ references: ['ref-005', 'pvb-save-envelope'] })
+    );
+    // The legacy outbox keeps matching on eventData only.
+    expect(mockApplyOutflow).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ references: ['ref-005'] })
+    );
+  });
+
   it('stays retryable when savings reconciliation is inconclusive', async () => {
     mockSavingsOutflow.mockResolvedValue('pending');
     const event = {

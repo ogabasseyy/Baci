@@ -11,6 +11,15 @@ import {
 import { CheckoutIdentityOverlayProvider } from './CheckoutIdentityOverlayProvider';
 import { useCheckoutIdentityOverlay } from './useCheckoutIdentityOverlay';
 
+jest.mock('@/components/cart/CartWriteNotice', () => ({
+  CartWriteNotice: () =>
+    mockReact.createElement(
+      mockText,
+      { testID: 'cart-write-notice' },
+      'Cart write notice'
+    ),
+}));
+
 jest.mock('./CheckoutIdentityModal', () => ({
   CheckoutIdentityModal: ({
     isOpen,
@@ -121,6 +130,7 @@ it('covers root app chrome and restores it after identity completion', () => {
   expect(StyleSheet.flatten(contentLayer.props.style).pointerEvents).toBe(
     'none'
   );
+  expect(screen.getByTestId('cart-write-notice')).toBeOnTheScreen();
   expect(screen.queryByRole('button', { name: 'Chat widget' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Drawer menu' })).toBeNull();
   expect(

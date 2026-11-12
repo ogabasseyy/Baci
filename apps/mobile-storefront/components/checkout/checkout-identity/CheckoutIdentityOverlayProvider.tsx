@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { CartWriteNotice } from '@/components/cart/CartWriteNotice';
 import { GlobalErrorBoundary } from '@/components/ErrorBoundary';
 import { CheckoutIdentityModal } from './CheckoutIdentityModal';
 import { CheckoutIdentityOverlayContext } from './CheckoutIdentityOverlayContext';
@@ -38,6 +39,7 @@ export function CheckoutIdentityOverlayProvider({
         >
           {children}
         </View>
+        <CartWriteNotice />
         <GlobalErrorBoundary context="CheckoutIdentityOverlay">
           <CheckoutIdentityModal
             isOpen={isOpen}

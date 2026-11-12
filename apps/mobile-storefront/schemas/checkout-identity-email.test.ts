@@ -13,3 +13,10 @@ describe('checkoutIdentityEmailSchema', () => {
     );
   });
 });
+
+it('rejects email addresses longer than the supported maximum', () => {
+  const localPart = 'a'.repeat(243);
+  expect(
+    checkoutIdentityEmailSchema.safeParse(`${localPart}@example.com`).success
+  ).toBe(false);
+});

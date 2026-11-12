@@ -195,6 +195,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
           ? continueInWallet
           : undefined,
         onHandOffPending,
+        submittingUserId,
       },
       validation,
       stillCurrent

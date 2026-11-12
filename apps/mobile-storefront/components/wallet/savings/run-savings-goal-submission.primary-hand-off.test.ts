@@ -59,13 +59,18 @@ describe('runSavingsGoalSubmission PiggyVest head-start hand-off', () => {
       onContinueInWallet,
       refetch: jest.fn(async () => loadedWith('goal-1')),
       setCreatedGoalId,
+      submittingUserId: 'user-1',
     });
 
     await runSavingsGoalSubmission(input, validation);
 
-    // The plan is created without debiting the legacy wallet...
+    // The plan is created for the submitting account only, without
+    // debiting the legacy wallet...
     expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
-      expect.objectContaining({ initialContributionAmount: 0 })
+      expect.objectContaining({
+        expectedUserId: 'user-1',
+        initialContributionAmount: 0,
+      })
     );
     // ...and the head start moves from the wallet's Add to savings sheet.
     expect(onContinueInWallet).toHaveBeenCalledWith('goal-1', 10000);

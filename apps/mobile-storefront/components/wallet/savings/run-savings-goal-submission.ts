@@ -71,6 +71,8 @@ export type UseStartSavingsSubmitInput = {
   startDate: string;
   targetValue: number;
   variantId?: string | null;
+  /** The account that submitted; goal creation is refused for any other. */
+  submittingUserId?: string;
 };
 
 type ValidatedSavingsInput = {
@@ -109,6 +111,7 @@ export async function runSavingsGoalSubmission(
     const result = await createSavingsGoal({
       goalIdempotencyKey: requestGoalKey,
       autoDebitAuthorized: input.sourceMode === 'auto_debit' ? true : undefined,
+      expectedUserId: input.submittingUserId,
       contributionAmount: input.contributionValue,
       contributionFrequency: input.frequency,
       initialContributionAmount: requestInitialContribution,

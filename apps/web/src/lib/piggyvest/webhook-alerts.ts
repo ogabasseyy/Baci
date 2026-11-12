@@ -80,6 +80,11 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // A customer completed a goal: the balance is already in their main wallet
   // and a purchase request is saved. The owner fulfils the purchase by hand.
   'PIGGYVEST_GOAL_PURCHASE_REQUEST',
+  // A redelivered credit matched a recorded one on pvb_reference with the
+  // same money and attribution, but its audit-only eventData internals
+  // differ. Deduped (never credited twice); paged so a reused pvb_reference
+  // or provider bug is seen instead of silently acked.
+  'PIGGYVEST_CREDIT_AUDIT_DRIFT',
 ] as const;
 
 export type PiggyvestWebhookAlertCode =

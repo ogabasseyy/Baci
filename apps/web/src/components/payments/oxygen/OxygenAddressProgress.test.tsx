@@ -2,6 +2,23 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OxygenAddressProgress } from './OxygenAddressProgress';
 
+it('can refresh payment options without repeating address submission', () => {
+  const refresh = vi.fn().mockResolvedValue(true);
+  const check = vi.fn();
+  render(
+    <OxygenAddressProgress
+      submitted
+      onCheck={check}
+      onRefreshOffers={refresh}
+    />
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Update payment options' })
+  );
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(check).not.toHaveBeenCalled();
+});
+
 it('explains prolonged processing as needing a manual review without another upload', () => {
   const onCheck = vi.fn().mockResolvedValue(undefined);
   render(

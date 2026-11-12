@@ -6,6 +6,12 @@ const untrustedWidgetOrigin = 'https://untrusted.example.test';
 const requestId = 'fixture_context_123456';
 const conversationId = 905;
 const visitorTokenSha256 = 'b'.repeat(64);
+const blockedTargetOriginMessages = [
+  'Unable to post message to https://support.example.test. Recipient has origin https://untrusted.example.test.\n',
+  "Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://support.example.test') does not match the recipient window's origin ('https://untrusted.example.test').",
+];
+
+test.use({ allowedConsoleErrors: blockedTargetOriginMessages });
 
 type CapturedRequest = {
   path: string;
@@ -14,6 +20,7 @@ type CapturedRequest = {
   origin: string;
   csrfHeader: string | null;
   csrfCookie: string | null;
+  requestCookieHeader: string | null;
   body: unknown;
 };
 
@@ -30,6 +37,7 @@ function widgetHtml(targetOrigin: string) {
       if (event.origin !== targetOrigin || event.source !== parent) return;
       if (typeof event.data !== 'string') return;
       if (event.data.startsWith('baci-commerce-context-challenge:')) {
+        document.documentElement.dataset.bridgeChallengeSeen = 'true';
         parent.postMessage('baci-commerce-context-ready:' + JSON.stringify({
           requestId,
           conversationId,
@@ -38,6 +46,7 @@ function widgetHtml(targetOrigin: string) {
         }), targetOrigin);
       }
       if (event.data.startsWith('baci-commerce-context-authorized:')) {
+        document.documentElement.dataset.authorizedMessageSeen = 'true';
         const authorization = JSON.parse(event.data.slice('baci-commerce-context-authorized:'.length));
         parent.postMessage('baci-cart-request:' + JSON.stringify({
           requestId: 'fixture_cart_123456',
@@ -64,11 +73,30 @@ function widgetHtml(targetOrigin: string) {
 
 async function installChatwootFixture(
   page: Page,
-  baseURL: string | undefined
-): Promise<{ requests: CapturedRequest[]; harnessOrigin: string }> {
+  baseURL: string | undefined,
+  options: { holdVerify?: boolean } = {}
+): Promise<{
+  requests: CapturedRequest[];
+  harnessOrigin: string;
+  verifyRequested: Promise<void>;
+  verifyResponseSent: Promise<void>;
+  releaseVerifyResponse: () => void;
+}> {
   if (!baseURL) throw new Error('Checkout browser fixture requires baseURL');
   const harnessOrigin = new URL(baseURL).origin;
   const requests: CapturedRequest[] = [];
+  let markVerifyRequested!: () => void;
+  let markVerifyResponseSent!: () => void;
+  let releaseVerifyResponse!: () => void;
+  const verifyRequested = new Promise<void>((resolve) => {
+    markVerifyRequested = resolve;
+  });
+  const verifyResponseSent = new Promise<void>((resolve) => {
+    markVerifyResponseSent = resolve;
+  });
+  const verifyResponseGate = new Promise<void>((resolve) => {
+    releaseVerifyResponse = resolve;
+  });
   const contextPath =
     /^\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)$/;
   await page.context().addCookies([
@@ -96,16 +124,25 @@ async function installChatwootFixture(
       const endpoint = url.pathname.split('/').at(-1) ?? '';
       const merchantSlug = url.searchParams.get('merchantSlug');
       const headers = route.request().headers();
-      // WebKit omits Cookie from intercepted request headers here, even though
-      // the same-origin page can read the seeded cookie and sends its token.
+      const cookieHeader = await route.request().headerValue('cookie');
+      // Some Playwright engines omit Cookie from intercepted headers. The
+      // context-cookie check is fixture state; requestCookieHeader records
+      // actual transport evidence when the engine exposes it.
       const csrfCookie =
         (await page.context().cookies(harnessOrigin)).find(
           (cookie) => cookie.name === 'csrf-token'
         )?.value ?? null;
+      const requestCsrfCookie =
+        cookieHeader
+          ?.split(';')
+          .map((cookie) => cookie.trim())
+          .find((cookie) => cookie.startsWith('csrf-token='))
+          ?.slice('csrf-token='.length) ?? null;
       const csrfHeader = headers['x-csrf-token'] ?? null;
       const csrfValid =
         csrfHeader === 'fixture-csrf-token' &&
-        csrfCookie === 'fixture-csrf-token';
+        csrfCookie === 'fixture-csrf-token' &&
+        (cookieHeader === null || requestCsrfCookie === 'fixture-csrf-token');
       const method = route.request().method();
       if (method !== 'POST' || !csrfValid) {
         requests.push({
@@ -115,6 +152,7 @@ async function installChatwootFixture(
           origin: url.origin,
           csrfHeader,
           csrfCookie,
+          requestCookieHeader: cookieHeader,
           body: null,
         });
         return route.fulfill({ status: 403, json: { error: 'forbidden' } });
@@ -127,6 +165,7 @@ async function installChatwootFixture(
         origin: url.origin,
         csrfHeader,
         csrfCookie,
+        requestCookieHeader: cookieHeader,
         body,
       });
 
@@ -141,7 +180,9 @@ async function installChatwootFixture(
         });
       }
       if (endpoint === 'verify') {
-        return route.fulfill({
+        markVerifyRequested();
+        if (options.holdVerify) await verifyResponseGate;
+        await route.fulfill({
           json: {
             authorized: true,
             requestId,
@@ -150,6 +191,8 @@ async function installChatwootFixture(
             sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
           },
         });
+        markVerifyResponseSent();
+        return;
       }
       return route.fulfill({
         json: {
@@ -180,12 +223,39 @@ async function installChatwootFixture(
   );
 
   await page.goto('/chatwoot-bridge');
-  return { requests, harnessOrigin };
+  return {
+    requests,
+    harnessOrigin,
+    verifyRequested,
+    verifyResponseSent,
+    releaseVerifyResponse,
+  };
+}
+
+function assertCookieHeaderObservation(
+  requests: CapturedRequest[],
+  browserName: string
+) {
+  const observedCookies = requests.map(
+    (request) => request.requestCookieHeader
+  );
+  if (browserName === 'webkit') {
+    expect(observedCookies).toEqual(requests.map(() => null));
+    return;
+  }
+  expect(
+    observedCookies.every((cookie) =>
+      cookie
+        ?.split(';')
+        .some((entry) => entry.trim() === 'csrf-token=fixture-csrf-token')
+    )
+  ).toBe(true);
 }
 
 test('rejects messages from an untrusted widget iframe', async ({
   page,
   baseURL,
+  browserName,
 }) => {
   const { requests } = await installChatwootFixture(page, baseURL);
   const attacker = page.frameLocator('#untrusted-chatwoot-widget');
@@ -216,11 +286,13 @@ test('rejects messages from an untrusted widget iframe', async ({
     { path: 'authorize', merchantSlug: 'ogabassey', method: 'POST' },
   ]);
   await expect(attacker.locator('#cart-result')).toHaveText('');
+  assertCookieHeaderObservation(requests, browserName);
 });
 
 test('renders the canonical response from the trusted widget transport', async ({
   page,
   baseURL,
+  browserName,
 }) => {
   const { requests, harnessOrigin } = await installChatwootFixture(
     page,
@@ -237,6 +309,7 @@ test('renders the canonical response from the trusted widget transport', async (
   await expect(result).toContainText('Canonical server phone');
   await expect(result).toContainText('"cartVersion":8');
   await expect(result).not.toContainText('Forged local name');
+  assertCookieHeaderObservation(requests, browserName);
 
   expect(
     requests.map(
@@ -290,4 +363,55 @@ test('renders the canonical response from the trusted widget transport', async (
     includeCartSnapshot: true,
   });
   // The harness network guard denies cart writes, orders, and payments here.
+});
+
+test('does not disclose authorization to a replacement widget origin', async ({
+  page,
+  baseURL,
+}) => {
+  const blockedMessages: string[] = [];
+  page.on('console', (message) => {
+    if (blockedTargetOriginMessages.includes(message.text()))
+      blockedMessages.push(message.text());
+  });
+  const { verifyRequested, verifyResponseSent, releaseVerifyResponse } =
+    await installChatwootFixture(page, baseURL, { holdVerify: true });
+  const trusted = page.frameLocator('#chatwoot_live_chat_widget');
+
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-chatwoot-bridge-ready',
+    'true'
+  );
+  await trusted.getByRole('button', { name: 'Request cart' }).click();
+  await verifyRequested;
+
+  await page
+    .locator('#chatwoot_live_chat_widget')
+    .evaluate((frame: HTMLIFrameElement) => {
+      frame.src = 'https://untrusted.example.test/widget';
+    });
+  const replacement = page.frameLocator('#chatwoot_live_chat_widget');
+  await replacement.getByRole('button', { name: 'Request cart' }).waitFor();
+  await expect(page.locator('#chatwoot_live_chat_widget')).toHaveAttribute(
+    'src',
+    `${untrustedWidgetOrigin}/widget`
+  );
+
+  releaseVerifyResponse();
+  await verifyResponseSent;
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  );
+
+  await expect(replacement.locator('html')).not.toHaveAttribute(
+    'data-authorized-message-seen',
+    'true'
+  );
+  expect(blockedMessages).toHaveLength(1);
+  expect(blockedMessages[0]).toMatch(
+    /https:\/\/support\.example\.test.*https:\/\/untrusted\.example\.test/s
+  );
 });

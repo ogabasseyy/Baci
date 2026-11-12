@@ -1,5 +1,8 @@
 import { test as base, expect } from '@playwright/test';
-import { isFixtureAssetRequest } from './request-allowlist';
+import {
+  isChatwootBridgeFixtureRequest,
+  isFixtureAssetRequest,
+} from './request-allowlist';
 import { order } from './setup';
 
 export const test = base.extend<{
@@ -165,27 +168,13 @@ export const test = base.extend<{
         const isFixtureResumeOrderRead =
           request.method() === 'GET' &&
           url.pathname === `/api/storefront/orders/${order.id}`;
-        const isChatwootBridgeFixturePage =
-          url.origin === harnessOrigin &&
-          url.pathname === '/chatwoot-bridge' &&
-          request.method() === 'GET';
-        const isChatwootWidgetFixture =
-          chatwootBridgeFixtureVisited &&
-          (url.origin === 'https://support.example.test' ||
-            url.origin === 'https://untrusted.example.test') &&
-          url.pathname === '/widget' &&
-          request.method() === 'GET';
-        const isChatwootContextFixture =
-          chatwootBridgeFixtureVisited &&
-          url.origin === harnessOrigin &&
-          /^\/api\/storefront\/chatwoot\/context\/(?:challenge|verify|authorize)$/.test(
-            url.pathname
-          ) &&
-          request.method() === 'POST';
         if (
-          isChatwootBridgeFixturePage ||
-          isChatwootWidgetFixture ||
-          isChatwootContextFixture
+          isChatwootBridgeFixtureRequest({
+            url: request.url(),
+            method: request.method(),
+            harnessOrigin,
+            fixtureVisited: chatwootBridgeFixtureVisited,
+          })
         )
           return route.continue();
         if (

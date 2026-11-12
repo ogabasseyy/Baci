@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { isFixtureAssetRequest } from './request-allowlist';
+import {
+  isChatwootBridgeFixtureRequest,
+  isFixtureAssetRequest,
+} from './request-allowlist';
 
 const request = {
   url: 'http://127.0.0.1:3217/checkout',
@@ -7,6 +10,51 @@ const request = {
   resourceType: 'document',
 };
 afterEach(() => vi.unstubAllEnvs());
+it('limits Chatwoot harness traffic to its exact origins, paths, methods, and visited state', () => {
+  const harnessOrigin = 'http://127.0.0.1:3217';
+  const request = (url: string, method: string, fixtureVisited = true) =>
+    isChatwootBridgeFixtureRequest({
+      url,
+      method,
+      harnessOrigin,
+      fixtureVisited,
+    });
+
+  expect(request(`${harnessOrigin}/chatwoot-bridge`, 'GET', false)).toBe(true);
+  for (const origin of [
+    'https://support.example.test',
+    'https://untrusted.example.test',
+  ])
+    expect(request(`${origin}/widget`, 'GET')).toBe(true);
+  for (const endpoint of ['challenge', 'verify', 'authorize'])
+    expect(
+      request(
+        `${harnessOrigin}/api/storefront/chatwoot/context/${endpoint}?merchantSlug=ogabassey`,
+        'POST'
+      )
+    ).toBe(true);
+
+  expect(request('https://other.example.test/widget', 'GET')).toBe(false);
+  expect(request('https://support.example.test/other', 'GET')).toBe(false);
+  expect(request('https://support.example.test/widget', 'POST')).toBe(false);
+  expect(
+    request(`${harnessOrigin}/api/storefront/chatwoot/context/other`, 'POST')
+  ).toBe(false);
+  expect(
+    request(`${harnessOrigin}/api/storefront/chatwoot/context/challenge`, 'GET')
+  ).toBe(false);
+  expect(request('https://support.example.test/widget', 'GET', false)).toBe(
+    false
+  );
+  expect(
+    request(
+      `${harnessOrigin}/api/storefront/chatwoot/context/challenge`,
+      'POST',
+      false
+    )
+  ).toBe(false);
+});
+
 it('permits fixture navigation and Next RSC navigation', () => {
   expect(isFixtureAssetRequest(request)).toBe(true);
   expect(

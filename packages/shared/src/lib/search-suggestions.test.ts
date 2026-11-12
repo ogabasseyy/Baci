@@ -45,7 +45,7 @@ describe('catalog search suggestions', () => {
       { currency: 'USD' }
     );
     const budget = suggestions.find((item) => item.label.includes('up to'));
-    expect(budget?.label).toBe('iphone up to US$400');
+    expect(budget?.label).toBe('iphone up to $400');
     expect(budget?.proposal.filters.maxPrice).toBe(400);
   });
   it('falls back to a plain code label for unknown currencies', () => {

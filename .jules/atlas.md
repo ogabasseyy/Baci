@@ -11,3 +11,7 @@
 **Learning:** Hardcoded `Intl.NumberFormat('en-NG', { currency: 'NGN' })` in storefront components creates market-readiness drift when merchant context already exposes centralized country/payout currency formatting.
 **Action:** Use the storefront `useCurrency()` hook for purchase-history prices and cover the delegation with a colocated regression test.
 **Source:** MDN Intl.NumberFormat docs and `apps/web/src/hooks/use-currency.ts`, verified 2026-07-01.
+2025-02-14 — Atlas: Extract budget hardcoded format to shared money util
+Learning: Manual en-NG and hardcoded ₦ budget formatting should be routed through formatMoney from @baci/shared/money to support multi-currency seamlessly.
+Action: Replace manual Intl formatting loops with formatMoney and use try/catch to maintain fallback behaviour for unrecognized currencies.
+Source: packages/shared/src/lib/search-suggestions.ts

@@ -1,3 +1,4 @@
+import { formatMoney } from '../money';
 import { normalizeCanonicalProductCondition } from './product-condition';
 import { buildProductSearchQuery } from './product-search';
 import type { SearchAssistanceProposal } from './shopping-assistance';
@@ -20,13 +21,11 @@ function roundBudgetToMagnitude(value: number): number {
 }
 
 function formatBudgetAmount(value: number, currency: string): string {
-  if (currency === 'NGN') return `₦${value.toLocaleString('en-NG')}`;
   try {
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
+    return formatMoney(value, currency, {
       minimumFractionDigits: 0,
-    }).format(value);
+      maximumFractionDigits: 0,
+    });
   } catch {
     return `${currency} ${value.toLocaleString('en')}`;
   }

@@ -58,7 +58,7 @@ describe('SearchAssistance', () => {
         currency="USD"
       />
     );
-    const budget = screen.getByRole('link', { name: 'iphone up to US$400' });
+    const budget = screen.getByRole('link', { name: 'iphone up to $400' });
     expect(budget.getAttribute('href')).toContain('maxPrice=400');
   });
   it('renders nothing while a different query is loading', () => {

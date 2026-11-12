@@ -7,7 +7,9 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   reconcile: vi.fn(),
   alert: vi.fn(),
+  retrieve: vi.fn(),
 }));
+vi.mock('./wallets', () => ({ retrievePiggyvestWallet: mocks.retrieve }));
 vi.mock('./transfers', () => ({ transferToWallet: mocks.transfer }));
 vi.mock('./primary-wallet-savings-transfer-lookup', () => ({
   lookupSavingsTransferReference: mocks.lookup,
@@ -91,4 +93,37 @@ it('pages when a release caps the forfeit into review, and binds evidence reconc
     providerToken: 'token',
     operationId: forfeit.operationId,
   });
+});
+
+const ownWallet = {
+  id: 'interest-wallet',
+  business_id: 'business',
+  api_customer_id: 'ogabassey',
+  currency: 'NGN',
+  status: 'active',
+};
+
+it("accepts only Ogabassey's own active wallet in this business as the interest destination", async () => {
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn(),
+    provider,
+    evidence: null,
+    operationId,
+  });
+  mocks.retrieve.mockResolvedValue(ownWallet);
+  expect(await ports.verifyDestination(forfeit)).toBe(true);
+  for (const wrong of [
+    { business_id: 'another-business' },
+    { api_customer_id: 'customer' },
+    { status: 'frozen' },
+    { id: 'someone-else' },
+  ]) {
+    mocks.retrieve.mockResolvedValue({ ...ownWallet, ...wrong });
+    expect(await ports.verifyDestination(forfeit)).toBe(false);
+  }
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
+    { reason: 'interest_wallet_not_ours', operationId }
+  );
 });

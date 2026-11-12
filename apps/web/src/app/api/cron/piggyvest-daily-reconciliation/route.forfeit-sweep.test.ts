@@ -45,7 +45,8 @@ it('reports the forfeit sweep counts beside the reconciliation report', async ()
   });
 });
 
-it('keeps the sweep counts visible when the reconciliation fails', async () => {
+it('keeps the sweep counts visible and logs the reason when the reconciliation fails', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   mocks.sweep.mockResolvedValue(counts);
   mocks.run.mockRejectedValue(new Error('boom'));
   const response = await GET(request());
@@ -54,6 +55,11 @@ it('keeps the sweep counts visible when the reconciliation fails', async () => {
     error: 'Reconciliation failed',
     forfeitSweep: counts,
   });
+  expect(warn).toHaveBeenCalledWith(
+    '[PiggyVest] Daily reconciliation failed:',
+    'boom'
+  );
+  warn.mockRestore();
 });
 
 it('leaves the report unchanged where the sweep is inert', async () => {

@@ -21,16 +21,24 @@ export function goalCancelForfeitTransfersAllowed(
 
 /**
  * The daily cron's forfeit sweep. Inert (null) wherever the PiggyVest savings
- * credentials are not configured; never throws, so it can not fail the
- * reconciliation report it runs beside. Counts only, never transfer detail.
+ * credentials are not configured; a sweep that fails answers
+ * { status: 'failed' } (and logs the reason). Never throws, so it can not fail
+ * the reconciliation report it runs beside. Counts only, never transfer
+ * detail.
  */
 export async function runScheduledGoalCancelForfeitSweep(
   env: NodeJS.ProcessEnv = process.env,
   sweep: typeof sweepPendingGoalCancelForfeits = sweepPendingGoalCancelForfeits,
   deadlineAt?: number
-): Promise<GoalCancelForfeitSweepResult | null> {
+): Promise<GoalCancelForfeitSweepResult | { status: 'failed' } | null> {
+  let runtime: ReturnType<typeof readPrimaryWalletSavingsRecoveryRuntime>;
   try {
-    const runtime = readPrimaryWalletSavingsRecoveryRuntime(env);
+    runtime = readPrimaryWalletSavingsRecoveryRuntime(env);
+  } catch {
+    // Not configured here: the sweep is inert, not failing.
+    return null;
+  }
+  try {
     return await sweep({
       configuration: runtime.configuration,
       reconciliationConfiguration: runtime.reconciliationConfiguration,
@@ -38,7 +46,12 @@ export async function runScheduledGoalCancelForfeitSweep(
       allowNewTransfers: goalCancelForfeitTransfersAllowed(env),
       ...(deadlineAt === undefined ? {} : { deadlineAt }),
     });
-  } catch {
-    return null;
+  } catch (error) {
+    // A sweep outage is reported, never mistaken for "nothing to do".
+    console.warn(
+      '[PiggyVest] Goal cancel forfeit sweep failed:',
+      error instanceof Error ? error.message : 'unknown error'
+    );
+    return { status: 'failed' };
   }
 }

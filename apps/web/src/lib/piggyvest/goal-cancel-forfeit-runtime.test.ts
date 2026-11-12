@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   reconcile: vi.fn(),
   alert: vi.fn(),
+  retrieve: vi.fn(),
 }));
+vi.mock('./wallets', () => ({ retrievePiggyvestWallet: mocks.retrieve }));
 vi.mock('./transfers', () => ({ transferToWallet: mocks.transfer }));
 vi.mock('./primary-wallet-savings-transfer-lookup', () => ({
   lookupSavingsTransferReference: mocks.lookup,
@@ -47,6 +49,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.transfer.mockResolvedValue({ accepted: true });
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
+  mocks.retrieve.mockResolvedValue({
+    id: 'interest-wallet',
+    business_id: 'business',
+    api_customer_id: 'ogabassey',
+    currency: 'NGN',
+    status: 'active',
+  });
 });
 
 it('sends the interest to the interest wallet and settles it through the evidence login', async () => {
@@ -158,4 +167,11 @@ it('pages once when the third rejected forfeit is capped into review', async () 
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
     { reason: 'forfeit_rejected_three_times', operationId }
   );
+});
+
+it('shows no amounts while the principal is under review', async () => {
+  const s = store(null);
+  expect(
+    await withGoalCancelAmounts(s, operationId, { status: 'needs_review' })
+  ).toEqual({ status: 'needs_review' });
 });

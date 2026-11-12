@@ -1,6 +1,7 @@
 import 'server-only';
 import type { z } from 'zod';
 import { piggyvestGoalCancelForfeitSchemas as schemas } from '@/schemas/piggyvest-goal-cancel-forfeit';
+import { PiggyvestApiError } from './client';
 import { isDefinitiveNoTransferRejection } from './primary-wallet-savings-transfer';
 import type { TransferReferenceLookup } from './transfer-reference-lookup';
 
@@ -23,6 +24,10 @@ export type GoalCancelForfeitOutcome =
 
 interface Ports {
   claim: (operationId: string) => Promise<Claim>;
+  // Checked before the POST: the destination must be Ogabassey's own wallet
+  // in this business (a mistyped configured wallet would send interest to
+  // someone else, irreversibly). False or a failed check sends nothing.
+  verifyDestination: (forfeit: GoalCancelForfeit) => Promise<boolean>;
   transfer: (forfeit: GoalCancelForfeit) => Promise<{ accepted: true }>;
   lookupTransfer: (
     forfeit: GoalCancelForfeit
@@ -56,6 +61,10 @@ export async function driveGoalCancelForfeit(
     return await readStatus(claim.forfeitId, ports);
   if (claim.status !== 'claimed') return claim.status;
   const forfeit = schemas.forfeit.parse(claim.forfeit);
+  // Nothing has been sent yet, so a destination that fails the check is
+  // released (a fresh reference is planned; the third time goes to review).
+  if (!(await ports.verifyDestination(forfeit).catch(() => false)))
+    return await releaseUnsent(forfeit, ports);
   try {
     const response = await ports.transfer(forfeit);
     if (response.accepted !== true) throw new Error('Invalid acceptance');
@@ -80,6 +89,10 @@ async function releaseIfDefinitivelyRejected(
   ports: Pick<Ports, 'lookupTransfer' | 'release'>
 ): Promise<'released' | 'needs_review' | 'pending'> {
   if (!isDefinitiveNoTransferRejection(error)) return 'pending';
+  // The credential was refused or the relay proved it never reached
+  // PiggyVest: no transfer exists, and a lookup would fail in the same
+  // outage (leaving the forfeit dispatched for good), so release now.
+  if (isAuthoritativeNotSent(error)) return await releaseUnsent(forfeit, ports);
   let lookup: TransferReferenceLookup;
   try {
     lookup = await ports.lookupTransfer(forfeit);
@@ -87,6 +100,21 @@ async function releaseIfDefinitivelyRejected(
     return 'pending';
   }
   if (lookup !== 'not_found') return 'pending';
+  return await releaseUnsent(forfeit, ports);
+}
+
+function isAuthoritativeNotSent(error: unknown): boolean {
+  return (
+    error instanceof PiggyvestApiError &&
+    (error.code === 'PIGGYVEST_AUTH_ERROR' ||
+      error.code === 'PIGGYVEST_RELAY_UNAVAILABLE')
+  );
+}
+
+async function releaseUnsent(
+  forfeit: GoalCancelForfeit,
+  ports: Pick<Ports, 'release'>
+): Promise<'released' | 'needs_review' | 'pending'> {
   const released = await ports.release(forfeit.operationId);
   return released === 'not_released' ? 'pending' : released;
 }

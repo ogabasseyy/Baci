@@ -88,16 +88,20 @@ export async function sweepPendingGoalCancelForfeits(input: {
     deferred: 0,
   };
   const now = input.now ?? Date.now;
-  for (const [index, item] of work.entries()) {
-    if (input.deadlineAt !== undefined && now() >= input.deadlineAt) {
-      result.deferred = work.length - index;
-      break;
-    }
+  // The database stamped these alerts while listing, so every one is paged
+  // now, before the deadline can defer its item: a deferred item comes back
+  // unstamped-for-alert next run and the page would otherwise be lost.
+  for (const item of work)
     if (item.alert)
       emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
         reason: 'forfeit_overdue',
         operationId: item.operationId,
       });
+  for (const [index, item] of work.entries()) {
+    if (input.deadlineAt !== undefined && now() >= input.deadlineAt) {
+      result.deferred = work.length - index;
+      break;
+    }
     if (item.state === 'reserved' && !input.allowNewTransfers) {
       result.skipped += 1;
       continue;

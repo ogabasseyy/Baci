@@ -56,8 +56,9 @@ export async function withGoalCancelAmounts<T extends { status: string }>(
 ): Promise<
   T & { amounts?: { principalKobo: number; forfeitedInterestKobo: number } }
 > {
-  if (!['confirmed', 'pending', 'needs_review'].includes(result.status))
-    return result;
+  // Not while the principal is under review: the provider moved money the
+  // database refused to settle, so "back to your wallet" is not yet true.
+  if (!['confirmed', 'pending'].includes(result.status)) return result;
   const amounts = await store.readAmounts(operationId).catch(() => null);
   return amounts ? { ...result, amounts } : result;
 }

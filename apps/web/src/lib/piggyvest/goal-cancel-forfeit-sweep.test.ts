@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   reconcile: vi.fn(),
   alert: vi.fn(),
+  retrieve: vi.fn(),
 }));
+vi.mock('./wallets', () => ({ retrievePiggyvestWallet: mocks.retrieve }));
 vi.mock('./primary-wallet-savings-executor', () => ({
   createPrimaryWalletSavingsExecutor: () => mocks.execute,
 }));
@@ -57,6 +59,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.transfer.mockResolvedValue({ accepted: true });
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
+  mocks.retrieve.mockResolvedValue({
+    id: 'interest-wallet',
+    business_id: 'business',
+    api_customer_id: 'ogabassey',
+    currency: 'NGN',
+    status: 'active',
+  });
 });
 
 describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
@@ -183,4 +192,18 @@ it('starts no new forfeit once the deadline has passed', async () => {
   });
   expect(result).toMatchObject({ listed: 2, confirmed: 1, deferred: 1 });
   expect(mocks.transfer).toHaveBeenCalledOnce();
+});
+
+it('pages an overdue forfeit even when the deadline defers its item', async () => {
+  db([{ operationId: opB, state: 'dispatched', alert: true }]);
+  const result = await sweepPendingGoalCancelForfeits({
+    ...input(true),
+    deadlineAt: 0,
+    now: () => 1,
+  });
+  expect(result).toMatchObject({ listed: 1, deferred: 1 });
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'forfeit_overdue', operationId: opB }
+  );
 });

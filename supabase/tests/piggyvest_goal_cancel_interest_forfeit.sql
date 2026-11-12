@@ -448,6 +448,81 @@ BEGIN
 END
 $worker$;
 
+-- 15. Interest PiggyVest pays into the goal wallet after the cancel is
+--     forfeited too: it plans (or merges into) an unsent forfeit, and a
+--     payout to a goal with no live cancel plans nothing.
+SET LOCAL session_replication_role = replica;
+INSERT INTO piggyvest_primary.paid_interest_crosswalks(id, integration_id, goal_id, api_wallet_id,
+  api_customer_id, onboarding_customer_id, webhook_customer_id, source_wallet_id, accrued_wallet_id,
+  destination_wallet_id, envelope_destination_wallet_id, provider_evidence_sha256,
+  policy_evidence_sha256, policy_reference, allocation_policy, enabled)
+VALUES ('f3860000-0000-4000-8000-0000000000c1', 'f3860000-0000-4000-8000-000000000006',
+  'f3860000-0000-4000-8000-000000000005', 'gf-api-wallet', 'gf-api-customer', 'gf-onboarding-customer',
+  'gf-webhook-customer', 'gf-source', 'gf-accrued', 'synthetic-goalcancel-goal-wallet', NULL,
+  repeat('a', 64), repeat('b', 64), 'synthetic-goal-cancel-forfeit-fixture',
+  'provider_net_is_customer_plan_interest', true);
+SET LOCAL session_replication_role = origin;
+CREATE FUNCTION pg_temp.gf_receipt(p_payout text, p_net bigint) RETURNS void LANGUAGE sql AS $$
+  INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
+    goal_id, merchant_id, customer_id, net_kobo, financial_identity, body_digest)
+  VALUES ('f3860000-0000-4000-8000-000000000006', p_payout, 'f3860000-0000-4000-8000-0000000000c1',
+    'f3860000-0000-4000-8000-000000000005', 'f3860000-0000-4000-8000-000000000002',
+    'f3860000-0000-4000-8000-000000000003', p_net, jsonb_build_object('payoutId', p_payout), repeat('a', 64));
+$$;
+DO $late$
+DECLARE
+  c_goal constant text := 'f3860000-0000-4000-8000-000000000005';
+  c_integration constant uuid := 'f3860000-0000-4000-8000-000000000006';
+  v_scope jsonb := pg_temp.gc_scope();
+  v_op text;
+  v_forfeit text;
+BEGIN
+  DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits;
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+   WHERE id = c_goal::uuid;
+  -- No live cancel: an ordinary payout plans nothing.
+  PERFORM pg_temp.gf_receipt('gf-before', 700);
+  PERFORM pg_temp.gc_assert(NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits),
+    'a payout to a goal with no cancel planned a forfeit');
+  v_op := pg_temp.gc_reserved('late');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'late split');
+  -- Paid while the principal is in flight: merges into the unsent forfeit.
+  PERFORM pg_temp.gf_receipt('gf-during', 500);
+  PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 1
+    AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12500,
+    'interest paid during the cancel was not merged into the unsent forfeit');
+  PERFORM pg_temp.gc_assert(
+    pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12500}'::jsonb) = 'confirmed',
+    'the principal did not settle with the merged interest still in the goal wallet');
+  PERFORM piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid);
+  v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+  -- Paid after the forfeit was sent: a second, separate forfeit is planned.
+  PERFORM pg_temp.gf_receipt('gf-after', 300);
+  PERFORM pg_temp.gc_assert(
+    (SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits
+      WHERE cancel_operation_id = v_op::uuid AND state = 'reserved' AND amount_kobo = 300) = 1
+    AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'pending',
+    'late interest after the forfeit was sent was not planned, or the in-flight one was not read first');
+  -- The goal wallet still holding the planned 300 is expected, more is not.
+  BEGIN
+    PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
+        pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":301}'::jsonb) = 'conflict',
+      'a residual above the planned late forfeit was not reviewed');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
+      pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":300}'::jsonb) = 'confirmed',
+    'the first forfeit did not settle while the late one was still planned');
+  -- The planned late forfeit is next.
+  PERFORM pg_temp.gc_assert(
+    (piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) #>> '{forfeit,amountKobo}')::bigint = 300,
+    'the late forfeit was not claimed after the first settled');
+END
+$late$;
+
 -- 13. Catalog: both new tables are row-level-secured and closed; every new
 --     function is SECURITY DEFINER with an empty search_path and not PUBLIC.
 DO $catalog$
@@ -486,7 +561,8 @@ BEGIN
     'piggyvest_primary.settle_goal_cancel_forfeit(uuid,text,jsonb)',
     'piggyvest_primary.release_failed_goal_cancel_forfeit(uuid,text,jsonb)',
     'piggyvest_primary.release_unsent_goal_cancel_forfeit()',
-    'piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()'
+    'piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()',
+    'piggyvest_primary.plan_forfeit_for_late_goal_interest()'
   ] LOOP
     v_oid := v_signature::regprocedure;
     PERFORM pg_temp.gc_assert((SELECT proc.prosecdef AND proc.proconfig @> ARRAY['search_path=""']

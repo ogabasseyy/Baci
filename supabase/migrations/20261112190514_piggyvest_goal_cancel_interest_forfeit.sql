@@ -56,6 +56,9 @@ BEGIN
     OR to_regprocedure('piggyvest_primary.goal_cancel_proof_valid(jsonb)') IS NULL THEN
     RAISE EXCEPTION 'goal cancel refund schema missing; apply 20261103085004 first';
   END IF;
+  IF to_regclass('piggyvest_primary.paid_interest_receipts') IS NULL THEN
+    RAISE EXCEPTION 'paid interest receipts missing; apply 20261007212100 first';
+  END IF;
 END $guard$;
 
 -- 1. Ogabassey's PiggyVest wallet that receives forfeited goal interest, one
@@ -105,9 +108,13 @@ CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   CHECK (state = 'reserved' OR state = 'released' OR state = 'needs_review' OR dispatched_at IS NOT NULL),
   CHECK (state <> 'confirmed' OR provider_transaction_id IS NOT NULL)
 );
+-- At most one planned and one in-flight forfeit per cancel attempt. A cancel
+-- can forfeit more than once: interest PiggyVest pays into the goal wallet
+-- after the cancel is planned (section 8b) becomes another forfeit, and a
+-- later plan merges into an unsent one.
 CREATE UNIQUE INDEX goal_cancel_forfeit_one_live_idx
-  ON piggyvest_primary.goal_cancel_interest_forfeits (cancel_operation_id)
-  WHERE state IN ('reserved', 'dispatched', 'confirmed', 'needs_review');
+  ON piggyvest_primary.goal_cancel_interest_forfeits (cancel_operation_id, state)
+  WHERE state IN ('reserved', 'dispatched');
 CREATE UNIQUE INDEX goal_cancel_forfeit_provider_transaction_idx
   ON piggyvest_primary.goal_cancel_interest_forfeits (integration_id, provider_transaction_id)
   WHERE provider_transaction_id IS NOT NULL;
@@ -501,7 +508,10 @@ BEGIN
   VALUES (v_forfeit.cancel_operation_id, v_forfeit.integration_id, v_forfeit.intent_id, v_forfeit.goal_id,
     'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_forfeit.goal_id),
     v_forfeit.source_wallet_id, COALESCE(v_wallet, v_forfeit.destination_wallet_id),
-    v_forfeit.amount_kobo, pg_catalog.clock_timestamp());
+    v_forfeit.amount_kobo, pg_catalog.clock_timestamp())
+  ON CONFLICT (cancel_operation_id, state) WHERE state IN ('reserved', 'dispatched')
+  DO UPDATE SET amount_kobo = LEAST(9999999999,
+    piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo);
   RETURN 'released';
 END;
 $$;
@@ -554,9 +564,14 @@ BEGIN
   SELECT op.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS op
    WHERE op.id = p_operation_id;
   IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('status', 'none'); END IF;
+  -- In-flight first (read its status, never send twice), then unsent, then
+  -- review; confirmed only when nothing else is left for this attempt.
   SELECT forfeit.* INTO v_forfeit FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.cancel_operation_id = v_operation.id
      AND forfeit.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')
+   ORDER BY CASE forfeit.state WHEN 'dispatched' THEN 0 WHEN 'reserved' THEN 1
+                               WHEN 'needs_review' THEN 2 ELSE 3 END, forfeit.reserved_at DESC
+   LIMIT 1
      FOR UPDATE;
   IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('status', 'none'); END IF;
   IF v_forfeit.state = 'confirmed' THEN
@@ -706,7 +721,10 @@ BEGIN
   END IF;
   v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
   WITH work AS (
-    SELECT forfeit.id, forfeit.cancel_operation_id, forfeit.state,
+    SELECT pg_catalog.row_number() OVER (
+             ORDER BY (forfeit.state = 'reserved') DESC, (forfeit.alerted_at IS NOT NULL),
+                      forfeit.reserved_at, forfeit.id) AS rank,
+           forfeit.id, forfeit.cancel_operation_id, forfeit.state,
            forfeit.state = 'dispatched' AND forfeit.alerted_at IS NULL
              AND forfeit.dispatched_at < pg_catalog.clock_timestamp() - interval '1 day' AS overdue
       FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
@@ -724,7 +742,7 @@ BEGIN
   )
   SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'operationId', work.cancel_operation_id, 'state', work.state,
-      'alert', work.id IN (SELECT stamped.id FROM stamped)) ORDER BY work.cancel_operation_id), '[]'::jsonb)
+      'alert', work.id IN (SELECT stamped.id FROM stamped)) ORDER BY work.rank), '[]'::jsonb)
     INTO v_result FROM work;
   RETURN v_result;
 END;
@@ -955,7 +973,13 @@ BEGIN
                   AND funding.provider_transaction_id = proof ->> 'providerTransactionId') THEN
     RETURN 'conflict';
   END IF;
-  v_review := COALESCE((proof ->> 'residualKobo')::bigint, 0) > 0;
+  -- Money left in the goal wallet is expected only for this cancel's other
+  -- planned or in-flight forfeits (interest paid after the cancel).
+  v_review := COALESCE((proof ->> 'residualKobo')::bigint, 0) > (
+    SELECT COALESCE(pg_catalog.sum(other.amount_kobo), 0)
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS other
+     WHERE other.cancel_operation_id = v_forfeit.cancel_operation_id AND other.id <> v_forfeit.id
+       AND other.state IN ('reserved', 'dispatched'));
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
      SET state = CASE WHEN v_review THEN 'needs_review' ELSE 'confirmed' END,
          provider_transaction_id = proof ->> 'providerTransactionId',
@@ -1028,6 +1052,50 @@ CREATE TRIGGER release_unsent_goal_cancel_forfeit
   FOR EACH ROW WHEN (NEW.state IN ('released', 'reviewed') AND OLD.state IS DISTINCT FROM NEW.state)
   EXECUTE FUNCTION piggyvest_primary.release_unsent_goal_cancel_forfeit();
 
+-- 8b. Interest PiggyVest pays into a goal wallet after an early cancel was
+-- dispatched or confirmed is forfeited too: each such payout plans (or merges
+-- into) an unsent forfeit of the cancel, which the sweep sends once the
+-- principal is confirmed. Never raises: a payout is never refused because of
+-- this; with no interest wallet ever configured (a cancel that owed no
+-- interest) nothing is planned and the payout stays in the goal wallet.
+CREATE FUNCTION piggyvest_primary.plan_forfeit_for_late_goal_interest()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
+  v_wallet text;
+BEGIN
+  IF NEW.net_kobo IS NULL OR NEW.net_kobo < 1 OR NEW.net_kobo > 9999999999 THEN RETURN NEW; END IF;
+  SELECT cancel.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS cancel
+   WHERE cancel.goal_id = NEW.goal_id AND cancel.integration_id = NEW.integration_id
+     AND cancel.state IN ('dispatched', 'confirmed')
+   ORDER BY cancel.dispatched_at DESC LIMIT 1;
+  IF NOT FOUND THEN RETURN NEW; END IF;
+  SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
+   WHERE wallet.integration_id = v_operation.integration_id;
+  IF NOT FOUND OR v_wallet = v_operation.source_wallet_id
+    OR v_wallet = v_operation.destination_wallet_id THEN
+    RETURN NEW;
+  END IF;
+  INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+    cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+    source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+  VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+    'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+    v_operation.source_wallet_id, v_wallet, NEW.net_kobo, pg_catalog.clock_timestamp())
+  ON CONFLICT (cancel_operation_id, state) WHERE state IN ('reserved', 'dispatched')
+  DO UPDATE SET amount_kobo = LEAST(9999999999,
+    piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo);
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER plan_forfeit_for_late_goal_interest
+  AFTER INSERT ON piggyvest_primary.paid_interest_receipts
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.plan_forfeit_for_late_goal_interest();
+
 -- A customer may not be deleted while a forfeit is planned or in flight:
 -- sending and settlement join the live intent and customer.
 CREATE FUNCTION piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()
@@ -1074,6 +1142,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.settle_goal_cancel_forfeit(uuid, text, jsonb),
   piggyvest_primary.release_failed_goal_cancel_forfeit(uuid, text, jsonb),
   piggyvest_primary.release_unsent_goal_cancel_forfeit(),
+  piggyvest_primary.plan_forfeit_for_late_goal_interest(),
   piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 

@@ -3,6 +3,7 @@ import type { driveGoalCancelForfeit } from './goal-cancel-forfeit';
 import { runGoalCancelForfeitReconciliation } from './goal-cancel-forfeit-reconciliation';
 import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
 import { transferToWallet } from './transfers';
+import { retrievePiggyvestWallet } from './wallets';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Ports = Parameters<typeof driveGoalCancelForfeit>[1];
@@ -42,6 +43,31 @@ export function forfeitDriverPorts(input: {
           }
         );
       return claim;
+    },
+    verifyDestination: async (forfeit) => {
+      const wallet = (await retrievePiggyvestWallet(
+        provider,
+        forfeit.destinationWalletId
+      )) as Partial<
+        Record<
+          'id' | 'business_id' | 'api_customer_id' | 'currency' | 'status',
+          unknown
+        >
+      >;
+      // Ogabassey's own active NGN wallet in this business, never the
+      // customer's (a mistyped configuration is refused and paged).
+      const ours =
+        wallet.id === forfeit.destinationWalletId &&
+        wallet.business_id === forfeit.businessId &&
+        wallet.api_customer_id !== forfeit.providerCustomerId &&
+        wallet.currency === 'NGN' &&
+        wallet.status === 'active';
+      if (!ours)
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
+          reason: 'interest_wallet_not_ours',
+          operationId,
+        });
+      return ours;
     },
     transfer: async (forfeit) =>
       await transferToWallet(provider, {

@@ -81,7 +81,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
     id,
-    api_customer_id: 'customer',
+    api_customer_id: id === 'interest-wallet' ? 'ogabassey' : 'customer',
     business_id: 'business',
     currency: 'NGN',
     status: 'active',

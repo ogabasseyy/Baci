@@ -72,8 +72,16 @@ it('is inert where the savings credentials are not configured', async () => {
   expect(sweep).not.toHaveBeenCalled();
 });
 
-it('never throws when the sweep fails', async () => {
+it('reports a failed sweep distinctly from an inert one, and never throws', async () => {
   mocks.live.mockReturnValue(runtime);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   const sweep = vi.fn().mockRejectedValue(new Error('db down'));
-  expect(await runScheduledGoalCancelForfeitSweep(env, sweep)).toBeNull();
+  expect(await runScheduledGoalCancelForfeitSweep(env, sweep)).toEqual({
+    status: 'failed',
+  });
+  expect(warn).toHaveBeenCalledWith(
+    '[PiggyVest] Goal cancel forfeit sweep failed:',
+    'db down'
+  );
+  warn.mockRestore();
 });

@@ -24,7 +24,12 @@ export async function GET(request: Request) {
   > | null = null;
   try {
     report = await runPiggyvestDailyReconciliation();
-  } catch {
+  } catch (error) {
+    // The reason only (never wallet or transfer detail), then the sweep runs.
+    console.warn(
+      '[PiggyVest] Daily reconciliation failed:',
+      error instanceof Error ? error.message : 'unknown error'
+    );
     report = null;
   }
   const forfeitSweep = await runScheduledGoalCancelForfeitSweep(

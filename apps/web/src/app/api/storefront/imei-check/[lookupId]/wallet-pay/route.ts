@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
@@ -31,7 +32,7 @@ export async function POST(
   const parsed = imeiWalletPaySchemas.payRequest.safeParse(
     await request.json().catch(() => null)
   );
-  if (!parsed.success || !/^[0-9a-f-]{36}$/.test(lookupId))
+  if (!parsed.success || !z.uuid().safeParse(lookupId).success)
     return refuse('Invalid payment request.', 'INVALID_INPUT', 400);
   try {
     return await payImeiWalletPayment(

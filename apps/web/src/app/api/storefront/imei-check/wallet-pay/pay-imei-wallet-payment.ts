@@ -1,11 +1,11 @@
 import 'server-only';
-import { createHmac } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { z } from 'zod';
 import type { WalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import type { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
-import type { ImeiLookupRow } from '../route-helpers';
+import { hashImei, type ImeiLookupRow } from '../route-helpers';
+import { normalizeForLookup } from './normalize-for-lookup';
 
 type Identity = { merchantId: string; customerId: string; userId: string };
 type Scope = ReturnType<typeof walletPayScope>;
@@ -133,12 +133,9 @@ export async function payImeiWalletPayment(
       'IMEI_HASH_SALT_MISSING',
       503
     );
-  // Serials are case-folded by the IMEI route; IMEIs are digits.
-  const normalizedImei = body.imei.toUpperCase();
-  if (
-    createHmac('sha256', salt).update(normalizedImei).digest('hex') !==
-    lookup.imei_hash
-  )
+  // The same normalisation and hash the IMEI route used to create the lookup.
+  const normalizedImei = normalizeForLookup(body.imei, lookup);
+  if (hashImei(normalizedImei, salt) !== lookup.imei_hash)
     return refuse(
       'This IMEI does not match the check you paid for.',
       'IMEI_MISMATCH',

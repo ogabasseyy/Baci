@@ -35,11 +35,10 @@ import {
   findLookupByIdempotencyKey,
   hashImei,
   json,
-  mapExistingLookup,
   mapExistingTerminalLookupWithoutImeiHash,
   UUID_PATTERN,
 } from './route-helpers';
-import { runImeiLookup } from './run-imei-lookup';
+import { replayFor, runImeiLookup } from './run-imei-lookup';
 
 const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<string>(
   PUBLIC_IMEI_SERVICE_TIERS
@@ -244,9 +243,8 @@ export async function POST(request: NextRequest) {
       supabaseAdmin,
       idempotencyKey
     );
-    if (existingLookup) {
-      return mapExistingLookup(existingLookup, replayContext);
-    }
+    const replay = replayFor(existingLookup, bodyParse.data, replayContext);
+    if (replay) return replay;
 
     const prepared = await prepareImeiProvider({
       access: supabaseAdmin,

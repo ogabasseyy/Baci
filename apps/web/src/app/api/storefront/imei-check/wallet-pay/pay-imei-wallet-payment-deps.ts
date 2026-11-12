@@ -80,6 +80,11 @@ export function createPayImeiWalletPaymentDeps(auth: {
           claim: delivery.claim,
           finish: delivery.finish,
           refund: (paymentId) => refundWalletPayment({ runtime, paymentId }),
+          readStatus: async (lookupId) => {
+            const { data, error } = await supabaseAdmin.readStatus(lookupId);
+            if (error) throw new Error('IMEI lookup read failed');
+            return (data as { status?: string } | null)?.status ?? null;
+          },
           prepare: (row) =>
             prepareImeiProvider({
               access: supabaseAdmin,

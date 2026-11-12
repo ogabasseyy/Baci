@@ -43,6 +43,7 @@ function deps(overrides: Record<string, unknown> = {}) {
       order.push('refund');
       return 'pending' as const;
     }),
+    readStatus: vi.fn(async () => 'completed'),
     prepare: vi.fn(async () => ({
       binding: { provider: 'sickw' },
       provider: { submit },
@@ -176,5 +177,67 @@ describe('deliverPaidImeiLookup', () => {
     expect(response.status).toBe(502);
     expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
     expect(submit).not.toHaveBeenCalled();
+  });
+  it('refunds a reclaimed delivery instead of buying the Sickw check twice', async () => {
+    const d = deps({
+      claim: vi.fn(async () => ({
+        status: 'reclaimed' as const,
+        purpose: 'imei_check' as const,
+        purchaseRef: LOOKUP,
+        amountKobo: 50000,
+        claimToken: 'tok-2',
+      })),
+    });
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(502);
+    expect(submit).not.toHaveBeenCalled();
+    expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
+    expect(d.finish).toHaveBeenCalledWith(OP, 'failed', 'tok-2');
+  });
+
+  it('persists the refunded outcome when an earlier refund cache write was lost', async () => {
+    for (const status of ['refund_owed', 'refunded'] as const) {
+      order.length = 0;
+      const d = deps({ claim: vi.fn(async () => ({ status })) });
+      const response = await deliverPaidImeiLookup(base, d);
+      expect(response.status).toBe(502);
+      expect(order).toEqual(['cache:refunded_error']);
+      expect(d.finish).not.toHaveBeenCalled();
+    }
+  });
+
+  it('does not record delivery when the result was not durably saved', async () => {
+    submit.mockResolvedValue({
+      kind: 'complete',
+      body: {},
+      rawResponseText: 'x',
+      providerStatus: 's',
+      status: 200,
+    });
+    const d = deps({ readStatus: vi.fn(async () => 'pending') });
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(200);
+    expect(d.finish).not.toHaveBeenCalled();
+  });
+
+  it('retries recording a failed delivery once before refunding', async () => {
+    submit.mockResolvedValue({
+      kind: 'failure',
+      body: { code: 'ERR', error: 'x', success: false },
+      providerStatus: 'e',
+      refundReason: 'error',
+      status: 502,
+    });
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('db'))
+      .mockImplementation(async (_op: string, outcome: string) => {
+        order.push(`finish:${outcome}`);
+        return 'refund_owed';
+      });
+    const d = deps({ finish });
+    await deliverPaidImeiLookup(base, d);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
   });
 });

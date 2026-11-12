@@ -1,4 +1,4 @@
--- Contract tests for 20261111140000_piggyvest_credit_pvb_reference_key:
+-- Contract tests for 20261112050000_piggyvest_credit_pvb_reference_key:
 -- PiggyVest (2026-11-11) named pvb_reference as a credit's unique key. The
 -- intake functions must require it, dedupe on it (first writer wins even when
 -- the internal id differs), still refuse a reused internal id, and read by

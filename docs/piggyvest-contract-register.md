@@ -32,7 +32,7 @@ All fixtures in colocated tests use synthetic identifiers.
   (`bankTransferInflowSuccessEventSchema`), colocated tests pass.
 - Ledger (implemented 17 Sep 2026; key changed 2026-11-11, §8):
   `piggyvest_inflow_credits` dedupes on `pvb_reference` (unique column,
-  migration `20261111140000`). `eventData.transaction_id` is kept as a
+  migration `20261112050000`). `eventData.transaction_id` is kept as a
   still-unique audit column and as the plan-transfer projection key of the
   first writer. Previously it deduped on `eventData.transaction_id`.
   Positive amount enforced in app code and by

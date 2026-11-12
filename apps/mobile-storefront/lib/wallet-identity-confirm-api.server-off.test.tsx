@@ -14,6 +14,7 @@ jest.mock('./supabase', () => ({
   supabase: {
     auth: {
       setSession: jest.fn(),
+      getSession: jest.fn(),
       mfa: { getAuthenticatorAssuranceLevel: jest.fn() },
     },
   },
@@ -31,9 +32,16 @@ const level = (nextLevel: string) =>
     error: null,
   });
 
+const activeUser = (id: string | null) =>
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: id ? { user: { id } } : null },
+    error: null,
+  });
+
 beforeEach(() => {
   jest.resetAllMocks();
   level('aal1');
+  activeUser('user-1');
 });
 
 // It only uses the normal sign-in code endpoints, which work whether or not
@@ -164,4 +172,29 @@ it('decodes the token without a global atob', () => {
   } finally {
     globalThis.atob = original;
   }
+});
+
+it('bugfix: never switches the app back when another account signed in meanwhile', async () => {
+  verify.mockResolvedValue({
+    success: true,
+    data: { access_token: tokenFor('user-1'), refresh_token: 'r' },
+  });
+  activeUser('user-2');
+  await expect(
+    confirmIdentityCode({
+      email: 'a@b.co',
+      code: '1',
+      expectedUserId: 'user-1',
+    })
+  ).rejects.toThrow('switched accounts');
+  expect(setSession).not.toHaveBeenCalled();
+  activeUser(null);
+  await expect(
+    confirmIdentityCode({
+      email: 'a@b.co',
+      code: '1',
+      expectedUserId: 'user-1',
+    })
+  ).rejects.toThrow('switched accounts');
+  expect(setSession).not.toHaveBeenCalled();
 });

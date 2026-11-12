@@ -5,6 +5,8 @@ import { supabase } from './supabase';
 const OTHER_ACCOUNT =
   'This code belongs to a different account. Please try again.';
 const NOT_CONFIRMED = 'We could not confirm it is you. Please try again.';
+const ACCOUNT_CHANGED =
+  'You switched accounts while we were checking. Please try again.';
 const CHECK_FAILED =
   "We couldn't check your account just now. Please try again.";
 const SECOND_FACTOR_REQUIRED =
@@ -72,6 +74,11 @@ export async function confirmIdentityCode(input: {
   if (!result.success) throw new Error(result.error);
   if (accessTokenSubject(result.data.access_token) !== input.expectedUserId)
     throw new Error(OTHER_ACCOUNT);
+  // The customer may have signed in to another account while the code was
+  // being checked: never switch the app back to the earlier one.
+  const { data: current } = await supabase.auth.getSession();
+  if (current.session?.user.id !== input.expectedUserId)
+    throw new Error(ACCOUNT_CHANGED);
   const { data, error } = await supabase.auth.setSession({
     access_token: result.data.access_token,
     refresh_token: result.data.refresh_token,

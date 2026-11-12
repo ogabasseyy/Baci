@@ -7,9 +7,11 @@ import { useCartCheckoutRecovery } from './use-cart-checkout-recovery';
 export function useCartCheckoutFlow({
   isAuthenticated,
   isPriceChangeVisible,
+  hasCart = true,
 }: {
   isAuthenticated: boolean;
   isPriceChangeVisible: boolean;
+  hasCart?: boolean;
 }) {
   const {
     isOpen: isIdentityModalOpen,
@@ -18,16 +20,24 @@ export function useCartCheckoutFlow({
   } = useCheckoutIdentityOverlay();
   const isRouteFocused = useIsFocused();
   const isPriceChangeVisibleRef = useRef(isPriceChangeVisible);
+  const ownsIdentityModal = useRef(false);
 
   useLayoutEffect(() => {
     isPriceChangeVisibleRef.current = isPriceChangeVisible;
   }, [isPriceChangeVisible]);
 
   useEffect(() => {
-    // Losing Cart focus cancels its identity continuation; a later auth result
-    // must not push Checkout over the route the customer moved to.
-    if (!isRouteFocused && isIdentityModalOpen) closeCheckoutIdentity();
-  }, [closeCheckoutIdentity, isIdentityModalOpen, isRouteFocused]);
+    if (!isIdentityModalOpen) {
+      ownsIdentityModal.current = false;
+      return;
+    }
+    // Only the Cart route that opened the global sheet may close it. Other
+    // mounted Cart routes can be unfocused while this owner is still active.
+    if (ownsIdentityModal.current && (!isRouteFocused || !hasCart)) {
+      ownsIdentityModal.current = false;
+      closeCheckoutIdentity();
+    }
+  }, [closeCheckoutIdentity, hasCart, isIdentityModalOpen, isRouteFocused]);
 
   const { recoverCheckout, isPreparing } = useCartCheckoutRecovery(() => {
     if (isPriceChangeVisibleRef.current) return;
@@ -35,6 +45,7 @@ export function useCartCheckoutFlow({
       router.push('/checkout');
       return;
     }
+    ownsIdentityModal.current = true;
     openCheckoutIdentity(onCheckoutIdentityVerified, () => {
       void recoverCheckout(() => {
         if (!isPriceChangeVisibleRef.current) router.push('/checkout');

@@ -126,6 +126,7 @@ export default function CartScreen({
     );
   }, 0);
   const grandTotal = subtotal + assuranceTotal;
+  const statusOnly = useCartStatusOnly(items.length);
   const {
     showNegotiateWarning,
     setShowNegotiateWarning,
@@ -153,7 +154,11 @@ export default function CartScreen({
     markDismissed: dismissPriceChangeModal,
   } = usePriceChangeDismissal(isPriceChangeVisible);
   const { isIdentityModalOpen, isPreparing, recoverCheckout } =
-    useCartCheckoutFlow({ isAuthenticated, isPriceChangeVisible });
+    useCartCheckoutFlow({
+      isAuthenticated,
+      isPriceChangeVisible,
+      hasCart: !hasCartLoadError && !statusOnly && items.length > 0,
+    });
   const handleCheckout = () => {
     triggerHaptic();
     void recoverCheckout();
@@ -174,7 +179,6 @@ export default function CartScreen({
       });
   };
 
-  const statusOnly = useCartStatusOnly(items.length);
   if (hasCartLoadError) {
     return (
       <CartStateView

@@ -81,4 +81,18 @@ describe('useAutoRetrySetup with PiggyVest off', () => {
       expect(second.result.current.exhausted).toBe(false);
     });
   });
+
+  it('gives the try back when the retry throws before sending', async () => {
+    const retry = jest.fn().mockRejectedValue(new Error('offline'));
+    const { result, rerender } = renderHook(
+      ({ submitting }: { submitting: boolean }) =>
+        useAutoRetrySetup({ active: true, submitting, scopeKey: 'c', retry }),
+      { initialProps: { submitting: false } }
+    );
+    await act(async () => {});
+    rerender({ submitting: true });
+    rerender({ submitting: false });
+    await act(async () => {});
+    expect(result.current.exhausted).toBe(false);
+  });
 });

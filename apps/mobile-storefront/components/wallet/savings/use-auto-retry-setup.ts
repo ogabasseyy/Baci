@@ -29,19 +29,22 @@ export function useAutoRetrySetup({
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry is a fresh closure each render; the scope and state identify the attempt.
   useEffect(() => {
     if (!active || submitting || exhausted) return;
-    // Spend a try now (so this effect never sends twice), and give it back
-    // if the setup hook deduped the call: only real sends count.
+    // Spend a try now (so this effect never sends twice); only real sends
+    // keep it spent.
     setTries({ scopeKey, count: count + 1 });
+    const giveBack = () =>
+      setTries((current) =>
+        current.scopeKey === scopeKey
+          ? { scopeKey, count: Math.max(0, current.count - 1) }
+          : current
+      );
+    // A deduped call (false) or one that threw before sending gives the try
+    // back; a real send that failed still counts (its status is re-read).
     void retry()
       .then((sent) => {
-        if (!sent)
-          setTries((current) =>
-            current.scopeKey === scopeKey
-              ? { scopeKey, count: Math.max(0, current.count - 1) }
-              : current
-          );
+        if (!sent) giveBack();
       })
-      .catch(() => undefined);
+      .catch(giveBack);
   }, [active, submitting, exhausted, scopeKey]);
 
   return { exhausted };

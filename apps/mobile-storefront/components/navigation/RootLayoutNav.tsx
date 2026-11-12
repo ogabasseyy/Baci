@@ -20,7 +20,7 @@ import { renderRootStackScreens } from '@/components/navigation/RootStackScreens
 import { RouteResumeController } from '@/components/navigation/RouteResumeController';
 import { getRootStackScreenOptions } from '@/components/navigation/root-stack-screen-options';
 import AppKeyboardProvider from '@/components/ui/AppKeyboardProvider';
-import { StartupMotionProvider } from '@/components/ui/StartupMotionContext';
+import { StartupMotionProvider } from '@/components/ui/StartupMotionProvider';
 import { MobileUpdateController } from '@/components/updates/MobileUpdateController';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';

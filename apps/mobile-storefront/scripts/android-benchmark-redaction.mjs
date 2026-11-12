@@ -6,11 +6,16 @@ function escapeRegExp(value) {
 
 function getPrivateValueVariants(value) {
   const encoded = encodeURIComponent(value);
+  const encodedWithLowercaseEscapes = encoded.replace(
+    /%[0-9A-F]{2}/g,
+    (escape) => escape.toLowerCase()
+  );
   const jsonEscaped = JSON.stringify(value).slice(1, -1);
   const base64 = Buffer.from(value).toString('base64');
   return new Set([
     value,
     encoded,
+    encodedWithLowercaseEscapes,
     encoded.replaceAll('%20', '+'),
     jsonEscaped,
     base64,

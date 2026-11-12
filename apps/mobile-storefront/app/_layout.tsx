@@ -17,7 +17,6 @@ import { useNativeSplashHandoff } from '@/hooks/use-native-splash-handoff';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
-import { verifyBenchmarkTelemetry } from '@/lib/benchmark-telemetry-check';
 import {
   installCrashDiagnostics,
   recordCrashBreadcrumb,
@@ -27,6 +26,7 @@ import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-o
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
 import { markStartupTiming } from '@/lib/startup-timing';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
+import { verifyBenchmarkTelemetry } from '@/lib/verify-benchmark-telemetry';
 import { initAnalytics } from '@/services/analytics';
 import { useAuthStore } from '@/stores/auth-store';
 

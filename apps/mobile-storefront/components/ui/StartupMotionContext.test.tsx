@@ -1,9 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import {
-  StartupMotionProvider,
-  useStartupMotionEnabled,
-} from './StartupMotionContext';
+import { StartupMotionProvider } from './StartupMotionProvider';
+import { useStartupMotionEnabled } from './useStartupMotionEnabled';
 
 it('enables motion by default', () => {
   expect(renderHook(() => useStartupMotionEnabled()).result.current).toBe(true);

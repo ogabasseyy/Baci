@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import SplashMotion from 'react-native-splash-motion';
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { markStartupTiming } from '@/lib/startup-timing';
+import { SPLASH_TIMEOUT_MS } from './splash-constants';
 
 // Allow the six-second intro to finish within the startup recovery deadline.
-export const SPLASH_TIMEOUT_MS = 8_000;
-
 /** Native playback owns this boundary; app rendering must not race its frames. */
 export function useNativeSplashIntro(initialVisible: boolean) {
   const [intro, setIntro] = useState({

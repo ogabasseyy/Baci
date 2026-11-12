@@ -25,6 +25,18 @@ test('leaves Android system splash ownership with SplashMotion after Expo prebui
   assert.doesNotMatch(result.modResults.contents, /SplashScreenManager/);
   assert.match(result.modResults.contents, /super\.onCreate\(null\)/);
 });
+test('fails prebuild when Expo splash registration markers are missing', async () => {
+  const config = plugin({});
+  await assert.rejects(
+    config.mods.android.mainActivity({
+      modResults: {
+        language: 'kt',
+        contents: 'class MainActivity : ReactActivity() {}',
+      },
+    }),
+    /Expected Expo splash-screen registration block/
+  );
+});
 function transform(resources) {
   const config = plugin({});
   return config.mods.android.styles({ modResults: { resources } });

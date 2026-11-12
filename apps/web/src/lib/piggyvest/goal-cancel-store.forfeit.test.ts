@@ -135,3 +135,13 @@ describe('forfeit leg', () => {
     ]);
   });
 });
+
+it('hands a claimed forfeit back unsent through the fixed statement', async () => {
+  const { execute, store: s } = store([{ result: 'unclaimed' }]);
+  expect(await s.unclaimForfeit(forfeitId)).toBe('unclaimed');
+  expect(execute).toHaveBeenCalledWith(forfeitSql.manage, [
+    scopeText,
+    forfeitId,
+    'unclaim',
+  ]);
+});

@@ -18,6 +18,7 @@ function ports() {
   return {
     claim: vi.fn().mockResolvedValue({ status: 'claimed', forfeit }),
     verifyDestination: vi.fn().mockResolvedValue(true),
+    unclaim: vi.fn().mockResolvedValue('unclaimed'),
     transfer: vi.fn().mockResolvedValue({ accepted: true }),
     lookupTransfer: vi.fn().mockResolvedValue('not_found'),
     release: vi.fn().mockResolvedValue('released'),
@@ -123,19 +124,22 @@ it('reports needs_review when the database caps a third rejected forfeit', async
   expect(await driveGoalCancelForfeit(operationId, p)).toBe('needs_review');
 });
 
-it('sends nothing and releases the forfeit when the interest wallet is not ours', async () => {
+it('hands the forfeit back unsent, never as a rejection, when the interest wallet is not ours', async () => {
   const p = ports();
   p.verifyDestination.mockResolvedValue(false);
-  expect(await driveGoalCancelForfeit(operationId, p)).toBe('released');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
   expect(p.transfer).not.toHaveBeenCalled();
-  expect(p.release).toHaveBeenCalledWith(forfeit.operationId);
+  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId);
+  expect(p.release).not.toHaveBeenCalled();
 });
 
-it('sends nothing when the interest wallet can not be checked', async () => {
+it('hands the forfeit back unsent when the interest wallet can not be checked', async () => {
   const p = ports();
   p.verifyDestination.mockRejectedValue(new Error('down'));
-  await driveGoalCancelForfeit(operationId, p);
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
   expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId);
+  expect(p.release).not.toHaveBeenCalled();
 });
 
 it.each([

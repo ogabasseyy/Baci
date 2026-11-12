@@ -37,6 +37,9 @@ interface Ports {
   release: (
     forfeitId: string
   ) => Promise<'released' | 'needs_review' | 'not_released'>;
+  // Hands a claimed forfeit back unsent (same reference): retryable, never a
+  // rejection, for a destination check that fails or can not run.
+  unclaim: (forfeitId: string) => Promise<'unclaimed' | 'not_released'>;
   // Evidence-side status read of a dispatched forfeit (settle or release
   // from a verified provider record). Absent: the outcome stays pending.
   reconcile?: (forfeitId: string) => Promise<{ status: string }>;
@@ -61,10 +64,13 @@ export async function driveGoalCancelForfeit(
     return await readStatus(claim.forfeitId, ports);
   if (claim.status !== 'claimed') return claim.status;
   const forfeit = schemas.forfeit.parse(claim.forfeit);
-  // Nothing has been sent yet, so a destination that fails the check is
-  // released (a fresh reference is planned; the third time goes to review).
-  if (!(await ports.verifyDestination(forfeit).catch(() => false)))
-    return await releaseUnsent(forfeit, ports);
+  // Nothing has been sent yet, so a destination that fails the check (or a
+  // check that can not run) hands the forfeit back unsent: retryable once the
+  // configuration or PiggyVest is fixed, and never counted as a rejection.
+  if (!(await ports.verifyDestination(forfeit).catch(() => false))) {
+    await ports.unclaim(forfeit.operationId);
+    return 'unavailable';
+  }
   try {
     const response = await ports.transfer(forfeit);
     if (response.accepted !== true) throw new Error('Invalid acceptance');

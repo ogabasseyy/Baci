@@ -18,6 +18,7 @@ type Ports = Parameters<typeof driveGoalCancelForfeit>[1];
 export function forfeitDriverPorts(input: {
   claim: Ports['claim'];
   release: Ports['release'];
+  unclaim: Ports['unclaim'];
   provider: { token: string; baseUrl: string };
   evidence: unknown | null;
   operationId: string;
@@ -94,6 +95,7 @@ export function forfeitDriverPorts(input: {
         token: provider.token,
         baseUrl: provider.baseUrl,
       }),
+    unclaim: input.unclaim,
     release: async (id) => {
       const released = await input.release(id);
       if (released === 'needs_review')

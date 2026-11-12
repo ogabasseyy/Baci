@@ -30,6 +30,7 @@ export async function sweepGoalCancelForfeit(input: {
       forfeitDriverPorts({
         claim: (id) => store.claimForfeit(id),
         release: (id) => store.releaseForfeit(id),
+        unclaim: (id) => store.unclaimForfeit(id),
         provider,
         evidence,
         operationId,

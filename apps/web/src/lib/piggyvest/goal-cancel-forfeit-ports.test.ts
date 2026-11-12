@@ -41,6 +41,7 @@ it('pages only on the first report of a stuck claim', async () => {
   const ports = forfeitDriverPorts({
     claim,
     release: vi.fn(),
+    unclaim: vi.fn(),
     provider,
     evidence: null,
     operationId,
@@ -59,6 +60,7 @@ it('sends the forfeit from the goal wallet to the interest wallet under its own 
   const ports = forfeitDriverPorts({
     claim: vi.fn(),
     release: vi.fn(),
+    unclaim: vi.fn(),
     provider,
     evidence: null,
     operationId,
@@ -79,6 +81,7 @@ it('pages when a release caps the forfeit into review, and binds evidence reconc
   const ports = forfeitDriverPorts({
     claim: vi.fn(),
     release: vi.fn().mockResolvedValue('needs_review'),
+    unclaim: vi.fn(),
     provider,
     evidence: { integrationId: 'i' },
     operationId,
@@ -110,6 +113,7 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
   const ports = forfeitDriverPorts({
     claim: vi.fn(),
     release: vi.fn(),
+    unclaim: vi.fn(),
     provider,
     evidence: null,
     operationId,
@@ -139,6 +143,7 @@ it('refuses a wallet the deployment does not name as the interest wallet, even i
     const ports = forfeitDriverPorts({
       claim: vi.fn(),
       release: vi.fn(),
+      unclaim: vi.fn(),
       provider,
       evidence: null,
       operationId,

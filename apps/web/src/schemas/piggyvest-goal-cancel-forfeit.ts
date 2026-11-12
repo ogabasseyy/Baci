@@ -93,6 +93,9 @@ export const piggyvestGoalCancelForfeitSchemas = {
       })
     )
     .length(1),
+  unclaimRows: z
+    .array(z.strictObject({ result: z.enum(['unclaimed', 'not_released']) }))
+    .length(1),
   releaseRows: z
     .array(
       z.strictObject({

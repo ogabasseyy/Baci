@@ -539,7 +539,12 @@ BEGIN
       ~ 'pg_advisory_xact_lock\(\s*pg_catalog\.hashtextextended\(''primary-savings:'''
     AND (SELECT proc.prosrc FROM pg_catalog.pg_proc AS proc
           WHERE proc.oid = 'piggyvest_primary.plan_forfeit_for_late_goal_interest()'::regprocedure)
-      ~ 'EXCEPTION WHEN unique_violation',
+      ~ 'EXCEPTION WHEN unique_violation'
+    -- The cancel is re-read under that lock, so one released meanwhile gets
+    -- no new forfeit.
+    AND (SELECT proc.prosrc FROM pg_catalog.pg_proc AS proc
+          WHERE proc.oid = 'piggyvest_primary.plan_forfeit_for_late_goal_interest()'::regprocedure)
+      ~ 'pg_advisory_xact_lock[\s\S]*cancel\.state IN \(''dispatched'', ''confirmed''\)\s*FOR SHARE',
     'the late-interest plan is not serialized on the customer lock, or its failure could refuse the payout');
   -- PiggyVest reverses part of the late payout: the unsent forfeit shrinks;
   -- a full reversal releases it.
@@ -566,6 +571,54 @@ BEGIN
     'the late forfeit was not claimed after the first settled');
 END
 $late$;
+
+
+-- 16. A forfeit whose destination check fails before sending is handed back
+--     unsent (same reference, nothing was POSTed): retryable any number of
+--     times, never a rejection, so it can not drift into review.
+DO $unclaim$
+DECLARE
+  c_goal constant text := 'f3860000-0000-4000-8000-000000000005';
+  c_integration constant uuid := 'f3860000-0000-4000-8000-000000000006';
+  v_scope jsonb := pg_temp.gc_scope();
+  v_op text;
+  v_forfeit text;
+  v_ref text;
+  v_round integer;
+BEGIN
+  DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits;
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+   WHERE id = c_goal::uuid;
+  v_op := pg_temp.gc_reserved('unclaim');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'unclaim split');
+  PERFORM pg_temp.gc_assert(pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed',
+    'unclaim principal');
+  v_ref := pg_temp.gf_forfeit(v_op, 'reference');
+  FOR v_round IN 1..4 LOOP
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    PERFORM pg_temp.gc_assert(
+      CASE WHEN v_round % 2 = 0
+        THEN piggyvest_primary.unclaim_goal_cancel_forfeit_worker(c_integration, 'staging', v_forfeit::uuid)
+        ELSE piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') END = 'unclaimed',
+      'round ' || v_round || ' was not handed back');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'reserved'
+      AND pg_temp.gf_forfeit(v_op, 'reference') = v_ref
+      AND pg_temp.gf_forfeit(v_op, 'dispatched_at') IS NULL,
+      'round ' || v_round || ' did not hand the forfeit back unsent under its reference');
+  END LOOP;
+  PERFORM pg_temp.gc_assert(
+    (SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 1
+    AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'claimed',
+    'repeated hand-backs drifted toward review or created rows');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') = 'unclaimed'
+    AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') = 'not_released',
+    'an unsent forfeit was handed back twice');
+END
+$unclaim$;
 
 -- 13. Catalog: both new tables are row-level-secured and closed; every new
 --     function is SECURITY DEFINER with an empty search_path and not PUBLIC.
@@ -597,6 +650,8 @@ BEGIN
     'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer,boolean)',
     'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
+    'piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid,text,uuid)',
+    'piggyvest_primary.unclaim_goal_cancel_forfeit_row(uuid)',
     'piggyvest_primary.manage_goal_cancel_forfeit(jsonb,uuid,text)',
     'piggyvest_primary.assert_goal_cancel_evidence(uuid,text)',
     'piggyvest_primary.read_dispatched_goal_cancel_forfeit(uuid,text,uuid)',

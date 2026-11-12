@@ -143,4 +143,19 @@ describe('bugfix: equal-timestamp MSHC and arrival', () => {
     );
     expect(result.status).toBe('out_for_delivery');
   });
+
+  it('keeps out_for_delivery when MSHC and ARF share a timestamp and ARF comes first', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W19',
+        MobileShipmentTrackings: [
+          event('ARF', '11:00:00'),
+          event('MSHC', '11:00:00'),
+        ],
+      },
+      'W19',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('out_for_delivery');
+  });
 });

@@ -88,6 +88,10 @@ type Guardable = {
   providerStatus: string;
 };
 
+function isMshc(candidate: Guardable): number {
+  return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
+}
+
 /**
  * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
  * run, and an arrival scan also marks the parcel reaching its destination.
@@ -107,8 +111,6 @@ function applyLifecycleGuards(
   const sameCity = matchesDestination(origin, destination);
   // Equal timestamps: process MSHC last so a contemporaneous arrival or
   // movement scan is seen first, whatever order the payload listed them in.
-  const isMshc = (candidate: Guardable) =>
-    candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
   const ordered = [...candidates].sort(
     (a, b) =>
       a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
@@ -248,7 +250,8 @@ export function normalizeGiglTrackingShipment(
 
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
-      right.event.timestamp.getTime() - left.event.timestamp.getTime()
+      right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
+      isMshc(right) - isMshc(left)
   );
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null

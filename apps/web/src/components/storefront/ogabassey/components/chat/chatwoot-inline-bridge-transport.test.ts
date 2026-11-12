@@ -39,7 +39,9 @@ describe('Chatwoot inline bridge transport', () => {
   });
 
   it('adds the path-store merchant hint to challenge and verification routes', async () => {
-    const fetchMock = vi.fn(async () => response({ requestId: 'request-1' }));
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => response({ requestId: 'request-1' })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     await postChatwootBridgeJson(
@@ -53,7 +55,7 @@ describe('Chatwoot inline bridge transport', () => {
       'store-a'
     );
 
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       '/api/storefront/chatwoot/context/challenge?merchantSlug=store-a',
       '/api/storefront/chatwoot/context/verify?merchantSlug=store-a',
     ]);

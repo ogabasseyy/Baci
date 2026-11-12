@@ -49,6 +49,8 @@ export function SavingsPhoneSwapStep({
   useEffect(() => {
     setLoadingPreview(false);
     setLoadError(null);
+    // A preview opened for an earlier search never stands in for new results.
+    setResolved(null);
     return () => {
       request.current++;
     };
@@ -72,7 +74,11 @@ export function SavingsPhoneSwapStep({
   const rows = shown.flatMap(savingsPhoneRows);
   // The phone saved for now is not a choice to switch to.
   const isCurrent = (row: SavingsPhoneRow) =>
-    row.title === goal.title && row.price === goal.target_amount;
+    goal.product_id
+      ? row.product.id === goal.product_id &&
+        (row.variantId ?? null) === (goal.variant_id ?? null)
+      : // Older goals without ids: same name and price is the best match.
+        row.title === goal.title && row.price === goal.target_amount;
   const choices = rows.filter((row) => !isCurrent(row));
   const affordable = choices.filter(
     (row) => row.product.searchPreview || row.price >= goal.current_amount

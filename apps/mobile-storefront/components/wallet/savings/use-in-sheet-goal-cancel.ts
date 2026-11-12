@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
 import { useGoalLifecycle } from './use-goal-lifecycle';
+
+const IN_FLIGHT = new Set(['submitting', 'polling']);
 
 /**
  * Cancelling or completing a goal as a step inside the Add to savings sheet.
@@ -25,6 +27,13 @@ export function useInSheetGoalCancel(
     kind,
     goalId: active?.id ?? goal?.id ?? '',
   });
+  // Refresh once an action actually settles (or may have), whether or not
+  // the sheet is still open.
+  const settled = flow.step === 'done' || flow.step === 'timed_out';
+  useEffect(() => {
+    if (settled) void refreshWallet?.();
+  }, [settled, refreshWallet]);
+
   return {
     goal: active,
     kind,
@@ -34,11 +43,12 @@ export function useInSheetGoalCancel(
     },
     /** Back to the savings view; nothing was sent unless the flow says so. */
     keep: () => setHeld(null),
-    /** The sheet closed: drop the step and refresh the wallet if it moved money. */
+    /**
+     * The sheet closed. An action still being saved stays tracked, so its
+     * result refreshes the wallet when it settles; anything else is dropped.
+     */
     closed: () => {
-      const finished = flow.step !== 'review';
-      setHeld(null);
-      if (finished) void refreshWallet?.();
+      if (!IN_FLIGHT.has(flow.step)) setHeld(null);
     },
   };
 }

@@ -51,6 +51,8 @@ export function GoalCompleteStep({
 }) {
   const { saved, interest, total } = goalCompleteBreakdown(goal);
   const done = flow.step === 'done';
+  // A plan can also be completed at its end date without reaching the target.
+  const reachedTarget = total >= goal.target_amount;
   const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
     flow.step
   );
@@ -143,12 +145,14 @@ export function GoalCompleteStep({
         accessibilityRole="header"
         style={[styles.title, { color: colors.text }]}
       >
-        {done ? COPY.doneTitle : COPY.title}
+        {done ? COPY.doneTitle : reachedTarget ? COPY.title : COPY.maturedTitle}
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
         {done
           ? COPY.doneBody(formatNgnCurrency(total), goal.title)
-          : COPY.subtitle(goal.title)}
+          : reachedTarget
+            ? COPY.subtitle(goal.title)
+            : COPY.maturedSubtitle(goal.title)}
       </Text>
       {done ? null : (
         <View style={[styles.card, { borderColor: colors.border }]}>

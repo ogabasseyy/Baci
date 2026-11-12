@@ -3,7 +3,10 @@ import { GOAL_LIFECYCLE_COPY } from './goal-lifecycle-outcomes';
 /** Words for completing a goal inside the savings sheet (owner-approved mock). */
 export const GOAL_COMPLETE_STEP_COPY = {
   title: 'You did it!',
+  maturedTitle: 'Your plan is ready',
   subtitle: (goalTitle: string) => `Your ${goalTitle} is fully saved.`,
+  maturedSubtitle: (goalTitle: string) =>
+    `Your ${goalTitle} plan has reached its end date.`,
   saved: 'Saved',
   interest: 'Interest earned',
   toWallet: 'Moves to your wallet',

@@ -6,6 +6,14 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
  */
 export function goalCancelBreakdown(goal: WalletActiveSavingsGoal) {
   const balance = goal.current_amount;
+  // Without the stored balance the split between savings and interest is
+  // unknown: say so instead of implying the whole balance comes back.
+  const known = goal.principal_amount !== undefined || balance <= 0;
   const saved = Math.min(goal.principal_amount ?? balance, balance);
-  return { saved, forfeited: Math.max(0, balance - saved), refund: saved };
+  return {
+    known,
+    saved,
+    forfeited: Math.max(0, balance - saved),
+    refund: saved,
+  };
 }

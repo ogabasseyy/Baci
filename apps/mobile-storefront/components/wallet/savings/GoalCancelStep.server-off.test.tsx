@@ -70,6 +70,19 @@ describe('Cancel goal step inside the savings sheet', () => {
     expect(screen.getAllByText('₦120,000')).toHaveLength(2);
   });
 
+  it('never implies a full refund when the savings/interest split is unknown', () => {
+    renderStep({ ...baseGoal, current_amount: 50000 });
+    expect(screen.queryByText('Back to your wallet')).toBeNull();
+    expect(
+      screen.getByText(/Any interest on this goal is not refunded/)
+    ).toBeOnTheScreen();
+  });
+
+  it('does not promise an empty goal will close', () => {
+    renderStep(baseGoal);
+    expect(screen.queryByText(/just closes/)).toBeNull();
+  });
+
   it('starts the PIN-protected cancel, or goes back on Keep saving', () => {
     const flow = makeFlow();
     const handlers = renderStep(baseGoal, flow);

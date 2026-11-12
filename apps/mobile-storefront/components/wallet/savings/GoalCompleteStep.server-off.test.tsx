@@ -73,6 +73,29 @@ describe('Complete goal inside the savings sheet, server off', () => {
     ).toBeOnTheScreen();
   });
 
+  it('does not call a matured, underfunded plan fully saved', () => {
+    const handlers = {
+      onDone: jest.fn(),
+      onNotNow: jest.fn(),
+      onSignIn: jest.fn(),
+    };
+    render(
+      <GoalCompleteStep
+        colors={Colors.light}
+        flow={makeFlow()}
+        goal={{ ...goal, current_amount: 500000, principal_amount: 500000 }}
+        {...handlers}
+      />
+    );
+    expect(
+      screen.getByRole('header', { name: 'Your plan is ready' })
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Your iPhone 15 plan has reached its end date.')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/fully saved/)).toBeNull();
+  });
+
   it('starts the PIN-protected complete, or steps back with Not now', () => {
     const flow = makeFlow();
     const handlers = {

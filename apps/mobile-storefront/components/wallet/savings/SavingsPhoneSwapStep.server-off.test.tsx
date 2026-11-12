@@ -176,6 +176,83 @@ describe('Change phone inside the savings sheet, server off', () => {
     ).toBeNull();
   });
 
+  it('hides only the exact variant being saved for, not others at the same price', () => {
+    const twins: Product = {
+      ...iphone,
+      variants: [
+        {
+          attributes: { storage: '128GB' },
+          condition: 'used' as const,
+          id: 'v-a',
+          name: '128GB',
+          price: 650000,
+        },
+        {
+          attributes: { storage: '256GB' },
+          condition: 'used' as const,
+          id: 'v-b',
+          name: '256GB',
+          price: 650000,
+        },
+      ],
+    };
+    renderStep(
+      { savingsDeviceProducts: [twins] },
+      {
+        ...goal,
+        product_id: 'product-1',
+        variant_id: 'v-a',
+        target_amount: 650000,
+      }
+    );
+    expect(
+      screen.queryByRole('button', {
+        name: 'Choose iPhone 15 Pro Storage: 128GB',
+      })
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', {
+        name: 'Choose iPhone 15 Pro Storage: 256GB',
+      })
+    ).toBeOnTheScreen();
+  });
+
+  it('forgets an opened preview when the search changes, even if it comes back', async () => {
+    const preview = { ...iphone, price: 1, variants: [], searchPreview: true };
+    const { swap, view } = renderStep({
+      resolveProduct: jest.fn(async () => iphone),
+      savingsDeviceProducts: [preview],
+    });
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Choose iPhone 15 Pro' })
+    );
+    await screen.findByRole('button', { name: /Choose iPhone 15 Pro.*256GB/ });
+    const galaxy = {
+      ...iphone,
+      id: 'p2',
+      name: 'Galaxy S23',
+      variants: [],
+      price: 610000,
+    };
+    for (const searchValue of ['galaxy', 'iphone']) {
+      view.rerender(
+        <SavingsPhoneSwapStep
+          colors={Colors.light}
+          goal={goal}
+          swap={{
+            ...swap,
+            savingsDeviceSearch: searchValue,
+            savingsDeviceProducts: [galaxy],
+          }}
+        />
+      );
+    }
+    expect(
+      screen.getByRole('button', { name: 'Choose Galaxy S23' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /256GB/ })).toBeNull();
+  });
+
   it('Back returns to the savings view', () => {
     const { swap } = renderStep();
     fireEvent.press(screen.getByRole('button', { name: 'Back to savings' }));

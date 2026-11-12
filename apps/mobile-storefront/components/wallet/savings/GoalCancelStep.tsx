@@ -41,7 +41,7 @@ export function GoalCancelStep({
   onKeep: () => void;
   onSignIn: () => void;
 }) {
-  const { saved, forfeited, refund } = goalCancelBreakdown(goal);
+  const { known, saved, forfeited, refund } = goalCancelBreakdown(goal);
   const empty = saved <= 0 && forfeited <= 0;
   const done = flow.step === 'done';
   const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
@@ -50,9 +50,11 @@ export function GoalCancelStep({
 
   let body: string | null = empty
     ? COPY.emptyBody
-    : forfeited > 0
-      ? COPY.forfeitNote
-      : COPY.savedBody;
+    : !known
+      ? COPY.unknownSplitNote
+      : forfeited > 0
+        ? COPY.forfeitNote
+        : COPY.savedBody;
   let actions = (
     <>
       <GoalCancelButton
@@ -133,7 +135,7 @@ export function GoalCancelStep({
     );
   }
 
-  const showBreakdown = !empty && !done;
+  const showBreakdown = known && !empty && !done;
   return (
     <View style={styles.root} testID="goal-cancel-step">
       <View

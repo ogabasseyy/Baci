@@ -74,20 +74,33 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(result.current.goal?.id).toBe('goal-1');
   });
 
-  it('refreshes the wallet on close only after an attempt went out', () => {
+  it('keeps tracking an action still being saved when the sheet closes, and refreshes when it settles', () => {
     const refresh = jest.fn();
     const { result, rerender } = renderHook(() =>
       useInSheetGoalCancel(goal, refresh)
     );
     act(() => result.current.start());
-    act(() => result.current.closed());
-    expect(refresh).not.toHaveBeenCalled();
-    act(() => result.current.start());
-    mockStep.current = 'failed';
+    mockStep.current = 'submitting';
     rerender({});
     act(() => result.current.closed());
+    expect(result.current.goal?.id).toBe('goal-1');
+    expect(refresh).not.toHaveBeenCalled();
+    mockStep.current = 'done';
+    rerender({});
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a finished or untouched step on close without refreshing', () => {
+    const refresh = jest.fn();
+    const { result, rerender } = renderHook(() =>
+      useInSheetGoalCancel(goal, refresh)
+    );
+    act(() => result.current.start());
+    mockStep.current = 'pin_cancelled';
+    rerender({});
+    act(() => result.current.closed());
     expect(result.current.goal).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it('never shows one account the goal another account was cancelling', () => {

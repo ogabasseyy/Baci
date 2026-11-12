@@ -41,6 +41,9 @@ export interface WalletActiveSavingsGoal {
   maturity_date: string;
   /** Stored balance before projected interest; absent when no interest applies. */
   principal_amount?: number;
+  /** The catalogue product and exact variant this goal saves for, when known. */
+  product_id?: string | null;
+  variant_id?: string | null;
   product_condition?: string | null;
   product_image?: string | null;
   product_variant_label?: string | null;

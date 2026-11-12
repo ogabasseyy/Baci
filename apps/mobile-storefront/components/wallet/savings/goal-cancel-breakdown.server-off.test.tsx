@@ -23,12 +23,12 @@ describe('goalCancelBreakdown', () => {
         current_amount: 121240,
         principal_amount: 120000,
       })
-    ).toEqual({ saved: 120000, forfeited: 1240, refund: 120000 });
+    ).toEqual({ known: true, saved: 120000, forfeited: 1240, refund: 120000 });
   });
 
-  it('treats the whole balance as savings when no interest applies', () => {
+  it('marks the split unknown when the stored balance is missing', () => {
     expect(goalCancelBreakdown({ ...baseGoal, current_amount: 50000 })).toEqual(
-      { saved: 50000, forfeited: 0, refund: 50000 }
+      { known: false, saved: 50000, forfeited: 0, refund: 50000 }
     );
   });
 
@@ -39,6 +39,6 @@ describe('goalCancelBreakdown', () => {
         current_amount: 40000,
         principal_amount: 45000,
       })
-    ).toEqual({ saved: 40000, forfeited: 0, refund: 40000 });
+    ).toEqual({ known: true, saved: 40000, forfeited: 0, refund: 40000 });
   });
 });

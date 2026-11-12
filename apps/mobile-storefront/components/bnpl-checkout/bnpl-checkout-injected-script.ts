@@ -162,7 +162,12 @@ export const BNPL_INJECTED_JAVASCRIPT = `
         const summary = getMessageSummary(event.data);
         // The native handler also consumes provider-close summaries.
         const isClose = [summary.type, summary.status, summary.name, summary.message].includes('checkout.widget.closed');
-        if (${isDevelopment} || isClose) {
+        const isCloseLike = [summary.type, summary.status, summary.name, summary.message].some(function(value) {
+          return typeof value === 'string' && /\\b(close|closed|dismiss|dismissed|cancel|cancelled|canceled)\\b/i.test(value);
+        });
+        // Keep unusual provider close/cancel shapes observable without treating
+        // them as terminal in the native checkout state machine.
+        if (${isDevelopment} || isClose || isCloseLike) {
           postDebugMessage({
             type: 'bnpl_log',
             message: 'Provider postMessage received',

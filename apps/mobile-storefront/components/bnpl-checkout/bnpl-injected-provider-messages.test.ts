@@ -78,6 +78,7 @@ test('skips routine provider diagnostics in production and preserves checkout si
       data: { message: 'checkout.widget.closed' },
     },
   });
+  emit({ origin: provider, data: { type: 'checkout closed by customer' } });
   emit({ origin, data: { type: 'checkoutStatus', status: 'pending' } });
 
   expect(
@@ -94,6 +95,10 @@ test('skips routine provider diagnostics in production and preserves checkout si
     expect.objectContaining({
       type: 'bnpl_log',
       summary: expect.objectContaining({ message: 'checkout.widget.closed' }),
+    }),
+    expect.objectContaining({
+      type: 'bnpl_log',
+      summary: expect.objectContaining({ type: 'checkout closed by customer' }),
     }),
     { type: 'checkoutStatus', status: 'pending' },
   ]);

@@ -56,13 +56,22 @@ export function WalletPinDots({
 }
 
 const styles = StyleSheet.create({
-  dots: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
+  dots: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  // Up to 44 wide, narrower when six boxes would not fit the sheet.
   slot: {
     alignItems: 'center',
     borderRadius: 12,
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
     height: 52,
     justifyContent: 'center',
-    width: 44,
+    maxWidth: 44,
   },
   dot: { borderRadius: 6, height: 12, width: 12 },
 });

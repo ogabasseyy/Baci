@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { WalletPinDots } from './WalletPinDots';
 
@@ -23,5 +24,22 @@ describe('WalletPinDots', () => {
     expect(
       screen.getByLabelText('Code, 2 of 6 digits entered')
     ).toBeOnTheScreen();
+  });
+
+  it('lets the boxes shrink to fit a narrow sheet instead of overflowing', () => {
+    render(
+      <WalletPinDots
+        colors={Colors.light}
+        label="Code"
+        length={0}
+        fixedSlots={6}
+      />
+    );
+    const row = screen.getByLabelText('Code, 0 of 6 digits entered');
+    const first = row.children[0];
+    if (typeof first === 'string') throw new Error('expected a box');
+    const box = StyleSheet.flatten(first.props.style);
+    expect(box).toMatchObject({ flexShrink: 1, maxWidth: 44 });
+    expect(box.width).toBeUndefined();
   });
 });

@@ -5,6 +5,8 @@ import { supabase } from './supabase';
 const OTHER_ACCOUNT =
   'This code belongs to a different account. Please try again.';
 const NOT_CONFIRMED = 'We could not confirm it is you. Please try again.';
+const CHECK_FAILED =
+  "We couldn't check your account just now. Please try again.";
 const SECOND_FACTOR_REQUIRED =
   'This account uses two-step verification. Please sign out and sign in again with it, then set your PIN.';
 
@@ -13,18 +15,20 @@ const SECOND_FACTOR_REQUIRED =
  * for an account with a verified second factor. This app has no second-
  * factor step, so such an account is told so up front: no code is sent and
  * its current (possibly AAL2) session is never swapped for a weaker one.
- * If the check itself fails, carry on: the server still enforces the rule.
+ * If the check cannot be made, stop with a retryable error rather than
+ * risk swapping a two-step account's session for a weaker one.
  */
 async function refuseSecondFactorAccounts() {
-  let secondFactor = false;
+  let nextLevel: string | null | undefined;
   try {
     const { data, error } =
       await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    secondFactor = !error && data?.nextLevel === 'aal2';
+    if (error) throw error;
+    nextLevel = data?.nextLevel;
   } catch {
-    secondFactor = false;
+    throw new Error(CHECK_FAILED);
   }
-  if (secondFactor) throw new Error(SECOND_FACTOR_REQUIRED);
+  if (nextLevel === 'aal2') throw new Error(SECOND_FACTOR_REQUIRED);
 }
 
 /** The account a Supabase access token was issued for, or null. */

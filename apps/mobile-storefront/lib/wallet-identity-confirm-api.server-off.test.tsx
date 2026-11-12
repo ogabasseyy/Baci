@@ -136,13 +136,22 @@ describe('confirm it is you', () => {
     expect(setSession).not.toHaveBeenCalled();
   });
 
-  it('carries on when the two-step check itself fails (the server still enforces)', async () => {
-    assurance.mockRejectedValue(new Error('offline'));
-    jest
-      .mocked(sendStorefrontOtp)
-      .mockResolvedValue({ success: true, data: undefined });
-    await sendIdentityCode('a@b.co');
-    expect(sendStorefrontOtp).toHaveBeenCalledWith('a@b.co');
+  it('stops with a retryable error when the two-step check cannot be made', async () => {
+    assurance.mockRejectedValueOnce(new Error('offline'));
+    await expect(sendIdentityCode('a@b.co')).rejects.toThrow(
+      'Please try again'
+    );
+    assurance.mockResolvedValueOnce({ data: null, error: new Error('x') });
+    await expect(
+      confirmIdentityCode({
+        email: 'a@b.co',
+        code: '1',
+        expectedUserId: 'user-1',
+      })
+    ).rejects.toThrow('Please try again');
+    expect(sendStorefrontOtp).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+    expect(setSession).not.toHaveBeenCalled();
   });
 });
 

@@ -2,7 +2,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { type ReactNode, useRef } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,8 +52,12 @@ export function SavingsBottomSheet({
   // The embedded PIN step's cancel, if one is showing: closing this sheet
   // cancels it first so the PIN request never outlives the sheet.
   const pinCancel = useRef<(() => void) | null>(null);
+  // While a PIN step covers the sheet, the savings controls under it are
+  // hidden from VoiceOver and TalkBack too, not only from sight.
+  const [pinActive, setPinActive] = useState(false);
   const registerPinCancel = (cancel: (() => void) | null) => {
     pinCancel.current = cancel;
+    setPinActive(cancel !== null);
   };
   const dismiss = () => sheet.current?.close();
   const close = () => {
@@ -106,7 +110,17 @@ export function SavingsBottomSheet({
                   { paddingBottom: Math.max(insets.bottom, 16) },
                 ]}
               >
-                {typeof children === 'function' ? children(dismiss) : children}
+                <View
+                  style={styles.body}
+                  accessibilityElementsHidden={pinActive}
+                  importantForAccessibility={
+                    pinActive ? 'no-hide-descendants' : 'auto'
+                  }
+                >
+                  {typeof children === 'function'
+                    ? children(dismiss)
+                    : children}
+                </View>
                 {/* The PIN step takes over this same sheet rather than opening
                   a second one on top. */}
                 {overlay}
@@ -122,6 +136,7 @@ export function SavingsBottomSheet({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  body: { flex: 1 },
   background: {
     borderWidth: 1.5,
     borderBottomWidth: 0,

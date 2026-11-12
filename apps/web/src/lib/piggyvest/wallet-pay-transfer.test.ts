@@ -238,4 +238,18 @@ describe('submitWalletPayment', () => {
     });
     expect(p.transfer).toHaveBeenCalledTimes(1);
   });
+  it('releases cleanly when PiggyVest answers 403 "Outbound transfers are paused"', async () => {
+    // Observed on PiggyVest staging, 2026-11-12: a paused account refuses the
+    // POST with 403 before anything moves. That is a definite "no transfer".
+    const paused = new PiggyvestApiError(
+      'PIGGYVEST_AUTH_ERROR',
+      'Outbound transfers are paused, please contact support',
+      403
+    );
+    const p = ports({ transfer: vi.fn(async () => Promise.reject(paused)) });
+    await expect(submitWalletPayment({ operationId: OP }, p)).resolves.toEqual({
+      status: 'released',
+    });
+    expect(p.releaseAfterRejection).toHaveBeenCalledWith(OP);
+  });
 });

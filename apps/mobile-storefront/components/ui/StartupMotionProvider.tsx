@@ -1,6 +1,5 @@
-import { createContext, type ReactNode, useContext } from 'react';
-
-const StartupMotionContext = createContext(true);
+import type { ReactNode } from 'react';
+import { StartupMotionContext } from './StartupMotionContext';
 
 export function StartupMotionProvider({
   children,
@@ -14,8 +13,4 @@ export function StartupMotionProvider({
       {children}
     </StartupMotionContext.Provider>
   );
-}
-
-export function useStartupMotionEnabled() {
-  return useContext(StartupMotionContext);
 }

@@ -225,7 +225,12 @@ describe('Expo compliance', () => {
       background: '#20000b',
       loop: false,
     });
-    expect(findPlugin(plugins, 'expo-splash-screen')).toBeUndefined();
+    expect(
+      plugins.some((plugin) => {
+        if (typeof plugin === 'string') return plugin === 'expo-splash-screen';
+        return Array.isArray(plugin) && plugin[0] === 'expo-splash-screen';
+      })
+    ).toBe(false);
     expect(plugins).not.toContain('./config/withBackgroundOnlyIosSplash.js');
     expect(plugins).not.toContain('./config/withNoSplashImage.js');
   });

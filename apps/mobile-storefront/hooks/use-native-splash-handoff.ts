@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import SplashMotion from 'react-native-splash-motion';
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { markStartupTiming } from '@/lib/startup-timing';
-import {
-  SPLASH_TIMEOUT_MS,
-  useNativeSplashIntro,
-} from './use-native-splash-intro';
+import { SPLASH_TIMEOUT_MS } from './splash-constants';
+import { useNativeSplashIntro } from './use-native-splash-intro';
 
 interface NativeSplashHandoffOptions {
   initialVisible: boolean;

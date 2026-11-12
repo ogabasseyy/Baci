@@ -10,8 +10,10 @@ jest.mock('@/lib/crash-diagnostics', () => ({
   recordCrashBreadcrumb: jest.fn(),
 }));
 jest.mock('@/lib/startup-timing', () => ({ markStartupTiming: jest.fn() }));
-jest.mock('./use-native-splash-intro', () => ({
+jest.mock('./splash-constants', () => ({
   SPLASH_TIMEOUT_MS: 8_000,
+}));
+jest.mock('./use-native-splash-intro', () => ({
   useNativeSplashIntro: () => ({ settled: false, completed: false }),
 }));
 

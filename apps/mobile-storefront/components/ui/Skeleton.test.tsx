@@ -9,7 +9,7 @@ import {
   ProductGridSkeleton,
   Skeleton,
 } from './Skeleton';
-import { StartupMotionProvider } from './StartupMotionContext';
+import { StartupMotionProvider } from './StartupMotionProvider';
 
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',

@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useStartupMotionEnabled } from './StartupMotionContext';
+import { useStartupMotionEnabled } from './useStartupMotionEnabled';
 
 interface SkeletonProps {
   width?: DimensionValue;

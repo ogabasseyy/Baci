@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react-native';
 import type React from 'react';
 import { Platform, Text, View } from 'react-native';
-import { useStartupMotionEnabled } from '@/components/ui/StartupMotionContext';
+import { useStartupMotionEnabled } from '@/components/ui/useStartupMotionEnabled';
 import { CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET } from '@/constants/layout';
 import { getTemplateConfig } from '@/lib/templates';
 import { RootLayoutNav } from './RootLayoutNav';

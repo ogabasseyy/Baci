@@ -53,7 +53,7 @@ jest.mock('@/lib/crash-diagnostics', () => ({
   installCrashDiagnostics: jest.fn(),
   recordCrashBreadcrumb: jest.fn(),
 }));
-jest.mock('@/lib/benchmark-telemetry-check', () => ({
+jest.mock('@/lib/verify-benchmark-telemetry', () => ({
   verifyBenchmarkTelemetry: jest.fn(async () => {}),
 }));
 jest.mock('@/lib/offline-queue', () => ({

@@ -1,0 +1,166 @@
+import 'server-only';
+import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+import type { ImeiAccessClient } from '@/lib/imei-access';
+import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
+import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
+import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
+import { issueWalletPayment } from '@/lib/piggyvest/wallet-pay-service';
+import {
+  errorBody,
+  findLookupByIdempotencyKey,
+  isUniqueViolation,
+  mapExistingLookup,
+} from '../route-helpers';
+
+type Issue = typeof issueWalletPayment;
+export interface StartImeiWalletPaymentDeps {
+  readRuntime: typeof readWalletPayRuntime;
+  resolveIdentity: (input: {
+    supabase: SupabaseClient;
+    user: User;
+    merchantId: string;
+  }) => Promise<{
+    merchantId: string;
+    customerId: string;
+    userId: string;
+  } | null>;
+  issue: Issue;
+}
+
+const defaultDeps: StartImeiWalletPaymentDeps = {
+  readRuntime: readWalletPayRuntime,
+  resolveIdentity: (input) =>
+    resolvePrimaryWalletIdentity({ ...input, forOnboarding: false }),
+  issue: issueWalletPayment,
+};
+
+function refuse(code: string, error: string, status: number) {
+  return NextResponse.json(errorBody({ code, error }), { status });
+}
+
+/**
+ * IMEI check paid from the PiggyVest main wallet, step 1: create the pending
+ * lookup and issue a payment of exactly the server price. Nothing is charged
+ * here; the customer confirms with their PIN on the wallet-pay route. Only
+ * Sickw (instant) tiers are offered: Petrock's debit lives in deeper database
+ * functions that do not know PiggyVest yet.
+ */
+export async function startImeiWalletPayment(
+  input: {
+    binding: { provider: string };
+    serviceTier: { price: number };
+    customer: { id: string };
+    merchantId: string;
+    idempotencyKey: string;
+    imeiHash: string;
+    deviceCategory?: ImeiDeviceCategory;
+    requestedTier: ImeiServiceTierKey;
+    replayContext: Parameters<typeof mapExistingLookup>[1];
+    supabase: SupabaseClient;
+    supabaseAdmin: ImeiAccessClient;
+    user: User;
+  },
+  deps: StartImeiWalletPaymentDeps = defaultDeps
+) {
+  const runtime = deps.readRuntime();
+  if (!runtime || runtime.merchantId !== input.merchantId)
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available yet.',
+      409
+    );
+  if (input.binding.provider !== 'sickw')
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER',
+      'This check can not be paid from your PiggyVest wallet yet.',
+      409
+    );
+  const identity = await deps.resolveIdentity({
+    supabase: input.supabase,
+    user: input.user,
+    merchantId: input.merchantId,
+  });
+  if (!identity || identity.customerId !== input.customer.id)
+    return refuse(
+      'PIGGYVEST_WALLET_NOT_READY',
+      'Finish setting up your PiggyVest wallet to pay from it.',
+      409
+    );
+
+  const amount = input.serviceTier.price;
+  let lookupId: string;
+  const inserted = await input.supabaseAdmin.insertPending({
+    amount_ngn: amount,
+    customer_id: input.customer.id,
+    idempotency_key: input.idempotencyKey,
+    imei_hash: input.imeiHash,
+    device_category: input.deviceCategory ?? null,
+    merchant_id: input.merchantId,
+    status: 'pending',
+    tier: input.requestedTier,
+  });
+  if (inserted.error) {
+    if (!isUniqueViolation(inserted.error))
+      throw new Error('IMEI pending insert failed');
+    const existing = await findLookupByIdempotencyKey(
+      input.supabaseAdmin,
+      input.idempotencyKey
+    );
+    // A replay of this same request re-asks for the same payment; anything
+    // else answers exactly as the store-credit path does.
+    if (!existing)
+      return refuse('IDEMPOTENCY_CONFLICT', 'Please try again.', 409);
+    if (
+      existing.status !== 'pending' ||
+      existing.customer_id !== input.customer.id ||
+      existing.imei_hash !== input.imeiHash ||
+      existing.tier !== input.requestedTier
+    )
+      return mapExistingLookup(existing, input.replayContext);
+    lookupId = String(existing.id);
+  } else {
+    if (!inserted.data) throw new Error('IMEI pending insert returned no row');
+    lookupId = String(inserted.data.id);
+  }
+
+  const issued = await deps.issue({
+    runtime,
+    scope: walletPayScope(runtime, identity),
+    request: {
+      purpose: 'imei_check',
+      purchaseRef: lookupId,
+      amountKobo: Math.round(amount * 100),
+    },
+  });
+  if (issued.status === 'unavailable')
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
+  if (issued.status === 'conflict')
+    return refuse('PAYMENT_CONFLICT', 'Please refresh and try again.', 409);
+  if (issued.status === 'issued')
+    return NextResponse.json(
+      {
+        status: 'payment_required',
+        lookupId,
+        operationId: issued.operationId,
+        amountKobo: issued.amountKobo,
+        expiresAt: issued.expiresAt,
+      },
+      { status: 202, headers: { 'Cache-Control': 'no-store' } }
+    );
+  return NextResponse.json(
+    {
+      status:
+        issued.status === 'needs_review' ? 'payment_review' : 'payment_pending',
+      lookupId,
+      operationId: issued.operationId,
+      amountKobo: issued.amountKobo,
+    },
+    { status: 202, headers: { 'Cache-Control': 'no-store' } }
+  );
+}

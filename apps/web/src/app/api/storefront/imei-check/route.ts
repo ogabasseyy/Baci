@@ -29,7 +29,6 @@ import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
 import { createImeiCapabilitiesHandler } from './capabilities-handler';
-import { executeImeiLookup } from './execute-imei-lookup';
 import { prepareImeiProvider } from './prepare-imei-provider';
 import {
   errorBody,
@@ -40,6 +39,7 @@ import {
   mapExistingTerminalLookupWithoutImeiHash,
   UUID_PATTERN,
 } from './route-helpers';
+import { runImeiLookup } from './run-imei-lookup';
 
 const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<string>(
   PUBLIC_IMEI_SERVICE_TIERS
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest) {
       requestedTier,
     });
     if (prepared.response) return prepared.response;
-    return await executeImeiLookup({
+    return await runImeiLookup(bodyParse.data.paymentMethod, {
       ...prepared,
       customer,
       deviceCategory,
@@ -276,6 +276,7 @@ export async function POST(request: NextRequest) {
       requestedTier,
       supabase,
       supabaseAdmin,
+      user: auth.user,
     });
   } catch (error) {
     console.error('IMEI check error:', error);

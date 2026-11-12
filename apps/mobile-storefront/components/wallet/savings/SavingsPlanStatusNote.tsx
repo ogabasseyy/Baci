@@ -149,6 +149,7 @@ function StatusNoteView({
       <SavingsPlanGettingReady
         colors={colors}
         slow
+        paused={paused}
         onCheckNow={
           onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
         }

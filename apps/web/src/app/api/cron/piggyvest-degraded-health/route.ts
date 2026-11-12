@@ -5,7 +5,7 @@ import { runPiggyvestDegradedHealth } from '@/lib/piggyvest/degraded-health-runt
 export const maxDuration = 30;
 
 // PiggyVest degraded-health check (read-only). Inert until the owner sets
-// PIGGYVEST_DEGRADED_ALERTS_ENABLED=true, and not scheduled in vercel.json.
+// PIGGYVEST_DEGRADED_ALERTS_ENABLED=true; the VPS worker crontab calls it every 5 minutes.
 // The response carries counts only.
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET)) {

@@ -13,7 +13,7 @@ it('waits for auth state to settle before recovering checkout', async () => {
   act(() => result.current());
   expect(recoverCheckout).not.toHaveBeenCalled();
 
-  rerender({ isAuthenticated: true });
+  rerender({ isAuthenticated: true, isRouteFocused: true });
   await waitFor(() => expect(recoverCheckout).toHaveBeenCalledTimes(1));
 });
 
@@ -39,7 +39,7 @@ it('expires a resume request when authentication never settles', () => {
 
   act(() => result.current());
   act(() => jest.advanceTimersByTime(60_000));
-  rerender({ isAuthenticated: true });
+  rerender({ isAuthenticated: true, isRouteFocused: true });
 
   expect(recoverCheckout).not.toHaveBeenCalled();
   expect(alert).toHaveBeenCalledWith(

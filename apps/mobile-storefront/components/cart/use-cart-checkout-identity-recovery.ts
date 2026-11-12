@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 
 export function useCartCheckoutIdentityRecovery(
   isAuthenticated: boolean,
@@ -33,6 +34,10 @@ export function useCartCheckoutIdentityRecovery(
     resumeExpiryRef.current = setTimeout(() => {
       resumeExpiryRef.current = null;
       setResumeCheckoutAfterAuth(false);
+      Alert.alert(
+        'Checkout not resumed',
+        'Tap Checkout again to continue with your current cart.'
+      );
     }, 60_000);
   };
 }

@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { useCartCheckoutIdentityRecovery } from './use-cart-checkout-identity-recovery';
 
 it('waits for auth state to settle before recovering checkout', async () => {
@@ -18,6 +19,7 @@ it('waits for auth state to settle before recovering checkout', async () => {
 
 it('expires a resume request when authentication never settles', () => {
   jest.useFakeTimers();
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   const recoverCheckout = jest.fn(async () => {});
   const { result, rerender, unmount } = renderHook(
     ({ isAuthenticated }: { isAuthenticated: boolean }) =>
@@ -30,6 +32,11 @@ it('expires a resume request when authentication never settles', () => {
   rerender({ isAuthenticated: true });
 
   expect(recoverCheckout).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledWith(
+    'Checkout not resumed',
+    'Tap Checkout again to continue with your current cart.'
+  );
   unmount();
+  alert.mockRestore();
   jest.useRealTimers();
 });

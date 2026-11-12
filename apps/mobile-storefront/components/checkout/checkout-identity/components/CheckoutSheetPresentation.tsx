@@ -4,23 +4,33 @@ import { BackHandler, Modal, Platform, StyleSheet, View } from 'react-native';
 
 export function CheckoutSheetPresentation({
   children,
+  busy,
+  isActive,
   onClose,
 }: {
   children: ReactNode;
+  busy: boolean;
+  isActive: boolean;
   onClose: () => void;
 }) {
   const inline = Platform.OS === 'android';
   const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  const isActiveRef = useRef(isActive);
 
   useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    busyRef.current = busy;
+    isActiveRef.current = isActive;
+  }, [busy, isActive, onClose]);
 
   useEffect(() => {
     if (!inline) return;
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
+        if (!isActiveRef.current) return false;
+        if (busyRef.current) return true;
         onCloseRef.current();
         return true;
       }
@@ -29,6 +39,8 @@ export function CheckoutSheetPresentation({
   }, [inline]);
 
   if (inline) {
+    // Keep this layer in the React tree on Android; native Modal presentation
+    // caused checkout transitions to stall on lower-end devices.
     return (
       <View
         style={styles.overlay}

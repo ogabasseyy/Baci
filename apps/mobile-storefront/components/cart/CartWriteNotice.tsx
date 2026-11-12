@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 1000,
     // Android stacks by elevation, not zIndex alone.
-    elevation: 200,
+    elevation: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

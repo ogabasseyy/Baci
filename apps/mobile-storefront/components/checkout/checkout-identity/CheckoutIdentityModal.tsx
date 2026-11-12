@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -45,6 +45,7 @@ function CheckoutIdentitySheet({
   const otpBusy = useRef(false);
   const [isOtpBusy, setIsOtpBusy] = useState(false);
   const insets = useSafeAreaInsets();
+  const isRouteFocused = useIsFocused();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const theme = getCheckoutIdentityTheme(colorScheme);
   const { triggerHaptic } = useHapticFeedback();
@@ -94,7 +95,11 @@ function CheckoutIdentitySheet({
   };
 
   return (
-    <CheckoutSheetPresentation onClose={handleClose}>
+    <CheckoutSheetPresentation
+      busy={isOtpBusy || isSocialAuthLoading}
+      isActive={isRouteFocused}
+      onClose={handleClose}
+    >
       <AppKeyboardContainer style={styles.container}>
         {/* Backdrop */}
         <Animated.View

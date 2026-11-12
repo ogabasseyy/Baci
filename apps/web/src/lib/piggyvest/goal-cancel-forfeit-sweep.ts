@@ -16,8 +16,13 @@ export interface GoalCancelForfeitSweepResult {
   listed: number;
   confirmed: number;
   pending: number;
+  // Stuck or rejected (needs_review, unavailable, released): a person
+  // should look, unlike ordinary pending work.
+  attention: number;
   skipped: number;
   failed: number;
+  // Listed but not started because the deadline passed; next run picks them up.
+  deferred: number;
 }
 
 /**
@@ -35,6 +40,11 @@ export async function sweepPendingGoalCancelForfeits(input: {
   providerToken: unknown;
   allowNewTransfers: boolean;
   limit?: number;
+  // No new forfeit is started at or after this time (ms since epoch), so the
+  // caller keeps its own time budget. One started forfeit can still take
+  // its provider timeouts to finish.
+  deadlineAt?: number;
+  now?: () => number;
 }): Promise<GoalCancelForfeitSweepResult> {
   const configuration = piggyvestPrimarySavingsRuntimeSchema.parse(
     input.configuration
@@ -72,10 +82,17 @@ export async function sweepPendingGoalCancelForfeits(input: {
     listed: work.length,
     confirmed: 0,
     pending: 0,
+    attention: 0,
     skipped: 0,
     failed: 0,
+    deferred: 0,
   };
-  for (const item of work) {
+  const now = input.now ?? Date.now;
+  for (const [index, item] of work.entries()) {
+    if (input.deadlineAt !== undefined && now() >= input.deadlineAt) {
+      result.deferred = work.length - index;
+      break;
+    }
     if (item.alert)
       emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
         reason: 'forfeit_overdue',
@@ -103,6 +120,12 @@ export async function sweepPendingGoalCancelForfeits(input: {
         })
       );
       if (outcome === 'confirmed') result.confirmed += 1;
+      else if (
+        outcome === 'needs_review' ||
+        outcome === 'unavailable' ||
+        outcome === 'released'
+      )
+        result.attention += 1;
       else result.pending += 1;
     } catch {
       result.failed += 1;

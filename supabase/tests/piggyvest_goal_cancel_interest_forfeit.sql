@@ -391,6 +391,30 @@ BEGIN
     piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) -> 0 ->> 'alert' = 'true'
     AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) -> 0 ->> 'alert' = 'false',
     'an overdue forfeit did not page exactly once');
+  -- An already-paged stuck transfer never starves newer work: an unsent
+  -- forfeit of another cancel comes first in a window of one.
+  INSERT INTO piggyvest_primary.goal_cancel_operations (
+    id, integration_id, intent_id, goal_id, state, reference, source_wallet_id, destination_wallet_id,
+    amount_kobo, forfeited_interest_kobo, provider_transaction_id, issued_at, expires_at, reserved_at,
+    dispatched_at, settled_at)
+  VALUES ('f3860000-0000-4000-8000-0000000000d1', c_integration, 'f3860000-0000-4000-8000-000000000007',
+    'f3860000-0000-4000-8000-0000000000d2', 'confirmed', 'pvb-cancel-f3860000-0000-4000-8000-0000000000d2',
+    'synthetic-goalcancel-goal-wallet-2', 'synthetic-goalcancel-main', 100, 5, 'synthetic-gf-other',
+    pg_catalog.clock_timestamp(), pg_catalog.clock_timestamp(), pg_catalog.clock_timestamp(),
+    pg_catalog.clock_timestamp(), pg_catalog.clock_timestamp());
+  INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+    cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+    source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+  VALUES ('f3860000-0000-4000-8000-0000000000d1', c_integration, 'f3860000-0000-4000-8000-000000000007',
+    'f3860000-0000-4000-8000-0000000000d2', 'reserved', 'pvb-forfeit-f3860000-0000-4000-8000-0000000000d2',
+    'synthetic-goalcancel-goal-wallet-2', 'synthetic-goalcancel-interest-wallet-2', 5,
+    pg_catalog.clock_timestamp());
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 1)
+      = '[{"operationId":"f3860000-0000-4000-8000-0000000000d1","state":"reserved","alert":false}]'::jsonb,
+    'an already-paged stuck transfer starved newer work');
+  DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits
+   WHERE cancel_operation_id = 'f3860000-0000-4000-8000-0000000000d1';
   -- A definitive rejection through the worker releases and replaces it.
   v_old_ref := pg_temp.gf_forfeit(v_op, 'reference');
   PERFORM pg_temp.gc_assert(
@@ -404,9 +428,16 @@ BEGIN
       = pg_catalog.jsonb_build_object('operationId', v_forfeit)
     AND piggyvest_primary.read_dispatched_goal_cancel_forfeit(c_integration, 'staging', v_forfeit::uuid) IS NOT NULL,
     'a late success of a released forfeit is unreachable');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'reserved', 'no replacement was planned');
   PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
       pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict',
     'a late success of a released forfeit settled automatically');
+  -- The money moved under the old reference: the replacement is frozen, so
+  -- nothing can send the interest a second time.
+  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) = '[]'::jsonb
+    AND piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid) ->> 'status' = 'needs_review',
+    'a late success left the replacement sendable');
   PERFORM pg_temp.gc_assert(
     has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer)', 'EXECUTE')
     AND has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
@@ -424,6 +455,14 @@ DECLARE
   v_signature text;
   v_oid regprocedure;
 BEGIN
+  PERFORM pg_temp.gc_assert(EXISTS (
+    SELECT 1 FROM pg_catalog.pg_index AS idx
+     WHERE idx.indrelid = 'piggyvest_primary.goal_cancel_interest_forfeits'::regclass
+       AND idx.indpred IS NULL
+       AND (idx.indkey::int2[])[0] = (SELECT attnum FROM pg_catalog.pg_attribute
+                                      WHERE attrelid = 'piggyvest_primary.goal_cancel_interest_forfeits'::regclass
+                                        AND attname = 'cancel_operation_id')),
+    'the cancel-operation foreign key has no full index');
   PERFORM pg_temp.gc_assert(COALESCE((SELECT bool_and(class.relrowsecurity) FROM pg_catalog.pg_class AS class
     WHERE class.oid IN ('piggyvest_primary.goal_cancel_interest_forfeits'::regclass,
                         'piggyvest_primary.goal_interest_forfeit_wallets'::regclass)), false),

@@ -4,26 +4,39 @@ import { runPiggyvestDailyReconciliation } from '@/lib/piggyvest/daily-reconcili
 import { runScheduledGoalCancelForfeitSweep } from '@/lib/piggyvest/goal-cancel-forfeit-cron';
 
 export const maxDuration = 300;
+// The forfeit sweep starts no new forfeit after this much of the budget, so
+// one started forfeit (provider timeouts included) still ends in time.
+const FORFEIT_SWEEP_BUDGET_MS = 200_000;
 
 // Daily PiggyVest reconciliation (read-only). Inert until the owner sets
 // PIGGYVEST_RECONCILIATION_ENABLED=true; then it emails the report and pages
 // on a mismatch. The response carries counts only, never wallet or transfer
-// detail. It also runs the early-cancel interest forfeit sweep (inert until
-// the PiggyVest savings credentials exist; never fails the report).
+// detail. After the report it runs the early-cancel interest forfeit sweep
+// (inert until the PiggyVest savings credentials exist; bounded by a
+// deadline, never fails the report or the response).
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const forfeitSweep = await runScheduledGoalCancelForfeitSweep();
+  const startedAt = Date.now();
+  let report: Awaited<
+    ReturnType<typeof runPiggyvestDailyReconciliation>
+  > | null = null;
   try {
-    const report = await runPiggyvestDailyReconciliation();
-    return NextResponse.json(
-      forfeitSweep === null ? report : { ...report, forfeitSweep }
-    );
+    report = await runPiggyvestDailyReconciliation();
   } catch {
+    report = null;
+  }
+  const forfeitSweep = await runScheduledGoalCancelForfeitSweep(
+    process.env,
+    undefined,
+    startedAt + FORFEIT_SWEEP_BUDGET_MS
+  );
+  const sweepFields = forfeitSweep === null ? {} : { forfeitSweep };
+  if (report === null)
     return NextResponse.json(
-      { error: 'Reconciliation failed' },
+      { error: 'Reconciliation failed', ...sweepFields },
       { status: 500 }
     );
-  }
+  return NextResponse.json({ ...report, ...sweepFields });
 }

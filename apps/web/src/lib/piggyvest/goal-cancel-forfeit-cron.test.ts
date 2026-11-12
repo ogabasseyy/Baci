@@ -20,7 +20,15 @@ const runtime = {
   providerToken: 't',
 };
 const env = {} as NodeJS.ProcessEnv;
-const counts = { listed: 0, confirmed: 0, pending: 0, skipped: 0, failed: 0 };
+const counts = {
+  listed: 0,
+  confirmed: 0,
+  pending: 0,
+  attention: 0,
+  skipped: 0,
+  failed: 0,
+  deferred: 0,
+};
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.recovery.mockReturnValue(runtime);
@@ -42,6 +50,17 @@ it('sweeps with the recovery credentials and the switch state', async () => {
   const sweep = vi.fn().mockResolvedValue(counts);
   expect(await runScheduledGoalCancelForfeitSweep(env, sweep)).toEqual(counts);
   expect(sweep).toHaveBeenCalledWith({ ...runtime, allowNewTransfers: false });
+});
+
+it('passes the caller deadline to the sweep', async () => {
+  mocks.live.mockReturnValue(runtime);
+  const sweep = vi.fn().mockResolvedValue(counts);
+  await runScheduledGoalCancelForfeitSweep(env, sweep, 12345);
+  expect(sweep).toHaveBeenCalledWith({
+    ...runtime,
+    allowNewTransfers: true,
+    deadlineAt: 12345,
+  });
 });
 
 it('is inert where the savings credentials are not configured', async () => {

@@ -69,8 +69,10 @@ describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
       listed: 1,
       confirmed: 1,
       pending: 0,
+      attention: 0,
       skipped: 0,
       failed: 0,
+      deferred: 0,
     });
     expect(mocks.execute.mock.calls[0]).toEqual([
       sql.workerList,
@@ -149,4 +151,36 @@ it('refuses evidence bound to another integration', async () => {
     })
   ).rejects.toThrow('Goal cancel forfeit sweep binding unavailable');
   expect(mocks.execute).not.toHaveBeenCalled();
+});
+
+it('counts a stuck forfeit as needing attention, not as ordinary pending work', async () => {
+  db([{ operationId: opA, state: 'reserved', alert: false }], {
+    status: 'unavailable',
+  });
+  expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
+    attention: 1,
+    pending: 0,
+  });
+});
+
+it('starts no new forfeit once the deadline has passed', async () => {
+  db(
+    [
+      { operationId: opA, state: 'reserved', alert: false },
+      { operationId: opB, state: 'reserved', alert: false },
+    ],
+    { status: 'claimed', forfeit }
+  );
+  let clock = 1000;
+  const result = await sweepPendingGoalCancelForfeits({
+    ...input(true),
+    deadlineAt: 1500,
+    now: () => {
+      const current = clock;
+      clock += 1000;
+      return current;
+    },
+  });
+  expect(result).toMatchObject({ listed: 2, confirmed: 1, deferred: 1 });
+  expect(mocks.transfer).toHaveBeenCalledOnce();
 });

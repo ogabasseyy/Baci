@@ -26,7 +26,8 @@ export function goalCancelForfeitTransfersAllowed(
  */
 export async function runScheduledGoalCancelForfeitSweep(
   env: NodeJS.ProcessEnv = process.env,
-  sweep: typeof sweepPendingGoalCancelForfeits = sweepPendingGoalCancelForfeits
+  sweep: typeof sweepPendingGoalCancelForfeits = sweepPendingGoalCancelForfeits,
+  deadlineAt?: number
 ): Promise<GoalCancelForfeitSweepResult | null> {
   try {
     const runtime = readPrimaryWalletSavingsRecoveryRuntime(env);
@@ -35,6 +36,7 @@ export async function runScheduledGoalCancelForfeitSweep(
       reconciliationConfiguration: runtime.reconciliationConfiguration,
       providerToken: runtime.providerToken,
       allowNewTransfers: goalCancelForfeitTransfersAllowed(env),
+      ...(deadlineAt === undefined ? {} : { deadlineAt }),
     });
   } catch {
     return null;

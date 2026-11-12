@@ -111,6 +111,10 @@ CREATE UNIQUE INDEX goal_cancel_forfeit_one_live_idx
 CREATE UNIQUE INDEX goal_cancel_forfeit_provider_transaction_idx
   ON piggyvest_primary.goal_cancel_interest_forfeits (integration_id, provider_transaction_id)
   WHERE provider_transaction_id IS NOT NULL;
+-- Full (non-partial) index for the cancel-operation foreign key: the live
+-- index above skips released rows.
+CREATE INDEX goal_cancel_forfeit_cancel_operation_idx
+  ON piggyvest_primary.goal_cancel_interest_forfeits (cancel_operation_id);
 CREATE INDEX goal_cancel_forfeit_integration_idx ON piggyvest_primary.goal_cancel_interest_forfeits (integration_id);
 CREATE INDEX goal_cancel_forfeit_goal_idx ON piggyvest_primary.goal_cancel_interest_forfeits (goal_id);
 CREATE INDEX goal_cancel_forfeit_intent_idx ON piggyvest_primary.goal_cancel_interest_forfeits (intent_id);
@@ -680,7 +684,9 @@ $$;
 -- Up to p_limit cancel attempts whose forfeit needs the sweep: reserved behind
 -- a confirmed principal (to send), or dispatched (to settle). A forfeit still
 -- dispatched a day after it was sent is stamped and returned with
--- "alert": true once, so a person is paged about it.
+-- "alert": true once, so a person is paged about it. Unsent work comes first,
+-- then in-flight work nobody has been paged about, and already-paged stuck
+-- transfers last, so old stuck rows can never starve newer work.
 CREATE FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(
   integration_id uuid,
   environment text,
@@ -707,7 +713,8 @@ BEGIN
       JOIN piggyvest_primary.goal_cancel_operations AS cancel ON cancel.id = forfeit.cancel_operation_id
      WHERE forfeit.integration_id = v_binding.id
        AND (forfeit.state = 'dispatched' OR (forfeit.state = 'reserved' AND cancel.state = 'confirmed'))
-     ORDER BY forfeit.reserved_at, forfeit.id
+     ORDER BY (forfeit.state = 'reserved') DESC, (forfeit.alerted_at IS NOT NULL),
+              forfeit.reserved_at, forfeit.id
      LIMIT p_limit
   ), stamped AS (
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
@@ -926,7 +933,15 @@ BEGIN
   END IF;
   IF v_forfeit.state <> 'dispatched' THEN
     -- A success for a released forfeit (indexed late, possibly after its
-    -- replacement was planned) is never settled automatically.
+    -- replacement was planned) is never settled automatically. The money has
+    -- moved, so an unsent replacement is frozen for review in the same
+    -- transaction: neither the sweep nor a status check may send it again.
+    IF v_forfeit.state = 'released' AND v_forfeit.dispatched_at IS NOT NULL THEN
+      UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS replacement
+         SET state = 'needs_review', alerted_at = pg_catalog.clock_timestamp()
+       WHERE replacement.cancel_operation_id = v_forfeit.cancel_operation_id
+         AND replacement.state = 'reserved';
+    END IF;
     RETURN 'conflict';
   END IF;
   IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS other

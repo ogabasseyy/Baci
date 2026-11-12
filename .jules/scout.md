@@ -17,3 +17,7 @@
 **Learning:** Coverage-only branches are safe to fold when they add isolated tests and do not import stale runtime changes from their source branches.
 **Action:** Cherry-pick only the intended test files for notification routes and performance hooks, then run those exact tests before closing the source PRs.
 **Source:** PRs #2892 and #2859, verified against current branch on 2026-07-01.
+2024-11-10 — Test coverage for /api/search
+Learning: When mocking Next.js API routes, it's necessary to mock the underlying Supabase helpers (`searchStorefrontProducts`, `createClient`) as well as `next/headers` to isolate the validation and HTTP response mapping layer.
+Action: Apply standard Next.js route handler mocking approach when testing APIs that interact directly with Supabase via library functions.
+Source: Vitest 4

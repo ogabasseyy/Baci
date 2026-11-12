@@ -13,6 +13,7 @@ import './ci-build-runner-contract.test.mjs';
 import './ci-hosted-free-runner-contract.test.mjs';
 import './ci-hosted-postgresql-contract.test.mjs';
 import './install-postgresql-hosted.test.mjs';
+import './install-postgresql-hosted-stalled-apt.test.mjs';
 import './dependency-review-availability.test.mjs';
 import './codeql-private-availability.test.mjs';
 import './jules-sunset-contract.test.mjs';

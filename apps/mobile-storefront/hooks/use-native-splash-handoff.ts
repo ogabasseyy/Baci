@@ -33,7 +33,7 @@ export function useNativeSplashHandoff({
   }, [showSplash]);
 
   useEffect(() => {
-    if (!showSplash || !intro.settled || !hasLayout || !(timedOut || ready))
+    if (!showSplash || !intro.settled || !(timedOut || (hasLayout && ready)))
       return;
     let active = true;
     if (!hidePromiseRef.current) {
@@ -63,7 +63,7 @@ export function useNativeSplashHandoff({
   }, [showSplash, timedOut, ready, hasLayout, intro.settled, intro.completed]);
 
   const onFirstLayout = () => {
-    if (!intro.settled || firstLayoutRecorded.current) return;
+    if (firstLayoutRecorded.current) return;
     firstLayoutRecorded.current = true;
     markStartupTiming('root_first_layout');
     setHasLayout(true);
@@ -74,5 +74,6 @@ export function useNativeSplashHandoff({
     onFirstLayout,
     shouldRenderApp: intro.settled,
     timedOut,
+    hasLayout,
   };
 }

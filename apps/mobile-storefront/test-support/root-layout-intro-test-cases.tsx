@@ -1,5 +1,5 @@
 import { expect, it, jest } from '@jest/globals';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, screen, waitFor } from '@testing-library/react-native';
 
 interface IntroTestContext {
   renderRoot: () => void;
@@ -70,10 +70,12 @@ export function registerRootLayoutIntroTests(context: IntroTestContext) {
       'Startup recovery'
     );
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
-    expect(context.mockHideSplash).not.toHaveBeenCalled();
-    fireEvent(screen.getByTestId('startup-recovery'), 'layout');
     await waitFor(() =>
-      expect(context.mockHideSplash).toHaveBeenCalledTimes(1)
+      expect(context.mockHideSplash).toHaveBeenCalledWith({
+        waitForLoop: false,
+        minDuration: 0,
+        fade: 220,
+      })
     );
   });
 }

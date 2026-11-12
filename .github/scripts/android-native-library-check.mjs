@@ -41,9 +41,9 @@ try:
                     raise ValueError(f'{path}: invalid ELF header size or version for {abi}')
                 if int.from_bytes(header[16:18], 'little') != 3:
                     raise ValueError(f'{path}: ELF entry is not a shared object for {abi}')
-    print('Native library ABI check passed for ' + ', '.join(abis))
+    print('Native library packaging and architecture check passed for ' + ', '.join(abis))
 except (OSError, ValueError, zipfile.BadZipFile) as error:
-    print(f'Native library ABI check failed: {error}', file=sys.stderr)
+    print(f'Native library packaging and architecture check failed: {error}', file=sys.stderr)
     sys.exit(1)
 `;
 const result = spawnSync('python3', ['-c', python, artifact, extension === '.aab' ? 'base/lib' : 'lib', ...abis], { stdio: 'inherit' });

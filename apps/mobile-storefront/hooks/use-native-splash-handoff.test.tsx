@@ -52,11 +52,11 @@ it('keeps the heavy app tree unmounted until native playback actually ends', asy
   expect(mockWaitForIntro).toHaveBeenCalledTimes(1);
   expect(mockHide).not.toHaveBeenCalled();
 
-  // A placeholder's layout must not stand in for the real app's layout.
-  act(() => result.current.onFirstLayout());
   await act(async () => intro.resolve(true));
   expect(result.current.shouldRenderApp).toBe(true);
   expect(mockHide).not.toHaveBeenCalled();
+  act(() => result.current.onFirstLayout());
+  await waitFor(() => expect(mockHide).toHaveBeenCalledTimes(1));
 });
 
 it('holds the final scene until the app has laid out, then fades without another loop', async () => {
@@ -141,17 +141,15 @@ it('records only the first layout even when callbacks arrive in the same batch',
   expect(markStartupTiming).toHaveBeenCalledWith('root_first_layout');
 });
 
-it('reveals recovery after a stalled native intro and hides the splash without a loop', async () => {
+it('fails open after the intro deadline even if app layout never arrives', async () => {
   const { result } = renderHook(() =>
-    useNativeSplashHandoff({ initialVisible: true, ready: false })
+    useNativeSplashHandoff({ initialVisible: true, ready: true })
   );
   act(() => jest.advanceTimersByTime(7999));
   expect(result.current.shouldRenderApp).toBe(false);
-  act(() => jest.advanceTimersByTime(1));
+  await act(async () => jest.advanceTimersByTime(1));
   expect(result.current.shouldRenderApp).toBe(true);
   expect(result.current.timedOut).toBe(true);
-  expect(mockHide).not.toHaveBeenCalled();
-  act(() => result.current.onFirstLayout());
   await waitFor(() =>
     expect(mockHide).toHaveBeenCalledWith({
       waitForLoop: false,
@@ -159,7 +157,7 @@ it('reveals recovery after a stalled native intro and hides the splash without a
       fade: 220,
     })
   );
-  await act(async () => intro.resolve(true));
   expect(mockHide).toHaveBeenCalledTimes(1);
   expect(markStartupTiming).not.toHaveBeenCalledWith('native_intro_completed');
+  await waitFor(() => expect(result.current.showSplash).toBe(false));
 });

@@ -44,12 +44,18 @@ export function useGoalWalletSetupPoll({
   // While PiggyVest is slow, a failed read is shown as "getting ready", so
   // the checks must keep going through it too.
   const slowdown = usePiggyvestSlowdown();
-  const active = phase === 'pending' || (phase === 'error' && slowdown);
+  // An error this poll reported itself (its last quick read failed) keeps
+  // the checks going too, so they recover on their own instead of stopping.
+  const [selfErrored, setSelfErrored] = useState<string | null>(null);
+  const active =
+    phase === 'pending' ||
+    (phase === 'error' && (slowdown || selfErrored === scopeKey));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reread is a fresh closure each render; the scope is what identifies it.
   useEffect(() => {
     if (!active) {
       if (count !== 0) setAttempt({ scopeKey, count: 0 });
+      if (selfErrored !== null && phase !== 'error') setSelfErrored(null);
       return;
     }
     if (count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS) return;
@@ -65,6 +71,7 @@ export function useGoalWalletSetupPoll({
         }
         if (!current) return;
         if (count + 1 === FAST_ATTEMPTS && lastFailure.current) {
+          setSelfErrored(scopeKey);
           onExhausted?.(lastFailure.current.error);
         }
         setAttempt({ scopeKey, count: count + 1 });
@@ -75,7 +82,7 @@ export function useGoalWalletSetupPoll({
       current = false;
       clearTimeout(timer);
     };
-  }, [active, count, scopeKey]);
+  }, [active, count, scopeKey, phase]);
 
   const slow = active && count >= FAST_ATTEMPTS;
   // Only a still-pending setup raises the signal: an errored read kept alive

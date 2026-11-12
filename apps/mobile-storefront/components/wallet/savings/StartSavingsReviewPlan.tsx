@@ -4,12 +4,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { BRAND, palette } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { formatSavingsDuration } from './format-savings-duration';
+import { daysUntil } from '../get-savings-pace';
 import { SavingsProductThumb } from './SavingsProductThumb';
 import { EARLY_CANCEL_INTEREST_NOTE } from './savings-interest-copy';
 import { savingsPaceWords } from './savings-pace-words';
 import { savingsProductImage } from './savings-product-image';
-import { getTodayIsoDate } from './start-savings.helpers';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 
@@ -22,11 +21,8 @@ type IconName = ComponentProps<typeof Ionicons>['name'];
  */
 export function StartSavingsReviewPlan({ colors, controller }: Props) {
   const product = controller.selectedProduct;
-  const duration = formatSavingsDuration(
-    controller.targetValue,
-    controller.contributionValue,
-    controller.frequency
-  );
+  // Counted from today to the plan's end date, so a later start is included.
+  const daysToGo = daysUntil(controller.maturityDate, new Date());
   const auto = controller.sourceMode === 'auto_debit';
   return (
     <View style={styles.wrap}>
@@ -54,11 +50,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           {savingsPaceWords(controller.frequency)}
         </Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>
-          {duration !== 'Same day'
-            ? `Yours in about ${duration}`
-            : controller.startDate === getTodayIsoDate()
-              ? 'Yours today'
-              : `Yours on ${formatDateTimeDisplay(controller.startDate, 'date')}`}
+          {yoursLine(daysToGo, controller.maturityDate)}
         </Text>
       </View>
       <View accessible accessibilityLabel={timelineLabel(controller)}>
@@ -110,6 +102,14 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
       </View>
     </View>
   );
+}
+
+/** "Yours today", "Yours in about 124 days", or the date when unknown. */
+function yoursLine(daysToGo: number | null, maturityDate: string) {
+  if (daysToGo === 0) return 'Yours today';
+  if (daysToGo === null)
+    return `Yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
+  return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;
 }
 
 function timelineLabel(controller: StartSavingsController) {

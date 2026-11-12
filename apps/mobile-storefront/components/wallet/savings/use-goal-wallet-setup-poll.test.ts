@@ -170,4 +170,27 @@ describe('useGoalWalletSetupPoll', () => {
       expect(reread).not.toHaveBeenCalled();
     });
   });
+
+  describe('bugfix: checks stopped when the last quick read failed', () => {
+    it('keeps checking after reporting its own failed read', async () => {
+      const onExhausted = jest.fn();
+      const reread = jest.fn().mockRejectedValue(new Error('down'));
+      const hook = renderHook(
+        (props: Props) =>
+          useGoalWalletSetupPoll({
+            phase: props.phase,
+            scopeKey: 'a',
+            reread,
+            onExhausted,
+          }),
+        { initialProps: { phase: 'pending' } as Props }
+      );
+      await ticks(12);
+      expect(onExhausted).toHaveBeenCalledTimes(1);
+      // The parent flips the phase to error; the poll keeps going.
+      hook.rerender({ phase: 'error' });
+      await advance(20_000);
+      expect(reread).toHaveBeenCalledTimes(13);
+    });
+  });
 });

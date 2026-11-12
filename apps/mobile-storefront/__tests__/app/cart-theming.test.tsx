@@ -39,6 +39,22 @@ jest.mock('@/components/useColorScheme', () => mockColorSchemeModule());
 jest.mock('@/components/checkout/checkout-identity', () =>
   mockCheckoutIdentityModule()
 );
+jest.mock(
+  '@/components/checkout/checkout-identity/useCheckoutIdentityOverlay',
+  () => {
+    const { useState } = jest.requireActual<typeof import('react')>('react');
+    return {
+      useCheckoutIdentityOverlay: () => {
+        const [isOpen, setIsOpen] = useState(false);
+        return {
+          isOpen,
+          open: () => setIsOpen(true),
+          close: () => setIsOpen(false),
+        };
+      },
+    };
+  }
+);
 jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
 jest.mock('@/stores/cart-store', () => mockCartStoreModule());
 jest.mock('@/hooks/useMerchantPaymentSettings', () => ({

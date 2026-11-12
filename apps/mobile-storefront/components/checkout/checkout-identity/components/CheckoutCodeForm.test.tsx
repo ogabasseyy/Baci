@@ -58,7 +58,7 @@ it('sends a normalized address, announces busy state, then verifies the code', a
   expect(onBusyChange).toHaveBeenNthCalledWith(4, false);
 });
 
-it('prevents a same-address resend after switching back to email entry', async () => {
+it('resumes verification and preserves resend cooldown after switching email', async () => {
   jest.useFakeTimers();
   try {
     renderForm();
@@ -78,16 +78,26 @@ it('prevents a same-address resend after switching back to email entry', async (
       screen.getByLabelText('Email address'),
       ' Cooldown-Form@Example.com '
     );
-    const submit = screen.getByRole('button', {
-      name: 'Continue with email',
+    const resume = screen.getByRole('button', {
+      name: 'Enter verification code',
     });
-    expect(submit).toBeDisabled();
-    fireEvent.press(submit);
+    expect(resume).toBeEnabled();
+    fireEvent.press(resume);
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+
+    const resend = screen.getByRole('button', {
+      name: 'Resend code unavailable during cooldown.',
+    });
+    expect(resend).toBeDisabled();
+    fireEvent.press(resend);
     expect(mockSendCode).toHaveBeenCalledTimes(1);
 
     act(() => jest.advanceTimersByTime(60_000));
-    expect(submit).toBeEnabled();
-    await act(async () => fireEvent.press(submit));
+    const availableResend = screen.getByRole('button', {
+      name: 'Resend code',
+    });
+    expect(availableResend).toBeEnabled();
+    await act(async () => fireEvent.press(availableResend));
     expect(mockSendCode).toHaveBeenCalledTimes(2);
   } finally {
     jest.useRealTimers();
@@ -113,13 +123,26 @@ it('does not update busy state after an in-flight request is unmounted', async (
   await act(async () => complete({ success: true }));
   expect(onBusyChange).toHaveBeenCalledTimes(1);
 
-  renderForm();
+  const reopened = renderForm();
   fireEvent.changeText(
     screen.getByLabelText('Email address'),
     'unmount-form@example.com'
   );
-  expect(
-    screen.getByRole('button', { name: 'Continue with email' })
-  ).toBeDisabled();
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Enter verification code' })
+  );
+  const code = await screen.findByLabelText('Verification code');
   expect(mockSendCode).toHaveBeenCalledTimes(1);
+  fireEvent.changeText(code, '123456');
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Verify & continue checkout' })
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(mockVerifyCode).toHaveBeenCalledWith(
+    'unmount-form@example.com',
+    '123456'
+  );
+  expect(reopened.onVerified).toHaveBeenCalledTimes(1);
 });

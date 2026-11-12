@@ -1,12 +1,25 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  type TextInputInstance,
+  View,
+} from 'react-native';
 import { checkoutIdentityEmailSchema } from '@/schemas/checkout-identity-email';
 import { useAuthStore } from '@/stores/auth-store';
 import type { CheckoutIdentityTheme } from '../colors';
+import {
+  MAX_OTP_EMAIL_ENTRIES,
+  OTP_CODE_EXPIRY_MS,
+  OTP_RESEND_COOLDOWN_MS,
+} from '../constants';
 import { ErrorAlert } from './ErrorAlert';
 
 const resendCooldownsByEmail = new Map<string, number>();
+const pendingOtpEmails = new Map<string, number>();
 
 function getResendCooldown(email: string): number | null {
   const until = resendCooldownsByEmail.get(email);
@@ -17,14 +30,41 @@ function getResendCooldown(email: string): number | null {
 }
 
 function startResendCooldown(email: string): number {
-  const until = Date.now() + 60_000;
+  const now = Date.now();
+  const until = now + OTP_RESEND_COOLDOWN_MS;
+  for (const [cooldownEmail, expiresAt] of resendCooldownsByEmail) {
+    if (expiresAt <= now) resendCooldownsByEmail.delete(cooldownEmail);
+  }
+  resendCooldownsByEmail.delete(email);
+  if (resendCooldownsByEmail.size >= MAX_OTP_EMAIL_ENTRIES) {
+    const oldestEmail = resendCooldownsByEmail.keys().next().value;
+    if (oldestEmail) resendCooldownsByEmail.delete(oldestEmail);
+  }
   resendCooldownsByEmail.set(email, until);
+  const otpExpiresAt = now + OTP_CODE_EXPIRY_MS;
+  for (const [pendingEmail, expiresAt] of pendingOtpEmails) {
+    if (expiresAt <= now) pendingOtpEmails.delete(pendingEmail);
+  }
+  pendingOtpEmails.delete(email);
+  if (pendingOtpEmails.size >= MAX_OTP_EMAIL_ENTRIES) {
+    const oldestEmail = pendingOtpEmails.keys().next().value;
+    if (oldestEmail) pendingOtpEmails.delete(oldestEmail);
+  }
+  pendingOtpEmails.set(email, otpExpiresAt);
   setTimeout(() => {
     if (resendCooldownsByEmail.get(email) === until) {
       resendCooldownsByEmail.delete(email);
     }
-  }, 60_000);
+  }, OTP_RESEND_COOLDOWN_MS);
   return until;
+}
+
+function hasPendingOtp(email: string): boolean {
+  const expiresAt = pendingOtpEmails.get(email);
+  if (expiresAt === undefined) return false;
+  if (expiresAt > Date.now()) return true;
+  pendingOtpEmails.delete(email);
+  return false;
 }
 
 export function CheckoutCodeForm({
@@ -51,6 +91,7 @@ export function CheckoutCodeForm({
   const [busy, setBusy] = useState(false);
   const [, setCooldownVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const active = useRef(false);
   const pending = useRef(false);
 
@@ -65,6 +106,7 @@ export function CheckoutCodeForm({
   const isEmailValid =
     checkoutIdentityEmailSchema.safeParse(normalizedEmail).success;
   const activeEmail = sentTo || normalizedEmail;
+  const canResumeOtp = !sentTo && hasPendingOtp(normalizedEmail);
   const resendAfter =
     resendAfterByEmail[activeEmail] ?? getResendCooldown(activeEmail);
   const emailCoolingDown =
@@ -89,16 +131,28 @@ export function CheckoutCodeForm({
     return () => clearTimeout(timer);
   }, [activeEmail, resendAfter]);
 
+  useEffect(() => {
+    if (sentTo) inputRef.current?.focus();
+  }, [sentTo]);
+
   const submit = async (resend = false) => {
     if (
       pending.current ||
       socialBusy ||
       (resend && resendAfter !== null && resendAfter > Date.now()) ||
+      (resend && !sentTo) ||
       (!resend &&
         !sentTo &&
+        !canResumeOtp &&
         (getResendCooldown(normalizedEmail) ?? 0) > Date.now())
     )
       return;
+    if (!sentTo && !resend && hasPendingOtp(normalizedEmail)) {
+      setSentTo(normalizedEmail);
+      setCode('');
+      setError(null);
+      return;
+    }
     if (sentTo ? !resend && code.length !== 6 : !isEmailValid) return;
 
     pending.current = true;
@@ -115,6 +169,9 @@ export function CheckoutCodeForm({
         result.success && (sentTo.length === 0 || resend)
           ? startResendCooldown(sentEmail)
           : null;
+      if (result.success && sentTo && !resend) {
+        pendingOtpEmails.delete(sentTo);
+      }
       if (!active.current) return;
       if (!result.success) {
         setError(result.error || 'Unable to sign in. Please try again.');
@@ -144,11 +201,15 @@ export function CheckoutCodeForm({
   const inputLabel = sentTo ? 'Verification code' : 'Email address';
   const submitLabel = sentTo
     ? 'Verify & continue checkout'
-    : 'Continue with email';
+    : canResumeOtp
+      ? 'Enter verification code'
+      : 'Continue with email';
   const disabled =
     busy ||
     socialBusy ||
-    (sentTo ? code.length !== 6 : !isEmailValid || emailCoolingDown);
+    (sentTo
+      ? code.length !== 6
+      : !isEmailValid || (emailCoolingDown && !canResumeOtp));
 
   return (
     <View style={styles.form}>
@@ -161,7 +222,7 @@ export function CheckoutCodeForm({
       <View style={styles.field}>
         <Text style={[styles.label, { color: theme.text }]}>{inputLabel}</Text>
         <TextInput
-          key={inputLabel}
+          ref={inputRef}
           accessibilityLabel={inputLabel}
           value={sentTo ? code : email}
           onChangeText={

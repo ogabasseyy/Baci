@@ -1,31 +1,7 @@
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { CheckoutIdentityModal } from './CheckoutIdentityModal';
-
-interface CheckoutIdentityOverlayContextValue {
-  isOpen: boolean;
-  open: (onVerified?: () => void) => void;
-  close: () => void;
-}
-
-const CheckoutIdentityOverlayContext =
-  createContext<CheckoutIdentityOverlayContextValue | null>(null);
-
-export function useCheckoutIdentityOverlay() {
-  const context = useContext(CheckoutIdentityOverlayContext);
-  if (!context) {
-    throw new Error(
-      'useCheckoutIdentityOverlay must be used inside CheckoutIdentityOverlayProvider.'
-    );
-  }
-  return context;
-}
+import { CheckoutIdentityOverlayContext } from './CheckoutIdentityOverlayContext';
 
 /** Host the Android inline checkout sheet above navigation and app chrome. */
 export function CheckoutIdentityOverlayProvider({
@@ -34,14 +10,14 @@ export function CheckoutIdentityOverlayProvider({
   children: ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const onVerifiedRef = useRef<(() => void) | undefined>(undefined);
+  const [onVerified, setOnVerified] = useState<(() => void) | undefined>();
 
   const open = (onVerified?: () => void) => {
-    onVerifiedRef.current = onVerified;
+    setOnVerified(() => onVerified);
     setIsOpen(true);
   };
   const close = () => {
-    onVerifiedRef.current = undefined;
+    setOnVerified(undefined);
     setIsOpen(false);
   };
 
@@ -58,7 +34,7 @@ export function CheckoutIdentityOverlayProvider({
         <CheckoutIdentityModal
           isOpen={isOpen}
           onClose={close}
-          onVerified={onVerifiedRef.current}
+          onVerified={onVerified}
         />
       </View>
     </CheckoutIdentityOverlayContext.Provider>

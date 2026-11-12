@@ -60,7 +60,7 @@ export function CheckoutSheetPresentation({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFill,
-    zIndex: 1,
-    elevation: 1,
+    zIndex: 100,
+    elevation: 100,
   },
 });

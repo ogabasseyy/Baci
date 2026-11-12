@@ -36,6 +36,8 @@ import {
   setupCartMocks,
 } from './cart.test-utils';
 
+const mockOpenCheckoutIdentity = jest.fn();
+
 // These isolated screen fixtures represent a focused navigation route.
 jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
 
@@ -52,6 +54,25 @@ jest.mock('react-native-reanimated', () => mockReanimatedModule());
 jest.mock('@/components/useColorScheme', () => mockColorSchemeModule());
 jest.mock('@/components/checkout/checkout-identity', () =>
   mockCheckoutIdentityModule()
+);
+jest.mock(
+  '@/components/checkout/checkout-identity/useCheckoutIdentityOverlay',
+  () => {
+    const { useState } = jest.requireActual<typeof import('react')>('react');
+    return {
+      useCheckoutIdentityOverlay: () => {
+        const [isOpen, setIsOpen] = useState(false);
+        return {
+          isOpen,
+          open: (...args: unknown[]) => {
+            mockOpenCheckoutIdentity(...args);
+            setIsOpen(true);
+          },
+          close: () => setIsOpen(false),
+        };
+      },
+    };
+  }
 );
 jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
 jest.mock('@/stores/cart-store', () => mockCartStoreModule());
@@ -183,12 +204,9 @@ describe('CartScreen state', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('Checkout Identity Modal')).toBeTruthy()
+      expect(mockOpenCheckoutIdentity).toHaveBeenCalledTimes(1)
     );
     expect(mockRouterPush).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole('button', { name: /Proceed to checkout, total/i })
-    ).toBeNull();
     unmount();
 
     mockUseAuthStatus.mockReturnValue(

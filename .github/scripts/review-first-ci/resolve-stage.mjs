@@ -17,11 +17,11 @@ function summaryFor(decision, headSha, timeoutMinutes) {
   const lines = [`## ${heading}`, '', '| | |', '| --- | --- |', `| Stage | \`${decision.stage}\` (${decision.code}) |`, `| Why | ${oneLine(decision.reason)} |`, `| Commit | \`${String(headSha).slice(0, 10)}\` |`, ''];
   if (decision.stage === 'quick') {
     lines.push(
-      'The test shards, mobile and shared tests, `Build`, DB replay and the browser regression start after Codex reports no major findings for this exact commit. `Build` and `Quality Gate` are deferred: GitHub shows them as missing, so merging stays blocked.',
+      'The test shards, mobile and shared tests, `Build`, DB replay and the browser regression start only once the PR is ready and Codex reports no major findings for this exact commit. `Build` and `Quality Gate` are deferred: GitHub shows them as missing, so merging stays blocked.',
       '',
-      `* Wait: Codex reviews every push; the full CI then starts on its own.`,
-      `* Break-glass (Codex down, or a finding was answered): add the label \`${BREAK_GLASS_LABEL}\`.`,
-      `* No Codex verdict after ${timeoutMinutes} minutes starts the full CI anyway.`,
+      `* Wait: keep the PR draft until Codex and Muse are clean, then mark ready; full CI starts on its own.`,
+      `* Break-glass (Codex down, or a finding was answered): on a ready PR, add the label \`${BREAK_GLASS_LABEL}\`. Drafts stay quick.`,
+      `* No Codex verdict after ${timeoutMinutes} minutes on a ready PR starts the full CI anyway. Drafts never time out.`,
       ''
     );
   }

@@ -67,6 +67,8 @@ export function decideStage(input) {
   if (liveHeadSha && headSha && liveHeadSha !== headSha) {
     return result('quick', 'superseded', `the pull request head moved to ${liveHeadSha.slice(0, 7)}; this run is for ${headSha.slice(0, 7)}`);
   }
+  // Readiness is a hard gate, including when Codex is clean or ci-now is present.
+  if (draft) return result('quick', 'draft', 'the pull request is draft; mark ready after Codex and Muse are clean to release heavy CI');
   if (labelsKnown && labels.includes(BREAK_GLASS_LABEL)) return result('full', 'break-glass', `the "${BREAK_GLASS_LABEL}" label asks for the full CI now`, true);
 
   if (verdict?.state === 'clean') return result('full', 'codex-clean', verdict.reason);

@@ -4,7 +4,7 @@ import { SavingsQuickAmounts } from './SavingsQuickAmounts';
 
 const options = [
   { amount: 5000, label: '₦5,000' },
-  { amount: 1000, label: 'All available' },
+  { amount: 1000, label: 'Max', spokenLabel: 'all available' },
 ];
 
 describe('SavingsQuickAmounts', () => {

@@ -51,7 +51,9 @@ const interestEvent = {
   eventData: {
     id: 'faas-interest-synthetic-001',
     amount: 95000,
-    destination_wallet: 'faas-wallet-synthetic-001',
+    // PVB-internal wallet id (PiggyVest, 2026-11-11): never the credited
+    // plan wallet.
+    destination_wallet: 'pvb-internal-wallet-synthetic-009',
     destination_wallet_balance: 1095000,
     destination_wallet_ledger_balance: 1095000,
     reference: 'faas-ref-synthetic-002',
@@ -64,7 +66,8 @@ const interestEvent = {
     },
   },
   pvb_reference: 'pvb-txn-synthetic-002',
-  pvb_wallet: 'pvb-wallet-synthetic-001',
+  // The PVB wallet the payout credited.
+  pvb_wallet: 'faas-wallet-synthetic-001',
   pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
   pvb_destination_wallet: null,
   pvb_third_party_reference: null,
@@ -218,9 +221,10 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
+  // A changed internal transaction_id alone is no longer a conflict: the
+  // credit identity is pvb_reference (route.pvb-reference-retry.test.ts).
   it.each([
     { amount: 1 },
-    { transaction_id: 'provider-txn-synthetic-002' },
   ])('quarantines same-identity conflicting deliveries without crediting: %j', async (changedDetail) => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     // Stored envelope keeps the original amount while the redelivery
@@ -281,7 +285,7 @@ describe('POST event intake', () => {
     );
   });
 
-  it('records the destination plan wallet for interest payouts', async () => {
+  it('records the credited pvb_wallet for interest payouts', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     const { query, upsert } = chainable({
       data: [{ event_id: interestEvent.eventId }],

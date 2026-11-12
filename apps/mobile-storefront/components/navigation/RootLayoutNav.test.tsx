@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { render, screen, waitFor, within } from '@testing-library/react-native';
 import type React from 'react';
 import { Platform, Text, View } from 'react-native';
 import { CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET } from '@/constants/layout';
@@ -87,7 +87,9 @@ jest.mock('react-native-gesture-handler', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => children,
+  SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => (
+    <MockView testID="safe-area-provider">{children}</MockView>
+  ),
 }));
 
 jest.mock('@/components/cart/SharedCartBridge', () => ({
@@ -191,6 +193,20 @@ describe('RootLayoutNav', () => {
     expect(screen.getByText('negotiation-modal')).toBeTruthy();
     expect(screen.getByText('drawer-menu')).toBeTruthy();
     expect(mockUseAuthGuard).toHaveBeenCalledTimes(1);
+  });
+
+  it('bugfix: puts the offline banner above the screens, so it pushes headers down instead of covering them', () => {
+    render(<RootLayoutNav />);
+
+    const providers = screen.getAllByTestId('safe-area-provider');
+    const screensArea = providers[providers.length - 1];
+    // The screens get their own safe-area provider below the banner...
+    expect(
+      within(screensArea).getByRole('summary', { name: 'root stack' })
+    ).toBeTruthy();
+    // ...and the banner is outside it, in the flow above.
+    expect(within(screensArea).queryByText('connectivity-banner')).toBeNull();
+    expect(screen.getByText('connectivity-banner')).toBeTruthy();
   });
 
   it('passes persistence settings through to the query provider', () => {

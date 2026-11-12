@@ -1,6 +1,13 @@
 import 'server-only';
 import { piggyvestDailyReconciliationSchemas as schemas } from '@/schemas/piggyvest-daily-reconciliation';
 import {
+  createWalletPageReader,
+  type ListWalletPage,
+} from './credit-gap-provider-reader';
+import { runCreditGapCheck } from './credit-gap-reconciliation';
+import { withCreditGap } from './credit-gap-report';
+import { buildCreditGapPorts } from './credit-gap-runtime';
+import {
   type ReconciliationReport,
   runDailyReconciliation,
 } from './daily-reconciliation';
@@ -61,6 +68,12 @@ export interface DailyReconciliationDeps {
   createExecutor: typeof createPrimaryWalletEvidenceExecutor;
   readProviderTransfer: typeof readProviderTransfer;
   retrieveWallet: typeof retrievePiggyvestWallet;
+  /** Builds the reader for PiggyVest's transaction list (credit-gap check). */
+  createWalletPageReader: (transport: {
+    environment: 'staging' | 'production';
+    token: string;
+    fetchImplementation: typeof fetch;
+  }) => ListWalletPage;
   sendEmail: (message: {
     to: string;
     subject: string;
@@ -81,6 +94,7 @@ function defaultDeps(): DailyReconciliationDeps {
     createExecutor: createPrimaryWalletEvidenceExecutor,
     readProviderTransfer,
     retrieveWallet: retrievePiggyvestWallet,
+    createWalletPageReader,
     sendEmail: sendReconciliationEmail,
     emitAlert: emitPiggyvestWebhookAlert,
     now: () => new Date().toISOString(),
@@ -102,7 +116,23 @@ function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
   const token = runtime.providerToken;
   const baseUrl = getPrimaryWalletProviderOrigin(environment);
   const execute = deps.createExecutor(runtime.reconciliationConfiguration);
+  const listPage = deps.createWalletPageReader({
+    environment,
+    token,
+    fetchImplementation: fetch,
+  });
+  const creditGap = (expired: () => boolean) =>
+    buildCreditGapPorts({
+      execute,
+      integrationId,
+      environment,
+      businessId: runtime.businessId,
+      rotationSlot: rotationSlotOf(deps.nowMs()),
+      listPage,
+      expired,
+    });
   return {
+    creditGap,
     loadSnapshot: async () => {
       const { rows } = await execute(SNAPSHOT_STATEMENT, [
         integrationId,
@@ -198,12 +228,25 @@ export async function runPiggyvestDailyReconciliation(
       };
     } else {
       try {
+        const deadlineMs = deps.nowMs() + RECONCILIATION_READ_BUDGET_MS;
         report = await runDailyReconciliation({
           ...ports,
           now: deps.now,
           nowMs: deps.nowMs,
-          deadlineMs: deps.nowMs() + RECONCILIATION_READ_BUDGET_MS,
+          deadlineMs,
         });
+        // Credits PiggyVest made that our ledgers never recorded (and the
+        // reverse). Shares the read budget; it only reads.
+        if (report.status !== 'failed') {
+          const completed = report;
+          const gap = await runCreditGapCheck(
+            ports.creditGap(() => deps.nowMs() >= deadlineMs)
+          ).catch(() => ({
+            status: 'failed' as const,
+            reason: 'snapshot_unavailable' as const,
+          }));
+          report = withCreditGap(completed, gap);
+        }
       } catch {
         // The configuration was fine; the run itself threw.
         report = {
@@ -234,9 +277,11 @@ export async function runPiggyvestDailyReconciliation(
       emailed = false;
     }
   }
+  // The email-failure marker goes first: the alert reason is clipped at
+  // 120 characters and must never lose it behind a long count list.
   const reasons = [
-    pageReasonOf(report),
     emailed ? null : 'report_email_failed',
+    pageReasonOf(report),
   ];
   const reason = reasons.filter(Boolean).join(' ');
   if (reason) deps.emitAlert('PIGGYVEST_RECONCILIATION_MISMATCH', { reason });

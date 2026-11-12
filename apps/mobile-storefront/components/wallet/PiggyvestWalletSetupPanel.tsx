@@ -3,6 +3,10 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import {
+  beginPrimaryRead,
+  rememberPrimaryFundingAccount,
+} from '@/hooks/primary-funding-account-memory';
 import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
@@ -91,14 +95,43 @@ export function PiggyvestWalletSetupPanel({
     setBusy(true);
     setError(false);
     setAwaitingAccount(false);
+    // Numbered as it starts, so a wallet read started later still wins.
+    const sequence = requestUserId
+      ? beginPrimaryRead(merchantId, requestUserId)
+      : 0;
     try {
       const result = await piggyvestPrimaryWalletApi.read(
         merchantId,
         requestUserId ?? undefined
       );
       if (authUserIdRef.current !== requestUserId) return;
-      if (result.account) onRefresh();
-      else setAwaitingAccount(true);
+      if (result.account) {
+        // Hand this confirmed read to the wallet reload below, so the sheet
+        // closes even when that reload's own PiggyVest read runs slow.
+        // Only a full read (account and balance) is handed over: one
+        // without a balance would show the account but not the money.
+        const balanceKobo = result.balanceKobo;
+        if (
+          requestUserId &&
+          typeof balanceKobo === 'number' &&
+          Number.isSafeInteger(balanceKobo) &&
+          balanceKobo >= 0
+        )
+          rememberPrimaryFundingAccount(
+            merchantId,
+            requestUserId,
+            {
+              status: 'ready',
+              account: result.account,
+              balanceKobo,
+            },
+            sequence
+          );
+        // Reload even when a newer read already answered (the handover is
+        // then ignored): that newer answer is what the reload recalls, and
+        // the reload is what closes this sheet.
+        onRefresh();
+      } else setAwaitingAccount(true);
     } catch (error) {
       if (authUserIdRef.current !== requestUserId) return;
       if (requestUserId && isPrimaryWalletReviewRequired(error)) {

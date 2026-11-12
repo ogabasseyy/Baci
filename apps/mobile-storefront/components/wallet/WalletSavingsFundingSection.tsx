@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { ManualPrimaryGoalSection } from './ManualPrimaryGoalSection';
 import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
 import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
 import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
 import type { WalletSavingsFundingSectionProps } from './wallet-savings-funding-section.types';
@@ -26,7 +27,11 @@ export function WalletSavingsFundingSection({
   walletUpdatedAt,
 }: WalletSavingsFundingSectionProps) {
   const [gateRetryNonce, setGateRetryNonce] = useState(0);
-  const gate = usePrimaryGoalGate(walletUpdatedAt, gateRetryNonce);
+  // The wallet screen already confirmed the main wallet: use that answer
+  // instead of waiting on a second read when the sheet opens.
+  const walletPrimaryReady = useWalletPrimaryReady();
+  const checkedGate = usePrimaryGoalGate(walletUpdatedAt, gateRetryNonce);
+  const gate = walletPrimaryReady ? 'ready' : checkedGate;
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
   const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID);

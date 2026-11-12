@@ -1,0 +1,1 @@
+supabase/tests/wallet_pin_recent_sign_in_read.sql

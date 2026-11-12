@@ -1,4 +1,3 @@
-import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
 import { SavingsPlanStatusNote } from './savings/SavingsPlanStatusNote';
 import { useGoalWalletSetupPoll } from './savings/use-goal-wallet-setup-poll';
 import { useSavingsPlanFunding } from './savings/use-savings-plan-funding';
@@ -23,10 +22,6 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
   });
   return (
     <>
-      {funding.planFundingPhase === 'idle' ||
-      funding.planFundingPhase === 'loading' ? (
-        <SavingsFundingLoadingPanel colors={colors} />
-      ) : null}
       <SavingsPlanStatusNote
         colors={colors}
         goalId={goal.id}
@@ -35,7 +30,12 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
         funding={funding}
         onCheckAgain={poll.exhausted ? poll.checkAgain : undefined}
       />
-      {funding.planFundingPhase === 'ready' ? (
+      {/* The form shows at once while the plan's savings wallet is confirmed
+          in the background; only a definite "not ready" answer replaces it.
+          The transfer itself is refused server-side until that wallet exists. */}
+      {funding.planFundingPhase === 'ready' ||
+      funding.planFundingPhase === 'idle' ||
+      funding.planFundingPhase === 'loading' ? (
         <WalletSavingsContributionFlow
           addAmount={props.addAmount}
           colors={colors}

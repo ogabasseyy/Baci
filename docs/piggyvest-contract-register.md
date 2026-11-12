@@ -454,6 +454,19 @@ wallet and the business settlement wallet (no API customer). Masked output only.
   creating customer". It needs another sandbox BVN that staging accepts, or a
   named sandbox customer to stand in. The collection-wallet check in code is
   unchanged until a transfer into an Ogabassey API wallet settles.
+- Second destination tried (same day, same QA customer, ₦1 test money): the
+  business `expense` wallet (no API customer, `auto_payout: false`, the wallet
+  the settlement wallet forwards to). Same outcome: 202 "Wallet transfer
+  processing", then for 6 minutes no row on either wallet, no balance change,
+  and TSQ 404 now carrying `processing_status: "initiated"`. So in staging a
+  customer API wallet cannot pay ANY business-owned (non-API) wallet; only
+  API-wallet ↔ API-wallet transfers (main ↔ goal) are proven.
+- Creating a new API customer for Ogabassey fails for every BVN except the
+  taken all-zeros one: `11111111111`, `12345678901`, `22222222222`, random
+  values, minimal bodies, local/international phones, and with a NIN all
+  answer 400 "An error occurred creating customer". Staging appears to verify
+  BVNs; Option B needs a sandbox BVN PiggyVest staging accepts (never a real
+  person's BVN).
 - Not observed (no transfer completed): the fee on a completed transfer, the
   TSQ record shape for these directions, and webhooks.
 

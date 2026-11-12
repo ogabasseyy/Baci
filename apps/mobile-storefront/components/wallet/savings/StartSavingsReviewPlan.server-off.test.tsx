@@ -74,7 +74,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       expect(screen.getByText('Yours today')).toBeOnTheScreen();
     });
 
-    it('says the estimate is before a partial head start', () => {
+    it('says the estimate does not count a partial head start', () => {
       render(
         <StartSavingsReviewPlan
           colors={Colors.light}
@@ -84,7 +84,9 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
         />
       );
       expect(
-        screen.getByText('Yours in about 125 days, before your head start')
+        screen.getByText(
+          'Yours in about 125 days, not counting your head start'
+        )
       ).toBeOnTheScreen();
     });
   });

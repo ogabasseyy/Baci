@@ -123,7 +123,7 @@ function headStartShare(
 /**
  * "Yours today", "Yours in about 124 days", or the date when unknown. The
  * plan's end date is worked out from the full price, so with a partial head
- * start the line says the estimate is before it (it will likely be sooner).
+ * start the line says the estimate does not count it (it will likely be sooner).
  */
 function yoursLine(
   daysToGo: number | null,
@@ -132,7 +132,7 @@ function yoursLine(
 ) {
   if (headStart === 'all' || daysToGo === 0) return 'Yours today';
   if (headStart === 'part' && daysToGo !== null)
-    return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}, before your head start`;
+    return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}, not counting your head start`;
   if (daysToGo === null)
     return `Yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
   return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;

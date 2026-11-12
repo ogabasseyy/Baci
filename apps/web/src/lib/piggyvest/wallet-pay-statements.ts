@@ -13,6 +13,8 @@ export const WALLET_PAY_CUSTOMER_STATEMENTS = {
     'SELECT piggyvest_primary.manage_wallet_payment($1::jsonb,$2::uuid,$3::text) AS result',
   status:
     'SELECT piggyvest_primary.read_wallet_payment_status($1::jsonb,$2::uuid) AS result',
+  forPurchase:
+    'SELECT piggyvest_primary.read_wallet_payment_for_purchase($1::jsonb,$2::jsonb) AS result',
 } as const;
 
 /** Authorizer login, first parameters = integration id and environment. */

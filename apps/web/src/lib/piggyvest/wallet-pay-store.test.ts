@@ -181,4 +181,21 @@ describe('createWalletPayWorkerStore', () => {
       OP,
     ]);
   });
+  it('reads this customer payment for one purchase', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows({ operationId: OP, state: 'issued' })
+    );
+    const store = createWalletPayCustomerStore({ scope, execute });
+    await expect(
+      store.readForPurchase('imei_check', 'lookup-1')
+    ).resolves.toEqual({
+      operationId: OP,
+      state: 'issued',
+    });
+    expect(execute).toHaveBeenCalledWith(customerSql.forPurchase, [
+      JSON.stringify(scope),
+      JSON.stringify({ purpose: 'imei_check', purchaseRef: 'lookup-1' }),
+    ]);
+  });
 });

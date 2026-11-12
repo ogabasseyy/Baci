@@ -26,12 +26,14 @@ export function CheckoutCodeForm({
   renderSocial,
   onVerified,
   onBusyChange,
+  onVerificationBusyChange,
   socialBusy,
   theme,
 }: {
   renderSocial: (busy: boolean) => ReactNode;
   onVerified: () => void;
   onBusyChange: (busy: boolean) => void;
+  onVerificationBusyChange: (busy: boolean) => void;
   socialBusy: boolean;
   theme: CheckoutIdentityTheme;
 }) {
@@ -144,6 +146,8 @@ export function CheckoutCodeForm({
     pending.current = true;
     setBusy(true);
     onBusyChange(true);
+    const verifying = Boolean(sentTo && !resend);
+    if (verifying) onVerificationBusyChange(true);
     setError(null);
     try {
       let result: OtpSendResult;
@@ -179,6 +183,7 @@ export function CheckoutCodeForm({
     } finally {
       pending.current = false;
       if (active.current) {
+        if (verifying) onVerificationBusyChange(false);
         onBusyChange(false);
         setBusy(false);
       }

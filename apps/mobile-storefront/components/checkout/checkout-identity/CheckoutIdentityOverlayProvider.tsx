@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { GlobalErrorBoundary } from '@/components/ErrorBoundary';
 import { CheckoutIdentityModal } from './CheckoutIdentityModal';
 import { CheckoutIdentityOverlayContext } from './CheckoutIdentityOverlayContext';
 
@@ -11,13 +12,18 @@ export function CheckoutIdentityOverlayProvider({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [onVerified, setOnVerified] = useState<(() => void) | undefined>();
+  const [onGuestCheckout, setOnGuestCheckout] = useState<
+    (() => void) | undefined
+  >();
 
-  const open = (onVerified?: () => void) => {
+  const open = (onVerified?: () => void, onGuestCheckout?: () => void) => {
     setOnVerified(() => onVerified);
+    setOnGuestCheckout(() => onGuestCheckout);
     setIsOpen(true);
   };
   const close = () => {
     setOnVerified(undefined);
+    setOnGuestCheckout(undefined);
     setIsOpen(false);
   };
 
@@ -31,11 +37,14 @@ export function CheckoutIdentityOverlayProvider({
         >
           {children}
         </View>
-        <CheckoutIdentityModal
-          isOpen={isOpen}
-          onClose={close}
-          onVerified={onVerified}
-        />
+        <GlobalErrorBoundary context="CheckoutIdentityOverlay">
+          <CheckoutIdentityModal
+            isOpen={isOpen}
+            onClose={close}
+            onVerified={onVerified}
+            onGuestCheckout={onGuestCheckout}
+          />
+        </GlobalErrorBoundary>
       </View>
     </CheckoutIdentityOverlayContext.Provider>
   );

@@ -19,20 +19,22 @@ beforeEach(() => {
 function renderForm() {
   const onVerified = jest.fn();
   const onBusyChange = jest.fn();
+  const onVerificationBusyChange = jest.fn();
   const result = render(
     <CheckoutCodeForm
       onVerified={onVerified}
       onBusyChange={onBusyChange}
+      onVerificationBusyChange={onVerificationBusyChange}
       renderSocial={() => <Text>Social sign-in</Text>}
       socialBusy={false}
       theme={getCheckoutIdentityTheme('light')}
     />
   );
-  return { ...result, onVerified, onBusyChange };
+  return { ...result, onVerified, onBusyChange, onVerificationBusyChange };
 }
 
 it('sends a normalized address, announces busy state, then verifies the code', async () => {
-  const { onVerified, onBusyChange } = renderForm();
+  const { onVerified, onBusyChange, onVerificationBusyChange } = renderForm();
   fireEvent.changeText(
     screen.getByLabelText('Email address'),
     ' Shopper@Example.com '
@@ -56,6 +58,8 @@ it('sends a normalized address, announces busy state, then verifies the code', a
   expect(onVerified).toHaveBeenCalledTimes(1);
   expect(onBusyChange).toHaveBeenNthCalledWith(3, true);
   expect(onBusyChange).toHaveBeenNthCalledWith(4, false);
+  expect(onVerificationBusyChange).toHaveBeenNthCalledWith(1, true);
+  expect(onVerificationBusyChange).toHaveBeenNthCalledWith(2, false);
 });
 
 it('resumes verification and preserves resend cooldown after switching email', async () => {
@@ -86,7 +90,7 @@ it('resumes verification and preserves resend cooldown after switching email', a
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
 
     const resend = screen.getByRole('button', {
-      name: 'Resend code unavailable during cooldown.',
+      name: 'Resend code unavailable.',
     });
     expect(resend).toBeDisabled();
     fireEvent.press(resend);

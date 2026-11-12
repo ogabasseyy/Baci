@@ -12,14 +12,12 @@ import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel
 import PriceChangeModal from '@/components/cart/PriceChangeModal';
 import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
 import { unavailableCartActions } from '@/components/cart/unavailable-cart-actions';
-import { useCartCheckoutIdentityRecovery } from '@/components/cart/use-cart-checkout-identity-recovery';
-import { useCartCheckoutRecovery } from '@/components/cart/use-cart-checkout-recovery';
+import { useCartCheckoutFlow } from '@/components/cart/use-cart-checkout-flow';
 import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
 import { useCartScreenItemHandlers } from '@/components/cart/use-cart-screen-item-handlers';
 import { useCartStatusOnly } from '@/components/cart/use-cart-status-only';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
-import { useCheckoutIdentityOverlay } from '@/components/checkout/checkout-identity/useCheckoutIdentityOverlay';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
@@ -41,8 +39,6 @@ export default function CartScreen() {
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const colors = Colors[colorScheme];
   const { light: triggerHaptic } = useHaptics();
-  const { isOpen: isIdentityModalOpen, open: openCheckoutIdentity } =
-    useCheckoutIdentityOverlay();
   const [isRetryingCartLoad, setIsRetryingCartLoad] = useState(false);
   // Keep CART_MPU unmounted until the iOS price-change modal's fade and
   // native dismissal complete.
@@ -111,22 +107,6 @@ export default function CartScreen() {
     triggerHaptic,
   });
 
-  const { recoverCheckout, isPreparing } = useCartCheckoutRecovery(() => {
-    if (isAuthenticated) {
-      router.push('/checkout');
-    } else {
-      openCheckoutIdentity(onCheckoutIdentityVerified);
-    }
-  });
-  const onCheckoutIdentityVerified = useCartCheckoutIdentityRecovery(
-    isAuthenticated,
-    recoverCheckout
-  );
-  const handleCheckout = () => {
-    triggerHaptic();
-    void recoverCheckout();
-  };
-
   const handleReturnHome = () => {
     triggerHaptic();
     if (router.canGoBack()) {
@@ -167,6 +147,12 @@ export default function CartScreen() {
     priceChanges.length > 0 ||
     conditionChanges.length > 0 ||
     unavailableLines.length > 0;
+  const { isIdentityModalOpen, isPreparing, recoverCheckout } =
+    useCartCheckoutFlow({ isAuthenticated, isPriceChangeVisible });
+  const handleCheckout = () => {
+    triggerHaptic();
+    void recoverCheckout();
+  };
 
   useEffect(() => {
     if (isPriceChangeVisible) setPriceChangeDismissed(false);
@@ -284,6 +270,7 @@ export default function CartScreen() {
       />
       <PriceChangeModal
         visible={isPriceChangeVisible && !isIdentityModalOpen}
+        isDeferred={isIdentityModalOpen}
         changes={priceChanges}
         conditionChanges={conditionChanges}
         unavailableLines={unavailableLines}

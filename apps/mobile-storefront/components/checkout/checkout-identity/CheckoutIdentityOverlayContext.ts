@@ -2,7 +2,7 @@ import { createContext } from 'react';
 
 export interface CheckoutIdentityOverlayContextValue {
   isOpen: boolean;
-  open: (onVerified?: () => void) => void;
+  open: (onVerified?: () => void, onGuestCheckout?: () => void) => void;
   close: () => void;
 }
 

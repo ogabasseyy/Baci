@@ -5,31 +5,26 @@ import { BackHandler, Modal, Platform, StyleSheet, View } from 'react-native';
 export function CheckoutSheetPresentation({
   children,
   busy,
-  isActive,
   onClose,
 }: {
   children: ReactNode;
   busy: boolean;
-  isActive: boolean;
   onClose: () => void;
 }) {
   const inline = Platform.OS === 'android';
   const onCloseRef = useRef(onClose);
   const busyRef = useRef(busy);
-  const isActiveRef = useRef(isActive);
 
   useEffect(() => {
     onCloseRef.current = onClose;
     busyRef.current = busy;
-    isActiveRef.current = isActive;
-  }, [busy, isActive, onClose]);
+  }, [busy, onClose]);
 
   useEffect(() => {
     if (!inline) return;
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        if (!isActiveRef.current) return false;
         if (busyRef.current) return true;
         onCloseRef.current();
         return true;
@@ -44,6 +39,7 @@ export function CheckoutSheetPresentation({
     return (
       <View
         style={styles.overlay}
+        accessible
         accessibilityViewIsModal
         accessibilityLabel="Checkout sign-in options"
         importantForAccessibility="yes"
@@ -61,6 +57,7 @@ export function CheckoutSheetPresentation({
       animationType="none"
       onRequestClose={onClose}
       statusBarTranslucent
+      accessible
       accessibilityViewIsModal
       accessibilityLabel="Checkout sign-in options"
     >

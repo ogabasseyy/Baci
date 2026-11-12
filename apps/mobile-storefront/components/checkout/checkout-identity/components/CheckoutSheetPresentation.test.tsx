@@ -16,7 +16,7 @@ it('uses the inline Android layer and handles hardware Back until unmount', () =
       return { remove };
     });
   const view = render(
-    <CheckoutSheetPresentation busy={false} isActive onClose={onClose}>
+    <CheckoutSheetPresentation busy={false} onClose={onClose}>
       <Text>Checkout form</Text>
     </CheckoutSheetPresentation>
   );
@@ -39,7 +39,7 @@ it('keeps the native Modal presentation on iOS without a BackHandler listener', 
   jest.replaceProperty(Platform, 'OS', 'ios');
   const listener = jest.spyOn(BackHandler, 'addEventListener');
   const view = render(
-    <CheckoutSheetPresentation busy={false} isActive onClose={jest.fn()}>
+    <CheckoutSheetPresentation busy={false} onClose={jest.fn()}>
       <Text>Checkout form</Text>
     </CheckoutSheetPresentation>
   );
@@ -54,7 +54,7 @@ it('keeps the native Modal presentation on iOS without a BackHandler listener', 
   jest.restoreAllMocks();
 });
 
-it('does not close an unfocused sheet and consumes Back while auth is busy', () => {
+it('consumes Back without closing while auth is busy', () => {
   jest.replaceProperty(Platform, 'OS', 'android');
   const onClose = jest.fn();
   let handleBack:
@@ -67,20 +67,20 @@ it('does not close an unfocused sheet and consumes Back while auth is busy', () 
       return { remove: jest.fn() };
     });
   const view = render(
-    <CheckoutSheetPresentation busy={false} isActive={false} onClose={onClose}>
+    <CheckoutSheetPresentation busy onClose={onClose}>
       <Text>Checkout form</Text>
     </CheckoutSheetPresentation>
   );
 
-  expect(handleBack?.({ type: 'hardwareBackPress', timeStamp: 0 })).toBe(false);
+  expect(handleBack?.({ type: 'hardwareBackPress', timeStamp: 0 })).toBe(true);
   expect(onClose).not.toHaveBeenCalled();
 
   view.rerender(
-    <CheckoutSheetPresentation busy isActive onClose={onClose}>
+    <CheckoutSheetPresentation busy={false} onClose={onClose}>
       <Text>Checkout form</Text>
     </CheckoutSheetPresentation>
   );
   expect(handleBack?.({ type: 'hardwareBackPress', timeStamp: 0 })).toBe(true);
-  expect(onClose).not.toHaveBeenCalled();
+  expect(onClose).toHaveBeenCalledTimes(1);
   jest.restoreAllMocks();
 });

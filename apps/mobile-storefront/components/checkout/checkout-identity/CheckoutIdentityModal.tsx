@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { router, useIsFocused } from 'expo-router';
+import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -26,26 +26,37 @@ interface CheckoutIdentityModalProps {
   isOpen: boolean;
   onClose: () => void;
   onVerified?: () => void;
+  onGuestCheckout?: () => void;
 }
 
 export function CheckoutIdentityModal({
   isOpen,
   onClose,
   onVerified,
+  onGuestCheckout,
 }: CheckoutIdentityModalProps) {
   return isOpen ? (
-    <CheckoutIdentitySheet onClose={onClose} onVerified={onVerified} />
+    <CheckoutIdentitySheet
+      onClose={onClose}
+      onGuestCheckout={onGuestCheckout}
+      onVerified={onVerified}
+    />
   ) : null;
 }
 
 function CheckoutIdentitySheet({
   onClose,
+  onGuestCheckout,
   onVerified,
-}: Pick<CheckoutIdentityModalProps, 'onClose' | 'onVerified'>) {
+}: Pick<
+  CheckoutIdentityModalProps,
+  'onClose' | 'onGuestCheckout' | 'onVerified'
+>) {
   const otpBusy = useRef(false);
+  const otpVerificationBusy = useRef(false);
   const [isOtpBusy, setIsOtpBusy] = useState(false);
+  const [isOtpVerificationBusy, setIsOtpVerificationBusy] = useState(false);
   const insets = useSafeAreaInsets();
-  const isRouteFocused = useIsFocused();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const theme = getCheckoutIdentityTheme(colorScheme);
   const { triggerHaptic } = useHapticFeedback();
@@ -69,6 +80,7 @@ function CheckoutIdentitySheet({
   } = useSignInForm({ onSuccess: handleSignInSuccess });
 
   const handleClose = () => {
+    if (otpVerificationBusy.current || isSocialAuthLoading) return;
     triggerHaptic('light');
     Keyboard.dismiss();
     onClose();
@@ -79,7 +91,8 @@ function CheckoutIdentitySheet({
     triggerHaptic('light');
     Keyboard.dismiss();
     onClose();
-    router.push('/checkout');
+    if (onGuestCheckout) onGuestCheckout();
+    else router.push('/checkout');
   };
 
   const handleVerified = () => {
@@ -94,10 +107,14 @@ function CheckoutIdentitySheet({
     setIsOtpBusy(busy);
   };
 
+  const handleOtpVerificationBusyChange = (busy: boolean) => {
+    otpVerificationBusy.current = busy;
+    setIsOtpVerificationBusy(busy);
+  };
+
   return (
     <CheckoutSheetPresentation
-      busy={isOtpBusy || isSocialAuthLoading}
-      isActive={isRouteFocused}
+      busy={isOtpVerificationBusy || isSocialAuthLoading}
       onClose={handleClose}
     >
       <AppKeyboardContainer style={styles.container}>
@@ -112,6 +129,10 @@ function CheckoutIdentitySheet({
           <Pressable
             style={styles.backdropPressable}
             onPress={handleClose}
+            disabled={isOtpVerificationBusy || isSocialAuthLoading}
+            accessibilityState={{
+              disabled: isOtpVerificationBusy || isSocialAuthLoading,
+            }}
             accessibilityRole="button"
             accessibilityLabel="Close modal"
             accessibilityHint="Double tap to close the checkout options"
@@ -159,6 +180,10 @@ function CheckoutIdentitySheet({
               </View>
               <Pressable
                 onPress={handleClose}
+                disabled={isOtpVerificationBusy || isSocialAuthLoading}
+                accessibilityState={{
+                  disabled: isOtpVerificationBusy || isSocialAuthLoading,
+                }}
                 style={styles.identityClose}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
@@ -170,6 +195,7 @@ function CheckoutIdentitySheet({
             <CheckoutCodeForm
               onVerified={handleVerified}
               onBusyChange={handleOtpBusyChange}
+              onVerificationBusyChange={handleOtpVerificationBusyChange}
               socialBusy={isSocialAuthLoading}
               theme={theme}
               renderSocial={(emailBusy) => (

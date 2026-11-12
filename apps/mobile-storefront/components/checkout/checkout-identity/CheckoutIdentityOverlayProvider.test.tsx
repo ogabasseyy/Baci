@@ -16,10 +16,12 @@ jest.mock('./CheckoutIdentityModal', () => ({
     isOpen,
     onClose,
     onVerified,
+    onGuestCheckout,
   }: {
     isOpen: boolean;
     onClose: () => void;
     onVerified?: () => void;
+    onGuestCheckout?: () => void;
   }) =>
     isOpen
       ? mockReact.createElement(
@@ -45,6 +47,17 @@ jest.mock('./CheckoutIdentityModal', () => ({
             mockPressable,
             { accessibilityRole: 'button', onPress: onClose },
             mockReact.createElement(mockText, null, 'Close checkout identity')
+          ),
+          mockReact.createElement(
+            mockPressable,
+            {
+              accessibilityRole: 'button',
+              onPress: () => {
+                onClose();
+                onGuestCheckout?.();
+              },
+            },
+            mockReact.createElement(mockText, null, 'Continue as Guest')
           )
         )
       : null,
@@ -52,10 +65,12 @@ jest.mock('./CheckoutIdentityModal', () => ({
 
 function CartCheckoutControl({
   onVerified,
+  onGuestCheckout,
   label = 'Open checkout identity',
   testID,
 }: {
   onVerified: () => void;
+  onGuestCheckout?: () => void;
   label?: string;
   testID?: string;
 }) {
@@ -63,7 +78,7 @@ function CartCheckoutControl({
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => open(onVerified)}
+      onPress={() => open(onVerified, onGuestCheckout)}
       testID={testID}
     >
       <Text>{label}</Text>
@@ -165,4 +180,25 @@ it('uses the latest completion callback when reopened while already open', () =>
 
   expect(firstCallback).not.toHaveBeenCalled();
   expect(latestCallback).toHaveBeenCalledTimes(1);
+});
+
+it('passes the guest continuation callback through the overlay host', () => {
+  const onVerified = jest.fn();
+  const onGuestCheckout = jest.fn();
+  render(
+    <CheckoutIdentityOverlayProvider>
+      <CartCheckoutControl
+        onVerified={onVerified}
+        onGuestCheckout={onGuestCheckout}
+      />
+    </CheckoutIdentityOverlayProvider>
+  );
+
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Open checkout identity' })
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Continue as Guest' }));
+
+  expect(onGuestCheckout).toHaveBeenCalledTimes(1);
+  expect(onVerified).not.toHaveBeenCalled();
 });

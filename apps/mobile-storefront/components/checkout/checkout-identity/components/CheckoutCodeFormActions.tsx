@@ -39,9 +39,7 @@ export function CheckoutCodeFormActions({
             { color: cooldownActive ? theme.mutedText : theme.primary },
           ]}
         >
-          {cooldownActive
-            ? 'Resend code unavailable during cooldown.'
-            : 'Resend code'}
+          {cooldownActive ? 'Resend code unavailable.' : 'Resend code'}
         </Text>
       </Pressable>
       <Pressable

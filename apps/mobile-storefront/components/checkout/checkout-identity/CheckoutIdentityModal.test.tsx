@@ -151,7 +151,7 @@ it('offers a retry after an incorrect verification code', async () => {
   expect(router.push).toHaveBeenCalledWith('/checkout');
 });
 
-it('ignores verification completion after the shopper closes the sheet', async () => {
+it('keeps the sheet open until a pending OTP verification settles', async () => {
   let complete = (_result: { success: boolean }) => {};
   mockVerifyCode.mockReturnValueOnce(
     new Promise((resolve) => {
@@ -159,15 +159,16 @@ it('ignores verification completion after the shopper closes the sheet', async (
     })
   );
   const close = jest.fn();
-  const { rerender } = render(<CheckoutIdentityModal isOpen onClose={close} />);
+  render(<CheckoutIdentityModal isOpen onClose={close} />);
 
   fireEvent.press(await enterVerificationCode());
-  fireEvent.press(screen.getByRole('button', { name: 'Close' }));
-  rerender(<CheckoutIdentityModal isOpen={false} onClose={close} />);
+  const closeButton = screen.getByRole('button', { name: 'Close' });
+  expect(closeButton).toBeDisabled();
+  expect(close).not.toHaveBeenCalled();
   await act(async () => complete({ success: true }));
 
   expect(close).toHaveBeenCalledTimes(1);
-  expect(router.push).not.toHaveBeenCalled();
+  expect(router.push).toHaveBeenCalledWith('/checkout');
 });
 
 it('prevents guest checkout while OTP verification is changing the session', async () => {
@@ -191,6 +192,24 @@ it('prevents guest checkout while OTP verification is changing the session', asy
   expect(close).toHaveBeenCalledTimes(1);
 });
 
+it('delegates guest checkout to the cart revalidation callback', async () => {
+  const close = jest.fn();
+  const onGuestCheckout = jest.fn();
+  render(
+    <CheckoutIdentityModal
+      isOpen
+      onClose={close}
+      onGuestCheckout={onGuestCheckout}
+    />
+  );
+
+  fireEvent.press(screen.getByRole('button', { name: 'Continue as Guest' }));
+
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(onGuestCheckout).toHaveBeenCalledTimes(1);
+  expect(router.push).not.toHaveBeenCalled();
+});
+
 it('allows a code resend only after the cooldown and restarts the cooldown on success', async () => {
   jest.useFakeTimers();
   try {
@@ -198,7 +217,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
     await enterVerificationCode();
     expect(
       screen.getByRole('button', {
-        name: 'Resend code unavailable during cooldown.',
+        name: 'Resend code unavailable.',
       })
     ).toBeDisabled();
 
@@ -210,7 +229,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
     expect(mockSendCode).toHaveBeenCalledTimes(2);
     expect(
       screen.getByRole('button', {
-        name: 'Resend code unavailable during cooldown.',
+        name: 'Resend code unavailable.',
       })
     ).toBeDisabled();
   } finally {
@@ -245,7 +264,7 @@ it('resumes the existing code and keeps resend disabled after switching email mo
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
     expect(
       screen.getByRole('button', {
-        name: 'Resend code unavailable during cooldown.',
+        name: 'Resend code unavailable.',
       })
     ).toBeDisabled();
     expect(mockSendCode).toHaveBeenCalledTimes(1);

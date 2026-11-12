@@ -132,6 +132,48 @@ describe('CartScreen price-change modal', () => {
     jest.restoreAllMocks();
   });
 
+  it('keeps the cart ad gated until a deferred iOS repricing modal is reviewed', () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    mockRepriceHolder.current = {
+      priceChanges: [
+        {
+          id: 'cart-1',
+          name: 'Lenovo ThinkPad E16 Gen 2',
+          oldPrice: 1428000,
+          newPrice: 1500000,
+        },
+      ],
+      conditionChanges: [],
+      unavailableLines: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    const { rerender, UNSAFE_getAllByType } = render(<CartScreen />);
+    act(() => mockSetCheckoutIdentityOpen?.(true));
+    const modalWhileDeferred = UNSAFE_getAllByType(Modal)
+      .filter((item) => typeof item.props.onDismiss === 'function')
+      .at(-1);
+    act(() => modalWhileDeferred?.props.onDismiss());
+
+    act(() => mockSetCheckoutIdentityOpen?.(false));
+    fireEvent.press(screen.getByLabelText('Continue with updated prices'));
+    mockRepriceHolder.current = {
+      priceChanges: [],
+      conditionChanges: [],
+      unavailableLines: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+    rerender(<CartScreen />);
+
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+    const dismissedModal = UNSAFE_getAllByType(Modal)
+      .filter((item) => typeof item.props.onDismiss === 'function')
+      .at(-1);
+    act(() => dismissedModal?.props.onDismiss());
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+    jest.restoreAllMocks();
+  });
+
   it('surfaces unavailable lines in the cart without price drift', () => {
     mockRepriceHolder.current = {
       priceChanges: [],

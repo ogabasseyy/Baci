@@ -163,6 +163,8 @@ export async function deliverPaidImeiLookup(
   // earlier: persist it now.
   if (claim.status === 'refund_owed' || claim.status === 'refunded')
     return await cacheRefunded(input, NOT_COMPLETED);
+  if (claim.status !== 'claimed' && claim.status !== 'reclaimed')
+    return cached(lookup);
   if (claim.purpose !== 'imei_check' || claim.purchaseRef !== lookup.id)
     throw new Error('Wallet payment does not belong to this IMEI lookup');
   // A previous delivery died mid-flight. Sickw has no lookup by reference,

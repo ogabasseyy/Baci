@@ -52,8 +52,9 @@ export function getSavingsPace({
       return { short: `${amount} ${per}`, label: `${amount} ${per}` };
     return {
       short: `${amount} ${per} · until ${weekly.endsOn}`,
-      // One formatted date for both the visible line and the spoken label.
-      label: `${amount} ${per} to finish by ${weekly.endsOn}`,
+      // The plan's own pace and end date, not a promise: a plan that is
+      // behind needs more. One formatted date for line and spoken label.
+      label: `${amount} ${per} until ${weekly.endsOn}`,
     };
   }
   const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });

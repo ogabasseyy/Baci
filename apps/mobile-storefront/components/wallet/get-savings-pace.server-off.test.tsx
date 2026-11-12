@@ -14,7 +14,8 @@ describe('getSavingsPace', () => {
       })
     ).toEqual({
       short: '₦2,000 a day · until 17 Mar 2027',
-      label: expect.stringMatching(/^₦2,000 a day to finish by /),
+      // The plan's pace and end date, never a promise to finish by then.
+      label: '₦2,000 a day until 17 Mar 2027',
     });
   });
 

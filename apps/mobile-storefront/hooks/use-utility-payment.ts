@@ -10,6 +10,7 @@ import {
   getPendingVtuKey,
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
+import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import {
   isWalletPrimaryUnknown,
@@ -72,6 +73,9 @@ export function useUtilityPayment() {
     paymentSettings.data?.wallet_paystack_dva_enabled === true;
   const walletError = wallet.error instanceof Error ? wallet.error : null;
 
+  const liveVerdictReader: {
+    getWalletVerdict?: () => PiggyvestShortfallVerdict;
+  } = { getWalletVerdict: wallet.getWalletVerdict };
   return {
     canFundByBankTransfer,
     /**
@@ -138,6 +142,10 @@ export function useUtilityPayment() {
     // refetch failing mid-await leaves stale data that reads
     // settled — only the cache knows the refresh failed.
     getWalletError: wallet.getWalletError,
+    // Live PiggyVest verdict (Codex): the wallet can load as
+    // PiggyVest-ready during the settlement-gate await. Optional in the
+    // type so callers without it fall back to the render-time fields.
+    ...liveVerdictReader,
     walletError,
     walletIsLoading: wallet.isLoading,
     // PiggyVest customers spend store credit (the older wallet balance).

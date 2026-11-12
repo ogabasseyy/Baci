@@ -381,6 +381,23 @@ describe('ensureUtilityWalletReady', () => {
       expect(refetchWallet).toHaveBeenCalled();
     });
 
+    it('uses the live verdict when the wallet turns PiggyVest-ready mid-await', () => {
+      const ready = ensureUtilityWalletReady({
+        amount: 1000,
+        payment: paymentState({
+          getWalletBalance: () => 200,
+          getWalletVerdict: () => ({ walletIsStoreCredit: true }),
+        }),
+        returnToHref,
+      });
+
+      expect(ready).toBe(false);
+      expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+      expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe(
+        'Not enough store credit'
+      );
+    });
+
     it('still pays from store credit that covers the amount', () => {
       expect(
         ensureUtilityWalletReady({

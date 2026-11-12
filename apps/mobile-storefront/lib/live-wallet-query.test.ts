@@ -90,6 +90,26 @@ describe('live-wallet-query', () => {
     queryClient.clear();
   });
 
+  it('reads the PiggyVest verdict live once the wallet loads mid-await', () => {
+    const queryClient = createTestClient();
+    const live = createLiveWalletQuery(queryClient);
+    expect(live.getVerdict()).toEqual({
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    });
+
+    queryClient.setQueryData<WalletQueryData>(keyFor('customer-1', 'user-1'), {
+      wallet: { balance: 0, loyalty_points: 0, primary_balance_kobo: 500_000 },
+      transactions: [],
+    });
+
+    expect(live.getVerdict()).toEqual({
+      walletIsStoreCredit: true,
+      walletPrimaryUnknown: false,
+    });
+    queryClient.clear();
+  });
+
   it('reports unsettled while the identities disagree despite cached data', () => {
     const queryClient = createTestClient();
     seedBalance(queryClient, keyFor('customer-1', 'user-1'), 750);

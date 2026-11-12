@@ -8,6 +8,12 @@ import type { WalletReturnHref } from './sanitize-wallet-return-to';
 import { promptUtilityWalletFunding } from './utility-wallet-funding-prompt';
 
 interface UtilityWalletReadinessPayment extends PiggyvestShortfallVerdict {
+  /**
+   * Live PiggyVest verdict reader, invoked at gate time. Preferred over
+   * the render-time fields above, which miss a wallet that loads as
+   * PiggyVest-ready during the settlement-gate await.
+   */
+  getWalletVerdict?: () => PiggyvestShortfallVerdict;
   canFundByBankTransfer: boolean;
   /**
    * Raw auth user id at gate time — NOT session presence. Startup can
@@ -151,7 +157,7 @@ export function ensureUtilityWalletReady({
         balance: walletBalance,
         refetchWallet: payment.refetchWallet,
         returnToHref,
-        verdict: payment,
+        verdict: payment.getWalletVerdict?.() ?? payment,
       })
     ) {
       return false;

@@ -250,6 +250,7 @@ export function useWallet(options: UseWalletOptions = {}) {
     fetchStatus,
     getWalletBalance: liveWalletQuery.getBalance,
     getWalletError: liveWalletQuery.getError,
+    getWalletVerdict: liveWalletQuery.getVerdict,
     isError,
     isFetchingNow: liveWalletQuery.isFetching,
     isLoading,

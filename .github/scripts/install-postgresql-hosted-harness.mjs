@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after } from 'node:test';
@@ -26,6 +26,8 @@ stub('sudo', [
   // FAKE_SUDO_EXEC=1 lets the real timeout run (under the stand-in sudo) so that the apt-get and dpkg stand-ins below
   // are executed and can stall; everything else stays a recording.
   `if [ "$1" = timeout ] && [ -n "\${FAKE_SUDO_EXEC:-}" ]; then exec "$@"; fi`,
+  // FAKE_MIRROR_WRITE_FAIL=1 makes writing the Ubuntu mirror list fail (read-only file system, no space left).
+  `if [ "$1" = tee ] && [ "\${2:-}" = /etc/apt/apt-mirrors.txt ] && [ -n "\${FAKE_MIRROR_WRITE_FAIL:-}" ]; then cat > /dev/null; exit 1; fi`,
   `if [ "$1" = tee ]; then sed 's/^/  stdin: /' >> "$FAKE_LOG"; fi`,
   // FAKE_APT_INSTALL_FAILURES=1 (or FAKE_APT_UPDATE_FAILURES=1) makes the first apt-get install (or update) fail,
   // the way an unreachable mirror does.
@@ -100,6 +102,33 @@ stub('dpkg-query', [
   `if [ -z "$version" ]; then exit 1; fi`,
   `printf '%s' "$version"`,
 ]);
+
+// State letter of a process (Linux /proc, otherwise ps), or undefined when no such process exists.
+function processState(pid) {
+  if (existsSync('/proc/self/stat')) {
+    try {
+      // "pid (name) S ..." — the name can hold spaces and brackets, so cut after the last ") ".
+      return readFileSync(`/proc/${pid}/stat`, 'utf8').replace(/^.*\) /s, '')[0];
+    } catch {
+      return undefined;
+    }
+  }
+  const ps = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' });
+  return ps.error ? 'S' : (ps.stdout ?? '').trim()[0];
+}
+
+// True once the process can no longer hold anything. A killed process that nobody has reaped yet is a zombie
+// (<defunct>): it still answers signal 0, for instance in a container whose PID 1 does not reap orphans, but it cannot
+// hold a lock, so it counts as gone.
+export function isGone(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    return error.code === 'ESRCH';
+  }
+  const state = processState(pid);
+  return state === undefined || state === 'Z';
+}
 
 let runs = 0;
 export function install({ runner = 'github-hosted', ...fake } = {}) {

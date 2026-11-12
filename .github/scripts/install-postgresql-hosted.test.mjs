@@ -210,4 +210,32 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     assert.equal(aptCommands(result).filter((line) => line === INSTALL).length, 2, 'one try plus one retry, never a loop');
     assert.equal(aptCommands(result).filter(isUpdate).length, 2, 'the PGDG refresh and one full refresh');
   });
+
+  test('stops with a clear message, and runs no further apt command, when the fallback mirror list cannot be written', () => {
+    const result = install({ FAKE_APT_INSTALL_FAILURES: '1', FAKE_MIRROR_WRITE_FAIL: '1' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Could not write the fallback mirror list \/etc\/apt\/apt-mirrors\.txt/);
+    assert.equal(aptCommands(result).length, 2, 'only the first refresh and the first install ran');
+    assert.ok(!result.commands.some((line) => line.includes('dpkg --configure')), 'no repair or retry after the failed write');
+  });
+
+  // The environment can lower the ceiling (the stalled-apt tests do), so a value that would break `timeout` or switch
+  // it off (0, or a number so large it never fires) must be refused up front.
+  test('refuses an APT_LIMIT_SECONDS that is not a whole number of seconds from 1 to 999, before running anything', () => {
+    for (const bad of ['0', 'abc', '-5', '1.5', '1000', '09', ' 90', '90 ']) {
+      const result = install({ APT_LIMIT_SECONDS: bad });
+      assert.equal(result.status, 1, JSON.stringify(bad));
+      assert.match(result.stderr, /APT_LIMIT_SECONDS must be a whole number of seconds from 1 to 999/, JSON.stringify(bad));
+      assert.deepEqual(result.commands, [], `${JSON.stringify(bad)} must not run anything`);
+    }
+  });
+
+  test('uses the 180 second ceiling when APT_LIMIT_SECONDS is empty and a lower ceiling when one is set', () => {
+    for (const [value, seconds] of [['', 180], ['5', 5], ['999', 999]]) {
+      const result = install({ APT_LIMIT_SECONDS: value });
+      assert.equal(result.status, 0, result.stderr);
+      const apt = result.privileged.filter((line) => line.includes(' apt-get '));
+      assert.ok(apt.length >= 2 && apt.every((line) => line.startsWith(`sudo timeout --kill-after=10 ${seconds} apt-get `)), JSON.stringify(value));
+    }
+  });
 });

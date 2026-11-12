@@ -4,8 +4,10 @@
 # ci-hosted-postgresql-contract.test.mjs fails when PG_BUILD changes without these stanzas being refreshed, so the
 # next audit is a diff of this file: copy the same fields for the new build and re-check Recommends and Provides.
 # --no-install-recommends applies to the whole dependency closure, not just the two packages. Observed install set
-# on the hosted ubuntu-24.04 image (CI run 43067584503, 2026-11-11): exactly three new packages, liburing2
-# 2.5-1build1, postgresql-client-18 and postgresql-18 (the others in Depends were already installed).
+# on the hosted ubuntu-24.04 image, build 20261101.360.1 (CI run 43067584503, 2026-11-11): exactly three new packages,
+# liburing2 2.5-1build1, postgresql-client-18 and postgresql-18 (the others in Depends were already installed).
+# That set belongs to this image build: another build may preinstall more or fewer of the Depends, so look at the
+# packages apt installs in the job log, and note the image build here, whenever this audit is refreshed.
 
 Package: postgresql-18
 Version: 18.6-1.pgdg24.04+2

@@ -59,6 +59,12 @@ FALLBACK_MIRRORS=(
 # No single apt command may wait longer than this, whatever the mirrors do. A healthy install takes well
 # under a minute. The environment may lower it, which is how the tests make a stalled apt end in a second.
 APT_LIMIT_SECONDS="${APT_LIMIT_SECONDS:-180}"
+# Anything but a whole number of seconds from 1 to 999 would break `timeout` or, as 0 or a huge number, switch the
+# ceiling off, so it is refused before anything privileged runs.
+if ! [[ "$APT_LIMIT_SECONDS" =~ ^[1-9][0-9]{0,2}$ ]]; then
+  echo "APT_LIMIT_SECONDS must be a whole number of seconds from 1 to 999, not '${APT_LIMIT_SECONDS}'." >&2
+  exit 1
+fi
 # Fifteen seconds per connection and one try per file, the values the x64 runner image itself configures
 # (images/ubuntu/scripts/build/configure-apt.sh): apt spends every retry on the same URI before it moves on
 # to the next mirror in the list, so a higher count delays the failover this script exists for. Plus up to a
@@ -156,7 +162,10 @@ if [ -n "$failed_step" ]; then
   for mirror in "${FALLBACK_MIRRORS[@]}"; do
     priority=$((priority + 1))
     printf '%s\tpriority:%d\n' "$mirror" "$priority"
-  done | sudo tee "$UBUNTU_MIRRORS" >/dev/null
+  done | sudo tee "$UBUNTU_MIRRORS" >/dev/null || {
+    echo "Could not write the fallback mirror list ${UBUNTU_MIRRORS}." >&2
+    exit 1
+  }
   # A command stopped by the ceiling can leave dpkg half-way through a package; finish that work before the retry.
   sudo timeout --kill-after=10 "$APT_LIMIT_SECONDS" dpkg --configure -a ||
     echo "dpkg --configure -a exited with status $? (ignored: the retry below reports any real problem; its output is above)."

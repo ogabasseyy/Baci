@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { STALL_SECONDS, install } from './install-postgresql-hosted-harness.mjs';
+import { STALL_SECONDS, install, isGone } from './install-postgresql-hosted-harness.mjs';
 
 // The 2026-11-11 outage did not make apt fail quickly, it made apt wait. The tests in install-postgresql-hosted.test.mjs
 // stand in for a quick failure. Here the real timeout(1) runs around an apt-get stand-in that stalls, so the time
@@ -16,15 +17,6 @@ const aptKinds = (result) =>
   result.commands
     .filter((line) => line.startsWith('apt-get '))
     .map((line) => (/ install /.test(line) ? 'install' : / update$/.test(line) ? 'update' : 'other'));
-
-const isGone = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (error) {
-    return error.code === 'ESRCH';
-  }
-};
 
 describe('bugfix: a stalled apt command ends at the time ceiling and the fallback finishes the install (2026-11-11 outage)', { skip: !hasTimeout && 'needs timeout(1) on the PATH' }, () => {
   const stalled = (fake) => {
@@ -68,5 +60,24 @@ describe('bugfix: a stalled apt command ends at the time ceiling and the fallbac
     assert.ok(seconds < STALL_SECONDS / 2, `took ${seconds}s: two stalled installs must end after ${CEILING_SECONDS}s each`);
     assert.match(result.stderr, /Could not install PostgreSQL 18/);
     assert.deepEqual(aptKinds(result), ['update', 'install', 'update', 'install']);
+  });
+});
+
+describe('bugfix: a killed helper that nobody has reaped yet must not fail the helper check', () => {
+  // In a container whose PID 1 does not reap orphans, `timeout` kills the helper but the zombie (<defunct>) still
+  // answers signal 0, so the check used to fail although the process cannot hold the dpkg lock.
+  test('counts a defunct process as gone and a live one as running', async () => {
+    // The shell starts a child that exits at once and then becomes `sleep`, which never waits for it: the child stays defunct.
+    const parent = spawn('sh', ['-c', 'sleep 0 & echo $!; exec sleep 5'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    try {
+      const [chunk] = await once(parent.stdout, 'data');
+      const zombie = Number(String(chunk).trim());
+      await sleep(300);
+      assert.doesNotThrow(() => process.kill(zombie, 0), 'a defunct process still answers signal 0');
+      assert.equal(isGone(zombie), true, 'a defunct process holds nothing');
+      assert.equal(isGone(parent.pid), false, 'a running process is not gone');
+    } finally {
+      parent.kill();
+    }
   });
 });

@@ -166,6 +166,21 @@ describe('deriveWalletDisplayData legacy balance', () => {
   });
 });
 
+describe('bugfix: malformed PiggyVest balance', () => {
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+  ])('keeps the legacy wallet when primary_balance_kobo is %p', (kobo) => {
+    const data = deriveWalletDisplayData({
+      balance: 300,
+      primary_balance_kobo: kobo,
+    });
+    expect('primaryReady' in data).toBe(false);
+    expect(data.walletBalance).toBe(300);
+  });
+});
+
 describe('bugfix: PiggyVest balance shown as spendable', () => {
   it('never reports PiggyVest money as store credit for a ₦5,000 PiggyVest, ₦0 legacy customer', () => {
     const data = deriveWalletDisplayData({

@@ -40,3 +40,13 @@ describe('imeiCheckScreenActions.alertInvalidIdentifier', () => {
     );
   });
 });
+
+describe('bugfix: IMEI shortfall below the card minimum', () => {
+  it('prefills the card top-up minimum for a ₦50 shortfall', () => {
+    imeiCheckScreenActions.fundWallet(50);
+
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
+    );
+  });
+});

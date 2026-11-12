@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 
 export const imeiCheckScreenActions = {
   alertInvalidIdentifier(identifier: 'imei' | 'serial' | 'both') {
@@ -13,7 +14,10 @@ export const imeiCheckScreenActions = {
     );
   },
   fundWallet(amount: number) {
-    const requiredAmount = Math.max(0, Math.ceil(amount));
+    // A real shortfall is never prefilled below the card top-up minimum
+    // (the card form would refuse it); an unknown one (0) stays unfilled.
+    const requiredAmount =
+      amount > 0 ? Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(amount)) : 0;
     router.push(
       `/wallet?action=fund&requiredAmount=${requiredAmount}&returnTo=/imei-check`
     );

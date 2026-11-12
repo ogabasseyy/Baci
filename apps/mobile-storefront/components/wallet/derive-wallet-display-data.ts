@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 interface WalletFundingAccountLike {
@@ -45,9 +46,11 @@ export function deriveWalletDisplayData(
   // savings wallet: it funds savings goals only and is never spent on
   // purchases. Purchases spend the legacy balance, shown as store credit.
   // Without a PiggyVest answer this is exactly the legacy computation.
-  const primaryReady = typeof walletData.primary_balance_kobo === 'number';
+  // Same check as every purchase screen, so a malformed balance (NaN,
+  // negative) keeps the whole app on the legacy wallet consistently.
+  const primaryReady = isWalletStoreCredit(walletData);
   const walletBalance =
-    typeof walletData.primary_balance_kobo === 'number'
+    primaryReady && typeof walletData.primary_balance_kobo === 'number'
       ? koboToNaira(walletData.primary_balance_kobo)
       : (walletData.balance ?? 0);
   const earningsAvailable =

@@ -13,6 +13,7 @@ type ClaimAnswer =
       purpose: 'imei_check' | 'vtu';
       purchaseRef: string;
       amountKobo: number;
+      claimToken: string;
     }
   | {
       status:
@@ -33,9 +34,11 @@ interface PreparedProvider {
 
 export interface DeliverPaidImeiLookupDeps {
   claim: (operationId: string) => Promise<ClaimAnswer>;
+  // Only the current claimant (its token) may finish delivery.
   finish: (
     operationId: string,
-    outcome: 'fulfilled' | 'failed'
+    outcome: 'fulfilled' | 'failed',
+    claimToken: string
   ) => Promise<string>;
   refund: (paymentId: string) => Promise<string>;
   prepare: (
@@ -65,6 +68,7 @@ async function failAndRefund(
     lookup: ImeiLookupRow;
     operationId: string;
     supabaseAdmin: ImeiAccessClient;
+    claimToken: string;
   },
   deps: DeliverPaidImeiLookupDeps,
   outcome: {
@@ -74,7 +78,7 @@ async function failAndRefund(
     sickwStatus?: string;
   }
 ) {
-  await deps.finish(input.operationId, 'failed');
+  await deps.finish(input.operationId, 'failed', input.claimToken);
   await deps.refund(input.operationId).catch(() => 'pending');
   const body = {
     ...outcome.body,
@@ -108,9 +112,14 @@ export async function deliverPaidImeiLookup(
   deps: DeliverPaidImeiLookupDeps
 ): Promise<Response> {
   const { lookup, operationId } = input;
-  // A previous request saved the outcome but did not record the delivery.
+  // A previous request saved the outcome but did not record the delivery:
+  // take the claim (its token) and record it, never a second lookup.
   if (lookup.status === 'completed') {
-    await deps.finish(operationId, 'fulfilled').catch(() => 'conflict');
+    const late = await deps.claim(operationId).catch(() => null);
+    if (late && (late.status === 'claimed' || late.status === 'reclaimed'))
+      await deps
+        .finish(operationId, 'fulfilled', late.claimToken)
+        .catch(() => 'conflict');
     return cached(lookup);
   }
   if (
@@ -130,8 +139,9 @@ export async function deliverPaidImeiLookup(
     throw new Error('Wallet payment does not belong to this IMEI lookup');
 
   const prepared = await deps.prepare(lookup);
+  const claimed = { ...input, claimToken: claim.claimToken };
   if ('response' in prepared || prepared.binding.provider !== 'sickw')
-    return await failAndRefund(input, deps, {
+    return await failAndRefund(claimed, deps, {
       body: errorBody({
         code: 'IMEI_TIER_NOT_AVAILABLE',
         error: 'This check is not available right now.',
@@ -174,12 +184,14 @@ export async function deliverPaidImeiLookup(
     });
     // Recorded after the result is saved: the money guard accepts a completed
     // status only while the delivery is claimed.
-    await deps.finish(operationId, 'fulfilled').catch(() => 'conflict');
+    await deps
+      .finish(operationId, 'fulfilled', claim.claimToken)
+      .catch(() => 'conflict');
     return response;
   }
   if (outcome.kind !== 'failure')
     throw new Error('Sickw unexpectedly returned a non-terminal outcome');
-  return await failAndRefund(input, deps, {
+  return await failAndRefund(claimed, deps, {
     body: outcome.body,
     status: outcome.status,
     notFound: outcome.refundReason === 'not_found',

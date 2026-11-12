@@ -31,8 +31,9 @@ function deps(overrides: Record<string, unknown> = {}) {
       purpose: 'imei_check' as const,
       purchaseRef: LOOKUP,
       amountKobo: 50000,
+      claimToken: 'tok-1',
     })),
-    finish: vi.fn(async (_op: string, outcome: string) => {
+    finish: vi.fn(async (_op: string, outcome: string, _token: string) => {
       order.push(`finish:${outcome}`);
       return outcome === 'fulfilled'
         ? ('fulfilled' as const)
@@ -87,6 +88,7 @@ describe('deliverPaidImeiLookup', () => {
     expect(response.status).toBe(200);
     expect(submit).toHaveBeenCalledTimes(1);
     expect(order).toEqual(['cache:completed', 'finish:fulfilled']);
+    expect(d.finish).toHaveBeenCalledWith(OP, 'fulfilled', 'tok-1');
     expect(d.refund).not.toHaveBeenCalled();
   });
 
@@ -135,6 +137,7 @@ describe('deliverPaidImeiLookup', () => {
         purpose: 'imei_check' as const,
         purchaseRef: '99999999-9999-4999-8999-999999999999',
         amountKobo: 50000,
+        claimToken: 'tok-1',
       })),
     });
     await expect(deliverPaidImeiLookup(base, d)).rejects.toThrow();
@@ -156,7 +159,8 @@ describe('deliverPaidImeiLookup', () => {
       d
     );
     expect(response.status).toBe(200);
-    expect(d.finish).toHaveBeenCalledWith(OP, 'fulfilled');
+    expect(d.claim).toHaveBeenCalledWith(OP);
+    expect(d.finish).toHaveBeenCalledWith(OP, 'fulfilled', 'tok-1');
     expect(submit).not.toHaveBeenCalled();
   });
 

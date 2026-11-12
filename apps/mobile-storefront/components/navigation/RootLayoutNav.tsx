@@ -88,7 +88,7 @@ export function RootLayoutNav({
       >
         <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
           <SafeAreaProvider>
-            <AppKeyboardProvider>
+            <AppKeyboardProvider preloadAfterStartup={persistenceEnabled}>
               <ThemeProvider
                 value={
                   colorScheme === 'dark'

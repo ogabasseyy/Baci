@@ -25,13 +25,17 @@ describe('SavingsGoalSummary', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  it('replaces the flat zero state with encouragement and a weekly pace', () => {
+  it('hides the progress card until something is saved, keeping the weekly pace', () => {
     render(<SavingsGoalSummary colors={Colors.dark} goal={goal} />);
-    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
-    expect(screen.getByText('Start with any amount.')).toBeOnTheScreen();
-    expect(screen.getByText('₦0 saved')).toBeOnTheScreen();
-    expect(screen.getByText('₦250,000 target')).toBeOnTheScreen();
+    expect(screen.queryByText('YOUR PROGRESS')).toBeNull();
+    expect(screen.queryByText('₦0 saved')).toBeNull();
+    expect(screen.queryByText('Every naira counts')).toBeNull();
     expect(screen.queryByText(/no image/i)).toBeNull();
+    // Screen readers still hear the target and that nothing is saved yet.
+    // The target is shown, not only read out, beside the weekly pace.
+    expect(
+      screen.getByText('Nothing saved yet toward your ₦250,000 target.')
+    ).toBeOnTheScreen();
     expect(
       screen.getByText(/^Save about ₦62,500 a week to reach this by /)
     ).toBeOnTheScreen();
@@ -56,10 +60,27 @@ describe('SavingsGoalSummary', () => {
     expect(screen.queryByText(/Condition:|Storage:|Color:/)).toBeNull();
   });
 
+  it('shows the progress card once something is saved', () => {
+    render(
+      <SavingsGoalSummary
+        colors={Colors.dark}
+        goal={{ ...goal, current_amount: 400 }}
+      />
+    );
+    expect(screen.getByText('YOUR PROGRESS')).toBeOnTheScreen();
+    expect(screen.getByText('₦400 saved')).toBeOnTheScreen();
+    expect(screen.getByText('₦250,000 target')).toBeOnTheScreen();
+  });
+
   it('lets the saved and target labels shrink inside their row', () => {
-    render(<SavingsGoalSummary colors={Colors.light} goal={goal} />);
+    render(
+      <SavingsGoalSummary
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 400 }}
+      />
+    );
     expect(
-      StyleSheet.flatten(screen.getByText('₦0 saved').props.style)
+      StyleSheet.flatten(screen.getByText('₦400 saved').props.style)
     ).toMatchObject({ flexShrink: 1 });
     expect(
       StyleSheet.flatten(screen.getByText('₦250,000 target').props.style)
@@ -74,6 +95,10 @@ describe('SavingsGoalSummary', () => {
       />
     );
     expect(screen.queryByText(/a week to reach this by/)).toBeNull();
+    // No blank gap: with no pace, the zero-saved status shows instead.
+    expect(
+      screen.getByText('Nothing saved yet toward your ₦250,000 target.')
+    ).toBeOnTheScreen();
   });
 
   it.each([

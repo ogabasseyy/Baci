@@ -22,9 +22,10 @@ it('uses the inline Android layer and handles hardware Back until unmount', () =
   );
 
   const overlay = screen.getByTestId('checkout-identity-inline-overlay');
+  expect(overlay.props.accessible).not.toBe(true);
+  expect(screen.getByText('Checkout form')).toBeTruthy();
   expect(StyleSheet.flatten(overlay.props.style).elevation).toBe(100);
   expect(StyleSheet.flatten(overlay.props.style).zIndex).toBe(100);
-  expect(screen.getByText('Checkout form')).toBeTruthy();
   expect(view.UNSAFE_root.findAllByType(Modal)).toHaveLength(0);
   expect(handleBack?.({ type: 'hardwareBackPress', timeStamp: 0 })).toBe(true);
   expect(onClose).toHaveBeenCalledTimes(1);

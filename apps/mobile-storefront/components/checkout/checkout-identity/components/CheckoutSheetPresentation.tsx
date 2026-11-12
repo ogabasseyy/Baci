@@ -39,9 +39,7 @@ export function CheckoutSheetPresentation({
     return (
       <View
         style={styles.overlay}
-        accessible
         accessibilityViewIsModal
-        accessibilityLabel="Checkout sign-in options"
         importantForAccessibility="yes"
         testID="checkout-identity-inline-overlay"
       >

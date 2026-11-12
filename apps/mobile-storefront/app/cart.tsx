@@ -17,10 +17,10 @@ import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
 import { useCartScreenItemHandlers } from '@/components/cart/use-cart-screen-item-handlers';
 import { useCartStatusOnly } from '@/components/cart/use-cart-status-only';
+import { usePriceChangeDismissal } from '@/components/cart/use-price-change-dismissal';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useHaptics } from '@/hooks/use-haptics';
 import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
@@ -44,9 +44,6 @@ export default function CartScreen({
   const colors = Colors[colorScheme];
   const { light: triggerHaptic } = useHaptics();
   const [isRetryingCartLoad, setIsRetryingCartLoad] = useState(false);
-  // Keep CART_MPU unmounted until the iOS price-change modal's fade and
-  // native dismissal complete.
-  const [priceChangeDismissed, setPriceChangeDismissed] = useState(true);
 
   const cartStore = useCartStore(
     useShallow((state) => ({
@@ -151,25 +148,16 @@ export default function CartScreen({
     priceChanges.length > 0 ||
     conditionChanges.length > 0 ||
     unavailableLines.length > 0;
+  const {
+    isDismissed: priceChangeDismissed,
+    markDismissed: dismissPriceChangeModal,
+  } = usePriceChangeDismissal(isPriceChangeVisible);
   const { isIdentityModalOpen, isPreparing, recoverCheckout } =
     useCartCheckoutFlow({ isAuthenticated, isPriceChangeVisible });
   const handleCheckout = () => {
     triggerHaptic();
     void recoverCheckout();
   };
-
-  useEffect(() => {
-    if (isPriceChangeVisible) setPriceChangeDismissed(false);
-  }, [isPriceChangeVisible]);
-
-  useEffect(() => {
-    if (isPriceChangeVisible || priceChangeDismissed) return undefined;
-    const fallback = setTimeout(
-      () => setPriceChangeDismissed(true),
-      MODAL_DISMISS_FALLBACK_MS
-    );
-    return () => clearTimeout(fallback);
-  }, [isPriceChangeVisible, priceChangeDismissed]);
 
   const handleRetryCartLoad = () => {
     setIsRetryingCartLoad(true);
@@ -279,7 +267,7 @@ export default function CartScreen({
         conditionChanges={conditionChanges}
         unavailableLines={unavailableLines}
         onClose={dismissPriceChanges}
-        onDismissed={() => setPriceChangeDismissed(true)}
+        onDismissed={dismissPriceChangeModal}
         colors={colors}
       />
     </>

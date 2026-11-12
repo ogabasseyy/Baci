@@ -44,9 +44,9 @@ export function useProductSearchNavigation({
     });
     try {
       onSelectionStart?.();
-      saveSearch(query.trim() || product.name);
       await dismissKeyboardForNavigation();
       if (request !== generation.current || !navigation.isFocused()) return;
+      saveSearch(query.trim() || product.name);
       // Keep the results visible while the keyboard closes, then slide in.
       onClose();
       onNavigate(product);

@@ -82,3 +82,7 @@ test('APK requires explicit architecture selection', () => {
   assert.equal(run(apk).status, 2);
   assert.equal(run(apk, '--abis', 'arm64-v8a').status, 0);
 });
+test('trims whitespace around selected APK architectures', () => {
+  const apk = fixture('valid-whitespace.apk', 'valid');
+  assert.equal(run(apk, '--abis', ' arm64-v8a, x86_64 ').status, 0);
+});

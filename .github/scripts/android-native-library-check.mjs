@@ -9,7 +9,7 @@ if (!artifact || rest.length || (flag && flag !== '--abis') || (flag && !abiArgu
   process.exit(2);
 }
 const extension = extname(artifact).toLowerCase();
-const abis = flag ? abiArgument.split(',') : knownAbis;
+const abis = flag ? abiArgument.split(',').map((abi) => abi.trim()) : knownAbis;
 if (!['.aab', '.apk'].includes(extension) || (extension === '.apk' && !flag) || !abis.length || new Set(abis).size !== abis.length || abis.some((abi) => !knownAbis.includes(abi))) {
   console.error('Invalid artifact or ABI list; APK verification requires explicit --abis.');
   process.exit(2);

@@ -29,6 +29,7 @@ export function CheckoutIdentityOverlayProvider({
 
   return (
     <CheckoutIdentityOverlayContext.Provider value={{ isOpen, open, close }}>
+      {/* This is a root-level modal; fence app chrome as well as Cart content. */}
       <View style={styles.root}>
         <View
           style={[styles.content, { pointerEvents: isOpen ? 'none' : 'auto' }]}

@@ -22,9 +22,19 @@ it('expires a resume request when authentication never settles', () => {
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   const recoverCheckout = jest.fn(async () => {});
   const { result, rerender, unmount } = renderHook(
-    ({ isAuthenticated }: { isAuthenticated: boolean }) =>
-      useCartCheckoutIdentityRecovery(isAuthenticated, recoverCheckout),
-    { initialProps: { isAuthenticated: false } }
+    ({
+      isAuthenticated,
+      isRouteFocused,
+    }: {
+      isAuthenticated: boolean;
+      isRouteFocused: boolean;
+    }) =>
+      useCartCheckoutIdentityRecovery(
+        isAuthenticated,
+        recoverCheckout,
+        isRouteFocused
+      ),
+    { initialProps: { isAuthenticated: false, isRouteFocused: true } }
   );
 
   act(() => result.current());
@@ -36,6 +46,36 @@ it('expires a resume request when authentication never settles', () => {
     'Checkout not resumed',
     'Tap Checkout again to continue with your current cart.'
   );
+  unmount();
+  alert.mockRestore();
+  jest.useRealTimers();
+});
+
+it('does not show the expiry alert after Cart loses focus', () => {
+  jest.useFakeTimers();
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  const recoverCheckout = jest.fn(async () => {});
+  const { result, rerender, unmount } = renderHook(
+    ({
+      isAuthenticated,
+      isRouteFocused,
+    }: {
+      isAuthenticated: boolean;
+      isRouteFocused: boolean;
+    }) =>
+      useCartCheckoutIdentityRecovery(
+        isAuthenticated,
+        recoverCheckout,
+        isRouteFocused
+      ),
+    { initialProps: { isAuthenticated: false, isRouteFocused: true } }
+  );
+
+  act(() => result.current());
+  rerender({ isAuthenticated: false, isRouteFocused: false });
+  act(() => jest.advanceTimersByTime(60_000));
+
+  expect(alert).not.toHaveBeenCalled();
   unmount();
   alert.mockRestore();
   jest.useRealTimers();

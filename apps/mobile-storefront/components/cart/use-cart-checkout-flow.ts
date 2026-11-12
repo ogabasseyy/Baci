@@ -24,6 +24,8 @@ export function useCartCheckoutFlow({
   }, [isPriceChangeVisible]);
 
   useEffect(() => {
+    // Losing Cart focus cancels its identity continuation; a later auth result
+    // must not push Checkout over the route the customer moved to.
     if (!isRouteFocused && isIdentityModalOpen) closeCheckoutIdentity();
   }, [closeCheckoutIdentity, isIdentityModalOpen, isRouteFocused]);
 
@@ -41,7 +43,8 @@ export function useCartCheckoutFlow({
   });
   const onCheckoutIdentityVerified = useCartCheckoutIdentityRecovery(
     isAuthenticated,
-    recoverCheckout
+    recoverCheckout,
+    isRouteFocused
   );
 
   return { isIdentityModalOpen, isPreparing, recoverCheckout };

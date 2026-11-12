@@ -239,6 +239,8 @@ export function CheckoutCodeForm({
             {
               color: theme.text,
               backgroundColor: theme.input,
+              // Keep email as the visually active checkout path, even before
+              // validation runs; the button still gates incomplete addresses.
               borderColor: sentTo ? theme.border : theme.error,
               borderWidth: sentTo ? 1 : 1.5,
             },

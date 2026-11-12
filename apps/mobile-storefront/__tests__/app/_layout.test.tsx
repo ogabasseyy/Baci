@@ -12,6 +12,7 @@ import { registerRootLayoutSplashContractTests } from '@/test-support/root-layou
 import { registerRootLayoutSplashRecoveryTests } from '@/test-support/root-layout-splash-recovery-test-cases';
 
 const mockHideSplash = jest.fn<(options: unknown) => Promise<void>>();
+const mockIsSplashVisible = jest.fn<() => boolean>();
 const mockWaitForIntro = jest.fn<() => Promise<boolean>>();
 const mockInitializeStorage = jest.fn<() => Promise<void>>();
 const mockInitializeAuth = jest.fn<() => Promise<void>>();
@@ -51,6 +52,7 @@ jest.mock('react-native-splash-motion', () => ({
   __esModule: true,
   default: {
     hide: (options: unknown) => mockHideSplash(options),
+    isVisible: () => mockIsSplashVisible(),
     waitForIntro: () => mockWaitForIntro(),
   },
 }));
@@ -208,6 +210,7 @@ describe('RootLayout storage boot gate', () => {
           mockResolveSplashHide = resolve;
         })
     );
+    mockIsSplashVisible.mockReturnValue(false);
     mockInitializeAuth.mockResolvedValue(undefined);
     mockInitializeAdTrackingForStartup.mockResolvedValue(undefined);
     mockPrefetchStartupStorefrontData.mockResolvedValue(undefined);
@@ -244,6 +247,7 @@ describe('RootLayout storage boot gate', () => {
     initializeStorage: mockInitializeStorage,
     prefetchStartupStorefrontData: mockPrefetchStartupStorefrontData,
     hideSplash: mockHideSplash,
+    isSplashVisible: mockIsSplashVisible,
     useAppTrackingTransparency: mockUseAppTrackingTransparency,
     usePushNotifications: mockUsePushNotifications,
     verifyBenchmarkTelemetry: mockVerifyBenchmarkTelemetry,

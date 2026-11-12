@@ -279,7 +279,6 @@ export function WalletSavingsProgressModal({
                 colors={colors}
                 goal={goal}
                 hasPendingContribution={hasPendingContribution}
-                onBeforeNavigate={onClose}
                 onCancel={() => cancel.start('cancel')}
                 onComplete={() => cancel.start('complete')}
                 walletUpdatedAt={walletUpdatedAt}

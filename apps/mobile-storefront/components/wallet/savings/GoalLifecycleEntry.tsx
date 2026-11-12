@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -10,12 +9,10 @@ type Props = {
   colors: (typeof Colors)['light'];
   goal: WalletActiveSavingsGoal;
   hasPendingContribution: boolean;
-  /** Runs before navigating, e.g. to close the sheet this entry sits in. */
-  onBeforeNavigate?: () => void;
-  /** Cancels inside the sheet instead of opening the cancel screen. */
-  onCancel?: () => void;
-  /** Completes inside the sheet instead of opening the complete screen. */
-  onComplete?: () => void;
+  /** Opens the in-sheet Cancel step. */
+  onCancel: () => void;
+  /** Opens the in-sheet Complete step. */
+  onComplete: () => void;
   /** The wallet's last-updated time: re-reads the readiness gate. */
   walletUpdatedAt?: number;
 };
@@ -43,7 +40,6 @@ export function GoalLifecycleEntry({
   colors,
   goal,
   hasPendingContribution,
-  onBeforeNavigate,
   onCancel,
   onComplete,
   walletUpdatedAt,
@@ -61,15 +57,7 @@ export function GoalLifecycleEntry({
           key={kind}
           accessibilityRole="button"
           accessibilityLabel={GOAL_LIFECYCLE_COPY[kind].entryLabel}
-          onPress={() => {
-            if (kind === 'cancel' && onCancel) return onCancel();
-            if (kind === 'complete' && onComplete) return onComplete();
-            onBeforeNavigate?.();
-            router.push({
-              pathname: '/wallet/savings/goal-actions',
-              params: { goalId: goal.id, kind },
-            });
-          }}
+          onPress={kind === 'cancel' ? onCancel : onComplete}
           style={
             kind === 'cancel'
               ? styles.quietLink

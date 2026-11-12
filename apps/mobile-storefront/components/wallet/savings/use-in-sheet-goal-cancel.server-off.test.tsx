@@ -45,23 +45,31 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(result.current.goal).toBeNull();
     act(() => result.current.start());
     expect(result.current.goal?.id).toBe('goal-1');
-    expect(mockLifecycle).toHaveBeenLastCalledWith({
-      kind: 'cancel',
-      goalId: 'goal-1',
-    });
+    expect(mockLifecycle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'cancel', goalId: 'goal-1' })
+    );
     act(() => result.current.keep());
     expect(result.current.goal).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh attempt each time the step opens', () => {
+    const { result } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start());
+    const first = mockLifecycle.mock.calls.at(-1)?.[0] as { resetKey: number };
+    act(() => result.current.keep());
+    act(() => result.current.start());
+    const second = mockLifecycle.mock.calls.at(-1)?.[0] as { resetKey: number };
+    expect(second.resetKey).toBeGreaterThan(first.resetKey);
   });
 
   it('runs the complete action when started for it', () => {
     const { result } = renderHook(() => useInSheetGoalCancel(goal));
     act(() => result.current.start('complete'));
     expect(result.current.kind).toBe('complete');
-    expect(mockLifecycle).toHaveBeenLastCalledWith({
-      kind: 'complete',
-      goalId: 'goal-1',
-    });
+    expect(mockLifecycle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'complete', goalId: 'goal-1' })
+    );
   });
 
   it('keeps the goal on screen after the wallet stops listing it', () => {
@@ -88,6 +96,23 @@ describe('in-sheet goal cancel with the server off', () => {
     mockStep.current = 'done';
     rerender({});
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes once per settled action, even when the refresh callback changes every render', () => {
+    const { result, rerender } = renderHook(
+      ({ cb }: { cb: () => unknown }) => useInSheetGoalCancel(goal, cb),
+      { initialProps: { cb: jest.fn() as () => unknown } }
+    );
+    act(() => result.current.start());
+    mockStep.current = 'done';
+    const calls: jest.Mock[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const cb = jest.fn();
+      calls.push(cb);
+      rerender({ cb });
+    }
+    const total = calls.reduce((sum, cb) => sum + cb.mock.calls.length, 0);
+    expect(total).toBe(1);
   });
 
   it('drops a finished or untouched step on close without refreshing', () => {

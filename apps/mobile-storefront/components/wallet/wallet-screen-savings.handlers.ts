@@ -270,9 +270,17 @@ export async function resolveCompletedSavingsGoalVariant({
       merchantSlug: activeMerchantSlug,
       variantId,
     });
-    // A failed refresh does not undo the save; the next refresh shows it.
-    await refetchWallet().catch(() => undefined);
-    return true;
+    // The choice is saved. Refresh so the goal stops asking for it; if two
+    // tries fail, say it is saved rather than leaving the old question up.
+    for (let tries = 0; tries < 2; tries += 1) {
+      try {
+        await refetchWallet();
+        return true;
+      } catch {
+        // try once more
+      }
+    }
+    return 'Your choice is saved. Pull down on the wallet to refresh it.';
   } catch (error) {
     await refetchWallet().catch(() => undefined);
     return error instanceof Error && error.message

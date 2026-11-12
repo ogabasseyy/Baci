@@ -23,7 +23,25 @@ const goal = {
 describe('saving the exact option of a completed goal', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns true once saved, even if the wallet refresh fails', async () => {
+  it('returns true once saved and refreshed, retrying one failed refresh', async () => {
+    jest
+      .mocked(resolveSavingsGoalVariant)
+      .mockResolvedValue(undefined as never);
+    const refetchWallet = jest
+      .fn<Promise<unknown>, []>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(undefined);
+    await expect(
+      resolveCompletedSavingsGoalVariant({
+        goal,
+        refetchWallet,
+        variantId: 'v1',
+      })
+    ).resolves.toBe(true);
+    expect(refetchWallet).toHaveBeenCalledTimes(2);
+  });
+
+  it('says the choice is saved when the wallet cannot refresh', async () => {
     jest
       .mocked(resolveSavingsGoalVariant)
       .mockResolvedValue(undefined as never);
@@ -36,7 +54,9 @@ describe('saving the exact option of a completed goal', () => {
         refetchWallet,
         variantId: 'v1',
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe(
+      'Your choice is saved. Pull down on the wallet to refresh it.'
+    );
   });
 
   it('refuses an option the goal does not offer, without calling the server', async () => {

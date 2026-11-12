@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
@@ -23,23 +23,35 @@ export function useInSheetGoalCancel(
   } | null>(null);
   const active = held && held.userId === userId ? held.goal : null;
   const kind: GoalActionKind = held?.kind ?? 'cancel';
+  // Each time the step opens it starts fresh, never on a stale outcome.
+  const [attempt, setAttempt] = useState(0);
   const flow = useGoalLifecycle({
     kind,
     goalId: active?.id ?? goal?.id ?? '',
+    resetKey: attempt,
   });
   // Refresh once an action actually settles (or may have), whether or not
   // the sheet is still open.
+  // Exactly once per attempt: the refresh callback is a new function on
+  // every wallet render, so it must not drive the effect.
   const settled = flow.step === 'done' || flow.step === 'timed_out';
+  const refreshRef = useRef(refreshWallet);
+  refreshRef.current = refreshWallet;
+  const refreshedAttempt = useRef<number | null>(null);
   useEffect(() => {
-    if (settled) void refreshWallet?.();
-  }, [settled, refreshWallet]);
+    if (!settled || refreshedAttempt.current === attempt) return;
+    refreshedAttempt.current = attempt;
+    void refreshRef.current?.();
+  }, [settled, attempt]);
 
   return {
     goal: active,
     kind,
     flow,
     start: (next: GoalActionKind = 'cancel') => {
-      if (goal) setHeld({ goal, kind: next, userId });
+      if (!goal) return;
+      setAttempt((value) => value + 1);
+      setHeld({ goal, kind: next, userId });
     },
     /** Back to the savings view; nothing was sent unless the flow says so. */
     keep: () => setHeld(null),

@@ -93,9 +93,12 @@ function submitFailure(kind: GoalActionKind, error: unknown): Outcome | null {
 export function useGoalLifecycle({
   kind,
   goalId,
+  resetKey = 0,
 }: {
   kind: GoalActionKind;
   goalId: string;
+  /** A new value starts a fresh attempt for the same goal and kind. */
+  resetKey?: number;
 }) {
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
@@ -110,7 +113,8 @@ export function useGoalLifecycle({
   const submitted = useRef(false);
   const generation = useRef(0);
 
-  // A different account, goal or kind never inherits an attempt in flight.
+  // A different account, goal, kind or attempt never inherits an attempt in
+  // flight (or a finished one's outcome).
   // biome-ignore lint/correctness/useExhaustiveDependencies: the scope is the trigger, the body reads none of it.
   useEffect(() => {
     generation.current += 1;
@@ -123,7 +127,7 @@ export function useGoalLifecycle({
     return () => {
       generation.current += 1;
     };
-  }, [userId, merchantId, goalId, kind]);
+  }, [userId, merchantId, goalId, kind, resetKey]);
 
   const show = (
     step: GoalLifecycleStep,

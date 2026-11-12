@@ -33,7 +33,7 @@ export function useNativeSplashHandoff({
   }, [showSplash]);
 
   useEffect(() => {
-    if (!showSplash || !intro.settled || !(timedOut || (hasLayout && ready)))
+    if (!showSplash || !(timedOut || (intro.settled && hasLayout && ready)))
       return;
     let active = true;
     if (!hidePromiseRef.current) {

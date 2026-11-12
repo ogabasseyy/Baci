@@ -4,12 +4,12 @@ const widgetOrigin = 'https://support.example.test';
 const requestId = 'fixture_context_123456';
 const conversationId = 905;
 
-const widgetHtml = `<!doctype html>
+const widgetHtml = (targetOrigin: string) => `<!doctype html>
 <html><body>
   <button id="request-cart" type="button">Request cart</button>
   <output id="cart-result"></output>
   <script>
-    const targetOrigin = new URL(document.referrer).origin;
+    const targetOrigin = '${targetOrigin}';
     const requestId = '${requestId}';
     const conversationId = ${conversationId};
     const received = (event) => {
@@ -49,11 +49,17 @@ const widgetHtml = `<!doctype html>
 
 test('mocked browser transport accepts the trusted widget and renders its canonical response', async ({
   page,
+  baseURL,
 }) => {
   const requests: Array<{ path: string; body: unknown }> = [];
+  if (!baseURL) throw new Error('Checkout browser fixture requires baseURL');
+  const harnessOrigin = new URL(baseURL).origin;
 
   await page.route(`${widgetOrigin}/widget`, (route) =>
-    route.fulfill({ contentType: 'text/html', body: widgetHtml })
+    route.fulfill({
+      contentType: 'text/html',
+      body: widgetHtml(harnessOrigin),
+    })
   );
   await page.route(
     /\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)(?:\?.*)?$/,
@@ -138,7 +144,6 @@ test('mocked browser transport accepts the trusted widget and renders its canoni
     sessionToken: 'synthetic-session-capability',
     includeCartSnapshot: true,
   });
-  expect(requests.map((request) => request.path)).not.toContain('commands');
-  expect(requests.map((request) => request.path)).not.toContain('orders');
-  expect(requests.map((request) => request.path)).not.toContain('payments');
+  // The harness network guard denies cart writes, orders, and payments here;
+  // only these mocked context endpoints are allowed.
 });

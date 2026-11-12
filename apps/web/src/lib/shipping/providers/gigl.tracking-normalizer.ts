@@ -105,8 +105,14 @@ function applyLifecycleGuards(
   // A same-city shipment's origin centre also matches the destination, so a
   // name match only counts once the parcel has moved through the network.
   const sameCity = matchesDestination(origin, destination);
+  // Equal timestamps: process MSHC last so a contemporaneous arrival or
+  // movement scan is seen first, whatever order the payload listed them in.
+  const isMshc = (candidate: Guardable) =>
+    candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
   const ordered = [...candidates].sort(
-    (a, b) => a.event.timestamp.getTime() - b.event.timestamp.getTime()
+    (a, b) =>
+      a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
+      isMshc(a) - isMshc(b)
   );
   let arrived = false;
   let movedThroughNetwork = false;

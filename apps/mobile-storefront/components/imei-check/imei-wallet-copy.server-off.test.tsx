@@ -23,4 +23,14 @@ describe('IMEI wallet copy with the server off', () => {
       'Add ₦1,500 store credit by card to run this check'
     );
   });
+
+  it('quotes the card minimum when the shortfall is below it', () => {
+    expect(getImeiWalletCopy(true).shortfallHint(50)).toBe(
+      'Add ₦100 store credit by card to run this check'
+    );
+    // Legacy wording is unchanged.
+    expect(getImeiWalletCopy(false).shortfallHint(50)).toBe(
+      'Balance low — top up ₦50 to run this check'
+    );
+  });
 });

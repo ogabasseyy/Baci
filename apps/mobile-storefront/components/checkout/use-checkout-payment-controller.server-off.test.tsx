@@ -4,6 +4,7 @@ import type { CartItem } from '@/stores/cart-store';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
 
 let mockWallet: Record<string, unknown> | undefined;
+let mockIsRefetching = false;
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
   useCheckoutSavings: () => ({
@@ -14,7 +15,10 @@ jest.mock('@/hooks/use-checkout-savings', () => ({
 }));
 
 jest.mock('@/hooks/use-wallet', () => ({
-  useWallet: () => ({ data: mockWallet ? { wallet: mockWallet } : undefined }),
+  useWallet: () => ({
+    data: mockWallet ? { wallet: mockWallet } : undefined,
+    isRefetching: mockIsRefetching,
+  }),
 }));
 
 // The merchant runs "Bank transfer to wallet" (wallet auto-debit) today.
@@ -115,6 +119,20 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
     // Assert: wording stays as today, but no transfer into a wallet that may
     // route to PiggyVest savings.
     expect(result.current.walletIsStoreCredit).toBe(false);
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+
+  it('holds bank transfer to wallet while a cached legacy wallet refreshes', () => {
+    // Arrange: a cached legacy answer is being refetched and may come back
+    // PiggyVest-ready.
+    mockWallet = { balance: 0 };
+    mockIsRefetching = true;
+
+    // Act
+    const { result } = renderController();
+    mockIsRefetching = false;
+
+    // Assert
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
   });
 

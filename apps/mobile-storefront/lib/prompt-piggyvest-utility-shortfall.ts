@@ -1,6 +1,7 @@
 import { Alert } from 'react-native';
 import { navigateToStoreCreditTopUp } from './navigate-to-store-credit-top-up';
 import type { WalletReturnHref } from './sanitize-wallet-return-to';
+import { WALLET_TOP_UP_MIN_AMOUNT } from './wallet-top-up-constants';
 
 export interface PiggyvestShortfallVerdict {
   /** PiggyVest customer: utilities spend store credit (the older wallet). */
@@ -30,10 +31,12 @@ export function promptPiggyvestUtilityShortfall({
 }): boolean {
   if (verdict.walletIsStoreCredit) {
     const shortfall = Math.max(amount - balance, 0);
+    // Card top-ups have a minimum, so quote what the sheet will prefill.
+    const topUp = Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall));
     const message =
       `This costs ₦${amount.toLocaleString()} and you have ` +
       `₦${balance.toLocaleString()} store credit. Your savings wallet ` +
-      `can’t pay for this yet, so add ₦${shortfall.toLocaleString()} ` +
+      `can’t pay for this yet, so add ₦${topUp.toLocaleString()} ` +
       'store credit by card.';
     Alert.alert(
       'Not enough store credit',

@@ -1,3 +1,4 @@
+import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { formatServicePrice } from './format-service-price';
 
 export interface ImeiWalletCopy {
@@ -31,7 +32,8 @@ const STORE_CREDIT_COPY: ImeiWalletCopy = {
   loading: 'Loading store credit...',
   loadingButton: 'Loading store credit...',
   shortfallHint: (shortfall) =>
-    `Add ${formatServicePrice(shortfall)} store credit by card to run this check`,
+    // Card top-ups have a minimum, so quote what the sheet will prefill.
+    `Add ${formatServicePrice(Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall)))} store credit by card to run this check`,
   topUpButton: 'Add store credit',
   unavailable: 'Store credit unavailable. Refresh your wallet and try again.',
   unavailableButton: 'Store credit unavailable',

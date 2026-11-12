@@ -14,6 +14,7 @@ let mockWalletQuery: {
   getWalletBalance?: () => number;
   isFetchingNow?: () => boolean;
   isLoading?: boolean;
+  isRefetching?: boolean;
   refetch: jest.Mock;
 };
 
@@ -92,5 +93,28 @@ describe('useUtilityPayment store credit', () => {
     const { result } = renderHook(() => useUtilityPayment());
 
     expect(result.current.walletIsStoreCredit).toBe(true);
+  });
+
+  it('holds bank-transfer funding while a cached legacy wallet refreshes', () => {
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0 } },
+      isRefetching: true,
+    };
+
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.walletPrimaryUnknown).toBe(true);
+  });
+
+  it("keeps today's funding when the server keeps PiggyVest off and nothing refreshes", () => {
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0 } },
+    };
+
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.walletPrimaryUnknown).toBeUndefined();
   });
 });

@@ -45,4 +45,15 @@ describe('promptPiggyvestUtilityShortfall (server off)', () => {
     expect(call[1]).toContain('₦800');
     expect(call[2]).toEqual([{ text: 'OK', style: 'cancel' }]);
   });
+
+  it('quotes the card minimum when the shortfall is below it', () => {
+    promptPiggyvestUtilityShortfall({
+      amount: 250,
+      balance: 200,
+      refetchWallet: () => {},
+      verdict: { walletIsStoreCredit: true },
+    });
+    const call = (Alert.alert as unknown as jest.Mock).mock.calls[0];
+    expect(call[1]).toContain('add ₦100 store credit by card');
+  });
 });

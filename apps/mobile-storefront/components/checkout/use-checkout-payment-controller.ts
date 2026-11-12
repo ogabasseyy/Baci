@@ -186,10 +186,12 @@ export function useCheckoutPaymentController({
       walletBalance,
       walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
-      // Not loaded yet counts as unknown: a PiggyVest customer must never
-      // pick this option before the wallet says which kind it is.
+      // Not loaded yet, or refreshing (Codex), counts as unknown: a
+      // PiggyVest customer must never pick this option before the wallet
+      // says which kind it is.
       walletPrimaryUnknown:
         !walletQuery.data?.wallet ||
+        walletQuery.isRefetching ||
         isWalletPrimaryUnknown(walletQuery.data.wallet),
     });
   const storeCreditCompatible = isStoreCreditCompatiblePayment({

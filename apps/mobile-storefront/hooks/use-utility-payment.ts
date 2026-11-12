@@ -151,8 +151,9 @@ export function useUtilityPayment() {
     ...(isWalletStoreCredit(wallet.data?.wallet)
       ? { walletIsStoreCredit: true as const }
       : {}),
-    // PiggyVest check failed: hold bank-transfer top-ups until it retries.
-    ...(isWalletPrimaryUnknown(wallet.data?.wallet)
+    // PiggyVest check failed, or a refresh may change the verdict (Codex):
+    // hold bank-transfer top-ups until the wallet settles.
+    ...(isWalletPrimaryUnknown(wallet.data?.wallet) || wallet.isRefetching
       ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

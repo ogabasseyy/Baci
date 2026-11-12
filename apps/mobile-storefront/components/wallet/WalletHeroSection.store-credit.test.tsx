@@ -61,3 +61,28 @@ describe('merchants without PiggyVest', () => {
     expect(screen.queryByText('Store credit')).toBeNull();
   });
 });
+
+describe('wallet card utility shortcuts', () => {
+  it('are hidden for a PiggyVest customer with ₦0 store credit (₦5,000 PiggyVest)', () => {
+    renderHero(true, 0);
+
+    expect(screen.queryByRole('button', { name: 'Buy Airtime' })).toBeNull();
+    expect(screen.queryByText('Airtime')).toBeNull();
+  });
+
+  it('show for a PiggyVest customer with store credit above zero', () => {
+    renderHero(true, 500);
+
+    expect(
+      screen.getByRole('button', { name: 'Buy Airtime' })
+    ).toBeOnTheScreen();
+  });
+
+  it('always show for merchants without PiggyVest, even at ₦0', () => {
+    renderHero(false, undefined);
+
+    expect(
+      screen.getByRole('button', { name: 'Buy Airtime' })
+    ).toBeOnTheScreen();
+  });
+});

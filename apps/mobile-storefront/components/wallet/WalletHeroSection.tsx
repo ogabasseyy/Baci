@@ -4,6 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { hasSpendableBalance } from '@/lib/has-spendable-balance';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
@@ -34,6 +35,8 @@ type WalletHeroSectionProps = {
   /** Set when there is no savings plan: shows Start Savings inside the card. */
   onStartSavings?: () => void;
   savingsBalance: number;
+  /** PiggyVest only: the PiggyVest main wallet balance (naira). */
+  savingsWalletBalance?: number;
   /** PiggyVest only: the legacy balance purchases can spend. */
   storeCreditBalance?: number;
   totalBalance: number;
@@ -64,12 +67,18 @@ export function WalletHeroSection({
   onOpenRedeemPanel,
   onStartSavings,
   savingsBalance,
+  savingsWalletBalance,
   storeCreditBalance,
   totalBalance,
 }: WalletHeroSectionProps) {
   const visibleTier = formatTierLabel(loyaltyTier);
   // PiggyVest money funds savings goals only: never call it spendable.
   const primaryReady = useWalletPrimaryReady();
+  // Utility shortcuts appear only when there is money to pay with; legacy
+  // wallets always show them, as before.
+  const showUtilities =
+    !primaryReady ||
+    hasSpendableBalance({ savingsWalletBalance, storeCreditBalance });
   const isDark = useColorScheme() === 'dark';
   return (
     <Animated.View
@@ -152,7 +161,9 @@ export function WalletHeroSection({
           </Text>
         </View>
       </View>
-      <WalletQuickUtilities accentColor={utilityAccentColor} />
+      {showUtilities ? (
+        <WalletQuickUtilities accentColor={utilityAccentColor} />
+      ) : null}
       {fundingAccount && creditWatch ? (
         <WalletCreditCheckPanel
           accentColor="#F8B84C"

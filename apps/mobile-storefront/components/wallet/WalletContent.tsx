@@ -205,6 +205,7 @@ export function WalletContent(props: WalletContentProps) {
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           savingsBalance={savingsBalance}
+          savingsWalletBalance={walletBalance}
           storeCreditBalance={props.storeCreditBalance}
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}

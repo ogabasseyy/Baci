@@ -34,7 +34,7 @@ describe('getSavingsPace', () => {
     ).toEqual({ short: `₦5,000 ${words}`, label: `₦5,000 ${words}` });
   });
 
-  it('never asks for more than is left to save', () => {
+  it('keeps the plan pace even when less is left (the last payment is smaller)', () => {
     expect(
       getSavingsPace({
         contributionAmount: 10000,
@@ -43,7 +43,7 @@ describe('getSavingsPace', () => {
         now,
         remaining: 1500,
       })?.short
-    ).toBe('₦1,500 a week');
+    ).toBe('₦10,000 a week');
   });
 
   it('falls back to the weekly pace from the end date without a plan pace', () => {

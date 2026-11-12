@@ -25,4 +25,21 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
     // The legacy wallet asks no interest question.
     expect(screen.queryByText(/interest/i)).toBeNull();
   });
+
+  describe('bugfix: "Yours today" was shown for a future start date', () => {
+    it('names the start date when one payment covers the target later', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            contributionValue: 250000,
+            startDate: '2099-01-15',
+            maturityDate: '2099-01-15',
+          })}
+        />
+      );
+      expect(screen.queryByText('Yours today')).toBeNull();
+      expect(screen.getByText(/^Yours on /)).toBeOnTheScreen();
+    });
+  });
 });

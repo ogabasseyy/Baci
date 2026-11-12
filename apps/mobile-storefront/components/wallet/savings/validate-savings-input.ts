@@ -69,6 +69,7 @@ export function validateSavingsInput(
       ok: false,
     };
   }
+  // undefined = not asked (legacy); a PiggyVest plan passes boolean | null.
   if (input.interestChoice === null) {
     return { error: 'Choose whether your plan earns interest.', ok: false };
   }

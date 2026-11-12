@@ -9,6 +9,7 @@ import { SavingsProductThumb } from './SavingsProductThumb';
 import { EARLY_CANCEL_INTEREST_NOTE } from './savings-interest-copy';
 import { savingsPaceWords } from './savings-pace-words';
 import { savingsProductImage } from './savings-product-image';
+import { getTodayIsoDate } from './start-savings.helpers';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 
@@ -53,9 +54,11 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           {savingsPaceWords(controller.frequency)}
         </Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>
-          {duration === 'Same day'
-            ? 'Yours today'
-            : `Yours in about ${duration}`}
+          {duration !== 'Same day'
+            ? `Yours in about ${duration}`
+            : controller.startDate === getTodayIsoDate()
+              ? 'Yours today'
+              : `Yours on ${formatDateTimeDisplay(controller.startDate, 'date')}`}
         </Text>
       </View>
       <View accessible accessibilityLabel={timelineLabel(controller)}>

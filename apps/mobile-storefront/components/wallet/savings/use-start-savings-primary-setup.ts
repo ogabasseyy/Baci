@@ -27,6 +27,8 @@ export function useStartSavingsPrimarySetup({
   // Known once the wallet read has answered and was not unavailable.
   const walletKnown =
     wallet !== undefined && wallet.primary_unavailable !== true;
+  // PiggyVest when the wallet says so or the merchant is a PiggyVest one:
+  // the form, review and submit all use this one answer (askInterest).
   const primary = primaryWallet || isPiggyvestPrimaryMerchant(activeMerchantId);
   const [answer, setAnswer] = useState<{
     userId?: string;
@@ -35,7 +37,7 @@ export function useStartSavingsPrimarySetup({
   const interestChoice = answer.userId === userId ? answer.value : null;
   const setInterestChoice = (value: boolean) => setAnswer({ userId, value });
   const startGoalWalletSetup =
-    primary && interestChoice !== null
+    primary && typeof interestChoice === 'boolean'
       ? (goalId: string) =>
           setupExistingSavingsGoal({
             goalId,

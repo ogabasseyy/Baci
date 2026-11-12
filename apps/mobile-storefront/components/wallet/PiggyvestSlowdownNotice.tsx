@@ -11,7 +11,8 @@ export const PIGGYVEST_SLOWDOWN_MESSAGE =
  * answering slowly. Renders nothing the rest of the time.
  */
 export function PiggyvestSlowdownNotice() {
-  if (!usePiggyvestSlowdown()) return null;
+  const slow = usePiggyvestSlowdown();
+  if (!slow) return null;
   return (
     <View
       accessibilityRole="alert"

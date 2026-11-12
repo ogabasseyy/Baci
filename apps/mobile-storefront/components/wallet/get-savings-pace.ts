@@ -49,10 +49,8 @@ export function getSavingsPace({
     Number.isFinite(contributionAmount) &&
     contributionAmount > 0
   ) {
-    // Never ask for more than is left to save.
-    const amount = formatNgnCurrency(
-      Math.min(contributionAmount, Math.ceil(remaining))
-    );
+    // Always the plan's own pace (the last payment may simply be smaller).
+    const amount = formatNgnCurrency(contributionAmount);
     const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });
     // Only show the end date when this pace can still reach it: a plan that
     // is behind shows its pace alone rather than a date it cannot meet.

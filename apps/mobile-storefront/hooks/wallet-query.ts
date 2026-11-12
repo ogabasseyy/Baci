@@ -22,6 +22,11 @@ export interface WalletData {
    * the fresh read ran slow: shown, but the wallet keeps re-checking.
    */
   primary_stale?: boolean;
+  /**
+   * True when PiggyVest is confirmed for this customer but the account or
+   * balance isn't ready yet: purchase screens hold bank-transfer funding.
+   */
+  primary_pending?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];

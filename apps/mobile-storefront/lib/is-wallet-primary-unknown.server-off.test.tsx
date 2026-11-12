@@ -19,4 +19,8 @@ describe('isWalletPrimaryUnknown', () => {
       })
     ).toBe(false);
   });
+
+  it('bugfix: is true while PiggyVest is confirmed but the account is pending', () => {
+    expect(isWalletPrimaryUnknown({ primary_pending: true })).toBe(true);
+  });
 });

@@ -1,6 +1,7 @@
 export interface WalletPrimaryLike {
   primary_balance_kobo?: number | null;
   primary_unavailable?: boolean | null;
+  primary_pending?: boolean | null;
 }
 
 /**

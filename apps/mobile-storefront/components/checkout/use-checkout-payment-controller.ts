@@ -192,6 +192,8 @@ export function useCheckoutPaymentController({
       walletPrimaryUnknown:
         !walletQuery.data?.wallet ||
         walletQuery.isRefetching ||
+        // A failed refresh keeps stale data: not an authoritative verdict.
+        walletQuery.isError ||
         isWalletPrimaryUnknown(walletQuery.data.wallet),
     });
   const storeCreditCompatible = isStoreCreditCompatiblePayment({

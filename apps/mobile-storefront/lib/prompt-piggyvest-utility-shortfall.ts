@@ -55,12 +55,25 @@ export function promptPiggyvestUtilityShortfall({
     return true;
   }
   if (verdict.walletPrimaryUnknown) {
+    // A card top-up only ever adds store credit, which this purchase
+    // spends, so it is safe while the wallet kind is unknown or pending;
+    // bank transfer stays held. Try again re-checks the wallet.
+    const shortfall = Math.max(amount - balance, 0);
     Alert.alert(
-      'Wallet unavailable',
-      "We couldn't check your wallet. Please try again.",
+      'Wallet not ready',
+      "We couldn't confirm your wallet yet. Add store credit by card, or try again.",
       [
+        ...(returnToHref
+          ? [
+              {
+                text: 'Add store credit',
+                onPress: () =>
+                  navigateToStoreCreditTopUp(shortfall, returnToHref),
+              },
+            ]
+          : []),
         { text: 'Try Again', onPress: () => refetchWallet() },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' as const },
       ]
     );
     return true;

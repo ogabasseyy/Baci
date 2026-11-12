@@ -361,7 +361,7 @@ describe('ensureUtilityWalletReady', () => {
       );
     });
 
-    it('holds funding when the PiggyVest check is unknown', () => {
+    it('offers only card store credit or a retry when the PiggyVest check is unknown', () => {
       const refetchWallet = jest.fn();
       const ready = ensureUtilityWalletReady({
         amount: 1000,
@@ -376,8 +376,18 @@ describe('ensureUtilityWalletReady', () => {
       expect(ready).toBe(false);
       expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
       const [title, , buttons] = (Alert.alert as jest.Mock).mock.calls[0];
-      expect(title).toBe('Wallet unavailable');
+      expect(title).toBe('Wallet not ready');
+      // Card store credit (never bank transfer), then Try Again.
+      expect(buttons.map((b: { text: string }) => b.text)).toEqual([
+        'Add store credit',
+        'Try Again',
+        'Cancel',
+      ]);
       buttons[0].onPress();
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        `/wallet?action=fund&requiredAmount=800&returnTo=${encodeURIComponent(returnToHref)}`
+      );
+      buttons[1].onPress();
       expect(refetchWallet).toHaveBeenCalled();
     });
 

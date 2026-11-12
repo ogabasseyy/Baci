@@ -2,6 +2,7 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
+import { primaryPendingField } from './primary-pending-field';
 import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import {
@@ -270,6 +271,7 @@ export async function fetchWalletDataUnbounded(
       ...primaryBalanceField(primaryFunding),
       ...primaryUnavailableField(primaryFunding),
       ...primaryStaleField(primaryFunding),
+      ...primaryPendingField(primaryFunding),
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
       savings_goals: savingsGoals,

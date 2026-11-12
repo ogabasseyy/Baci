@@ -218,7 +218,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
   }
 });
 
-it('keeps the same-email cooldown when the shopper switches email modes', async () => {
+it('resumes the existing code and keeps resend disabled after switching email modes', async () => {
   jest.useFakeTimers();
   try {
     render(<CheckoutIdentityModal isOpen onClose={jest.fn()} />);
@@ -236,24 +236,31 @@ it('keeps the same-email cooldown when the shopper switches email modes', async 
     );
     const email = screen.getByLabelText('Email address');
     fireEvent.changeText(email, ' Cooldown-Modal@Example.com ');
-    const continueButton = screen.getByRole('button', {
-      name: 'Continue with email',
+    const resumeButton = screen.getByRole('button', {
+      name: 'Enter verification code',
     });
 
-    expect(continueButton).toBeDisabled();
-    fireEvent.press(continueButton);
+    expect(resumeButton).toBeEnabled();
+    fireEvent.press(resumeButton);
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+    expect(
+      screen.getByRole('button', {
+        name: 'Resend code unavailable during cooldown.',
+      })
+    ).toBeDisabled();
     expect(mockSendCode).toHaveBeenCalledTimes(1);
 
     act(() => jest.advanceTimersByTime(60_000));
-    expect(continueButton).toBeEnabled();
-    await act(async () => fireEvent.press(continueButton));
+    const resendButton = screen.getByRole('button', { name: 'Resend code' });
+    expect(resendButton).toBeEnabled();
+    await act(async () => fireEvent.press(resendButton));
     expect(mockSendCode).toHaveBeenCalledTimes(2);
   } finally {
     jest.useRealTimers();
   }
 });
 
-it('preserves the cooldown when the shopper closes and reopens the sheet', async () => {
+it('resumes the existing code when the shopper closes and reopens the sheet', async () => {
   jest.useFakeTimers();
   try {
     const emailAddress = 'reopen-modal@example.com';
@@ -270,11 +277,12 @@ it('preserves the cooldown when the shopper closes and reopens the sheet', async
     rerender(<CheckoutIdentityModal isOpen onClose={jest.fn()} />);
     fireEvent.changeText(screen.getByLabelText('Email address'), emailAddress);
 
-    const continueButton = screen.getByRole('button', {
-      name: 'Continue with email',
+    const resumeButton = screen.getByRole('button', {
+      name: 'Enter verification code',
     });
-    expect(continueButton).toBeDisabled();
-    fireEvent.press(continueButton);
+    expect(resumeButton).toBeEnabled();
+    fireEvent.press(resumeButton);
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
     expect(mockSendCode).toHaveBeenCalledTimes(1);
   } finally {
     jest.useRealTimers();

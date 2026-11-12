@@ -288,7 +288,7 @@ export default function CartScreen() {
         updateQuantity={updateQuantity}
       />
       <PriceChangeModal
-        visible={isPriceChangeVisible}
+        visible={isPriceChangeVisible && !isIdentityModalOpen}
         changes={priceChanges}
         conditionChanges={conditionChanges}
         unavailableLines={unavailableLines}

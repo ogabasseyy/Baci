@@ -146,3 +146,62 @@ it('does not update busy state after an in-flight request is unmounted', async (
   );
   expect(reopened.onVerified).toHaveBeenCalledTimes(1);
 });
+
+it('joins an in-flight send after closing and reopening the form', async () => {
+  let complete!: (result: { success: boolean }) => void;
+  mockSendCode.mockReturnValueOnce(
+    new Promise((resolve) => {
+      complete = resolve;
+    })
+  );
+  const first = renderForm();
+  fireEvent.changeText(
+    screen.getByLabelText('Email address'),
+    'inflight-form@example.com'
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
+  expect(mockSendCode).toHaveBeenCalledTimes(1);
+  first.unmount();
+
+  renderForm();
+  fireEvent.changeText(
+    screen.getByLabelText('Email address'),
+    'inflight-form@example.com'
+  );
+  expect(screen.getByRole('button', { name: 'Sending code…' })).toBeDisabled();
+
+  await act(async () => complete({ success: true }));
+
+  expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+  expect(mockSendCode).toHaveBeenCalledTimes(1);
+});
+
+it('does not start a second send for the same email while the first is pending', async () => {
+  let complete!: (result: { success: boolean }) => void;
+  mockSendCode.mockReturnValueOnce(
+    new Promise((resolve) => {
+      complete = resolve;
+    })
+  );
+  const first = renderForm();
+  fireEvent.changeText(
+    screen.getByLabelText('Email address'),
+    'concurrent-form@example.com'
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
+  first.unmount();
+
+  const reopened = renderForm();
+  fireEvent.changeText(
+    screen.getByLabelText('Email address'),
+    'concurrent-form@example.com'
+  );
+  expect(screen.getByRole('button', { name: 'Sending code…' })).toBeDisabled();
+  expect(mockSendCode).toHaveBeenCalledTimes(1);
+
+  await act(async () => complete({ success: true }));
+
+  expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+  expect(mockSendCode).toHaveBeenCalledTimes(1);
+  reopened.unmount();
+});

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Modal } from 'react-native';
+import { Modal, Platform } from 'react-native';
 import {
   mockAdSlotModule,
   mockAuthGuardModule,
@@ -21,6 +21,8 @@ import {
   mockUIStoreModule,
   setupCartMocks,
 } from './cart.test-utils';
+
+let mockSetCheckoutIdentityOpen: ((open: boolean) => void) | null = null;
 
 // These isolated screen fixtures represent a focused navigation route.
 jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
@@ -46,6 +48,7 @@ jest.mock(
     return {
       useCheckoutIdentityOverlay: () => {
         const [isOpen, setIsOpen] = useState(false);
+        mockSetCheckoutIdentityOpen = setIsOpen;
         return {
           isOpen,
           open: () => setIsOpen(true),
@@ -96,6 +99,37 @@ describe('CartScreen price-change modal', () => {
 
     expect(screen.getByText('Prices updated')).toBeTruthy();
     expect(screen.getByLabelText('Continue with updated prices')).toBeTruthy();
+  });
+
+  it('defers native cart repricing while the identity overlay is open on Android', () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    mockRepriceHolder.current = {
+      priceChanges: [
+        {
+          id: 'cart-1',
+          name: 'Lenovo ThinkPad E16 Gen 2',
+          oldPrice: 1428000,
+          newPrice: 1500000,
+        },
+      ],
+      conditionChanges: [],
+      unavailableLines: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    const { UNSAFE_getAllByType } = render(<CartScreen />);
+    const getPriceChangeModal = () =>
+      UNSAFE_getAllByType(Modal)
+        .filter((modal) => typeof modal.props.onDismiss === 'function')
+        .at(-1);
+    expect(getPriceChangeModal()?.props.visible).toBe(true);
+
+    act(() => mockSetCheckoutIdentityOpen?.(true));
+    expect(getPriceChangeModal()?.props.visible).toBe(false);
+
+    act(() => mockSetCheckoutIdentityOpen?.(false));
+    expect(getPriceChangeModal()?.props.visible).toBe(true);
+    jest.restoreAllMocks();
   });
 
   it('surfaces unavailable lines in the cart without price drift', () => {

@@ -20,12 +20,18 @@ import { ErrorAlert } from './ErrorAlert';
 
 const resendCooldownsByEmail = new Map<string, number>();
 const pendingOtpEmails = new Map<string, number>();
+const inFlightOtpSends = new Map<string, Promise<OtpSendOutcome>>();
+
+type OtpSendResult = { success: boolean; error?: string };
+type OtpSendOutcome = {
+  result: OtpSendResult;
+  cooldownUntil: number | null;
+};
 
 function getResendCooldown(email: string): number | null {
   const until = resendCooldownsByEmail.get(email);
   if (!until) return null;
   if (until > Date.now()) return until;
-  resendCooldownsByEmail.delete(email);
   return null;
 }
 
@@ -63,8 +69,38 @@ function hasPendingOtp(email: string): boolean {
   const expiresAt = pendingOtpEmails.get(email);
   if (expiresAt === undefined) return false;
   if (expiresAt > Date.now()) return true;
-  pendingOtpEmails.delete(email);
   return false;
+}
+
+function sendOtpOnce(
+  email: string,
+  sendCode: (address: string) => Promise<OtpSendResult>
+): Promise<OtpSendOutcome> {
+  const existing = inFlightOtpSends.get(email);
+  if (existing) return existing;
+  if (inFlightOtpSends.size >= MAX_OTP_EMAIL_ENTRIES) {
+    return Promise.resolve({
+      result: {
+        success: false,
+        error: 'Please wait before requesting another code.',
+      },
+      cooldownUntil: null,
+    });
+  }
+
+  let request: Promise<OtpSendOutcome>;
+  request = sendCode(email)
+    .then((result) => ({
+      result,
+      cooldownUntil: result.success ? startResendCooldown(email) : null,
+    }))
+    .finally(() => {
+      if (inFlightOtpSends.get(email) === request) {
+        inFlightOtpSends.delete(email);
+      }
+    });
+  inFlightOtpSends.set(email, request);
+  return request;
 }
 
 export function CheckoutCodeForm({
@@ -107,6 +143,10 @@ export function CheckoutCodeForm({
     checkoutIdentityEmailSchema.safeParse(normalizedEmail).success;
   const activeEmail = sentTo || normalizedEmail;
   const canResumeOtp = !sentTo && hasPendingOtp(normalizedEmail);
+  const pendingSend = !sentTo
+    ? inFlightOtpSends.get(normalizedEmail)
+    : undefined;
+  const isSendInProgress = pendingSend !== undefined;
   const resendAfter =
     resendAfterByEmail[activeEmail] ?? getResendCooldown(activeEmail);
   const emailCoolingDown =
@@ -135,10 +175,39 @@ export function CheckoutCodeForm({
     if (sentTo) inputRef.current?.focus();
   }, [sentTo]);
 
+  useEffect(() => {
+    if (!pendingSend) return;
+    let subscribed = true;
+    void pendingSend.then(
+      ({ result, cooldownUntil }) => {
+        if (!subscribed) return;
+        if (!result.success) {
+          setError(result.error || 'Unable to sign in. Please try again.');
+          return;
+        }
+        if (cooldownUntil === null) return;
+        setSentTo(normalizedEmail);
+        setResendAfterByEmail((current) => ({
+          ...current,
+          [normalizedEmail]: cooldownUntil,
+        }));
+      },
+      () => {
+        if (subscribed) {
+          setError('Unable to sign in. Please try again.');
+        }
+      }
+    );
+    return () => {
+      subscribed = false;
+    };
+  }, [normalizedEmail, pendingSend]);
+
   const submit = async (resend = false) => {
     if (
       pending.current ||
       socialBusy ||
+      (!sentTo && isSendInProgress) ||
       (resend && resendAfter !== null && resendAfter > Date.now()) ||
       (resend && !sentTo) ||
       (!resend &&
@@ -160,15 +229,16 @@ export function CheckoutCodeForm({
     onBusyChange(true);
     setError(null);
     try {
-      const result =
-        sentTo && !resend
-          ? await verifyCode(sentTo, code)
-          : await sendCode(sentTo || normalizedEmail);
+      let result: OtpSendResult;
       const sentEmail = sentTo || normalizedEmail;
-      const successfulSendCooldown =
-        result.success && (sentTo.length === 0 || resend)
-          ? startResendCooldown(sentEmail)
-          : null;
+      let successfulSendCooldown: number | null = null;
+      if (sentTo && !resend) {
+        result = await verifyCode(sentTo, code);
+      } else {
+        const outcome = await sendOtpOnce(sentEmail, sendCode);
+        result = outcome.result;
+        successfulSendCooldown = outcome.cooldownUntil;
+      }
       if (result.success && sentTo && !resend) {
         pendingOtpEmails.delete(sentTo);
       }
@@ -203,10 +273,13 @@ export function CheckoutCodeForm({
     ? 'Verify & continue checkout'
     : canResumeOtp
       ? 'Enter verification code'
-      : 'Continue with email';
+      : isSendInProgress
+        ? 'Sending code…'
+        : 'Continue with email';
   const disabled =
     busy ||
     socialBusy ||
+    (!sentTo && isSendInProgress) ||
     (sentTo
       ? code.length !== 6
       : !isEmailValid || (emailCoolingDown && !canResumeOtp));

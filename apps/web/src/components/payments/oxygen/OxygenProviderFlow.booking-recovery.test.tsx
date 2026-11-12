@@ -69,6 +69,7 @@ it('shows a bank statement requirement after a rejected booking without claiming
           eligibleAmount: 396000,
           minimumAmount: 10000,
           maxTenure: 12,
+          offers: [{ tenure: 3, loanAmount: 396000 }],
         },
         approvalOtpReady: false,
         activationEnabled: false,
@@ -131,6 +132,7 @@ it('shows one safe waiting state for an uncertain booking and refreshes without 
         eligibleAmount: 396000,
         minimumAmount: 10000,
         maxTenure: 12,
+        offers: [{ tenure: 3, loanAmount: 396000 }],
       },
       approvalOtpReady: false,
       pending: bookingSent
@@ -228,6 +230,7 @@ it('shows the safe active-loan reason and support action without offering anothe
           eligibleAmount: 396000,
           minimumAmount: 10000,
           maxTenure: 12,
+          offers: [{ tenure: 3, loanAmount: 396000 }],
         },
         approvalOtpReady: false,
         activationEnabled: false,

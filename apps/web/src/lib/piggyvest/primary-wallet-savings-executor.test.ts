@@ -3,6 +3,10 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
+import {
+  WALLET_PAY_CUSTOMER_STATEMENTS,
+  WALLET_PAY_WORKER_STATEMENTS,
+} from './wallet-pay-statements';
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
@@ -204,4 +208,50 @@ it('permits the five goal complete statements with their exact parameter counts 
     await expect(
       execute(text, [JSON.stringify(scope), id, id])
     ).rejects.toThrow('Savings statement unavailable');
+});
+
+it('admits the wallet pay customer statements under the customer scope', async () => {
+  await createPrimaryWalletSavingsExecutor(config)(
+    WALLET_PAY_CUSTOMER_STATEMENTS.reserve,
+    [JSON.stringify(scope), '{}', pinProof]
+  );
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    WALLET_PAY_CUSTOMER_STATEMENTS.reserve,
+    [JSON.stringify(scope), '{}', pinProof]
+  );
+});
+it('admits wallet pay worker statements only for the configured integration', async () => {
+  const operationId = '55555555-5555-4555-8555-555555555555';
+  await createPrimaryWalletSavingsExecutor(config)(
+    WALLET_PAY_WORKER_STATEMENTS.finish,
+    [integrationId, 'staging', operationId, 'failed']
+  );
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    WALLET_PAY_WORKER_STATEMENTS.finish,
+    [integrationId, 'staging', operationId, 'failed']
+  );
+  vi.clearAllMocks();
+  const execute = createPrimaryWalletSavingsExecutor(config);
+  await expect(
+    execute(WALLET_PAY_WORKER_STATEMENTS.claim, [
+      '99999999-9999-4999-8999-999999999999',
+      'staging',
+      operationId,
+    ])
+  ).rejects.toThrow();
+  await expect(
+    execute(WALLET_PAY_WORKER_STATEMENTS.claim, [
+      integrationId,
+      'production',
+      operationId,
+    ])
+  ).rejects.toThrow();
+  // A worker statement can not be smuggled in with a scope shape either.
+  await expect(
+    execute(WALLET_PAY_WORKER_STATEMENTS.claim, [
+      JSON.stringify(scope),
+      operationId,
+    ])
+  ).rejects.toThrow();
+  expect(mocks.connect).not.toHaveBeenCalled();
 });

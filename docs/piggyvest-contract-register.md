@@ -440,6 +440,20 @@ wallet and the business settlement wallet (no API customer). Masked output only.
   PiggyVest enabling settlement-wallet transfers. TSQ's documented statuses are
   `success`/`pending`/`failed`; `GET /transaction/:id` adds `partial`.
   `processing_status` (what our 404 carried) is not documented anywhere.
+- The business settlement wallet is a pass-through: `auto_payout: true` and
+  `auto_withdrawal_destination_type: "wallet"`, forwarding to the business
+  `expense` wallet (the Pay with Pocket wallet). Its balance always reads 0, so
+  it can never fund a refund and is unusable as the collection wallet. All three
+  business wallets (settlement, expense, savings) showed no transactions after
+  the probe, so the 202-accepted payment was not forwarded either: it never
+  moved.
+- Option B (owner-approved: Ogabassey as its own API customer, its main API
+  wallet as the collection wallet) could not be set up in staging. Creating the
+  customer is refused: the all-zeros sandbox BVN answers "Customer already
+  exists" (one customer per BVN), and other BVNs answer "An error occurred
+  creating customer". It needs another sandbox BVN that staging accepts, or a
+  named sandbox customer to stand in. The collection-wallet check in code is
+  unchanged until a transfer into an Ogabassey API wallet settles.
 - Not observed (no transfer completed): the fee on a completed transfer, the
   TSQ record shape for these directions, and webhooks.
 

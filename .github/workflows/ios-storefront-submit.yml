@@ -112,6 +112,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Fastlane submit
+        id: submit
         working-directory: ${{ env.WORKING_DIR }}
         env:
           CI: '1'
@@ -128,6 +129,19 @@ jobs:
           # withdrawing a build Apple may be actively reviewing.
           IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT: ${{ inputs.cancel_review_for_resubmit }}
         run: bundle exec fastlane ios submit
+
+      - name: Record submission mode
+        if: ${{ always() && steps.submit.outcome == 'success' }}
+        env:
+          SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
+        run: |
+          if [ "$SUBMISSION_RESULT" = "submitted" ]; then
+            echo 'This run submitted the iOS build for App Store review.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_RESULT" = "skipped" ]; then
+            echo 'This run skipped App Store submission because the App Store version slot is occupied.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Fastlane completed without recording an App Store submission result; inspect the Fastlane logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Clean up secrets
         if: always()

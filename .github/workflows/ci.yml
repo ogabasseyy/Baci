@@ -81,7 +81,7 @@ jobs:
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.
       - name: Test storefront release gate
-        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
+        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-mode.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
       - name: Test PiggyVest stuck-funds runbook CI wiring

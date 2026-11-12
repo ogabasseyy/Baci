@@ -79,6 +79,10 @@ export class WalletPaymentMismatchError extends Error {
   }
 }
 
+/** The lookup's recorded price in kobo (the price the payment must carry). */
+export const lookupPriceKobo = (lookup: Pick<ImeiLookupRow, 'amount_ngn'>) =>
+  Math.round(Number(lookup.amount_ngn) * 100);
+
 const pending = (status: string) =>
   NextResponse.json(
     { status },
@@ -179,9 +183,14 @@ export async function deliverPaidImeiLookup(
   // earlier: persist it now.
   if (claim.status === 'refund_owed' || claim.status === 'refunded')
     return await cacheRefunded(input, NOT_COMPLETED);
+  // A status this step does not know is raised (503), never hidden.
   if (claim.status !== 'claimed' && claim.status !== 'reclaimed')
-    return cached(lookup);
-  if (claim.purpose !== 'imei_check' || claim.purchaseRef !== lookup.id)
+    throw new Error('Unexpected wallet payment claim status');
+  if (
+    claim.purpose !== 'imei_check' ||
+    claim.purchaseRef !== lookup.id ||
+    claim.amountKobo !== lookupPriceKobo(lookup)
+  )
     throw new WalletPaymentMismatchError();
   // A previous delivery died mid-flight. Sickw has no lookup by reference,
   // so re-submitting could buy the check twice: refund instead.

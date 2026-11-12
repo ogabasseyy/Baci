@@ -138,6 +138,14 @@ export function createWalletPayWorkerStore(input: {
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },
+    // Whether the IMEI check this claimed payment bought was already saved.
+    async isImeiDelivered(operationId: string) {
+      const result = await input.execute(workerSql.imeiDelivered, [
+        ...binding,
+        schemas.operationId.parse(operationId),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
     async listWork(maxRows: number) {
       const result = await input.execute(workerSql.work, [
         ...binding,

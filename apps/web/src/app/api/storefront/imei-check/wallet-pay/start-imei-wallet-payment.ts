@@ -106,6 +106,7 @@ export async function startImeiWalletPayment(
 
   let amount = input.serviceTier.price;
   let lookupId: string;
+  let created = false;
   const inserted = await input.supabaseAdmin.insertPending({
     amount_ngn: amount,
     customer_id: input.customer.id,
@@ -154,6 +155,7 @@ export async function startImeiWalletPayment(
   } else {
     if (!inserted.data) throw new Error('IMEI pending insert returned no row');
     lookupId = String(inserted.data.id);
+    created = true;
   }
 
   const issued = await deps.issue({
@@ -165,12 +167,20 @@ export async function startImeiWalletPayment(
       amountKobo: Math.round(amount * 100),
     },
   });
-  if (issued.status === 'unavailable')
+  if (issued.status === 'unavailable') {
+    // No payment exists for the lookup this request just created: remove it
+    // (best effort; the database refuses once a payment exists) so a retry
+    // with the same key can issue instead of answering a conflict forever.
+    if (created)
+      await (async () => input.supabaseAdmin.deletePending(lookupId))().catch(
+        () => null
+      );
     return refuse(
       'PIGGYVEST_PAY_UNAVAILABLE',
       'Paying from your PiggyVest wallet is not available right now.',
       503
     );
+  }
   if (issued.status === 'conflict' || !('operationId' in issued))
     return refuse('PAYMENT_CONFLICT', 'Please refresh and try again.', 409);
   if (issued.status === 'issued')

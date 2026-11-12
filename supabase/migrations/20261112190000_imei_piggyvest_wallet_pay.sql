@@ -13,6 +13,8 @@
 --                      or is moving the customer's money ('charged' or
 --                      'delivering'), like a legacy debit.
 --   * delete_pending : refused once any PiggyVest payment exists.
+-- It also adds imei_wallet_payment_delivered, which the wallet pay drain asks
+-- before refunding an uncollected payment (a saved result is fulfilled).
 -- A PiggyVest payment counts only for purpose imei_check, purchase_ref = the
 -- lookup id, the same customer and merchant (through the onboarding intent),
 -- and exactly the lookup's price in kobo. Petrock (asynchronous) lookups are
@@ -56,6 +58,44 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION piggyvest_primary.imei_wallet_payment_state(uuid, uuid, uuid, numeric)
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
+
+-- For the wallet pay drain (authorizer login, worker authority): whether the
+-- IMEI check a confirmed payment bought was already delivered (its lookup is
+-- completed for the same customer, merchant and price). A delivery that saved
+-- the result but lost the fulfilment write must be recorded as fulfilled,
+-- never refunded.
+CREATE FUNCTION piggyvest_primary.imei_wallet_payment_delivered(
+  integration_id uuid, environment text, operation_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM piggyvest_primary.assert_wallet_pay_worker(
+    imei_wallet_payment_delivered.integration_id, imei_wallet_payment_delivered.environment);
+  RETURN EXISTS (
+    SELECT 1
+      FROM piggyvest_primary.wallet_payments AS payment
+      JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = payment.intent_id
+      JOIN public.imei_lookups AS lookup ON lookup.id::text = payment.purchase_ref
+     WHERE payment.id = imei_wallet_payment_delivered.operation_id
+       AND payment.integration_id = imei_wallet_payment_delivered.integration_id
+       AND payment.purpose = 'imei_check'
+       AND payment.state = 'confirmed'
+       AND payment.fulfilment = 'claimed'
+       AND lookup.status = 'completed'
+       AND lookup.customer_id = intent.customer_id
+       AND lookup.merchant_id = intent.merchant_id
+       AND lookup.amount_ngn * 100 = trunc(lookup.amount_ngn * 100)
+       AND payment.amount_kobo = (lookup.amount_ngn * 100)::bigint);
+END;
+$$;
+REVOKE ALL ON FUNCTION piggyvest_primary.imei_wallet_payment_delivered(uuid, text, uuid)
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_evidence;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.imei_wallet_payment_delivered(uuid, text, uuid)
+  TO piggyvest_primary_authorizer;
 
 CREATE OR REPLACE FUNCTION public.imei_lookup_access(p_payload text, p_signature text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$

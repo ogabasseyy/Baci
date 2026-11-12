@@ -158,6 +158,7 @@ describe('startImeiWalletPayment', () => {
     });
   });
 
+  // (Its supabaseAdmin has no deletePending: a failed clean-up still answers 503.)
   it('answers 503 when the collection wallet is not configured', async () => {
     const response = await startImeiWalletPayment(
       input(),
@@ -175,6 +176,26 @@ describe('startImeiWalletPayment', () => {
       })
     );
     expect(response.status).toBe(503);
+  });
+
+  describe('bugfix: an outage at issue stranded the request key (#4220)', () => {
+    it('deletes the uncharged pending lookup it just created, so a retry can issue', async () => {
+      const deletePending = vi.fn(async () => ({ data: null, error: null }));
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+      );
+      expect(response.status).toBe(503);
+      expect(deletePending).toHaveBeenCalledWith(LOOKUP);
+    });
   });
 
   describe('replay of the same Idempotency-Key', () => {

@@ -20,4 +20,13 @@ describe('normalizeForLookup', () => {
       })
     ).toBe(normalizeDeviceIdentifier('c02xl0abjgh5', 'serial'));
   });
+
+  it('answers null for a tier that no longer exists (never throws)', () => {
+    expect(
+      normalizeForLookup('356938035643809', {
+        tier: 'retiredTier' as never,
+        device_category: null,
+      })
+    ).toBeNull();
+  });
 });

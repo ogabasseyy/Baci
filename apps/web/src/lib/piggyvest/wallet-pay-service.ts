@@ -204,5 +204,7 @@ export function walletPayDelivery(runtime: WalletPayRuntime) {
       outcome: 'fulfilled' | 'failed',
       claimToken: string
     ) => worker.finish(operationId, outcome, claimToken),
+    isImeiDelivered: (operationId: string) =>
+      worker.isImeiDelivered(operationId),
   };
 }

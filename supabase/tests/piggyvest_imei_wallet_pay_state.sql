@@ -55,6 +55,26 @@ BEGIN
   PERFORM pg_temp.wp_claim(v_late);
   PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_state(c_lookup::uuid, c_customer, c_merchant, 1000) = 'delivering',
     'an older refunded attempt outranked the payment being delivered');
+  -- The drain's delivered check: only a completed lookup of the same
+  -- customer, merchant and price counts, and only for a confirmed payment.
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.imei_wallet_payment_delivered(
+    'f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', v_late::uuid), 'a payment with no lookup was delivered');
+  INSERT INTO public.imei_lookups (id, customer_id, merchant_id, tier, imei_hash, idempotency_key, amount_ngn, status)
+  VALUES (c_lookup::uuid, c_customer, c_merchant, 'basic', 'hash', 'f9a10000-0000-4000-8000-0000000000b1', 999, 'completed');
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.imei_wallet_payment_delivered(
+    'f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', v_late::uuid), 'a lookup at another price was delivered');
+  UPDATE public.imei_lookups SET amount_ngn = 1000, status = 'pending' WHERE id = c_lookup::uuid;
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.imei_wallet_payment_delivered(
+    'f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', v_late::uuid), 'a pending lookup was delivered');
+  UPDATE public.imei_lookups SET status = 'completed' WHERE id = c_lookup::uuid;
+  PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_delivered(
+    'f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', v_late::uuid), 'a completed lookup was not delivered');
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.imei_wallet_payment_delivered(
+    'f9a10000-0000-4000-8000-000000000006'::uuid, 'staging', v_op::uuid), 'a payment whose refund is owed counts as delivered');
+  PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('authenticated',
+    'piggyvest_primary.imei_wallet_payment_delivered(uuid,text,uuid)', 'EXECUTE'), 'authenticated can read delivered');
+  PERFORM pg_temp.wp_assert(pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+    'piggyvest_primary.imei_wallet_payment_delivered(uuid,text,uuid)', 'EXECUTE'), 'the worker can not read delivered');
   -- Client roles can not call it.
   PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('authenticated',
     'piggyvest_primary.imei_wallet_payment_state(uuid,uuid,uuid,numeric)', 'EXECUTE'), 'authenticated can read state');

@@ -5,7 +5,10 @@ import type { WalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import type { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
 import { hashImei, type ImeiLookupRow } from '../route-helpers';
-import { WalletPaymentMismatchError } from './deliver-paid-imei-lookup';
+import {
+  lookupPriceKobo,
+  WalletPaymentMismatchError,
+} from './deliver-paid-imei-lookup';
 import { normalizeForLookup } from './normalize-for-lookup';
 
 type Identity = { merchantId: string; customerId: string; userId: string };
@@ -25,7 +28,11 @@ export interface PayImeiWalletPaymentDeps {
     runtime: WalletPayRuntime;
     scope: Scope;
     operationId: string;
-  }) => Promise<{ purpose: string; purchaseRef: string } | null>;
+  }) => Promise<{
+    purpose: string;
+    purchaseRef: string;
+    amountKobo: number;
+  } | null>;
   pay: (input: {
     runtime: WalletPayRuntime;
     scope: Scope;
@@ -138,8 +145,12 @@ export async function payImeiWalletPayment(
   // A mismatch blocks spending a new PIN and delivery, never a status check:
   // money already sent still settles, and an undeliverable payment is refunded
   // by the wallet pay drain.
+  // A lookup on a tier that no longer exists can not be matched: treated as
+  // a mismatch (money already sent still settles, then the drain refunds).
   const normalizedImei = normalizeForLookup(body.imei, lookup);
-  const matches = hashImei(normalizedImei, salt) === lookup.imei_hash;
+  const matches =
+    normalizedImei !== null &&
+    hashImei(normalizedImei, salt) === lookup.imei_hash;
   const mismatch = () =>
     refuse(
       'This IMEI does not match the check you paid for.',
@@ -153,7 +164,11 @@ export async function payImeiWalletPayment(
     scope,
     operationId: body.operationId,
   });
-  if (payment?.purpose !== 'imei_check' || payment.purchaseRef !== lookupId)
+  if (
+    payment?.purpose !== 'imei_check' ||
+    payment.purchaseRef !== lookupId ||
+    payment.amountKobo !== lookupPriceKobo(lookup)
+  )
     return refuse(
       'This payment is not for this IMEI check.',
       'PAYMENT_OPERATION_INVALID',
@@ -167,7 +182,7 @@ export async function payImeiWalletPayment(
   });
   if (result.status !== 'confirmed')
     return payResponse(result, body.operationId);
-  if (!matches) return mismatch();
+  if (!matches || normalizedImei === null) return mismatch();
   try {
     return await deps.deliver({
       runtime,

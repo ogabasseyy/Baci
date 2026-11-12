@@ -12,6 +12,7 @@ export const WALLET_PAY_DELIVERERS: Partial<
   Record<WalletPayPurpose, WalletPayDeliverer>
 > = {
   // An IMEI check needs the identifier the customer re-sends; it is never
-  // stored in plain text, so an uncollected paid check is refunded.
+  // stored in plain text, so an uncollected paid check is refunded (unless
+  // its result was already saved, which is recorded as fulfilled).
   imei_check: refundUncollectedPayment,
 };

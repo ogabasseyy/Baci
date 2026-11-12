@@ -211,4 +211,43 @@ describe('payImeiWalletPayment', () => {
     );
     expect(response.status).toBe(404);
   });
+
+  describe('bugfix: review round four (#4220)', () => {
+    it('refuses a payment whose amount is not the lookup price, before spending the PIN', async () => {
+      const d = deps({
+        check: vi.fn(
+          async () => ({ ...payment('issued'), amountKobo: 49999 }) as never
+        ),
+      });
+      const response = await payImeiWalletPayment(
+        { lookupId: LOOKUP, body, auth: {} as never },
+        d
+      );
+      expect(response.status).toBe(409);
+      expect(d.pay).not.toHaveBeenCalled();
+    });
+
+    it('treats a lookup on a retired tier as a mismatch: no new payment, no delivery', async () => {
+      const retired = { ...lookup, tier: 'retiredTier' };
+      const spend = deps({ readLookup: vi.fn(async () => retired as never) });
+      const refused = await payImeiWalletPayment(
+        { lookupId: LOOKUP, body, auth: {} as never },
+        spend
+      );
+      expect(refused.status).toBe(409);
+      expect(spend.pay).not.toHaveBeenCalled();
+      const recheck = deps({ readLookup: vi.fn(async () => retired as never) });
+      const status = await payImeiWalletPayment(
+        {
+          lookupId: LOOKUP,
+          body: { ...body, pinProof: '' },
+          auth: {} as never,
+        },
+        recheck
+      );
+      expect(recheck.pay).toHaveBeenCalled();
+      expect(status.status).toBe(409);
+      expect(recheck.deliver).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -270,4 +270,30 @@ describe('deliverPaidImeiLookup', () => {
     expect(d.refund).toHaveBeenCalledWith(OP);
     expect(d.claim).not.toHaveBeenCalled();
   });
+
+  describe('bugfix: review round four (#4220)', () => {
+    it('refuses a claimed payment whose amount is not the lookup price, before buying the check', async () => {
+      const d = deps({
+        claim: vi.fn(async () => ({
+          status: 'claimed' as const,
+          purpose: 'imei_check' as const,
+          purchaseRef: LOOKUP,
+          amountKobo: 49999,
+          claimToken: 'tok-1',
+        })),
+      });
+      await expect(deliverPaidImeiLookup(base, d)).rejects.toBeInstanceOf(
+        WalletPaymentMismatchError
+      );
+      expect(submit).not.toHaveBeenCalled();
+    });
+
+    it('raises an unknown claim status instead of answering delivering', async () => {
+      const d = deps({ claim: vi.fn(async () => ({ status: 'mystery' })) });
+      await expect(deliverPaidImeiLookup(base, d)).rejects.toThrow(
+        'Unexpected wallet payment claim status'
+      );
+      expect(submit).not.toHaveBeenCalled();
+    });
+  });
 });

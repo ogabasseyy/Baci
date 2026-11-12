@@ -181,6 +181,22 @@ describe('createWalletPayWorkerStore', () => {
       OP,
     ]);
   });
+  it('asks whether a claimed IMEI payment was already delivered', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(false)
+    );
+    const store = createWalletPayWorkerStore({
+      integrationId: INTEGRATION,
+      environment: 'staging',
+      execute,
+    });
+    await expect(store.isImeiDelivered(OP)).resolves.toBe(false);
+    expect(execute).toHaveBeenCalledWith(workerSql.imeiDelivered, [
+      INTEGRATION,
+      'staging',
+      OP,
+    ]);
+  });
   it('reads this customer payment for one purchase', async () => {
     const execute = vi.fn(
       async (_statement: string, _parameters: readonly string[]) =>

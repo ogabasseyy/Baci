@@ -30,6 +30,8 @@ export const WALLET_PAY_WORKER_STATEMENTS = {
   work: 'SELECT piggyvest_primary.list_wallet_pay_work($1::uuid,$2::text,$3::integer) AS result',
   releaseStale:
     'SELECT piggyvest_primary.release_stale_wallet_payment($1::uuid,$2::text,$3::uuid) AS result',
+  imeiDelivered:
+    'SELECT piggyvest_primary.imei_wallet_payment_delivered($1::uuid,$2::text,$3::uuid) AS result',
 } as const;
 
 /** Evidence login, (integration id, environment, one value). */

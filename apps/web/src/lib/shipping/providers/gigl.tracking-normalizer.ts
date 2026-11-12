@@ -84,6 +84,8 @@ function matchesDestination(
 type Guardable = {
   event: TrackingEvent;
   recognizedStatus: TrackingEvent['status'] | null;
+  /** The provider's own status code, before notification-specific rewrites. */
+  providerStatus: string;
 };
 
 /**
@@ -97,8 +99,12 @@ type Guardable = {
  */
 function applyLifecycleGuards(
   candidates: Guardable[],
-  destination: string | undefined
+  destination: string | undefined,
+  origin: string | undefined
 ): void {
+  // A same-city shipment's origin centre also matches the destination, so a
+  // name match only counts once the parcel has moved through the network.
+  const sameCity = matchesDestination(origin, destination);
   const ordered = [...candidates].sort(
     (a, b) => a.event.timestamp.getTime() - b.event.timestamp.getTime()
   );
@@ -106,12 +112,13 @@ function applyLifecycleGuards(
   let movedThroughNetwork = false;
   for (const candidate of ordered) {
     const { event } = candidate;
-    const raw = (event.rawStatus ?? '').trim().toUpperCase();
+    const raw = candidate.providerStatus.trim().toUpperCase();
     const isArrival =
       raw === 'ARF' ||
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
         !/DEPART/i.test(event.description) &&
+        (!sameCity || movedThroughNetwork) &&
         matchesDestination(event.location, destination));
     if (isArrival) {
       arrived = true;
@@ -219,6 +226,7 @@ export function normalizeGiglTrackingShipment(
               timestamp,
             } satisfies TrackingEvent,
             recognizedStatus,
+            providerStatus: rawStatus,
           },
         ];
       } catch {
@@ -227,7 +235,11 @@ export function normalizeGiglTrackingShipment(
     }
   );
 
-  applyLifecycleGuards(candidates, shipment.Destination ?? undefined);
+  applyLifecycleGuards(
+    candidates,
+    shipment.Destination ?? undefined,
+    shipment.Origin ?? undefined
+  );
 
   const sortedCandidates = [...candidates].sort(
     (left, right) =>

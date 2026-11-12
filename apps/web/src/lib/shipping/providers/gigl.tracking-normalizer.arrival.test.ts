@@ -269,3 +269,51 @@ describe('bugfix: MSHC retry after a failed delivery attempt is not demoted to p
     );
   });
 });
+
+describe('bugfix: same-city shipments and pickup-reason MSHC', () => {
+  it('does not flag the first origin scan as arrival when origin and destination are the same city', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W14',
+        Origin: 'ABUJA',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('MSVC', '10:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+        ],
+      },
+      'W14',
+      OBSERVED_AT
+    );
+    expect(result.events[0]?.rawStatus).toBe('MSVC');
+  });
+
+  it('still flags an explicit ARF for a same-city shipment', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W15',
+        Origin: 'ABUJA',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [event('ARF', '10:00:00')],
+      },
+      'W15',
+      OBSERVED_AT
+    );
+    expect(result.events[0]?.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
+  });
+
+  it('demotes MSHC carrying the pickup-en-route reason when no movement happened', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W16',
+        MobileShipmentTrackings: [
+          event('MSHC', '10:00:00', {
+            ScanStatusReason: 'RIDER EN ROUTE FOR PICKUP',
+          }),
+        ],
+      },
+      'W16',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('pickup_scheduled');
+  });
+});

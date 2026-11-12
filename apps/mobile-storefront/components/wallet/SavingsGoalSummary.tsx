@@ -13,6 +13,8 @@ import { SavingsProgressMeter } from './SavingsProgressMeter';
 /**
  * Top of the savings sheet: what is being saved for, how far along it is, a
  * cheer that matches the progress, and a weekly pace when the goal has a date.
+ * The progress card shows only once something has been saved; before that,
+ * only the weekly pace is shown.
  */
 export function SavingsGoalSummary({
   colors,
@@ -29,6 +31,7 @@ export function SavingsGoalSummary({
     goal.product_variant_label
   );
   const cheer = getSavingsEncouragement(percent, goal.current_amount);
+  const hasProgress = goal.current_amount > 0;
   const nudge =
     goal.status === 'completed'
       ? null
@@ -108,59 +111,75 @@ export function SavingsGoalSummary({
           />
         ) : null}
       </View>
-      <View
-        style={[
-          styles.progressCard,
-          {
-            backgroundColor: colors.primaryLowOpacity,
-            borderColor: colors.primaryLowOpacity,
-          },
-        ]}
-      >
-        <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
-          YOUR PROGRESS
-        </Text>
-        <View style={styles.amountRow}>
-          <Text style={[styles.saved, { color: colors.text }]}>
-            {formatNgnCurrency(goal.current_amount)} saved
+      {hasProgress ? null : (
+        // No progress card yet: where the plan stands, seen and heard alike,
+        // then the weekly pace when the plan has a date.
+        <>
+          <Text style={[styles.nudge, { color: colors.text }]}>
+            {`Nothing saved yet toward your ${formatNgnCurrency(goal.target_amount)} target.`}
           </Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>
-            {formatNgnCurrency(goal.target_amount)} target
-          </Text>
-        </View>
-        <SavingsProgressMeter
-          accessibilityLabel="Savings plan progress details"
-          colors={colors}
-          percent={percent}
-        />
-        <View style={styles.amountRow}>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>
-            {formatNgnCurrency(amountLeft)} left
-          </Text>
-          <Text style={[styles.small, { color: colors.textSecondary }]}>
-            <Text style={{ color: colors.primary }}>{displayPercent}</Text>{' '}
-            complete
-          </Text>
-        </View>
-        <View style={styles.encouragement}>
-          <View
-            style={[styles.accentDot, { backgroundColor: colors.primary }]}
-          />
-          <View style={styles.encouragementCopy}>
-            <Text style={[styles.cheerTitle, { color: colors.primary }]}>
-              {cheer.title}
+          {nudge ? (
+            <Text style={[styles.nudge, { color: colors.text }]}>
+              {nudge.label}
             </Text>
-            <Text style={[styles.cheerBody, { color: colors.textSecondary }]}>
-              {cheer.body}
+          ) : null}
+        </>
+      )}
+      {hasProgress ? (
+        <View
+          style={[
+            styles.progressCard,
+            {
+              backgroundColor: colors.primaryLowOpacity,
+              borderColor: colors.primaryLowOpacity,
+            },
+          ]}
+        >
+          <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
+            YOUR PROGRESS
+          </Text>
+          <View style={styles.amountRow}>
+            <Text style={[styles.saved, { color: colors.text }]}>
+              {formatNgnCurrency(goal.current_amount)} saved
+            </Text>
+            <Text style={[styles.small, { color: colors.textSecondary }]}>
+              {formatNgnCurrency(goal.target_amount)} target
             </Text>
           </View>
+          <SavingsProgressMeter
+            accessibilityLabel="Savings plan progress details"
+            colors={colors}
+            percent={percent}
+          />
+          <View style={styles.amountRow}>
+            <Text style={[styles.small, { color: colors.textSecondary }]}>
+              {formatNgnCurrency(amountLeft)} left
+            </Text>
+            <Text style={[styles.small, { color: colors.textSecondary }]}>
+              <Text style={{ color: colors.primary }}>{displayPercent}</Text>{' '}
+              complete
+            </Text>
+          </View>
+          <View style={styles.encouragement}>
+            <View
+              style={[styles.accentDot, { backgroundColor: colors.primary }]}
+            />
+            <View style={styles.encouragementCopy}>
+              <Text style={[styles.cheerTitle, { color: colors.primary }]}>
+                {cheer.title}
+              </Text>
+              <Text style={[styles.cheerBody, { color: colors.textSecondary }]}>
+                {cheer.body}
+              </Text>
+            </View>
+          </View>
+          {nudge ? (
+            <Text style={[styles.nudge, { color: colors.text }]}>
+              {nudge.label}
+            </Text>
+          ) : null}
         </View>
-        {nudge ? (
-          <Text style={[styles.nudge, { color: colors.text }]}>
-            {nudge.label}
-          </Text>
-        ) : null}
-      </View>
+      ) : null}
     </>
   );
 }

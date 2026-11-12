@@ -26,4 +26,21 @@ describe('SavingsPlanGettingReady with PiggyVest off', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
     expect(onCheckNow).toHaveBeenCalled();
   });
+
+  describe('bugfix: the card promised checks after they had paused', () => {
+    it('says so and points to Check now once the checks have paused', () => {
+      render(
+        <SavingsPlanGettingReady
+          colors={Colors.light}
+          slow
+          paused
+          onCheckNow={jest.fn()}
+        />
+      );
+      expect(
+        screen.getByText(/Tap Check now to see if it’s ready/)
+      ).toBeOnTheScreen();
+      expect(screen.queryByText(/We’ll keep going/)).toBeNull();
+    });
+  });
 });

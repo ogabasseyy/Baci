@@ -2,7 +2,7 @@ BEGIN;
 -- Goal-wallet setup health read (PiggyVest degraded-health alert). Read-only:
 -- it changes no row and returns one number, with no ids and no customer data:
 -- how many goal-wallet setups of the integration are not yet enrolled more
--- than staleAfterSeconds after they started (created_at, when the customer
+-- than staleAfterSeconds after they started, for goals still active (created_at, when the customer
 -- chose the wallet; updated_at is refreshed by every retry, so it would keep
 -- a long-stuck setup looking young). The caller must be the evidence login
 -- bound to the integration (the same authority read_daily_reconciliation
@@ -35,6 +35,9 @@ BEGIN
   as_of:=pg_catalog.clock_timestamp();
   SELECT count(*)::integer INTO stalled
     FROM piggyvest_primary.goal_wallet_intents intent
+    -- Only goals whose setup can still finish: setup requires an active goal,
+    -- so a goal cancelled or completed mid-setup is never counted as stuck.
+    JOIN public.customer_savings_goals goal ON goal.id=intent.goal_id AND goal.status='active'
     WHERE intent.integration_id=read_goal_wallet_setup_health.integration_id
       AND intent.state<>'enrolled'
       AND intent.created_at<=as_of-pg_catalog.make_interval(secs=>stale_seconds);

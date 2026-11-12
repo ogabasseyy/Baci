@@ -29,6 +29,7 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
         merchantId={merchantId}
         funding={funding}
         slow={poll.slow}
+        paused={poll.paused}
         onCheckAgain={poll.checkAgain}
       />
       {/* The form shows at once while the plan's savings wallet is confirmed

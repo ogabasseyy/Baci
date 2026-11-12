@@ -25,6 +25,8 @@ type Props = {
   funding?: PlanFunding;
   /** Set once setup has taken longer than the first minute of checks. */
   slow?: boolean;
+  /** Automatic checks have paused (about an hour on screen). */
+  paused?: boolean;
   /** Reads status now and restarts the quick checks. */
   onCheckAgain?: () => void;
 };
@@ -73,6 +75,7 @@ function OwnStatusNote(props: Props) {
       funding={funding}
       bvnGate
       slow={poll.slow}
+      paused={poll.paused}
       onCheckAgain={poll.checkAgain}
     />
   );
@@ -85,6 +88,7 @@ function StatusNoteView({
   funding,
   bvnGate = false,
   slow = false,
+  paused = false,
   onCheckAgain,
 }: Props & { funding: PlanFunding; bvnGate?: boolean }) {
   const primary = isPiggyvestPrimaryMerchant(merchantId);
@@ -195,6 +199,7 @@ function StatusNoteView({
     <SavingsPlanGettingReady
       colors={colors}
       slow={slow}
+      paused={paused}
       onCheckNow={onCheckAgain}
     />
   );

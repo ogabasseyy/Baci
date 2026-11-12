@@ -138,8 +138,10 @@ describe('useGoalWalletSetupPoll', () => {
     await advance(120_000);
     expect(reread).toHaveBeenCalledTimes(calls);
     expect(result.current.slow).toBe(true);
+    expect(result.current.paused).toBe(true);
     await act(async () => result.current.checkAgain());
     expect(reread).toHaveBeenCalledTimes(calls + 1);
+    expect(result.current.paused).toBe(false);
   });
 
   describe('bugfix: checks stopped after a failed read during a slowdown', () => {

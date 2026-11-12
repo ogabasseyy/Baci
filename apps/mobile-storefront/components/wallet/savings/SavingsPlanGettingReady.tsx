@@ -7,6 +7,8 @@ type Props = {
   colors: (typeof Colors)['light'];
   /** Set once setup has taken longer than the first minute. */
   slow?: boolean;
+  /** Automatic checks have stopped: say so, and point to Check now. */
+  paused?: boolean;
   onCheckNow?: () => void;
 };
 
@@ -15,7 +17,12 @@ type Props = {
  * nothing is wrong, nothing is needed from the customer, and they can leave.
  * Checks keep running in the background for as long as the wallet is open.
  */
-export function SavingsPlanGettingReady({ colors, slow, onCheckNow }: Props) {
+export function SavingsPlanGettingReady({
+  colors,
+  slow,
+  paused,
+  onCheckNow,
+}: Props) {
   return (
     <View
       accessibilityLiveRegion="polite"
@@ -30,10 +37,12 @@ export function SavingsPlanGettingReady({ colors, slow, onCheckNow }: Props) {
             Getting your plan ready
           </Text>
           <Text style={[styles.body, { color: colors.textSecondary }]}>
-            {slow
-              ? // The shared slowdown notice above says why; don't repeat it.
-                'This is taking longer than usual. We’ll keep going, and there’s nothing you need to do.'
-              : 'This usually takes about a minute. You can leave this screen. We’ll keep going.'}
+            {paused
+              ? 'This is taking much longer than usual. Tap Check now to see if it’s ready, or come back later.'
+              : slow
+                ? // The shared slowdown notice above says why; don't repeat it.
+                  'This is taking longer than usual. We’ll keep going, and there’s nothing you need to do.'
+                : 'This usually takes about a minute. You can leave this screen. We’ll keep going.'}
           </Text>
         </View>
       </View>

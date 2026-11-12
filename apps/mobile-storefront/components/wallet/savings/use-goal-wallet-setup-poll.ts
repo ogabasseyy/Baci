@@ -85,6 +85,8 @@ export function useGoalWalletSetupPoll({
   }, [active, count, scopeKey, phase]);
 
   const slow = active && count >= FAST_ATTEMPTS;
+  // The hour-long window is used up: checks wait for Check now or a reopen.
+  const paused = active && count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS;
   // Only a still-pending setup raises the signal: an errored read kept alive
   // by the signal must never renew it, or it would latch itself on.
   useReportPiggyvestSlow('goal-setup', phase === 'pending' && slow);
@@ -93,5 +95,5 @@ export function useGoalWalletSetupPoll({
     setAttempt({ scopeKey, count: 0 });
     void Promise.resolve(reread({ silent: true })).catch(() => undefined);
   };
-  return { slow, checkAgain };
+  return { slow, paused, checkAgain };
 }

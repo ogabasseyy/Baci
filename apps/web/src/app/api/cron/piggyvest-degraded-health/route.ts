@@ -13,7 +13,12 @@ export async function GET(request: Request) {
   }
   try {
     return NextResponse.json(await runPiggyvestDegradedHealth());
-  } catch {
+  } catch (error) {
+    // Unexpected (read problems already come back as readFailed). Log the
+    // error name only: no payloads, ids or secrets.
+    console.error(
+      `[PiggyVest Degraded][ERROR] health check failed ${error instanceof Error ? error.name : 'unknown'}`
+    );
     return NextResponse.json({ error: 'Health check failed' }, { status: 500 });
   }
 }

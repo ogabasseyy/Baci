@@ -39,6 +39,14 @@ SELECT pg_temp.goal(n), 'a4300000-0000-4000-8000-000000000002',
   'Goal health ' || n, 'active', 'manual', 100000, 0, 20000, 'daily',
   current_date, current_date + 30, now(), now()
 FROM generate_series(10, 15) AS n;
+-- Goal 16 was cancelled while its setup was pending: never counted as stuck.
+INSERT INTO public.customer_savings_goals(id, merchant_id, customer_id, product_id, title, status,
+  source_mode, target_amount, current_amount, contribution_amount, contribution_frequency,
+  start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at)
+VALUES (pg_temp.goal(16), 'a4300000-0000-4000-8000-000000000002',
+  'a4300000-0000-4000-8000-000000000003', 'a4300000-0000-4000-8000-000000000004',
+  'Goal health 16', 'cancelled', 'manual', 100000, 0, 20000, 'daily',
+  current_date, current_date + 30, now(), now());
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a4300000-0000-4000-8000-000000000005', 'a4300000-0000-4000-8000-000000000002',
     'goal-health-business', 'staging', session_user, true);
@@ -51,8 +59,9 @@ INSERT INTO piggyvest_primary.onboarding_intents(id, integration_id, merchant_id
     'a4300000-0000-4000-8000-000000000001', repeat('c', 64), 'verified',
     'pv-customer', 'pv-primary-wallet');
 
--- Six setups: 10 old unknown, 11 old dispatched, 12 old accepted (all stalled);
--- 13 old enrolled (done); 14 fresh unknown, 15 fresh dispatched (too young).
+-- Seven setups: 10 old unknown, 11 old dispatched, 12 old accepted (all stalled);
+-- 13 old enrolled (done); 14 fresh unknown, 15 fresh dispatched (too young);
+-- 16 old unknown on a cancelled goal (excluded).
 INSERT INTO piggyvest_primary.goal_wallet_intents(integration_id, goal_id, primary_intent_id, wallet_name,
   state, claim_token, provider_wallet_id, interest_accepted, created_at, updated_at)
 SELECT 'a4300000-0000-4000-8000-000000000005', pg_temp.goal(s.n), 'a4300000-0000-4000-8000-000000000006',
@@ -63,7 +72,8 @@ SELECT 'a4300000-0000-4000-8000-000000000005', pg_temp.goal(s.n), 'a4300000-0000
   pg_catalog.clock_timestamp() - make_interval(mins => s.age_minutes),
   pg_catalog.clock_timestamp()
 FROM (VALUES (10, 'unknown', 30), (11, 'dispatched', 30), (12, 'accepted', 30),
-  (13, 'enrolled', 30), (14, 'unknown', 2), (15, 'dispatched', 2)) AS s(n, state, age_minutes)
+  (13, 'enrolled', 30), (14, 'unknown', 2), (15, 'dispatched', 2),
+  (16, 'unknown', 30)) AS s(n, state, age_minutes)
 ;
 
 DO $$

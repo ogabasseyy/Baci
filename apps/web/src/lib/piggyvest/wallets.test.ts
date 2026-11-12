@@ -139,6 +139,44 @@ describe('retrievePiggyvestWallet', () => {
   });
 });
 
+describe('bugfix: business (settlement) wallets failed to parse', () => {
+  it('reads a business wallet that has api_customer_id null and no withdrawal_count', async () => {
+    // Shape observed live on PiggyVest staging, 2026-11-12 (wallet pay probe).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          status: true,
+          message: 'Wallet details fetched',
+          data: {
+            id: '01JBZ8Q5W3X9R2K4M6N8P0T2V7',
+            api_customer_id: null,
+            business_id: 'business-synthetic-001',
+            currency: 'NGN',
+            name: 'Synthetic Settlement',
+            status: 'active',
+            type: 'settlement',
+            balance: 0,
+            creation_interest_rate: 0,
+            current_interest_rate: 0,
+            interest_payout_wallet: null,
+            is_frozen: false,
+            has_an_active_lien: false,
+          },
+        })
+      )
+    );
+    const wallet = await retrievePiggyvestWallet(
+      { token: 'synthetic-token' },
+      '01JBZ8Q5W3X9R2K4M6N8P0T2V7'
+    );
+    expect(wallet.api_customer_id).toBeUndefined();
+    expect(wallet.withdrawal_count).toBeUndefined();
+    expect(wallet.is_frozen).toBe(false);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('listPiggyvestWallets', () => {
   it('returns id/name/status edges for create-time reconciliation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(

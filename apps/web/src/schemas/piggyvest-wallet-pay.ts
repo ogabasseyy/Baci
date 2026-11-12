@@ -183,7 +183,9 @@ export const piggyvestWalletPaySchemas = {
   // api_customer_id; a customer wallet must.
   wallet: z.object({
     id: piggyvestProviderIdSchema,
-    api_customer_id: piggyvestProviderIdSchema.optional(),
+    api_customer_id: piggyvestProviderIdSchema
+      .nullish()
+      .transform((value) => value ?? undefined),
     business_id: piggyvestProviderIdSchema,
     currency: z.literal('NGN'),
     status: z.literal('active'),

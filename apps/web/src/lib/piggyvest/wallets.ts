@@ -35,7 +35,13 @@ const retrieveWalletDataSchema = z.object({
   // Owning provider customer, preserved for evidence binding: snapshot and
   // verification require it to match the stored mapping. Optional here so
   // unrelated consumers stay liberal; the evidence boundary is strict.
-  api_customer_id: z.string().min(1).optional(),
+  // A business (settlement) wallet answers null: normalised to absent so
+  // every consumer keeps one "no customer" value (staging, 2026-11-12).
+  api_customer_id: z
+    .string()
+    .min(1)
+    .nullish()
+    .transform((value) => value ?? undefined),
   business_id: z.string().min(1),
   virtual_account_id: z.string().nullable().optional(),
   currency: z.literal('NGN'),
@@ -43,7 +49,8 @@ const retrieveWalletDataSchema = z.object({
   status: z.string().min(1),
   type: z.string().min(1),
   balance: koboSchema,
-  withdrawal_count: z.int().nonnegative(),
+  // Absent on business (settlement) wallets.
+  withdrawal_count: z.int().nonnegative().optional(),
   creation_interest_rate: z.number(),
   current_interest_rate: z.number(),
   // Interest settings fixed at creation. Optional so unrelated consumers

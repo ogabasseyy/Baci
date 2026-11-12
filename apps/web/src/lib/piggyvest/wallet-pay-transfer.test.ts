@@ -223,4 +223,19 @@ describe('submitWalletPayment', () => {
     });
     expect(p.transfer).not.toHaveBeenCalled();
   });
+  it('accepts a collection wallet that reports api_customer_id as null', async () => {
+    const settlement = {
+      ...(wallets['collection-wallet'] as object),
+      api_customer_id: null,
+    };
+    const p = ports({
+      retrieveWallet: vi.fn(async (id: string) =>
+        id === 'collection-wallet' ? settlement : wallets[id]
+      ),
+    });
+    await expect(submitWalletPayment({ operationId: OP }, p)).resolves.toEqual({
+      status: 'pending',
+    });
+    expect(p.transfer).toHaveBeenCalledTimes(1);
+  });
 });

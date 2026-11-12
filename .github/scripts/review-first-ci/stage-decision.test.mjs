@@ -131,8 +131,17 @@ describe('break-glass and timeout', () => {
     assert.equal(stageOf({ draft: true, ageMinutes: 600 }).stage, 'quick');
   });
 
-  it('still honours a clean verdict on a draft', () => {
-    assert.equal(stageOf({ draft: true, verdict: clean }).stage, 'full');
+  it('keeps a clean draft quick until it is marked ready', () => {
+    const draft = stageOf({ draft: true, verdict: clean });
+    assert.equal(draft.stage, 'quick');
+    assert.equal(draft.code, 'draft');
+    assert.equal(stageOf({ draft: false, verdict: clean }).stage, 'full');
+  });
+
+  it('ci-now and timeout cannot start heavy CI on a draft', () => {
+    const result = stageOf({ draft: true, verdict: clean, labels: [BREAK_GLASS_LABEL], ageMinutes: 600 });
+    assert.equal(result.stage, 'quick');
+    assert.equal(result.code, 'draft');
   });
 });
 

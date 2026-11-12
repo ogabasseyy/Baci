@@ -29,6 +29,7 @@ export function RootStartupError({ error, retry }: RootStartupErrorProps) {
 
   return (
     <View
+      key={shouldRenderApp ? 'startup-error' : 'startup-placeholder'}
       testID="root-startup-error"
       onLayout={onFirstLayout}
       style={{ flex: 1 }}

@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
 import { SavingsSheetContext } from './SavingsSheetContext';
 
-const SNAP_POINTS = ['72%', '92%'];
+const DEFAULT_SNAP_POINTS = ['72%', '92%'];
 
 /** Let Gorhom own backdrop dismissal so closing retains its exit animation. */
 function SavingsBackdrop(props: BottomSheetBackdropProps) {
@@ -30,6 +30,7 @@ export function SavingsBottomSheet({
   colors,
   onClose,
   overlay,
+  snapPoints = DEFAULT_SNAP_POINTS,
   visible,
 }: {
   children: ReactNode | ((dismiss: () => void) => ReactNode);
@@ -41,6 +42,8 @@ export function SavingsBottomSheet({
    * rendered inside this sheet's modal instead of beside it.
    */
   overlay?: ReactNode;
+  /** Opening height first, then the expanded height. */
+  snapPoints?: string[];
   visible: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -60,7 +63,7 @@ export function SavingsBottomSheet({
           <BottomSheet
             ref={sheet}
             index={0}
-            snapPoints={SNAP_POINTS}
+            snapPoints={snapPoints}
             enableDynamicSizing={false}
             enablePanDownToClose
             enableBlurKeyboardOnGesture
@@ -90,10 +93,12 @@ export function SavingsBottomSheet({
               ]}
             >
               {typeof children === 'function' ? children(dismiss) : children}
+              {/* The PIN step takes over this same sheet rather than opening
+                  a second one on top. */}
+              {overlay}
             </View>
           </BottomSheet>
         </SavingsSheetContext.Provider>
-        {overlay}
       </GestureHandlerRootView>
     </Modal>
   );

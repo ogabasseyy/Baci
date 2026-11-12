@@ -88,41 +88,34 @@ export function WalletSavingsContributionFlow({
             ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
             : 'Add money to your wallet to save this amount.'
       : validAmount
-        ? `Move ${formatNgnCurrency(amount)} from your wallet into this plan.`
+        ? null
         : 'Enter an amount to move from your wallet into this plan.';
 
   return (
     <View style={styles.addSection}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        Amount to add from wallet
-      </Text>
-      <View
-        style={[
-          styles.amountInput,
-          {
-            backgroundColor: validAmount
-              ? colors.primaryLowOpacity
-              : colors.card,
-            borderColor: validAmount ? colors.primary : colors.border,
-          },
-        ]}
-      >
-        <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
-        <SavingsSheetTextInput
-          accessibilityLabel="Savings top-up amount"
-          value={addAmount
-            .replace(/\D/g, '')
-            .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-          editable={!isBusy}
-          onChangeText={(text) => {
-            setHasSeededAmount(true);
-            onAddAmountChange(text.replace(/\D/g, ''));
-          }}
-          keyboardType="number-pad"
-          placeholder="0"
-          placeholderTextColor={colors.placeholder}
-          style={[styles.amountInputField, { color: colors.text }]}
-        />
+      {/* The amount is the hero: big and centred, with what the wallet holds. */}
+      <View style={styles.amountHero}>
+        <View style={styles.amountHeroRow}>
+          <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
+          <SavingsSheetTextInput
+            accessibilityLabel="Savings top-up amount"
+            value={addAmount
+              .replace(/\D/g, '')
+              .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            editable={!isBusy}
+            onChangeText={(text) => {
+              setHasSeededAmount(true);
+              onAddAmountChange(text.replace(/\D/g, ''));
+            }}
+            keyboardType="number-pad"
+            placeholder="0"
+            placeholderTextColor={colors.placeholder}
+            style={[styles.amountInputField, { color: colors.text }]}
+          />
+        </View>
+        <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
+          {`${formatNgnCurrency(walletBalance)} available in wallet`}
+        </Text>
       </View>
       <SavingsQuickAmounts
         colors={colors}
@@ -134,18 +127,17 @@ export function WalletSavingsContributionFlow({
         options={quickAmounts}
         selectedAmount={amount}
       />
-      <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
-        Available in wallet: {formatNgnCurrency(walletBalance)}
-      </Text>
-      <Text
-        accessibilityRole="text"
-        style={[
-          styles.contributionGuidance,
-          { color: invalidAmount ? colors.error : colors.textSecondary },
-        ]}
-      >
-        {guidance}
-      </Text>
+      {guidance ? (
+        <Text
+          accessibilityRole="text"
+          style={[
+            styles.contributionGuidance,
+            { color: invalidAmount ? colors.error : colors.textSecondary },
+          ]}
+        >
+          {guidance}
+        </Text>
+      ) : null}
       {!invalidAmount ? (
         needsFunding ? (
           <Pressable
@@ -204,6 +196,7 @@ export function WalletSavingsContributionFlow({
           </Pressable>
         ) : (
           <WalletSavingsContributionButton
+            amount={validAmount ? amount : undefined}
             colors={colors}
             disabled={!validAmount}
             isAdding={isAdding}

@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { usePiggyvestSlowdownStore } from '@/stores/piggyvest-slowdown-store';
 import {
   MAX_SLOW_ATTEMPTS,
   useGoalWalletSetupPoll,
@@ -139,5 +140,22 @@ describe('useGoalWalletSetupPoll', () => {
     expect(result.current.slow).toBe(true);
     await act(async () => result.current.checkAgain());
     expect(reread).toHaveBeenCalledTimes(calls + 1);
+  });
+
+  describe('bugfix: checks stopped after a failed read during a slowdown', () => {
+    afterEach(() => usePiggyvestSlowdownStore.setState({ signals: {} }));
+
+    it('keeps checking an errored read while PiggyVest is slow', async () => {
+      act(() => usePiggyvestSlowdownStore.getState().markSlow('wallet-read'));
+      const { reread } = setup({ phase: 'error' });
+      await ticks(2);
+      expect(reread).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not poll an errored read when PiggyVest is not slow', async () => {
+      const { reread } = setup({ phase: 'error' });
+      await ticks(2);
+      expect(reread).not.toHaveBeenCalled();
+    });
   });
 });

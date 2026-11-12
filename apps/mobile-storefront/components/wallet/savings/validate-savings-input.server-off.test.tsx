@@ -46,4 +46,34 @@ describe('server keeps PiggyVest off', () => {
       ok: false,
     });
   });
+
+  describe('bugfix: a direct submit could skip the terms or the interest answer', () => {
+    it('refuses without the accepted terms', () => {
+      expect(
+        validateSavingsInput(
+          createInput({ acceptsNonWithdrawableTerms: false }) as never
+        )
+      ).toEqual({
+        error: 'You must accept the non-withdrawable savings terms.',
+        ok: false,
+      });
+    });
+
+    it('refuses a PiggyVest plan without an interest answer', () => {
+      expect(
+        validateSavingsInput(createInput({ interestChoice: null }) as never)
+      ).toEqual({
+        error: 'Choose whether your plan earns interest.',
+        ok: false,
+      });
+    });
+
+    it('accepts when interest is not asked (legacy wallet)', () => {
+      expect(
+        validateSavingsInput(
+          createInput({ interestChoice: undefined }) as never
+        ).ok
+      ).toBe(true);
+    });
+  });
 });

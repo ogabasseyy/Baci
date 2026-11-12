@@ -52,3 +52,18 @@ describe('StartSavingsDoneContent for a PiggyVest wallet', () => {
     ).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: auto-debit plans were told to save from the wallet', () => {
+  it('says the saved card is charged on saving days', () => {
+    render(
+      <StartSavingsDoneContent
+        colors={Colors.light}
+        controller={createStartSavingsController({ sourceMode: 'auto_debit' })}
+      />
+    );
+    expect(
+      screen.getByText(/We’ll charge your saved card ₦2,000 a day from /)
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/from your wallet/)).toBeNull();
+  });
+});

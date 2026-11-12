@@ -188,7 +188,7 @@ describe('SavingsPlanStatusNote', () => {
 });
 
 describe('slow pending setup', () => {
-  it('says savings are running slowly and offers Check now, which runs the supplied check', () => {
+  it('says it is taking longer and offers Check now, which runs the supplied check', () => {
     const onCheckAgain = jest.fn();
     render(
       <SavingsPlanStatusNote
@@ -201,9 +201,7 @@ describe('slow pending setup', () => {
         onCheckAgain={onCheckAgain}
       />
     );
-    expect(
-      screen.getByText(/Savings are running slowly right now/)
-    ).toBeOnTheScreen();
+    expect(screen.getByText(/taking longer than usual/)).toBeOnTheScreen();
     fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
     expect(onCheckAgain).toHaveBeenCalledTimes(1);
   });

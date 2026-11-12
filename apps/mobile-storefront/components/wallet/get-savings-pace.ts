@@ -1,4 +1,3 @@
-import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
 
@@ -53,7 +52,8 @@ export function getSavingsPace({
       return { short: `${amount} ${per}`, label: `${amount} ${per}` };
     return {
       short: `${amount} ${per} · until ${weekly.endsOn}`,
-      label: `${amount} ${per} to finish by ${formatDateTimeDisplay(maturityDate ?? '', 'date')}`,
+      // One formatted date for both the visible line and the spoken label.
+      label: `${amount} ${per} to finish by ${weekly.endsOn}`,
     };
   }
   const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });

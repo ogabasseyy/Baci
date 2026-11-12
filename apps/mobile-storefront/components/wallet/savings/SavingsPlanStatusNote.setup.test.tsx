@@ -19,7 +19,7 @@ jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
 
 const refresh = jest.fn();
 const submit = jest.fn();
-const retry = jest.fn().mockResolvedValue(undefined);
+const retry = jest.fn().mockResolvedValue(true);
 const setChoice = jest.fn();
 const setupState = (change: Record<string, unknown> = {}) => ({
   choice: null,
@@ -60,7 +60,7 @@ const renderExhausted = (change: Record<string, unknown> = {}) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  retry.mockResolvedValue(undefined);
+  retry.mockResolvedValue(true);
   mockSetupHook.mockReturnValue(setupState());
 });
 

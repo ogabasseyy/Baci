@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useReportPiggyvestSlow } from '@/hooks/use-piggyvest-slowdown';
+import {
+  usePiggyvestSlowdown,
+  useReportPiggyvestSlow,
+} from '@/hooks/use-piggyvest-slowdown';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
 const FAST_POLL_MS = 5000;
@@ -38,10 +41,14 @@ export function useGoalWalletSetupPoll({
   const lastFailure = useRef<{ error: unknown } | null>(null);
   const [attempt, setAttempt] = useState({ scopeKey, count: 0 });
   const count = attempt.scopeKey === scopeKey ? attempt.count : 0;
+  // While PiggyVest is slow, a failed read is shown as "getting ready", so
+  // the checks must keep going through it too.
+  const slowdown = usePiggyvestSlowdown();
+  const active = phase === 'pending' || (phase === 'error' && slowdown);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reread is a fresh closure each render; the scope is what identifies it.
   useEffect(() => {
-    if (phase !== 'pending') {
+    if (!active) {
       if (count !== 0) setAttempt({ scopeKey, count: 0 });
       return;
     }
@@ -68,9 +75,9 @@ export function useGoalWalletSetupPoll({
       current = false;
       clearTimeout(timer);
     };
-  }, [phase, count, scopeKey]);
+  }, [active, count, scopeKey]);
 
-  const slow = phase === 'pending' && count >= FAST_ATTEMPTS;
+  const slow = active && count >= FAST_ATTEMPTS;
   useReportPiggyvestSlow('goal-setup', slow);
   // Reads once right away and starts the quick checks again.
   const checkAgain = () => {

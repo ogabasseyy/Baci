@@ -4,7 +4,7 @@ import { AUTO_SETUP_RETRIES, useAutoRetrySetup } from './use-auto-retry-setup';
 type Props = { active: boolean; submitting: boolean; scopeKey: string };
 
 function setup(initial: Props) {
-  const retry = jest.fn().mockResolvedValue(undefined);
+  const retry = jest.fn().mockResolvedValue(true);
   const hook = renderHook(
     (props: Props) => useAutoRetrySetup({ ...props, retry }),
     {
@@ -54,5 +54,31 @@ describe('useAutoRetrySetup with PiggyVest off', () => {
     rerender({ active: true, submitting: false, scopeKey: 'b' });
     await act(async () => {});
     expect(retry).toHaveBeenCalledTimes(2);
+  });
+
+  describe('bugfix: a deduped retry used up an automatic try', () => {
+    it('gives the try back when the setup hook did not send', async () => {
+      const retry = jest.fn().mockResolvedValue(false);
+      const { result } = renderHook(() =>
+        useAutoRetrySetup({
+          active: true,
+          submitting: true,
+          scopeKey: 'a',
+          retry,
+        })
+      );
+      expect(retry).not.toHaveBeenCalled();
+      expect(result.current.exhausted).toBe(false);
+      const second = renderHook(
+        ({ submitting }: { submitting: boolean }) =>
+          useAutoRetrySetup({ active: true, submitting, scopeKey: 'b', retry }),
+        { initialProps: { submitting: false } }
+      );
+      await act(async () => {});
+      second.rerender({ submitting: true });
+      second.rerender({ submitting: false });
+      await act(async () => {});
+      expect(second.result.current.exhausted).toBe(false);
+    });
   });
 });

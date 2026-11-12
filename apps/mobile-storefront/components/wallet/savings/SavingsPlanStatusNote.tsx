@@ -145,7 +145,9 @@ function StatusNoteView({
       <SavingsPlanGettingReady
         colors={colors}
         slow
-        onCheckNow={() => void funding.fetchExistingPlanFunding()}
+        onCheckNow={
+          onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
+        }
       />
     );
   if (phase === 'error') {

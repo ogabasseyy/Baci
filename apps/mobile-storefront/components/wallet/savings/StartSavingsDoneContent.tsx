@@ -24,10 +24,13 @@ export function StartSavingsDoneContent({ colors, controller }: Props) {
     controller.sourceMode === 'auto_debit'
       ? 0
       : controller.effectiveInitialContribution;
+  const startsOn = formatDateTimeDisplay(controller.startDate, 'date');
   const message =
-    headStart > 0
-      ? `Your ${formatNgnCurrency(headStart)} head start is in. Next, save ${pace}.`
-      : `Nothing has been taken yet. Save ${pace} from ${formatDateTimeDisplay(controller.startDate, 'date')}, from your wallet.`;
+    controller.sourceMode === 'auto_debit'
+      ? `Nothing has been taken yet. We’ll charge your saved card ${pace} from ${startsOn}.`
+      : headStart > 0
+        ? `Your ${formatNgnCurrency(headStart)} head start is in. Next, save ${pace}.`
+        : `Nothing has been taken yet. Save ${pace} from ${startsOn}, from your wallet.`;
   return (
     <>
       <View style={styles.successIconWrap}>

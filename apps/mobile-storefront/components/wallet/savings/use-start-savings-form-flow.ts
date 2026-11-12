@@ -32,6 +32,7 @@ export function useStartSavingsFormFlow({
   initialContributionEnabled,
   initialContributionValue,
   primaryWallet = false,
+  autoDebitAllowed = true,
   refetch,
   selectedFundingOption,
   selectedPaymentMethodId,
@@ -57,6 +58,8 @@ export function useStartSavingsFormFlow({
   initialContributionValue: number;
   /** The customer's spendable wallet is their PiggyVest main wallet. */
   primaryWallet?: boolean;
+  /** False until the wallet is confirmed legacy (or for PiggyVest). */
+  autoDebitAllowed?: boolean;
   refetch: () => Promise<unknown>;
   selectedFundingOption: SavingsFundingOption;
   selectedPaymentMethodId: string | null | undefined;
@@ -111,7 +114,7 @@ export function useStartSavingsFormFlow({
   };
 
   const handleFundingContinue = async () => {
-    if (sourceMode === 'auto_debit' && primaryWallet) {
+    if (sourceMode === 'auto_debit' && (primaryWallet || !autoDebitAllowed)) {
       setFormError(AUTO_DEBIT_UNAVAILABLE_MESSAGE);
       return;
     }
@@ -181,7 +184,7 @@ export function useStartSavingsFormFlow({
 
   const handleSourceModeChange = (nextMode: SavingsSourceMode) => {
     // No card money goes into PiggyVest: manual is the only choice there.
-    if (nextMode === 'auto_debit' && primaryWallet) {
+    if (nextMode === 'auto_debit' && (primaryWallet || !autoDebitAllowed)) {
       setFormError(AUTO_DEBIT_UNAVAILABLE_MESSAGE);
       return;
     }

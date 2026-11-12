@@ -46,6 +46,10 @@ export type UseStartSavingsSubmitInput = {
    * time-boxed: the wallet keeps checking and retrying afterwards.
    */
   startGoalWalletSetup?: (goalId: string) => Promise<unknown>;
+  /** Re-checked at submit so no caller can skip the form's gates. */
+  acceptsNonWithdrawableTerms?: boolean;
+  /** PiggyVest only: the interest answer; null until chosen. */
+  interestChoice?: boolean | null;
   /** The plan exists but its hand-off could not finish (wallet not loaded). */
   onHandOffPending?: (goalId: string) => void;
   effectiveInitialContribution: number;

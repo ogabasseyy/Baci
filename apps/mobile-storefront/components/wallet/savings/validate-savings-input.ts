@@ -50,6 +50,18 @@ export function validateSavingsInput(
     return { error: HEAD_START_ABOVE_TARGET_MESSAGE, ok: false };
   }
 
+  // The form gates these before review; submit checks them again so a
+  // direct submit can never skip the terms or the interest answer.
+  if (input.acceptsNonWithdrawableTerms === false) {
+    return {
+      error: 'You must accept the non-withdrawable savings terms.',
+      ok: false,
+    };
+  }
+  if (input.interestChoice === null) {
+    return { error: 'Choose whether your plan earns interest.', ok: false };
+  }
+
   if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {
     return { error: 'Select a saved card for auto debit.', ok: false };
   }

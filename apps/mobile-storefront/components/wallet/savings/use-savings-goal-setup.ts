@@ -34,8 +34,12 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
     []
   );
 
-  const run = async (send: () => Promise<unknown>, isRetry: boolean) => {
-    if (inFlight.current) return;
+  /** Resolves true when a send actually started (false when deduped). */
+  const run = async (
+    send: () => Promise<unknown>,
+    isRetry: boolean
+  ): Promise<boolean> => {
+    if (inFlight.current) return false;
     inFlight.current = true;
     setSubmitting(true);
     setAttempted(true);
@@ -55,6 +59,7 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
         onSettled();
       }
     }
+    return true;
   };
   const submit = async () => {
     if (choice === null) return;

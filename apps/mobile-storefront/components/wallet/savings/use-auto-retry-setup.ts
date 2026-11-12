@@ -19,7 +19,8 @@ export function useAutoRetrySetup({
   active: boolean;
   scopeKey: string;
   submitting: boolean;
-  retry: () => Promise<unknown>;
+  /** Resolves true when a retry was actually sent. */
+  retry: () => Promise<boolean>;
 }) {
   const [tries, setTries] = useState({ scopeKey, count: 0 });
   const count = tries.scopeKey === scopeKey ? tries.count : 0;
@@ -28,8 +29,19 @@ export function useAutoRetrySetup({
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry is a fresh closure each render; the scope and state identify the attempt.
   useEffect(() => {
     if (!active || submitting || exhausted) return;
+    // Spend a try now (so this effect never sends twice), and give it back
+    // if the setup hook deduped the call: only real sends count.
     setTries({ scopeKey, count: count + 1 });
-    void retry().catch(() => undefined);
+    void retry()
+      .then((sent) => {
+        if (!sent)
+          setTries((current) =>
+            current.scopeKey === scopeKey
+              ? { scopeKey, count: Math.max(0, current.count - 1) }
+              : current
+          );
+      })
+      .catch(() => undefined);
   }, [active, submitting, exhausted, scopeKey]);
 
   return { exhausted };

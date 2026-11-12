@@ -1,7 +1,10 @@
 import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
 import { formatDateInput } from './start-savings.helpers';
 import type { SavingsProductChoice } from './start-savings.types';
-import { contributionAboveTargetMessage } from './start-savings-controller.utils';
+import {
+  contributionAboveTargetMessage,
+  HEAD_START_ABOVE_TARGET_MESSAGE,
+} from './start-savings-controller.utils';
 
 type SavingsInputValidation =
   | {
@@ -36,6 +39,15 @@ export function validateSavingsInput(
   );
   if (contributionRefusal) {
     return { error: contributionRefusal, ok: false };
+  }
+
+  // The head start moves at creation on the old wallet: never above target.
+  if (
+    input.sourceMode === 'manual' &&
+    input.targetValue > 0 &&
+    input.effectiveInitialContribution > input.targetValue
+  ) {
+    return { error: HEAD_START_ABOVE_TARGET_MESSAGE, ok: false };
   }
 
   if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {

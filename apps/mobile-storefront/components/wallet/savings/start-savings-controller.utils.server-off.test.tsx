@@ -38,6 +38,28 @@ describe('start savings validation with PiggyVest off', () => {
     });
   });
 
+  describe('bugfix: a legacy head start above the target was accepted', () => {
+    it('refuses a head start bigger than the phone', () => {
+      expect(
+        validateStartSavingsForm({
+          ...valid,
+          initialContributionEnabled: true,
+          initialContributionValue: 300_000,
+        })
+      ).toBe('Your head start cannot be more than the plan target.');
+    });
+
+    it('accepts a head start up to the target', () => {
+      expect(
+        validateStartSavingsForm({
+          ...valid,
+          initialContributionEnabled: true,
+          initialContributionValue: 250_000,
+        })
+      ).toBeNull();
+    });
+  });
+
   it('says nothing when there is no target to compare with', () => {
     expect(contributionAboveTargetMessage(5000, 0)).toBeNull();
     expect(contributionAboveTargetMessage(Number.NaN, 1000)).toBeNull();

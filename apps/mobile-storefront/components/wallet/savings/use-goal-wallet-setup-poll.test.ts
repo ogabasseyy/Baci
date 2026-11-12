@@ -1,5 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
+import {
+  MAX_SLOW_ATTEMPTS,
+  useGoalWalletSetupPoll,
+} from './use-goal-wallet-setup-poll';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
 type Props = { phase: SavingsPlanFundingPhase; scope?: string };
@@ -122,5 +125,19 @@ describe('useGoalWalletSetupPoll', () => {
     rerender({ phase: 'pending', scope: 'b' });
     await advance(5000);
     expect(reread).toHaveBeenCalledTimes(13);
+  });
+
+  it('pauses after about an hour of slow checks, and Check now resumes', async () => {
+    const { result, reread } = setup({ phase: 'pending' });
+    await ticks(12);
+    for (let tick = 0; tick < MAX_SLOW_ATTEMPTS; tick += 1)
+      await advance(20_000);
+    const calls = reread.mock.calls.length;
+    expect(calls).toBe(12 + MAX_SLOW_ATTEMPTS);
+    await advance(120_000);
+    expect(reread).toHaveBeenCalledTimes(calls);
+    expect(result.current.slow).toBe(true);
+    await act(async () => result.current.checkAgain());
+    expect(reread).toHaveBeenCalledTimes(calls + 1);
   });
 });

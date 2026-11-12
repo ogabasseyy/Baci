@@ -2,6 +2,7 @@ import type {
   SavingsProductChoice,
   SavingsSourceMode,
 } from './start-savings.types';
+import { PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE } from './start-savings-wallet-balance';
 
 export {
   applyStartSavingsProductSelection,
@@ -86,6 +87,10 @@ export function contributionAboveTargetMessage(
   return 'Each saving can’t be more than the phone’s price. Try a smaller amount.';
 }
 
+/** One wording for every head-start-above-target refusal. */
+export const HEAD_START_ABOVE_TARGET_MESSAGE =
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE;
+
 export function validateStartSavingsForm({
   acceptsNonWithdrawableTerms,
   contributionValue,
@@ -131,6 +136,13 @@ export function validateStartSavingsForm({
   }
   if (initialContributionEnabled && initialContributionValue <= 0) {
     return 'Enter your initial contribution amount.';
+  }
+  if (
+    initialContributionEnabled &&
+    targetValue > 0 &&
+    initialContributionValue > targetValue
+  ) {
+    return HEAD_START_ABOVE_TARGET_MESSAGE;
   }
   // Provider capability: Paystack auto-debit setup creates the mandate first;
   // providers must opt in before combining mandate setup and upfront funding.

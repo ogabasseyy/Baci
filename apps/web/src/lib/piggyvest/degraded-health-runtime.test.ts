@@ -60,7 +60,7 @@ describe('runPiggyvestDegradedHealth', () => {
   });
 
   it('pages once per hour per reason with a counts-only detail', async () => {
-    const d = deps({ stuck: 4, readStalledGoalWallets: async () => 2 });
+    const d = deps({ stuck: 4, readStalledGoalWallets: async () => 3 });
     const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
     const first = await runPiggyvestDegradedHealth({ env, deps: d.value });
     const second = await runPiggyvestDegradedHealth({ env, deps: d.value });

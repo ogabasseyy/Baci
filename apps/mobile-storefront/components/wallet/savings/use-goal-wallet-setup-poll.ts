@@ -6,11 +6,17 @@ const FAST_POLL_MS = 5000;
 const FAST_ATTEMPTS = 12;
 /** After the first minute: keep going, just less often. */
 const SLOW_POLL_MS = 20_000;
+/**
+ * Slow checks before pausing (about an hour on screen). "Check now", a new
+ * goal or reopening the wallet starts the checks again.
+ */
+export const MAX_SLOW_ATTEMPTS = 180;
 
 /**
- * Keeps re-reading a goal wallet that is still being set up for as long as
- * the screen is open: every 5 s for the first minute, then every 20 s. It
- * never gives up on its own, so a customer is never left on a dead end; after
+ * Keeps re-reading a goal wallet that is still being set up while the screen
+ * is open: every 5 s for the first minute, then every 20 s for about an hour
+ * (then it pauses until "Check now" or the wallet reopens, so a wallet left
+ * open never polls forever). The customer is never left on a dead end; after
  * the first minute `slow` is set so the screen can say it is taking a little
  * longer. Reads are silent, stop the moment the goal is ready, and start over
  * for another account or goal. Only reads status; it never re-sends setup. A
@@ -39,6 +45,7 @@ export function useGoalWalletSetupPoll({
       if (count !== 0) setAttempt({ scopeKey, count: 0 });
       return;
     }
+    if (count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS) return;
     if (count === 0) lastFailure.current = null;
     let current = true;
     const timer = setTimeout(

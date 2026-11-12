@@ -4,6 +4,8 @@
  * and rate-limits; this only applies the thresholds.
  */
 export const DEGRADED_TRANSFER_THRESHOLD = 3;
+/** Same rule as transfers: one customer's hiccup never pages on its own. */
+export const DEGRADED_GOAL_WALLET_THRESHOLD = 3;
 /** A goal-wallet setup older than this (seconds) counts as stalled. */
 export const DEGRADED_STALE_AFTER_SECONDS = 600;
 
@@ -27,7 +29,10 @@ export function decideDegradedAlerts(counts: DegradedCounts): DegradedAlert[] {
   const alerts: DegradedAlert[] = [];
   const { stalledGoalWallets: wallets, indeterminateTransfers: transfers } =
     counts;
-  if (Number.isSafeInteger(wallets) && (wallets as number) >= 1)
+  if (
+    Number.isSafeInteger(wallets) &&
+    (wallets as number) >= DEGRADED_GOAL_WALLET_THRESHOLD
+  )
     alerts.push({
       reason: 'goal_wallet_setup_stalled',
       attempts: wallets as number,

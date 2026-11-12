@@ -14,17 +14,23 @@ describe('decideDegradedAlerts', () => {
     ).toEqual([]);
   });
 
-  it('raises goal-wallet setup from a single stalled wallet', () => {
+  it('does not page for one or two stalled goal wallets', () => {
     expect(
-      decideDegradedAlerts({ stalledGoalWallets: 1, indeterminateTransfers: 0 })
-    ).toEqual([{ reason: 'goal_wallet_setup_stalled', attempts: 1 }]);
+      decideDegradedAlerts({ stalledGoalWallets: 2, indeterminateTransfers: 0 })
+    ).toEqual([]);
+  });
+
+  it('raises goal-wallet setup at the same threshold as transfers', () => {
+    expect(
+      decideDegradedAlerts({ stalledGoalWallets: 3, indeterminateTransfers: 0 })
+    ).toEqual([{ reason: 'goal_wallet_setup_stalled', attempts: 3 }]);
   });
 
   it('raises transfers at the threshold and both reasons together', () => {
     expect(
-      decideDegradedAlerts({ stalledGoalWallets: 2, indeterminateTransfers: 3 })
+      decideDegradedAlerts({ stalledGoalWallets: 4, indeterminateTransfers: 3 })
     ).toEqual([
-      { reason: 'goal_wallet_setup_stalled', attempts: 2 },
+      { reason: 'goal_wallet_setup_stalled', attempts: 4 },
       { reason: 'transfers_indeterminate', attempts: 3 },
     ]);
   });

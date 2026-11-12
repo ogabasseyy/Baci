@@ -11,6 +11,7 @@ import { CartWriteNotice } from '@/components/cart/CartWriteNotice';
 import { NativeCartPairingPanel } from '@/components/cart/NativeCartPairingPanel';
 import { SharedCartBridge } from '@/components/cart/SharedCartBridge';
 import { ChatWidget } from '@/components/chat/ChatWidget';
+import { CheckoutIdentityOverlayProvider } from '@/components/checkout/checkout-identity/CheckoutIdentityOverlayProvider';
 import { GlobalErrorBoundary } from '@/components/ErrorBoundary';
 import { NegotiationModal } from '@/components/modals/NegotiationModal';
 import { DrawerMenu } from '@/components/navigation/DrawerMenu';
@@ -107,50 +108,52 @@ export function RootLayoutNav({
                     { backgroundColor: colors.background },
                   ]}
                 >
-                  <GlobalErrorBoundary context="RootNavigation">
-                    <AdTrackingRouteReadinessProvider ready={adTrackingReady}>
-                      <RouteResumeController
-                        shouldResume={shouldResumeNavigation}
+                  <CheckoutIdentityOverlayProvider>
+                    <GlobalErrorBoundary context="RootNavigation">
+                      <AdTrackingRouteReadinessProvider ready={adTrackingReady}>
+                        <RouteResumeController
+                          shouldResume={shouldResumeNavigation}
+                        />
+                        <MobileUpdateController />
+                        <SharedCartBridge />
+                        <NativeCartPairingPanel />
+                        <CartWriteNotice />
+                        {/*
+                         * No custom `header` function in screenOptions — that would
+                         * make react-native-screens NativeStack reserve a header zone
+                         * via additionalSafeAreaInsets on every screen, even ones
+                         * with `headerShown: false`, which combined with screens'
+                         * own `<SafeAreaView edges={['top']}>` produced ~120pt of
+                         * stacked blank padding above content. Mirrors apps/mobile-admin
+                         * which uses the native iOS UINavigationBar.
+                         *
+                         * Screens that need a custom JS header can opt in
+                         * per-Stack.Screen via `options.header`. Inner-content
+                         * customization (back button, title node, right action) is
+                         * available via `headerLeft`, `headerRight`, `headerTitle`
+                         * without triggering the inset reservation.
+                         */}
+                        <Stack
+                          screenOptions={getRootStackScreenOptions({
+                            background: colors.background,
+                            text: colors.text,
+                          })}
+                        >
+                          {renderRootStackScreens({
+                            mutedContentBackgroundColor: colors.muted,
+                          })}
+                        </Stack>
+                      </AdTrackingRouteReadinessProvider>
+                    </GlobalErrorBoundary>
+                    {enableConnectivityBanner ? <ConnectivityBanner /> : null}
+                    {enableChatWidget ? (
+                      <ChatWidget
+                        bottomOffset={CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET}
                       />
-                      <MobileUpdateController />
-                      <SharedCartBridge />
-                      <NativeCartPairingPanel />
-                      <CartWriteNotice />
-                      {/*
-                       * No custom `header` function in screenOptions — that would
-                       * make react-native-screens NativeStack reserve a header zone
-                       * via additionalSafeAreaInsets on every screen, even ones
-                       * with `headerShown: false`, which combined with screens'
-                       * own `<SafeAreaView edges={['top']}>` produced ~120pt of
-                       * stacked blank padding above content. Mirrors apps/mobile-admin
-                       * which uses the native iOS UINavigationBar.
-                       *
-                       * Screens that need a custom JS header can opt in
-                       * per-Stack.Screen via `options.header`. Inner-content
-                       * customization (back button, title node, right action) is
-                       * available via `headerLeft`, `headerRight`, `headerTitle`
-                       * without triggering the inset reservation.
-                       */}
-                      <Stack
-                        screenOptions={getRootStackScreenOptions({
-                          background: colors.background,
-                          text: colors.text,
-                        })}
-                      >
-                        {renderRootStackScreens({
-                          mutedContentBackgroundColor: colors.muted,
-                        })}
-                      </Stack>
-                    </AdTrackingRouteReadinessProvider>
-                  </GlobalErrorBoundary>
-                  {enableConnectivityBanner ? <ConnectivityBanner /> : null}
-                  {enableChatWidget ? (
-                    <ChatWidget
-                      bottomOffset={CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET}
-                    />
-                  ) : null}
-                  {enableNegotiationModal ? <NegotiationModal /> : null}
-                  {enableDrawerMenu ? <DrawerMenu /> : null}
+                    ) : null}
+                    {enableNegotiationModal ? <NegotiationModal /> : null}
+                    {enableDrawerMenu ? <DrawerMenu /> : null}
+                  </CheckoutIdentityOverlayProvider>
                 </View>
               </ThemeProvider>
             </AppKeyboardProvider>

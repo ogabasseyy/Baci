@@ -1,12 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { CartEmptyState } from '@/components/cart/CartEmptyState';
 import CartLoadedView from '@/components/cart/CartLoadedView';
-import { CartRouteOverlayBoundary } from '@/components/cart/CartRouteOverlayBoundary';
 import CartStateView from '@/components/cart/CartStateView';
 import { CartStatusOnlyScreen } from '@/components/cart/CartStatusOnlyScreen';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
@@ -19,7 +18,7 @@ import { useCartReprice } from '@/components/cart/use-cart-reprice';
 import { useCartScreenItemHandlers } from '@/components/cart/use-cart-screen-item-handlers';
 import { useCartStatusOnly } from '@/components/cart/use-cart-status-only';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
-import { CheckoutIdentityModal } from '@/components/checkout/checkout-identity';
+import { useCheckoutIdentityOverlay } from '@/components/checkout/checkout-identity/CheckoutIdentityOverlayProvider';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
@@ -41,7 +40,9 @@ export default function CartScreen() {
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const colors = Colors[colorScheme];
   const { light: triggerHaptic } = useHaptics();
-  const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
+  const { isOpen: isIdentityModalOpen, open: openCheckoutIdentity } =
+    useCheckoutIdentityOverlay();
+  const checkoutRecoveryRef = useRef<(() => Promise<void>) | null>(null);
   const [isRetryingCartLoad, setIsRetryingCartLoad] = useState(false);
   // Keep CART_MPU unmounted until the iOS price-change modal's fade and
   // native dismissal complete.
@@ -114,9 +115,14 @@ export default function CartScreen() {
     if (isAuthenticated) {
       router.push('/checkout');
     } else {
-      setIsIdentityModalOpen(true);
+      openCheckoutIdentity(() => {
+        globalThis.requestAnimationFrame(() => {
+          void checkoutRecoveryRef.current?.();
+        });
+      });
     }
   });
+  checkoutRecoveryRef.current = recoverCheckout;
   const handleCheckout = () => {
     triggerHaptic();
     void recoverCheckout();
@@ -219,16 +225,7 @@ export default function CartScreen() {
   }
 
   return (
-    <CartRouteOverlayBoundary
-      overlayVisible={isIdentityModalOpen}
-      overlay={
-        <CheckoutIdentityModal
-          isOpen={isIdentityModalOpen}
-          onClose={() => setIsIdentityModalOpen(false)}
-          onVerified={() => void recoverCheckout()}
-        />
-      }
-    >
+    <>
       <SharedCartStatusPanel />
       <NativeCartAccountPanel />
       <CartLoadedView
@@ -295,6 +292,6 @@ export default function CartScreen() {
         onDismissed={() => setPriceChangeDismissed(true)}
         colors={colors}
       />
-    </CartRouteOverlayBoundary>
+    </>
   );
 }

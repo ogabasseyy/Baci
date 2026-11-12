@@ -117,6 +117,7 @@ describe('forfeit leg', () => {
     { status: 'waiting' },
     { status: 'confirmed' },
     { status: 'needs_review' },
+    { status: 'needs_review', alert: true },
     { status: 'none' },
     { status: 'unavailable' },
   ])('passes %j through', async (result) => {

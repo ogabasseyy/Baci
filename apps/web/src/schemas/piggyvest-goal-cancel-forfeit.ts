@@ -66,13 +66,13 @@ export const piggyvestGoalCancelForfeitSchemas = {
           }),
           z.strictObject({ status: z.literal('pending'), forfeitId: z.uuid() }),
           z.strictObject({
-            status: z.enum([
-              'waiting',
-              'confirmed',
-              'needs_review',
-              'none',
-              'unavailable',
-            ]),
+            status: z.enum(['waiting', 'confirmed', 'none']),
+          }),
+          // A stuck forfeit; "alert" only the first time it is reported, so
+          // a person is paged once rather than on every status poll.
+          z.strictObject({
+            status: z.enum(['needs_review', 'unavailable']),
+            alert: z.literal(true).optional(),
           }),
         ]),
       })

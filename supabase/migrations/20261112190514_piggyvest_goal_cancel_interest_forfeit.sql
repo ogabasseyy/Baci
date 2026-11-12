@@ -97,6 +97,9 @@ CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   reserved_at timestamptz NOT NULL,
   dispatched_at timestamptz,
   settled_at timestamptz,
+  -- Set the first time a claim reports this forfeit stuck (needs_review or
+  -- unavailable), so a person is paged once, not on every status poll.
+  alerted_at timestamptz,
   CONSTRAINT goal_cancel_forfeit_reference_key UNIQUE (reference),
   CHECK (source_wallet_id <> destination_wallet_id),
   CHECK (state = 'reserved' OR state = 'released' OR state = 'needs_review' OR dispatched_at IS NOT NULL),
@@ -495,6 +498,25 @@ BEGIN
 END;
 $$;
 
+-- A stuck forfeit's claim answer; "alert" only the first time (stamps
+-- alerted_at). Caller holds the row lock.
+CREATE FUNCTION piggyvest_primary.report_stuck_goal_cancel_forfeit(p_forfeit_id uuid, p_status text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+     SET alerted_at = pg_catalog.clock_timestamp()
+   WHERE id = p_forfeit_id AND alerted_at IS NULL;
+  IF FOUND THEN
+    RETURN pg_catalog.jsonb_build_object('status', p_status, 'alert', true);
+  END IF;
+  RETURN pg_catalog.jsonb_build_object('status', p_status);
+END;
+$$;
+
 -- 6. Forfeit leg, authorizer side. Claims the attempt's planned forfeit for
 -- its single POST, only once the customer's principal is CONFIRMED. Answers:
 --   claimed  {forfeit: transfer details}   send it now, exactly once
@@ -502,6 +524,8 @@ $$;
 --   waiting                                principal not confirmed yet
 --   confirmed / needs_review / none        nothing to send
 --   unavailable                            interest wallet no longer enabled
+-- needs_review and unavailable carry "alert": true the first time they are
+-- reported for a forfeit (alerted_at is stamped), so the caller pages once.
 CREATE FUNCTION piggyvest_primary.claim_goal_cancel_forfeit(scope jsonb, operation_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -529,8 +553,11 @@ BEGIN
      AND forfeit.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')
      FOR UPDATE;
   IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('status', 'none'); END IF;
-  IF v_forfeit.state IN ('confirmed', 'needs_review') THEN
-    RETURN pg_catalog.jsonb_build_object('status', v_forfeit.state);
+  IF v_forfeit.state = 'confirmed' THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'confirmed');
+  END IF;
+  IF v_forfeit.state = 'needs_review' THEN
+    RETURN piggyvest_primary.report_stuck_goal_cancel_forfeit(v_forfeit.id, 'needs_review');
   END IF;
   IF v_forfeit.state = 'dispatched' THEN
     RETURN pg_catalog.jsonb_build_object('status', 'pending', 'forfeitId', v_forfeit.id);
@@ -541,7 +568,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
                   WHERE wallet.integration_id = v_forfeit.integration_id AND wallet.enabled
                     AND wallet.provider_wallet_id = v_forfeit.destination_wallet_id) THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
+    RETURN piggyvest_primary.report_stuck_goal_cancel_forfeit(v_forfeit.id, 'unavailable');
   END IF;
   SELECT intent.* INTO v_intent FROM piggyvest_primary.onboarding_intents AS intent
    WHERE intent.id = v_intent_id;
@@ -845,6 +872,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.read_goal_cancel_amounts(jsonb, uuid),
   piggyvest_primary.settle_goal_cancel(uuid, text, jsonb),
   piggyvest_primary.release_goal_cancel_forfeit_row(uuid),
+  piggyvest_primary.report_stuck_goal_cancel_forfeit(uuid, text),
   piggyvest_primary.claim_goal_cancel_forfeit(jsonb, uuid),
   piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text),
   piggyvest_primary.assert_goal_cancel_evidence(uuid, text),

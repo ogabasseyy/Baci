@@ -197,8 +197,8 @@ it('a status check never resends a dispatched forfeit', async () => {
   expect(mocks.reconcileForfeit).toHaveBeenCalledOnce();
 });
 
-it('pages when the forfeit is under review', async () => {
-  dbAnswers('confirmed', { status: 'needs_review' }, amounts);
+it('pages when the forfeit is first reported under review', async () => {
+  dbAnswers('confirmed', { status: 'needs_review', alert: true }, amounts);
   await checkPrimaryWalletGoalCancelStatus(statusInput);
   expect(mocks.alert).toHaveBeenCalledWith(
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',

@@ -28,7 +28,28 @@ export async function sweepGoalCancelForfeit(input: {
   const { store, provider, evidence, operationId } = input;
   try {
     const outcome = await driveGoalCancelForfeit(operationId, {
-      claim: (id) => store.claimForfeit(id),
+      claim: async (id) => {
+        const claim = await store.claimForfeit(id);
+        // The database stamps the first report of a stuck forfeit, so a
+        // person is paged once, not on every customer status poll.
+        if (
+          (claim.status === 'needs_review' || claim.status === 'unavailable') &&
+          claim.alert === true
+        )
+          emitPiggyvestWebhookAlert(
+            claim.status === 'needs_review'
+              ? 'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW'
+              : 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
+            {
+              reason:
+                claim.status === 'needs_review'
+                  ? 'forfeit_needs_review'
+                  : 'interest_wallet_disabled',
+              operationId,
+            }
+          );
+        return claim;
+      },
       transfer: async (forfeit) =>
         await transferToWallet(provider, {
           amountKobo: forfeit.amountKobo,
@@ -58,16 +79,6 @@ export async function sweepGoalCancelForfeit(input: {
               }),
           }),
     });
-    if (outcome === 'needs_review')
-      emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
-        reason: 'forfeit_needs_review',
-        operationId,
-      });
-    if (outcome === 'unavailable')
-      emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
-        reason: 'interest_wallet_disabled',
-        operationId,
-      });
     return outcome;
   } catch {
     return 'failed';
@@ -75,8 +86,12 @@ export async function sweepGoalCancelForfeit(input: {
 }
 
 /**
- * What the customer gets back and what was forfeited, from the server, for a
- * dispatched (or later) attempt. Absent before dispatch, for attempts made
+ * What the customer gets back and what is NOT refunded to them, from the
+ * server, for a dispatched (or later) attempt. forfeitedInterestKobo is the
+ * customer-facing "interest (not refunded)" figure, fixed at dispatch: it is
+ * true for the customer as soon as the principal is confirmed, whether or not
+ * Ogabassey's interest-wallet transfer (an internal leg, tracked and paged
+ * separately) has settled yet. Absent before dispatch, for attempts made
  * before the split existed, or when the read fails: the app then shows the
  * status alone.
  */

@@ -1,6 +1,8 @@
 /**
  * The response fields that tell the app what an early cancel returns to the
- * main wallet and what interest it forfeits, straight from the server's
+ * main wallet and what interest is not refunded to the customer (fixed when
+ * the attempt is dispatched; Ogabassey's own interest-wallet transfer settles
+ * separately and never changes either figure), straight from the server's
  * record (never a client guess). Empty when the server has no split for the
  * attempt (not dispatched yet, or made before the split existed).
  */

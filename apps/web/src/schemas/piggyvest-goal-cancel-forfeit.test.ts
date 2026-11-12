@@ -93,4 +93,17 @@ describe('forfeit transfer', () => {
       schemas.claimRows.safeParse([{ result: { status: 'sent' } }]).success
     ).toBe(false);
   });
+
+  it('lets only a stuck forfeit ask for a page', () => {
+    expect(
+      schemas.claimRows.safeParse([
+        { result: { status: 'unavailable', alert: true } },
+      ]).success
+    ).toBe(true);
+    expect(
+      schemas.claimRows.safeParse([
+        { result: { status: 'waiting', alert: true } },
+      ]).success
+    ).toBe(false);
+  });
 });

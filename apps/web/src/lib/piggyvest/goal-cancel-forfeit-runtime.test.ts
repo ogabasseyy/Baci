@@ -81,9 +81,9 @@ it('stays pending without an evidence binding', async () => {
 it.each([
   ['needs_review', 'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW'],
   ['unavailable', 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE'],
-] as const)('pages a person when the forfeit is %s', async (status, code) => {
+] as const)('pages a person the first time the forfeit is %s', async (status, code) => {
   await sweepGoalCancelForfeit({
-    store: store({ status }),
+    store: store({ status, alert: true }),
     provider,
     evidence: null,
     operationId,
@@ -93,6 +93,21 @@ it.each([
     expect.objectContaining({ operationId })
   );
   expect(mocks.transfer).not.toHaveBeenCalled();
+});
+
+it.each([
+  'needs_review',
+  'unavailable',
+] as const)('does not page again when a %s forfeit was already reported', async (status) => {
+  expect(
+    await sweepGoalCancelForfeit({
+      store: store({ status }),
+      provider,
+      evidence: null,
+      operationId,
+    })
+  ).toBe(status);
+  expect(mocks.alert).not.toHaveBeenCalled();
 });
 
 it('never throws: a failing database answers failed', async () => {

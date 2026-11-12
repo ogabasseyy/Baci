@@ -9,9 +9,8 @@ export type GoalCancelForfeit = z.infer<typeof schemas.forfeit>;
 type Claim =
   | { status: 'claimed'; forfeit: unknown }
   | { status: 'pending'; forfeitId: string }
-  | {
-      status: 'waiting' | 'confirmed' | 'needs_review' | 'none' | 'unavailable';
-    };
+  | { status: 'waiting' | 'confirmed' | 'none' }
+  | { status: 'needs_review' | 'unavailable'; alert?: true };
 
 export type GoalCancelForfeitOutcome =
   | 'pending'

@@ -277,8 +277,13 @@ BEGIN
   PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits
                               WHERE cancel_operation_id = v_op::uuid) = 3
     AND (SELECT pg_catalog.count(DISTINCT reference) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 4
-    AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'needs_review',
+    AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
+      = '{"status":"needs_review","alert":true}'::jsonb,
     'forfeit replacements are unbounded or reuse references');
+  -- A stuck forfeit pages once, not on every status poll.
+  PERFORM pg_temp.gc_assert(piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
+      = '{"status":"needs_review"}'::jsonb,
+    'a stuck forfeit asked for a second page');
 
   -- 12. Grants: customer-side functions for the authorizer, settlement for the
   --     evidence login, nothing for anyone else.
@@ -317,6 +322,7 @@ BEGIN
     'piggyvest_primary.dispatch_goal_cancel_split(jsonb,uuid,bigint)',
     'piggyvest_primary.read_goal_cancel_amounts(jsonb,uuid)',
     'piggyvest_primary.release_goal_cancel_forfeit_row(uuid)',
+    'piggyvest_primary.report_stuck_goal_cancel_forfeit(uuid,text)',
     'piggyvest_primary.claim_goal_cancel_forfeit(jsonb,uuid)',
     'piggyvest_primary.manage_goal_cancel_forfeit(jsonb,uuid,text)',
     'piggyvest_primary.assert_goal_cancel_evidence(uuid,text)',

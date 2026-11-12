@@ -1,8 +1,4 @@
-/**
- * Flip to true when the "Pay from your wallet" project lets the PiggyVest
- * savings wallet pay for purchases; the rule below then counts it too.
- */
-export const SAVINGS_WALLET_CAN_PAY = false;
+import { SAVINGS_WALLET_CAN_PAY } from './savings-wallet-can-pay';
 
 interface SpendableBalanceInput {
   /** Older wallet balance in naira: what purchases spend today. */

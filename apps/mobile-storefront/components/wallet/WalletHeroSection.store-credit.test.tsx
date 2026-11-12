@@ -23,11 +23,16 @@ const baseProps = {
   totalBalance: 5000,
 };
 
-function renderHero(primaryReady: boolean, storeCreditBalance?: number) {
+function renderHero(
+  primaryReady: boolean,
+  storeCreditBalance?: number,
+  savingsWalletBalance?: number
+) {
   render(
     <WalletPrimaryContext.Provider value={primaryReady}>
       <WalletHeroSection
         {...baseProps}
+        savingsWalletBalance={savingsWalletBalance}
         storeCreditBalance={storeCreditBalance}
       />
     </WalletPrimaryContext.Provider>
@@ -64,7 +69,7 @@ describe('merchants without PiggyVest', () => {
 
 describe('wallet card utility shortcuts', () => {
   it('are hidden for a PiggyVest customer with ₦0 store credit (₦5,000 PiggyVest)', () => {
-    renderHero(true, 0);
+    renderHero(true, 0, 5000);
 
     expect(screen.queryByRole('button', { name: 'Buy Airtime' })).toBeNull();
     expect(screen.queryByText('Airtime')).toBeNull();

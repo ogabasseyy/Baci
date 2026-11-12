@@ -1,8 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
-import {
-  hasSpendableBalance,
-  SAVINGS_WALLET_CAN_PAY,
-} from './has-spendable-balance';
+import { hasSpendableBalance } from './has-spendable-balance';
+import { SAVINGS_WALLET_CAN_PAY } from './savings-wallet-can-pay';
 
 // With the server keeping PiggyVest off no balances are passed, so nothing
 // counts as spendable; callers only use this for PiggyVest-ready customers.

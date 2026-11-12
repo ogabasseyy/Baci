@@ -13,16 +13,14 @@ import {
   useMerchantPaymentSettings,
 } from '@/hooks/useMerchantPaymentSettings';
 import { calculateCommerce } from '@/lib/commerce-brain';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   getKlumpDisabledReason,
   shouldHideKlumpPaymentMethod,
 } from '@/lib/klump-checkout';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
-import {
-  isWalletPrimaryUnknown,
-  isWalletStoreCredit,
-} from '@/lib/wallet-store-credit';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';

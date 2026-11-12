@@ -1,6 +1,7 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { CONFIG } from '@/lib/config';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   buildVtuPurchaseDescriptor,
   scopePendingVtuKey,
@@ -12,10 +13,7 @@ import {
 } from '@/lib/pending-vtu-idempotency';
 import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
-import {
-  isWalletPrimaryUnknown,
-  isWalletStoreCredit,
-} from '@/lib/wallet-store-credit';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';

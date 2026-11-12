@@ -1,12 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { type WalletQueryData, walletKeys } from '@/hooks/wallet-query';
 import { CONFIG } from '@/lib/config';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
-import {
-  isWalletPrimaryUnknown,
-  isWalletStoreCredit,
-} from '@/lib/wallet-store-credit';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**

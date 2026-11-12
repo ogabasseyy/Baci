@@ -3,6 +3,8 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 export const PLAN_CREATED_HEAD_START_PENDING =
   'Your plan was created, but we could not load it yet. Open your wallet to add the head start.';
 
+export const SIGN_IN_TO_START_SAVINGS_MESSAGE =
+  'Sign in to start a savings plan.';
 export const PLAN_ALREADY_CREATED_MESSAGE =
   'Your plan is already created. Open your wallet to add the head start, or leave this screen to start a different plan.';
 

@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import {
   handOffToWallet,
   PLAN_ALREADY_CREATED_MESSAGE,
+  SIGN_IN_TO_START_SAVINGS_MESSAGE,
 } from './hand-off-to-wallet';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
@@ -29,7 +30,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
-  // The signed-in account, kept current so a mid-submit switch cancels it.
+  // The signed-in account: none blocks a submit, a mid-submit switch cancels.
   const authUserId = useAuthStore((state) => state.user?.id);
   const authUserIdRef = useRef(authUserId);
   useEffect(() => {
@@ -88,15 +89,17 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       return;
     }
 
+    if (!authUserIdRef.current) {
+      input.setFormError(SIGN_IN_TO_START_SAVINGS_MESSAGE);
+      return;
+    }
     submitInFlightRef.current = true;
     setIsSubmitting(true);
-    // Every exit below releases the submit lock through this one function.
     const release = () => {
       submitInFlightRef.current = false;
       if (mountedRef.current) setIsSubmitting(false);
     };
     const context = contextRef.current;
-    // Bound to the account that submitted: a switch cancels every follow-up.
     const submittingUserId = authUserIdRef.current;
     const stillCurrent = () =>
       context.active && authUserIdRef.current === submittingUserId;

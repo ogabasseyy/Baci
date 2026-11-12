@@ -45,6 +45,7 @@ const primaryOptions = {
 
 describe('PiggyVest head start balance check at submit', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-a' } } as never);
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });

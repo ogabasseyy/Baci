@@ -3,7 +3,11 @@ import { act, renderHook } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { createSavingsGoal } from '@/lib/customer-savings';
-import { PLAN_ALREADY_CREATED_MESSAGE } from './hand-off-to-wallet';
+import { useAuthStore } from '@/stores/auth-store';
+import {
+  PLAN_ALREADY_CREATED_MESSAGE,
+  SIGN_IN_TO_START_SAVINGS_MESSAGE,
+} from './hand-off-to-wallet';
 import { readFreshPrimaryBalanceKobo } from './start-savings-wallet-balance';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { createInput } from './use-start-savings-submit.test-utils';
@@ -44,6 +48,7 @@ const loaded = {
 
 describe('a created plan whose head start has not moved yet', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-a' } } as never);
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     readBalance.mockResolvedValue(2_000_000);
@@ -161,5 +166,20 @@ describe('a created plan whose head start has not moved yet', () => {
     expect(input.setFormError).toHaveBeenLastCalledWith(
       PLAN_ALREADY_CREATED_MESSAGE
     );
+  });
+
+  it('creates nothing when no account is signed in', async () => {
+    useAuthStore.setState({ user: null } as never);
+    const input = createInput();
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(readBalance).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenLastCalledWith(
+      SIGN_IN_TO_START_SAVINGS_MESSAGE
+    );
+    expect(result.current.isSubmitting).toBe(false);
   });
 });

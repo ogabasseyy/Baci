@@ -8,12 +8,11 @@ import {
   useWalletPinSettingsGate,
   type WalletPinStatus,
 } from './use-wallet-pin-settings-gate';
+import { MISMATCH_ERROR, SAME_PIN_ERROR } from './wallet-pin-errors';
 
 export type WalletPinMode = 'set' | 'change' | 'reset';
 
 const FORMAT_ERROR = 'Enter 4 to 6 digits.';
-export const MISMATCH_ERROR = 'The two PINs do not match.';
-export const SAME_PIN_ERROR = 'Choose a different PIN from your current one.';
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 const SUCCESS: Record<WalletPinMode, string> = {
   set: 'PIN set',

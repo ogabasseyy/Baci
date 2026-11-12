@@ -115,6 +115,21 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(total).toBe(1);
   });
 
+  it('refreshes again when a timed-out action confirms after Check again', () => {
+    const refresh = jest.fn();
+    const { result, rerender } = renderHook(() =>
+      useInSheetGoalCancel(goal, refresh)
+    );
+    act(() => result.current.start());
+    mockStep.current = 'timed_out';
+    rerender({});
+    mockStep.current = 'polling';
+    rerender({});
+    mockStep.current = 'done';
+    rerender({});
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
   it('drops a finished or untouched step on close without refreshing', () => {
     const refresh = jest.fn();
     const { result, rerender } = renderHook(() =>

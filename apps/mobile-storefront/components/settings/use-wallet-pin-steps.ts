@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import {
-  MISMATCH_ERROR,
-  SAME_PIN_ERROR,
-  type useWalletPinSettings,
-  type WalletPinMode,
+import type {
+  useWalletPinSettings,
+  WalletPinMode,
 } from './use-wallet-pin-settings';
+import { MISMATCH_ERROR, SAME_PIN_ERROR } from './wallet-pin-errors';
 
 export type WalletPinStage = 'current' | 'new' | 'confirm';
 

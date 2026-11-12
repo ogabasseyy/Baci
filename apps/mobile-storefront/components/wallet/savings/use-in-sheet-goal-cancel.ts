@@ -37,12 +37,15 @@ export function useInSheetGoalCancel(
   const settled = flow.step === 'done' || flow.step === 'timed_out';
   const refreshRef = useRef(refreshWallet);
   refreshRef.current = refreshWallet;
-  const refreshedAttempt = useRef<number | null>(null);
+  // Keyed by outcome too: a timed-out attempt that later confirms after
+  // "Check again" refreshes again, once.
+  const refreshed = useRef<string | null>(null);
+  const outcomeKey = settled ? `${attempt}:${flow.step}` : null;
   useEffect(() => {
-    if (!settled || refreshedAttempt.current === attempt) return;
-    refreshedAttempt.current = attempt;
+    if (!outcomeKey || refreshed.current === outcomeKey) return;
+    refreshed.current = outcomeKey;
     void refreshRef.current?.();
-  }, [settled, attempt]);
+  }, [outcomeKey]);
 
   return {
     goal: active,

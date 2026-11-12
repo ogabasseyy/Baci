@@ -91,9 +91,12 @@ describe('readWalletPayPinBinding', () => {
     await expect(
       readWalletPayPinBinding({ runtime, scope, operationId: OP })
     ).resolves.toEqual({
-      purpose: 'wallet_pay',
-      amountKobo: 5000,
-      idempotencyKeySha256: 'a'.repeat(64),
+      binding: {
+        purpose: 'wallet_pay',
+        amountKobo: 5000,
+        idempotencyKeySha256: 'a'.repeat(64),
+      },
+      purchase: { purpose: 'vtu', purchaseRef: 'vtu-1' },
     });
   });
 

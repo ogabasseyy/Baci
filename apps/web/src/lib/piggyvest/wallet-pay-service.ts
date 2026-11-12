@@ -54,9 +54,14 @@ export async function readWalletPayPinBinding(input: {
     .readIssued(schemas.operationId.parse(input.operationId));
   if (!issued) return null;
   return {
-    purpose: 'wallet_pay' as const,
-    amountKobo: issued.amountKobo,
-    idempotencyKeySha256: issued.pinKeySha256,
+    binding: {
+      purpose: 'wallet_pay' as const,
+      amountKobo: issued.amountKobo,
+      idempotencyKeySha256: issued.pinKeySha256,
+    },
+    // What the payment is for, so a route can refuse a proof for another
+    // purchase than the one in its URL.
+    purchase: { purpose: issued.purpose, purchaseRef: issued.purchaseRef },
   };
 }
 

@@ -10,6 +10,15 @@ interface NativeSplashHandoffOptions {
   ready: boolean;
 }
 
+function readNativeSplashVisibility() {
+  try {
+    return SplashMotion.isVisible();
+  } catch {
+    // Do not claim the recovery UI is visible while native UI may cover it.
+    return true;
+  }
+}
+
 export function useNativeSplashHandoff({
   initialVisible,
   ready,
@@ -17,6 +26,7 @@ export function useNativeSplashHandoff({
   const [showSplash, setShowSplash] = useState(initialVisible);
   const [timedOut, setTimedOut] = useState(false);
   const [hideFailed, setHideFailed] = useState(false);
+  const [nativeSplashVisible, setNativeSplashVisible] = useState(true);
   const [hasLayout, setHasLayout] = useState(false);
   const firstLayoutRecorded = useRef(false);
   const hidePromiseRef = useRef<Promise<boolean> | null>(null);
@@ -72,6 +82,7 @@ export function useNativeSplashHandoff({
         // promise clear so the bounded recovery attempt below can call native
         // hide again.
         hidePromiseRef.current = null;
+        setNativeSplashVisible(readNativeSplashVisibility());
         setHideFailed(true);
       }
     });
@@ -106,12 +117,33 @@ export function useNativeSplashHandoff({
         // Keep this as one bounded retry; a persistent native failure falls
         // through to StartupRecoveryScreen and the native watchdog.
         hidePromiseRef.current = null;
+        setNativeSplashVisible(readNativeSplashVisibility());
       }
     });
     return () => {
       active = false;
     };
   }, [showSplash, hideFailed]);
+
+  useEffect(() => {
+    if (!hideFailed) {
+      setNativeSplashVisible(false);
+      return;
+    }
+
+    let active = true;
+    const syncVisibility = () => {
+      const visible = readNativeSplashVisibility();
+      if (active) setNativeSplashVisible(visible);
+    };
+
+    syncVisibility();
+    const interval = setInterval(syncVisibility, 250);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [hideFailed]);
 
   const onFirstLayout = () => {
     if (firstLayoutRecorded.current) return;
@@ -127,5 +159,6 @@ export function useNativeSplashHandoff({
     timedOut,
     hasLayout,
     hideFailed,
+    nativeSplashVisible,
   };
 }

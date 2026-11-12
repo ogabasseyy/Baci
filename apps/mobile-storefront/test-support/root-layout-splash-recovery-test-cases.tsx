@@ -14,6 +14,7 @@ interface SplashRecoveryTestContext {
   initializeStorage: jest.Mock<() => Promise<void>>;
   prefetchStartupStorefrontData: jest.Mock<() => Promise<void>>;
   hideSplash: jest.Mock<(options: unknown) => Promise<void>>;
+  isSplashVisible: jest.Mock<() => boolean>;
   useAppTrackingTransparency: jest.Mock;
   usePushNotifications: jest.Mock;
   verifyBenchmarkTelemetry: jest.Mock;
@@ -29,6 +30,7 @@ export function registerRootLayoutSplashRecoveryTests({
   initializeStorage,
   prefetchStartupStorefrontData,
   hideSplash,
+  isSplashVisible,
   useAppTrackingTransparency,
   usePushNotifications,
   verifyBenchmarkTelemetry,
@@ -141,19 +143,25 @@ export function registerRootLayoutSplashRecoveryTests({
 
   it('keeps startup recovery visible if the native hide request rejects', async () => {
     initializeStorage.mockResolvedValue(undefined);
+    isSplashVisible.mockReturnValue(true);
     hideSplash.mockRejectedValue(new Error('native splash unavailable'));
 
     render(<RootLayout />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
-    );
+    await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(3));
     expect(hideSplash).toHaveBeenCalledTimes(3);
     expect(hideSplash).toHaveBeenLastCalledWith({
       waitForLoop: false,
       minDuration: 0,
       fade: 0,
     });
+    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(rootLayoutNavUnmount).not.toHaveBeenCalled();
+    isSplashVisible.mockReturnValue(false);
+    act(() => jest.advanceTimersByTime(250));
+    await waitFor(() =>
+      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
+    );
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
     expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
       enabled: false,

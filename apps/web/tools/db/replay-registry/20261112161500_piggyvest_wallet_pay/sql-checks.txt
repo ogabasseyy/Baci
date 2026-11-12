@@ -1,0 +1,2 @@
+supabase/tests/piggyvest_wallet_pay.sql
+supabase/tests/piggyvest_wallet_pay_refund.sql

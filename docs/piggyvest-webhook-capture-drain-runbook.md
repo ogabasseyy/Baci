@@ -230,3 +230,76 @@ count rows whose state is `needs_review` and whose exact last error is
 recovery of those specific captures after signature and ownership verification.
 Do not broaden the worker login or release unrelated quarantines. A verified
 provider redelivery still settles its matching capture through the receiver.
+
+## Replaying a parked delivery (operator requeue)
+
+PiggyVest cannot resend a webhook on request; it only retries on its own for
+a while. Once those retries stop, the stored capture is the only copy of the
+event. When a delivery is parked for review (`needs_review`) because of a bug
+or outage that has since been fixed, an operator puts it back in the drain
+queue with the replay tool. The tool never processes anything itself: the
+regular drain claims the delivery again, re-checks the stored signature
+against the current and archived keys exactly as it does for every capture,
+and processes it. The ledgers ignore an event they already applied, so
+requeueing a delivery that was in fact already credited credits nothing twice.
+
+**Before any live replay**, confirm the ledger that the event reaches dedupes
+on the provider's stable key. For bank inflows that key is `pvb_reference`
+(PiggyVest confirmed it on 2026-11-11); the fix that makes it the credit
+dedupe key is PR #4199. Without that fix, a delivery that was parked after a
+partial credit could otherwise be credited again, so the database enforces
+it: requeueing a bank inflow, an interest payout, or a capture with no
+readable event type returns `credit_dedupe_missing` and changes nothing until
+both ledgers enforce uniqueness on `pvb_reference` alone (#4199's UNIQUE
+constraints, or any full unique index on that column).
+
+Each requeue gives the delivery a fresh attempt budget and writes an
+append-only audit row (who, from the database login; when; why). A delivery
+can be requeued at most five times.
+
+### One-time setup (owner, with approval)
+
+Create a personal operator login for each person who may replay, as a member
+of `piggyvest_webhook_capture_operator` only. Never use `postgres`,
+`service_role`, the drain login or the intake login, and never add an operator
+login to `piggyvest_webhook_capture_worker` or `piggyvest_webhook_intake`: the
+tool refuses those logins by name and refuses any login that also holds a
+pipeline role, so one person cannot both requeue and drain. Both database
+functions (list and requeue) enforce the same session checks (operator role only, no pipeline
+grants, no direct table access), so calling them directly from `psql`
+cannot skip them. Encryption is enforced by the tool (direct host only,
+`verify-full` TLS) and by the project's SSL enforcement: from SQL the
+server can only see the last network hop.
+
+Generate the password in the password manager and, as with the drain login,
+never put it in any SQL text. Create the login without a password:
+
+```sql
+CREATE ROLE ops_<name> LOGIN IN ROLE piggyvest_webhook_capture_operator;
+```
+
+Then set the password from `psql`, which prompts for it and sends only a
+hashed verifier:
+
+```sql
+\password ops_<name>
+```
+
+### Each replay
+
+From `apps/web`, with your own login's connection string (TLS) in
+`PIGGYVEST_CAPTURE_OPERATOR_DATABASE_URL`. It must be the **direct** database
+connection (`db.<project-ref>.supabase.co`, port 5432), never the pooler on
+port 6543: the tool's encryption check sees only the last hop into PostgreSQL,
+which through a pooler is the pooler's own link. The tool accepts only that
+direct host on port 5432 (or a loopback database for local testing).
+
+1. `pnpm piggyvest:capture-replay list` shows parked deliveries (metadata
+   only: id, event type, transaction id, attempts, last error). It shows up
+   to 200 at a time, newest first; add `--offset 200`, `--offset 400`, and so
+   on to page further. The preview of a requeue searches every page.
+2. `pnpm piggyvest:capture-replay requeue <id> --reason "<what was fixed>"`
+   previews the change; add `--yes` to do it.
+3. The drain picks the delivery up on its next run (within a few minutes).
+   Run `list` again: it is gone once processed. If it comes back with a new
+   error, the fix did not cover it; do not keep replaying.

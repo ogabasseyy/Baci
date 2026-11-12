@@ -8,9 +8,10 @@ import type {
 import { oxygenRuntimeSubmissionSchema } from '@/schemas/oxygen-runtime';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { oxygenWorkflowStageSchema } from '@/schemas/oxygen-workflow';
+import { fixtureBooking as booking } from './provider-journey-booking';
 
 export const fixtureId = '60000000-0000-4000-8000-000000000001';
-const loanId = '70000000-0000-4000-8000-000000000001';
+const loanId = booking.loan_reference;
 export function createProviderJourney() {
   let context: OxygenProviderContext = {
     workflowId: fixtureId,
@@ -41,17 +42,6 @@ export function createProviderJourney() {
   let setupDone = false;
   const actions: string[] = [];
   const operations: string[] = [];
-  const booking = {
-    loan_reference: loanId,
-    product_amount: 400000,
-    loan_amount: 260000,
-    equity_percentage: 35,
-    equity_amount: 140000,
-    loan_tenure: 3,
-    status: 'BOOKED' as const,
-    total_charges: 5135,
-    total_upfront_payment: 145135,
-  };
   const snapshot = (): OxygenRuntimeSnapshot => {
     const state = { ...context.state };
     delete state.phone;
@@ -126,6 +116,8 @@ export function createProviderJourney() {
           max_loan_amount: 400000,
           minimum_loan_amount: 10000,
           max_tenure: 12,
+          tenure_unit: 'Monthly',
+          offers: [{ loan_amount: 400000, tenor: 3 }],
         };
       if (operation === 'approval_otp')
         return { activity_token: 'synthetic-activity-token' };
@@ -209,6 +201,10 @@ export function createProviderJourney() {
           ...context.state,
           validated: true,
           eligible: true,
+          eligibleAmount: 400000,
+          minimumAmount: 10000,
+          maxTenure: 3,
+          offers: [{ tenure: 3, loanAmount: 400000 }],
           bookingReference: loanId,
           booking,
           kyc: {

@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
+import { NODE_PROJECT_TEST_GLOB } from './vitest.node-project-tests';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,7 +126,6 @@ export default defineConfig({
     ],
   },
   test: {
-    environment: 'jsdom',
     globals: true,
     // Keep the Expo/jsdom suite from exhausting fork startup capacity when
     // Turborepo runs package tests concurrently.
@@ -143,5 +143,32 @@ export default defineConfig({
         external: [/expo-linear-gradient/, /react-native\//],
       },
     },
+    // The projects share everything above (`extends: true`); only the
+    // environment and the files differ. Every test file belongs to exactly one
+    // project, chosen by its extension:
+    //  - `jsdom`: `.tsx` and `.jsx` tests (React components).
+    //  - `node`: plain `.ts` and `.js` tests. Creating a jsdom environment took
+    //    most of this suite's worker time, so such a test only gets one when its
+    //    first line says `// @vitest-environment jsdom`. A new one that touches
+    //    `window` or `document` without that line fails with a ReferenceError.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'jsdom',
+          environment: 'jsdom',
+          exclude: [...configDefaults.exclude, NODE_PROJECT_TEST_GLOB],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          include: [NODE_PROJECT_TEST_GLOB],
+          exclude: configDefaults.exclude,
+        },
+      },
+    ],
   },
 });

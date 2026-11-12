@@ -44,6 +44,7 @@ it('pages only on the first report of a stuck claim', async () => {
     provider,
     evidence: null,
     operationId,
+    expectedDestinationWalletId: 'interest-wallet',
   });
   await ports.claim(operationId);
   await ports.claim(operationId);
@@ -61,6 +62,7 @@ it('sends the forfeit from the goal wallet to the interest wallet under its own 
     provider,
     evidence: null,
     operationId,
+    expectedDestinationWalletId: 'interest-wallet',
   });
   await ports.transfer(forfeit);
   expect(mocks.transfer).toHaveBeenCalledWith(provider, {
@@ -80,6 +82,7 @@ it('pages when a release caps the forfeit into review, and binds evidence reconc
     provider,
     evidence: { integrationId: 'i' },
     operationId,
+    expectedDestinationWalletId: 'interest-wallet',
   });
   expect(await ports.release(forfeit.operationId)).toBe('needs_review');
   expect(mocks.alert).toHaveBeenCalledWith(
@@ -110,6 +113,7 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
     provider,
     evidence: null,
     operationId,
+    expectedDestinationWalletId: 'interest-wallet',
   });
   mocks.retrieve.mockResolvedValue(ownWallet);
   expect(await ports.verifyDestination(forfeit)).toBe(true);
@@ -126,4 +130,20 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
     { reason: 'interest_wallet_not_ours', operationId }
   );
+});
+
+it('refuses a wallet the deployment does not name as the interest wallet, even in this business', async () => {
+  // PiggyVest would accept the wallet; only the deployment's setting differs.
+  mocks.retrieve.mockResolvedValue(ownWallet);
+  for (const expected of ['another-wallet', null]) {
+    const ports = forfeitDriverPorts({
+      claim: vi.fn(),
+      release: vi.fn(),
+      provider,
+      evidence: null,
+      operationId,
+      expectedDestinationWalletId: expected,
+    });
+    expect(await ports.verifyDestination(forfeit)).toBe(false);
+  }
 });

@@ -47,6 +47,7 @@ function store(claim: unknown) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('PIGGYVEST_INTEREST_WALLET_ID', 'interest-wallet');
   mocks.transfer.mockResolvedValue({ accepted: true });
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
   mocks.retrieve.mockResolvedValue({

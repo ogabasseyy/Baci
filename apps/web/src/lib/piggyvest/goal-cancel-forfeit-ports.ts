@@ -21,6 +21,9 @@ export function forfeitDriverPorts(input: {
   provider: { token: string; baseUrl: string };
   evidence: unknown | null;
   operationId: string;
+  // PIGGYVEST_INTEREST_WALLET_ID: the deployment's own record of
+  // Ogabassey's interest wallet; it must match the database's.
+  expectedDestinationWalletId: string | null;
 }): Ports {
   const { provider, evidence, operationId } = input;
   return {
@@ -54,9 +57,14 @@ export function forfeitDriverPorts(input: {
           unknown
         >
       >;
-      // Ogabassey's own active NGN wallet in this business, never the
-      // customer's (a mistyped configuration is refused and paged).
+      // Ogabassey's own active NGN wallet in this business: the database's
+      // configured wallet must equal the deployment's
+      // PIGGYVEST_INTEREST_WALLET_ID (two independent settings, so one typo
+      // can not redirect interest), and PiggyVest must confirm it is an
+      // active NGN wallet in this business and not the customer's.
       const ours =
+        input.expectedDestinationWalletId !== null &&
+        forfeit.destinationWalletId === input.expectedDestinationWalletId &&
         wallet.id === forfeit.destinationWalletId &&
         wallet.business_id === forfeit.businessId &&
         wallet.api_customer_id !== forfeit.providerCustomerId &&

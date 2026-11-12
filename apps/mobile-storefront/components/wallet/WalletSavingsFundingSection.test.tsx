@@ -168,8 +168,6 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
   });
 
   it.each([
-    'idle',
-    'loading',
     'not_started',
     'pending',
     'setup_retryable',
@@ -254,7 +252,7 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
     expect(screen.queryByText('wallet-contribution')).toBeNull();
   });
 
-  it('keeps actions hidden through goal-wallet loading after primary readiness resolves', () => {
+  it('waits only for an unknown main wallet, never for goal-wallet loading', () => {
     mockGate.mockReturnValue('checking');
     const fundingProps = props('manual', { usesPlanFunding: false });
     const view = render(<WalletSavingsFundingSection {...fundingProps} />);
@@ -267,8 +265,8 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
       <WalletSavingsFundingSection {...fundingProps} walletBalance={1} />
     );
     expect(screen.getByText('status-note:loading')).toBeOnTheScreen();
-    expect(screen.getByText('Almost ready')).toBeOnTheScreen();
-    expect(screen.queryByText('wallet-contribution')).toBeNull();
+    expect(screen.queryByText('Almost ready')).toBeNull();
+    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
 
     mockPlanFunding.mockReturnValue(plan('ready'));
     view.rerender(

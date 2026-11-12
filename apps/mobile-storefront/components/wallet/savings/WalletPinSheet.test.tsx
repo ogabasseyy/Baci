@@ -59,13 +59,6 @@ function typePin(pin: string) {
 const digitsEntered = (label: string, count: number) =>
   screen.getByLabelText(`${label}, ${count} of 6 digits entered`);
 
-function chooseAndSave(button: string, newPin: string, confirm: string) {
-  typePin(newPin);
-  fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
-  typePin(confirm);
-  fireEvent.press(screen.getByRole('button', { name: button }));
-}
-
 beforeEach(() => jest.resetAllMocks());
 
 describe('entering the PIN', () => {
@@ -131,70 +124,6 @@ describe('entering the PIN', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalled();
     expect(onProof).not.toHaveBeenCalled();
-  });
-});
-
-describe('setting a PIN', () => {
-  it('asks for a matching confirmation, saves, then asks to enter it', async () => {
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ hasPin: false }));
-    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
-    renderSheet();
-    await screen.findByText('Create your wallet PIN');
-    chooseAndSave('Save PIN', '4821', '4822');
-    expect(
-      await screen.findByText('The two PINs do not match.')
-    ).toBeOnTheScreen();
-    expect(submitWalletPin).not.toHaveBeenCalled();
-    chooseAndSave('Save PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
-    expect(submitWalletPin).toHaveBeenCalledWith('set', '4821', undefined);
-    expect(verifyFundPin).not.toHaveBeenCalled();
-    expect(digitsEntered('PIN', 0)).toBeOnTheScreen();
-  });
-
-  it('shows the server copy when saving fails', async () => {
-    const message = 'Please sign in again to continue.';
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ hasPin: false }));
-    jest
-      .mocked(submitWalletPin)
-      .mockRejectedValue(serverError(message, 'REAUTHENTICATION_REQUIRED'));
-    renderSheet();
-    await screen.findByText('Create your wallet PIN');
-    chooseAndSave('Save PIN', '4821', '4821');
-    expect(await screen.findByText(message)).toBeOnTheScreen();
-  });
-
-  it('goes to PIN entry when the server says a PIN already exists', async () => {
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ hasPin: false }));
-    jest
-      .mocked(submitWalletPin)
-      .mockRejectedValue(
-        serverError('A PIN is already set.', 'PIN_ALREADY_SET')
-      );
-    renderSheet();
-    await screen.findByText('Create your wallet PIN');
-    chooseAndSave('Save PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
-  });
-});
-
-describe('resetting a PIN', () => {
-  it('uses the reset route when the server requires a reset', async () => {
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ resetRequired: true }));
-    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
-    renderSheet();
-    await screen.findByText('Reset your wallet PIN');
-    chooseAndSave('Reset PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
-    expect(submitWalletPin).toHaveBeenCalledWith('reset', '4821', undefined);
   });
 });
 

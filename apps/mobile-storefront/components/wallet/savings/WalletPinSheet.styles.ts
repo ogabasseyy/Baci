@@ -56,4 +56,7 @@ export const walletPinSheetStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   footerText: { fontSize: 12 },
+  notice: { fontSize: 12, textAlign: 'center' },
+  secondary: { alignItems: 'center', paddingVertical: 4 },
+  secondaryText: { fontSize: 13, fontWeight: '600' },
 });

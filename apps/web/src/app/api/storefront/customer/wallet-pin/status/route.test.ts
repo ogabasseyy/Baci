@@ -48,15 +48,30 @@ beforeEach(() => {
 it.each([
   [
     { status: 'not_set' },
-    { hasPin: false, resetRequired: false, available: true },
+    {
+      hasPin: false,
+      resetRequired: false,
+      available: true,
+      signInConfirmationRequired: false,
+    },
   ],
   [
     { status: 'unavailable' },
-    { hasPin: false, resetRequired: false, available: false },
+    {
+      hasPin: false,
+      resetRequired: false,
+      available: false,
+      signInConfirmationRequired: false,
+    },
   ],
   [
     { status: 'locked', lockedUntil: '2026-11-03T12:30:00Z' },
-    { hasPin: true, resetRequired: false, available: true },
+    {
+      hasPin: true,
+      resetRequired: false,
+      available: true,
+      signInConfirmationRequired: false,
+    },
   ],
 ])('maps %j', async (state, expected) => {
   mocks.rpc.mockResolvedValue({ data: state, error: null });
@@ -70,6 +85,7 @@ it('reports unavailable, not an error, when the pepper is unusable', async () =>
     hasPin: false,
     resetRequired: false,
     available: false,
+    signInConfirmationRequired: false,
   });
   expect(mocks.rpc).not.toHaveBeenCalled();
 });
@@ -91,6 +107,7 @@ it('never exposes the salt, lock details or any hash', async () => {
     'hasPin',
     'primary',
     'resetRequired',
+    'signInConfirmationRequired',
   ]);
 });
 

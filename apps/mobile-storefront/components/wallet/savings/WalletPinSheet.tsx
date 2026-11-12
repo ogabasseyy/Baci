@@ -1,16 +1,10 @@
-import { useBottomSheet } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { type ReactNode, useContext, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useContext, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { IdentityConfirmPanel } from '../identity/IdentityConfirmPanel';
 import { SavingsSheetContext } from '../SavingsSheetContext';
 import type { WalletPinSheetBinding } from './use-wallet-pin-prompt';
 import {
@@ -18,8 +12,11 @@ import {
   WALLET_PIN_UNAVAILABLE,
   type WalletPinStep,
 } from './use-wallet-pin-sheet';
+import { WalletPinContextStrip } from './WalletPinContextStrip';
+import { EmbeddedPinStep } from './WalletPinEmbeddedStep';
 import { WalletPinDots, WalletPinPad } from './WalletPinPad';
 import { walletPinSheetStyles as styles } from './WalletPinSheet.styles';
+import { WalletPinSheetHeader } from './WalletPinSheetHeader';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -33,6 +30,8 @@ const COPY: Record<
     body: WALLET_PIN_UNAVAILABLE,
     action: '',
   },
+  // Drawn by IdentityConfirmPanel; listed so every step has copy.
+  confirm: { title: "Confirm it's you", body: '', action: '' },
   set: {
     title: 'Create your wallet PIN',
     body: "You'll use it every time you save.",
@@ -93,42 +92,6 @@ export function WalletPinSheet(props: WalletPinSheetProps) {
   );
 }
 
-/** The sheet's handle, top padding and bottom safe area around the step. */
-const SHEET_CHROME_HEIGHT = 72;
-
-/**
- * Covers the savings sheet's content and resizes that sheet to fit the PIN
- * step exactly (no empty space below), then back when the step closes.
- */
-function EmbeddedPinStep({
-  children,
-  colors,
-}: {
-  children: ReactNode;
-  colors: WalletColors;
-}) {
-  const { snapToIndex, snapToPosition } = useBottomSheet();
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    if (height > 0) snapToPosition(height + SHEET_CHROME_HEIGHT);
-  }, [height, snapToPosition]);
-  useEffect(() => () => snapToIndex(0), [snapToIndex]);
-  return (
-    <View
-      style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
-    >
-      <View
-        testID="pin-step-content"
-        onLayout={(event) =>
-          setHeight(Math.ceil(event.nativeEvent.layout.height))
-        }
-      >
-        {children}
-      </View>
-    </View>
-  );
-}
-
 function WalletPinPanel({
   colors,
   embedded = false,
@@ -181,44 +144,36 @@ function WalletPinPanel({
   const close = entering ? 'Cancel' : 'Close';
   const context = contextLine(request);
   const error = tooShort ? PIN_TOO_SHORT : sheet.error;
-  return (
-    <View
-      style={[
-        styles.sheet,
-        embedded && styles.embedded,
-        { backgroundColor: colors.background },
-      ]}
-    >
-      <View style={styles.header}>
-        <View
-          style={[styles.icon, { backgroundColor: colors.primaryLowOpacity }]}
-        >
-          <Ionicons
-            name="lock-closed-outline"
-            size={16}
-            color={colors.primary}
-          />
-        </View>
-        <Text
-          accessibilityRole="header"
-          style={[styles.title, { color: colors.primary }]}
-        >
-          {copy.title}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={close}
-          hitSlop={8}
-          onPress={onCancel}
-          style={styles.close}
-        >
-          <Ionicons
-            name={embedded ? 'arrow-back' : 'close'}
-            size={20}
-            color={colors.textSecondary}
-          />
-        </Pressable>
+  const frame = [
+    styles.sheet,
+    embedded && styles.embedded,
+    { backgroundColor: colors.background },
+  ];
+  if (sheet.step === 'confirm')
+    return (
+      <View style={frame}>
+        <IdentityConfirmPanel
+          colors={colors}
+          expectedUserId={expectedUserId}
+          onConfirmed={() => {
+            setConfirming(false);
+            void sheet.identityConfirmed();
+          }}
+          onCancel={onCancel}
+          embedded={embedded}
+          context={context}
+        />
       </View>
+    );
+  return (
+    <View style={frame}>
+      <WalletPinSheetHeader
+        colors={colors}
+        title={copy.title}
+        closeLabel={close}
+        embedded={embedded}
+        onClose={onCancel}
+      />
       <Text style={[styles.body, { color: colors.textSecondary }]}>
         {sheet.notice
           ? request?.action && request.action !== 'fund'
@@ -231,12 +186,7 @@ function WalletPinPanel({
             : copy.body}
       </Text>
       {context && entering ? (
-        <View style={[styles.context, { backgroundColor: colors.muted }]}>
-          <Ionicons name="wallet-outline" size={16} color={colors.primary} />
-          <Text style={[styles.contextText, { color: colors.text }]}>
-            {context}
-          </Text>
-        </View>
+        <WalletPinContextStrip colors={colors} text={context} />
       ) : null}
       {sheet.step === 'loading' ? (
         <ActivityIndicator color={colors.primary} />

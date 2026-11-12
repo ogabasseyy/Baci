@@ -2,14 +2,15 @@ import BottomSheet, {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { type ReactNode, useRef } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
 import { SavingsSheetContext } from './SavingsSheetContext';
+import { SavingsSheetPinCancelContext } from './SavingsSheetPinCancelContext';
 
-const SNAP_POINTS = ['72%', '92%'];
+const DEFAULT_SNAP_POINTS = ['72%', '92%'];
 
 /** Let Gorhom own backdrop dismissal so closing retains its exit animation. */
 function SavingsBackdrop(props: BottomSheetBackdropProps) {
@@ -30,6 +31,7 @@ export function SavingsBottomSheet({
   colors,
   onClose,
   overlay,
+  snapPoints = DEFAULT_SNAP_POINTS,
   visible,
 }: {
   children: ReactNode | ((dismiss: () => void) => ReactNode);
@@ -41,11 +43,29 @@ export function SavingsBottomSheet({
    * rendered inside this sheet's modal instead of beside it.
    */
   overlay?: ReactNode;
+  /** Opening height first, then the expanded height. */
+  snapPoints?: string[];
   visible: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const sheet = useRef<BottomSheet>(null);
+  // The embedded PIN step's cancel, if one is showing: closing this sheet
+  // cancels it first so the PIN request never outlives the sheet.
+  const pinCancel = useRef<(() => void) | null>(null);
+  // While a PIN step covers the sheet, the savings controls under it are
+  // hidden from VoiceOver and TalkBack too, not only from sight.
+  const [pinActive, setPinActive] = useState(false);
+  const registerPinCancel = (cancel: (() => void) | null) => {
+    pinCancel.current = cancel;
+    setPinActive(cancel !== null);
+  };
   const dismiss = () => sheet.current?.close();
+  const close = () => {
+    const cancel = pinCancel.current;
+    pinCancel.current = null;
+    cancel?.();
+    onClose();
+  };
   if (!visible) return null;
   return (
     <Modal
@@ -57,43 +77,57 @@ export function SavingsBottomSheet({
     >
       <GestureHandlerRootView style={styles.root}>
         <SavingsSheetContext.Provider value={true}>
-          <BottomSheet
-            ref={sheet}
-            index={0}
-            snapPoints={SNAP_POINTS}
-            enableDynamicSizing={false}
-            enablePanDownToClose
-            enableBlurKeyboardOnGesture
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            topInset={insets.top}
-            backdropComponent={SavingsBackdrop}
-            onClose={onClose}
-            backgroundStyle={[
-              styles.background,
-              {
-                backgroundColor: colors.background,
-                borderColor: colors.primary,
-              },
-            ]}
-            handleIndicatorStyle={{
-              backgroundColor: colors.primary,
-              width: 40,
-            }}
-          >
-            <View
-              accessibilityViewIsModal
-              style={[
-                styles.content,
-                { paddingBottom: Math.max(insets.bottom, 16) },
+          <SavingsSheetPinCancelContext.Provider value={registerPinCancel}>
+            <BottomSheet
+              ref={sheet}
+              index={0}
+              snapPoints={snapPoints}
+              enableDynamicSizing={false}
+              enablePanDownToClose
+              enableBlurKeyboardOnGesture
+              keyboardBehavior="interactive"
+              keyboardBlurBehavior="restore"
+              android_keyboardInputMode="adjustResize"
+              topInset={insets.top}
+              backdropComponent={SavingsBackdrop}
+              onClose={close}
+              backgroundStyle={[
+                styles.background,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.primary,
+                },
               ]}
+              handleIndicatorStyle={{
+                backgroundColor: colors.primary,
+                width: 40,
+              }}
             >
-              {typeof children === 'function' ? children(dismiss) : children}
-            </View>
-          </BottomSheet>
+              <View
+                accessibilityViewIsModal
+                style={[
+                  styles.content,
+                  { paddingBottom: Math.max(insets.bottom, 16) },
+                ]}
+              >
+                <View
+                  style={styles.body}
+                  accessibilityElementsHidden={pinActive}
+                  importantForAccessibility={
+                    pinActive ? 'no-hide-descendants' : 'auto'
+                  }
+                >
+                  {typeof children === 'function'
+                    ? children(dismiss)
+                    : children}
+                </View>
+                {/* The PIN step takes over this same sheet rather than opening
+                  a second one on top. */}
+                {overlay}
+              </View>
+            </BottomSheet>
+          </SavingsSheetPinCancelContext.Provider>
         </SavingsSheetContext.Provider>
-        {overlay}
       </GestureHandlerRootView>
     </Modal>
   );
@@ -102,6 +136,7 @@ export function SavingsBottomSheet({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  body: { flex: 1 },
   background: {
     borderWidth: 1.5,
     borderBottomWidth: 0,

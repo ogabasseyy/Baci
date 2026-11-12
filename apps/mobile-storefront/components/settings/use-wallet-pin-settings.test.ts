@@ -81,6 +81,17 @@ describe('useWalletPinSettings', () => {
     expect(result.current.mode).toBe('reset');
   });
 
+  it('never lets one account inherit another account\'s "confirm it\'s you"', () => {
+    mockStatus = { ...mockStatus, signInConfirmationRequired: true };
+    const { result, rerender } = renderHook(() => useWalletPinSettings());
+    expect(result.current.needsIdentity).toBe(true);
+    act(() => result.current.identityConfirmed());
+    expect(result.current.needsIdentity).toBe(false);
+    mockUserId = 'user-2';
+    rerender({});
+    expect(result.current.needsIdentity).toBe(true);
+  });
+
   it('clears fields and the validation error path sends nothing', () => {
     const { result } = renderHook(() => useWalletPinSettings());
     act(() => {

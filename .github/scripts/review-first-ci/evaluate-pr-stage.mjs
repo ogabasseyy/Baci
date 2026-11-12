@@ -7,7 +7,7 @@ import { buildCarryOver } from './net-diff.mjs';
 import { decideStage } from './stage-decision.mjs';
 
 // Decisions that do not depend on what Codex said: no need to read comments.
-const DECIDED_WITHOUT_CODEX = new Set(['not-pull-request', 'fork', 'mode-off', 'pilot-not-selected', 'closed', 'superseded', 'break-glass']);
+const DECIDED_WITHOUT_CODEX = new Set(['not-pull-request', 'fork', 'mode-off', 'pilot-not-selected', 'closed', 'superseded', 'draft', 'break-glass']);
 // Decisions that need no API call at all (legacy paths stay untouched and offline).
 const DECIDED_OFFLINE = new Set(['not-pull-request', 'fork', 'mode-off']);
 

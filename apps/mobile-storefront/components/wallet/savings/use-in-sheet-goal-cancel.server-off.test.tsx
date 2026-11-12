@@ -172,6 +172,19 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('abandons an action still being issued when the sheet closes', () => {
+    const { result, rerender } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start());
+    const opened = mockLifecycle.mock.calls.at(-1)?.[0] as { resetKey: number };
+    mockStep.current = 'issuing';
+    rerender({});
+    act(() => result.current.closed());
+    const after = mockLifecycle.mock.calls.at(-1)?.[0] as { resetKey: number };
+    expect(result.current.goal).toBeNull();
+    // A new attempt invalidates the pending request, so no hidden PIN step.
+    expect(after.resetKey).toBeGreaterThan(opened.resetKey);
+  });
+
   it('never shows one account the goal another account was cancelling', () => {
     const { result } = renderHook(() => useInSheetGoalCancel(goal));
     act(() => result.current.start());

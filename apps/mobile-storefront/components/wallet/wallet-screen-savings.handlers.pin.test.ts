@@ -4,7 +4,10 @@ import { PIN_CANCELLED_CODE } from '@/lib/wallet-pin-proof';
 import { notifySavings } from './savings/savings-notice';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
+jest.mock('./savings/savings-notice', () => ({
+  clearSavingsNotice: jest.fn(),
+  notifySavings: jest.fn(),
+}));
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,

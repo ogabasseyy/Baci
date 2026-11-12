@@ -36,6 +36,11 @@ export function notifySavings(
   });
 }
 
+/** Drops the current notice, e.g. before retrying the action it described. */
+export function clearSavingsNotice() {
+  useSavingsNoticeStore.setState({ notice: null });
+}
+
 /**
  * The latest notice, only for the customer and store it was shown for:
  * another account signing in on the same phone never sees it.

@@ -75,8 +75,14 @@ export function useInSheetGoalCancel(
      * result refreshes the wallet when it settles; anything else is dropped.
      */
     closed: () => {
-      if (!IN_FLIGHT.has(flow.step)) setHeld(null);
-      else closedInFlight.current = attempt;
+      if (IN_FLIGHT.has(flow.step)) {
+        closedInFlight.current = attempt;
+        return;
+      }
+      setHeld(null);
+      // Anything not yet sent (e.g. still issuing) is abandoned: a new
+      // attempt invalidates it, so a late reply never opens a hidden PIN step.
+      setAttempt((value) => value + 1);
     },
   };
 }

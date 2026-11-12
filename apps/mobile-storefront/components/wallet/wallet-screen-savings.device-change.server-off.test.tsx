@@ -1,0 +1,68 @@
+import { act, renderHook } from '@testing-library/react-native';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { swapSavingsGoalDevice } from '@/lib/customer-savings';
+import { useAuthStore } from '@/stores/auth-store';
+import type { Product } from '@/types/product';
+import { useSavingsNotice } from './savings/savings-notice';
+import { changeSavingsGoalDevice } from './wallet-screen-savings.handlers';
+
+jest.mock('@/lib/customer-savings', () => ({
+  swapSavingsGoalDevice: jest.fn(),
+}));
+
+const goal: WalletActiveSavingsGoal = {
+  contribution_amount: 1000,
+  contribution_frequency: 'weekly',
+  current_amount: 500,
+  id: 'goal-1',
+  maturity_date: '2026-09-30',
+  source_mode: 'manual',
+  status: 'active',
+  target_amount: 5000,
+  title: 'iPhone 13',
+};
+const product = {
+  id: 'p-2',
+  name: 'iPhone 14',
+  slug: 'iphone-14',
+  price: 9000,
+  image: 'https://example.test/iphone-14.png',
+} satisfies Product;
+
+const change = () =>
+  changeSavingsGoalDevice({
+    activeMerchantId: 'm-1',
+    goal,
+    product,
+    refetchWallet: async () => ({}),
+  });
+
+beforeEach(() => {
+  act(() => {
+    useAuthStore.setState({
+      user: { id: 'user-a' } as never,
+      merchantId: 'm-1',
+    });
+  });
+});
+
+// The device swap still works with PiggyVest off; a retry that succeeds
+// leaves no earlier failure on the savings sheet.
+describe('changing the savings device with the server off', () => {
+  it('clears the earlier failure when a retry succeeds', async () => {
+    const swap = jest.mocked(swapSavingsGoalDevice);
+    const { result } = renderHook(() => useSavingsNotice());
+
+    swap.mockRejectedValueOnce(new Error('Network down'));
+    await act(async () => {
+      expect(await change()).toBe(false);
+    });
+    expect(result.current.notice?.title).toBe('Unable to change device');
+
+    swap.mockResolvedValueOnce(undefined as never);
+    await act(async () => {
+      expect(await change()).toBe(true);
+    });
+    expect(result.current.notice).toBeNull();
+  });
+});

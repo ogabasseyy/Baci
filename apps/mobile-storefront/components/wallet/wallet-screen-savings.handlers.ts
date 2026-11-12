@@ -4,7 +4,7 @@ import { swapSavingsGoalDevice } from '@/lib/customer-savings';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { readConfirmedContribution } from './read-confirmed-contribution';
-import { notifySavings } from './savings/savings-notice';
+import { clearSavingsNotice, notifySavings } from './savings/savings-notice';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
@@ -203,6 +203,8 @@ export async function changeSavingsGoalDevice({
     return false;
   }
 
+  // A retry must not leave the previous failure on screen after it works.
+  clearSavingsNotice();
   try {
     await swapSavingsGoalDevice({
       goalId: goal.id,

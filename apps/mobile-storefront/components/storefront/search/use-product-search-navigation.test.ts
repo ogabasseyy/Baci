@@ -60,7 +60,7 @@ it('keeps results visible and ignores duplicate taps until keyboard layout settl
   });
   expect(h.onClose).not.toHaveBeenCalled();
   expect(h.onNavigate).not.toHaveBeenCalled();
-  expect(h.saveSearch).toHaveBeenCalledTimes(1);
+  expect(h.saveSearch).not.toHaveBeenCalled();
   expect(h.onSelectionStart).toHaveBeenCalledTimes(1);
   expect(h.onSelectionStart.mock.invocationCallOrder[0]).toBeLessThan(
     mockDismiss.mock.invocationCallOrder[0]
@@ -69,6 +69,7 @@ it('keeps results visible and ignores duplicate taps until keyboard layout settl
     h.release();
     await navigation;
   });
+  expect(h.saveSearch).toHaveBeenCalledWith('phone');
   expect(h.onNavigate).toHaveBeenCalledWith(product);
   expect(h.onClose.mock.invocationCallOrder[0]).toBeLessThan(
     h.onNavigate.mock.invocationCallOrder[0]
@@ -83,6 +84,7 @@ it('cancels pending navigation when search closes', async () => {
     await navigation;
   });
   expect(h.onNavigate).not.toHaveBeenCalled();
+  expect(h.saveSearch).not.toHaveBeenCalled();
 });
 it('cancels pending navigation when unmounted', async () => {
   const h = setup();
@@ -91,6 +93,7 @@ it('cancels pending navigation when unmounted', async () => {
   h.release();
   await navigation;
   expect(h.onNavigate).not.toHaveBeenCalled();
+  expect(h.saveSearch).not.toHaveBeenCalled();
 });
 it('cancels pending navigation when the app backgrounds', async () => {
   let change: ((state: AppStateStatus) => void) | undefined;
@@ -109,6 +112,7 @@ it('cancels pending navigation when the app backgrounds', async () => {
     await navigation;
   });
   expect(h.onNavigate).not.toHaveBeenCalled();
+  expect(h.saveSearch).not.toHaveBeenCalled();
   expect(remove).toHaveBeenCalled();
   spy.mockRestore();
 });
@@ -123,6 +127,7 @@ it('cancels a pending selection when the search query changes', async () => {
   });
   expect(h.onClose).not.toHaveBeenCalled();
   expect(h.onNavigate).not.toHaveBeenCalled();
+  expect(h.saveSearch).not.toHaveBeenCalled();
 });
 
 it('cancels a selection when Cart covers search before the keyboard settles', async () => {
@@ -136,4 +141,5 @@ it('cancels a selection when Cart covers search before the keyboard settles', as
   });
   expect(h.onClose).not.toHaveBeenCalled();
   expect(h.onNavigate).not.toHaveBeenCalled();
+  expect(h.saveSearch).not.toHaveBeenCalled();
 });

@@ -52,3 +52,11 @@ test('native lifecycle preserves intro playback on recreation and marker configu
   assert.match(marker, /onIntroFinished\(finished\)/, 'marker reports actual completion');
   assert.match(marker, /loopMode: \.loop/, 'looping marker retains its loop behavior');
 });
+
+
+test('the Android system splash releases when missing configuration terminates playback', () => {
+  const source = new URL('../../../node_modules/react-native-splash-motion/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt', import.meta.url);
+  const android = readFileSync(source, 'utf8');
+  assert.match(android, /if \(config == null\) \{[^}]*terminated = true[^}]*return/);
+  assert.match(android, /setKeepOnScreenCondition \{ !terminated && !overlayReady \}/);
+});

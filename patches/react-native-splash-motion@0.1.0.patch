@@ -86,7 +86,7 @@ index 9ce48d6..3ef00be 100644
 +    if (terminated) return
 +    // Every Activity gets its own system-splash exit callback. A recreated
 +    // Activity can replace the original before the original exit fires.
-+    splash.setKeepOnScreenCondition { !overlayReady }
++    splash.setKeepOnScreenCondition { !terminated && !overlayReady }
 +    splash.setOnExitAnimationListener {
 +      it.remove()
 +      splashGone = true

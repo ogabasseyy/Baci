@@ -394,7 +394,7 @@ run against PiggyVest for this flow.
 | `POST /transfer/wallet` answers 202 "processing", never success | confirmed | §5 probes; transfers.ts. Payment and refund are "submitted" until a TSQ record settles them. |
 | TSQ answers 404 for a just-accepted transfer before indexing | confirmed | contract evidence 2026-10-31 P2. A 404 is never proof of absence; only a definitive POST rejection plus `not_found` releases. |
 | A business wallet carries no `api_customer_id` | confirmed (sandbox) | 2026-11-02 `house_wallet_unbound_to_customer = yes`. The send step refuses a collection wallet that names a customer. |
-| A customer main wallet may send to a business (collection) wallet via the API | **unproven: staging accepted (202) but never processed it** (probe below) | Docs: transfers are "from one wallet to another wallet under your account". If PiggyVest refuses, the POST's definitive rejection (400) releases the payment and nothing moves. |
+| A customer main wallet may send to a business (collection) wallet via the API | **unproven: staging queued but processed no wallet transfer at all on 2026-11-12** (probe below) | Docs: transfers are "from one wallet to another wallet under your account". If PiggyVest refuses, the POST's definitive rejection (400) releases the payment and nothing moves. |
 | A business wallet may send back to a customer main wallet (refund) | sandbox-observed | Evidence 2026-11-02-2 P8 "Collection to main": worked; the destination row carries our reference and GET /transaction/:id resolves from both sides. Not confirmed for production. |
 | Fee on either direction | **unknown** for production; sandbox 0 | Sandbox P6: the record carries a fee field, `transfer_fee_kobo` 0, exact amounts both sides. Docs: `PATCH /api/v1/business/api-fee-wallet-settings` charges a fee wallet when its flag is set, else the source wallet; an invalid fee wallet "may fail silently". No amounts are published and no fee wallet is known to be set. A record with `fee > 0` is never settled clean: it is recorded `needs_review` and nothing is delivered. |
 | TSQ record for these transfers carries our reference in `third_party_reference`, both wallets, `internal_reference = id` | assumed from savings | Same shape as main→goal (evidence 2026-11-04 S12). `customer_id` may be the business id, as there. |
@@ -467,6 +467,29 @@ wallet and the business settlement wallet (no API customer). Masked output only.
   answer 400 "An error occurred creating customer". Staging appears to verify
   BVNs; Option B needs a sandbox BVN PiggyVest staging accepts (never a real
   person's BVN).
+- **Correction (later the same day): staging is not processing ANY wallet
+  transfer today, so the "customer → business unsupported" reading above is
+  withdrawn.** A control transfer of the kind that settled on 2026-11-04/06
+  (QA main → the QA customer's own goal wallet, both `api` wallets) also stayed
+  at 404 "Transaction Not Found" + `processing_status: "initiated"` for
+  6 minutes, with no balance change. So did QA main → another customer's main
+  API wallet (the all-zeros-BVN sandbox customer: not the QA customer, bound to
+  no app account). The 202 reply carries PiggyVest's own id
+  (`data.reference`, `PVB01…`); TSQ by our reference, TSQ by the PVB id, and
+  GET /transaction/:id all answer the same 404/`initiated`, and the source
+  wallet lists no pending row. Reading: PiggyVest queued every transfer and
+  its staging worker is not picking them up. **Re-run the probe when staging
+  processes transfers again.** Nothing about customer → business is proven
+  either way.
+- **Five ₦1 test transfers are queued at PiggyVest staging** (QA main → the
+  settlement wallet, → the expense wallet, → the all-zeros customer's main
+  wallet ×2, → the QA goal wallet). If the worker resumes they may all execute:
+  ₦5 of test money leaves the QA main wallet, the goal-wallet one is unknown to
+  our books (the daily reconciliation would list the goal as above expected,
+  REVIEW only), and none has a refund. Re-read balances when staging recovers.
+- `processing_status` is an undocumented field on the TSQ 404 body; `initiated`
+  means queued, not failed. Wallet pay already treats a TSQ 404 as "not
+  proven absent" and holds the payment pending, which is right for this.
 - Not observed (no transfer completed): the fee on a completed transfer, the
   TSQ record shape for these directions, and webhooks.
 

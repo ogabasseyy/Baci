@@ -6,6 +6,11 @@ import { useCheckoutPaymentController } from './use-checkout-payment-controller'
 let mockWallet: Record<string, unknown> | undefined;
 let mockIsRefetching = false;
 let mockIsError = false;
+let mockCapability: boolean | null = null;
+
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: () => mockCapability,
+}));
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
   useCheckoutSavings: () => ({
@@ -136,6 +141,23 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
 
     // Assert
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+
+  it('keeps bank transfer to wallet through a refresh where the server rules PiggyVest out', () => {
+    // Arrange: non-PiggyVest merchant, cached legacy wallet, failing refresh.
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    mockIsRefetching = true;
+    mockIsError = true;
+
+    // Act
+    const { result } = renderController();
+    mockCapability = null;
+    mockIsRefetching = false;
+    mockIsError = false;
+
+    // Assert: exactly as before this change.
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
   });
 
   it('holds bank transfer to wallet after a failed wallet refresh', () => {

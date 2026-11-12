@@ -22,6 +22,11 @@ jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
   useMerchantPaymentSettings: () => mockUseMerchantPaymentSettings(),
 }));
 
+let mockCapability: boolean | null = null;
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: () => mockCapability,
+}));
+
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => mockWalletQuery,
 }));
@@ -114,6 +119,20 @@ describe('useUtilityPayment store credit', () => {
     };
 
     const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.walletPrimaryUnknown).toBeUndefined();
+  });
+
+  it("keeps today's funding through a refresh where the server rules PiggyVest out", () => {
+    mockCapability = false;
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0 } },
+      isRefetching: true,
+    };
+
+    const { result } = renderHook(() => useUtilityPayment());
+    mockCapability = null;
 
     expect(result.current.walletPrimaryUnknown).toBeUndefined();
   });

@@ -15,6 +15,7 @@ import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-s
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
+import { usePiggyvestPossible } from './use-piggyvest-possible';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
 import { walletKeys } from './wallet-query';
@@ -60,6 +61,9 @@ export function useUtilityPayment() {
   // Rotated only after a definitive HTTP response (success or 4xx).
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
+  const piggyvestPossible = usePiggyvestPossible(
+    useAuthStore((state) => state.merchantId)
+  );
   const queryClient = useQueryClient();
   // The bank-transfer funding nudge deep-links into DVA territory, so offer
   // it to any signed-in customer of a merchant with wallet DVAs enabled. No
@@ -153,7 +157,8 @@ export function useUtilityPayment() {
       : {}),
     // PiggyVest check failed, or a refresh may change the verdict (Codex):
     // hold bank-transfer top-ups until the wallet settles.
-    ...(isWalletPrimaryUnknown(wallet.data?.wallet) || wallet.isRefetching
+    ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
+    (piggyvestPossible && wallet.isRefetching)
       ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

@@ -6,6 +6,7 @@ import type {
   PaymentTab,
 } from '@/components/checkout/PaymentMethodSelector';
 import { useCheckoutSavings } from '@/hooks/use-checkout-savings';
+import { usePiggyvestPossible } from '@/hooks/use-piggyvest-possible';
 import { useWallet } from '@/hooks/use-wallet';
 import {
   getEnabledPaymentMethods,
@@ -104,6 +105,7 @@ export function useCheckoutPaymentController({
   // Orders spend the older balance: store credit for PiggyVest customers.
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
   const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
+  const piggyvestPossible = usePiggyvestPossible(merchantId);
 
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);
@@ -186,15 +188,16 @@ export function useCheckoutPaymentController({
       walletBalance,
       walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
-      // Not loaded yet, or refreshing (Codex), counts as unknown: a
-      // PiggyVest customer must never pick this option before the wallet
-      // says which kind it is.
+      // Where PiggyVest is possible, not loaded, refreshing or a failed
+      // refresh (stale data) counts as unknown (Codex): a PiggyVest customer
+      // must never pick this before the wallet says which kind it is.
+      // Merchants the server rules out keep today's behaviour (Muse).
       walletPrimaryUnknown:
-        !walletQuery.data?.wallet ||
-        walletQuery.isRefetching ||
-        // A failed refresh keeps stale data: not an authoritative verdict.
-        walletQuery.isError ||
-        isWalletPrimaryUnknown(walletQuery.data.wallet),
+        isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
+        (piggyvestPossible &&
+          (!walletQuery.data?.wallet ||
+            walletQuery.isRefetching ||
+            walletQuery.isError)),
     });
   const storeCreditCompatible = isStoreCreditCompatiblePayment({
     paymentTab,

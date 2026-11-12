@@ -19,6 +19,8 @@ interface UtilityPaymentOptionsProps {
   walletBalance?: number;
   walletError?: Error | null;
   walletIsLoading?: boolean;
+  /** PiggyVest customer: the wallet balance is store credit. */
+  walletIsStoreCredit?: boolean;
   /**
    * False while the wallet query is disabled (owner resolving,
    * session hydration, account switch): TanStack reports
@@ -42,7 +44,11 @@ export function UtilityPaymentOptions({
   walletError,
   walletIsLoading,
   walletIsSettled,
+  walletIsStoreCredit = false,
 }: UtilityPaymentOptionsProps) {
+  const payLabel = walletIsStoreCredit
+    ? 'Pay with store credit'
+    : 'Pay with wallet';
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   // Unsettled (query disabled, no data yet) renders as checking even
@@ -72,6 +78,7 @@ export function UtilityPaymentOptions({
         walletError={walletError}
         walletIsLoading={walletIsLoading}
         walletIsSettled={walletIsSettled}
+        walletIsStoreCredit={walletIsStoreCredit}
       />
 
       {isChecking ? (
@@ -133,7 +140,7 @@ export function UtilityPaymentOptions({
             },
           ]}
           accessibilityRole="text"
-          accessibilityLabel={`Pay with wallet. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
+          accessibilityLabel={`${payLabel}. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
         >
           <View
             style={[
@@ -145,7 +152,7 @@ export function UtilityPaymentOptions({
           </View>
           <View style={styles.walletCopy}>
             <Text style={[styles.walletTitle, { color: colors.text }]}>
-              Pay with wallet
+              {payLabel}
             </Text>
             <Text style={[styles.walletMeta, { color: colors.textSecondary }]}>
               {coversBill

@@ -56,9 +56,31 @@ describe('WalletFundModal card option with the PiggyVest wallet ready', () => {
     expect(screen.queryByRole('button', { name: CARD })).toBeNull();
   });
 
-  it('keeps card funding for the legacy-funded IMEI check return', () => {
+  it('offers only a card store credit top-up for the IMEI check return', () => {
     renderModal(true, '/imei-check');
+    // IMEI checks spend store credit: the card adds it, and the PiggyVest
+    // account (which funds the savings wallet) is not offered here.
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Adds store credit for this purchase')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Continue to payment' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('9814644749')).toBeNull();
+  });
+
+  it('offers the same store credit top-up for a utility purchase return', () => {
+    renderModal(true, '/utilities/airtime?repeatAmount=500');
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+    expect(screen.queryByText('9814644749')).toBeNull();
+  });
+
+  it('keeps the account number and card toggle for legacy customers on the IMEI return', () => {
+    renderModal(false, '/imei-check');
+    expect(screen.getByText('9814644749')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: CARD })).toBeOnTheScreen();
+    expect(screen.queryByText('Add store credit')).toBeNull();
   });
 
   it('keeps card funding for legacy customers', () => {

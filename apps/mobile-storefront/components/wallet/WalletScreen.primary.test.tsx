@@ -45,7 +45,7 @@ const mockDeriveWalletDisplayData = jest.fn(() => ({
   fundingAccount: null,
   savingsBalance: 0,
   showQuickSave: false,
-  spendableBalance: 0,
+  walletBalance: 0,
   totalBalance: 0,
 }));
 
@@ -143,7 +143,7 @@ describe('WalletScreen PiggyVest main wallet', () => {
     primaryReady: true,
     savingsBalance: 0,
     showQuickSave: false,
-    spendableBalance: 1234.56,
+    walletBalance: 1234.56,
     totalBalance: 1234.56,
   });
 
@@ -162,7 +162,7 @@ describe('WalletScreen PiggyVest main wallet', () => {
     mockDeriveWalletDisplayData.mockReturnValue(
       primaryReady
         ? primaryDisplay()
-        : { ...primaryDisplay(), primaryReady: false, spendableBalance: 5000 }
+        : { ...primaryDisplay(), primaryReady: false, walletBalance: 5000 }
     );
     render(<WalletScreen />);
     const controller = () =>
@@ -182,7 +182,7 @@ describe('WalletScreen PiggyVest main wallet', () => {
   it('funds savings from the PiggyVest balance and routes a short balance to Add money', () => {
     const { controller, contentProps } = mountWith(true);
 
-    expect(controller()?.spendableBalance).toBe(1234.56);
+    expect(controller()?.walletBalance).toBe(1234.56);
     expect(controller()?.primaryReady).toBe(true);
     expect(contentProps()?.primaryReady).toBe(true);
     expect(contentProps()?.showFundPanel).toBe(false);

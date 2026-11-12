@@ -10,6 +10,8 @@ import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
 import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
 import { WalletHeroLoyaltyPill } from './WalletHeroLoyaltyPill';
 import { WalletHeroStartSavingsButton } from './WalletHeroStartSavingsButton';
+import { WalletHeroStoreCredit } from './WalletHeroStoreCredit';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletQuickUtilities } from './WalletQuickUtilities';
 import { styles } from './wallet.styles';
 import type { WalletDisplayFundingAccount } from './wallet.types';
@@ -32,6 +34,8 @@ type WalletHeroSectionProps = {
   /** Set when there is no savings plan: shows Start Savings inside the card. */
   onStartSavings?: () => void;
   savingsBalance: number;
+  /** PiggyVest only: the legacy balance purchases can spend. */
+  storeCreditBalance?: number;
   totalBalance: number;
 };
 
@@ -60,9 +64,12 @@ export function WalletHeroSection({
   onOpenRedeemPanel,
   onStartSavings,
   savingsBalance,
+  storeCreditBalance,
   totalBalance,
 }: WalletHeroSectionProps) {
   const visibleTier = formatTierLabel(loyaltyTier);
+  // PiggyVest money funds savings goals only: never call it spendable.
+  const primaryReady = useWalletPrimaryReady();
   const isDark = useColorScheme() === 'dark';
   return (
     <Animated.View
@@ -79,7 +86,9 @@ export function WalletHeroSection({
       </View>
       <View style={styles.balanceAndAccountRow}>
         <View style={styles.balanceBlock}>
-          <Text style={styles.balanceLabel}>Total Balance · NGN</Text>
+          <Text style={styles.balanceLabel}>
+            {primaryReady ? 'Savings wallet · NGN' : 'Total Balance · NGN'}
+          </Text>
           <Text
             style={styles.balanceAmount}
             numberOfLines={1}
@@ -88,6 +97,9 @@ export function WalletHeroSection({
           >
             {formatNgnCurrency(totalBalance)}
           </Text>
+          {primaryReady ? (
+            <WalletHeroStoreCredit balance={storeCreditBalance} />
+          ) : null}
         </View>
         {fundingAccount ? (
           <WalletHeroFundingAccount account={fundingAccount} />

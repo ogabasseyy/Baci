@@ -41,6 +41,7 @@ interface CheckoutPaymentStepViewProps {
   total: number;
   walletBalance: number;
   walletFundedBankTransferOptionEnabled: boolean;
+  walletIsStoreCredit?: boolean;
   walletSelection: PaymentMethodSelectorProps['walletSelection'];
 }
 
@@ -67,6 +68,7 @@ export function CheckoutPaymentStepView({
   total,
   walletBalance,
   walletFundedBankTransferOptionEnabled,
+  walletIsStoreCredit,
   walletSelection,
 }: CheckoutPaymentStepViewProps) {
   // Owns the payment-step ScrollView + a live scroll offset so the intent
@@ -121,6 +123,7 @@ export function CheckoutPaymentStepView({
         initiallyCollapsed
         walletMode="orders"
         walletBalance={walletBalance}
+        walletIsStoreCredit={walletIsStoreCredit}
         walletOrderTotal={total}
         walletSelection={walletSelection}
         onWalletToggle={onWalletToggle}

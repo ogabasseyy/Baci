@@ -248,6 +248,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
             walletIsSettled={payment.isWalletSettled()}
+            walletIsStoreCredit={payment.walletIsStoreCredit}
           />
         </View>
       </ScrollView>

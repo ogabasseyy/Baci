@@ -73,7 +73,7 @@ describe('server keeps PiggyVest off', () => {
         primaryReady={display.primaryReady}
         savingsContributionAmount="500"
         showSavingsProgress
-        spendableBalance={0}
+        walletBalance={0}
         totalBalance={display.totalBalance}
       />
     );

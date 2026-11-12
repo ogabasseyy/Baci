@@ -33,7 +33,7 @@ export function createWalletSavingsActions({
   refetchWallet,
   requestPinProof,
   savingsContributionAmount,
-  spendableBalance,
+  walletBalance,
   startWalletTopUp,
   walletTopUp,
   setIsAddingSavingsContribution,
@@ -48,7 +48,7 @@ export function createWalletSavingsActions({
   /** A funded completed goal whose readiness verdict is still being read. */
   goalSettlementChecking?: boolean;
   idempotencyKeyRef: { current: string | null };
-  /** Legacy-rail balance; defaults to spendableBalance when not supplied. */
+  /** Legacy-rail balance; defaults to walletBalance when not supplied. */
   legacyBalance?: number;
   /** PiggyVest main wallet ready: opens Add money in place of a card top-up. */
   onAddMoney?: () => void;
@@ -61,7 +61,7 @@ export function createWalletSavingsActions({
   /** Opens the wallet PIN sheet; resolves a single-use proof or null. */
   requestPinProof?: PinProofRequester;
   savingsContributionAmount: string;
-  spendableBalance: number;
+  walletBalance: number;
   startWalletTopUp?: () => void;
   walletTopUp?: Pick<
     Parameters<typeof startSavingsWalletTopUp>[0],
@@ -104,7 +104,7 @@ export function createWalletSavingsActions({
     ) {
       return;
     }
-    if (requestedAmount <= spendableBalance) {
+    if (requestedAmount <= walletBalance) {
       return;
     }
     if (primaryReady) {
@@ -200,9 +200,7 @@ export function createWalletSavingsActions({
       setIsAddingSavingsContribution,
       // An id bound to the legacy rail is validated against the legacy balance.
       walletBalance:
-        rail === 'primary'
-          ? spendableBalance
-          : (legacyBalance ?? spendableBalance),
+        rail === 'primary' ? walletBalance : (legacyBalance ?? walletBalance),
     });
   };
 

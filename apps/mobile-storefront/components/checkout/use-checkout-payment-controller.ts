@@ -19,8 +19,10 @@ import {
 } from '@/lib/klump-checkout';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
 import { useRedvaultAvailability } from './use-redvault-availability';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
@@ -98,7 +100,9 @@ export function useCheckoutPaymentController({
     merchantSlug,
   });
   const walletQuery = useWallet();
+  // Orders spend the older balance: store credit for PiggyVest customers.
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
+  const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
 
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);
@@ -179,6 +183,7 @@ export function useCheckoutPaymentController({
       isAuthenticated,
       residualAfterSavings: walletFundedBankTransferResidual,
       walletBalance,
+      walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
     });
   const storeCreditCompatible = isStoreCreditCompatiblePayment({
@@ -246,6 +251,7 @@ export function useCheckoutPaymentController({
     total,
     walletBalance,
     walletFundedBankTransferOptionEnabled,
+    walletIsStoreCredit,
     walletSelection,
   };
 }
@@ -253,28 +259,3 @@ export function useCheckoutPaymentController({
 export type CheckoutPaymentController = ReturnType<
   typeof useCheckoutPaymentController
 >;
-
-function isEligibleForWalletFundedBankTransfer({
-  customerId,
-  customerPhone,
-  isAuthenticated,
-  residualAfterSavings,
-  walletBalance,
-  walletOrderAutoDebitEnabled,
-}: {
-  customerId?: string | null;
-  customerPhone?: string | null;
-  isAuthenticated: boolean;
-  residualAfterSavings: number;
-  walletBalance: number;
-  walletOrderAutoDebitEnabled: boolean;
-}) {
-  return (
-    walletOrderAutoDebitEnabled &&
-    isAuthenticated &&
-    Boolean(customerId) &&
-    Boolean(customerPhone) &&
-    residualAfterSavings > 0 &&
-    walletBalance < residualAfterSavings
-  );
-}

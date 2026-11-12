@@ -46,7 +46,7 @@ async function submit(primaryReady: boolean) {
     primaryReady,
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '500',
-    spendableBalance: 5000,
+    walletBalance: 5000,
     setIsAddingSavingsContribution: jest.fn(),
     setShowSavingsProgressModal: jest.fn(),
     setSavingsContributionAmount: jest.fn(),

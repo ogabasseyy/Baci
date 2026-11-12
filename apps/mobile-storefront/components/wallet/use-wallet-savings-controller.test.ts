@@ -31,7 +31,7 @@ const input = {
   operationRailRef: { current: null },
   refetchWallet: async () => undefined,
   savingsContributionAmount: '',
-  spendableBalance: 0,
+  walletBalance: 0,
   setIsAddingSavingsContribution: jest.fn(),
   setShowSavingsProgressModal: jest.fn(),
   setSavingsContributionAmount: jest.fn(),

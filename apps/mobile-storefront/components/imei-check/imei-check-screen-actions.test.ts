@@ -25,3 +25,18 @@ describe('imeiCheckScreenActions', () => {
     ).toMatch(/network error/i);
   });
 });
+
+describe('imeiCheckScreenActions.alertInvalidIdentifier', () => {
+  it('names the serial number for serial-only checks', () => {
+    const { Alert } =
+      jest.requireActual<typeof import('react-native')>('react-native');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    imeiCheckScreenActions.alertInvalidIdentifier('serial');
+
+    expect(alert).toHaveBeenCalledWith(
+      'Invalid serial',
+      'Please enter a valid device serial number.'
+    );
+  });
+});

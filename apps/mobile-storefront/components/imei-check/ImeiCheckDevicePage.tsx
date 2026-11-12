@@ -26,6 +26,7 @@ interface ImeiCheckDevicePageProps {
   isWalletError: boolean;
   isWalletLoading: boolean;
   walletBalance: number;
+  walletIsStoreCredit?: boolean;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
 }
@@ -43,6 +44,7 @@ export function ImeiCheckDevicePage({
   isWalletError,
   isWalletLoading,
   walletBalance,
+  walletIsStoreCredit,
   onVerify,
   onTopUpWallet,
 }: ImeiCheckDevicePageProps) {
@@ -160,6 +162,7 @@ export function ImeiCheckDevicePage({
       canToggleServices={canToggleServices}
       showAllServices={expandedViewEnabled}
       walletBalance={walletBalance}
+      walletIsStoreCredit={walletIsStoreCredit}
       onBrandSelect={handleBrandSelect}
       onChangeImei={(text) =>
         setImei(normalizeDeviceIdentifier(text, identifier))

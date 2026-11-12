@@ -11,6 +11,7 @@ import {
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
@@ -136,6 +137,11 @@ export function useUtilityPayment() {
     getWalletError: wallet.getWalletError,
     walletError,
     walletIsLoading: wallet.isLoading,
+    // PiggyVest customers spend store credit (the older wallet balance).
+    // Spread so the key stays optional: absent means today's wallet wording.
+    ...(isWalletStoreCredit(wallet.data?.wallet)
+      ? { walletIsStoreCredit: true as const }
+      : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):
     // the readiness gate invokes this after the settlement-gate
     // await, so a refetch starting mid-await must still read true.

@@ -94,7 +94,7 @@ it('renders savings progress modal and wires manual contribution actions', async
         product_variant_label: 'Color: Black · Storage: 256GB',
       }}
       savingsContributionAmount="500"
-      spendableBalance={1000}
+      walletBalance={1000}
       showSavingsProgress
     />
   );

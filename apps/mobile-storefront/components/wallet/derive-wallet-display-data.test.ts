@@ -16,7 +16,7 @@ describe('normalizeRequiredFundingAccountValue', () => {
 });
 
 describe('deriveWalletDisplayData', () => {
-  it('keeps settled interest separate from spendable and savings balances', () => {
+  it('keeps settled interest separate from wallet and savings balances', () => {
     const result = deriveWalletDisplayData({
       balance: 5000,
       earnings_available: true,
@@ -27,7 +27,7 @@ describe('deriveWalletDisplayData', () => {
     expect(result.earningsBalance).toBe(125.5);
     expect(result.earningsAvailable).toBe(true);
     expect(result.savingsBalance).toBe(500);
-    expect(result.spendableBalance).toBe(5000);
+    expect(result.walletBalance).toBe(5000);
     expect(result.totalBalance).toBe(5500);
   });
 
@@ -41,7 +41,7 @@ describe('deriveWalletDisplayData', () => {
 
     expect(result.earningsBalance).toBeNull();
     expect(result.earningsAvailable).toBe(false);
-    expect(result.spendableBalance).toBe(800);
+    expect(result.walletBalance).toBe(800);
     expect(result.totalBalance).toBe(800);
   });
 
@@ -121,7 +121,7 @@ describe('deriveWalletDisplayData', () => {
         total_balance: 7000,
       });
 
-      expect(result.spendableBalance).toBe(1234.56);
+      expect(result.walletBalance).toBe(1234.56);
       expect(result.totalBalance).toBe(3234.56);
       expect(result.savingsBalance).toBe(2000);
       expect(result.primaryReady).toBe(true);
@@ -133,7 +133,7 @@ describe('deriveWalletDisplayData', () => {
         primary_balance_kobo: 0,
       });
 
-      expect(result.spendableBalance).toBe(0);
+      expect(result.walletBalance).toBe(0);
       expect(result.primaryReady).toBe(true);
     });
 
@@ -145,7 +145,7 @@ describe('deriveWalletDisplayData', () => {
       };
       const result = deriveWalletDisplayData(legacy);
 
-      expect(result.spendableBalance).toBe(5000);
+      expect(result.walletBalance).toBe(5000);
       expect(result.totalBalance).toBe(7000);
       expect('primaryReady' in result).toBe(false);
       expect(
@@ -156,12 +156,27 @@ describe('deriveWalletDisplayData', () => {
 });
 
 describe('deriveWalletDisplayData legacy balance', () => {
-  it('keeps the legacy balance beside a primary-derived spendable balance', () => {
+  it('keeps the legacy balance beside the PiggyVest savings wallet balance', () => {
     const data = deriveWalletDisplayData({
       balance: 2000,
       primary_balance_kobo: 0,
     });
-    expect(data.spendableBalance).toBe(0);
+    expect(data.walletBalance).toBe(0);
     expect(data.legacyBalance).toBe(2000);
+  });
+});
+
+describe('bugfix: PiggyVest balance shown as spendable', () => {
+  it('never reports PiggyVest money as store credit for a ₦5,000 PiggyVest, ₦0 legacy customer', () => {
+    const data = deriveWalletDisplayData({
+      balance: 0,
+      primary_balance_kobo: 500_000,
+      savings_balance: 0,
+    });
+
+    // The savings wallet holds the ₦5,000; purchases can spend nothing.
+    expect(data.walletBalance).toBe(5000);
+    expect(data.legacyBalance).toBe(0);
+    expect('spendableBalance' in data).toBe(false);
   });
 });

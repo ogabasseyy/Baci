@@ -26,6 +26,10 @@ const SETTING_UP_ACCOUNT = 'Setting up your account number...';
 const SETUP_FAILED =
   "We couldn't set up your account number just now. Fund with card below, or try bank transfer again later.";
 const CARD_TOGGLE_LABEL = 'Fund with card instead';
+const STORE_CREDIT_TITLE = 'Add store credit';
+const STORE_CREDIT_SUBTITLE =
+  "Your savings wallet can't pay for this yet. Pay by card to add store credit, then finish your purchase.";
+const STORE_CREDIT_CARD_SUBTITLE = 'Adds store credit for this purchase';
 
 interface WalletFundPanelProps {
   canCreateFundingAccount: boolean;
@@ -47,6 +51,13 @@ interface WalletFundPanelProps {
   onResetFund: () => void;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
   returnToSavings?: boolean;
+  /**
+   * PiggyVest customer topping up for a purchase (e.g. an IMEI check):
+   * purchases spend store credit, which only a card top-up adds. The
+   * PiggyVest account number is hidden because transfers to it land in
+   * the savings wallet, not store credit.
+   */
+  storeCreditTopUp?: boolean;
 }
 
 export function WalletFundPanel({
@@ -66,6 +77,7 @@ export function WalletFundPanel({
   onResetFund,
   onSubmitPhone,
   returnToSavings = false,
+  storeCreditTopUp = false,
 }: WalletFundPanelProps) {
   const insets = useSafeAreaInsets();
   // Tracks the "Fund with card instead" toggle. Card entry is ALSO shown
@@ -74,7 +86,7 @@ export function WalletFundPanel({
   const [showCardEntry, setShowCardEntry] = useState(false);
   const { copyToClipboard, feedback: copyFeedback } = useCopyToClipboard();
   const { autoCreateFailed, openedWithPrefill } = useWalletFundPanelAutoCreate({
-    canCreateFundingAccount,
+    canCreateFundingAccount: canCreateFundingAccount && !storeCreditTopUp,
     fundAmount,
     hasFundingAccount: Boolean(fundingAccount),
     isCreatingFundingAccount,
@@ -92,6 +104,7 @@ export function WalletFundPanel({
   // even if it arrives after the panel is already mounted; openedWithPrefill
   // keeps it visible if the customer clears the prefilled input.
   const cardEntryVisible =
+    storeCreditTopUp ||
     showCardEntry ||
     openedWithPrefill ||
     fundAmount !== '' ||
@@ -119,7 +132,7 @@ export function WalletFundPanel({
             accessibilityRole="header"
             style={[styles.title, { color: colors.text }]}
           >
-            {BANK_TRANSFER_TITLE}
+            {storeCreditTopUp ? STORE_CREDIT_TITLE : BANK_TRANSFER_TITLE}
           </Text>
         </View>
         <Pressable
@@ -140,7 +153,11 @@ export function WalletFundPanel({
         </Text>
       ) : null}
 
-      {fundingAccount ? (
+      {storeCreditTopUp ? (
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          {STORE_CREDIT_SUBTITLE}
+        </Text>
+      ) : fundingAccount ? (
         <>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {fundingAccount.provider === 'piggyvest'
@@ -232,6 +249,7 @@ export function WalletFundPanel({
           isFundPending={isFundPending}
           onChangeFundAmount={onChangeFundAmount}
           onConfirmFund={onConfirmFund}
+          subtitle={storeCreditTopUp ? STORE_CREDIT_CARD_SUBTITLE : undefined}
         />
       ) : (
         <Pressable

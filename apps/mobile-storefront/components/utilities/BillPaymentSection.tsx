@@ -69,6 +69,7 @@ export function BillPaymentSection({
         walletError={payment.walletError}
         walletIsLoading={payment.walletIsLoading}
         walletIsSettled={payment.isWalletSettled()}
+        walletIsStoreCredit={payment.walletIsStoreCredit}
       />
     </View>
   );

@@ -74,6 +74,8 @@ export default function ImeiCheckerScreen() {
   const walletBalance = walletQuery.data?.wallet.balance ?? 0;
   const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
+  const fundWallet = (amount: number) =>
+    imeiCheckScreenActions.fundWallet(amount, walletIsStoreCredit);
 
   const clearIdempotencyKey = () => {
     requestIdentity.clear();
@@ -120,7 +122,7 @@ export default function ImeiCheckerScreen() {
       return;
     }
     if (walletBalance < serviceTier.price) {
-      imeiCheckScreenActions.fundWallet(serviceTier.price - walletBalance);
+      fundWallet(serviceTier.price - walletBalance);
       return;
     }
 
@@ -158,7 +160,7 @@ export default function ImeiCheckerScreen() {
           return;
         }
         if (outcome.topUpAmount !== null) {
-          imeiCheckScreenActions.fundWallet(outcome.topUpAmount);
+          fundWallet(outcome.topUpAmount);
           return;
         }
         if (outcome.shouldRefetchWallet) {
@@ -284,7 +286,7 @@ export default function ImeiCheckerScreen() {
             walletIsStoreCredit={walletIsStoreCredit}
             onPageSelected={handlePageSelected}
             onVerify={handleVerify}
-            onTopUpWallet={imeiCheckScreenActions.fundWallet}
+            onTopUpWallet={fundWallet}
           />
         </AppKeyboardContainer>
       )}

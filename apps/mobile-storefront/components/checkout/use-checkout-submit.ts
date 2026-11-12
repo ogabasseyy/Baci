@@ -45,6 +45,7 @@ export function useCheckoutSubmit({
   isLoadingQuotes,
   isOrderInFlight,
   isProcessing,
+  isWalletFundedBankTransferHeld,
   mobileCheckoutIdempotencyRef,
   orderTotals,
   paymentSettings,
@@ -271,6 +272,7 @@ export function useCheckoutSubmit({
           snapshot,
           user,
           walletFundedBankTransferOptionEnabled,
+          isWalletFundedBankTransferHeld,
         })
       ) {
         return;

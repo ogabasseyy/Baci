@@ -23,6 +23,7 @@ import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 import { ImeiCheckServiceSelector } from './imei-check-service-selector';
+import { getImeiWalletCopy } from './imei-wallet-copy';
 
 interface ImeiCheckFormViewProps {
   colors: ImeiCheckerColors;
@@ -43,6 +44,8 @@ interface ImeiCheckFormViewProps {
   canToggleServices: boolean;
   showAllServices: boolean;
   walletBalance: number;
+  /** PiggyVest customer: the balance is store credit. */
+  walletIsStoreCredit?: boolean;
   onBrandSelect: (brand: ImeiBrandFilter) => void;
   onChangeImei: (value: string) => void;
   onCheck: () => void;
@@ -71,6 +74,7 @@ export function ImeiCheckFormView({
   canToggleServices,
   showAllServices,
   walletBalance,
+  walletIsStoreCredit = false,
   onBrandSelect,
   onChangeImei,
   onCheck,
@@ -83,6 +87,7 @@ export function ImeiCheckFormView({
   // The home-indicator inset is buried under the keyboard while it's open —
   // keeping it floats the footer a full inset above the keyboard for nothing.
   const { isKeyboardVisible } = useKeyboard();
+  const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const isWalletReady = !(isWalletLoading || isWalletError);
   const hasEnoughBalance = isWalletReady && walletBalance >= currentTier.price;
   const needsTopUp =
@@ -100,9 +105,9 @@ export function ImeiCheckFormView({
     isValidDeviceIdentifier(imei, identifier) &&
     hasEnoughBalance;
   const walletStatusText = isWalletLoading
-    ? 'Loading wallet balance...'
+    ? walletCopy.loading
     : isWalletError
-      ? 'Wallet balance unavailable. Refresh your wallet and try again.'
+      ? walletCopy.unavailable
       : null;
 
   return (
@@ -205,7 +210,7 @@ export function ImeiCheckFormView({
           )}
           <View style={styles.footerRow}>
             <View
-              accessibilityLabel={`Wallet balance ${formatServicePrice(walletBalance)}`}
+              accessibilityLabel={walletCopy.balanceLabel(walletBalance)}
               style={styles.walletBadge}
             >
               <Ionicons
@@ -219,7 +224,9 @@ export function ImeiCheckFormView({
                   { color: needsTopUp ? colors.error : colors.text },
                 ]}
               >
-                {formatServicePrice(walletBalance)}
+                {walletCopy.badgePrefix
+                  ? `${walletCopy.badgePrefix} ${formatServicePrice(walletBalance)}`
+                  : formatServicePrice(walletBalance)}
               </Text>
             </View>
             <Pressable
@@ -240,11 +247,11 @@ export function ImeiCheckFormView({
                     {selectedTier === null
                       ? 'Choose a check'
                       : isWalletLoading
-                        ? 'Loading wallet...'
+                        ? walletCopy.loadingButton
                         : isWalletError
-                          ? 'Wallet unavailable'
+                          ? walletCopy.unavailableButton
                           : needsTopUp
-                            ? 'Top up to unlock'
+                            ? walletCopy.topUpButton
                             : `Verify Now - ${formatServicePrice(currentTier.price)}`}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />
@@ -254,8 +261,7 @@ export function ImeiCheckFormView({
           </View>
           {needsTopUp ? (
             <Text style={[styles.footerHint, { color: colors.error }]}>
-              Balance low — top up {formatServicePrice(shortfall)} to run this
-              check
+              {walletCopy.shortfallHint(shortfall)}
             </Text>
           ) : null}
         </View>

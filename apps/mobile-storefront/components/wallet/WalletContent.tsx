@@ -89,11 +89,13 @@ export interface WalletContentProps {
   redeemPoints: string;
   savingsContributionAmount: string;
   savingsBalance: number;
-  spendableBalance?: number;
+  walletBalance?: number;
   showSavingsProgress: boolean;
   showQuickSave: boolean;
   showFundPanel: boolean;
   showRedeemPanel: boolean;
+  /** PiggyVest only: the legacy balance, spendable on purchases. */
+  storeCreditBalance?: number;
   totalBalance: number;
   /** Wallet ledger; the credit watch reads bank-transfer top-ups off it. */
   transactions: WalletTransaction[];
@@ -140,7 +142,7 @@ export function WalletContent(props: WalletContentProps) {
     redeemPoints,
     savingsContributionAmount,
     savingsBalance,
-    spendableBalance = 0,
+    walletBalance = 0,
     showSavingsProgress,
     showFundPanel,
     showRedeemPanel,
@@ -203,6 +205,8 @@ export function WalletContent(props: WalletContentProps) {
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           savingsBalance={savingsBalance}
+          savingsWalletBalance={walletBalance}
+          storeCreditBalance={props.storeCreditBalance}
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
         />
@@ -263,7 +267,7 @@ export function WalletContent(props: WalletContentProps) {
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
         overlay={savingsSheetOpen ? props.pinPrompt : null}
         visible={showSavingsProgress}
-        walletBalance={spendableBalance}
+        walletBalance={walletBalance}
       />
       <WalletSavingsDeviceSwapModal
         colors={colors}

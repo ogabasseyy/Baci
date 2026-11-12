@@ -3,7 +3,8 @@ import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
+import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
@@ -57,17 +58,30 @@ export function WalletFundModal({
   // Card top-ups credit the legacy wallet, so only primary-funded flows (a
   // savings shortfall or a plain top-up) lose the card option; any other
   // return flow (e.g. IMEI check) still spends the legacy balance.
-  const hideCardFunding =
-    useWalletPrimaryReady() &&
-    (!fundReturnTo || isWalletSavingsReturnHref(fundReturnTo));
+  const primaryReady = useWalletPrimaryReady();
+  // PiggyVest merchant whose primary wallet the server hasn't ruled out.
+  const piggyvestMerchant = isPiggyvestCardOnlyMerchant(
+    merchantId,
+    primaryCapability
+  );
+  // A purchase return (IMEI check, utilities) spends store credit, which
+  // only a card top-up adds: the PiggyVest account would fund savings.
+  // Also when the PiggyVest read is unknown (timed out) or not set up yet,
+  // so the purchase never detours into PiggyVest setup.
+  const storeCreditTopUp =
+    isWalletPurchaseReturnHref(fundReturnTo) &&
+    (primaryReady || piggyvestMerchant);
+  // Every other PiggyVest top-up (plain, savings plan, start savings) funds
+  // the savings wallet by bank transfer, never by card.
+  const hideCardFunding = primaryReady && !storeCreditTopUp;
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
   // fallback once setup completes.
   const showPrimarySetup =
+    !storeCreditTopUp &&
     !!merchantId &&
-    isPiggyvestPrimaryMerchant(merchantId) &&
-    primaryCapability !== false &&
+    piggyvestMerchant &&
     fundingAccount?.provider !== 'piggyvest';
   // Keep the panel rendered while the card slides down on close, so the
   // exit animation shows the sheet instead of an empty card; it unmounts
@@ -130,6 +144,7 @@ export function WalletFundModal({
               onResetFund={onResetFund}
               onSubmitPhone={onSubmitPhone}
               returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
+              storeCreditTopUp={storeCreditTopUp}
             />
           )}
         </ScrollView>

@@ -1,7 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { type WalletQueryData, walletKeys } from '@/hooks/wallet-query';
 import { CONFIG } from '@/lib/config';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
+import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**
@@ -89,6 +92,15 @@ export interface LiveWalletQuery {
    * — without this the gate would read missing data as zero.
    */
   isSettled: () => boolean;
+  /**
+   * PiggyVest verdict for the CURRENT identity's cached wallet. Invoke
+   * at gate time: the wallet may load as PiggyVest-ready mid-await.
+   * `holdUnsettled` (set where PiggyVest is possible) also counts a
+   * missing wallet or one without a customer row as unknown.
+   */
+  getVerdict: (options?: {
+    holdUnsettled?: boolean;
+  }) => PiggyvestShortfallVerdict;
 }
 
 /**
@@ -132,6 +144,19 @@ export function createLiveWalletQuery(
       return key
         ? queryClient.isFetching({ queryKey: key, exact: true }) > 0
         : false;
+    },
+    getVerdict: (options) => {
+      const { key } = resolveLiveWalletQuery();
+      const wallet = key
+        ? queryClient.getQueryData<WalletQueryData>(key)?.wallet
+        : undefined;
+      const unsettled =
+        options?.holdUnsettled === true &&
+        (!wallet || wallet.owner_unresolved === true);
+      return {
+        walletIsStoreCredit: isWalletStoreCredit(wallet),
+        walletPrimaryUnknown: isWalletPrimaryUnknown(wallet) || unsettled,
+      };
     },
     isSettled: () => {
       const { key, identityAgreed: liveAgreed } = resolveLiveWalletQuery();

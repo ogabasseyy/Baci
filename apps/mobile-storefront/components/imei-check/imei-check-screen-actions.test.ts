@@ -25,3 +25,36 @@ describe('imeiCheckScreenActions', () => {
     ).toMatch(/network error/i);
   });
 });
+
+describe('imeiCheckScreenActions.alertInvalidIdentifier', () => {
+  it('names the serial number for serial-only checks', () => {
+    const { Alert } =
+      jest.requireActual<typeof import('react-native')>('react-native');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    imeiCheckScreenActions.alertInvalidIdentifier('serial');
+
+    expect(alert).toHaveBeenCalledWith(
+      'Invalid serial',
+      'Please enter a valid device serial number.'
+    );
+  });
+});
+
+describe('bugfix: IMEI shortfall below the card minimum', () => {
+  it('prefills the card top-up minimum for a ₦50 store credit shortfall', () => {
+    imeiCheckScreenActions.fundWallet(50, true);
+
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
+    );
+  });
+
+  it('keeps the exact ₦50 prefill for customers without PiggyVest', () => {
+    imeiCheckScreenActions.fundWallet(50);
+
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=50&returnTo=/imei-check'
+    );
+  });
+});

@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 interface WalletFundingAccountLike {
@@ -41,11 +42,15 @@ export function deriveWalletDisplayData(
   walletData: WalletDataLike,
   selectedSavingsGoalId?: string | null
 ) {
-  // PiggyVest main wallet is the spendable balance only when the server
-  // reported it; otherwise this is exactly the legacy computation.
-  const primaryReady = typeof walletData.primary_balance_kobo === 'number';
-  const spendableBalance =
-    typeof walletData.primary_balance_kobo === 'number'
+  // Once the server reports the PiggyVest main wallet, walletBalance is that
+  // savings wallet: it funds savings goals only and is never spent on
+  // purchases. Purchases spend the legacy balance, shown as store credit.
+  // Without a PiggyVest answer this is exactly the legacy computation.
+  // Same check as every purchase screen, so a malformed balance (NaN,
+  // negative) keeps the whole app on the legacy wallet consistently.
+  const primaryReady = isWalletStoreCredit(walletData);
+  const walletBalance =
+    primaryReady && typeof walletData.primary_balance_kobo === 'number'
       ? koboToNaira(walletData.primary_balance_kobo)
       : (walletData.balance ?? 0);
   const earningsAvailable =
@@ -56,8 +61,8 @@ export function deriveWalletDisplayData(
     : null;
   const savingsBalance = walletData.savings_balance ?? 0;
   const totalBalance = primaryReady
-    ? spendableBalance + savingsBalance
-    : (walletData.total_balance ?? spendableBalance + savingsBalance);
+    ? walletBalance + savingsBalance
+    : (walletData.total_balance ?? walletBalance + savingsBalance);
   const rawFundingAccount = walletData.funding_account;
   const accountName = normalizeRequiredFundingAccountValue(
     rawFundingAccount?.account_name
@@ -94,15 +99,15 @@ export function deriveWalletDisplayData(
     activeSavingsGoal,
     fundingAccount,
     // Only present on the PiggyVest path, so the legacy output is unchanged.
-    // Legacy rail balance rides along only with the primary fields: a
-    // contribution already bound to legacy validates against it, never the
-    // primary-derived spendable balance.
+    // The legacy balance is the customer's store credit: what IMEI checks,
+    // utilities and checkout spend. A contribution already bound to the
+    // legacy rail also validates against it, never the savings wallet.
     ...(primaryReady
       ? { primaryReady: true as const, legacyBalance: walletData.balance ?? 0 }
       : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),
-    spendableBalance,
+    walletBalance,
     totalBalance,
   };
 }

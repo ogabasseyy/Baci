@@ -1,6 +1,7 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { CONFIG } from '@/lib/config';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   buildVtuPurchaseDescriptor,
   scopePendingVtuKey,
@@ -10,8 +11,11 @@ import {
   getPendingVtuKey,
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
+import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
+import { usePiggyvestPossible } from './use-piggyvest-possible';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
 import { walletKeys } from './wallet-query';
@@ -57,6 +61,9 @@ export function useUtilityPayment() {
   // Rotated only after a definitive HTTP response (success or 4xx).
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
+  const piggyvestPossible = usePiggyvestPossible(
+    useAuthStore((state) => state.merchantId)
+  );
   const queryClient = useQueryClient();
   // The bank-transfer funding nudge deep-links into DVA territory, so offer
   // it to any signed-in customer of a merchant with wallet DVAs enabled. No
@@ -68,6 +75,17 @@ export function useUtilityPayment() {
     paymentSettings.data?.wallet_paystack_dva_enabled === true;
   const walletError = wallet.error instanceof Error ? wallet.error : null;
 
+  // Where PiggyVest is possible, a wallet without a customer row can't be
+  // classified yet (Codex): hold bank transfers like an unknown verdict.
+  const readLiveVerdict = wallet.getWalletVerdict;
+  const liveVerdictReader: {
+    getWalletVerdict?: () => PiggyvestShortfallVerdict;
+  } = readLiveVerdict
+    ? {
+        getWalletVerdict: () =>
+          readLiveVerdict({ holdUnsettled: piggyvestPossible }),
+      }
+    : {};
   return {
     canFundByBankTransfer,
     /**
@@ -134,8 +152,24 @@ export function useUtilityPayment() {
     // refetch failing mid-await leaves stale data that reads
     // settled — only the cache knows the refresh failed.
     getWalletError: wallet.getWalletError,
+    // Live PiggyVest verdict (Codex): the wallet can load as
+    // PiggyVest-ready during the settlement-gate await. Optional in the
+    // type so callers without it fall back to the render-time fields.
+    ...liveVerdictReader,
     walletError,
     walletIsLoading: wallet.isLoading,
+    // PiggyVest customers spend store credit (the older wallet balance).
+    // Spread so the key stays optional: absent means today's wallet wording.
+    ...(isWalletStoreCredit(wallet.data?.wallet)
+      ? { walletIsStoreCredit: true as const }
+      : {}),
+    // PiggyVest check failed, or a refresh may change the verdict (Codex):
+    // hold bank-transfer top-ups until the wallet settles.
+    ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
+    (piggyvestPossible &&
+      (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
+      ? { walletPrimaryUnknown: true as const }
+      : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):
     // the readiness gate invokes this after the settlement-gate
     // await, so a refetch starting mid-await must still read true.

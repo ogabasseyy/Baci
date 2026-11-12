@@ -179,7 +179,7 @@ describe('wallet-screen.helpers', () => {
       },
       savingsBalance: 60,
       showQuickSave: true,
-      spendableBalance: 10,
+      walletBalance: 10,
       totalBalance: 70,
     });
   });
@@ -315,7 +315,7 @@ describe('wallet-screen.helpers', () => {
       fundingAccount: null,
       savingsBalance: 30,
       showQuickSave: false,
-      spendableBalance: 15,
+      walletBalance: 15,
       totalBalance: 45,
     });
 
@@ -326,7 +326,7 @@ describe('wallet-screen.helpers', () => {
       fundingAccount: null,
       savingsBalance: 0,
       showQuickSave: false,
-      spendableBalance: 0,
+      walletBalance: 0,
       totalBalance: 0,
     });
   });

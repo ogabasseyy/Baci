@@ -2,6 +2,7 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
+import { primaryPendingField } from './primary-pending-field';
 import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import {
@@ -31,10 +32,14 @@ import {
   normalizeWalletTransaction,
 } from './wallet-transaction-normalize';
 
-function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
+function getEmptyWalletData(
+  loyaltyPoints: unknown = 0,
+  ownerUnresolved = false
+): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;
   return {
     wallet: {
+      ...(ownerUnresolved ? { owner_unresolved: true as const } : {}),
       active_savings_goal: null,
       balance: 0,
       earnings_available: false,
@@ -90,7 +95,7 @@ export async function fetchWalletDataUnbounded(
     : [];
 
   if (customerRows.length === 0) {
-    return getEmptyWalletData();
+    return getEmptyWalletData(0, true);
   }
 
   if (customerRows.length > 1) {
@@ -106,7 +111,7 @@ export async function fetchWalletDataUnbounded(
       severity: 'data_integrity',
       userId,
     });
-    return getEmptyWalletData();
+    return getEmptyWalletData(0, true);
   }
 
   const customerRow = customerRows[0];
@@ -123,7 +128,7 @@ export async function fetchWalletDataUnbounded(
         ? (coerceDatabaseNumber(customerValidation.data.loyalty_points) ?? 0)
         : (coerceDatabaseNumber(customerRow.loyalty_points) ?? 0);
 
-    return getEmptyWalletData(safeLoyaltyPoints);
+    return getEmptyWalletData(safeLoyaltyPoints, true);
   }
 
   const walletResult = await supabase
@@ -270,6 +275,7 @@ export async function fetchWalletDataUnbounded(
       ...primaryBalanceField(primaryFunding),
       ...primaryUnavailableField(primaryFunding),
       ...primaryStaleField(primaryFunding),
+      ...primaryPendingField(primaryFunding),
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
       savings_goals: savingsGoals,

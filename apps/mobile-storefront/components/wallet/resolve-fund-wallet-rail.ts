@@ -1,7 +1,9 @@
 import { Alert } from 'react-native';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
+import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
 
 /**
  * Resolves which rail a wallet funding must use. Known verdicts (and the
@@ -22,8 +24,20 @@ import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-
  */
 export async function resolveFundWalletRail(
   activeMerchantId?: string,
-  options?: { onRetry?: () => void }
+  options?: { onRetry?: () => void; userId?: string; walletReturnTo?: string }
 ): Promise<'primary' | 'legacy' | 'blocked'> {
+  // A top-up for a purchase (IMEI check, utilities) adds store credit: those
+  // purchases spend the legacy balance, never the PiggyVest savings wallet.
+  // A saved PiggyVest card funding (maybe already charged) is recovered
+  // first through the primary path, never doubled by a new legacy charge.
+  if (isWalletPurchaseReturnHref(options?.walletReturnTo)) {
+    return (await hasRetainedPrimaryCardFunding(
+      activeMerchantId,
+      options?.userId
+    ))
+      ? 'primary'
+      : 'legacy';
+  }
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) return 'primary';
   if (
     activeMerchantId &&

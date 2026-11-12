@@ -8,12 +8,26 @@ module.exports = function withSplashMotionWindowBackground(config) {
     // SplashMotion installs in onActivityPreCreated on Android 10+. Expo's
     // later registration replaces its exit listener and stalls playback.
     const source = innerConfig.modResults.contents;
-    innerConfig.modResults.contents = (
-      removeGeneratedContents(source, 'expo-splashscreen') ?? source
-    ).replace(
+    const withoutExpoSplash = removeGeneratedContents(
+      source,
+      'expo-splashscreen'
+    );
+    if (withoutExpoSplash === null) {
+      throw new Error(
+        'Expected Expo splash-screen registration block before removing its exit listener.'
+      );
+    }
+
+    const withoutSplashManagerImport = withoutExpoSplash.replace(
       /^import expo\.modules\.splashscreen\.SplashScreenManager;?\r?\n/m,
       ''
     );
+    if (withoutSplashManagerImport.includes('SplashScreenManager')) {
+      throw new Error(
+        'Expo SplashScreenManager registration remains after removing its generated block.'
+      );
+    }
+    innerConfig.modResults.contents = withoutSplashManagerImport;
     return innerConfig;
   });
 

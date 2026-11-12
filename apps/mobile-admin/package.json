@@ -87,7 +87,7 @@
     "react-native-gesture-handler": "~3.3.0",
     "react-native-google-places-autocomplete": "^2.6.4",
     "react-native-mmkv": "4.3.1",
-    "react-native-nitro-modules": "0.37.2",
+    "react-native-nitro-modules": "0.35.9",
     "react-native-pager-view": "9.0.7",
     "react-native-phone-number-input": "2.1.0",
     "react-native-purchases": "10.4.2",

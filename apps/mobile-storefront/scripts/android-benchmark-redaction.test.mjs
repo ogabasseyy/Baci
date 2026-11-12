@@ -31,7 +31,8 @@ test('leaves output unchanged when no private values are supplied', () => {
 
 test('keeps wrapped-pattern work bounded for long secrets in large logs', () => {
   const secret = 'x'.repeat(2048);
-  const log = `${'noise\n'.repeat(100_000)}${secret}`;
+  const wrappedSecret = secret.match(/.{1,64}/g)?.join('\n') ?? '';
+  const log = `${'noise\n'.repeat(100_000)}${wrappedSecret}`;
   const start = performance.now();
   const redacted = redactPrivateValues(log, [secret]);
 

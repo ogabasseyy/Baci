@@ -43,10 +43,18 @@ versioned. Machine-generated benchmark native output and private build settings
 are not part of this change. The `splashmotion1` runtime generation prevents
 sending this JS/native API to older installed binaries.
 
-The shared Nitro dependency is pinned to 0.37.2 with the RN 0.88 compatibility
-patch; mobile-admin's declaration stays aligned with the workspace override.
-Mobile-admin and iOS native builds/device behavior require their own validation.
-Do not treat Android storefront evidence as proof for those targets.
+The storefront pins Nitro 0.37.2 with the RN 0.88 compatibility patch required
+by SplashMotion. Mobile-admin remains on its existing Nitro 0.35.9 patch; this
+PR does not change its declared or resolved Nitro version. Mobile-admin and iOS
+native builds/device behavior require their own validation. Do not treat Android
+storefront evidence as proof for those targets.
+
+The release workflow checks that the AAB contains the required native libraries
+and ELF architecture headers for all four configured ABIs (`armeabi-v7a`,
+`arm64-v8a`, `x86`, and `x86_64`) before Play generates device-specific splits.
+That packaging gate does not verify dynamic symbol compatibility or prove that
+the libraries load at runtime. Physical-device installation and launch remain
+the runtime loadability check; the startup observations above cover ARM64 only.
 
 ## Product-page performance remains open
 

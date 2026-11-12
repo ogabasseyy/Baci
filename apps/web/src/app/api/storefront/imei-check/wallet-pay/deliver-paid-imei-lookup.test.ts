@@ -240,4 +240,11 @@ describe('deliverPaidImeiLookup', () => {
     expect(finish).toHaveBeenCalledTimes(2);
     expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
   });
+  it('refunds (never strands the claim) on an unexpected provider answer', async () => {
+    submit.mockResolvedValue({ kind: 'pending', body: {}, status: 202 });
+    const d = deps();
+    const response = await deliverPaidImeiLookup(base, d);
+    expect(response.status).toBe(502);
+    expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
+  });
 });

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { verifyGoalPin } from '@/lib/piggyvest/goal-pin-verify';
@@ -39,7 +40,7 @@ export async function POST(
   const parsed = imeiWalletPaySchemas.pinRequest.safeParse(
     await request.json().catch(() => null)
   );
-  if (!parsed.success)
+  if (!parsed.success || !z.uuid().safeParse(lookupId).success)
     return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
   try {
     const runtime = readWalletPayRuntime();
@@ -67,15 +68,18 @@ export async function POST(
       scope: walletPayScope(runtime, identity),
       operationId: parsed.data.operationId,
     });
-    if (
-      issued?.purchase.purpose !== 'imei_check' ||
-      issued.purchase.purchaseRef !== lookupId
-    )
-      return refuse(
+    const invalid = () =>
+      refuse(
         'This payment is no longer valid. Please start again.',
         'PAYMENT_OPERATION_INVALID',
         409
       );
+    if (!issued) return invalid();
+    if (
+      issued.purchase.purpose !== 'imei_check' ||
+      issued.purchase.purchaseRef !== lookupId
+    )
+      return invalid();
     // Charged only once a real PIN check will happen.
     const limited = await chargeWalletPinCustomerLimit(
       'goal-verify',

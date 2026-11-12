@@ -218,8 +218,10 @@ export async function deliverPaidImeiLookup(
         .catch(() => 'conflict');
     return response;
   }
+  // Anything but a definite failure (an unexpected non-terminal answer)
+  // delivered no result: refund rather than leave the claim stranded.
   if (outcome.kind !== 'failure')
-    throw new Error('Sickw unexpectedly returned a non-terminal outcome');
+    return await failAndRefund(input, deps, claim.claimToken, NOT_COMPLETED);
   return await failAndRefund(input, deps, claim.claimToken, {
     body: outcome.body,
     status: outcome.status,

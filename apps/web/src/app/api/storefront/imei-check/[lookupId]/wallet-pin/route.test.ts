@@ -31,7 +31,7 @@ vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
 }));
 
-function call(body: unknown) {
+function call(body: unknown, lookupId = LOOKUP) {
   return POST(
     new NextRequest(
       `https://shop.example.test/api/storefront/imei-check/${LOOKUP}/wallet-pin`,
@@ -40,7 +40,7 @@ function call(body: unknown) {
         body: JSON.stringify(body),
       }
     ),
-    { params: Promise.resolve({ lookupId: LOOKUP }) }
+    { params: Promise.resolve({ lookupId }) }
   );
 }
 
@@ -159,5 +159,13 @@ describe('POST /imei-check/[lookupId]/wallet-pin', () => {
   it('requires sign-in', async () => {
     mocks.auth.mockResolvedValue({ error: 'x' });
     expect((await call({ operationId: OP, pin: '1234' })).status).toBe(401);
+  });
+  it('refuses a malformed lookup id before any PIN check', async () => {
+    const response = await call(
+      { operationId: OP, pin: '1234' },
+      '-'.repeat(36)
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.verify).not.toHaveBeenCalled();
   });
 });

@@ -29,6 +29,10 @@ function deps(overrides: Record<string, unknown> = {}) {
       amountKobo: 50000,
       expiresAt: '2026-11-12T17:00:00Z',
     })),
+    findForPurchase: vi.fn(async () => ({
+      operationId: OP,
+      state: 'issued' as const,
+    })),
     ...overrides,
   };
 }
@@ -160,5 +164,66 @@ describe('startImeiWalletPayment', () => {
       deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
     );
     expect(response.status).toBe(503);
+  });
+  it('answers 503 (not 500) when wallet pay is on but misconfigured', async () => {
+    const response = await startImeiWalletPayment(
+      input(),
+      deps({
+        readRuntime: vi.fn(() => {
+          throw new Error('missing collection wallet');
+        }),
+      })
+    );
+    expect(response.status).toBe(503);
+  });
+
+  describe('replay of the same Idempotency-Key', () => {
+    const existing = {
+      id: LOOKUP,
+      status: 'pending',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-1',
+      imei_hash: 'a'.repeat(64),
+      tier: 'simLock',
+      device_category: 'smartphone',
+      amount_ngn: 500,
+      cached_response: null,
+      cached_status: null,
+    };
+    function replayInput(row: Record<string, unknown>) {
+      return input({
+        supabaseAdmin: {
+          insertPending: vi.fn(async () => ({
+            data: null,
+            error: { code: '23505' },
+          })),
+          readReplay: vi.fn(async () => ({ data: row, error: null })),
+        },
+      });
+    }
+
+    it('returns the payment already issued for this wallet lookup', async () => {
+      const d = deps();
+      const response = await startImeiWalletPayment(replayInput(existing), d);
+      expect(response.status).toBe(202);
+      expect(d.issue).toHaveBeenCalled();
+    });
+
+    it('never wallet-pays a lookup a concurrent store-credit request owns', async () => {
+      const d = deps({ findForPurchase: vi.fn(async () => null) });
+      const response = await startImeiWalletPayment(replayInput(existing), d);
+      expect(response.status).not.toBe(202);
+      expect(d.issue).not.toHaveBeenCalled();
+    });
+
+    it('treats a different device as another request', async () => {
+      const d = deps();
+      const response = await startImeiWalletPayment(
+        replayInput({ ...existing, device_category: 'tablet' }),
+        d
+      );
+      expect(response.status).not.toBe(202);
+      expect(d.issue).not.toHaveBeenCalled();
+    });
   });
 });

@@ -6,7 +6,10 @@ import type { ImeiAccessClient } from '@/lib/imei-access';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
-import { issueWalletPayment } from '@/lib/piggyvest/wallet-pay-service';
+import {
+  findWalletPaymentForPurchase,
+  issueWalletPayment,
+} from '@/lib/piggyvest/wallet-pay-service';
 import {
   errorBody,
   findLookupByIdempotencyKey,
@@ -27,6 +30,7 @@ export interface StartImeiWalletPaymentDeps {
     userId: string;
   } | null>;
   issue: Issue;
+  findForPurchase: typeof findWalletPaymentForPurchase;
 }
 
 const defaultDeps: StartImeiWalletPaymentDeps = {
@@ -34,6 +38,7 @@ const defaultDeps: StartImeiWalletPaymentDeps = {
   resolveIdentity: (input) =>
     resolvePrimaryWalletIdentity({ ...input, forOnboarding: false }),
   issue: issueWalletPayment,
+  findForPurchase: findWalletPaymentForPurchase,
 };
 
 function refuse(code: string, error: string, status: number) {
@@ -64,7 +69,17 @@ export async function startImeiWalletPayment(
   },
   deps: StartImeiWalletPaymentDeps = defaultDeps
 ) {
-  const runtime = deps.readRuntime();
+  let runtime: ReturnType<typeof readWalletPayRuntime>;
+  try {
+    runtime = deps.readRuntime();
+  } catch {
+    // Switched on but misconfigured: retryable, like the PIN and pay routes.
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
+  }
   if (!runtime || runtime.merchantId !== input.merchantId)
     return refuse(
       'PIGGYVEST_PAY_UNAVAILABLE',
@@ -116,9 +131,20 @@ export async function startImeiWalletPayment(
       existing.status !== 'pending' ||
       existing.customer_id !== input.customer.id ||
       existing.imei_hash !== input.imeiHash ||
-      existing.tier !== input.requestedTier
+      existing.tier !== input.requestedTier ||
+      (existing.device_category ?? null) !== (input.deviceCategory ?? null)
     )
       return mapExistingLookup(existing, input.replayContext);
+    // Only a lookup this wallet flow owns (a PiggyVest payment was issued for
+    // it) is re-asked: a concurrent store-credit request that won the insert
+    // must never also be paid from the wallet.
+    const owned = await deps.findForPurchase({
+      runtime,
+      scope: walletPayScope(runtime, identity),
+      purpose: 'imei_check',
+      purchaseRef: String(existing.id),
+    });
+    if (!owned) return mapExistingLookup(existing, input.replayContext);
     lookupId = String(existing.id);
   } else {
     if (!inserted.data) throw new Error('IMEI pending insert returned no row');

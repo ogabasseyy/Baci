@@ -25,7 +25,9 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   scrollView: { flex: 1 },
-  scrollContent: { flexGrow: 1, gap: SPACING.md, paddingBottom: SPACING.md },
+  // No flexGrow: the measured content height must be the real height, so the
+  // sheet can shrink to fit it.
+  scrollContent: { gap: SPACING.md, paddingBottom: SPACING.md },
   header: {
     alignItems: 'center',
     flexDirection: 'row',

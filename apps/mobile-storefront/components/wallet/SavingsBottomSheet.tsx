@@ -3,7 +3,7 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { type ReactNode, useRef, useState } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
@@ -11,6 +11,8 @@ import { SavingsSheetContext } from './SavingsSheetContext';
 import { SavingsSheetPinCancelContext } from './SavingsSheetPinCancelContext';
 
 const DEFAULT_SNAP_POINTS = ['72%', '92%'];
+/** The drag handle above the content, plus the content's top padding. */
+const HANDLE_AND_TOP = 32;
 
 /** Let Gorhom own backdrop dismissal so closing retains its exit animation. */
 function SavingsBackdrop(props: BottomSheetBackdropProps) {
@@ -29,6 +31,7 @@ function SavingsBackdrop(props: BottomSheetBackdropProps) {
 export function SavingsBottomSheet({
   children,
   colors,
+  contentHeight,
   onClose,
   overlay,
   snapPoints = DEFAULT_SNAP_POINTS,
@@ -36,6 +39,11 @@ export function SavingsBottomSheet({
 }: {
   children: ReactNode | ((dismiss: () => void) => ReactNode);
   colors: (typeof Colors)['light'];
+  /**
+   * The measured height of what the sheet shows. When given, the sheet opens
+   * exactly that tall (no empty space below), up to nearly full screen.
+   */
+  contentHeight?: number;
   onClose: () => void;
   /**
    * A modal that must appear above this sheet (the wallet PIN prompt). iOS
@@ -48,6 +56,17 @@ export function SavingsBottomSheet({
   visible: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const bottomPadding = Math.max(insets.bottom, 16);
+  const fitted =
+    contentHeight && contentHeight > 0
+      ? [
+          Math.min(
+            contentHeight + HANDLE_AND_TOP + bottomPadding,
+            Math.round((windowHeight - insets.top) * 0.96)
+          ),
+        ]
+      : null;
   const sheet = useRef<BottomSheet>(null);
   // The embedded PIN step's cancel, if one is showing: closing this sheet
   // cancels it first so the PIN request never outlives the sheet.
@@ -81,7 +100,7 @@ export function SavingsBottomSheet({
             <BottomSheet
               ref={sheet}
               index={0}
-              snapPoints={snapPoints}
+              snapPoints={fitted ?? snapPoints}
               enableDynamicSizing={false}
               enablePanDownToClose
               enableBlurKeyboardOnGesture
@@ -105,10 +124,7 @@ export function SavingsBottomSheet({
             >
               <View
                 accessibilityViewIsModal
-                style={[
-                  styles.content,
-                  { paddingBottom: Math.max(insets.bottom, 16) },
-                ]}
+                style={[styles.content, { paddingBottom: bottomPadding }]}
               >
                 <View
                   style={styles.body}

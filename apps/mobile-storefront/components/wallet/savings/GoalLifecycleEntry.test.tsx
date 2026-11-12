@@ -144,6 +144,31 @@ describe('GoalLifecycleEntry', () => {
     });
   });
 
+  it('cancels inside the sheet when the sheet offers it, without navigating', () => {
+    const onCancel = jest.fn();
+    const onBeforeNavigate = jest.fn();
+    render(
+      <GoalLifecycleEntry
+        colors={Colors.light}
+        goal={makeGoal({ current_amount: 5000 })}
+        hasPendingContribution={false}
+        onBeforeNavigate={onBeforeNavigate}
+        onCancel={onCancel}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Cancel savings goal' })
+    );
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onBeforeNavigate).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+    // Complete still opens its own screen.
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Complete savings goal' })
+    );
+    expect(router.push).toHaveBeenCalledTimes(1);
+  });
+
   it('closes the sheet before pushing the goal actions route', () => {
     const order: string[] = [];
     const dismiss = jest.fn(() => order.push('dismiss'));

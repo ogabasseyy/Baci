@@ -1,6 +1,7 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import type { ReactNode } from 'react';
+import { router } from 'expo-router';
+import { type ReactNode, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
@@ -8,12 +9,17 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
+import { GoalCancelStep } from './savings/GoalCancelStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
+import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
+import { WalletPinSheet } from './savings/WalletPinSheet';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
 const COMPACT_SNAP_POINTS = ['64%', '92%'];
+/** The header's bottom margin (SPACING.md), outside its measured height. */
+const HEADER_GAP = 16;
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -63,9 +69,54 @@ export function WalletSavingsProgressModal({
     primaryForeground: BRAND.onPrimary,
     primaryLowOpacity: BRAND.primaryAlpha12,
   };
-  if (!goal) {
+  const cancel = useInSheetGoalCancel(goal, onRefreshWallet);
+  // The sheet is sized to what it shows, so it never ends in empty space.
+  const [cancelHeight, setCancelHeight] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [bodyHeight, setBodyHeight] = useState(0);
+  if (!goal && !cancel.goal) {
     return null;
   }
+  if (cancel.goal) {
+    const cancelGoal = cancel.goal;
+    return (
+      <SavingsBottomSheet
+        visible={visible}
+        colors={colors}
+        snapPoints={COMPACT_SNAP_POINTS}
+        contentHeight={cancelHeight}
+        onClose={() => {
+          cancel.closed();
+          onClose();
+        }}
+        overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
+      >
+        {(dismiss) => (
+          // Scrolls if large text or a small screen makes it taller than the
+          // sheet can grow, so the buttons always stay reachable.
+          <BottomSheetScrollView
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={(_width, height) =>
+              setCancelHeight(Math.ceil(height))
+            }
+          >
+            <GoalCancelStep
+              colors={colors}
+              flow={cancel.flow}
+              goal={cancelGoal}
+              onDone={dismiss}
+              onKeep={cancel.keep}
+              onSignIn={() => {
+                dismiss();
+                router.push('/auth/login?returnTo=%2Fwallet');
+              }}
+            />
+          </BottomSheetScrollView>
+        )}
+      </SavingsBottomSheet>
+    );
+  }
+  if (!goal) return null;
 
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
   const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
@@ -89,12 +140,22 @@ export function WalletSavingsProgressModal({
       // Nothing saved yet means no progress card: open shorter so the sheet
       // does not end in empty space. It still expands on drag.
       snapPoints={goal.current_amount > 0 ? undefined : COMPACT_SNAP_POINTS}
+      contentHeight={
+        headerHeight > 0 && bodyHeight > 0
+          ? headerHeight + HEADER_GAP + bodyHeight
+          : undefined
+      }
       onClose={onClose}
       overlay={overlay}
     >
       {(dismiss) => (
         <>
-          <View style={styles.header}>
+          <View
+            style={styles.header}
+            onLayout={(event) =>
+              setHeaderHeight(Math.ceil(event.nativeEvent.layout.height))
+            }
+          >
             <View style={styles.titleRow}>
               <View
                 style={[
@@ -131,6 +192,9 @@ export function WalletSavingsProgressModal({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
+            onContentSizeChange={(_width, height) =>
+              setBodyHeight(Math.ceil(height))
+            }
           >
             <SavingsGoalSummary
               colors={colors}
@@ -175,6 +239,7 @@ export function WalletSavingsProgressModal({
                 goal={goal}
                 hasPendingContribution={hasPendingContribution}
                 onBeforeNavigate={onClose}
+                onCancel={cancel.start}
                 walletUpdatedAt={walletUpdatedAt}
               />
             </View>

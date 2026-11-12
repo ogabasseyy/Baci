@@ -1,21 +1,25 @@
 /**
  * Decides which PiggyVest degraded-health alerts to raise from aggregate
  * counts only (no ids, no customer data). Pure: the runtime reads the counts
- * and rate-limits; this only applies the threshold.
+ * and rate-limits; this only applies the thresholds.
  *
- * Today it watches stuck savings transfers only. A "goal-wallet setup
- * stalled" reason needs a read-only aggregate over goal_wallet_intents that
- * the evidence login cannot read yet; it is a follow-up, not shipped dark.
+ * It watches two things: savings transfers stuck in flight, and goal-wallet
+ * setups that never reached "enrolled".
  */
 export const DEGRADED_TRANSFER_THRESHOLD = 3;
-/** A transfer still in flight after this many seconds counts as stuck. */
+export const DEGRADED_GOAL_WALLET_THRESHOLD = 3;
+/** A transfer or setup still unfinished after this many seconds is stuck. */
 export const DEGRADED_STALE_AFTER_SECONDS = 600;
 
-export type DegradedReason = 'transfers_indeterminate';
+export type DegradedReason =
+  | 'transfers_indeterminate'
+  | 'goal_wallet_setup_stalled';
 
 export interface DegradedCounts {
   /** Savings transfers still reserved or sent after the stale cutoff. */
   indeterminateTransfers: number | null;
+  /** Goal-wallet setups not enrolled after the stale cutoff. */
+  stalledGoalWallets: number | null;
 }
 
 export interface DegradedAlert {
@@ -23,13 +27,21 @@ export interface DegradedAlert {
   attempts: number;
 }
 
+function reaches(count: number | null, threshold: number): count is number {
+  return (
+    typeof count === 'number' &&
+    Number.isSafeInteger(count) &&
+    count >= threshold
+  );
+}
+
 export function decideDegradedAlerts(counts: DegradedCounts): DegradedAlert[] {
-  const transfers = counts.indeterminateTransfers;
-  if (
-    typeof transfers === 'number' &&
-    Number.isSafeInteger(transfers) &&
-    transfers >= DEGRADED_TRANSFER_THRESHOLD
-  )
-    return [{ reason: 'transfers_indeterminate', attempts: transfers }];
-  return [];
+  const alerts: DegradedAlert[] = [];
+  const { indeterminateTransfers: transfers, stalledGoalWallets: wallets } =
+    counts;
+  if (reaches(transfers, DEGRADED_TRANSFER_THRESHOLD))
+    alerts.push({ reason: 'transfers_indeterminate', attempts: transfers });
+  if (reaches(wallets, DEGRADED_GOAL_WALLET_THRESHOLD))
+    alerts.push({ reason: 'goal_wallet_setup_stalled', attempts: wallets });
+  return alerts;
 }

@@ -1,5 +1,6 @@
 import 'server-only';
 import { piggyvestDailyReconciliationSchemas as schemas } from '@/schemas/piggyvest-daily-reconciliation';
+import { piggyvestGoalWalletSetupHealthSchemas as goalSchemas } from '@/schemas/piggyvest-goal-wallet-setup-health';
 import {
   DEGRADED_STALE_AFTER_SECONDS,
   type DegradedAlert,
@@ -13,7 +14,9 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 /**
  * Read-only degraded-health check. Off until PIGGYVEST_DEGRADED_ALERTS_ENABLED
  * is exactly "true". Reads only an aggregate count through the restricted
- * evidence login (the same read-only function the daily reconciliation uses),
+ * evidence login (the same read-only login the daily reconciliation uses: stuck transfers from
+ * read_daily_reconciliation, stalled goal-wallet setups from
+ * read_goal_wallet_setup_health),
  * never service role, and pages with counts only. Like the reconciliation it
  * ignores the master kill switch: a rollback must not hide a stuck transfer.
  *
@@ -23,6 +26,8 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  */
 const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
+const GOAL_WALLET_STATEMENT =
+  'SELECT piggyvest_primary.read_goal_wallet_setup_health($1::uuid,$2::text,$3::jsonb) AS result';
 const MS_PER_HOUR = 3_600_000;
 const CLAIM_CAPACITY = 64;
 
@@ -49,32 +54,57 @@ export type DegradedHealthResult =
   | {
       status: 'checked';
       indeterminateTransfers: number | null;
-      /** The transfers read failed: reported, never mistaken for healthy. */
+      stalledGoalWallets: number | null;
+      /** A read failed: reported, never mistaken for healthy. */
       readFailed: boolean;
       alerts: number;
       paged: number;
     };
 
-async function readIndeterminateTransfers(
+type CountRead = number | null | 'failed';
+
+/** Runs one allowlisted aggregate read through the evidence executor. */
+async function readCount(
   deps: DegradedHealthDeps,
-  env: NodeJS.ProcessEnv
-): Promise<number | null | 'failed'> {
+  env: NodeJS.ProcessEnv,
+  statement: string,
+  parse: (rows: unknown) => number | null
+): Promise<CountRead> {
   try {
     const runtime = deps.readRuntime(env);
     // Switched on but not configured: as unknown as a failed read.
     if (!runtime) return 'failed';
     const execute = deps.createExecutor(runtime.reconciliationConfiguration);
     const { environment, integrationId } = runtime.configuration;
-    const { rows } = await execute(SNAPSHOT_STATEMENT, [
+    const { rows } = await execute(statement, [
       integrationId,
       environment,
       JSON.stringify({ staleAfterSeconds: DEGRADED_STALE_AFTER_SECONDS }),
     ]);
-    const parsed = schemas.snapshotRows.safeParse(rows);
-    return parsed.success ? parsed.data[0].result.stuckTotal : 'failed';
+    return parse(rows) ?? 'failed';
   } catch {
     return 'failed';
   }
+}
+
+function readIndeterminateTransfers(
+  deps: DegradedHealthDeps,
+  env: NodeJS.ProcessEnv
+): Promise<CountRead> {
+  return readCount(deps, env, SNAPSHOT_STATEMENT, (rows) => {
+    const parsed = schemas.snapshotRows.safeParse(rows);
+    return parsed.success ? parsed.data[0].result.stuckTotal : null;
+  });
+}
+
+function readStalledGoalWallets(
+  deps: DegradedHealthDeps,
+  env: NodeJS.ProcessEnv
+): Promise<CountRead> {
+  return readCount(deps, env, GOAL_WALLET_STATEMENT, (rows) => {
+    const parsed = goalSchemas.rows.safeParse(rows);
+    return parsed.success ? parsed.data[0].result.stalledGoalWallets : null;
+  });
 }
 
 function claimPage(reason: string, hour: number): boolean {
@@ -95,11 +125,18 @@ export async function runPiggyvestDegradedHealth(
   if (!isPiggyvestFeatureFlagSet('degraded_alerts', env))
     return { status: 'disabled' };
   const deps = { ...defaultDeps(), ...options.deps };
-  const transfersRead = await readIndeterminateTransfers(deps, env);
-  const readFailed = transfersRead === 'failed';
-  const indeterminateTransfers = readFailed ? null : transfersRead;
+  const [transfersRead, goalWalletsRead] = await Promise.all([
+    readIndeterminateTransfers(deps, env),
+    readStalledGoalWallets(deps, env),
+  ]);
+  const readFailed = transfersRead === 'failed' || goalWalletsRead === 'failed';
+  const indeterminateTransfers =
+    transfersRead === 'failed' ? null : transfersRead;
+  const stalledGoalWallets =
+    goalWalletsRead === 'failed' ? null : goalWalletsRead;
   const alerts: DegradedAlert[] = decideDegradedAlerts({
     indeterminateTransfers,
+    stalledGoalWallets,
   });
   const hour = Math.floor(deps.nowMs() / MS_PER_HOUR);
   let paged = 0;
@@ -124,6 +161,7 @@ export async function runPiggyvestDegradedHealth(
   return {
     status: 'checked',
     indeterminateTransfers,
+    stalledGoalWallets,
     readFailed,
     alerts: alerts.length,
     paged,

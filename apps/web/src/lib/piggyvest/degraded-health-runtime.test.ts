@@ -24,9 +24,25 @@ const snapshot = (stuckTotal: number) => [
   },
 ];
 
-function deps(over: Partial<DegradedHealthDeps> & { stuck?: number } = {}) {
+const goalHealth = (stalledGoalWallets: number) => [
+  {
+    result: {
+      generatedAt: '2026-11-12T10:00:00+00:00',
+      staleAfterSeconds: 600,
+      stalledGoalWallets,
+    },
+  },
+];
+
+function deps(
+  over: Partial<DegradedHealthDeps> & { stuck?: number; stalled?: number } = {}
+) {
   const emitAlert = vi.fn();
-  const execute = vi.fn(async () => ({ rows: snapshot(over.stuck ?? 0) }));
+  const execute = vi.fn(async (statement: string) => ({
+    rows: statement.includes('read_goal_wallet_setup_health')
+      ? goalHealth(over.stalled ?? 0)
+      : snapshot(over.stuck ?? 0),
+  }));
   const value = {
     readRuntime: vi.fn(() => ({
       configuration: { environment: 'production', integrationId: 'i1' },
@@ -87,6 +103,88 @@ describe('runPiggyvestDegradedHealth', () => {
     expect(d.emitAlert).toHaveBeenCalledTimes(2);
   });
 
+  it('pages stalled goal-wallet setups once per hour, counts only', async () => {
+    const d = deps({ stalled: 3 });
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+    const first = await runPiggyvestDegradedHealth({ env, deps: d.value });
+    const second = await runPiggyvestDegradedHealth({ env, deps: d.value });
+    expect(first).toMatchObject({
+      indeterminateTransfers: 0,
+      stalledGoalWallets: 3,
+      readFailed: false,
+      alerts: 1,
+      paged: 1,
+    });
+    expect(second).toMatchObject({ alerts: 1, paged: 0 });
+    expect(d.emitAlert).toHaveBeenCalledTimes(1);
+    expect(d.emitAlert).toHaveBeenCalledWith('PIGGYVEST_DEGRADED', {
+      reason: 'goal_wallet_setup_stalled',
+      attempts: 3,
+      operationId: 'degraded-goal_wallet_setup_stalled-500000',
+    });
+  });
+
+  it('pages transfers and goal wallets as separate reasons', async () => {
+    const d = deps({ stuck: 4, stalled: 5 });
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+    const result = await runPiggyvestDegradedHealth({ env, deps: d.value });
+    expect(result).toMatchObject({ alerts: 2, paged: 2 });
+  });
+
+  it('stays quiet below the goal-wallet threshold', async () => {
+    const d = deps({ stalled: 2 });
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+    expect(
+      await runPiggyvestDegradedHealth({ env, deps: d.value })
+    ).toMatchObject({
+      alerts: 0,
+      paged: 0,
+    });
+    expect(d.emitAlert).not.toHaveBeenCalled();
+  });
+
+  describe('bugfix: a failed goal-wallet read looked healthy', () => {
+    it('reports a failed goal-wallet read while transfers still read', async () => {
+      const d = deps({
+        stuck: 4,
+        createExecutor: vi.fn(() => async (statement: string) => {
+          if (statement.includes('read_goal_wallet_setup_health'))
+            throw new Error('down');
+          return { rows: snapshot(4) };
+        }) as never,
+      });
+      const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+      const result = await runPiggyvestDegradedHealth({ env, deps: d.value });
+      expect(result).toMatchObject({
+        indeterminateTransfers: 4,
+        stalledGoalWallets: null,
+        readFailed: true,
+        alerts: 1,
+        paged: 2,
+      });
+      expect(d.emitAlert).toHaveBeenCalledWith(
+        'PIGGYVEST_DEGRADED',
+        expect.objectContaining({ reason: 'health_read_failed' })
+      );
+    });
+
+    it('treats a malformed goal-wallet result as a failed read', async () => {
+      const d = deps({
+        createExecutor: vi.fn(() => async (statement: string) => ({
+          rows: statement.includes('read_goal_wallet_setup_health')
+            ? [{ result: { stalledGoalWallets: 'many' } }]
+            : snapshot(0),
+        })) as never,
+      });
+      const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+      const result = await runPiggyvestDegradedHealth({ env, deps: d.value });
+      expect(result).toMatchObject({
+        stalledGoalWallets: null,
+        readFailed: true,
+      });
+    });
+  });
+
   describe('bugfix: a failed health read looked healthy', () => {
     it('reports the failed read and pages it once per hour', async () => {
       const d = deps({
@@ -99,6 +197,7 @@ describe('runPiggyvestDegradedHealth', () => {
       const second = await runPiggyvestDegradedHealth({ env, deps: d.value });
       expect(first).toMatchObject({
         indeterminateTransfers: null,
+        stalledGoalWallets: null,
         readFailed: true,
         paged: 1,
       });

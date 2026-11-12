@@ -37,6 +37,7 @@ describe('GET /api/cron/piggyvest-degraded-health', () => {
     const body = {
       status: 'checked',
       indeterminateTransfers: 3,
+      stalledGoalWallets: 3,
       readFailed: false,
       alerts: 1,
       paged: 1,

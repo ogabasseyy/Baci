@@ -1,41 +1,26 @@
-# Review-first CI (quick checks on drafts, full CI once ready and Codex is clean)
+# Review-first CI (AI reviews and safeguards on drafts, validation once ready)
 
-Owner decision, 2026-11-11. On 2026-11-10 there were 262 full CI runs (about 85 job-minutes each, 22,357
-job-minutes) for 15 merged pull requests, because CI started on every push and every reviewer fix started another
-full run. Review-first CI keeps the cheap checks on every push and starts the expensive suite only after the
-PR is marked ready and the required AI reviewer (OpenAI Codex) has said the exact current commit is clean. Agents verify both Codex and Muse before marking ready.
+Owner decision, 2026-11-12: avoid validation CI during repeated AI review/fix rounds. Codex and Muse review drafts; agents mark ready only after both are clean on the current head and base. Main CI then runs validation for the first time, rather than repeating lint/typecheck/tests already run during draft review.
 
-Status: **built, off by default.** Merging the pull request changes nothing until the repository variable
-`BACI_REVIEW_FIRST_CI` is set (see "Switching it on").
+The main-CI gate applies to same-repository PRs selected by `BACI_REVIEW_FIRST_CI` (`on`, or `pilot` with the `review-first-ci` label). Forks and unselected PRs retain their existing main-CI behavior. Semgrep defers on all draft PRs independently of that switch; its existing fork/changed-path restrictions still apply when ready. Pushes to main, merge groups and manual validation keep their existing behavior. Scheduled security scans remain enabled.
 
 ## In plain language
 
-The draft CI gate below applies only to same-repository PRs selected by the switch (`on`, or `pilot` with the `review-first-ci` label). Fork drafts retain full CI; all agents still follow the draft/readiness policy.
+1. Draft pushes run AI reviews and essential safeguards: the unconditional `changes` job (capability checks, workflow contracts and change detection), the silent-revert guard, secret scanning, and independent workflow guards. They do **not** run lint, typecheck, application tests, miscellaneous validation tests, mobile guardrails, builds, browser regression or Semgrep. Small local checks remain the agent's responsibility.
+2. Deferred `Build`, `Quality Gate`, and `Semgrep SAST` use different check names, so skipped draft jobs cannot turn the required contexts green. Draft status itself also prevents merging.
+3. After both reviewers are clean, mark ready. `Review-first CI nudge` releases the existing PR-context CI and browser runs through the Codex gate. These validation jobs did not execute in the draft pass: only the small safeguards repeat. `Security` listens directly to `ready_for_review` and runs the applicable Semgrep scan. This is not a promise of zero Actions minutes during drafting.
+4. If validation fails, fix the failure while draft, refresh affected review evidence and mark ready again. A changed commit needs its own CI evidence. Do not mark ready merely to trigger CI before the required reviews, or automatically rerun successful validation on the same head.
 
-1. You push to a pull request from this repository. The normal `CI Quality Gate` run starts and does only the
-   quick checks: the change detector, lint, type check, the "misc" guard tests, the mobile admin guardrails and the
-   silent-revert guard (about 17 job-minutes instead of about 85). `Semgrep SAST` is untouched and also runs at once.
-2. In that first pass the two jobs that carry the required names, `Build` and `Quality Gate`, are **renamed**
-   to `Build (deferred until Codex review)` and `Quality Gate (deferred until Codex review)`. GitHub therefore sees
-   no check called `Build` or `Quality Gate` and shows "Expected - waiting for status to be reported". Merging and
-   auto-merge stay blocked.
-3. While the PR is draft, heavy CI stays deferred, even after a clean Codex review or with `ci-now`. Once the PR is marked ready and Codex reports no major findings for that exact commit, a small helper workflow
-   (`Review-first CI nudge`) re-runs the same pull-request run ("re-run all jobs"). In the second pass the
-   `changes` job re-checks the Codex verdict itself, finds it clean, and lets the heavy jobs run (web test shards,
-   mobile and shared tests, `Build`, DB replay, SQL suites, CWV runner contracts, and the checkout browser
-   regression). The jobs get their real names, so the required checks appear and merging can proceed once they pass.
-
-Pushes to `main`, `merge_group`, manual runs and pull requests from forks behave exactly as before (full CI, normal
-names).
+The helper remains necessary because the base-owned capability contract requires an unconditional `changes` job and forbids a `types` filter on the main CI trigger. Adding native `ready_for_review` there would fail that contract. Keeping the helper avoids weakening it and preserves required PR-context checks. Returning to draft does not guarantee cancellation of validation already running; the Security conversion event cancels its prior PR run, but the main CI gate controls future evaluations only.
 
 ## Options considered
 
 | Option | Verdict |
 | --- | --- |
-| Skip the heavy jobs with a job-level `if:` | Rejected. GitHub counts a skipped required job as passed, so `Build` and `Quality Gate` would be green before any review. |
+| Skip the validation jobs with a job-level `if:` | Rejected. GitHub counts a skipped required job as passed, so `Build` and `Quality Gate` would be green before any review. |
 | A separate heavy workflow started with `workflow_dispatch` on the branch | Works in principle, but a dispatched run is not a pull-request run: different event name (the test planner and lint scope change), no merge commit, and a comment in `ci.yml` says dispatched checks do not satisfy required pull-request checks. It also cannot be tried before the new file lands on `main`. |
 | Gate the first job (`changes`) with a job-level `if:` (draft-first PR #4115) | Rejected. The base-owned capability-gate contract pins `changes` as unconditional. |
-| **Same run, two passes (chosen)** | Identical event, merge commit, test planner and lint scope as today. The required names do not exist in pass one, so nothing can be skipped-green. The verdict is re-read inside the run, so a wrong or early nudge cannot start the heavy suite. |
+| **Same run, two passes (chosen)** | Identical event, merge commit, test planner and lint scope as today. The required names do not exist in pass one, so nothing can be skipped-green. The verdict is re-read inside the run, so a wrong or early nudge cannot start the validation suite. |
 
 ## Why a required check cannot end up skipped-green
 
@@ -68,7 +53,7 @@ run):
   (this is the "sync merge from main" case; line-number shifts are ignored). Anything else (a changed file, a
   binary or oversized patch, a failed lookup, 100 or more files) means "not clean".
 * Formats have changed before. If Codex items exist but none is understood, or the API cannot be read, the run
-  fails closed (quick checks only) and says so in a warning on the `changes` job and in the job summary.
+  fails closed (safeguards only) and says so in a warning on the `changes` job and in the job summary.
 
 ## What counts as "Muse is clean"
 
@@ -143,7 +128,7 @@ Fork PRs follow the same review requirements, but these secret-bearing automatic
 
 If another code change or base sync is needed after marking ready, convert back to draft (`gh pr ready <pr> --undo`) **before pushing**, so both draft reviewers run again. Recheck both reviewers on the new head. Keep explicitly paused or deprioritized PRs draft until the owner resumes them, even when reviews are clean.
 
-“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. For same-repository PRs selected by review-first CI (`on`, or `pilot` with the `review-first-ci` label), drafts run quick checks only, even when Codex is clean or `ci-now` is present. Fork PRs and PRs outside that selection retain their existing full-CI behavior, including while draft; the agent draft/readiness policy still applies to them. Marking ready releases heavy CI through the existing Codex gate; agents must verify both reviewers first. Muse remains an agent readiness requirement, not a machine-enforced verdict gate. On ready PRs, `ci-now` and timeout recovery do not waive either review before merging.
+“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. For same-repository PRs selected by review-first CI (`on`, or `pilot` with the `review-first-ci` label), drafts run AI reviews and essential workflow safeguards only, even when Codex is clean or `ci-now` is present. Lint, typecheck, application tests, miscellaneous tests, mobile guardrails and builds wait for the full stage. Semgrep also waits until ready; secret scanning remains active. Fork PRs and PRs outside that selection retain their existing main-CI behavior, including while draft (Semgrep draft deferral applies independently); the agent draft/readiness policy still applies to them. Marking ready releases validation through the existing Codex gate; the helper repeats only the small safeguards because validation has not run during draft review; agents must verify both reviewers first. Muse remains an agent readiness requirement, not a machine-enforced verdict gate. On ready PRs, `ci-now` and timeout recovery do not waive either review before merging.
 
 <!-- draft-first-policy:end -->
 
@@ -156,7 +141,7 @@ or `ci-now` run can make them green without a Codex verdict.
 
 ## Files
 
-* `.github/workflows/ci.yml`: `changes` resolves the stage; heavy jobs are gated on it; `build` and `quality` carry
+* `.github/workflows/ci.yml`: `changes` resolves the stage; validation jobs are gated on it; `build` and `quality` carry
   the dynamic names.
 * `.github/workflows/checkout-browser.yml`: the browser regression follows the same stage.
 * `.github/workflows/review-first-ci-nudge.yml`: re-runs the pull-request run when the verdict, the label or the
@@ -165,18 +150,13 @@ or `ci-now` run can make them green without a Codex verdict.
 
 ## What you will see
 
-* **While waiting for Codex:** the pull request shows the quick checks plus `Semgrep SAST`. The two deferred jobs
-  appear as skipped entries whose name is the raw name expression (GitHub does not evaluate the name of a skipped
-  job). That is expected and harmless: no check is called exactly `Build` or `Quality Gate`, so the merge box says
-  the required checks are missing. The `changes` job writes the reason for the stage into its summary and an
-  annotation, and the nudge workflow keeps a `Review-first CI` commit status ("Quick checks passed. Codex is still
-  reviewing ...").
-* **After the re-run:** the same run shows attempt 2. The heavy jobs run, `Build` and `Quality Gate` appear under their
-  real names, and the merge box behaves as before (strict, up to date, threads resolved).
-* **Re-runs of quick jobs:** attempt 2 repeats the quick jobs (lint, typecheck, misc, guards), about 20 job-minutes per
-  pull request. Skipping them when attempt 1 already passed them is a possible later optimisation.
+* **While draft:** only AI review and safeguard jobs execute. Lint, typecheck, tests, mobile guardrails, builds and Semgrep are deferred. The required Build, Quality Gate and Semgrep SAST contexts are missing, not skipped-green; GitHub may display the raw expression for a skipped job's name.
+* **After marking ready:** the main CI/browser run advances to its next attempt and validation runs for the first time. The Security workflow gets a new `ready_for_review` run for Semgrep. Required checks retain their original names.
+* **Repeated work:** the main capability/workflow and silent-revert safeguards repeat in the released attempt; secret scanning also runs on the Security ready event. Validation was not run on draft pushes. Do not claim every Actions minute is eliminated or reuse a passing result across changed heads.
 
 ## Rehearsal evidence
+
+Historical 2026-11-11 evidence below describes the earlier quick-checks-first design, before draft lint/typecheck/test/Semgrep deferral. It is not a measurement of the current safeguards-only draft stage.
 
 Run on 2026-11-11 on a throwaway same-repository pull request, [#4205](https://github.com/ogabasseyy/Baci/pull/4205),
 against the real branch protection, Codex and GitHub-hosted runners (switch `BACI_REVIEW_FIRST_CI=pilot`, removed
@@ -250,7 +230,4 @@ How to read the "after" column:
    Codex integration or the token needs attention.
 3. Median minutes from the push to the start of the heavy stage (Codex latency), and the number of pull requests
    that waited more than 90 minutes for it (should be close to zero because of the timeout).
-4. Expectation to hold the change to: quick stage about 17-23 job-minutes per push, heavy stage about 85 plus the
-   repeated quick jobs once per pull request that reaches a clean Codex verdict. With about 260 pushes and 35-40 heavy
-   runs a day that is roughly 8,000-9,500 job-minutes a day: 2-2.5 times lower than before. The planner change in
-   PR #4173, skipping the repeated quick jobs, and syncing pull requests only at merge time cut it further.
+4. Measure the safeguards-only draft stage and ready validation separately. The earlier 17–23 quick-stage job-minute estimate included lint/typecheck/misc jobs and no longer describes the draft stage. Include Security runs and AI review workflow costs in the overall comparison; the existing CI/browser measurement script alone does not count them. Do not publish a savings percentage until the new policy has representative live runs.

@@ -5,7 +5,7 @@ import YAML from 'yaml';
 
 // Heavy workflows that still wait for ready_for_review. The two big ones follow review-first CI
 // instead (ci.yml, checkout-browser.yml: see review-first-ci/ci-workflow-contract.test.mjs), and
-// security.yml keeps scanning every push, drafts included (Semgrep SAST is a cheap required check).
+// security.yml defers Semgrep while retaining secret scanning on draft pushes.
 const names = ['codeql', 'ios-runtime-scheduler-pr',
   'rn-find-shadow-node-gtest', 'pilot-codec-compatibility', 'chatwoot-synthetic-handoff', 'link-checker'];
 const load = (name) => YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8'));
@@ -35,11 +35,17 @@ test('main CI no longer depends on the draft flag or on ready_for_review', () =>
   assert.match(workflow.jobs['quality-test'].if, /needs\.changes\.outputs\.stage == 'full'/);
   assert.match(workflow.jobs.quality.if, /always\(\)/);
 });
-test('security scans and Semgrep SAST run on every push, drafts included', () => {
+test('Semgrep defers on drafts, starts on ready, and retains secret scanning', () => {
   const workflow = load('security');
-  for (const [id, job] of Object.entries(workflow.jobs)) {
-    assert.doesNotMatch(String(job.if ?? ''), /\.draft/, id);
-  }
+  assert.ok(workflow.on.pull_request.types.includes('ready_for_review'));
+  assert.ok(workflow.on.pull_request.types.includes('synchronize'));
+  assert.ok(workflow.on.pull_request.types.includes('converted_to_draft'));
+  assert.equal(evaluate(workflow.jobs.changes.if, 'pull_request', true), false);
+  assert.equal(evaluate(workflow.jobs.changes.if, 'pull_request', false), true);
+  assert.equal(evaluate(workflow.jobs.semgrep.if, 'pull_request', true), false);
+  assert.equal(evaluate(workflow.jobs.semgrep.if, 'push', false), true);
+  assert.match(workflow.jobs.semgrep.name, /deferred until ready/);
+  assert.equal(workflow.jobs['secrets-scan'].if, undefined);
 });
 test('Muse reviews draft pushes and retains same-repository isolation', () => {
   const workflow = load('muse-code-review');

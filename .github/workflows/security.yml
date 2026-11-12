@@ -8,6 +8,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   schedule:
     # Run daily at 3:00 AM UTC
     - cron: '0 3 * * *'
@@ -26,6 +27,7 @@ concurrency:
 jobs:
   changes:
     name: Detect Semgrep scope
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     outputs:
       semgrep_relevant: ${{ steps.scope.outputs.semgrep_relevant }}
@@ -134,7 +136,8 @@ jobs:
           fi
 
   semgrep:
-    name: Semgrep SAST
+    # Deferred drafts must not publish a skipped-green required Semgrep context.
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Semgrep SAST (deferred until ready)' || 'Semgrep SAST' }}
     needs: [changes]
     runs-on: ubuntu-latest
     # Skip for forked PRs where SEMGREP_APP_TOKEN is not available
@@ -142,6 +145,7 @@ jobs:
     if: |
       github.event_name != 'pull_request' ||
       (
+        github.event.pull_request.draft == false &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         needs.changes.outputs.semgrep_relevant == 'true'
       )

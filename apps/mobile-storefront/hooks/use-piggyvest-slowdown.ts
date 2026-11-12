@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   nextSlowSignalExpiry,
+  PIGGYVEST_SLOW_SIGNAL_TTL_MS,
   type PiggyvestSlowSource,
   usePiggyvestSlowdownStore,
 } from '@/stores/piggyvest-slowdown-store';
@@ -16,8 +17,17 @@ export function useReportPiggyvestSlow(
   const markSlow = usePiggyvestSlowdownStore((state) => state.markSlow);
   const clearSlow = usePiggyvestSlowdownStore((state) => state.clearSlow);
   useEffect(() => {
-    if (slow) markSlow(source);
-    else clearSlow(source);
+    if (!slow) {
+      clearSlow(source);
+      return;
+    }
+    markSlow(source);
+    // Renew while still slow, so a long slowdown never lapses mid-way.
+    const timer = setInterval(
+      () => markSlow(source),
+      PIGGYVEST_SLOW_SIGNAL_TTL_MS / 2
+    );
+    return () => clearInterval(timer);
   }, [slow, source, markSlow, clearSlow]);
 }
 

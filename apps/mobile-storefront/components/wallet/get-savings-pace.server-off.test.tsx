@@ -128,6 +128,12 @@ describe('getSavingsPace', () => {
       expect(paymentsThatFit('monthly', '2027-02-11', now)).toBe(3);
     });
 
+    it('counts a month-end payment into a shorter month (31 Jan -> 28 Feb)', () => {
+      const jan31 = new Date(2027, 0, 31, 10);
+      expect(paymentsThatFit('monthly', '2027-02-28', jan31)).toBe(2);
+      expect(paymentsThatFit('monthly', '2027-02-27', jan31)).toBe(1);
+    });
+
     it('uses the phone’s own day, not the UTC day', () => {
       const lateLocal = new Date(2026, 10, 12, 23, 30);
       expect(paymentsThatFit('daily', '2026-11-13', lateLocal)).toBe(2);

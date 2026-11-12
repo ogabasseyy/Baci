@@ -41,4 +41,15 @@ describe('usePiggyvestSlowdown with PiggyVest off', () => {
     });
     expect(result.current).toBe(false);
   });
+
+  describe('bugfix: a long slowdown notice lapsed after five minutes', () => {
+    it('stays on while the source is still slow', async () => {
+      renderHook(() => useReportPiggyvestSlow('goal-setup', true));
+      const { result } = renderHook(() => usePiggyvestSlowdown());
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(PIGGYVEST_SLOW_SIGNAL_TTL_MS * 3);
+      });
+      expect(result.current).toBe(true);
+    });
+  });
 });

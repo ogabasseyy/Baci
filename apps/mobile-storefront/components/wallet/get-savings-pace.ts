@@ -54,7 +54,11 @@ export function paymentsThatFit(
   if (frequency === 'weekly') return Math.floor(days / 7) + 1;
   const [ey, em, ed] = (maturityDate ?? '').slice(0, 10).split('-').map(Number);
   const [ty, tm, td] = localDay(now).split('-').map(Number);
-  const months = (ey - ty) * 12 + (em - tm) - (ed < td ? 1 : 0);
+  // A schedule day past the end of a shorter month rolls to its last day
+  // (31 Jan -> 28 Feb), so an end date on the last day still counts.
+  const lastDayOfEndMonth = new Date(ey, em, 0).getDate();
+  const shortOfDay = ed < td && ed !== lastDayOfEndMonth;
+  const months = (ey - ty) * 12 + (em - tm) - (shortOfDay ? 1 : 0);
   return Math.max(0, months) + 1;
 }
 

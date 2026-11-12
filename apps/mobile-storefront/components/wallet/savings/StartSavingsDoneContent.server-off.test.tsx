@@ -67,3 +67,20 @@ describe('bugfix: auto-debit plans were told to save from the wallet', () => {
     expect(screen.queryByText(/from your wallet/)).toBeNull();
   });
 });
+
+describe('bugfix: a full head start was asked for another payment', () => {
+  it('says the plan is complete when the head start covers the phone', () => {
+    render(
+      <StartSavingsDoneContent
+        colors={Colors.light}
+        controller={createStartSavingsController({
+          effectiveInitialContribution: 250000,
+        })}
+      />
+    );
+    expect(
+      screen.getByText(/head start covers the whole phone/)
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/Next, save/)).toBeNull();
+  });
+});

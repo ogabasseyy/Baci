@@ -118,6 +118,17 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
   });
 
+  it('holds bank transfer to wallet until the wallet has loaded', () => {
+    // Arrange: the wallet query has not answered yet.
+    mockWallet = undefined;
+
+    // Act
+    const { result } = renderController();
+
+    // Assert
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+
   it('keeps existing store credit spendable for a PiggyVest customer', () => {
     mockWallet = { balance: 2_000, primary_balance_kobo: 500_000 };
 

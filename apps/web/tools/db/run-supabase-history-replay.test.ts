@@ -31,8 +31,9 @@ describe('runSupabaseHistoryReplay', () => {
     expect(fixture.commands).toEqual([
       'docker info',
       `supabase init --workdir ${fixture.workdir}`,
+      `pin images ${fixture.workdir}`,
       `supabase db start --workdir ${fixture.workdir}`,
-      `supabase migration up --local --workdir ${fixture.workdir}`,
+      `supabase migration up --workdir ${fixture.workdir}`,
       `supabase status --workdir ${fixture.workdir} -o env`,
       'psql -X -w -v ON_ERROR_STOP=1 -At',
       `psql -X -w -v ON_ERROR_STOP=1 -v VERBOSITY=sqlstate -f ${fixture.workdir}/sql/126-00000000000126_migration.sql`,

@@ -121,11 +121,16 @@ export async function runSupabaseHistoryReplay(
       runtime.parseConfig(rewritten),
       projectId
     );
+    // The CLI's built-in image defaults move with every release; the pin files keep the replay on the
+    // PostgreSQL 17.6 build (and matching service images) the production fixture was captured on.
+    await runSupabaseReplayStage('pin images', () =>
+      runtime.writeImagePins(workdir)
+    );
     await runSupabaseReplayStage('db start', () =>
       run('supabase', ['db', 'start', '--workdir', workdir])
     );
     await runSupabaseReplayStage('migration up', () =>
-      run('supabase', ['migration', 'up', '--local', '--workdir', workdir])
+      run('supabase', ['migration', 'up', '--workdir', workdir])
     );
     const databaseUrl = await runSupabaseReplayStage('status', () =>
       readSupabaseReplayDatabaseUrl(run, workdir)

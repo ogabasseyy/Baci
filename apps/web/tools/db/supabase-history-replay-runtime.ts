@@ -15,6 +15,7 @@ import {
   verifySupabaseReplayContract,
 } from './supabase-replay-contract';
 import * as resourceTools from './supabase-replay-expected-resources';
+import { writeSupabaseReplayImagePins } from './supabase-replay-image-pins';
 import { verifySupabaseHistoryReplayManifest } from './verify-supabase-history-replay-manifest';
 import { verifySupabaseReplayBootstrapHistory } from './verify-supabase-replay-bootstrap-history';
 
@@ -58,6 +59,7 @@ export function createSupabaseHistoryReplayRuntimeDependencies() {
     verifyEffects: executeSupabaseHistoryReplayVerification,
     verifyManifest: verifySupabaseHistoryReplayManifest,
     verifyProductionOldCancellation: runProductionOldCancellationProof,
+    writeImagePins: writeSupabaseReplayImagePins,
     writeOwnership: ownershipTools.writeReplayProjectOwnership,
   };
 }

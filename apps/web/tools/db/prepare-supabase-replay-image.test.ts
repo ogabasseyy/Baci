@@ -88,7 +88,7 @@ exit 0
       ...process.env,
       PATH: `${root}:${process.env.PATH}`,
       TEST_COMMAND_LOG: log,
-      TEST_CLI_VERSION: options.version ?? '2.111.0',
+      TEST_CLI_VERSION: options.version ?? '3.1.0',
       TEST_PRIMARY_FAIL: options.primaryFails ? '1' : '0',
       TEST_ALL_FAIL: options.allFail ? '1' : '0',
       TEST_PRIMARY_FAIL_IMAGE: options.primaryFailImage ?? '',
@@ -145,6 +145,9 @@ it('stops on a tag failure instead of claiming a complete cache', () => {
     commands: successful.slice(0, 4),
   });
 });
-it('refuses a changed CLI pin before pulling an incompatible image', () => {
-  expect(run({ version: '2.117.0' })).toEqual({ status: 1, commands: [] });
+it.each([
+  '2.111.0',
+  '3.2.0',
+])('refuses CLI %s before pulling images it was not pinned for', (version) => {
+  expect(run({ version })).toEqual({ status: 1, commands: [] });
 });

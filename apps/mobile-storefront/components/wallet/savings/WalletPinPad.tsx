@@ -5,7 +5,6 @@ import { triggerHaptic } from '@/hooks/use-haptics';
 
 type WalletColors = (typeof Colors)['light'];
 
-const MIN_SLOTS = 4;
 const MAX_DIGITS = 6;
 const ROWS = [
   ['1', '2', '3'],
@@ -13,55 +12,6 @@ const ROWS = [
   ['7', '8', '9'],
   ['', '0', 'del'],
 ];
-
-/**
- * The PIN as dots: four boxes, growing to five or six as the customer types
- * (or a fixed count, for a code of known length). Only the count of digits is
- * shown or announced, never the digits.
- */
-export function WalletPinDots({
-  colors,
-  label,
-  length,
-  fixedSlots,
-}: {
-  colors: WalletColors;
-  label: string;
-  length: number;
-  fixedSlots?: number;
-}) {
-  const slots =
-    fixedSlots ?? Math.min(MAX_DIGITS, Math.max(MIN_SLOTS, length + 1));
-  return (
-    <View
-      accessible
-      accessibilityLabel={`${label}, ${length} of ${fixedSlots ?? MAX_DIGITS} digits entered`}
-      style={styles.dots}
-    >
-      {Array.from({ length: slots }, (_, index) => {
-        const filled = index < length;
-        const current = index === length;
-        return (
-          <View
-            // biome-ignore lint/suspicious/noArrayIndexKey: fixed slot positions
-            key={index}
-            style={[
-              styles.slot,
-              {
-                borderColor: current ? colors.primary : colors.border,
-                borderWidth: current ? 1.5 : 1,
-              },
-            ]}
-          >
-            {filled ? (
-              <View style={[styles.dot, { backgroundColor: colors.text }]} />
-            ) : null}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
 
 /**
  * An in-sheet number pad: no phone keyboard, so the sheet never jumps and a
@@ -120,15 +70,6 @@ export function WalletPinPad({
 }
 
 const styles = StyleSheet.create({
-  dots: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
-  slot: {
-    alignItems: 'center',
-    borderRadius: 12,
-    height: 52,
-    justifyContent: 'center',
-    width: 44,
-  },
-  dot: { borderRadius: 6, height: 12, width: 12 },
   pad: { alignSelf: 'stretch', gap: 4 },
   row: { flexDirection: 'row', gap: 4 },
   // Equal thirds whatever each key holds, so 0 sits under 8.

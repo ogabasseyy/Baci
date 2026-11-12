@@ -13,8 +13,9 @@ import {
   type WalletPinStep,
 } from './use-wallet-pin-sheet';
 import { WalletPinContextStrip } from './WalletPinContextStrip';
+import { WalletPinDots } from './WalletPinDots';
 import { EmbeddedPinStep } from './WalletPinEmbeddedStep';
-import { WalletPinDots, WalletPinPad } from './WalletPinPad';
+import { WalletPinPad } from './WalletPinPad';
 import { walletPinSheetStyles as styles } from './WalletPinSheet.styles';
 import { WalletPinSheetHeader } from './WalletPinSheetHeader';
 

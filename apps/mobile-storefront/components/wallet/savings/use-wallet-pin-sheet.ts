@@ -104,6 +104,10 @@ export function useWalletPinSheet({
       });
     return () => {
       current = false;
+      // Also on unmount (a new request remounts the panel): an answer still
+      // in flight must never settle a later request.
+      generation.current += 1;
+      pendingPin.current = null;
     };
   }, [operationId, goalId, amountKobo, action, merchantId, expectedUserId]);
 

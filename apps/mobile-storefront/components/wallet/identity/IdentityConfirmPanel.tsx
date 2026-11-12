@@ -1,7 +1,8 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { WalletPinContextStrip } from '../savings/WalletPinContextStrip';
-import { WalletPinDots, WalletPinPad } from '../savings/WalletPinPad';
+import { WalletPinDots } from '../savings/WalletPinDots';
+import { WalletPinPad } from '../savings/WalletPinPad';
 import { walletPinSheetStyles as styles } from '../savings/WalletPinSheet.styles';
 import { WalletPinSheetHeader } from '../savings/WalletPinSheetHeader';
 import {

@@ -2,6 +2,7 @@ name: Chatwoot synthetic handoff
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/chatwoot-synthetic-handoff.yml'
       - 'apps/web/tools/chatwoot-handoff-ci/**'
@@ -16,7 +17,9 @@ concurrency:
 
 jobs:
   handoff:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

@@ -1,7 +1,8 @@
 # Baci capabilities and agent access
 
-Reviewed 10 November 2026 against source revision
-`f43e6cff2387fb6b24f6c06183b875047a113df1`. Agentic checkout session quotes now include
+Reviewed 11 November 2026 against source revision
+`fc72484cc2f18b91ce001c074c49014c614384b6`. The mobile-admin follow-up queue no longer treats
+stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility

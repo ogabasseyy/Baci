@@ -54,8 +54,12 @@ jest.mock('@/lib/customer-savings', () => ({
 }));
 
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { merchantId: string | null }) => unknown) =>
-    selector({ merchantId: 'merchant-1' }),
+  useAuthStore: (
+    selector: (state: {
+      merchantId: string | null;
+      user: { id: string } | null;
+    }) => unknown
+  ) => selector({ merchantId: 'merchant-1', user: { id: 'user-1' } }),
 }));
 
 function getSavingsButton(name: string) {

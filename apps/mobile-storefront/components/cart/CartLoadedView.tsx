@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
-import { CheckoutIdentityModal } from '@/components/checkout/checkout-identity';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import { palette, SPACING } from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
@@ -32,7 +31,6 @@ interface CartLoadedViewProps {
   isPriceChangeModalOpen: boolean;
   itemCount: number;
   items: CartItem[];
-  onCloseIdentityModal: () => void;
   onCloseNegotiateWarning: () => void;
   onCheckoutPressIn: () => void;
   onBulkNegotiate: () => void;
@@ -78,7 +76,6 @@ export default function CartLoadedView({
   isPriceChangeModalOpen,
   itemCount,
   items,
-  onCloseIdentityModal,
   onCloseNegotiateWarning,
   onCheckoutPressIn,
   onBulkNegotiate,
@@ -278,10 +275,6 @@ export default function CartLoadedView({
         />
       </View>
 
-      <CheckoutIdentityModal
-        isOpen={isIdentityModalOpen}
-        onClose={onCloseIdentityModal}
-      />
       <NegotiationWarningModal
         visible={showNegotiateWarning}
         pendingItem={pendingNegotiateItem}

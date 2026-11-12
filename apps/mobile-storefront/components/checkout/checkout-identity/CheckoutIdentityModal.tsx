@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
+import { useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,18 +25,25 @@ import { styles } from './styles';
 interface CheckoutIdentityModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onVerified?: () => void;
 }
 
 export function CheckoutIdentityModal({
   isOpen,
   onClose,
+  onVerified,
 }: CheckoutIdentityModalProps) {
-  return isOpen ? <CheckoutIdentitySheet onClose={onClose} /> : null;
+  return isOpen ? (
+    <CheckoutIdentitySheet onClose={onClose} onVerified={onVerified} />
+  ) : null;
 }
 
 function CheckoutIdentitySheet({
   onClose,
-}: Pick<CheckoutIdentityModalProps, 'onClose'>) {
+  onVerified,
+}: Pick<CheckoutIdentityModalProps, 'onClose' | 'onVerified'>) {
+  const otpBusy = useRef(false);
+  const [isOtpBusy, setIsOtpBusy] = useState(false);
   const insets = useSafeAreaInsets();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const theme = getCheckoutIdentityTheme(colorScheme);
@@ -66,6 +74,7 @@ function CheckoutIdentitySheet({
   };
 
   const handleGuestCheckout = () => {
+    if (otpBusy.current) return;
     triggerHaptic('light');
     Keyboard.dismiss();
     onClose();
@@ -75,7 +84,13 @@ function CheckoutIdentitySheet({
   const handleVerified = () => {
     Keyboard.dismiss();
     onClose();
-    router.replace('/checkout');
+    if (onVerified) onVerified();
+    else router.push('/checkout');
+  };
+
+  const handleOtpBusyChange = (busy: boolean) => {
+    otpBusy.current = busy;
+    setIsOtpBusy(busy);
   };
 
   return (
@@ -149,6 +164,7 @@ function CheckoutIdentitySheet({
             <ErrorAlert error={socialAuthError} theme={theme} />
             <CheckoutCodeForm
               onVerified={handleVerified}
+              onBusyChange={handleOtpBusyChange}
               socialBusy={isSocialAuthLoading}
               theme={theme}
               renderSocial={(emailBusy) => (
@@ -165,6 +181,8 @@ function CheckoutIdentitySheet({
             />
             <Pressable
               onPress={handleGuestCheckout}
+              disabled={isOtpBusy}
+              accessibilityState={{ disabled: isOtpBusy }}
               style={styles.guestLink}
               accessibilityRole="button"
             >

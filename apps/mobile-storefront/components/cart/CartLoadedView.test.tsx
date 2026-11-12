@@ -113,7 +113,6 @@ function renderView(
     items: [item],
     onBulkNegotiate: jest.fn(),
     onCheckoutPressIn: jest.fn(),
-    onCloseIdentityModal: jest.fn(),
     onCloseNegotiateWarning: jest.fn(),
     onNegotiateItem: jest.fn(),
     onNegotiateTotal: jest.fn(),

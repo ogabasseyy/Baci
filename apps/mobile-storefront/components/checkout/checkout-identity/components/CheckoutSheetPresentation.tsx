@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BackHandler, Modal, Platform, StyleSheet, View } from 'react-native';
 
 export function CheckoutSheetPresentation({
@@ -10,21 +10,36 @@ export function CheckoutSheetPresentation({
   onClose: () => void;
 }) {
   const inline = Platform.OS === 'android';
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!inline) return;
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        onClose();
+        onCloseRef.current();
         return true;
       }
     );
     return () => subscription.remove();
-  }, [inline, onClose]);
+  }, [inline]);
 
   if (inline) {
-    return <View style={styles.overlay}>{children}</View>;
+    return (
+      <View
+        style={styles.overlay}
+        accessibilityViewIsModal
+        accessibilityLabel="Checkout sign-in options"
+        importantForAccessibility="yes"
+        testID="checkout-identity-inline-overlay"
+      >
+        {children}
+      </View>
+    );
   }
 
   return (
@@ -45,5 +60,6 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFill,
     zIndex: 1,
+    elevation: 1,
   },
 });

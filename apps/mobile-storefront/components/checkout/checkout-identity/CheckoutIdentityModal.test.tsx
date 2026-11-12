@@ -30,7 +30,10 @@ beforeEach(() => {
 
 it('offers email-code sign-in immediately and opens checkout after verification', async () => {
   const close = jest.fn();
-  render(<CheckoutIdentityModal isOpen onClose={close} />);
+  const onVerified = jest.fn();
+  render(
+    <CheckoutIdentityModal isOpen onClose={close} onVerified={onVerified} />
+  );
 
   expect(
     screen.getByRole('header', { name: 'Let’s get you started' })
@@ -53,7 +56,8 @@ it('offers email-code sign-in immediately and opens checkout after verification'
   await screen.findByRole('button', { name: 'Verify & continue checkout' });
   expect(mockVerifyCode).toHaveBeenCalledWith('shopper@example.com', '123456');
   expect(close).toHaveBeenCalledTimes(1);
-  expect(router.replace).toHaveBeenCalledWith('/checkout');
+  expect(onVerified).toHaveBeenCalledTimes(1);
+  expect(router.push).not.toHaveBeenCalled();
 });
 
 it('keeps guest checkout available when the code cannot be sent', async () => {
@@ -117,7 +121,7 @@ it('offers a retry after an incorrect verification code', async () => {
 
   fireEvent.press(await enterVerificationCode());
   expect(await screen.findByText('Incorrect code.')).toBeTruthy();
-  expect(router.replace).not.toHaveBeenCalled();
+  expect(router.push).not.toHaveBeenCalled();
 
   fireEvent.changeText(screen.getByLabelText('Verification code'), '654321');
   fireEvent.press(
@@ -129,7 +133,7 @@ it('offers a retry after an incorrect verification code', async () => {
     '654321'
   );
   expect(close).toHaveBeenCalledTimes(1);
-  expect(router.replace).toHaveBeenCalledWith('/checkout');
+  expect(router.push).toHaveBeenCalledWith('/checkout');
 });
 
 it('ignores verification completion after the shopper closes the sheet', async () => {
@@ -148,7 +152,28 @@ it('ignores verification completion after the shopper closes the sheet', async (
   await act(async () => complete({ success: true }));
 
   expect(close).toHaveBeenCalledTimes(1);
-  expect(router.replace).not.toHaveBeenCalled();
+  expect(router.push).not.toHaveBeenCalled();
+});
+
+it('prevents guest checkout while OTP verification is changing the session', async () => {
+  let complete = (_result: { success: boolean }) => {};
+  mockVerifyCode.mockReturnValueOnce(
+    new Promise((resolve) => {
+      complete = resolve;
+    })
+  );
+  const close = jest.fn();
+  render(<CheckoutIdentityModal isOpen onClose={close} />);
+
+  fireEvent.press(await enterVerificationCode());
+  const guest = screen.getByRole('button', { name: 'Continue as Guest' });
+  expect(guest).toBeDisabled();
+  fireEvent.press(guest);
+  expect(close).not.toHaveBeenCalled();
+  expect(router.push).not.toHaveBeenCalled();
+
+  await act(async () => complete({ success: true }));
+  expect(close).toHaveBeenCalledTimes(1);
 });
 
 it('allows a code resend only after the cooldown and restarts the cooldown on success', async () => {
@@ -173,6 +198,41 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
         name: 'You can resend a code after 60 seconds.',
       })
     ).toBeDisabled();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it('keeps the same-email cooldown when the shopper switches email modes', async () => {
+  jest.useFakeTimers();
+  try {
+    render(<CheckoutIdentityModal isOpen onClose={jest.fn()} />);
+    fireEvent.changeText(
+      screen.getByLabelText('Email address'),
+      'shopper@example.com'
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Continue with email' })
+    );
+    await screen.findByLabelText('Verification code');
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Use a different email' })
+    );
+    const email = screen.getByLabelText('Email address');
+    fireEvent.changeText(email, ' Shopper@Example.com ');
+    const continueButton = screen.getByRole('button', {
+      name: 'Continue with email',
+    });
+
+    expect(continueButton).toBeDisabled();
+    fireEvent.press(continueButton);
+    expect(mockSendCode).toHaveBeenCalledTimes(1);
+
+    act(() => jest.advanceTimersByTime(60_000));
+    expect(continueButton).toBeEnabled();
+    await act(async () => fireEvent.press(continueButton));
+    expect(mockSendCode).toHaveBeenCalledTimes(2);
   } finally {
     jest.useRealTimers();
   }

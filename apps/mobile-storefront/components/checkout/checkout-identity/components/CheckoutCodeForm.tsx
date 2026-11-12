@@ -11,11 +11,13 @@ const emailSchema = z.email();
 export function CheckoutCodeForm({
   renderSocial,
   onVerified,
+  onBusyChange,
   socialBusy,
   theme,
 }: {
   renderSocial: (busy: boolean) => ReactNode;
   onVerified: () => void;
+  onBusyChange: (busy: boolean) => void;
   socialBusy: boolean;
   theme: CheckoutIdentityTheme;
 }) {
@@ -24,7 +26,9 @@ export function CheckoutCodeForm({
   const [email, setEmail] = useState('');
   const [sentTo, setSentTo] = useState('');
   const [code, setCode] = useState('');
-  const [resendAfter, setResendAfter] = useState<number | null>(null);
+  const [resendAfterByEmail, setResendAfterByEmail] = useState<
+    Record<string, number>
+  >({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = useRef(false);
@@ -37,25 +41,44 @@ export function CheckoutCodeForm({
     };
   }, []);
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const isEmailValid = emailSchema.safeParse(normalizedEmail).success;
+  const activeEmail = sentTo || normalizedEmail;
+  const resendAfter = resendAfterByEmail[activeEmail] ?? null;
+  const emailCoolingDown =
+    !sentTo && isEmailValid && resendAfter !== null && resendAfter > Date.now();
+
   useEffect(() => {
     if (resendAfter === null) return;
     const timer = setTimeout(
-      () => setResendAfter(null),
+      () => {
+        setResendAfterByEmail((current) => {
+          if (current[activeEmail] !== resendAfter) return current;
+          const next = { ...current };
+          delete next[activeEmail];
+          return next;
+        });
+      },
       Math.max(0, resendAfter - Date.now())
     );
     return () => clearTimeout(timer);
-  }, [resendAfter]);
-
-  const normalizedEmail = email.trim().toLowerCase();
-  const isEmailValid = emailSchema.safeParse(normalizedEmail).success;
+  }, [activeEmail, resendAfter]);
 
   const submit = async (resend = false) => {
-    if (pending.current || socialBusy || (resend && resendAfter !== null))
+    if (
+      pending.current ||
+      socialBusy ||
+      (resend && resendAfter !== null) ||
+      (!resend &&
+        !sentTo &&
+        (resendAfterByEmail[normalizedEmail] ?? 0) > Date.now())
+    )
       return;
     if (sentTo ? !resend && code.length !== 6 : !isEmailValid) return;
 
     pending.current = true;
     setBusy(true);
+    onBusyChange(true);
     setError(null);
     try {
       const result =
@@ -70,13 +93,19 @@ export function CheckoutCodeForm({
       } else {
         setSentTo(sentTo || normalizedEmail);
         setCode('');
-        setResendAfter(Date.now() + 60_000);
+        setResendAfterByEmail((current) => ({
+          ...current,
+          [sentTo || normalizedEmail]: Date.now() + 60_000,
+        }));
       }
     } catch {
       if (active.current) setError('Unable to sign in. Please try again.');
     } finally {
       pending.current = false;
-      if (active.current) setBusy(false);
+      if (active.current) {
+        onBusyChange(false);
+        setBusy(false);
+      }
     }
   };
 
@@ -85,7 +114,9 @@ export function CheckoutCodeForm({
     ? 'Verify & continue checkout'
     : 'Continue with email';
   const disabled =
-    busy || socialBusy || (sentTo ? code.length !== 6 : !isEmailValid);
+    busy ||
+    socialBusy ||
+    (sentTo ? code.length !== 6 : !isEmailValid || emailCoolingDown);
 
   return (
     <View style={styles.form}>

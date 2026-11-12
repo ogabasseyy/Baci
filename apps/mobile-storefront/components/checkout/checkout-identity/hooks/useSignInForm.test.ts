@@ -135,7 +135,7 @@ describe('useSignInForm', () => {
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledTimes(1);
-      expect(mockRouterReplace).toHaveBeenCalledWith('/checkout');
+      expect(mockRouterReplace).not.toHaveBeenCalled();
     });
   });
 

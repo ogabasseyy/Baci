@@ -6,6 +6,7 @@ import { getCheckoutIdentityTheme } from './colors';
 const mockSendCode = jest.fn();
 const mockVerifyCode = jest.fn();
 let mockSocialBusy = false;
+let mockSignInSuccess: (() => void) | undefined;
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (select: (state: unknown) => unknown) =>
     select({ signInWithOtp: mockSendCode, verifyOtp: mockVerifyCode }),
@@ -13,7 +14,10 @@ jest.mock('@/stores/auth-store', () => ({
 jest.mock('./hooks', () => ({
   useBottomSheetAnimation: () => ({}),
   useHapticFeedback: () => ({ triggerHaptic: jest.fn() }),
-  useSignInForm: () => ({ isLoading: mockSocialBusy }),
+  useSignInForm: ({ onSuccess }: { onSuccess: () => void }) => {
+    mockSignInSuccess = onSuccess;
+    return { isLoading: mockSocialBusy };
+  },
 }));
 jest.mock('@/components/ui/AppKeyboardContainer', () => ({
   __esModule: true,
@@ -26,6 +30,7 @@ jest.mock('expo-router', () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockSocialBusy = false;
+  mockSignInSuccess = undefined;
   mockSendCode.mockResolvedValue({ success: true });
   mockVerifyCode.mockResolvedValue({ success: true });
 });
@@ -65,6 +70,20 @@ it('offers email-code sign-in immediately and opens checkout after verification'
   expect(router.push).not.toHaveBeenCalled();
 });
 
+it('routes social sign-in success through checkout revalidation', () => {
+  const close = jest.fn();
+  const onVerified = jest.fn();
+  render(
+    <CheckoutIdentityModal isOpen onClose={close} onVerified={onVerified} />
+  );
+
+  act(() => mockSignInSuccess?.());
+
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(onVerified).toHaveBeenCalledTimes(1);
+  expect(router.replace).not.toHaveBeenCalled();
+});
+
 it('keeps guest checkout available when the code cannot be sent', async () => {
   mockSendCode.mockResolvedValue({ success: false, error: 'Try again later.' });
   const close = jest.fn();
@@ -99,7 +118,7 @@ it('highlights the email field and enables email sign-in only for a complete add
   const button = screen.getByRole('button', { name: 'Continue with email' });
 
   expect(email).toHaveStyle({
-    borderColor: getCheckoutIdentityTheme('light').error,
+    borderColor: getCheckoutIdentityTheme('light').primary,
   });
   expect(button).toBeDisabled();
   expect(

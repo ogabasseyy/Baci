@@ -12,12 +12,14 @@ import { CheckoutIdentityOverlayProvider } from './CheckoutIdentityOverlayProvid
 import { useCheckoutIdentityOverlay } from './useCheckoutIdentityOverlay';
 
 jest.mock('@/components/cart/CartWriteNotice', () => ({
-  CartWriteNotice: () =>
-    mockReact.createElement(
-      mockText,
-      { testID: 'cart-write-notice' },
-      'Cart write notice'
-    ),
+  CartWriteNotice: ({ hidden }: { hidden?: boolean }) =>
+    hidden
+      ? null
+      : mockReact.createElement(
+          mockText,
+          { testID: 'cart-write-notice' },
+          'Cart write notice'
+        ),
 }));
 
 jest.mock('./CheckoutIdentityModal', () => ({
@@ -130,7 +132,7 @@ it('covers root app chrome and restores it after identity completion', () => {
   expect(StyleSheet.flatten(contentLayer.props.style).pointerEvents).toBe(
     'none'
   );
-  expect(screen.getByTestId('cart-write-notice')).toBeOnTheScreen();
+  expect(screen.queryByTestId('cart-write-notice')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Chat widget' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Drawer menu' })).toBeNull();
   expect(
@@ -141,6 +143,7 @@ it('covers root app chrome and restores it after identity completion', () => {
 
   expect(onVerified).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: 'Chat widget' })).toBeTruthy();
+  expect(screen.getByTestId('cart-write-notice')).toBeOnTheScreen();
   expect(screen.queryByTestId('checkout-identity-overlay')).toBeNull();
 });
 
@@ -164,6 +167,7 @@ it('restores background interaction after closing without verification', () => {
 
   expect(onVerified).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'Chat widget' })).toBeTruthy();
+  expect(screen.getByTestId('cart-write-notice')).toBeOnTheScreen();
   expect(screen.queryByTestId('checkout-identity-overlay')).toBeNull();
 });
 

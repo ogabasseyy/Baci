@@ -70,6 +70,7 @@ function CheckoutIdentitySheet({
 
   const handleSignInSuccess = () => {
     onClose();
+    onVerified?.();
   };
 
   const {

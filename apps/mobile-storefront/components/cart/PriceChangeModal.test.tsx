@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Modal, View } from 'react-native';
+import { Modal, Platform, View } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { CartPriceChange } from '@/services/cart-reprice';
 import PriceChangeModal from './PriceChangeModal';
@@ -169,6 +169,63 @@ describe('PriceChangeModal', () => {
       );
     expect(rowKeys).toHaveLength(2);
     expect(new Set(rowKeys).size).toBe(rowKeys.length);
+  });
+
+  it('does not swallow a real dismissal after a deferred modal is re-shown', () => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const onDismissed = jest.fn();
+    try {
+      const { rerender, UNSAFE_getByType } = render(
+        <PriceChangeModal
+          visible
+          changes={priceChanges}
+          onClose={jest.fn()}
+          onDismissed={onDismissed}
+          isDeferred
+          colors={Colors.light}
+        />
+      );
+
+      rerender(
+        <PriceChangeModal
+          visible={false}
+          changes={priceChanges}
+          onClose={jest.fn()}
+          onDismissed={onDismissed}
+          isDeferred
+          colors={Colors.light}
+        />
+      );
+      // The old native modal may not deliver onDismiss before a new reprice.
+      // Its stale skip flag must not consume the new modal's real dismissal.
+      rerender(
+        <PriceChangeModal
+          visible
+          changes={priceChanges}
+          onClose={jest.fn()}
+          onDismissed={onDismissed}
+          colors={Colors.light}
+        />
+      );
+      rerender(
+        <PriceChangeModal
+          visible={false}
+          changes={priceChanges}
+          onClose={jest.fn()}
+          onDismissed={onDismissed}
+          colors={Colors.light}
+        />
+      );
+
+      act(() => UNSAFE_getByType(Modal).props.onDismiss());
+      expect(onDismissed).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: originalPlatform,
+      });
+    }
   });
 
   it('reports native dismissal through onDismissed', () => {

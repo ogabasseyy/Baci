@@ -45,6 +45,7 @@ export default function PriceChangeModal({
   useLayoutEffect(() => {
     if (visible) {
       wasVisible.current = true;
+      skipDeferredDismiss.current = false;
     } else {
       if (Platform.OS === 'ios' && isDeferred && wasVisible.current) {
         skipDeferredDismiss.current = true;

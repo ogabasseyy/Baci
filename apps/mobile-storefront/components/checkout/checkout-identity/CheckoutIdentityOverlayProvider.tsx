@@ -39,7 +39,7 @@ export function CheckoutIdentityOverlayProvider({
         >
           {children}
         </View>
-        <CartWriteNotice />
+        <CartWriteNotice hidden={isOpen} />
         <GlobalErrorBoundary context="CheckoutIdentityOverlay">
           <CheckoutIdentityModal
             isOpen={isOpen}

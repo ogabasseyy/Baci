@@ -62,7 +62,9 @@ describe('WalletFundModal card option with the PiggyVest wallet ready', () => {
     // account (which funds the savings wallet) is not offered here.
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
     expect(
-      screen.getByText('Adds store credit for this purchase')
+      screen.getByText(
+        'Adds store credit for this purchase. Card top-ups have a minimum; anything extra stays as store credit.'
+      )
     ).toBeOnTheScreen();
     expect(
       screen.getByRole('button', { name: 'Continue to payment' })

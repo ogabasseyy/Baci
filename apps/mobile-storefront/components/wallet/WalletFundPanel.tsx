@@ -29,7 +29,8 @@ const CARD_TOGGLE_LABEL = 'Fund with card instead';
 const STORE_CREDIT_TITLE = 'Add store credit';
 const STORE_CREDIT_SUBTITLE =
   "Your savings wallet can't pay for this yet. Pay by card to add store credit, then finish your purchase.";
-const STORE_CREDIT_CARD_SUBTITLE = 'Adds store credit for this purchase';
+const STORE_CREDIT_CARD_SUBTITLE =
+  'Adds store credit for this purchase. Card top-ups have a minimum; anything extra stays as store credit.';
 
 interface WalletFundPanelProps {
   canCreateFundingAccount: boolean;

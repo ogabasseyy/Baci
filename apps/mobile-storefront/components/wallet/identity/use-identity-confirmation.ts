@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { maskEmail } from './mask-email';
 
 export const IDENTITY_CODE_LENGTH = 6;
+/** The server also limits sends; this just stops repeat taps. */
+const RESEND_COOLDOWN_MS = 30_000;
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 const NO_EMAIL =
   'We could not find an email for this account. Please sign out and sign in again.';
@@ -40,6 +42,8 @@ export function useIdentityConfirmation({
   const [notice, setNotice] = useState<string | null>(null);
   const live = useRef(true);
   const busyRef = useRef(false);
+  const [canResend, setCanResend] = useState(true);
+  const resendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The account a request was started for: an answer for an earlier account
   // (or after the hook went away) is dropped.
   const identity = `${userId ?? ''}|${email ?? ''}`;
@@ -49,6 +53,7 @@ export function useIdentityConfirmation({
     live.current = true;
     return () => {
       live.current = false;
+      if (resendTimer.current) clearTimeout(resendTimer.current);
     };
   }, []);
 
@@ -86,6 +91,11 @@ export function useIdentityConfirmation({
       setNotice(sent ? CODE_SENT : null);
       setSent(true);
       setCodeValue('');
+      setCanResend(false);
+      if (resendTimer.current) clearTimeout(resendTimer.current);
+      resendTimer.current = setTimeout(() => {
+        if (live.current) setCanResend(true);
+      }, RESEND_COOLDOWN_MS);
     });
 
   const verify = () =>
@@ -105,6 +115,7 @@ export function useIdentityConfirmation({
   return {
     maskedEmail: email ? maskEmail(email) : null,
     sent,
+    canResend,
     code,
     busy,
     error,

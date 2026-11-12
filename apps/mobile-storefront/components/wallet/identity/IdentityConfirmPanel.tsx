@@ -116,7 +116,10 @@ export function IdentityConfirmPanel({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send a new code"
-            disabled={confirm.busy}
+            accessibilityState={{
+              disabled: confirm.busy || !confirm.canResend,
+            }}
+            disabled={confirm.busy || !confirm.canResend}
             onPress={confirm.send}
             style={styles.secondary}
           >

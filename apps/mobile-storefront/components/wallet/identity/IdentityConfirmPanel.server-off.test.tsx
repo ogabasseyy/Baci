@@ -44,14 +44,22 @@ describe('IdentityConfirmPanel', () => {
     expect(onConfirmed).toHaveBeenCalledTimes(1);
   });
 
-  it('can send a new code', async () => {
-    jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
-    render(
-      <IdentityConfirmPanel colors={Colors.light} onConfirmed={jest.fn()} />
-    );
-    await act(async () => press('Send code'));
-    await act(async () => press('Send a new code'));
-    expect(sendIdentityCode).toHaveBeenCalledTimes(2);
-    expect(screen.getByText('We sent you a new code.')).toBeTruthy();
+  it('can send a new code after a short wait, not straight away', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
+      render(
+        <IdentityConfirmPanel colors={Colors.light} onConfirmed={jest.fn()} />
+      );
+      await act(async () => press('Send code'));
+      await act(async () => press('Send a new code'));
+      expect(sendIdentityCode).toHaveBeenCalledTimes(1);
+      act(() => jest.advanceTimersByTime(30_000));
+      await act(async () => press('Send a new code'));
+      expect(sendIdentityCode).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('We sent you a new code.')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

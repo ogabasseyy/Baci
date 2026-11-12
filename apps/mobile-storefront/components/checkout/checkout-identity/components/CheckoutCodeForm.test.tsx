@@ -64,7 +64,7 @@ it('prevents a same-address resend after switching back to email entry', async (
     renderForm();
     fireEvent.changeText(
       screen.getByLabelText('Email address'),
-      'shopper@example.com'
+      'cooldown-form@example.com'
     );
     fireEvent.press(
       screen.getByRole('button', { name: 'Continue with email' })
@@ -76,7 +76,7 @@ it('prevents a same-address resend after switching back to email entry', async (
     );
     fireEvent.changeText(
       screen.getByLabelText('Email address'),
-      ' Shopper@Example.com '
+      ' Cooldown-Form@Example.com '
     );
     const submit = screen.getByRole('button', {
       name: 'Continue with email',
@@ -104,7 +104,7 @@ it('does not update busy state after an in-flight request is unmounted', async (
   const { unmount, onBusyChange } = renderForm();
   fireEvent.changeText(
     screen.getByLabelText('Email address'),
-    'shopper@example.com'
+    'unmount-form@example.com'
   );
   fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
   expect(onBusyChange).toHaveBeenCalledWith(true);

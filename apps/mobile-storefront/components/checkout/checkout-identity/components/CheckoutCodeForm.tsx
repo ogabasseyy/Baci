@@ -7,6 +7,26 @@ import type { CheckoutIdentityTheme } from '../colors';
 import { ErrorAlert } from './ErrorAlert';
 
 const emailSchema = z.email();
+const resendCooldownsByEmail = new Map<string, number>();
+
+function getResendCooldown(email: string): number | null {
+  const until = resendCooldownsByEmail.get(email);
+  if (!until) return null;
+  if (until > Date.now()) return until;
+  resendCooldownsByEmail.delete(email);
+  return null;
+}
+
+function startResendCooldown(email: string): number {
+  const until = Date.now() + 60_000;
+  resendCooldownsByEmail.set(email, until);
+  setTimeout(() => {
+    if (resendCooldownsByEmail.get(email) === until) {
+      resendCooldownsByEmail.delete(email);
+    }
+  }, 60_000);
+  return until;
+}
 
 export function CheckoutCodeForm({
   renderSocial,
@@ -44,7 +64,8 @@ export function CheckoutCodeForm({
   const normalizedEmail = email.trim().toLowerCase();
   const isEmailValid = emailSchema.safeParse(normalizedEmail).success;
   const activeEmail = sentTo || normalizedEmail;
-  const resendAfter = resendAfterByEmail[activeEmail] ?? null;
+  const resendAfter =
+    resendAfterByEmail[activeEmail] ?? getResendCooldown(activeEmail);
   const emailCoolingDown =
     !sentTo && isEmailValid && resendAfter !== null && resendAfter > Date.now();
 
@@ -71,7 +92,7 @@ export function CheckoutCodeForm({
       (resend && resendAfter !== null) ||
       (!resend &&
         !sentTo &&
-        (resendAfterByEmail[normalizedEmail] ?? 0) > Date.now())
+        (getResendCooldown(normalizedEmail) ?? 0) > Date.now())
     )
       return;
     if (sentTo ? !resend && code.length !== 6 : !isEmailValid) return;
@@ -93,9 +114,10 @@ export function CheckoutCodeForm({
       } else {
         setSentTo(sentTo || normalizedEmail);
         setCode('');
+        const resendAfter = startResendCooldown(sentTo || normalizedEmail);
         setResendAfterByEmail((current) => ({
           ...current,
-          [sentTo || normalizedEmail]: Date.now() + 60_000,
+          [sentTo || normalizedEmail]: resendAfter,
         }));
       }
     } catch {
@@ -181,6 +203,9 @@ export function CheckoutCodeForm({
           <Pressable
             accessibilityRole="button"
             disabled={busy || resendAfter !== null}
+            accessibilityState={{
+              disabled: busy || resendAfter !== null,
+            }}
             onPress={() => void submit(true)}
           >
             <Text
@@ -199,6 +224,7 @@ export function CheckoutCodeForm({
           <Pressable
             accessibilityRole="button"
             disabled={busy || socialBusy}
+            accessibilityState={{ disabled: busy || socialBusy }}
             onPress={() => {
               setSentTo('');
               setCode('');

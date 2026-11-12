@@ -30,6 +30,9 @@ beforeEach(() => {
   mockVerifyCode.mockResolvedValue({ success: true });
 });
 
+let verificationEmail = '';
+let emailCounter = 0;
+
 it('offers email-code sign-in immediately and opens checkout after verification', async () => {
   const close = jest.fn();
   const onVerified = jest.fn();
@@ -68,7 +71,7 @@ it('keeps guest checkout available when the code cannot be sent', async () => {
   render(<CheckoutIdentityModal isOpen onClose={close} />);
   fireEvent.changeText(
     screen.getByLabelText('Email address'),
-    'shopper@example.com'
+    'guest-failure@example.com'
   );
   fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
   expect(await screen.findByText('Try again later.')).toBeTruthy();
@@ -108,16 +111,17 @@ it('highlights the email field and enables email sign-in only for a complete add
   expect(button).toBeDisabled();
   fireEvent(email, 'submitEditing');
   expect(mockSendCode).not.toHaveBeenCalled();
-  fireEvent.changeText(email, 'shopper@example.com');
+  fireEvent.changeText(email, 'complete-address@example.com');
   expect(button).toBeEnabled();
   fireEvent.changeText(email, 'shopper@');
   expect(button).toBeDisabled();
 });
 
 async function enterVerificationCode() {
+  verificationEmail = `shopper-${++emailCounter}@example.com`;
   fireEvent.changeText(
     screen.getByLabelText('Email address'),
-    'shopper@example.com'
+    verificationEmail
   );
   fireEvent.press(screen.getByRole('button', { name: 'Continue with email' }));
   const code = await screen.findByLabelText('Verification code');
@@ -142,10 +146,7 @@ it('offers a retry after an incorrect verification code', async () => {
     screen.getByRole('button', { name: 'Verify & continue checkout' })
   );
   await screen.findByRole('button', { name: 'Verify & continue checkout' });
-  expect(mockVerifyCode).toHaveBeenLastCalledWith(
-    'shopper@example.com',
-    '654321'
-  );
+  expect(mockVerifyCode).toHaveBeenLastCalledWith(verificationEmail, '654321');
   expect(close).toHaveBeenCalledTimes(1);
   expect(router.push).toHaveBeenCalledWith('/checkout');
 });
@@ -223,7 +224,7 @@ it('keeps the same-email cooldown when the shopper switches email modes', async 
     render(<CheckoutIdentityModal isOpen onClose={jest.fn()} />);
     fireEvent.changeText(
       screen.getByLabelText('Email address'),
-      'shopper@example.com'
+      'cooldown-modal@example.com'
     );
     fireEvent.press(
       screen.getByRole('button', { name: 'Continue with email' })
@@ -234,7 +235,7 @@ it('keeps the same-email cooldown when the shopper switches email modes', async 
       screen.getByRole('button', { name: 'Use a different email' })
     );
     const email = screen.getByLabelText('Email address');
-    fireEvent.changeText(email, ' Shopper@Example.com ');
+    fireEvent.changeText(email, ' Cooldown-Modal@Example.com ');
     const continueButton = screen.getByRole('button', {
       name: 'Continue with email',
     });
@@ -247,6 +248,34 @@ it('keeps the same-email cooldown when the shopper switches email modes', async 
     expect(continueButton).toBeEnabled();
     await act(async () => fireEvent.press(continueButton));
     expect(mockSendCode).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it('preserves the cooldown when the shopper closes and reopens the sheet', async () => {
+  jest.useFakeTimers();
+  try {
+    const emailAddress = 'reopen-modal@example.com';
+    const { rerender } = render(
+      <CheckoutIdentityModal isOpen onClose={jest.fn()} />
+    );
+    fireEvent.changeText(screen.getByLabelText('Email address'), emailAddress);
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Continue with email' })
+    );
+    await screen.findByLabelText('Verification code');
+
+    rerender(<CheckoutIdentityModal isOpen={false} onClose={jest.fn()} />);
+    rerender(<CheckoutIdentityModal isOpen onClose={jest.fn()} />);
+    fireEvent.changeText(screen.getByLabelText('Email address'), emailAddress);
+
+    const continueButton = screen.getByRole('button', {
+      name: 'Continue with email',
+    });
+    expect(continueButton).toBeDisabled();
+    fireEvent.press(continueButton);
+    expect(mockSendCode).toHaveBeenCalledTimes(1);
   } finally {
     jest.useRealTimers();
   }

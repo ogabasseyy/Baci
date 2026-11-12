@@ -144,17 +144,7 @@ export default function CartLoadedView({
 
   return (
     <View style={styles.container}>
-      <View
-        testID="cart-content"
-        style={[
-          styles.container,
-          { pointerEvents: isIdentityModalOpen ? 'none' : 'auto' },
-        ]}
-        importantForAccessibility={
-          isIdentityModalOpen ? 'no-hide-descendants' : 'auto'
-        }
-        accessibilityElementsHidden={isIdentityModalOpen}
-      >
+      <View testID="cart-content" style={styles.container}>
         <PatternedBackground
           backgroundColor={colors.background}
           isDark={isDark}

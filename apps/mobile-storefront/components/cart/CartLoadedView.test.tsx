@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
-import { Modal, StyleSheet } from 'react-native';
+import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
@@ -191,27 +191,6 @@ describe('CartLoadedView', () => {
 
     expect(onBulkNegotiate).toHaveBeenCalledTimes(1);
     expect(onNegotiateTotal).not.toHaveBeenCalled();
-  });
-
-  it('hides the cart controls from accessibility while the checkout sheet is open', () => {
-    const { rerender, props, UNSAFE_root } = renderView();
-
-    expect(
-      StyleSheet.flatten(
-        UNSAFE_root.findByProps({ testID: 'cart-content' }).props.style
-      ).pointerEvents
-    ).toBe('auto');
-    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
-    rerender(<CartLoadedView {...props} isIdentityModalOpen />);
-    expect(
-      StyleSheet.flatten(
-        UNSAFE_root.findByProps({ testID: 'cart-content' }).props.style
-      ).pointerEvents
-    ).toBe('none');
-    expect(screen.queryByRole('button', { name: 'Back to home' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Clear cart' })).toBeNull();
-    rerender(<CartLoadedView {...props} isIdentityModalOpen={false} />);
-    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
   });
 
   it('renders the footer ad only when no modal covers the cart', () => {

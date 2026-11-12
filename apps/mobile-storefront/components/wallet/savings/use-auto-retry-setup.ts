@@ -12,11 +12,14 @@ export const AUTO_SETUP_RETRIES = 2;
  */
 export function useAutoRetrySetup({
   active,
+  blocked = false,
   scopeKey,
   submitting,
   retry,
 }: {
   active: boolean;
+  /** Never retry by itself (e.g. a BVN is required): hand over at once. */
+  blocked?: boolean;
   scopeKey: string;
   submitting: boolean;
   /** Resolves true when a retry was actually sent. */
@@ -24,7 +27,7 @@ export function useAutoRetrySetup({
 }) {
   const [tries, setTries] = useState({ scopeKey, count: 0 });
   const count = tries.scopeKey === scopeKey ? tries.count : 0;
-  const exhausted = count >= AUTO_SETUP_RETRIES;
+  const exhausted = blocked || count >= AUTO_SETUP_RETRIES;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry is a fresh closure each render; the scope and state identify the attempt.
   useEffect(() => {

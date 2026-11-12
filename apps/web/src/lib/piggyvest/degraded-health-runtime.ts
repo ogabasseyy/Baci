@@ -58,6 +58,8 @@ export type DegradedHealthResult =
       status: 'checked';
       stalledGoalWallets: number | null;
       indeterminateTransfers: number | null;
+      /** The transfers read failed: reported, never mistaken for healthy. */
+      readFailed: boolean;
       alerts: number;
       paged: number;
     };
@@ -65,10 +67,11 @@ export type DegradedHealthResult =
 async function readIndeterminateTransfers(
   deps: DegradedHealthDeps,
   env: NodeJS.ProcessEnv
-): Promise<number | null> {
+): Promise<number | null | 'failed'> {
   try {
     const runtime = deps.readRuntime(env);
-    if (!runtime) return null;
+    // Switched on but not configured: as unknown as a failed read.
+    if (!runtime) return 'failed';
     const execute = deps.createExecutor(runtime.reconciliationConfiguration);
     const { environment, integrationId } = runtime.configuration;
     const { rows } = await execute(SNAPSHOT_STATEMENT, [
@@ -77,9 +80,9 @@ async function readIndeterminateTransfers(
       JSON.stringify({ staleAfterSeconds: DEGRADED_STALE_AFTER_SECONDS }),
     ]);
     const parsed = schemas.snapshotRows.safeParse(rows);
-    return parsed.success ? parsed.data[0].result.stuckTotal : null;
+    return parsed.success ? parsed.data[0].result.stuckTotal : 'failed';
   } catch {
-    return null;
+    return 'failed';
   }
 }
 
@@ -101,10 +104,12 @@ export async function runPiggyvestDegradedHealth(
   if (!isPiggyvestFeatureFlagSet('degraded_alerts', env))
     return { status: 'disabled' };
   const deps = { ...defaultDeps(), ...options.deps };
-  const [stalledGoalWallets, indeterminateTransfers] = await Promise.all([
+  const [stalledGoalWallets, transfersRead] = await Promise.all([
     deps.readStalledGoalWallets().catch(() => null),
     readIndeterminateTransfers(deps, env),
   ]);
+  const readFailed = transfersRead === 'failed';
+  const indeterminateTransfers = readFailed ? null : transfersRead;
   const alerts: DegradedAlert[] = decideDegradedAlerts({
     stalledGoalWallets,
     indeterminateTransfers,
@@ -120,10 +125,20 @@ export async function runPiggyvestDegradedHealth(
       operationId: `degraded-${alert.reason}-${hour}`,
     });
   }
+  // A check that cannot read must not look healthy: page that too (same
+  // hourly throttle), so an outage of the read itself is seen.
+  if (readFailed && claimPage('health_read_failed', hour)) {
+    paged += 1;
+    deps.emitAlert('PIGGYVEST_DEGRADED', {
+      reason: 'health_read_failed',
+      operationId: `degraded-health_read_failed-${hour}`,
+    });
+  }
   return {
     status: 'checked',
     stalledGoalWallets,
     indeterminateTransfers,
+    readFailed,
     alerts: alerts.length,
     paged,
   };

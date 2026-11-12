@@ -26,7 +26,12 @@ describe('SavingsGoalSummary', () => {
   afterEach(() => jest.useRealTimers());
 
   it('hides the progress card until something is saved, keeping the plan pace', () => {
-    render(<SavingsGoalSummary colors={Colors.dark} goal={goal} />);
+    render(
+      <SavingsGoalSummary
+        colors={Colors.dark}
+        goal={{ ...goal, contribution_amount: 62500 }}
+      />
+    );
     expect(screen.queryByText('Your progress')).toBeNull();
     expect(screen.queryByText('₦0 saved')).toBeNull();
     expect(screen.queryByText('Every naira counts')).toBeNull();
@@ -34,11 +39,11 @@ describe('SavingsGoalSummary', () => {
     // Saved-of-target and the plan's own pace side by side, read as one.
     expect(
       screen.getByLabelText(
-        '₦0 of ₦250,000 saved. ₦500 a week until 3 Dec 2026'
+        '₦0 of ₦250,000 saved. ₦62,500 a week until 3 Dec 2026'
       )
     ).toBeOnTheScreen();
     expect(
-      screen.getByText('₦500 a week · until 3 Dec 2026')
+      screen.getByText('₦62,500 a week · until 3 Dec 2026')
     ).toBeOnTheScreen();
     expect(screen.getByText('₦0 of ₦250,000')).toBeOnTheScreen();
     expect(screen.queryByText('SAVING TOWARDS')).toBeNull();

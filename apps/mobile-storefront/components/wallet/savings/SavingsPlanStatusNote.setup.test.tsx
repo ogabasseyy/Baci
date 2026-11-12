@@ -287,3 +287,20 @@ describe('bugfix: auto-retry ran behind the BVN field', () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('auto-retry and a required BVN wherever the note is shown', () => {
+  it('never retries by itself when a parent supplies a BVN-required status', () => {
+    status('setup_retryable', true);
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={mockFunding()}
+      />
+    );
+    expect(retry).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeOnTheScreen();
+  });
+});

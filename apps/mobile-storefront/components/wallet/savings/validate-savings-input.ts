@@ -33,6 +33,17 @@ export function validateSavingsInput(
     };
   }
 
+  // Defensive: a non-number amount must never pass as valid.
+  if (
+    !Number.isFinite(input.contributionValue) ||
+    input.contributionValue <= 0 ||
+    !Number.isFinite(input.targetValue) ||
+    input.targetValue <= 0 ||
+    !Number.isFinite(input.effectiveInitialContribution)
+  ) {
+    return { error: 'Enter a valid savings amount.', ok: false };
+  }
+
   const contributionRefusal = contributionAboveTargetMessage(
     input.contributionValue,
     input.targetValue

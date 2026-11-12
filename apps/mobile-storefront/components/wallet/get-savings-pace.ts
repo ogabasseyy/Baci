@@ -3,6 +3,12 @@ import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
+const PERIOD_DAYS: Record<Frequency, number> = {
+  daily: 1,
+  weekly: 7,
+  monthly: 30,
+};
+
 const PER: Record<Frequency, string> = {
   daily: 'a day',
   weekly: 'a week',
@@ -48,7 +54,15 @@ export function getSavingsPace({
       Math.min(contributionAmount, Math.ceil(remaining))
     );
     const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });
-    if (!weekly)
+    // Only show the end date when this pace can still reach it: a plan that
+    // is behind shows its pace alone rather than a date it cannot meet.
+    const payments = Math.ceil(remaining / contributionAmount);
+    const reachable =
+      weekly !== null &&
+      payments <=
+        Math.floor((weekly.weeks * 7) / PERIOD_DAYS[frequency as Frequency]) +
+          1;
+    if (!weekly || !reachable)
       return { short: `${amount} ${per}`, label: `${amount} ${per}` };
     return {
       short: `${amount} ${per} · until ${weekly.endsOn}`,

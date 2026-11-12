@@ -78,4 +78,18 @@ describe('getSavingsPace', () => {
       })
     ).toBeNull();
   });
+
+  describe('bugfix: the wallet kept an end date the pace could not meet', () => {
+    it('shows the pace alone when the plan is behind schedule', () => {
+      expect(
+        getSavingsPace({
+          contributionAmount: 2000,
+          frequency: 'daily',
+          maturityDate: '2026-11-20',
+          now,
+          remaining: 250000,
+        })
+      ).toEqual({ short: '₦2,000 a day', label: '₦2,000 a day' });
+    });
+  });
 });

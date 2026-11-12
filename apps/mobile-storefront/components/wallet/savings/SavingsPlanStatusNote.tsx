@@ -96,11 +96,10 @@ function StatusNoteView({
   const phase = funding.planFundingPhase;
   const slowdown = usePiggyvestSlowdown();
   const autoRetry = useAutoRetrySetup({
-    // Only where the note is on screen: never behind the BVN field.
-    active:
-      primary &&
-      phase === 'setup_retryable' &&
-      !(bvnGate && funding.planFundingRequiresBvn),
+    active: primary && phase === 'setup_retryable',
+    // Never retry by itself while a BVN is required, wherever the note is
+    // shown: the customer gets the manual retry and support instead.
+    blocked: funding.planFundingRequiresBvn === true,
     scopeKey: `${merchantId}:${goalId}`,
     submitting: setup.submitting,
     retry: setup.retry,

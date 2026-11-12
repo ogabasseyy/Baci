@@ -76,4 +76,15 @@ describe('server keeps PiggyVest off', () => {
       ).toBe(true);
     });
   });
+
+  it('refuses an amount that is not a real number', () => {
+    expect(
+      validateSavingsInput(
+        createInput({ contributionValue: Number.NaN }) as never
+      )
+    ).toEqual({ error: 'Enter a valid savings amount.', ok: false });
+    expect(
+      validateSavingsInput(createInput({ targetValue: Number.NaN }) as never)
+    ).toEqual({ error: 'Enter a valid savings amount.', ok: false });
+  });
 });

@@ -86,10 +86,7 @@
     },
     "currentMainOrbitCheckout": {
       "status": "passed",
-      "profiles": [
-        "desktop-1440",
-        "mobile-390"
-      ],
+      "profiles": ["desktop-1440", "mobile-390"],
       "orders": 0,
       "paymentSubmitted": false,
       "log": "/tmp/experience-candidate-orbit-final-checkout.log",
@@ -114,7 +111,7 @@
       "evidence": "cwv-final/orbit-rebuild-benchmark.json",
       "maxFrameLcpFromHostMs": 1833.300048828125,
       "maxHostLcpMs": 1448,
-      "maxPostFirstPaintCls": 4.62962962962963e-05,
+      "maxPostFirstPaintCls": 4.62962962962963e-5,
       "log": "/tmp/experience-candidate-cwv-final.log"
     },
     "fullWebTests": {

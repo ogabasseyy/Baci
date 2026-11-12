@@ -121,10 +121,10 @@ export function validateStartSavingsForm({
   ) {
     return 'Select the exact device variant you want to save for.';
   }
-  if (targetValue <= 0) {
+  if (!Number.isFinite(targetValue) || targetValue <= 0) {
     return 'Enter a valid target amount.';
   }
-  if (contributionValue <= 0) {
+  if (!Number.isFinite(contributionValue) || contributionValue <= 0) {
     return 'Enter a valid contribution amount.';
   }
   const contributionRefusal = contributionAboveTargetMessage(

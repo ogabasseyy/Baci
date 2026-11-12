@@ -88,16 +88,27 @@ describe('runPiggyvestDegradedHealth', () => {
     expect(d.emitAlert).toHaveBeenCalledTimes(2);
   });
 
-  it('does not page when the database read fails', async () => {
-    const d = deps({
-      createExecutor: vi.fn(() => async () => {
-        throw new Error('down');
-      }) as never,
+  describe('bugfix: a failed health read looked healthy', () => {
+    it('reports the failed read and pages it once per hour', async () => {
+      const d = deps({
+        createExecutor: vi.fn(() => async () => {
+          throw new Error('down');
+        }) as never,
+      });
+      const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+      const first = await runPiggyvestDegradedHealth({ env, deps: d.value });
+      const second = await runPiggyvestDegradedHealth({ env, deps: d.value });
+      expect(first).toMatchObject({
+        indeterminateTransfers: null,
+        readFailed: true,
+        paged: 1,
+      });
+      expect(second).toMatchObject({ readFailed: true, paged: 0 });
+      expect(d.emitAlert).toHaveBeenCalledTimes(1);
+      expect(d.emitAlert).toHaveBeenCalledWith(
+        'PIGGYVEST_DEGRADED',
+        expect.objectContaining({ reason: 'health_read_failed' })
+      );
     });
-    const result = await runPiggyvestDegradedHealth({
-      env: testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' }),
-      deps: d.value,
-    });
-    expect(result).toMatchObject({ indeterminateTransfers: null, paged: 0 });
   });
 });

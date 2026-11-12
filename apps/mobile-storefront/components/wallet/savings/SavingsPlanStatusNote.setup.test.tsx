@@ -2,6 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SavingsPlanStatusNote } from './SavingsPlanStatusNote';
 
+jest.mock('./use-goal-wallet-setup-poll', () => ({
+  useGoalWalletSetupPoll: () => ({ slow: false, checkAgain: jest.fn() }),
+}));
 const mockFunding = jest.fn();
 const mockSetupHook = jest.fn();
 jest.mock('./use-savings-plan-funding', () => ({
@@ -16,7 +19,7 @@ jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
 
 const refresh = jest.fn();
 const submit = jest.fn();
-const retry = jest.fn();
+const retry = jest.fn().mockResolvedValue(undefined);
 const setChoice = jest.fn();
 const setupState = (change: Record<string, unknown> = {}) => ({
   choice: null,
@@ -34,18 +37,30 @@ const status = (planFundingPhase: string, requiresBvn = false) =>
     planFundingRequiresBvn: requiresBvn,
     fetchExistingPlanFunding: refresh,
   });
-const renderNote = () =>
-  render(
-    <SavingsPlanStatusNote
-      colors={Colors.light}
-      goalId="goal-1"
-      identityKey="user-1"
-      merchantId="merchant-1"
-    />
-  );
+const noteElement = () => (
+  <SavingsPlanStatusNote
+    colors={Colors.light}
+    goalId="goal-1"
+    identityKey="user-1"
+    merchantId="merchant-1"
+  />
+);
+const renderNote = () => render(noteElement());
+/** Renders a retryable goal and lets both automatic tries finish. */
+const renderExhausted = (change: Record<string, unknown> = {}) => {
+  const view = renderNote();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    mockSetupHook.mockReturnValue(setupState({ submitting: true }));
+    view.rerender(noteElement());
+    mockSetupHook.mockReturnValue(setupState(change));
+    view.rerender(noteElement());
+  }
+  return view;
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
+  retry.mockResolvedValue(undefined);
   mockSetupHook.mockReturnValue(setupState());
 });
 
@@ -53,7 +68,7 @@ describe('existing-goal setup prompt', () => {
   it('asks the interest question, with no answer preselected, once status says not started', () => {
     status('not_started');
     renderNote();
-    expect(screen.getByText('Earn interest on this goal?')).toBeTruthy();
+    expect(screen.getByText('Earn interest on this plan?')).toBeTruthy();
     expect(
       screen.getByRole('radio', { name: 'Yes, earn interest' })
     ).toHaveProp(
@@ -68,20 +83,20 @@ describe('existing-goal setup prompt', () => {
     );
   });
 
-  it('keeps Set up this goal disabled until the customer has chosen', () => {
+  it('keeps Finish setting up disabled until the customer has chosen', () => {
     status('not_started');
     renderNote();
-    const button = screen.getByRole('button', { name: 'Set up this goal' });
+    const button = screen.getByRole('button', { name: 'Finish setting up' });
     expect(button).toBeDisabled();
     fireEvent.press(button);
     expect(submit).not.toHaveBeenCalled();
   });
 
-  it('enables Set up this goal after a choice and submits it', () => {
+  it('enables Finish setting up after a choice and submits it', () => {
     status('not_started');
     mockSetupHook.mockReturnValue(setupState({ choice: false }));
     renderNote();
-    fireEvent.press(screen.getByRole('button', { name: 'Set up this goal' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Finish setting up' }));
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
@@ -111,7 +126,7 @@ describe('existing-goal setup prompt', () => {
     );
     renderNote();
     expect(
-      screen.getByRole('button', { name: 'Set up this goal' })
+      screen.getByRole('button', { name: 'Finish setting up' })
     ).toBeDisabled();
   });
 
@@ -125,8 +140,8 @@ describe('existing-goal setup prompt', () => {
   ])('offers no setup while status is %s', (phase) => {
     status(phase);
     renderNote();
-    expect(screen.queryByText('Set up this goal')).toBeNull();
-    expect(screen.queryByText('Earn interest on this goal?')).toBeNull();
+    expect(screen.queryByText('Finish setting up')).toBeNull();
+    expect(screen.queryByText('Earn interest on this plan?')).toBeNull();
   });
 
   it('offers no setup without an available primary verdict', () => {
@@ -148,42 +163,56 @@ describe('existing-goal setup prompt', () => {
 });
 
 describe('retry of an expired claim', () => {
-  it('offers Try setup again, without a new interest question, once the claim is retryable', () => {
+  it('retries by itself without a new interest question, then shows the getting-ready card while a try runs', () => {
     status('setup_retryable');
+    mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     renderNote();
-    expect(
-      screen.getByRole('button', { name: 'Try setup again' })
-    ).toBeTruthy();
-    expect(screen.queryByText('Earn interest on this goal?')).toBeNull();
+    expect(screen.getByText('Getting your plan ready')).toBeTruthy();
     expect(screen.queryByRole('radio')).toBeNull();
-    expect(screen.queryByText('Set up this goal')).toBeNull();
+    expect(screen.queryByText('Earn interest on this plan?')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
-  it('retries through the setup hook and never sends a choice', () => {
+  it('auto-retries twice through the setup hook, never sends a choice, then offers Try again and support', () => {
     status('setup_retryable');
-    renderNote();
-    fireEvent.press(screen.getByRole('button', { name: 'Try setup again' }));
+    const view = renderNote();
     expect(retry).toHaveBeenCalledTimes(1);
+    // A running try ends (submitting flips back), so the second one starts.
+    mockSetupHook.mockReturnValue(setupState({ submitting: true }));
+    view.rerender(noteElement());
+    mockSetupHook.mockReturnValue(setupState());
+    view.rerender(noteElement());
+    expect(retry).toHaveBeenCalledTimes(2);
+    mockSetupHook.mockReturnValue(setupState({ submitting: true }));
+    view.rerender(noteElement());
+    mockSetupHook.mockReturnValue(setupState());
+    view.rerender(noteElement());
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(submit).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('We couldn’t finish setting up your plan')
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Message support' })).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(retry).toHaveBeenCalledTimes(3);
     expect(submit).not.toHaveBeenCalled();
   });
 
   it('keeps the action disabled, not hidden, while status is re-read after a retry', () => {
+    status('setup_retryable');
+    const view = renderExhausted();
     status('loading');
     mockSetupHook.mockReturnValue(
       setupState({ attempted: true, retried: true })
     );
-    renderNote();
-    expect(
-      screen.getByRole('button', { name: 'Try setup again' })
-    ).toBeDisabled();
+    view.rerender(noteElement());
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
   });
 
-  it('shows a safe error after a failed retry', () => {
+  it('shows a safe error after the automatic tries are used up', () => {
     status('setup_retryable');
-    mockSetupHook.mockReturnValue(
-      setupState({ error: "We couldn't confirm this goal's setup." })
-    );
-    renderNote();
+    renderExhausted({ error: "We couldn't confirm this goal's setup." });
     expect(screen.getByText(/couldn't confirm/)).toBeTruthy();
   });
 
@@ -192,11 +221,12 @@ describe('retry of an expired claim', () => {
     expect(renderNote().toJSON()).toBeNull();
   });
 
-  it('still says a live claim is being set up, with no action', () => {
+  it('says a live claim is getting ready, with no action', () => {
     status('pending');
     renderNote();
-    expect(screen.getByText(/still being set up/)).toBeTruthy();
-    expect(screen.queryByText('Try setup again')).toBeNull();
+    expect(screen.getByText('Getting your plan ready')).toBeTruthy();
+    expect(screen.queryByText('Try again')).toBeNull();
+    expect(retry).not.toHaveBeenCalled();
   });
 });
 
@@ -223,14 +253,14 @@ describe('shared status', () => {
     expect(mockFunding).not.toHaveBeenCalled();
     expect(
       screen.getByText(
-        'This goal is still being set up. Please check back shortly.'
+        'This usually takes about a minute. You can leave this screen. We’ll keep going.'
       )
     ).toBeTruthy();
   });
 
   it('asks the interest question for a shared not-started status and re-reads it after setup', () => {
     renderShared('not_started');
-    expect(screen.getByText('Earn interest on this goal?')).toBeTruthy();
+    expect(screen.getByText('Earn interest on this plan?')).toBeTruthy();
     expect(mockSetupHook).toHaveBeenCalledWith(
       expect.objectContaining({ goalId: 'goal-1', merchantId: 'merchant-1' })
     );
@@ -241,5 +271,19 @@ describe('shared status', () => {
   it('shows nothing for a shared ready status', () => {
     renderShared('ready');
     expect(screen.toJSON()).toBeNull();
+  });
+});
+
+describe('bugfix: auto-retry ran behind the BVN field', () => {
+  it('does not retry a stalled setup while the BVN field hides the note', () => {
+    status('setup_retryable', true);
+    renderNote();
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it('retries a stalled setup by itself once the note is on screen', () => {
+    status('setup_retryable');
+    renderNote();
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });

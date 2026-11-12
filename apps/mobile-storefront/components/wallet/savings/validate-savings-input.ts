@@ -1,6 +1,7 @@
 import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
 import { formatDateInput } from './start-savings.helpers';
 import type { SavingsProductChoice } from './start-savings.types';
+import { contributionAboveTargetMessage } from './start-savings-controller.utils';
 
 type SavingsInputValidation =
   | {
@@ -27,6 +28,14 @@ export function validateSavingsInput(
       error: 'Select the exact device variant you want to save for.',
       ok: false,
     };
+  }
+
+  const contributionRefusal = contributionAboveTargetMessage(
+    input.contributionValue,
+    input.targetValue
+  );
+  if (contributionRefusal) {
+    return { error: contributionRefusal, ok: false };
   }
 
   if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {

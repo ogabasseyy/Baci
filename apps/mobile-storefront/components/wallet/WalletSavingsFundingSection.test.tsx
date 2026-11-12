@@ -25,7 +25,7 @@ jest.mock('./savings/use-savings-plan-funding', () => ({
   useSavingsPlanFunding: (...args: unknown[]) => mockPlanFunding(...args),
 }));
 const mockPoll = jest.fn((..._args: unknown[]) => ({
-  exhausted: false,
+  slow: false,
   checkAgain: jest.fn(),
 }));
 jest.mock('./savings/use-goal-wallet-setup-poll', () => ({
@@ -35,14 +35,16 @@ jest.mock('./savings/SavingsPlanStatusNote', () => ({
   SavingsPlanStatusNote: ({
     funding,
     onCheckAgain,
+    slow,
   }: {
     funding?: { planFundingPhase: string };
     onCheckAgain?: () => void;
+    slow?: boolean;
   }) => {
     const { Text } = require('react-native');
     return (
       <Text onPress={onCheckAgain}>
-        {`status-note:${funding?.planFundingPhase ?? 'own'}${onCheckAgain ? ':can-check-again' : ''}`}
+        {`status-note:${funding?.planFundingPhase ?? 'own'}${slow ? ':slow' : ''}`}
       </Text>
     );
   },
@@ -180,16 +182,16 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
     expect(screen.queryByText('wallet-contribution')).toBeNull();
   });
 
-  it('gives the note a Check again only once the poll is exhausted', () => {
+  it("passes the poll's slow flag and check-again to the note", () => {
     mockGate.mockReturnValue('ready');
     const checkAgain = jest.fn();
     mockPlanFunding.mockReturnValue({
       planFundingPhase: 'pending',
       fetchExistingPlanFunding: jest.fn(),
     });
-    mockPoll.mockReturnValueOnce({ exhausted: true, checkAgain });
+    mockPoll.mockReturnValueOnce({ slow: true, checkAgain });
     renderManual();
-    fireEvent.press(screen.getByText('status-note:pending:can-check-again'));
+    fireEvent.press(screen.getByText('status-note:pending:slow'));
     expect(checkAgain).toHaveBeenCalledTimes(1);
   });
 

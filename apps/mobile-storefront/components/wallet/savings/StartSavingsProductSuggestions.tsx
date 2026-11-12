@@ -98,7 +98,7 @@ export function StartSavingsProductSuggestions({
   return (
     <View style={cardStyles.results}>
       <Text style={[cardStyles.heading, { color: colors.textSecondary }]}>
-        FIND YOUR NEXT UPGRADE
+        Pick from these
       </Text>
       {rows.map((row) => (
         <Pressable

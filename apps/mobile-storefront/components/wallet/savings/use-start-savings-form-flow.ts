@@ -20,8 +20,14 @@ export {
  * confirmation. Pure orchestration over controller state — no state of
  * its own.
  */
+export const INTEREST_CHOICE_REQUIRED_MESSAGE =
+  'Choose whether your plan earns interest.';
+export const AUTO_DEBIT_UNAVAILABLE_MESSAGE =
+  'Automatic saving isn’t available for your wallet yet. Save manually for now.';
+
 export function useStartSavingsFormFlow({
   acceptsNonWithdrawableTerms,
+  interestChoice,
   contributionValue,
   initialContributionEnabled,
   initialContributionValue,
@@ -44,6 +50,8 @@ export function useStartSavingsFormFlow({
   targetValue,
 }: {
   acceptsNonWithdrawableTerms: boolean;
+  /** PiggyVest plans only: the interest answer; null until chosen. */
+  interestChoice?: boolean | null;
   contributionValue: number;
   initialContributionEnabled: boolean;
   initialContributionValue: number;
@@ -81,8 +89,11 @@ export function useStartSavingsFormFlow({
       sourceMode,
       targetValue,
     });
-    setFormError(error);
-    if (!error) {
+    const refusal =
+      error ??
+      (interestChoice === null ? INTEREST_CHOICE_REQUIRED_MESSAGE : null);
+    setFormError(refusal);
+    if (!refusal) {
       setShowPreviewModal(true);
     }
   };
@@ -100,6 +111,10 @@ export function useStartSavingsFormFlow({
   };
 
   const handleFundingContinue = async () => {
+    if (sourceMode === 'auto_debit' && primaryWallet) {
+      setFormError(AUTO_DEBIT_UNAVAILABLE_MESSAGE);
+      return;
+    }
     if (sourceMode === 'auto_debit') {
       if (process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1') {
         setPaymentMethodsError(
@@ -117,7 +132,14 @@ export function useStartSavingsFormFlow({
       return;
     }
 
-    if (selectedFundingOption === 'bank_transfer') {
+    // The funding choice only exists for a legacy head start (it is not
+    // shown for ₦0 or PiggyVest), so a hidden stale choice never applies.
+    if (
+      selectedFundingOption === 'bank_transfer' &&
+      !primaryWallet &&
+      initialContributionEnabled &&
+      initialContributionValue > 0
+    ) {
       await submitSavingsGoal({ deferInitialContribution: true });
       return;
     }
@@ -158,6 +180,11 @@ export function useStartSavingsFormFlow({
   };
 
   const handleSourceModeChange = (nextMode: SavingsSourceMode) => {
+    // No card money goes into PiggyVest: manual is the only choice there.
+    if (nextMode === 'auto_debit' && primaryWallet) {
+      setFormError(AUTO_DEBIT_UNAVAILABLE_MESSAGE);
+      return;
+    }
     if (
       nextMode === 'auto_debit' &&
       process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1'

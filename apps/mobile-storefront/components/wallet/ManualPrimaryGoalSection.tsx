@@ -28,7 +28,8 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
         identityKey={userId}
         merchantId={merchantId}
         funding={funding}
-        onCheckAgain={poll.exhausted ? poll.checkAgain : undefined}
+        slow={poll.slow}
+        onCheckAgain={poll.checkAgain}
       />
       {/* The form shows at once while the plan's savings wallet is confirmed
           in the background; only a definite "not ready" answer replaces it.

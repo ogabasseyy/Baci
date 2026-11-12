@@ -1,8 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { usePiggyvestSlowdown } from '@/hooks/use-piggyvest-slowdown';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { openSavingsSupport } from './open-savings-support';
 import { SavingsGoalRetryPrompt } from './SavingsGoalRetryPrompt';
 import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
+import { SavingsPlanGettingReady } from './SavingsPlanGettingReady';
+import { useAutoRetrySetup } from './use-auto-retry-setup';
+import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
@@ -18,19 +23,22 @@ type Props = {
    * read one status). Without it the note reads its own.
    */
   funding?: PlanFunding;
-  /** Set once automatic checks have run out while setup is still pending. */
+  /** Set once setup has taken longer than the first minute of checks. */
+  slow?: boolean;
+  /** Reads status now and restarts the quick checks. */
   onCheckAgain?: () => void;
 };
 
 /**
- * Tells a customer whose plan wallet is not ready yet to check back, and
- * never shows the goal's account number. A goal whose setup never started
- * (confirmed by a finished status read, on a primary merchant with an
- * available verdict) also gets the explicit interest question and a setup
- * action; setup is never offered while status is unknown or pending. The
- * one exception is a pending goal the server flags retryable because its
- * earlier claim expired: it gets a retry action that reuses the stored
- * interest answer.
+ * Tells a customer whose plan wallet is not ready yet that it is getting
+ * ready (calmly: checks keep running and they can leave), and never shows the
+ * goal's account number. A goal whose setup never started (confirmed by a
+ * finished status read, on a primary merchant with an available verdict)
+ * gets the explicit interest question and a setup action; setup is never
+ * offered while status is unknown or pending. A pending goal the server flags
+ * retryable (its earlier claim expired) is retried automatically with the
+ * stored interest answer; only when those tries are used up does the
+ * customer see a retry button and a support link.
  */
 export function SavingsPlanStatusNote(props: Props) {
   return props.funding ? (
@@ -48,7 +56,26 @@ function OwnStatusNote(props: Props) {
     loadExisting: isPiggyvestPrimaryMerchant(props.merchantId),
     notFoundMeansNotStarted: true,
   });
-  return <StatusNoteView {...props} funding={funding} bvnGate />;
+  // Keeps checking a plan that is getting ready, so this screen never stalls.
+  const poll = useGoalWalletSetupPoll({
+    phase: funding.planFundingPhase,
+    scopeKey: JSON.stringify([
+      props.identityKey,
+      props.merchantId,
+      props.goalId,
+    ]),
+    reread: funding.fetchExistingPlanFunding,
+    onExhausted: funding.failExistingPlanFunding,
+  });
+  return (
+    <StatusNoteView
+      {...props}
+      funding={funding}
+      bvnGate
+      slow={poll.slow}
+      onCheckAgain={poll.checkAgain}
+    />
+  );
 }
 
 function StatusNoteView({
@@ -57,6 +84,7 @@ function StatusNoteView({
   merchantId,
   funding,
   bvnGate = false,
+  slow = false,
   onCheckAgain,
 }: Props & { funding: PlanFunding; bvnGate?: boolean }) {
   const primary = isPiggyvestPrimaryMerchant(merchantId);
@@ -65,12 +93,28 @@ function StatusNoteView({
     merchantId,
     onSettled: () => void funding.fetchExistingPlanFunding(),
   });
+  const phase = funding.planFundingPhase;
+  const slowdown = usePiggyvestSlowdown();
+  const autoRetry = useAutoRetrySetup({
+    // Only where the note is on screen: never behind the BVN field.
+    active:
+      primary &&
+      phase === 'setup_retryable' &&
+      !(bvnGate && funding.planFundingRequiresBvn),
+    scopeKey: `${merchantId}:${goalId}`,
+    submitting: setup.submitting,
+    retry: setup.retry,
+  });
   // The note reads its own status only where a BVN field may be on screen; a
   // parent that supplies the status (no BVN field) controls visibility itself.
   if (!primary || (bvnGate && funding.planFundingRequiresBvn)) return null;
-  const phase = funding.planFundingPhase;
   const rereadingAfterSetup = phase === 'loading' && setup.attempted;
-  if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))
+  // A stalled setup is picked up again automatically; the customer sees the
+  // calm "getting ready" card until those tries are used up.
+  if (
+    (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried)) &&
+    autoRetry.exhausted
+  )
     return (
       <SavingsGoalRetryPrompt
         colors={colors}
@@ -79,6 +123,8 @@ function StatusNoteView({
         onRetry={() => void setup.retry()}
       />
     );
+  if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))
+    return <SavingsPlanGettingReady colors={colors} />;
   if (phase === 'not_started' || rereadingAfterSetup)
     return (
       <SavingsGoalSetupPrompt
@@ -92,11 +138,22 @@ function StatusNoteView({
       />
     );
   if (phase === 'idle' || phase === 'loading' || phase === 'ready') return null;
+  // While PiggyVest is slow, a failed check is not alarming news: keep the
+  // calm card (the shared notice explains) and keep checking.
+  if (phase === 'error' && slowdown)
+    return (
+      <SavingsPlanGettingReady
+        colors={colors}
+        slow
+        onCheckNow={() => void funding.fetchExistingPlanFunding()}
+      />
+    );
   if (phase === 'error') {
     return (
       <View style={styles.section}>
         <Text style={[styles.body, { color: colors.textSecondary }]}>
-          We couldn't check this goal's status.
+          We couldn’t check on your plan just now. Check your connection and try
+          again.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -111,31 +168,30 @@ function StatusNoteView({
       </View>
     );
   }
-  if (phase === 'pending' && onCheckAgain) {
+  if (phase === 'unavailable')
     return (
       <View style={styles.section}>
         <Text style={[styles.body, { color: colors.textSecondary }]}>
-          Still setting up your goal.
+          We can’t finish setting up this plan right now. No money has moved.
         </Text>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Check again"
-          onPress={onCheckAgain}
+          accessibilityRole="link"
+          accessibilityLabel="Message support"
+          onPress={() => void openSavingsSupport()}
           style={styles.retry}
         >
           <Text style={[styles.action, { color: colors.primary }]}>
-            Check again
+            Message support
           </Text>
         </Pressable>
       </View>
     );
-  }
   return (
-    <Text style={[styles.body, { color: colors.textSecondary }]}>
-      {phase === 'unavailable'
-        ? 'Setup is not available for this goal right now.'
-        : 'This goal is still being set up. Please check back shortly.'}
-    </Text>
+    <SavingsPlanGettingReady
+      colors={colors}
+      slow={slow}
+      onCheckNow={onCheckAgain}
+    />
   );
 }
 

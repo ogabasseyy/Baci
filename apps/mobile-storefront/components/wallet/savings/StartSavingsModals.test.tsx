@@ -64,7 +64,7 @@ function createController(
 }
 
 describe('StartSavingsModals', () => {
-  it('keeps one visible sheet when moving from review to funding', () => {
+  it('keeps one visible sheet when the funding flag is set during review', () => {
     const controller = createController();
     const view = render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
@@ -90,41 +90,36 @@ describe('StartSavingsModals', () => {
         .UNSAFE_getAllByType(ModalSheet)
         .filter((sheet) => sheet.props.visible)
     ).toHaveLength(1);
-    expect(screen.getByText('Payment Methods')).toBeOnTheScreen();
+    expect(screen.getByText('Check your plan')).toBeOnTheScreen();
   });
 
-  it('previews the plan and opens funding options', () => {
+  it('reviews the plan in one step and creates it', () => {
     const controller = createController();
     render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
-    expect(screen.getByText('Your savings plan')).toBeOnTheScreen();
+    expect(screen.getByText('Check your plan')).toBeOnTheScreen();
     expect(screen.getByText('iPhone 13 Pro Max')).toBeOnTheScreen();
+    expect(screen.getByText('₦20,000 a day')).toBeOnTheScreen();
+    expect(screen.queryByText('Payment Methods')).toBeNull();
 
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Choose savings funding option' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Create my plan' }));
 
-    expect(controller.setShowPreviewModal).toHaveBeenCalledWith(false);
-    expect(controller.setShowFundingModal).toHaveBeenCalledWith(true);
+    expect(controller.handleFundingContinue).toHaveBeenCalledTimes(1);
   });
 
-  it('renders manual funding options and continues', () => {
-    const controller = createController({
-      showFundingModal: true,
-      showPreviewModal: false,
-    });
+  it('renders manual head-start funding options inside the review and continues', () => {
+    const controller = createController();
     render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
+    expect(screen.getByText('Pay your head start with')).toBeOnTheScreen();
     fireEvent.press(
       screen.getByRole('button', { name: 'Pay with bank transfer' })
     );
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Continue funding option' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Create my plan' }));
 
     expect(controller.setSelectedFundingOption).toHaveBeenCalledWith(
       'bank_transfer'
@@ -135,8 +130,6 @@ describe('StartSavingsModals', () => {
   it('keeps a failed funding response visible without dismissing the sheet', () => {
     const controller = createController({
       formError: 'Unable to create savings plan. Please retry.',
-      showFundingModal: true,
-      showPreviewModal: false,
     });
     render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
@@ -145,7 +138,7 @@ describe('StartSavingsModals', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Unable to create savings plan. Please retry.'
     );
-    expect(screen.getByText('Payment Methods')).toBeOnTheScreen();
+    expect(screen.getByText('Check your plan')).toBeOnTheScreen();
   });
 
   it('logs rejected funding continuations instead of leaving an unhandled promise', async () => {
@@ -157,25 +150,21 @@ describe('StartSavingsModals', () => {
       handleFundingContinue: jest.fn(async () => {
         throw new Error('continue failed');
       }),
-      showFundingModal: true,
-      showPreviewModal: false,
     });
     render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Continue funding option' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Create my plan' }));
 
     await waitFor(() => {
       expect(mockLogError).toHaveBeenCalledWith('Savings modal action failed', {
         error: expect.any(Error),
-        operation: 'Savings funding continue',
+        operation: 'Savings plan create',
       });
       expect(alertSpy).toHaveBeenCalledWith(
-        'Unable to continue',
-        'Please try the savings funding step again.'
+        'Unable to create plan',
+        'Please try creating your plan again.'
       );
     });
 
@@ -280,7 +269,7 @@ describe('StartSavingsModals', () => {
     );
 
     expect(screen.getByText('Opening secure checkout…')).toBeOnTheScreen();
-    expect(screen.getByText('Authorizing card...')).toBeOnTheScreen();
+    expect(screen.getByText('Adding your card…')).toBeOnTheScreen();
     fireEvent.press(screen.getByRole('button', { name: 'Add savings card' }));
 
     expect(controller.handleAuthorizeSavingsCard).not.toHaveBeenCalled();
@@ -289,19 +278,27 @@ describe('StartSavingsModals', () => {
   it('disables funding continue while submitting', () => {
     const controller = createController({
       isSubmitting: true,
-      showFundingModal: true,
-      showPreviewModal: false,
     });
     render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
-    expect(screen.getByText('Processing...')).toBeOnTheScreen();
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Continue funding option' })
-    );
+    expect(screen.getByText('Creating your plan…')).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Create my plan' }));
 
     expect(controller.handleFundingContinue).not.toHaveBeenCalled();
+  });
+
+  it('closes the review from Edit plan', () => {
+    const controller = createController();
+    render(
+      <StartSavingsModals colors={Colors.light} controller={controller} />
+    );
+
+    fireEvent.press(screen.getByRole('button', { name: 'Edit plan' }));
+
+    expect(controller.setShowPreviewModal).toHaveBeenCalledWith(false);
+    expect(controller.setShowFundingModal).toHaveBeenCalledWith(false);
   });
 
   it('renders success modal wallet navigation', () => {

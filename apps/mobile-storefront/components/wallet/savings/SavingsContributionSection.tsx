@@ -1,12 +1,19 @@
-import { Pressable, Text, View } from 'react-native';
-import { BRAND } from '@/constants/Colors';
+import { Text, View } from 'react-native';
 import { SavingsAmountInput } from './SavingsAmountInput';
+import { SavingsChoiceCards } from './SavingsChoiceCards';
 import { SavingsScheduleFields } from './SavingsScheduleFields';
 import { SavingsTimelinePreview } from './SavingsTimelinePreview';
-import { savingsCardAccent } from './savings-card-accent';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
+import { contributionAboveTargetMessage } from './start-savings-controller.utils';
+
+const HEAD_START_OPTIONS = [
+  { value: true, label: 'Yes', accessibilityLabel: 'Initial contribution Yes' },
+  { value: false, label: 'No', accessibilityLabel: 'Initial contribution No' },
+] as const;
+
+/** Step 2: how often and how much, the timeline, and an optional head start. */
 export function SavingsContributionSection({
   colors,
   controller,
@@ -14,11 +21,12 @@ export function SavingsContributionSection({
   colors: StartSavingsColors;
   controller: StartSavingsController;
 }) {
+  const tooBig = contributionAboveTargetMessage(
+    controller.contributionValue,
+    controller.targetValue
+  );
   return (
-    <View style={[styles.setupCard, savingsCardAccent(colors)]}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        02 · Make it a habit
-      </Text>
+    <View style={styles.section}>
       <SavingsScheduleFields colors={colors} controller={controller} />
       <Text style={[styles.subheading, { color: colors.textSecondary }]}>
         Pick an amount that works for you, {controller.frequency}.
@@ -29,53 +37,33 @@ export function SavingsContributionSection({
         value={controller.contributionAmount}
         onChangeText={controller.setContributionAmount}
       />
-      <SavingsTimelinePreview
-        colors={colors}
-        targetAmount={controller.targetValue}
-        contributionAmount={controller.contributionValue}
-        frequency={controller.frequency}
-        maturityDate={controller.maturityDate}
-        initialContributionEnabled={controller.initialContributionEnabled}
-      />
+      {tooBig ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.fieldWarning, { color: colors.error }]}
+        >
+          {tooBig}
+        </Text>
+      ) : (
+        <SavingsTimelinePreview
+          colors={colors}
+          targetAmount={controller.targetValue}
+          contributionAmount={controller.contributionValue}
+          frequency={controller.frequency}
+          maturityDate={controller.maturityDate}
+          initialContributionEnabled={controller.initialContributionEnabled}
+        />
+      )}
       <Text style={[styles.sectionLabel, { color: colors.text }]}>
         Want to give it a head start?
       </Text>
-      <View style={styles.radioRow}>
-        {[
-          { label: 'Yes', value: true },
-          { label: 'No', value: false },
-        ].map((option) => (
-          <Pressable
-            key={option.label}
-            accessibilityRole="radio"
-            accessibilityLabel={`Initial contribution ${option.label}`}
-            accessibilityState={{
-              selected: option.value === controller.initialContributionEnabled,
-            }}
-            onPress={() =>
-              controller.setInitialContributionEnabled(option.value)
-            }
-            style={styles.radioOption}
-          >
-            <View
-              style={[
-                styles.radioDot,
-                {
-                  borderColor:
-                    option.value === controller.initialContributionEnabled
-                      ? BRAND.primary
-                      : colors.border,
-                  backgroundColor:
-                    option.value === controller.initialContributionEnabled
-                      ? BRAND.primary
-                      : colors.card,
-                },
-              ]}
-            />
-            <Text style={{ color: colors.text }}>{option.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <SavingsChoiceCards
+        accessibilityLabel="Give it a head start"
+        colors={colors}
+        options={HEAD_START_OPTIONS}
+        selected={controller.initialContributionEnabled}
+        onSelect={controller.setInitialContributionEnabled}
+      />
       {controller.initialContributionEnabled ? (
         <SavingsAmountInput
           colors={colors}

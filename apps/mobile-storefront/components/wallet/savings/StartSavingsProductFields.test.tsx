@@ -142,8 +142,11 @@ describe('StartSavingsProductFields', () => {
       />
     );
 
-    expect(screen.getByText('THE ONE YOU’RE SAVING FOR')).toBeOnTheScreen();
-    expect(screen.getByText('Used · Storage: 256GB')).toBeOnTheScreen();
+    expect(screen.queryByText('THE ONE YOU’RE SAVING FOR')).toBeNull();
+    expect(screen.getByText('iPhone 13 Pro Max')).toBeOnTheScreen();
+    expect(screen.getByText('Used')).toBeOnTheScreen();
+    expect(screen.getByText('₦800,000')).toBeOnTheScreen();
+    expect(screen.getByText('Storage: 256GB')).toBeOnTheScreen();
     expect(screen.queryByLabelText('Savings product search')).toBeNull();
     expect(screen.queryByLabelText('Savings debit time')).toBeNull();
     fireEvent.press(screen.getByLabelText('Change savings device'));

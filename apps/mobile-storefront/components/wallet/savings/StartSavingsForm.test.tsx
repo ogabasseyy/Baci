@@ -10,6 +10,9 @@ function createController(
 ): StartSavingsController {
   return {
     acceptsNonWithdrawableTerms: false,
+    allowAutoDebit: true,
+    askInterest: false,
+    interestChoice: null,
     contributionAmount: '20000',
     contributionValue: 20000,
     effectiveInitialContribution: 0,
@@ -23,7 +26,7 @@ function createController(
     initialContributionEnabled: false,
     isProductsLoading: false,
     isSubmitting: false,
-    preferredDebitTime: '06:20',
+    preferredDebitTime: '08:00',
     products: [],
     searchValue: '',
     selectProduct: jest.fn(),
@@ -67,7 +70,15 @@ describe('StartSavingsForm', () => {
         screen.queryByRole('radio', { name: 'Use auto debit for savings' })
       ).toBeNull();
       expect(
-        screen.getByText(/Auto debit is not available in this staging build/)
+        screen.queryByRole('radio', { name: 'Use manual debit for savings' })
+      ).toBeNull();
+      expect(
+        screen.queryByText(/Auto debit is not available in this staging build/)
+      ).toBeNull();
+      expect(
+        screen.getByText(
+          'You add money from your wallet whenever you like. We’ll remind you on your saving days.'
+        )
       ).toBeOnTheScreen();
     } finally {
       if (previousValue === undefined)
@@ -100,10 +111,12 @@ describe('StartSavingsForm', () => {
     expect(
       screen.getByText('Your next device, one little win at a time.')
     ).toBeOnTheScreen();
-    expect(screen.getByText('03 · Choose how you fund it')).toBeOnTheScreen();
+    expect(screen.getByText('Pick your phone')).toBeOnTheScreen();
+    expect(screen.getByText('Make it a habit')).toBeOnTheScreen();
+    expect(screen.getByText('How you’ll save')).toBeOnTheScreen();
     expect(
       screen.getByText(
-        'I understand savings are reserved for my selected purchase and cannot be withdrawn to a bank account.'
+        'I understand this money is kept for the phone I picked and can’t be withdrawn to a bank account.'
       )
     ).toBeOnTheScreen();
 

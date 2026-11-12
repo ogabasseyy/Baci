@@ -25,20 +25,18 @@ describe('SavingsGoalSummary', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  it('hides the progress card until something is saved, keeping the weekly pace', () => {
+  it('hides the progress card until something is saved, keeping the plan pace', () => {
     render(<SavingsGoalSummary colors={Colors.dark} goal={goal} />);
-    expect(screen.queryByText('YOUR PROGRESS')).toBeNull();
+    expect(screen.queryByText('Your progress')).toBeNull();
     expect(screen.queryByText('₦0 saved')).toBeNull();
     expect(screen.queryByText('Every naira counts')).toBeNull();
     expect(screen.queryByText(/no image/i)).toBeNull();
-    // Saved-of-target and the weekly pace side by side, read as one.
+    // Saved-of-target and the plan's own pace side by side, read as one.
     expect(
-      screen.getByLabelText(
-        /^₦0 of ₦250,000 saved\. ₦62,500 a week to finish by /
-      )
+      screen.getByLabelText(/^₦0 of ₦250,000 saved\. ₦500 a week to finish by /)
     ).toBeOnTheScreen();
     expect(
-      screen.getByText('₦62,500 a week · until 3 Dec 2026')
+      screen.getByText('₦500 a week · until 3 Dec 2026')
     ).toBeOnTheScreen();
     expect(screen.getByText('₦0 of ₦250,000')).toBeOnTheScreen();
     expect(screen.queryByText('SAVING TOWARDS')).toBeNull();
@@ -70,7 +68,7 @@ describe('SavingsGoalSummary', () => {
         goal={{ ...goal, current_amount: 400 }}
       />
     );
-    expect(screen.getByText('YOUR PROGRESS')).toBeOnTheScreen();
+    expect(screen.getByText('Your progress')).toBeOnTheScreen();
     expect(screen.getByText('₦400 saved')).toBeOnTheScreen();
     expect(screen.getByText('₦250,000 target')).toBeOnTheScreen();
   });
@@ -90,17 +88,49 @@ describe('SavingsGoalSummary', () => {
     ).toMatchObject({ flexShrink: 1 });
   });
 
-  it('skips the pace line when the goal has no usable future date', () => {
+  it('keeps the plan pace without a date when the goal has no usable future date', () => {
     render(
       <SavingsGoalSummary
         colors={Colors.light}
         goal={{ ...goal, maturity_date: '' }}
       />
     );
-    expect(screen.queryByText(/a week to finish by/)).toBeNull();
+    expect(screen.queryByText(/to finish by/)).toBeNull();
+    expect(
+      screen.getByLabelText('₦0 of ₦250,000 saved. ₦500 a week')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/\/week|due by/)).toBeNull();
+  });
+
+  it('skips the pace line when there is no plan pace and no usable date', () => {
+    render(
+      <SavingsGoalSummary
+        colors={Colors.light}
+        goal={{ ...goal, contribution_amount: 0, maturity_date: '' }}
+      />
+    );
     // No blank gap: with no pace, the zero-saved status shows alone.
     expect(screen.getByLabelText('₦0 of ₦250,000 saved')).toBeOnTheScreen();
-    expect(screen.queryByText(/\/week|due by/)).toBeNull();
+  });
+
+  describe('bugfix: wallet pace disagreed with the plan (₦2,000 daily shown as ₦14,113 a week)', () => {
+    it('shows the plan contribution and frequency, not a recalculated weekly figure', () => {
+      render(
+        <SavingsGoalSummary
+          colors={Colors.light}
+          goal={{
+            ...goal,
+            contribution_amount: 2000,
+            contribution_frequency: 'daily',
+            maturity_date: '2027-03-10',
+          }}
+        />
+      );
+      expect(
+        screen.getByText('₦2,000 a day · until 10 Mar 2027')
+      ).toBeOnTheScreen();
+      expect(screen.queryByText(/a week/)).toBeNull();
+    });
   });
 
   it.each([
@@ -144,6 +174,6 @@ describe('SavingsGoalSummary', () => {
       />
     );
     expect(screen.getByText('Goal reached!')).toBeOnTheScreen();
-    expect(screen.queryByText(/a week to finish by/)).toBeNull();
+    expect(screen.queryByText(/to finish by/)).toBeNull();
   });
 });

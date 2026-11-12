@@ -24,12 +24,15 @@ import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
 import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
 import { useStartSavingsPaymentMethods } from './use-start-savings-payment-methods';
+import { useStartSavingsPrimarySetup } from './use-start-savings-primary-setup';
 import { useStartSavingsProductSearch } from './use-start-savings-product-search';
 import { useStartSavingsProductSelection } from './use-start-savings-product-selection';
+import { useStartSavingsSheets } from './use-start-savings-sheets';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { useStartSavingsVariantSelection } from './use-start-savings-variant-selection';
 
-const DEFAULT_PREFERRED_DEBIT_TIME = '06:20';
+// A round, sensible time; the customer can change it.
+export const DEFAULT_PREFERRED_DEBIT_TIME = '08:00';
 
 export function useStartSavingsController() {
   const [goalIdempotencyKey, setGoalIdempotencyKey] = useState<string | null>(
@@ -58,10 +61,7 @@ export function useStartSavingsController() {
   const [acceptsNonWithdrawableTerms, setAcceptsNonWithdrawableTerms] =
     useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [showFundingModal, setShowFundingModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const sheets = useStartSavingsSheets();
   const [createdGoalId, setCreatedGoalId] = useState<string | null>(null);
   const [selectedFundingOption, setSelectedFundingOption] =
     useState<SavingsFundingOption>('wallet');
@@ -99,6 +99,10 @@ export function useStartSavingsController() {
   const { balance: safeWalletBalance, primaryWallet } =
     resolveStartSavingsWalletBalance(walletData?.wallet);
   const fundingAccount = walletData?.wallet.funding_account ?? null;
+  const primarySetup = useStartSavingsPrimarySetup({
+    activeMerchantId: activeMerchantId ?? undefined,
+    primaryWallet,
+  });
   const { selectVariantOption, variantOptionGroups } =
     useStartSavingsVariantSelection({
       clearProductSelection,
@@ -132,10 +136,7 @@ export function useStartSavingsController() {
     setInitialContributionIdempotencyKey:
       operation.setInitialContributionIdempotencyKey,
     setFormError,
-    setShowFundingModal,
-    setShowPreviewModal,
-    setShowSuccessModal,
-    setShowTransferModal,
+    ...sheets,
   });
   const {
     fetchExistingPlanFunding,
@@ -179,12 +180,10 @@ export function useStartSavingsController() {
     selectedPaymentMethodId,
     selectedProduct,
     setFormError,
-    setShowFundingModal,
-    setShowPreviewModal,
-    setShowSuccessModal,
-    setShowTransferModal,
+    ...sheets,
     sourceMode,
     startDate,
+    startGoalWalletSetup: primarySetup.startGoalWalletSetup,
     targetValue,
     variantId: selectedProduct?.variantId ?? null,
   });
@@ -196,6 +195,9 @@ export function useStartSavingsController() {
     handleSourceModeChange,
   } = useStartSavingsFormFlow({
     acceptsNonWithdrawableTerms,
+    interestChoice: primarySetup.askInterest
+      ? primarySetup.interestChoice
+      : undefined,
     contributionValue,
     initialContributionEnabled,
     initialContributionValue,
@@ -209,9 +211,7 @@ export function useStartSavingsController() {
     setInitialContributionAmount,
     setInitialContributionEnabled,
     setPaymentMethodsError,
-    setShowPreviewModal,
-    setShowSuccessModal,
-    setShowTransferModal,
+    ...sheets,
     setSourceMode,
     sourceMode,
     submitSavingsGoal,
@@ -219,6 +219,8 @@ export function useStartSavingsController() {
   });
 
   return {
+    ...primarySetup,
+    ...sheets,
     acceptsNonWithdrawableTerms,
     confirmPlanTransfer,
     contributionAmount,
@@ -253,6 +255,7 @@ export function useStartSavingsController() {
     planFundingStatusCode,
     planFundingRequiresBvn,
     preferredDebitTime,
+    primaryWallet,
     products,
     refetch,
     requiredTopUpAmount,
@@ -281,13 +284,7 @@ export function useStartSavingsController() {
     setSearchValue,
     setSelectedFundingOption,
     setSelectedPaymentMethodId,
-    setShowFundingModal,
-    setShowPreviewModal,
     setStartDate: (value: string) => setStartDate(formatDateInput(value)),
-    showFundingModal,
-    showPreviewModal,
-    showSuccessModal,
-    showTransferModal,
     sourceMode,
     startDate,
     submitSavingsGoal,

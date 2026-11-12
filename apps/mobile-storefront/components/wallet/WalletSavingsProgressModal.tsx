@@ -6,6 +6,7 @@ import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
@@ -132,6 +133,7 @@ export function WalletSavingsProgressModal({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
+            <PiggyvestSlowdownNotice />
             <SavingsGoalSummary
               colors={colors}
               goal={goal}

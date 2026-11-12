@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import { useReportPiggyvestSlow } from '@/hooks/use-piggyvest-slowdown';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
-const POLL_MS = 5000;
-const MAX_ATTEMPTS = 12;
+const FAST_POLL_MS = 5000;
+const FAST_ATTEMPTS = 12;
+/** After the first minute: keep going, just less often. */
+const SLOW_POLL_MS = 20_000;
 
 /**
- * Keeps re-reading a goal wallet that is still being set up, every 5 s and at
- * most 12 times (a minute), then leaves the "check back shortly" text in
- * place. Reads are silent so the screen does not flicker, stop the moment the
- * goal is ready, and start over for another account or goal. Only reads
- * status; it never re-sends setup. A read that fails is retried on the next
- * tick; only when the last attempt also fails is `onExhausted` called with
- * that error, so one network blip never ends the automatic checks.
+ * Keeps re-reading a goal wallet that is still being set up for as long as
+ * the screen is open: every 5 s for the first minute, then every 20 s. It
+ * never gives up on its own, so a customer is never left on a dead end; after
+ * the first minute `slow` is set so the screen can say it is taking a little
+ * longer. Reads are silent, stop the moment the goal is ready, and start over
+ * for another account or goal. Only reads status; it never re-sends setup. A
+ * read that fails is retried on the next tick; if the last read of the first
+ * minute also failed, `onExhausted` is called with that error, so one network
+ * blip never ends the automatic checks.
  */
 export function useGoalWalletSetupPoll({
   phase,
@@ -34,34 +39,36 @@ export function useGoalWalletSetupPoll({
       if (count !== 0) setAttempt({ scopeKey, count: 0 });
       return;
     }
-    if (count >= MAX_ATTEMPTS) return;
     if (count === 0) lastFailure.current = null;
     let current = true;
-    const timer = setTimeout(async () => {
-      try {
-        await reread({ silent: true });
-        lastFailure.current = null;
-      } catch (error) {
-        lastFailure.current = { error };
-      }
-      if (!current) return;
-      if (count + 1 >= MAX_ATTEMPTS && lastFailure.current) {
-        onExhausted?.(lastFailure.current.error);
-      }
-      setAttempt({ scopeKey, count: count + 1 });
-    }, POLL_MS);
+    const timer = setTimeout(
+      async () => {
+        try {
+          await reread({ silent: true });
+          lastFailure.current = null;
+        } catch (error) {
+          lastFailure.current = { error };
+        }
+        if (!current) return;
+        if (count + 1 === FAST_ATTEMPTS && lastFailure.current) {
+          onExhausted?.(lastFailure.current.error);
+        }
+        setAttempt({ scopeKey, count: count + 1 });
+      },
+      count < FAST_ATTEMPTS ? FAST_POLL_MS : SLOW_POLL_MS
+    );
     return () => {
       current = false;
       clearTimeout(timer);
     };
   }, [phase, count, scopeKey]);
 
-  // After every attempt has come back still pending the poll stops; the
-  // customer can start it again by hand, which also reads once right away.
-  const exhausted = phase === 'pending' && count >= MAX_ATTEMPTS;
+  const slow = phase === 'pending' && count >= FAST_ATTEMPTS;
+  useReportPiggyvestSlow('goal-setup', slow);
+  // Reads once right away and starts the quick checks again.
   const checkAgain = () => {
     setAttempt({ scopeKey, count: 0 });
     void Promise.resolve(reread({ silent: true })).catch(() => undefined);
   };
-  return { exhausted, checkAgain };
+  return { slow, checkAgain };
 }

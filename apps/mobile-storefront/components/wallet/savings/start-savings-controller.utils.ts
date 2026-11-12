@@ -66,6 +66,26 @@ function supportsInitialContributionWithAutoDebit(paymentProvider: string) {
   );
 }
 
+/**
+ * Refuses a regular contribution bigger than the whole target: a ₦250,000
+ * phone can never need ₦82,000,000 a day. Shown as the customer types and
+ * enforced again on continue.
+ */
+export function contributionAboveTargetMessage(
+  contributionValue: number,
+  targetValue: number
+) {
+  if (
+    !Number.isFinite(contributionValue) ||
+    !Number.isFinite(targetValue) ||
+    targetValue <= 0 ||
+    contributionValue <= targetValue
+  ) {
+    return null;
+  }
+  return 'Each saving can’t be more than the phone’s price. Try a smaller amount.';
+}
+
 export function validateStartSavingsForm({
   acceptsNonWithdrawableTerms,
   contributionValue,
@@ -101,6 +121,13 @@ export function validateStartSavingsForm({
   }
   if (contributionValue <= 0) {
     return 'Enter a valid contribution amount.';
+  }
+  const contributionRefusal = contributionAboveTargetMessage(
+    contributionValue,
+    targetValue
+  );
+  if (contributionRefusal) {
+    return contributionRefusal;
   }
   if (initialContributionEnabled && initialContributionValue <= 0) {
     return 'Enter your initial contribution amount.';

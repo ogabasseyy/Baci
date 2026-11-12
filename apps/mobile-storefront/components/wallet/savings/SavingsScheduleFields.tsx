@@ -66,7 +66,7 @@ function DateAndAmountInputs({
       <DateTimePickerField
         accessibilityLabel="Savings debit time"
         displayFormattedValue
-        fallbackDisplay="06:20"
+        fallbackDisplay="08:00"
         fieldStyle={[styles.pickerField, themedInputStyle(colors)]}
         label="Preferred debit time"
         labelStyle={[styles.sectionLabel, { color: colors.text }]}

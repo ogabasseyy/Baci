@@ -34,29 +34,43 @@ beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
 
 describe('useGoalWalletSetupPoll', () => {
-  it('reports exhausted after 12 pending reads, and Check again reads now and polls afresh', async () => {
+  it('reports slow after 12 pending reads, and Check again reads now and polls afresh', async () => {
     const { result, reread } = setup({ phase: 'pending' });
-    expect(result.current.exhausted).toBe(false);
-    await ticks(14);
+    expect(result.current.slow).toBe(false);
+    await ticks(12);
     expect(reread).toHaveBeenCalledTimes(12);
-    expect(result.current.exhausted).toBe(true);
+    expect(result.current.slow).toBe(true);
     await act(async () => result.current.checkAgain());
     expect(reread).toHaveBeenCalledTimes(13);
     expect(reread).toHaveBeenLastCalledWith({ silent: true });
-    expect(result.current.exhausted).toBe(false);
+    expect(result.current.slow).toBe(false);
     await ticks(1);
     expect(reread).toHaveBeenCalledTimes(14);
   });
 
-  it('re-reads a pending goal every 5 seconds, at most 12 times', async () => {
+  it('re-reads a pending goal every 5 seconds for the first minute', async () => {
     const { reread } = setup({ phase: 'pending' });
     await advance(4999);
     expect(reread).not.toHaveBeenCalled();
     await advance(1);
     expect(reread).toHaveBeenCalledTimes(1);
     expect(reread).toHaveBeenCalledWith({ silent: true });
-    await ticks(30);
+    await ticks(11);
     expect(reread).toHaveBeenCalledTimes(12);
+  });
+
+  describe('bugfix: setup checks stopped after a minute, leaving a dead end', () => {
+    it('keeps checking every 20 seconds after the first minute', async () => {
+      const { reread } = setup({ phase: 'pending' });
+      await ticks(12);
+      expect(reread).toHaveBeenCalledTimes(12);
+      await advance(19_999);
+      expect(reread).toHaveBeenCalledTimes(12);
+      await advance(1);
+      expect(reread).toHaveBeenCalledTimes(13);
+      for (let tick = 0; tick < 10; tick += 1) await advance(20_000);
+      expect(reread).toHaveBeenCalledTimes(23);
+    });
   });
 
   it('keeps polling, without throwing, when a read rejects', async () => {
@@ -67,7 +81,7 @@ describe('useGoalWalletSetupPoll', () => {
     setup({ phase: 'pending' }, reread);
     await ticks(3);
     expect(reread).toHaveBeenCalledTimes(3);
-    await ticks(30);
+    await ticks(9);
     expect(reread).toHaveBeenCalledTimes(12);
   });
 

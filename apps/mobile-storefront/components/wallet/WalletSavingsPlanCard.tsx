@@ -77,7 +77,7 @@ export function WalletSavingsPlanCard({
         />
         <View style={styles.titleBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
-            YOUR NEXT UPGRADE
+            Your next upgrade
           </Text>
           <Text
             style={[styles.title, { color: colors.cardForeground }]}
@@ -229,9 +229,8 @@ const styles = StyleSheet.create({
   },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },
   eyebrow: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 12,
+    fontWeight: '600',
   },
   title: { fontSize: 16, fontWeight: '700' },
   storageTag: {

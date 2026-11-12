@@ -83,7 +83,6 @@ export const startSavingsModalStyles = {
   savedPaymentMethodMeta: {
     fontSize: 10,
     lineHeight: MODAL_DESCRIPTION_LINE_HEIGHT,
-    textTransform: 'uppercase',
   },
   emptyText: {
     fontSize: 11,
@@ -146,6 +145,16 @@ export const startSavingsModalStyles = {
   modalCloseText: {
     fontSize: 11,
   },
+  reviewCard: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 6 },
+  reviewProduct: { fontSize: 15, fontWeight: '600' },
+  reviewTarget: { fontSize: 27, fontWeight: '700' },
+  reviewDivider: {
+    borderTopWidth: 1,
+    marginTop: 8,
+    paddingTop: 12,
+    gap: 10,
+  },
+  doneBody: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
   successIconWrap: {
     width: SUCCESS_ICON_SIZE,
     height: SUCCESS_ICON_SIZE,

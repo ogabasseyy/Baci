@@ -40,6 +40,12 @@ export type UseStartSavingsSubmitInput = {
    * money through PiggyVest.
    */
   onContinueInWallet?: (goalId: string, amount: number) => void;
+  /**
+   * PiggyVest plans: starts the plan's savings wallet setup right after the
+   * plan is created, with the interest answer from the form. Best effort and
+   * time-boxed: the wallet keeps checking and retrying afterwards.
+   */
+  startGoalWalletSetup?: (goalId: string) => Promise<unknown>;
   /** The plan exists but its hand-off could not finish (wallet not loaded). */
   onHandOffPending?: (goalId: string) => void;
   effectiveInitialContribution: number;
@@ -79,6 +85,33 @@ type ValidatedSavingsInput = {
   formattedStartDate: string;
   selectedProduct: SavingsProductChoice;
 };
+
+/** How long plan creation waits for setup before moving on. */
+export const GOAL_WALLET_SETUP_WAIT_MS = 8000;
+
+/**
+ * Kicks off the savings wallet setup and waits a short while for it, so a
+ * quick provider answer lands before the customer sees the plan. A slow or
+ * failed start never blocks the plan: the wallet keeps checking afterwards.
+ */
+async function startSetupBriefly(
+  start: (goalId: string) => Promise<unknown>,
+  goalId: string
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve()
+        .then(() => start(goalId))
+        .catch(() => undefined),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, GOAL_WALLET_SETUP_WAIT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Runs the savings goal creation flow for `useStartSavingsSubmit`. Lives at
@@ -139,6 +172,9 @@ export async function runSavingsGoalSubmission(
     // form edit or reload in flight), so a later submit never creates another.
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.onHandOffPending?.(result.goalId);
+    }
+    if (input.startGoalWalletSetup) {
+      await startSetupBriefly(input.startGoalWalletSetup, result.goalId);
     }
     if (requestIdempotencyKey) {
       input.setInitialContributionIdempotencyKey((currentKey) =>

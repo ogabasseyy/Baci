@@ -233,10 +233,9 @@ describe('StartSavingsScreen', () => {
     acceptSavingsTerms();
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
-    expect(screen.getByText('Your savings plan')).toBeOnTheScreen();
+    expect(screen.getByText('Check your plan')).toBeOnTheScreen();
 
-    fireEvent.press(getSavingsButton('Choose savings funding option'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
     expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
@@ -249,9 +248,7 @@ describe('StartSavingsScreen', () => {
       })
     );
     await waitFor(() =>
-      expect(
-        screen.getByText('Savings plan created successfully')
-      ).toBeOnTheScreen()
+      expect(screen.getByText('Your plan is set')).toBeOnTheScreen()
     );
   });
 });

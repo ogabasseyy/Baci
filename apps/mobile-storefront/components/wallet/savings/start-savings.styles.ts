@@ -11,7 +11,7 @@ import { startSavingsModalStyles } from './start-savings-modal.styles';
 export const startSavingsStyles = StyleSheet.create({
   ...startSavingsModalStyles,
   container: { flex: 1 },
-  setupCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 20 },
+  steps: { marginTop: SPACING.sm },
   amountInput: { fontSize: 27, fontWeight: '700', minHeight: 62 },
   scrollContent: {
     paddingHorizontal: SPACING.md,
@@ -31,7 +31,7 @@ export const startSavingsStyles = StyleSheet.create({
     gap: SPACING.sm,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   input: {
@@ -112,7 +112,6 @@ export const startSavingsStyles = StyleSheet.create({
   },
   selectedProductLabel: {
     fontSize: 10,
-    textTransform: 'uppercase',
   },
   selectedProductName: {
     fontSize: 13,
@@ -147,45 +146,11 @@ export const startSavingsStyles = StyleSheet.create({
     flex: 1,
     gap: SPACING.sm,
   },
-  radioRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-  },
-  radioOption: {
-    minHeight: 44,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  radioDot: {
-    width: 14,
-    height: 14,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-  },
   sourceModeCard: {
     borderRadius: 24,
     borderWidth: 1,
     padding: SPACING.md,
     gap: SPACING.xs,
-  },
-  sourceModeRow: {
-    flexDirection: 'row',
-    gap: SPACING.xs,
-  },
-  sourceModeOption: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sourceModeLabel: {
-    fontSize: 11,
-    fontWeight: TYPOGRAPHY.weight.semibold,
   },
   sourceModeHint: {
     fontSize: 10,
@@ -212,6 +177,7 @@ export const startSavingsStyles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 18,
   },
+  fieldWarning: { fontSize: 12, lineHeight: 18, marginTop: -8 },
   errorText: {
     fontSize: 10,
     marginTop: -SPACING.xs,

@@ -8,6 +8,7 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -185,6 +186,7 @@ export function WalletContent(props: WalletContentProps) {
           />
         }
       >
+        <PiggyvestSlowdownNotice />
         <WalletHeroSection
           canCreateFundingAccount={canCreateFundingAccount}
           createFundingAccountUnavailableMessage={

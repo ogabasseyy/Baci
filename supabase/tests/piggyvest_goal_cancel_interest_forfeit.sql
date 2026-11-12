@@ -346,7 +346,7 @@ BEGIN
   PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'worker split');
   -- Nothing to do while the principal is still in flight.
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) = '[]'::jsonb,
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) = '[]'::jsonb,
     'the sweep listed a forfeit behind an unconfirmed principal');
   -- The customer can not be deleted while the forfeit is planned.
   BEGIN
@@ -357,16 +357,20 @@ BEGIN
   PERFORM pg_temp.gc_assert(pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed',
     'worker principal settle');
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10)
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true)
       = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('operationId', v_op, 'state', 'reserved', 'alert', false)),
     'the sweep did not list the unsent forfeit');
+  -- While new transfers are off, unsent work is not listed (only in-flight).
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, false) = '[]'::jsonb,
+    'the switched-off sweep listed unsent work');
   BEGIN
-    PERFORM piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 0);
+    PERFORM piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 0, true);
     RAISE EXCEPTION 'an invalid sweep limit was accepted' USING ERRCODE = 'PVT00';
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
   END;
   BEGIN
-    PERFORM piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'production', 10);
+    PERFORM piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'production', 10, true);
     RAISE EXCEPTION 'a foreign environment was swept' USING ERRCODE = 'PVT00';
   EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
   END;
@@ -388,8 +392,8 @@ BEGIN
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
      SET dispatched_at = pg_catalog.clock_timestamp() - interval '2 days' WHERE id = v_forfeit::uuid;
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) -> 0 ->> 'alert' = 'true'
-    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) -> 0 ->> 'alert' = 'false',
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) -> 0 ->> 'alert' = 'true'
+    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) -> 0 ->> 'alert' = 'false',
     'an overdue forfeit did not page exactly once');
   -- An already-paged stuck transfer never starves newer work: an unsent
   -- forfeit of another cancel comes first in a window of one.
@@ -410,7 +414,7 @@ BEGIN
     'synthetic-goalcancel-goal-wallet-2', 'synthetic-goalcancel-interest-wallet-2', 5,
     pg_catalog.clock_timestamp());
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 1)
+    piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 1, true)
       = '[{"operationId":"f3860000-0000-4000-8000-0000000000d1","state":"reserved","alert":false}]'::jsonb,
     'an already-paged stuck transfer starved newer work');
   DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits
@@ -435,11 +439,11 @@ BEGIN
   -- The money moved under the old reference: the replacement is frozen, so
   -- nothing can send the interest a second time.
   PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
-    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10) = '[]'::jsonb
+    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) = '[]'::jsonb
     AND piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid) ->> 'status' = 'needs_review',
     'a late success left the replacement sendable');
   PERFORM pg_temp.gc_assert(
-    has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer)', 'EXECUTE')
+    has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer,boolean)', 'EXECUTE')
     AND has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
     AND has_function_privilege('piggyvest_primary_authorizer', 'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
     AND NOT has_function_privilege('piggyvest_primary_evidence', 'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)', 'EXECUTE')
@@ -488,8 +492,16 @@ BEGIN
     'a payout to a goal with no cancel planned a forfeit');
   v_op := pg_temp.gc_reserved('late');
   PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'late split');
-  -- Paid while the principal is in flight: merges into the unsent forfeit.
+  -- Paid while the principal is in flight: merges into the unsent forfeit,
+  -- and the "interest added to your savings" notice is voided.
+  INSERT INTO savings_notifications.events (merchant_id, customer_id, goal_id, event_key, type, title, body)
+  VALUES ('f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003', c_goal::uuid,
+    'primary-interest:' || c_integration::text || ':gf-during', 'interest_credited', 'Interest', 'Interest')
+  ON CONFLICT DO NOTHING;
   PERFORM pg_temp.gf_receipt('gf-during', 500);
+  PERFORM pg_temp.gc_assert((SELECT voided_at IS NOT NULL FROM savings_notifications.events
+                              WHERE event_key = 'primary-interest:' || c_integration::text || ':gf-during'),
+    'the customer was told forfeited interest was added to their savings');
   PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 1
     AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12500,
     'interest paid during the cancel was not merged into the unsent forfeit');
@@ -514,11 +526,43 @@ BEGIN
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
   PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
-      pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":300}'::jsonb) = 'confirmed',
+      pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":200}'::jsonb) = 'confirmed',
     'the first forfeit did not settle while the late one was still planned');
+  -- Regression (reference race, needs two sessions so checked on the
+  -- definition): a payout plans its forfeit under the customer's savings
+  -- lock, the lock every other forfeit insert holds, so two plans can not
+  -- compute the same reference; a plan that still fails never refuses the
+  -- payout (the trigger catches it).
+  PERFORM pg_temp.gc_assert(
+    (SELECT proc.prosrc FROM pg_catalog.pg_proc AS proc
+      WHERE proc.oid = 'piggyvest_primary.plan_forfeit_for_late_goal_interest()'::regprocedure)
+      ~ 'pg_advisory_xact_lock\(\s*pg_catalog\.hashtextextended\(''primary-savings:'''
+    AND (SELECT proc.prosrc FROM pg_catalog.pg_proc AS proc
+          WHERE proc.oid = 'piggyvest_primary.plan_forfeit_for_late_goal_interest()'::regprocedure)
+      ~ 'EXCEPTION WHEN unique_violation',
+    'the late-interest plan is not serialized on the customer lock, or its failure could refuse the payout');
+  -- PiggyVest reverses part of the late payout: the unsent forfeit shrinks;
+  -- a full reversal releases it.
+  INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+    amount_kobo, provider_evidence_sha256, evidence_reference)
+  VALUES (c_integration, 'gf-reversal-1', 'gf-after', 100, repeat('c', 64), 'synthetic-reversal');
+  PERFORM pg_temp.gc_assert(
+    (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
+      WHERE cancel_operation_id = v_op::uuid AND state = 'reserved') = 200,
+    'a partial reversal did not shrink the unsent forfeit');
+  BEGIN
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES (c_integration, 'gf-reversal-2', 'gf-after', 200, repeat('c', 64), 'synthetic-reversal');
+    PERFORM pg_temp.gc_assert(NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                                           WHERE cancel_operation_id = v_op::uuid AND state = 'reserved'),
+      'a full reversal left the forfeit sendable');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- The planned late forfeit is next.
   PERFORM pg_temp.gc_assert(
-    (piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) #>> '{forfeit,amountKobo}')::bigint = 300,
+    (piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) #>> '{forfeit,amountKobo}')::bigint = 200,
     'the late forfeit was not claimed after the first settled');
 END
 $late$;
@@ -550,7 +594,7 @@ BEGIN
     'piggyvest_primary.claim_goal_cancel_forfeit(jsonb,uuid)',
     'piggyvest_primary.claim_goal_cancel_forfeit_core(uuid,text,text)',
     'piggyvest_primary.assert_goal_cancel_worker(uuid,text)',
-    'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer)',
+    'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer,boolean)',
     'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.manage_goal_cancel_forfeit(jsonb,uuid,text)',
@@ -562,7 +606,8 @@ BEGIN
     'piggyvest_primary.release_failed_goal_cancel_forfeit(uuid,text,jsonb)',
     'piggyvest_primary.release_unsent_goal_cancel_forfeit()',
     'piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()',
-    'piggyvest_primary.plan_forfeit_for_late_goal_interest()'
+    'piggyvest_primary.plan_forfeit_for_late_goal_interest()',
+    'piggyvest_primary.reduce_forfeit_for_reversed_goal_interest()'
   ] LOOP
     v_oid := v_signature::regprocedure;
     PERFORM pg_temp.gc_assert((SELECT proc.prosecdef AND proc.proconfig @> ARRAY['search_path=""']

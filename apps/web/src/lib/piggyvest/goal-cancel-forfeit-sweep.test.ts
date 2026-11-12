@@ -86,7 +86,7 @@ describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
     });
     expect(mocks.execute.mock.calls[0]).toEqual([
       sql.workerList,
-      [integrationId, 'staging', '50'],
+      [integrationId, 'staging', '50', 'true'],
     ]);
     expect(mocks.execute.mock.calls[1]).toEqual([
       sql.workerClaim,
@@ -207,4 +207,15 @@ it('pages an overdue forfeit even when the deadline defers its item', async () =
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
     { reason: 'forfeit_overdue', operationId: opB }
   );
+});
+
+it('lists only in-flight forfeits while new transfers are off', async () => {
+  db([]);
+  await sweepPendingGoalCancelForfeits(input(false));
+  expect(mocks.execute.mock.calls[0][1]).toEqual([
+    integrationId,
+    'staging',
+    '50',
+    'false',
+  ]);
 });

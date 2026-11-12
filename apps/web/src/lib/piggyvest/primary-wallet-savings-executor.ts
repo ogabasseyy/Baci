@@ -33,7 +33,7 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_STATEMENTS.amounts, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.manage, 3],
-  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerList, 3],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerList, 4],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease, 3],
   [GOAL_COMPLETE_STATEMENTS.issue, 2],

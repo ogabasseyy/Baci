@@ -59,6 +59,9 @@ BEGIN
   IF to_regclass('piggyvest_primary.paid_interest_receipts') IS NULL THEN
     RAISE EXCEPTION 'paid interest receipts missing; apply 20261007212100 first';
   END IF;
+  IF to_regclass('savings_notifications.events') IS NULL THEN
+    RAISE EXCEPTION 'savings notifications missing; apply 20260925130050 first';
+  END IF;
 END $guard$;
 
 -- 1. Ogabassey's PiggyVest wallet that receives forfeited goal interest, one
@@ -705,7 +708,8 @@ $$;
 CREATE FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(
   integration_id uuid,
   environment text,
-  p_limit integer
+  p_limit integer,
+  p_include_unsent boolean
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -716,7 +720,7 @@ DECLARE
   v_binding piggyvest_primary.integrations%ROWTYPE;
   v_result jsonb;
 BEGIN
-  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 200 THEN
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 200 OR p_include_unsent IS NULL THEN
     RAISE EXCEPTION 'invalid forfeit work limit' USING ERRCODE = '22023';
   END IF;
   v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
@@ -730,7 +734,10 @@ BEGIN
       FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
       JOIN piggyvest_primary.goal_cancel_operations AS cancel ON cancel.id = forfeit.cancel_operation_id
      WHERE forfeit.integration_id = v_binding.id
-       AND (forfeit.state = 'dispatched' OR (forfeit.state = 'reserved' AND cancel.state = 'confirmed'))
+       -- While new transfers are off only in-flight work is listed, so a
+       -- backlog of unsent forfeits can not crowd out settling sent ones.
+       AND (forfeit.state = 'dispatched'
+            OR (p_include_unsent AND forfeit.state = 'reserved' AND cancel.state = 'confirmed'))
      ORDER BY (forfeit.state = 'reserved') DESC, (forfeit.alerted_at IS NOT NULL),
               forfeit.reserved_at, forfeit.id
      LIMIT p_limit
@@ -1057,7 +1064,11 @@ CREATE TRIGGER release_unsent_goal_cancel_forfeit
 -- into) an unsent forfeit of the cancel, which the sweep sends once the
 -- principal is confirmed. Never raises: a payout is never refused because of
 -- this; with no interest wallet ever configured (a cancel that owed no
--- interest) nothing is planned and the payout stays in the goal wallet.
+-- interest) nothing is planned and the payout stays in the goal wallet. The
+-- plan is made under the customer's savings lock, the same lock every other
+-- forfeit insert holds, so two plans can not pick the same reference; and
+-- should the insert still fail, the payout is recorded anyway (only the plan
+-- is skipped; the daily reconciliation shows the interest left behind).
 CREATE FUNCTION piggyvest_primary.plan_forfeit_for_late_goal_interest()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1074,12 +1085,23 @@ BEGIN
      AND cancel.state IN ('dispatched', 'confirmed')
    ORDER BY cancel.dispatched_at DESC LIMIT 1;
   IF NOT FOUND THEN RETURN NEW; END IF;
+  -- The customer must not be told this interest was added to their savings:
+  -- it belongs to a cancelled goal and is forfeited. The credit notice is
+  -- voided (this trigger runs after the notification trigger, by name).
+  UPDATE savings_notifications.events AS event
+     SET voided_at = COALESCE(event.voided_at, pg_catalog.clock_timestamp())
+   WHERE event.merchant_id = NEW.merchant_id AND event.customer_id = NEW.customer_id
+     AND event.goal_id = NEW.goal_id
+     AND event.event_key = 'primary-interest:' || NEW.integration_id::text || ':' || NEW.payout_id;
   SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
    WHERE wallet.integration_id = v_operation.integration_id;
   IF NOT FOUND OR v_wallet = v_operation.source_wallet_id
     OR v_wallet = v_operation.destination_wallet_id THEN
     RETURN NEW;
   END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('primary-savings:' || v_operation.intent_id::text, 0));
+  BEGIN
   INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
     cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
     source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
@@ -1089,12 +1111,49 @@ BEGIN
   ON CONFLICT (cancel_operation_id, state) WHERE state IN ('reserved', 'dispatched')
   DO UPDATE SET amount_kobo = LEAST(9999999999,
     piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo);
+  EXCEPTION WHEN unique_violation OR check_violation THEN
+    -- Never refuse the payout over the forfeit plan.
+    NULL;
+  END;
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER plan_forfeit_for_late_goal_interest
+-- Named to sort after primary_paid_interest_notification (same timing), so
+-- the notice it voids already exists.
+CREATE TRIGGER primary_paid_interest_post_cancel_forfeit
   AFTER INSERT ON piggyvest_primary.paid_interest_receipts
   FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.plan_forfeit_for_late_goal_interest();
+
+-- Interest PiggyVest reverses is no longer in the goal wallet, so an unsent
+-- forfeit of the goal's live cancel shrinks by the reversal (released when
+-- nothing is left). A forfeit already sent is not touched: if the money is
+-- short PiggyVest refuses it, and the third refusal goes to review.
+CREATE FUNCTION piggyvest_primary.reduce_forfeit_for_reversed_goal_interest()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_goal_id uuid;
+BEGIN
+  SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
+   WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
+  IF NOT FOUND OR NEW.amount_kobo IS NULL OR NEW.amount_kobo < 1 THEN RETURN NEW; END IF;
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+     SET amount_kobo = CASE WHEN forfeit.amount_kobo > NEW.amount_kobo
+                            THEN forfeit.amount_kobo - NEW.amount_kobo ELSE forfeit.amount_kobo END,
+         state = CASE WHEN forfeit.amount_kobo > NEW.amount_kobo THEN 'reserved' ELSE 'released' END
+    FROM piggyvest_primary.goal_cancel_operations AS cancel
+   WHERE forfeit.cancel_operation_id = cancel.id AND forfeit.state = 'reserved'
+     AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
+     AND cancel.state IN ('dispatched', 'confirmed');
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER reduce_forfeit_for_reversed_goal_interest
+  AFTER INSERT ON piggyvest_primary.paid_interest_reversals
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.reduce_forfeit_for_reversed_goal_interest();
 
 -- A customer may not be deleted while a forfeit is planned or in flight:
 -- sending and settlement join the live intent and customer.
@@ -1131,7 +1190,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.claim_goal_cancel_forfeit(jsonb, uuid),
   piggyvest_primary.claim_goal_cancel_forfeit_core(uuid, text, text),
   piggyvest_primary.assert_goal_cancel_worker(uuid, text),
-  piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer),
+  piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer, boolean),
   piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.release_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text),
@@ -1143,6 +1202,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.release_failed_goal_cancel_forfeit(uuid, text, jsonb),
   piggyvest_primary.release_unsent_goal_cancel_forfeit(),
   piggyvest_primary.plan_forfeit_for_late_goal_interest(),
+  piggyvest_primary.reduce_forfeit_for_reversed_goal_interest(),
   piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 
@@ -1156,7 +1216,7 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.claim_goal_cancel_forfeit(jsonb, uui
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text)
   TO piggyvest_primary_authorizer;
-GRANT EXECUTE ON FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer)
+GRANT EXECUTE ON FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer, boolean)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid, text, uuid)
   TO piggyvest_primary_authorizer;

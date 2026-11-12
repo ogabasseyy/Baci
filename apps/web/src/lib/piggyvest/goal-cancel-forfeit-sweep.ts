@@ -69,10 +69,12 @@ export async function sweepPendingGoalCancelForfeits(input: {
   ];
   const work = schemas.workRows.parse(
     (
-      await execute(
-        sql.workerList,
-        bound(String(input.limit ?? GOAL_CANCEL_FORFEIT_SWEEP_LIMIT))
-      )
+      await execute(sql.workerList, [
+        ...bound(String(input.limit ?? GOAL_CANCEL_FORFEIT_SWEEP_LIMIT)),
+        // While new transfers are off only in-flight forfeits are listed, so
+        // unsent ones can not crowd out settling those already sent.
+        String(input.allowNewTransfers),
+      ])
     ).rows
   )[0].result;
   const provider = {

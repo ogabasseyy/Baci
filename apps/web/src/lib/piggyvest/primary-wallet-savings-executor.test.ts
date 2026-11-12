@@ -234,18 +234,24 @@ it('binds the forfeit worker statements to this integration and environment, wit
       ],
     });
     mocks.query.mockResolvedValueOnce({ rows: [{ result: null }] });
-    const parameters = [config.integrationId, config.environment, id];
+    const parameters =
+      text === GOAL_CANCEL_FORFEIT_STATEMENTS.workerList
+        ? [config.integrationId, config.environment, '50', 'true']
+        : [config.integrationId, config.environment, id];
     await execute(text, parameters);
     expect(mocks.query).toHaveBeenLastCalledWith(text, parameters);
     await expect(
       execute(text, [
         '99999999-9999-4999-8999-999999999999',
-        config.environment,
-        id,
+        ...parameters.slice(1),
       ])
     ).rejects.toThrow('Savings binding unavailable');
     await expect(
-      execute(text, [config.integrationId, 'production', id])
+      execute(text, [
+        config.integrationId,
+        'production',
+        ...parameters.slice(2),
+      ])
     ).rejects.toThrow('Savings binding unavailable');
   }
 });

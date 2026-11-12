@@ -9,7 +9,7 @@ export const GOAL_CANCEL_FORFEIT_STATEMENTS = {
   // Authorizer login, integration authority (the scheduled worker sweep):
   // parameters are integration id, environment, then the selection.
   workerList:
-    'SELECT piggyvest_primary.list_goal_cancel_forfeit_work($1::uuid,$2::text,$3::integer) AS result',
+    'SELECT piggyvest_primary.list_goal_cancel_forfeit_work($1::uuid,$2::text,$3::integer,$4::boolean) AS result',
   workerClaim:
     'SELECT piggyvest_primary.claim_goal_cancel_forfeit_worker($1::uuid,$2::text,$3::uuid) AS result',
   workerRelease:

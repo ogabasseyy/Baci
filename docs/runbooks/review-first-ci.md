@@ -10,6 +10,8 @@ Status: **built, off by default.** Merging the pull request changes nothing unti
 
 ## In plain language
 
+The draft CI gate below applies only to same-repository PRs selected by the switch (`on`, or `pilot` with the `review-first-ci` label). Fork drafts retain full CI; all agents still follow the draft/readiness policy.
+
 1. You push to a pull request from this repository. The normal `CI Quality Gate` run starts and does only the
    quick checks: the change detector, lint, type check, the "misc" guard tests, the mobile admin guardrails and the
    silent-revert guard (about 17 job-minutes instead of about 85). `Semgrep SAST` is untouched and also runs at once.
@@ -141,7 +143,7 @@ Fork PRs follow the same review requirements, but these secret-bearing automatic
 
 If another code change or base sync is needed after marking ready, convert back to draft (`gh pr ready <pr> --undo`) **before pushing**, so both draft reviewers run again. Recheck both reviewers on the new head. Keep explicitly paused or deprioritized PRs draft until the owner resumes them, even when reviews are clean.
 
-“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. With review-first CI enabled, drafts run quick checks only, even when Codex is clean or `ci-now` is present. Marking ready releases heavy CI through the existing Codex gate; agents must verify both reviewers first. Muse remains an agent readiness requirement, not a machine-enforced verdict gate. On ready PRs, `ci-now` and timeout recovery do not waive either review before merging.
+“Ready” means ready for review and required CI, not permission to merge. Merge only when authorized by the user, both reviewers are clean on the final head, all required checks pass, and actionable conversations are resolved. Until a required GitHub check enforces both reviews on the exact head, do not arm auto-merge; disable any existing auto-merge (`gh pr merge <pr> --disable-auto`) before changing the PR, and use `gh pr merge <pr> --squash --match-head-commit <reviewed-sha>` for an authorized merge to reject a changed head. This is an agent policy: Muse is not currently a required GitHub status check. For same-repository PRs selected by review-first CI (`on`, or `pilot` with the `review-first-ci` label), drafts run quick checks only, even when Codex is clean or `ci-now` is present. Fork PRs and PRs outside that selection retain their existing full-CI behavior, including while draft; the agent draft/readiness policy still applies to them. Marking ready releases heavy CI through the existing Codex gate; agents must verify both reviewers first. Muse remains an agent readiness requirement, not a machine-enforced verdict gate. On ready PRs, `ci-now` and timeout recovery do not waive either review before merging.
 
 <!-- draft-first-policy:end -->
 

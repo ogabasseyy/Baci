@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAndroidBenchmarkGradleInit } from './android-benchmark-gradle.mjs';
 import { resolveBenchmarkIdentity } from './android-benchmark-identity.mjs';
+import { redactPrivateValues } from './android-benchmark-redaction.mjs';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -158,9 +159,7 @@ function execute(label, command, commandArgs, cwd) {
   ].filter((value) => typeof value === 'string' && value.length > 0));
   let output = `${label}; exit ${result.status ?? 'unavailable'}\n${contents}`;
   if (result.error) output += '\nProcess could not be started or was interrupted.';
-  for (const value of [...privateValues].sort((a, b) => b.length - a.length)) {
-    output = output.split(value).join('[REDACTED]');
-  }
+  output = redactPrivateValues(output, privateValues);
   const logBase = join(homedir(), '.local/state/baci/android-benchmark');
   mkdirSync(logBase, { recursive: true, mode: 0o700 });
   const logDir = mkdtempSync(join(logBase, 'run-'));

@@ -15,6 +15,9 @@ interface RootStartupErrorProps {
 }
 
 export function RootStartupError({ error, retry }: RootStartupErrorProps) {
+  // Expo Router replaces the failed root tree with this boundary, so it must
+  // own its own layout callback. The native controller shares its intro latch
+  // across waiters and coalesces hide calls while a hide is in flight.
   const { onFirstLayout, shouldRenderApp } = useNativeSplashHandoff({
     initialVisible: true,
     ready: true,

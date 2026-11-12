@@ -48,18 +48,18 @@ describe('redirectSystemPath', () => {
     expect(mockCapture).not.toHaveBeenCalled();
   });
 
-  it('continues validating non-root, decorated, and non-initial URLs', () => {
-    for (const value of [
-      { path: 'ogabassey:///cart', initial: true },
-      { path: 'ogabassey:///', initial: false },
-    ]) {
+  it('keeps bare launcher roots on Home and validates route URLs', () => {
+    for (const value of [{ path: 'ogabassey:///cart', initial: true }]) {
       expect(redirectSystemPath(value)).toBe('/cart');
       expect(mockCapture).toHaveBeenLastCalledWith(
         value.path,
         expect.anything()
       );
     }
-    expect(mockCapture).toHaveBeenCalledTimes(2);
+    expect(redirectSystemPath({ path: 'ogabassey:///', initial: false })).toBe(
+      '/'
+    );
+    expect(mockCapture).toHaveBeenCalledTimes(1);
   });
 
   it('delegates to pairing capture with the configured merchant and platform root', () => {

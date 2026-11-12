@@ -3,8 +3,8 @@ import SplashMotion from 'react-native-splash-motion';
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { markStartupTiming } from '@/lib/startup-timing';
 
-// Leave headroom beyond the six-second scene for native startup on older phones.
-const NATIVE_INTRO_TIMEOUT_MS = 15_000;
+// Allow the six-second intro to finish within the startup recovery deadline.
+export const SPLASH_TIMEOUT_MS = 8_000;
 
 /** Native playback owns this boundary; app rendering must not race its frames. */
 export function useNativeSplashIntro(initialVisible: boolean) {
@@ -36,7 +36,7 @@ export function useNativeSplashIntro(initialVisible: boolean) {
       recordCrashBreadcrumb('root_layout:native_intro_timeout');
       markStartupTiming('native_intro_timeout');
       setIntro({ settled: true, completed: false });
-    }, NATIVE_INTRO_TIMEOUT_MS);
+    }, SPLASH_TIMEOUT_MS);
 
     void promiseRef.current.then(
       (completed) => {

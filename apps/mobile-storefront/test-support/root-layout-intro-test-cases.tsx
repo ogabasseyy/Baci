@@ -50,6 +50,11 @@ export function registerRootLayoutIntroTests(context: IntroTestContext) {
           })
         : Promise.resolve()
     );
+    context.mockWaitForIntro.mockReturnValue(
+      new Promise(() => {
+        /* Simulate a native intro callback that never arrives. */
+      })
+    );
     context.setFontsLoaded(blocked !== 'fonts');
     context.renderRoot();
     await act(async () => {

@@ -8,6 +8,7 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { SavingsPhoneSwapStep } from './savings/SavingsPhoneSwapStep';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -15,7 +16,6 @@ import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
-import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 import { WalletSavingsVariantResolutionModal } from './WalletSavingsVariantResolutionModal';
@@ -156,17 +156,7 @@ export function WalletContent(props: WalletContentProps) {
   });
   const [showSavingsVariantResolution, setShowSavingsVariantResolution] =
     useState(false);
-  const {
-    isChangingSavingsDevice,
-    isSavingsDeviceLoading,
-    resolveProduct,
-    savingsDeviceProducts,
-    savingsDeviceSearch,
-    setSavingsDeviceSearch,
-    setShowSavingsDeviceSwap,
-    showSavingsDeviceSwap,
-    handleSelectSavingsDevice,
-  } = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const swap = useSavingsDeviceSwap(onChangeSavingsDevice);
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (
@@ -256,27 +246,26 @@ export function WalletContent(props: WalletContentProps) {
         isFundPending={isFundPending}
         onAddAmountChange={onChangeSavingsContributionAmount}
         onAddSavings={onAddSavingsContribution}
-        onChangeDevice={() => setShowSavingsDeviceSwap(true)}
-        onClose={onCloseSavingsProgress}
+        onChangeDevice={() => swap.setShowSavingsDeviceSwap(true)}
+        onClose={() => {
+          swap.setShowSavingsDeviceSwap(false);
+          onCloseSavingsProgress();
+        }}
         onFundWallet={onFundSavingsWallet}
         onRefreshWallet={async () => onRefresh()}
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
         overlay={savingsSheetOpen ? props.pinPrompt : null}
+        phoneSwapStep={
+          swap.showSavingsDeviceSwap && activeSavingsGoal ? (
+            <SavingsPhoneSwapStep
+              colors={colors}
+              goal={activeSavingsGoal}
+              swap={swap}
+            />
+          ) : null
+        }
         visible={showSavingsProgress}
         walletBalance={spendableBalance}
-      />
-      <WalletSavingsDeviceSwapModal
-        colors={colors}
-        currentAmount={activeSavingsGoal?.current_amount ?? 0}
-        isLoading={isSavingsDeviceLoading}
-        isPending={isChangingSavingsDevice}
-        onClose={() => setShowSavingsDeviceSwap(false)}
-        onSearchChange={setSavingsDeviceSearch}
-        onSelectDevice={handleSelectSavingsDevice}
-        resolveProduct={resolveProduct}
-        products={savingsDeviceProducts}
-        searchValue={savingsDeviceSearch}
-        visible={showSavingsDeviceSwap}
       />
       <WalletSavingsVariantResolutionModal
         colors={colors}

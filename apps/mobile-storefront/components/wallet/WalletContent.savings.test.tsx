@@ -119,10 +119,13 @@ it('renders savings progress modal and wires manual contribution actions', async
   fireEvent.press(
     screen.getByRole('button', { name: 'Change savings device' })
   );
+  // Picking a phone only previews the switch; nothing is sent until the
+  // customer confirms it.
+  fireEvent.press(screen.getByRole('button', { name: 'Choose iPhone 16 Pro' }));
+  expect(props.onChangeSavingsDevice).not.toHaveBeenCalled();
+  expect(screen.getByText('Switch to iPhone 16 Pro?')).toBeOnTheScreen();
   await act(async () => {
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Select iPhone 16 Pro' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Switch phone' }));
     await Promise.resolve();
   });
 

@@ -113,9 +113,7 @@ describe('WalletContent completed savings goals', () => {
         name: 'Resolve savings variant 256GB Black',
       })
     ).toBeOnTheScreen();
-    expect(
-      screen.queryByLabelText('Savings replacement device search')
-    ).toBeNull();
+    expect(screen.queryByLabelText('Search phones')).toBeNull();
     expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
   });
 
@@ -133,9 +131,7 @@ describe('WalletContent completed savings goals', () => {
       screen.getByRole('button', { name: 'Change savings device' })
     );
 
-    expect(
-      screen.getByLabelText('Savings replacement device search')
-    ).toBeOnTheScreen();
+    expect(screen.getByLabelText('Search phones')).toBeOnTheScreen();
     expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
   });

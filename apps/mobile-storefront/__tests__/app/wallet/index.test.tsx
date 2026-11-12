@@ -1392,10 +1392,8 @@ describe('WalletScreen', () => {
         variantId: 'variant-256',
       });
       expect(mockRefetch).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Device updated',
-        'Your savings goal is now for iPhone 16 Pro.'
-      );
+      // The savings sheet shows the new phone; no alert on top of it.
+      expect(alertSpy).not.toHaveBeenCalled();
     } finally {
       alertSpy.mockRestore();
     }
@@ -1593,10 +1591,8 @@ describe('WalletScreen', () => {
         })
       );
       expect(mockRefetch).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Device updated',
-        'Your savings goal is now for Equal Price Phone.'
-      );
+      // The savings sheet shows the new phone; no alert on top of it.
+      expect(alertSpy).not.toHaveBeenCalled();
     } finally {
       alertSpy.mockRestore();
     }

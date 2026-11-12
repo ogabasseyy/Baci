@@ -230,10 +230,7 @@ export async function changeSavingsGoalDevice({
       );
       return true;
     }
-    Alert.alert(
-      'Device updated',
-      `Your savings goal is now for ${choice.name}.`
-    );
+    // The savings sheet shows the new phone; no alert on top of it.
     return true;
   } catch (error) {
     Alert.alert(

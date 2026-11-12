@@ -39,6 +39,8 @@ type WalletSavingsProgressModalProps = {
   onResolveVariant?: () => void;
   /** Rendered inside the sheet's modal so it can appear above it on iOS. */
   overlay?: ReactNode;
+  /** Change phone, shown in this same sheet in place of the savings view. */
+  phoneSwapStep?: ReactNode;
   visible: boolean;
   walletBalance: number;
   walletUpdatedAt?: number;
@@ -59,6 +61,7 @@ export function WalletSavingsProgressModal({
   onRefreshWallet,
   onResolveVariant,
   overlay,
+  phoneSwapStep,
   visible,
   walletBalance,
   walletUpdatedAt,
@@ -72,6 +75,7 @@ export function WalletSavingsProgressModal({
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet);
   // The sheet is sized to what it shows, so it never ends in empty space.
   const [cancelHeight, setCancelHeight] = useState(0);
+  const [swapHeight, setSwapHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
   if (!goal && !cancel.goal) {
@@ -117,6 +121,28 @@ export function WalletSavingsProgressModal({
     );
   }
   if (!goal) return null;
+  if (phoneSwapStep) {
+    return (
+      <SavingsBottomSheet
+        visible={visible}
+        colors={colors}
+        snapPoints={COMPACT_SNAP_POINTS}
+        contentHeight={swapHeight}
+        onClose={onClose}
+      >
+        <BottomSheetScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={(_width, height) =>
+            setSwapHeight(Math.ceil(height))
+          }
+        >
+          {phoneSwapStep}
+        </BottomSheetScrollView>
+      </SavingsBottomSheet>
+    );
+  }
 
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
   const usesPlanFunding = isHostedStagingTestPaymentsEnabled();

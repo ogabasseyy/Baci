@@ -85,20 +85,27 @@ reviews:
     ## 2. 🛡️ Security & Stability
     - **Input validation:** Every API route and server action must validate
       with Zod BEFORE any database operation.
-    - **Auth first:** `const { data: { user } } = await supabase.auth.getUser()`
-      is the FIRST operation in every protected route.
-    - **CSRF:** Non-GET API routes must validate CSRF (see `lib/csrf.ts`).
-    - **Supabase clients:** Use `@/lib/supabase/server` (SSR), `@/lib/supabase/client`
-      (browser), `@/lib/supabase/admin` (service-role, server-only). NEVER use
-      admin client in client bundles.
-    - **Scoped queries:** Always `.eq('merchant_id', user.id)` — never
-      `select('*')`, always explicit columns.
+    - **Auth first:** Authenticate with `supabase.auth.getUser()` before
+      protected business-data access, then resolve merchant/staff authorization
+      via `apps/web/src/lib/get-merchant-for-api-request.ts` (or the route's
+      established helper). NEVER assume `merchant_id === user.id`.
+    - **CSRF / Mutation protection:** Mutation protection is route-specific:
+      `apps/web/src/proxy.ts` enforces origin-based mutation checks for browser
+      routes, while bearer-authenticated mobile requests, signed webhooks, and
+      authenticated cron workers follow their own contracts. Do not require
+      browser CSRF tokens on webhooks or bearer requests.
+    - **Supabase clients:** Use `@/lib/supabase/server` (SSR) and
+      `@/lib/supabase/client` (browser) under RLS. Never use service-role/admin
+      clients for user-facing operations (all legacy exceptions in
+      `docs/agent-guidance/service-role-exceptions.md` are expired).
+    - **Scoped queries:** Scope business-data queries to the resolved
+      `merchantId` — never `select('*')`, always explicit columns.
     - **No `any`.** Use `unknown` or explicit interfaces/Zod schemas.
-    - **HTML sanitization:** Use `lib/sanitize*.ts` — NEVER `dangerouslySetInnerHTML`
-      on unsanitized input.
-    - **Payments:** Webhooks (Korapay/Paystack/Kuda) must verify HMAC-SHA256
-      signature and fail-closed if secret missing. Amount/currency must be
-      validated server-side against the stored transaction.
+    - **HTML sanitization:** Use `lib/sanitize*.ts` — NEVER `dangerouslySetInnerHTML`.
+    - **Payments:** Verify webhook signatures per each provider's exact contract
+      (e.g. Paystack uses HMAC-SHA512 over the raw body; do not assume all
+      providers use HMAC-SHA256) and fail-closed if the secret or signature is
+      missing. Validate amount/currency server-side and keep processing idempotent.
 
     ## 3. 🗄️ Database
     - **RLS required** on all new Supabase tables.

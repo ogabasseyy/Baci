@@ -23,6 +23,7 @@ export const test = base.extend<{
       let manualApi403ConsoleCount = 0;
       let manualApi404ConsoleCount = 0;
       let manualCheckoutFlowVisited = false;
+      let chatwootBridgeFixtureVisited = false;
       let manualCheckoutProviderErrorCount = 0;
       let manualCheckout503ConsoleCount = 0;
       let redvaultSharedPickupVisited = false;
@@ -32,6 +33,8 @@ export const test = base.extend<{
       let redvaultLostNetworkErrors = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('framenavigated', () => {
+        if (new URL(page.url()).pathname === '/chatwoot-bridge')
+          chatwootBridgeFixtureVisited = true;
         const qaScenario = new URL(page.url()).searchParams.get('qa');
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
         if (
@@ -158,6 +161,29 @@ export const test = base.extend<{
         const isFixtureResumeOrderRead =
           request.method() === 'GET' &&
           url.pathname === `/api/storefront/orders/${order.id}`;
+        const harnessOrigin = `http://127.0.0.1:${process.env.CHECKOUT_BROWSER_PORT?.trim() || '3217'}`;
+        const isChatwootBridgeFixturePage =
+          url.origin === harnessOrigin &&
+          url.pathname === '/chatwoot-bridge' &&
+          request.method() === 'GET';
+        const isChatwootWidgetFixture =
+          chatwootBridgeFixtureVisited &&
+          url.origin === 'https://support.example.test' &&
+          url.pathname === '/widget' &&
+          request.method() === 'GET';
+        const isChatwootContextFixture =
+          chatwootBridgeFixtureVisited &&
+          url.origin === harnessOrigin &&
+          /^\/api\/storefront\/chatwoot\/context\/(?:challenge|verify|authorize)$/.test(
+            url.pathname
+          ) &&
+          request.method() === 'POST';
+        if (
+          isChatwootBridgeFixturePage ||
+          isChatwootWidgetFixture ||
+          isChatwootContextFixture
+        )
+          return route.continue();
         if (
           manualApiScenario() &&
           url.origin === new URL(page.url()).origin &&

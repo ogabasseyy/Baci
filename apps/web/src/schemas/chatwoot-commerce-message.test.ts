@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  chatwootCommerceContextControlSchema,
-  chatwootCommerceMessageSchema,
-} from './chatwoot-commerce-message';
+import { chatwootCommerceMessageSchema } from './chatwoot-commerce-message';
 
 describe('Chatwoot commerce message schemas', () => {
   it('keeps commerce messages strict and accepts supported session token sizes', () => {
@@ -23,31 +20,6 @@ describe('Chatwoot commerce message schemas', () => {
           conversationId: 905,
           sessionToken: 'token',
           merchantId: 'caller-selected',
-        },
-      }).success
-    ).toBe(false);
-  });
-
-  it('requires validated visitor and context claims in control messages', () => {
-    expect(
-      chatwootCommerceContextControlSchema.safeParse({
-        event: 'baci-commerce-context-request',
-        data: {
-          requestId: 'context_123456',
-          conversationId: 905,
-          websiteToken: 'synthetic-widget-token-123456',
-          visitorTokenSha256: 'a'.repeat(64),
-        },
-      }).success
-    ).toBe(true);
-    expect(
-      chatwootCommerceContextControlSchema.safeParse({
-        event: 'baci-commerce-context-request',
-        data: {
-          requestId: 'context_123456',
-          conversationId: 905,
-          websiteToken: 'synthetic-widget-token-123456',
-          visitorTokenSha256: 'A'.repeat(64),
         },
       }).success
     ).toBe(false);

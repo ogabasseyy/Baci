@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { chatwootCartReviewSnapshotSchema } from '@/schemas/chatwoot-commerce-context';
+import { chatwootCartReviewSnapshotSchema } from '@/schemas/chatwoot-cart-review-snapshot';
 
 export type ChatwootCartReviewSnapshot = z.infer<
   typeof chatwootCartReviewSnapshotSchema

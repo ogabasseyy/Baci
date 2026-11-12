@@ -1,5 +1,14 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  authorizedEmptyCartResponse as authorizedResponse,
+  challengeResponse,
+  contextResponse,
+  establishChatwootWidgetContext as establishContext,
+  installChatwootFrame as installFrame,
+  CHATWOOT_WIDGET_ORIGIN as origin,
+  sendChatwootWidgetMessage as send,
+} from './chatwoot-inline-cart-test-fixtures';
 
 const mocks = vi.hoisted(() => ({
   cartState: {
@@ -31,107 +40,6 @@ function HookHarness({
   return null;
 }
 
-const origin = 'https://chatwoot.example.com';
-const snapshot = {
-  cartVersion: 8,
-  currency: 'NGN',
-  estimatedTotals: false,
-  items: [],
-  itemsSubtotalMinor: 0,
-};
-
-function installFrame() {
-  const holder = document.createElement('div');
-  holder.id = 'cw-widget-holder';
-  const frame = document.createElement('iframe');
-  frame.id = 'chatwoot_live_chat_widget';
-  holder.append(frame);
-  document.body.append(holder);
-  const target = frame.contentWindow;
-  if (!target) throw new Error('Expected the iframe to have a content window');
-  const postMessage = vi
-    .spyOn(target, 'postMessage')
-    .mockImplementation(() => {});
-  return { holder, target, postMessage };
-}
-
-function send(target: Window, event: string, data: Record<string, unknown>) {
-  window.dispatchEvent(
-    new MessageEvent('message', {
-      origin,
-      source: target,
-      data: `${event}:${JSON.stringify(data)}`,
-    })
-  );
-}
-
-function authorizedResponse(conversationId: number, onJson?: () => void) {
-  return {
-    ok: true,
-    json: async () => {
-      onJson?.();
-      return {
-        authorized: true,
-        conversationId,
-        sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
-        cartSnapshot: snapshot,
-      };
-    },
-  };
-}
-
-function contextResponse(contextToken: string) {
-  const conversationId = Number(contextToken.split('-').at(-1));
-  const requestId =
-    conversationId === 906 ? 'context_654321' : 'context_123456';
-  return {
-    ok: true,
-    json: async () => ({
-      authorized: true,
-      requestId,
-      conversationId,
-      sessionToken: `session-${conversationId}`,
-      sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
-    }),
-  };
-}
-
-async function establishContext(
-  target: Window,
-  postMessage: ReturnType<typeof installFrame>['postMessage'],
-  conversationId = 905
-) {
-  const requestId =
-    conversationId === 906 ? 'context_654321' : 'context_123456';
-  postMessage.mockClear();
-  send(target, 'baci-commerce-context-request', {
-    requestId,
-    conversationId,
-    websiteToken: 'synthetic-widget-token-123456',
-    visitorTokenSha256: 'b'.repeat(64),
-  });
-  await waitFor(() =>
-    expect(
-      postMessage.mock.calls.some(([payload]) =>
-        String(payload).startsWith('baci-commerce-context-challenge:')
-      )
-    ).toBe(true)
-  );
-  send(target, 'baci-commerce-context-ready', {
-    requestId,
-    conversationId,
-    contextToken: `context-${conversationId}`,
-    expiresAt: Math.floor(Date.now() / 1000) + 60,
-  });
-  await waitFor(() =>
-    expect(
-      postMessage.mock.calls.some(([payload]) =>
-        String(payload).startsWith('baci-commerce-context-authorized:')
-      )
-    ).toBe(true)
-  );
-}
-
 describe('ChatwootInlineCartBridge async context races', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -144,15 +52,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
         if (
           new URL(path, 'https://store.test').pathname.endsWith('/challenge')
         ) {
-          return {
-            ok: true,
-            json: async () => ({
-              requestId: body.requestId,
-              widgetOrigin: origin,
-              challengeToken: `challenge-${body.requestId}`,
-              expiresAt: Math.floor(Date.now() / 1000) + 60,
-            }),
-          };
+          return challengeResponse(String(body.requestId));
         }
         if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return contextResponse(String(body.contextToken));
@@ -175,15 +75,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
         if (
           new URL(path, 'https://store.test').pathname.endsWith('/challenge')
         ) {
-          return {
-            ok: true,
-            json: async () => ({
-              requestId: body.requestId,
-              widgetOrigin: origin,
-              challengeToken: `challenge-${body.requestId}`,
-              expiresAt: Math.floor(Date.now() / 1000) + 60,
-            }),
-          };
+          return challengeResponse(String(body.requestId));
         }
         if (new URL(path, 'https://store.test').pathname.endsWith('/verify'))
           return contextResponse(String(body.contextToken));
@@ -219,7 +111,10 @@ describe('ChatwootInlineCartBridge async context races', () => {
     ).toBe(false);
   });
 
-  it('discards an authorization response after iframe navigation or merchant switch', async () => {
+  it.each([
+    'iframe navigation',
+    'merchant switch',
+  ] as const)('discards an authorization response after %s', async (change) => {
     const { holder, target, postMessage } = installFrame();
     let resolveFetch:
       | ((value: ReturnType<typeof authorizedResponse>) => void)
@@ -231,15 +126,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
         if (
           new URL(path, 'https://store.test').pathname.endsWith('/challenge')
         ) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              requestId: body.requestId,
-              widgetOrigin: origin,
-              challengeToken: `challenge-${body.requestId}`,
-              expiresAt: Math.floor(Date.now() / 1000) + 60,
-            }),
-          });
+          return Promise.resolve(challengeResponse(String(body.requestId)));
         }
         if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return Promise.resolve(contextResponse(String(body.contextToken)));
@@ -267,11 +154,14 @@ describe('ChatwootInlineCartBridge async context races', () => {
         )
       );
     });
-    holder.replaceChildren(document.createElement('iframe'));
-    mocks.cartState.merchantSlug = 'another-store';
-    view.rerender(
-      <HookHarness storeSlug="another-store" widgetOrigin={origin} />
-    );
+    if (change === 'iframe navigation') {
+      holder.replaceChildren(document.createElement('iframe'));
+    } else {
+      mocks.cartState.merchantSlug = 'another-store';
+      view.rerender(
+        <HookHarness storeSlug="another-store" widgetOrigin={origin} />
+      );
+    }
     await act(async () => {
       let authorizationParsed = false;
       resolveFetch?.(

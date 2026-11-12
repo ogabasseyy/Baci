@@ -75,7 +75,7 @@ describe('projectChatwootCartReview', () => {
     ).toBeNull();
   });
 
-  it('rejects a line whose canonical product has no scoped name', () => {
+  it('rejects a line whose product has no merchant-scoped name', () => {
     expect(projectChatwootCartReview(makeCart(), {})).toBeNull();
   });
 });

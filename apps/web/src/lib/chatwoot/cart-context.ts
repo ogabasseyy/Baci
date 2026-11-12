@@ -149,7 +149,6 @@ export async function loadChatwootCartContext(
         .from('products')
         .select('id, name')
         .eq('merchant_id', cartContext.merchant.id)
-        .eq('status', 'active')
         .in('id', productIds);
       if (error || !data) return cartContextError('temporarily_unavailable');
       productNames = Object.fromEntries(

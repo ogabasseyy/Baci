@@ -8,10 +8,8 @@ import {
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
-import {
-  chatwootCartReviewSnapshotSchema,
-  chatwootCommerceSessionAuthorizeRequestSchema,
-} from '@/schemas/chatwoot-commerce-context';
+import { chatwootCartReviewSnapshotSchema } from '@/schemas/chatwoot-cart-review-snapshot';
+import { chatwootCommerceSessionAuthorizeRequestSchema } from '@/schemas/chatwoot-commerce-context';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
 

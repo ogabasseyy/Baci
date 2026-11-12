@@ -131,7 +131,7 @@ describe('Chatwoot cart product-name projection', () => {
     vi.clearAllMocks();
   });
 
-  it('queries names only under the independently resolved merchant and active catalog', async () => {
+  it('queries names under the independently resolved merchant for referenced products', async () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
     prepareVerifiedCart();
     const result = await loadChatwootCartContext(request(), {
@@ -147,7 +147,7 @@ describe('Chatwoot cart product-name projection', () => {
       'merchant_id',
       merchantId
     );
-    expect(mocks.productQuery.eq).toHaveBeenCalledWith('status', 'active');
+    expect(mocks.productQuery.eq).not.toHaveBeenCalledWith('status', 'active');
     expect(mocks.productQuery.in).toHaveBeenCalledWith('id', ['product-1']);
   });
 
@@ -163,17 +163,25 @@ describe('Chatwoot cart product-name projection', () => {
     expect(mocks.productQuery.in).not.toHaveBeenCalled();
   });
 
-  it('fails closed when a requested product has no usable name', async () => {
+  it('keeps the canonical name of an inactive cart product available', async () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
     prepareVerifiedCart();
-    mocks.productQuery.in.mockResolvedValue({ data: [], error: null });
+    mocks.productQuery.in.mockResolvedValue({
+      data: [
+        {
+          id: 'product-1',
+          name: 'Previously available product',
+          status: 'inactive',
+        },
+      ],
+      error: null,
+    });
 
     await expect(
       loadChatwootCartContext(request(), { includeProductNames: true })
     ).resolves.toMatchObject({
-      ok: false,
-      status: 503,
-      code: 'temporarily_unavailable',
+      ok: true,
+      productNames: { 'product-1': 'Previously available product' },
     });
   });
 

@@ -1,49 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import {
-  readChatwootCommerceContextMessage,
-  readChatwootCommerceMessage,
-} from './chatwoot-commerce-message';
+import { readChatwootCommerceMessage } from './chatwoot-commerce-message';
 const frame = {} as Window;
-const event = (origin: string, source: Window, message: unknown) =>
+const event = (
+  origin: string,
+  source: Window,
+  message: { event: string; data: unknown }
+) =>
   ({
     origin,
     source,
-    data: `${(message as { event: string }).event}:${JSON.stringify((message as { data: unknown }).data)}`,
+    data: `${message.event}:${JSON.stringify(message.data)}`,
   }) as MessageEvent;
 const context = { conversationId: 905, sessionToken: 'signed-session-capability' };
 describe('Chatwoot commerce messages', () => {
-  it('accepts only bounded context signals from the exact widget frame and origin', () => {
-    const request = {
-      event: 'baci-commerce-context-request',
-      data: {
-        requestId: 'context_123456',
-        conversationId: 905,
-        websiteToken: 'synthetic-widget-token-123456',
-        visitorTokenSha256: 'b'.repeat(64),
-      },
-    };
-    expect(
-      readChatwootCommerceContextMessage(
-        event('https://widget.test', frame, request),
-        'https://widget.test',
-        frame
-      )
-    ).toEqual(request);
-    expect(
-      readChatwootCommerceContextMessage(
-        event('https://evil.test', frame, request),
-        'https://widget.test',
-        frame
-      )
-    ).toBeNull();
-    expect(
-      readChatwootCommerceContextMessage(
-        event('https://widget.test', {} as Window, request),
-        'https://widget.test',
-        frame
-      )
-    ).toBeNull();
-  });
+
 
   it('accepts generated underscore product slugs in product and cart requests', () => {
     for (const msg of [
@@ -140,7 +110,7 @@ describe('Chatwoot commerce messages', () => {
   it('accepts only a request-id-only checkout review command', () => {
     const valid = { event: 'baci-checkout-review-request', data: { requestId: 'review-1', ...context } };
     expect(readChatwootCommerceMessage(event('https://widget.test', frame, valid), 'https://widget.test', frame)).toEqual(valid);
-    expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { requestId: 'review-1', cartId: 'caller-selected' } }), 'https://widget.test', frame)).toBeNull();
+    expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { ...valid.data, cartId: 'caller-selected' } }), 'https://widget.test', frame)).toBeNull();
   });
 
   it('accepts a full-size supported signed session token envelope', () => {

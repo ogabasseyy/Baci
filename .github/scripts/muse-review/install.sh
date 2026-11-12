@@ -11,11 +11,11 @@
 # Env in: HOME, GITHUB_PATH. Must run on Linux (runner: ubuntu-latest).
 set -euo pipefail
 
-MUSE_VERSION="1.4.13-R6996.1"
-# From the stable-channel manifest (retrieved 2026-10-26 over TLS):
+MUSE_VERSION="1.4.14-R7309.1"
+# From the stable-channel manifest (retrieved 2026-11-02 over TLS):
 # https://api.meta.ai/muse-code/channels/muse-stable
-SHA_X86_LINUX="51e97f8de0aa175080e6576cbc055510a95dfe0ededf175c7f6b34fc8e3bf524"
-SHA_AARCH64_LINUX="c7f278b5f12862f5721c73433976256aa2a8abd433a12da0e484d30b08c024ff"
+SHA_X86_LINUX="0809aac7cb58d18f5022b6d05e02aa1974683c0ec430e5f04d25b60ed17de2da"
+SHA_AARCH64_LINUX="3dc39b8fa26f9963cc2038f2966c0932ed5a39f0f9efb39cc0266a261cbbcf76"
 
 arch="$(uname -m)"
 case "${arch}" in

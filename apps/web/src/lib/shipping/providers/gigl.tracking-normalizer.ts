@@ -130,7 +130,6 @@ function applyLifecycleGuards(
     }
     if (
       candidate.recognizedStatus === 'in_transit' ||
-      candidate.recognizedStatus === 'picked_up' ||
       candidate.recognizedStatus === 'out_for_delivery' ||
       candidate.recognizedStatus === 'failed'
     ) {

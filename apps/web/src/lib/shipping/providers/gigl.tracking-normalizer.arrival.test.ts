@@ -317,3 +317,24 @@ describe('bugfix: same-city shipments and pickup-reason MSHC', () => {
     expect(result.status).toBe('pickup_scheduled');
   });
 });
+
+describe('bugfix: pickup completion alone is not network movement', () => {
+  it('keeps MSHC after MPIK in the first-mile state', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W17',
+        MobileShipmentTrackings: [
+          event('MAPT', '09:00:00'),
+          event('MPIK', '10:00:00'),
+          event('MSHC', '11:00:00'),
+        ],
+      },
+      'W17',
+      OBSERVED_AT
+    );
+    expect(result.status).not.toBe('out_for_delivery');
+    expect(result.events.some((e) => e.status === 'out_for_delivery')).toBe(
+      false
+    );
+  });
+});

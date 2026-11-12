@@ -13,7 +13,7 @@ it('waits for auth state to settle before recovering checkout', async () => {
   act(() => result.current());
   expect(recoverCheckout).not.toHaveBeenCalled();
 
-  rerender({ isAuthenticated: true, isRouteFocused: true });
+  rerender({ isAuthenticated: true });
   await waitFor(() => expect(recoverCheckout).toHaveBeenCalledTimes(1));
 });
 

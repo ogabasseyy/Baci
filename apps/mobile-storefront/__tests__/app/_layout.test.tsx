@@ -416,6 +416,26 @@ describe('RootLayout storage boot gate', () => {
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
   });
 
+  it('returns to navigation when the recovery screen gets a delayed layout', async () => {
+    mockAutoLayout = false;
+    mockInitializeStorage.mockResolvedValue(undefined);
+
+    render(<RootLayout />);
+    await waitFor(() =>
+      expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen()
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(8000);
+    });
+    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
+
+    fireEvent(screen.getByTestId('startup-recovery'), 'layout');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen()
+    );
+  });
+
   it('shows recovery and releases the splash when startup storage is not ready', async () => {
     mockInitializeStorage.mockReturnValue(new Promise(() => undefined));
 

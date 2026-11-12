@@ -48,6 +48,14 @@ describe('redirectSystemPath', () => {
     expect(mockCapture).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'OGABASSEY:///',
+    'Ogabassey://',
+  ])('keeps mixed-case bare launcher roots on Home after launch: %s', (path) => {
+    expect(redirectSystemPath({ path, initial: false })).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
   it('keeps bare launcher roots on Home and validates route URLs', () => {
     for (const value of [{ path: 'ogabassey:///cart', initial: true }]) {
       expect(redirectSystemPath(value)).toBe('/cart');

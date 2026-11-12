@@ -1,3 +1,5 @@
+const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+
 export const BNPL_INJECTED_JAVASCRIPT = `
   (function() {
     const postDebugMessage = function(payload) {
@@ -40,11 +42,17 @@ export const BNPL_INJECTED_JAVASCRIPT = `
       ['type', 'status', 'name', 'gateway'].forEach(function(key) {
         if (typeof data[key] === 'string') summary[key] = data[key];
       });
+      if (data.message === 'checkout.widget.closed') {
+        summary.message = data.message;
+      }
 
       if (data.data && typeof data.data === 'object') {
         ['type', 'status', 'name', 'gateway'].forEach(function(key) {
           if (typeof data.data[key] === 'string') summary[key] = data.data[key];
         });
+        if (data.data.message === 'checkout.widget.closed') {
+          summary.message = data.data.message;
+        }
       }
 
       return summary;
@@ -153,8 +161,8 @@ export const BNPL_INJECTED_JAVASCRIPT = `
       if (isProviderOrigin(event.origin)) {
         const summary = getMessageSummary(event.data);
         // The native handler also consumes provider-close summaries.
-        const isClose = [summary.type, summary.status, summary.name].includes('checkout.widget.closed');
-        if (${__DEV__} || isClose) {
+        const isClose = [summary.type, summary.status, summary.name, summary.message].includes('checkout.widget.closed');
+        if (${isDevelopment} || isClose) {
           postDebugMessage({
             type: 'bnpl_log',
             message: 'Provider postMessage received',

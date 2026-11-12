@@ -28,4 +28,21 @@ describe('hasSpendableBalance', () => {
       hasSpendableBalance({ savingsWalletBalance: 0, storeCreditBalance: 1 })
     ).toBe(true);
   });
+
+  it('counts PiggyVest money once the savings wallet can pay', () => {
+    expect(
+      hasSpendableBalance({
+        savingsWalletBalance: 5000,
+        savingsWalletCanPay: true,
+        storeCreditBalance: 0,
+      })
+    ).toBe(true);
+    expect(
+      hasSpendableBalance({
+        savingsWalletBalance: 0,
+        savingsWalletCanPay: true,
+        storeCreditBalance: 0,
+      })
+    ).toBe(false);
+  });
 });

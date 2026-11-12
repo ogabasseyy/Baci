@@ -9,6 +9,8 @@ interface SpendableBalanceInput {
   storeCreditBalance: number | undefined;
   /** PiggyVest main wallet in naira: funds savings goals only for now. */
   savingsWalletBalance: number | undefined;
+  /** Defaults to SAVINGS_WALLET_CAN_PAY; tests pass true to preview the flip. */
+  savingsWalletCanPay?: boolean;
 }
 
 /**
@@ -18,7 +20,8 @@ interface SpendableBalanceInput {
 export function hasSpendableBalance({
   storeCreditBalance,
   savingsWalletBalance,
+  savingsWalletCanPay = SAVINGS_WALLET_CAN_PAY,
 }: SpendableBalanceInput): boolean {
   if ((storeCreditBalance ?? 0) > 0) return true;
-  return SAVINGS_WALLET_CAN_PAY && (savingsWalletBalance ?? 0) > 0;
+  return savingsWalletCanPay && (savingsWalletBalance ?? 0) > 0;
 }

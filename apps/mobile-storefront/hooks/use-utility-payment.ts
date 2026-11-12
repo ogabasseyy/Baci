@@ -75,9 +75,17 @@ export function useUtilityPayment() {
     paymentSettings.data?.wallet_paystack_dva_enabled === true;
   const walletError = wallet.error instanceof Error ? wallet.error : null;
 
+  // Where PiggyVest is possible, a wallet without a customer row can't be
+  // classified yet (Codex): hold bank transfers like an unknown verdict.
+  const readLiveVerdict = wallet.getWalletVerdict;
   const liveVerdictReader: {
     getWalletVerdict?: () => PiggyvestShortfallVerdict;
-  } = { getWalletVerdict: wallet.getWalletVerdict };
+  } = readLiveVerdict
+    ? {
+        getWalletVerdict: () =>
+          readLiveVerdict({ holdUnsettled: piggyvestPossible }),
+      }
+    : {};
   return {
     canFundByBankTransfer,
     /**
@@ -158,7 +166,8 @@ export function useUtilityPayment() {
     // PiggyVest check failed, or a refresh may change the verdict (Codex):
     // hold bank-transfer top-ups until the wallet settles.
     ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
-    (piggyvestPossible && wallet.isRefetching)
+    (piggyvestPossible &&
+      (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
       ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

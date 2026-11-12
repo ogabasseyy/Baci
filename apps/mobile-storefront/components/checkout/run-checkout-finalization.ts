@@ -42,6 +42,7 @@ export async function runCheckoutFinalization({
   snapshot,
   user,
   walletFundedBankTransferOptionEnabled,
+  isWalletFundedBankTransferHeld,
 }: {
   accountPassword: UseCheckoutSubmitParams['accountPassword'];
   address: ShippingAddressInput;
@@ -68,6 +69,7 @@ export async function runCheckoutFinalization({
   snapshot: CheckoutSnapshot;
   user: UseCheckoutSubmitParams['user'];
   walletFundedBankTransferOptionEnabled: UseCheckoutSubmitParams['walletFundedBankTransferOptionEnabled'];
+  isWalletFundedBankTransferHeld?: UseCheckoutSubmitParams['isWalletFundedBankTransferHeld'];
 }): Promise<void> {
   // Stamped order currency for both emission lanes: the creation
   // purchase must carry it (otherwise a successful claim permanently
@@ -166,6 +168,9 @@ export async function runCheckoutFinalization({
     setShowCryptoSelection,
     shouldCreateWalletFundedBankTransferOrder:
       walletFundedBankTransferOptionEnabled &&
-      selectedPayment === 'bank_transfer',
+      selectedPayment === 'bank_transfer' &&
+      // Read now, not at render (Codex): the wallet may have turned out to
+      // be PiggyVest while the order was being created.
+      !(isWalletFundedBankTransferHeld?.() ?? false),
   });
 }

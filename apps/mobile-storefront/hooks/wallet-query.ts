@@ -27,6 +27,12 @@ export interface WalletData {
    * balance isn't ready yet: purchase screens hold bank-transfer funding.
    */
   primary_pending?: boolean;
+  /**
+   * True when a signed-in user has no single customer row for this merchant
+   * yet, so the wallet kind can't be classified: where PiggyVest is
+   * possible, purchase screens hold bank-transfer funding.
+   */
+  owner_unresolved?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];

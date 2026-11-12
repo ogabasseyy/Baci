@@ -7,11 +7,15 @@ let mockWalletQuery: {
   data?: {
     wallet: {
       balance: number;
+      owner_unresolved?: boolean;
       primary_balance_kobo?: number;
     };
   };
   error?: Error | null;
   getWalletBalance?: () => number;
+  getWalletVerdict?: (options?: { holdUnsettled?: boolean }) => {
+    walletPrimaryUnknown?: boolean;
+  };
   isFetchingNow?: () => boolean;
   isLoading?: boolean;
   isRefetching?: boolean;
@@ -129,6 +133,58 @@ describe('useUtilityPayment store credit', () => {
       ...baseWalletQuery(),
       data: { wallet: { balance: 0 } },
       isRefetching: true,
+    };
+
+    const { result } = renderHook(() => useUtilityPayment());
+    mockCapability = null;
+
+    expect(result.current.walletPrimaryUnknown).toBeUndefined();
+  });
+});
+
+describe('bugfix: utility bank transfers offered before the wallet owner resolves', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: true },
+    });
+  });
+
+  it('holds bank-transfer funding for a user with no customer row yet', () => {
+    // Arrange: settled empty wallet, no customer row, PiggyVest possible.
+    mockCapability = null;
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, owner_unresolved: true } },
+    };
+
+    // Act
+    const { result } = renderHook(() => useUtilityPayment());
+
+    // Assert
+    expect(result.current.walletPrimaryUnknown).toBe(true);
+  });
+
+  it('asks the live verdict to hold an unresolved owner where PiggyVest is possible', () => {
+    mockCapability = null;
+    const getWalletVerdict = jest.fn(() => ({ walletPrimaryUnknown: true }));
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, owner_unresolved: true } },
+      getWalletVerdict,
+    };
+
+    const { result } = renderHook(() => useUtilityPayment());
+    result.current.getWalletVerdict?.();
+
+    expect(getWalletVerdict).toHaveBeenCalledWith({ holdUnsettled: true });
+  });
+
+  it("keeps today's funding for an unresolved owner where the server rules PiggyVest out", () => {
+    mockCapability = false;
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, owner_unresolved: true } },
     };
 
     const { result } = renderHook(() => useUtilityPayment());

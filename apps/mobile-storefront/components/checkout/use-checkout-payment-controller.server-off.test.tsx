@@ -7,6 +7,10 @@ let mockWallet: Record<string, unknown> | undefined;
 let mockIsRefetching = false;
 let mockIsError = false;
 let mockCapability: boolean | null = null;
+let mockLiveVerdict = {
+  walletIsStoreCredit: false,
+  walletPrimaryUnknown: false,
+};
 
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
   usePiggyvestPrimaryCapability: () => mockCapability,
@@ -23,7 +27,10 @@ jest.mock('@/hooks/use-checkout-savings', () => ({
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({
     data: mockWallet ? { wallet: mockWallet } : undefined,
+    getWalletError: () => null,
+    getWalletVerdict: () => mockLiveVerdict,
     isError: mockIsError,
+    isFetchingNow: () => false,
     isRefetching: mockIsRefetching,
   }),
 }));
@@ -180,6 +187,35 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
 
     expect(result.current.walletIsStoreCredit).toBe(false);
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+
+  it('holds bank transfer to wallet for a user with no customer row yet', () => {
+    mockWallet = { balance: 0, owner_unresolved: true };
+
+    const { result } = renderController();
+
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+
+  it('exposes a live re-check that holds once the wallet turns PiggyVest', () => {
+    // Arrange: legacy at render; the cache now reads PiggyVest store credit.
+    mockWallet = { balance: 0 };
+    mockLiveVerdict = {
+      walletIsStoreCredit: true,
+      walletPrimaryUnknown: false,
+    };
+
+    // Act
+    const { result } = renderController();
+    const held = result.current.isWalletFundedBankTransferHeld();
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+
+    // Assert
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+    expect(held).toBe(true);
   });
 
   it('holds bank transfer to wallet until the wallet has loaded', () => {

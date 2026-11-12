@@ -65,5 +65,7 @@ export interface UseCheckoutSubmitParams {
   user: CheckoutUser | null | undefined;
   walletBalance: number;
   walletFundedBankTransferOptionEnabled: boolean;
+  /** Live re-check at finalization; true stops the wallet-funded transfer. */
+  isWalletFundedBankTransferHeld?: () => boolean;
   walletSelection: WalletSelection | undefined;
 }

@@ -110,6 +110,25 @@ describe('live-wallet-query', () => {
     queryClient.clear();
   });
 
+  it('bugfix: holds an unresolved or missing owner only when asked', () => {
+    const queryClient = createTestClient();
+    const live = createLiveWalletQuery(queryClient);
+    // No cached wallet yet.
+    expect(live.getVerdict({ holdUnsettled: true }).walletPrimaryUnknown).toBe(
+      true
+    );
+    queryClient.setQueryData<WalletQueryData>(keyFor('customer-1', 'user-1'), {
+      wallet: { balance: 0, loyalty_points: 0, owner_unresolved: true },
+      transactions: [],
+    });
+    expect(live.getVerdict({ holdUnsettled: true }).walletPrimaryUnknown).toBe(
+      true
+    );
+    // Merchants the server rules out keep today's verdict.
+    expect(live.getVerdict().walletPrimaryUnknown).toBe(false);
+    queryClient.clear();
+  });
+
   it('reports unsettled while the identities disagree despite cached data', () => {
     const queryClient = createTestClient();
     seedBalance(queryClient, keyFor('customer-1', 'user-1'), 750);

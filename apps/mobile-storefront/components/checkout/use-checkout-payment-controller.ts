@@ -25,6 +25,7 @@ import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
+import { isLiveWalletTransferHeld } from './is-live-wallet-transfer-held';
 import { useRedvaultAvailability } from './use-redvault-availability';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
@@ -196,6 +197,7 @@ export function useCheckoutPaymentController({
         isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
         (piggyvestPossible &&
           (!walletQuery.data?.wallet ||
+            walletQuery.data.wallet.owner_unresolved === true ||
             walletQuery.isRefetching ||
             walletQuery.isError)),
     });
@@ -264,6 +266,9 @@ export function useCheckoutPaymentController({
     total,
     walletBalance,
     walletFundedBankTransferOptionEnabled,
+    // Live re-check at submit: a refresh may land as PiggyVest mid-submit.
+    isWalletFundedBankTransferHeld: () =>
+      isLiveWalletTransferHeld(walletQuery, piggyvestPossible),
     walletIsStoreCredit,
     walletSelection,
   };

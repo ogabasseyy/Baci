@@ -32,10 +32,14 @@ import {
   normalizeWalletTransaction,
 } from './wallet-transaction-normalize';
 
-function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
+function getEmptyWalletData(
+  loyaltyPoints: unknown = 0,
+  ownerUnresolved = false
+): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;
   return {
     wallet: {
+      ...(ownerUnresolved ? { owner_unresolved: true as const } : {}),
       active_savings_goal: null,
       balance: 0,
       earnings_available: false,
@@ -91,7 +95,7 @@ export async function fetchWalletDataUnbounded(
     : [];
 
   if (customerRows.length === 0) {
-    return getEmptyWalletData();
+    return getEmptyWalletData(0, true);
   }
 
   if (customerRows.length > 1) {
@@ -107,7 +111,7 @@ export async function fetchWalletDataUnbounded(
       severity: 'data_integrity',
       userId,
     });
-    return getEmptyWalletData();
+    return getEmptyWalletData(0, true);
   }
 
   const customerRow = customerRows[0];
@@ -124,7 +128,7 @@ export async function fetchWalletDataUnbounded(
         ? (coerceDatabaseNumber(customerValidation.data.loyalty_points) ?? 0)
         : (coerceDatabaseNumber(customerRow.loyalty_points) ?? 0);
 
-    return getEmptyWalletData(safeLoyaltyPoints);
+    return getEmptyWalletData(safeLoyaltyPoints, true);
   }
 
   const walletResult = await supabase

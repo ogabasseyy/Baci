@@ -95,8 +95,12 @@ export interface LiveWalletQuery {
   /**
    * PiggyVest verdict for the CURRENT identity's cached wallet. Invoke
    * at gate time: the wallet may load as PiggyVest-ready mid-await.
+   * `holdUnsettled` (set where PiggyVest is possible) also counts a
+   * missing wallet or one without a customer row as unknown.
    */
-  getVerdict: () => PiggyvestShortfallVerdict;
+  getVerdict: (options?: {
+    holdUnsettled?: boolean;
+  }) => PiggyvestShortfallVerdict;
 }
 
 /**
@@ -141,14 +145,17 @@ export function createLiveWalletQuery(
         ? queryClient.isFetching({ queryKey: key, exact: true }) > 0
         : false;
     },
-    getVerdict: () => {
+    getVerdict: (options) => {
       const { key } = resolveLiveWalletQuery();
       const wallet = key
         ? queryClient.getQueryData<WalletQueryData>(key)?.wallet
         : undefined;
+      const unsettled =
+        options?.holdUnsettled === true &&
+        (!wallet || wallet.owner_unresolved === true);
       return {
         walletIsStoreCredit: isWalletStoreCredit(wallet),
-        walletPrimaryUnknown: isWalletPrimaryUnknown(wallet),
+        walletPrimaryUnknown: isWalletPrimaryUnknown(wallet) || unsettled,
       };
     },
     isSettled: () => {

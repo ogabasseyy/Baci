@@ -1266,7 +1266,10 @@ BEGIN
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
      SET state = CASE WHEN v_review THEN 'needs_review' ELSE 'confirmed' END,
          provider_transaction_id = proof ->> 'providerTransactionId',
-         settled_at = pg_catalog.clock_timestamp()
+         settled_at = pg_catalog.clock_timestamp(),
+         -- The caller pages this review (conflict); stamped so the sweep and
+         -- later claims do not page it again.
+         alerted_at = CASE WHEN v_review THEN pg_catalog.clock_timestamp() ELSE alerted_at END
    WHERE id = v_forfeit.id;
   SELECT intent.* INTO v_intent FROM piggyvest_primary.onboarding_intents AS intent
    WHERE intent.id = v_forfeit.intent_id;

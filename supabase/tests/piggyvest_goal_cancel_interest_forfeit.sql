@@ -177,8 +177,9 @@ BEGIN
   BEGIN
     PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
         pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":5}'::jsonb) = 'conflict'
-      AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review',
-      'money left in the goal wallet after the forfeit was not reviewed');
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NOT NULL,
+      'money left in the goal wallet after the forfeit was not reviewed, or would be paged twice');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

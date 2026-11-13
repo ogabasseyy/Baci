@@ -161,3 +161,29 @@ describe('bugfix: the key changed when the merchant hydrated late (Codex P1)', (
     expect(saved).toContain('|user-1|');
   });
 });
+
+describe('bugfix: two typings of one IMEI minted two keys (Muse)', () => {
+  it('resumes with the same key whatever spacing the IMEI was typed with', async () => {
+    start.mockResolvedValue({
+      httpStatus: 202,
+      body: {
+        status: 'payment_review',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 30_000,
+      },
+    });
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.open('basic', IMEI);
+    });
+    act(() => hook.result.current.sheet.close());
+    await act(async () => {
+      await hook.result.current.open(
+        'basic',
+        ` ${IMEI.slice(0, 8)} ${IMEI.slice(8)} `
+      );
+    });
+    expect(keyOfCall(1)).toBe(keyOfCall(0));
+  });
+});

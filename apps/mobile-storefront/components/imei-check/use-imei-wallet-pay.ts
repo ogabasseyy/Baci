@@ -149,7 +149,8 @@ export function useImeiWalletPay({
           // IMEI can be brute-forced); the app's own storage is the boundary.
           const imeiHash = await Crypto.digestStringAsync(
             Crypto.CryptoDigestAlgorithm.SHA256,
-            imei
+            // One device, one key, however it was typed (spaces, case).
+            imei.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
           );
           purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imeiHash}`;
           const idempotencyKey = await walletPayPurchaseKeys.keyFor(

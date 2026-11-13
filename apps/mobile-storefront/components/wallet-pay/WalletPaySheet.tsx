@@ -102,7 +102,8 @@ export function WalletPaySheet<Result>({
       ? walletPayNotice(sheet.outcome, sheet.amountKobo, purchase)
       : null;
   // Closing while a payment is being sent would only hide it: wait for it.
-  const closable = sheet.step !== 'paying';
+  // Nor while a PIN is being checked: the proof it returns is for this sheet.
+  const closable = sheet.step !== 'paying' && !sheet.busy;
   return (
     <ModalSheet
       visible={sheet.step !== 'closed'}

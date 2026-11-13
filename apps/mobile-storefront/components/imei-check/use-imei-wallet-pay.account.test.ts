@@ -1,7 +1,12 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
 
-jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'key-1') }));
+jest.mock('expo-crypto', () => ({
+  randomUUID: jest.fn(() => 'key-1'),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    `sha256(${value.length})`,
+}));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 const mockState: { user: { id: string } | null; merchantId: string } = {
   user: { id: 'user-a' },

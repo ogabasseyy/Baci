@@ -129,8 +129,13 @@ export function useImeiWalletPay({
       // One key per purchase (per account) until it settles, kept across
       // restarts: a lost, pending or under-review payment is resumed by the
       // next tap, never paid again.
+      // The IMEI is hashed: the saved purchase never holds it in plain text.
       const { user, merchantId } = useAuthStore.getState();
-      const purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imei}`;
+      const imeiHash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        imei
+      );
+      const purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imeiHash}`;
       const idempotencyKey = await walletPayPurchaseKeys.keyFor(
         purchase,
         Crypto.randomUUID

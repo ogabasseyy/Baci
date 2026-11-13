@@ -5,7 +5,12 @@ import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purcha
 import { imeiWalletPayApi } from '@/lib/wallet-pay/imei-wallet-pay-api';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
 
-jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
+jest.mock('expo-crypto', () => ({
+  randomUUID: jest.fn(),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    `sha256(${value.length})`,
+}));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/stores/auth-store', () => {
   const state = { user: { id: 'user-1' }, merchantId: 'merchant-1' };
@@ -125,5 +130,18 @@ describe('bugfix: a tier the server cannot bill kept opening the sheet (Codex P2
     expect(hook.result.current.covers('basic')).toBe(true);
     await openAndClose(hook);
     expect(hook.result.current.covers('basic')).toBe(false);
+  });
+});
+
+describe('bugfix: the raw IMEI was saved on the phone (Muse)', () => {
+  it('saves only a hash of the IMEI with the purchase key', async () => {
+    start.mockRejectedValueOnce(new Error('network'));
+    const hook = setup();
+    await openAndClose(hook);
+    const saved = JSON.stringify(
+      await AsyncStorage.getItem('baci.walletPay.openPurchases.v1')
+    );
+    expect(saved).toContain('key-1');
+    expect(saved).not.toContain(IMEI);
   });
 });

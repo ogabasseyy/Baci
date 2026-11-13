@@ -133,4 +133,9 @@ describe('WalletPaySheet', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     expect(sheet.retryStart).toHaveBeenCalledTimes(1);
   });
+
+  it('cannot be closed while the PIN is being checked', () => {
+    renderSheet(sheetState({ pin: '', busy: true }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
 });

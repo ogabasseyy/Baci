@@ -134,7 +134,10 @@ export function useWalletPaySheet<Result>({
     setBusy(true);
     const answer = await active.verifyPin(id, typed).catch(() => ({
       kind: 'retry' as const,
-      message: 'Could not check your PIN. Please try again.',
+      // A correct PIN resets the server's wrong-PIN count, so entering it
+      // again after a lost answer never moves the customer toward a lock.
+      message:
+        "We didn't hear back about your PIN. Nothing was paid. Please enter it again.",
     }));
     if (!current(mine)) return;
     inFlight.current = false;

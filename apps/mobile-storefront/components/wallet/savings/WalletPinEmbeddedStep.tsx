@@ -1,13 +1,12 @@
-import { useBottomSheet } from '@gorhom/bottom-sheet';
 import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { SavingsSheetPinCancelContext } from '../SavingsSheetPinCancelContext';
+import {
+  SavingsSheetPinCancelContext,
+  SavingsSheetPinHeightContext,
+} from '../SavingsSheetPinCancelContext';
 
 type WalletColors = (typeof Colors)['light'];
-
-/** The sheet's handle, top padding and bottom safe area around the step. */
-const SHEET_CHROME_HEIGHT = 72;
 
 /**
  * Covers the savings sheet's content and resizes that sheet to fit the PIN
@@ -23,7 +22,7 @@ export function EmbeddedPinStep({
   /** Called when the savings sheet itself is closed under this step. */
   onParentClose?: () => void;
 }) {
-  const { snapToIndex, snapToPosition } = useBottomSheet();
+  const setSheetPinHeight = useContext(SavingsSheetPinHeightContext);
   const registerCancel = useContext(SavingsSheetPinCancelContext);
   useEffect(() => {
     if (!registerCancel || !onParentClose) return;
@@ -31,10 +30,13 @@ export function EmbeddedPinStep({
     return () => registerCancel(null);
   }, [registerCancel, onParentClose]);
   const [height, setHeight] = useState(0);
+  // The sheet fits this step through its own snap point, then back when the
+  // step closes. Never snapToPosition: Gorhom reads that target as "closed"
+  // and closed the whole savings sheet, cancelling the PIN request.
   useEffect(() => {
-    if (height > 0) snapToPosition(height + SHEET_CHROME_HEIGHT);
-  }, [height, snapToPosition]);
-  useEffect(() => () => snapToIndex(0), [snapToIndex]);
+    if (height > 0) setSheetPinHeight?.(height);
+  }, [height, setSheetPinHeight]);
+  useEffect(() => () => setSheetPinHeight?.(0), [setSheetPinHeight]);
   return (
     <View
       style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}

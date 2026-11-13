@@ -59,3 +59,40 @@ Rules that apply throughout:
 A Fable agent walks the same journey on the simulator, screenshots every
 screen and state, and lists inconsistencies and bugs; findings are fixed and
 re-checked.
+
+## Walk-through results (2026-11-13)
+
+A Fable agent walked the combined build (`e2e/piggyvest-all`: #4216, #4222,
+#4223, #4224) on the iOS simulator against the local sandbox stack. It
+reached about half the journey. The test goal's setup never finished, so
+amount entry, the in-sheet PIN step, Complete goal and the checkout payment
+step were not reached. Screenshots are kept locally (not committed).
+
+| Finding | Severity | Owner | Status |
+| --- | --- | --- | --- |
+| Cancel goal on a goal whose setup never finished fails with "Could not confirm" (server: no savings destination → 503) | High | #4222 session | Sent 11-13 |
+| Pending setup: "about a minute" copy forever, no Check now | High | #4223 session | Sent 11-13 |
+| "Keep saving" flashes a live amount entry before the pending state | High | #4223 session | Sent 11-13 |
+| Keyboard covers the whole Change phone sheet | High | #4224 | **Fixed** (0c398f28d6), re-checked on the simulator |
+| Wallet card looks ready while setup is pending | Medium | #4223 session | Sent 11-13 |
+| One balance with three names; "Total savings" vs "Savings ₦0" | Medium | #4216 session | Sent 11-13 |
+| No Add money entry on the wallet; copy gives no feedback | Medium | #4216 session | Sent 11-13 |
+| Wallet tab stuck under a refresh spinner once | Medium | #4216 session | Sent 11-13 |
+| Wallet PIN change rejects a wrong current PIN only at the end | Medium | #4224 | Kept: checking it early needs a new server PIN check (another PIN-guessing door); the change is refused safely and restarts at step 1 |
+| Floating AI button covers PIN, settings and notification controls | Medium | #4224 | **Fixed**: hidden on Settings and Notifications |
+| Airtime: iOS alert, Pay enabled without credit; Add store credit return | Medium | #4225 session | Sent 11-13 |
+| Notifications: title differs from the Account row; orders link covers empty state | Medium | #4224 | **Fixed** |
+| "Recent Transactions" empty for a funded wallet | Medium | #4216 session | Sent 11-13 (may be how the test wallet was funded) |
+| "No Image" placeholder in Change phone; "Saving for now" label | Low | #4224 | **Fixed**, re-checked |
+| Back from "Choose a new PIN" leaves the flow | Low | #4224 | **Fixed** |
+| "Confirm it's you" repeats itself | Low | #4224 | **Fixed** |
+| Quiet-hours copy is technical | Low | #4224 | **Fixed** (copy); free-text time fields kept |
+| "New" badge overlap; spare space under the sheet | Low | #4223 session | Sent 11-13 |
+| IMEI "Retry" looks like text; header back buttons differ | Low | #4225 session | Sent 11-13 |
+| PIN boxes grow from 4 to 5 | Low | — | Kept: PINs are 4 to 6 digits, same pad as the in-sheet PIN step |
+| Version label mismatch (Account 1.0.0 vs Settings 2.0.1) | Low | — | Not PiggyVest; noted |
+
+Still to walk once the owning PRs land and staging outbound transfers
+resume: Start Savings, amount entry and the in-sheet PIN, Complete goal,
+funded Cancel breakdown, Add money sheet, checkout payment step, IMEI and
+airtime paid from the wallet.

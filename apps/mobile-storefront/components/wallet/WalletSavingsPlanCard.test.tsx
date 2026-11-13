@@ -277,3 +277,28 @@ describe('bugfix: the card invited a first contribution while the plan was being
     ).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: after completing a funded plan the card looked like the savings vanished', () => {
+  it('shows the purchase request calmly, with no ₦0 progress or contribution prompt', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={{ ...goal, status: 'completed', current_amount: 0 }}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(screen.getByText('Purchase requested')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Our team will contact you to finish your order')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Your next upgrade')).toBeNull();
+    expect(screen.queryByText('Start with your first contribution')).toBeNull();
+    expect(screen.queryByLabelText('Savings plan progress')).toBeNull();
+    expect(screen.queryByText(/^Ends /)).toBeNull();
+    expect(
+      screen.getByRole('button', {
+        name: 'Start another plan for iPhone 15 Pro',
+      })
+    ).toBeOnTheScreen();
+  });
+});

@@ -11,7 +11,7 @@ import { getSavingsProgress } from './get-savings-progress';
 import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
 import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
-import { planCardFooterLine } from './savings/plan-card-footer-line';
+import { planCardView } from './savings/plan-card-view';
 import type { GoalCardSetupState } from './savings/use-goal-card-setup-state';
 
 type WalletSavingsPlanCardProps = {
@@ -48,25 +48,9 @@ export function WalletSavingsPlanCard({
   const { colour, details, storage } = getSavingsVariantPresentation(
     goal.product_variant_label
   );
-  const footerLine = planCardFooterLine(setupState, goal.current_amount > 0);
-  const actionLabel = goal.selection_unresolved
-    ? 'Choose exact variant'
-    : awaitingSettlement
-      ? 'Move your savings'
-      : goal.status === 'completed'
-        ? 'Start another plan'
-        : goal.status === 'paused' ||
-            goal.source_mode !== 'manual' ||
-            setupState !== null
-          ? 'View plan'
-          : 'Add to savings';
+  const view = planCardView({ goal, awaitingSettlement, setupState });
+  const { actionLabel, footerLine, heading } = view;
   const hasSavingsGlow = actionLabel === 'Add to savings';
-  const heading =
-    goal.status === 'completed'
-      ? 'Plan complete'
-      : goal.status === 'paused'
-        ? 'Plan paused'
-        : null;
 
   return (
     <View
@@ -84,7 +68,7 @@ export function WalletSavingsPlanCard({
         />
         <View style={styles.titleBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
-            Your next upgrade
+            {view.eyebrow}
           </Text>
           <Text
             style={[styles.title, { color: colors.cardForeground }]}
@@ -115,27 +99,34 @@ export function WalletSavingsPlanCard({
               {heading}
             </Text>
           ) : null}
-          <View style={styles.amountRow}>
-            <Text
-              style={[styles.savedAmount, { color: colors.cardForeground }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {formatNgnCurrency(goal.current_amount)}
-              <Text
-                style={[styles.targetAmount, { color: colors.textSecondary }]}
-              >
-                {' / '}
-                {formatNgnCurrency(goal.target_amount)}
-              </Text>
-            </Text>
-          </View>
-          <SavingsProgressMeter
-            accessibilityLabel="Savings plan progress"
-            colors={colors}
-            height={9}
-            percent={progress}
-          />
+          {view.showProgress ? (
+            <>
+              <View style={styles.amountRow}>
+                <Text
+                  style={[styles.savedAmount, { color: colors.cardForeground }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {formatNgnCurrency(goal.current_amount)}
+                  <Text
+                    style={[
+                      styles.targetAmount,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {' / '}
+                    {formatNgnCurrency(goal.target_amount)}
+                  </Text>
+                </Text>
+              </View>
+              <SavingsProgressMeter
+                accessibilityLabel="Savings plan progress"
+                colors={colors}
+                height={9}
+                percent={progress}
+              />
+            </>
+          ) : null}
         </View>
         {colour ? (
           <View
@@ -158,7 +149,7 @@ export function WalletSavingsPlanCard({
             {footerLine}
           </Text>
         ) : null}
-        {goal.maturity_date ? (
+        {view.showEndDate && goal.maturity_date ? (
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
             Ends {formatDateTimeDisplay(goal.maturity_date, 'date')}
           </Text>

@@ -50,7 +50,7 @@ describe('PiggyVest wallet activity list', () => {
     expect(await screen.findByText('Money added')).toBeOnTheScreen();
     expect(screen.getByText('+₦50,000')).toBeOnTheScreen();
     expect(screen.getByText('−₦10,000.50')).toBeOnTheScreen();
-    expect(screen.getByText(/^Processing · /)).toBeOnTheScreen();
+    expect(screen.getByText(/^Pending · /)).toBeOnTheScreen();
     expect(mockFetch).toHaveBeenCalledWith({
       merchantId: MERCHANT,
       userId: 'customer-1',

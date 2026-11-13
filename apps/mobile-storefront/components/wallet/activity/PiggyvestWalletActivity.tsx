@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { CHAT_WIDGET_FAB_SIZE } from '@/constants/layout';
 import { usePiggyvestWalletActivity } from '@/hooks/use-piggyvest-wallet-activity';
 import { styles } from '../wallet.styles';
 import { PiggyvestActivityRow } from './PiggyvestActivityRow';
@@ -92,8 +93,20 @@ export function PiggyvestWalletActivity({
           {activity.items.map((item) => (
             <PiggyvestActivityRow colors={colors} item={item} key={item.id} />
           ))}
+          {activity.loadMoreFailed && !activity.isLoadingMore ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[local.moreError, { color: colors.textSecondary }]}
+            >
+              We couldn’t load more activity.
+            </Text>
+          ) : null}
           {activity.hasMore
-            ? button('Show more', activity.loadMore, activity.isLoadingMore)
+            ? button(
+                activity.loadMoreFailed ? 'Try again' : 'Show more',
+                activity.loadMore,
+                activity.isLoadingMore
+              )
             : null}
         </>
       )}
@@ -102,8 +115,10 @@ export function PiggyvestWalletActivity({
 }
 
 const local = StyleSheet.create({
-  // Same 16pt edge as the wallet cards (walk-through alignment).
-  aligned: { paddingHorizontal: 0 },
+  // Same 16pt left edge as the wallet cards; the right side keeps amounts
+  // and buttons clear of the floating AI button (Fable walk).
+  aligned: { paddingLeft: 0, paddingRight: CHAT_WIDGET_FAB_SIZE + 8 },
+  moreError: { fontSize: 13, marginTop: 12, textAlign: 'center' },
   state: { alignItems: 'center', gap: 12, paddingVertical: 24 },
   stateText: { fontSize: 13, textAlign: 'center' },
   button: {

@@ -32,7 +32,7 @@ export function PiggyvestActivityRow({
     <View
       accessible
       accessibilityRole="text"
-      accessibilityLabel={`${item.label}. ${amount}. ${pending ? 'Processing. ' : ''}${date}.`}
+      accessibilityLabel={`${item.label}. ${amount}. ${pending ? 'Pending. ' : ''}${date}.`}
       style={[styles.transactionItem, { borderBottomColor: colors.border }]}
     >
       <View style={[styles.txIcon, { backgroundColor: hexToRgba(tint, 0.12) }]}>
@@ -49,7 +49,7 @@ export function PiggyvestActivityRow({
           {item.label}
         </Text>
         <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-          {pending ? `Processing · ${date}` : date}
+          {pending ? `Pending · ${date}` : date}
         </Text>
       </View>
       <Text style={[styles.txAmount, { color: tint }]}>{amount}</Text>

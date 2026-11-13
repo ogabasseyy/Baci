@@ -31,20 +31,26 @@ export function usePiggyvestWalletActivity({
     getNextPageParam: (page) => page.nextCursor,
     retry: 1,
   });
-  const refetch = query.refetch;
+  const { refetch, fetchNextPage, isFetching } = query;
   const lastKey = useRef(refreshKey);
   useEffect(() => {
     if (!enabled || lastKey.current === refreshKey) return;
+    // bugfix (Fable walk): a wallet refresh used to cancel an in-flight
+    // "Show more" and re-read page 1 without the cursor. Skip while any
+    // read is running, and never cancel one.
+    if (isFetching) return;
     lastKey.current = refreshKey;
-    void refetch();
-  }, [enabled, refreshKey, refetch]);
+    void refetch({ cancelRefetch: false });
+  }, [enabled, refreshKey, refetch, isFetching]);
   return {
     items: query.data?.pages.flatMap((page) => page.items) ?? [],
     isLoading: query.isPending && query.fetchStatus !== 'idle',
     isError: query.isError && !query.data,
+    /** "Show more" failed: the rows already shown stay, with a retry. */
+    loadMoreFailed: query.isFetchNextPageError,
     hasMore: query.hasNextPage,
     isLoadingMore: query.isFetchingNextPage,
-    loadMore: () => void query.fetchNextPage(),
+    loadMore: () => void fetchNextPage({ cancelRefetch: false }),
     retry: () => void refetch(),
   };
 }

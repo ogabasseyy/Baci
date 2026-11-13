@@ -100,3 +100,49 @@ describe('bugfix: an unpaid PiggyVest purchase blocked a store credit retry (Cod
     expect(deps.issue).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: an expired, never-sent payment was re-checked forever (Codex P2)', () => {
+  const recheck = { ...base, operationId: OP, pinProof: '' };
+
+  it('ends the re-check and closes the purchase once the issued payment expired', async () => {
+    deps.findForPurchase.mockResolvedValueOnce(null);
+    const response = await runVtuWalletPayStep(recheck, deps as never);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_NOT_COMPLETED',
+    });
+    expect(deps.closeUnpaid).toHaveBeenCalled();
+    expect(deps.pay).not.toHaveBeenCalled();
+  });
+
+  it('keeps confirming while the issued payment is still the live attempt', async () => {
+    deps.findForPurchase.mockResolvedValueOnce({
+      operationId: OP,
+      state: 'issued',
+    } as never);
+    const response = await runVtuWalletPayStep(recheck, deps as never);
+    expect(response.status).toBe(202);
+    expect(deps.closeUnpaid).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: the purchase read did not bind merchant and customer (Muse)', () => {
+  it('refuses a purchase of another merchant or customer before any payment', async () => {
+    for (const other of [
+      { merchantId: 'merchant-2', customerId: 'customer-1' },
+      { merchantId: 'merchant-1', customerId: 'customer-2' },
+    ]) {
+      deps.readPurchase.mockResolvedValueOnce({
+        piggyvestPaid: true,
+        amount: 1000,
+        status: 'pending',
+        ...other,
+      });
+      const response = await runVtuWalletPayStep(base, deps as never);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PAYMENT_METHOD_MISMATCH',
+      });
+    }
+    expect(deps.issue).not.toHaveBeenCalled();
+  });
+});

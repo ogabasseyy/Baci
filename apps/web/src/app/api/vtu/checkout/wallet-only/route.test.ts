@@ -43,6 +43,8 @@ vi.mock('@/lib/vtu-fulfillment', () => ({
 // Pay from the PiggyVest wallet (dark): store credit gets no fulfiller, so
 // every existing path below is unchanged; PiggyVest requests reach the step.
 vi.mock('@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller', () => ({
+  // Wallet pay switched on for these route tests (its own tests cover off).
+  refuseUnavailableWalletPayStart: () => null,
   createVtuWalletPayFulfiller: (input: {
     charge: { paymentMethod?: string };
   }) =>

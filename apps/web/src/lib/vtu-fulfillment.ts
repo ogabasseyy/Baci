@@ -2090,6 +2090,12 @@ export async function fulfillPendingVtuTransaction({
     return resolveSuccessfulVtuTransaction({ row, supabase });
   }
 
+  // A PiggyVest-paid row moves no store credit and is vended (or failed and
+  // refunded) only by the request holding its payment's delivery claim;
+  // every other caller (cron, history, replays) waits, before any refund
+  // bookkeeping below (Muse).
+  if (piggyvestPaid && !walletPayClaimed) return piggyvestWalletPaidHold(row);
+
   if (row.status === 'failed' && !retryFailed) {
     // Existing failed row — issue (or confirm) the wallet refund so the
     // customer can retry from wallet credit. Idempotent. Collection
@@ -2175,11 +2181,6 @@ export async function fulfillPendingVtuTransaction({
       supabase,
     });
   }
-
-  // A PiggyVest-paid row moves no store credit and is vended only by the
-  // request holding its payment's delivery claim; every other caller (cron,
-  // history, replays) waits.
-  if (piggyvestPaid && !walletPayClaimed) return piggyvestWalletPaidHold(row);
 
   let claimedViaRetryRpc = false;
   if (row.status === 'failed' && retryFailed) {

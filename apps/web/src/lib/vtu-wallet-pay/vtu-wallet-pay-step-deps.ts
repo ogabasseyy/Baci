@@ -37,6 +37,8 @@ export function createVtuWalletPayStepDeps(auth: {
           piggyvest_paid: boolean;
           amount: number | string;
           status: string;
+          merchant_id: string;
+          customer_id: string;
         }> | null
       )?.[0];
       return row
@@ -44,6 +46,8 @@ export function createVtuWalletPayStepDeps(auth: {
             piggyvestPaid: row.piggyvest_paid === true,
             amount: Number(row.amount),
             status: row.status,
+            merchantId: row.merchant_id,
+            customerId: row.customer_id,
           }
         : null;
     },

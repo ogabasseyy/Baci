@@ -90,7 +90,8 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.vtu_wallet_payment_delivery_state(uu
 -- paid from PiggyVest only when it was prepared that way, so a store credit
 -- purchase can never also be charged to the PiggyVest wallet.
 CREATE FUNCTION public.get_vtu_wallet_pay_purchase(p_transaction_id uuid)
-RETURNS TABLE (id uuid, piggyvest_paid boolean, amount numeric, status text)
+RETURNS TABLE (id uuid, piggyvest_paid boolean, amount numeric, status text,
+               merchant_id uuid, customer_id uuid)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
@@ -98,7 +99,7 @@ SET search_path = ''
 AS $$
   SELECT t.id,
          COALESCE(t.source = 'checkout' AND t.metadata ->> 'paymentSource' = 'piggyvest_wallet', false),
-         t.amount, t.status
+         t.amount, t.status, t.merchant_id, t.customer_id
     FROM public.vtu_transactions AS t
    WHERE t.id = p_transaction_id
      AND EXISTS (

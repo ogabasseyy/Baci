@@ -19,7 +19,10 @@ import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
-import { createVtuWalletPayFulfiller } from '@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller';
+import {
+  createVtuWalletPayFulfiller,
+  refuseUnavailableWalletPayStart,
+} from '@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller';
 
 /**
  * SERVICE-ROLE BOUNDARY (owner-approved narrow exception, PR #3655,
@@ -96,6 +99,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const walletPayOff = refuseUnavailableWalletPayStart(input);
+    if (walletPayOff) return walletPayOff;
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     // Authenticated client for everything except the admission

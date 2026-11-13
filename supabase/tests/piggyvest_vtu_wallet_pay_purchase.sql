@@ -27,6 +27,8 @@ BEGIN
   SELECT piggyvest_paid, amount INTO v_paid, v_amount
     FROM public.get_vtu_wallet_pay_purchase(c_paid);
   PERFORM pg_temp.wp_assert(v_paid IS TRUE AND v_amount = 1000, 'a PiggyVest purchase was not reported as such');
+  PERFORM pg_temp.wp_assert((SELECT merchant_id = c_merchant AND customer_id = c_customer
+    FROM public.get_vtu_wallet_pay_purchase(c_paid)), 'the purchase did not report its merchant and customer');
   SELECT piggyvest_paid INTO v_paid FROM public.get_vtu_wallet_pay_purchase(c_credit);
   PERFORM pg_temp.wp_assert(v_paid IS FALSE, 'a store credit purchase was reported as PiggyVest-paid');
 

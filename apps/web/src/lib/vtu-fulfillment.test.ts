@@ -7472,6 +7472,30 @@ describe('PiggyVest-paid VTU rows (pay from the PiggyVest wallet, dark)', () => 
     );
   });
 
+  it('bugfix: a failed PiggyVest-paid row without the claim writes no refund bookkeeping (Muse)', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        status: 'failed',
+        error_message: 'This purchase was not paid.',
+      },
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result).not.toHaveProperty('refundedToWallet');
+    expect(updatePayloads).toEqual([]);
+    expect(rpcImpl).not.toHaveBeenCalled();
+  });
+
   it('never re-vends a failed PiggyVest-paid row on a retry', async () => {
     const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
     const supabase = createPendingTransactionSupabaseMock({

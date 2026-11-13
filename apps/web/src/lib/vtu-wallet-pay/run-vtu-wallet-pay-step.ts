@@ -39,6 +39,8 @@ export interface VtuWalletPayStepDeps {
     amount: number;
     /** The row's status; only a pending row may get a new payment. */
     status?: string;
+    merchantId?: string;
+    customerId?: string;
   } | null>;
   readRuntime: () => WalletPayRuntime | null;
   readRecoveryRuntime: () => WalletPayRuntime;
@@ -139,7 +141,14 @@ export async function runVtuWalletPayStep(
   // Only a purchase prepared as PiggyVest-paid is ever paid from it: a store
   // credit purchase (a replay or joined in-flight one) never is.
   const purchase = await deps.readPurchase(transactionId);
-  if (!purchase?.piggyvestPaid)
+  // The purchase must also be this checkout's own (merchant and customer).
+  if (
+    !purchase?.piggyvestPaid ||
+    (purchase.merchantId !== undefined &&
+      purchase.merchantId !== input.merchantId) ||
+    (purchase.customerId !== undefined &&
+      purchase.customerId !== input.customerId)
+  )
     return walletPayRefuse(
       'This purchase is not paid from your PiggyVest wallet.',
       'PAYMENT_METHOD_MISMATCH',
@@ -238,14 +247,30 @@ export async function runVtuWalletPayStep(
     return invalid();
   // A re-check (empty proof) never reaches the pay step: the status check
   // above already reconciled from PiggyVest's record without sending.
-  const result: WalletPayAnswer = recheck
-    ? { status: recheckStatus(payment.state) }
-    : await deps.pay({
+  // An issued payment whose PIN proof was never spent is re-checked against
+  // the purchase's live attempt, which leaves out expired ones: once it has
+  // expired unpaid, the re-check ends instead of confirming forever (Codex P2).
+  const expiredUnsent =
+    recheck &&
+    payment.state === 'issued' &&
+    (
+      await deps.findForPurchase({
         runtime,
         scope,
-        operationId,
-        pinProof: input.pinProof ?? '',
-      });
+        purpose: 'vtu',
+        purchaseRef: transactionId,
+      })
+    )?.operationId !== operationId;
+  const result: WalletPayAnswer = expiredUnsent
+    ? { status: 'expired' }
+    : recheck
+      ? { status: recheckStatus(payment.state) }
+      : await deps.pay({
+          runtime,
+          scope,
+          operationId,
+          pinProof: input.pinProof ?? '',
+        });
   if (ENDED_UNPAID.has(result.status))
     await Promise.resolve()
       .then(() => deps.closeUnpaid({ runtime, scope, transactionId }))

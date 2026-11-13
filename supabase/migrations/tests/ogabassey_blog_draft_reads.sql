@@ -15,6 +15,11 @@ SELECT '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'Privacy fixture',
          WHEN 'scheduled' THEN now() + interval '1 hour'
        END
 FROM unnest(ARRAY['draft', 'archived', 'scheduled', 'published']) AS state;
+INSERT INTO public.merchants (id, email)
+VALUES ('b3f20000-0000-4000-8000-000000000003', 'blog-privacy-control@example.invalid');
+INSERT INTO public.blog_posts (merchant_id, title, slug, content, author_name, status)
+VALUES ('b3f20000-0000-4000-8000-000000000003', 'Other merchant control',
+        'other-tenant-privacy-control', 'Synthetic content', 'Fixture author', 'draft');
 
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.role', 'anon', true);
@@ -22,6 +27,11 @@ DO $$ BEGIN
   IF ARRAY(SELECT status FROM public.blog_posts WHERE slug LIKE 'privacy-fixture-%')
      <> ARRAY['published'] THEN
     RAISE EXCEPTION 'anon must only see the published fixture';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.blog_posts
+    WHERE merchant_id = 'b3f20000-0000-4000-8000-000000000003'
+      AND slug = 'other-tenant-privacy-control') THEN
+    RAISE EXCEPTION 'anon visibility for other tenants must remain unchanged';
   END IF;
 END $$;
 
@@ -32,6 +42,11 @@ DO $$ BEGIN
   IF ARRAY(SELECT status FROM public.blog_posts WHERE slug LIKE 'privacy-fixture-%')
      <> ARRAY['published'] THEN
     RAISE EXCEPTION 'unrelated authenticated reader must only see the published fixture';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.blog_posts
+    WHERE merchant_id = 'b3f20000-0000-4000-8000-000000000003'
+      AND slug = 'other-tenant-privacy-control') THEN
+    RAISE EXCEPTION 'authenticated visibility for other tenants must remain unchanged';
   END IF;
 END $$;
 SELECT set_config('request.jwt.claim.sub', 'b3f20000-0000-4000-8000-000000000001', true);

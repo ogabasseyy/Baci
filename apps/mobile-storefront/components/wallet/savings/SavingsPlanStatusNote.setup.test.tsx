@@ -1,5 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
+import {
+  rememberPlanInterestAnswer,
+  resetPlanInterestAnswers,
+} from './plan-interest-answers';
 import { SavingsPlanStatusNote } from './SavingsPlanStatusNote';
 import { resetAutoSetupRetries } from './use-auto-retry-setup';
 
@@ -62,6 +66,7 @@ const renderExhausted = (change: Record<string, unknown> = {}) => {
 beforeEach(() => {
   jest.clearAllMocks();
   resetAutoSetupRetries();
+  resetPlanInterestAnswers();
   retry.mockResolvedValue(true);
   mockSetupHook.mockReturnValue(setupState());
 });
@@ -320,5 +325,29 @@ describe('auto-retry when a parent supplies the status', () => {
       />
     );
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: a plan whose first setup start never landed asked the interest question again', () => {
+  it('finishes setup with the form answer and shows the calm card instead', async () => {
+    rememberPlanInterestAnswer('goal-1', false);
+    status('not_started');
+    renderNote();
+    await act(async () => {});
+    expect(submit).toHaveBeenCalledWith(false);
+    expect(setChoice).toHaveBeenCalledWith(false);
+    expect(screen.getByText('Getting your plan ready')).toBeOnTheScreen();
+    expect(screen.queryByText(/earn interest/i)).toBeNull();
+  });
+
+  it('asks as usual, answer preselected, if that submit fails', async () => {
+    rememberPlanInterestAnswer('goal-1', true);
+    mockSetupHook.mockReturnValue(
+      setupState({ choice: true, attempted: true, error: 'failed' })
+    );
+    status('not_started');
+    renderNote();
+    await act(async () => {});
+    expect(screen.queryByText('Getting your plan ready')).toBeNull();
   });
 });

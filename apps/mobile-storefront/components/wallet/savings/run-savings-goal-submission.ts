@@ -7,6 +7,7 @@ import {
   scheduleSavingsReminderNotification,
 } from '@/services/savings-reminder-notifications';
 import { handOffToWallet } from './hand-off-to-wallet';
+import { rememberPlanInterestAnswer } from './plan-interest-answers';
 import {
   getSavingsReminderScheduledAt,
   type SavingsFrequency,
@@ -182,6 +183,9 @@ export async function runSavingsGoalSubmission(
       input.onHandOffPending?.(result.goalId);
     }
     if (input.startGoalWalletSetup) {
+      // Kept so the sheet can finish setup if this start never lands.
+      if (typeof input.interestChoice === 'boolean')
+        rememberPlanInterestAnswer(result.goalId, input.interestChoice);
       await startSetupBriefly(input.startGoalWalletSetup, result.goalId);
     }
     if (requestIdempotencyKey) {

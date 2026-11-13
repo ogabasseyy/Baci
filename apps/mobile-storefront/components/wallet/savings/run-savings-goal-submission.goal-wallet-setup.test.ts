@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  planInterestAnswer,
+  resetPlanInterestAnswers,
+} from './plan-interest-answers';
+import {
   GOAL_WALLET_SETUP_WAIT_MS,
   runSavingsGoalSubmission,
 } from './run-savings-goal-submission';
@@ -37,6 +41,7 @@ const validation = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetPlanInterestAnswers();
   mockCreateSavingsGoal.mockResolvedValue({ goalId: 'goal-1', success: true });
 });
 
@@ -50,6 +55,18 @@ describe('bugfix: a new PiggyVest plan was left “still being set up”', () =>
     await runSavingsGoalSubmission(input, validation);
     expect(start).toHaveBeenCalledWith('goal-1');
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
+  });
+
+  it('remembers the form answer so a start that never lands can be finished', async () => {
+    const input = createInput({
+      effectiveInitialContribution: 0,
+      interestChoice: false,
+      startGoalWalletSetup: jest.fn(async () => {
+        throw new Error('offline');
+      }),
+    });
+    await runSavingsGoalSubmission(input, validation);
+    expect(planInterestAnswer('goal-1')).toBe(false);
   });
 
   it('still shows the plan when setup fails to start', async () => {

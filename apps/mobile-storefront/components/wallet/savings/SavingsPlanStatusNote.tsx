@@ -8,6 +8,7 @@ import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
 import { SavingsPlanGettingReady } from './SavingsPlanGettingReady';
 import { useAutoRetrySetup } from './use-auto-retry-setup';
 import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
+import { useResumeGoalSetup } from './use-resume-goal-setup';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
@@ -113,6 +114,16 @@ function StatusNoteView({
     submitting: setup.submitting,
     retry: setup.retry,
   });
+  // A plan whose first setup start never landed is finished with the form's
+  // answer, so the customer is not asked again.
+  const resume = useResumeGoalSetup({
+    active: primary,
+    goalId,
+    phase,
+    failed: setup.error !== null,
+    setChoice: setup.setChoice,
+    submit: setup.submit,
+  });
   // The note reads its own status only where a BVN field may be on screen; a
   // parent that supplies the status (no BVN field) controls visibility itself.
   if (!primary || (bvnGate && funding.planFundingRequiresBvn)) return null;
@@ -143,6 +154,8 @@ function StatusNoteView({
         }
       />
     );
+  if ((phase === 'not_started' || rereadingAfterSetup) && resume.resuming)
+    return <SavingsPlanGettingReady colors={colors} />;
   if (phase === 'not_started' || rereadingAfterSetup)
     return (
       <SavingsGoalSetupPrompt

@@ -171,4 +171,18 @@ describe('getSavingsPace', () => {
       });
     });
   });
+
+  describe('bugfix: a plan due today that still needs more showed only its pace', () => {
+    it('warns on the end date itself when more than one payment is left', () => {
+      expect(
+        getSavingsPace({
+          contributionAmount: 1000,
+          frequency: 'daily',
+          maturityDate: '2026-11-12',
+          now,
+          remaining: 5000,
+        })?.short
+      ).toBe('Your plan: ₦1,000 a day · add a little more to finish on time');
+    });
+  });
 });

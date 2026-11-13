@@ -100,7 +100,7 @@ export function getSavingsPace({
   ) {
     // Always the plan's own pace (the last payment may simply be smaller).
     const amount = formatNgnCurrency(contributionAmount);
-    // Only a real, future calendar date can carry an end date or a
+    // Only a real, future-or-today calendar date can carry an end date or a
     // "behind" warning (2027-02-30 is no deadline at all).
     const weekly = endDateUsable
       ? getWeeklySavingsNudge({ maturityDate, now, remaining })
@@ -109,16 +109,17 @@ export function getSavingsPace({
     // is behind shows its pace alone rather than a date it cannot meet.
     const payments = Math.ceil(remaining / contributionAmount);
     const fits = paymentsThatFit(frequency as Frequency, maturityDate, now);
-    const reachable = weekly !== null && payments <= fits;
     // Labelled, so the line reads on its own under the cheer.
     const pace = `Your plan: ${amount} ${per}`;
-    if (!weekly) return { short: pace, label: pace };
-    // Behind: this pace cannot reach the end date, so say so calmly
-    // instead of showing a date it cannot meet.
-    if (!reachable) {
+    if (!endDateUsable) return { short: pace, label: pace };
+    // Behind: this pace cannot reach the end date (including on the end
+    // date itself), so say so calmly instead of showing a date it cannot
+    // meet. Decided from the date and the payments, not the weekly nudge.
+    if (payments > fits) {
       const behind = `${pace} · add a little more to finish on time`;
       return { short: behind, label: behind.replace(' · ', ', ') };
     }
+    if (!weekly) return { short: pace, label: pace };
     return {
       short: `${pace} · until ${weekly.endsOn}`,
       // The plan's own pace and end date, not a promise: a plan that is

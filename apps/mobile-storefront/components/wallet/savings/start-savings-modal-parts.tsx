@@ -9,12 +9,15 @@ export function FundingOptionCard({
   active,
   colors,
   description,
+  disabled = false,
   label,
   onPress,
 }: {
   active: boolean;
   colors: StartSavingsColors;
   description: string;
+  /** No change of how to pay while the plan is being created. */
+  disabled?: boolean;
   label: string;
   onPress: () => void;
 }) {
@@ -22,6 +25,8 @@ export function FundingOptionCard({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled, selected: active }}
+      disabled={disabled}
       onPress={onPress}
       style={[
         styles.fundingOptionCard,

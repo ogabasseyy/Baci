@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
-import { SavedPaymentMethodCard } from './start-savings-modal-parts';
+import {
+  FundingOptionCard,
+  SavedPaymentMethodCard,
+} from './start-savings-modal-parts';
 
 const method = {
   id: 'card-1',
@@ -35,6 +38,28 @@ describe('SavedPaymentMethodCard with PiggyVest off', () => {
       />
     );
     const button = screen.getByRole('button', { name: 'Select Visa 4242' });
+    fireEvent.press(button);
+    expect(onPress).not.toHaveBeenCalled();
+    expect(button).toBeDisabled();
+  });
+});
+
+describe('FundingOptionCard with PiggyVest off', () => {
+  it('bugfix: ignores a change of how to pay while the plan is being created', () => {
+    const onPress = jest.fn();
+    render(
+      <FundingOptionCard
+        active={false}
+        colors={Colors.light}
+        description="Show your account number"
+        disabled
+        label="Pay with bank transfer"
+        onPress={onPress}
+      />
+    );
+    const button = screen.getByRole('button', {
+      name: 'Pay with bank transfer',
+    });
     fireEvent.press(button);
     expect(onPress).not.toHaveBeenCalled();
     expect(button).toBeDisabled();

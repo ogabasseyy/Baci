@@ -32,17 +32,17 @@ export async function POST(
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase)
     return refuse('Please sign in again.', 'UNAUTHORIZED', 401);
-  // Per-IP throttle, as on the pay route; the per-customer PIN budget is
-  // charged below (Muse).
-  const rate = await checkRateLimit(request);
-  if (!rate.allowed)
-    return createRateLimitResponse(rate.limit, rate.remaining, rate.resetTime);
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid)
     return (
       csrf.response ??
       refuse('Please refresh and try again.', 'CSRF_FAILED', 403)
     );
+  // Per-IP throttle after sign-in and CSRF, as on the pay route; the
+  // per-customer PIN budget is charged below (Muse).
+  const rate = await checkRateLimit(request);
+  if (!rate.allowed)
+    return createRateLimitResponse(rate.limit, rate.remaining, rate.resetTime);
   const { lookupId } = await params;
   const parsed = imeiWalletPaySchemas.pinRequest.safeParse(
     await request.json().catch(() => null)

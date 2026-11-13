@@ -17,6 +17,10 @@ import {
   isUniqueViolation,
   mapExistingLookup,
 } from '../route-helpers';
+import {
+  type resumePaidImeiWalletPayment,
+  resumeWhileSwitchedOff,
+} from './resume-paid-imei-wallet-payment';
 
 type Issue = typeof issueWalletPayment;
 export interface StartImeiWalletPaymentDeps {
@@ -33,6 +37,8 @@ export interface StartImeiWalletPaymentDeps {
   issue: Issue;
   findForPurchase: typeof findWalletPaymentForPurchase;
   wasAttempted: typeof walletPaymentAttemptedForPurchase;
+  /** Resumes a paid replay while switched off (tests inject their own). */
+  resume?: typeof resumePaidImeiWalletPayment;
 }
 
 const defaultDeps: StartImeiWalletPaymentDeps = {
@@ -102,12 +108,17 @@ export async function startImeiWalletPayment(
     );
   }
   // Switched off (or the kill switch): retryable 503, like the PIN and pay
-  // steps. Another merchant is a definitive 409.
+  // steps, unless this is the replay of a start whose payment already moved
+  // money: that resumes on the recovery runtime, issuing nothing (Codex P2).
+  // Another merchant is a definitive 409.
   if (!runtime)
-    return refuse(
-      'PIGGYVEST_PAY_UNAVAILABLE',
-      'Paying from your PiggyVest wallet is not available right now.',
-      503
+    return (
+      (await resumeWhileSwitchedOff(input, deps.resume)) ??
+      refuse(
+        'PIGGYVEST_PAY_UNAVAILABLE',
+        'Paying from your PiggyVest wallet is not available right now.',
+        503
+      )
     );
   if (runtime.merchantId !== input.merchantId)
     return refuse(

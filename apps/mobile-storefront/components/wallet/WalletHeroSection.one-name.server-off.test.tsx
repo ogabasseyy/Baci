@@ -79,6 +79,20 @@ describe('bugfix: no Add money entry and no copy feedback on the wallet card', (
 
     expect(screen.getByText('Copied')).toBeOnTheScreen();
   });
+
+  it('bugfix: shows "Copied" in place of the bank line so the card does not move', async () => {
+    renderHero(true);
+
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Copy funding account number' })
+      );
+    });
+
+    // One "Copied" line replaces the bank name; no extra line is added.
+    expect(screen.getAllByText('Copied')).toHaveLength(1);
+    expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
+  });
 });
 
 describe('server keeps PiggyVest off', () => {

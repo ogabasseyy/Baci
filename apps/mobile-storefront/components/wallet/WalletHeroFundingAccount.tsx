@@ -75,15 +75,17 @@ export function WalletHeroFundingAccount({
             />
           ) : null}
         </View>
-        <Text style={styles.bank} numberOfLines={1}>
-          {account.bankName}
+        {/* "Copied" swaps in for the bank line, so nothing below moves. */}
+        <Text
+          accessibilityLiveRegion={copied ? 'polite' : undefined}
+          style={copied ? styles.copiedBank : styles.bank}
+          numberOfLines={1}
+        >
+          {copied ? COPIED : account.bankName}
         </Text>
       </Pressable>
-      {feedback ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          style={copied ? styles.copied : styles.feedback}
-        >
+      {feedback && !copied ? (
+        <Text accessibilityLiveRegion="polite" style={styles.feedback}>
           {feedback}
         </Text>
       ) : null}
@@ -116,5 +118,10 @@ const styles = StyleSheet.create({
   number: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   bank: { color: '#AEB4BE', fontSize: 10, marginTop: 2 },
   feedback: { color: '#AEB4BE', fontSize: 9 },
-  copied: { color: '#F8B84C', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  copiedBank: {
+    color: '#F8B84C',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
 });

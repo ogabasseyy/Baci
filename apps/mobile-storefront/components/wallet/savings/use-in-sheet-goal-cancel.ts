@@ -6,7 +6,9 @@ import { walletRefreshWorked } from '../wallet-refresh-worked';
 import { clearSavingsNotice, savingsNotifier } from './savings-notice';
 import { useGoalLifecycle } from './use-goal-lifecycle';
 
-const IN_FLIGHT = new Set(['submitting', 'polling']);
+// Steps whose reply can still settle money (an issue may answer "already
+// pending" or, for Complete, "confirmed"): a closed sheet keeps tracking them.
+const IN_FLIGHT = new Set(['issuing', 'submitting', 'polling']);
 
 /**
  * Cancelling or completing a goal as a step inside the Add to savings sheet.
@@ -99,10 +101,19 @@ export function useInSheetGoalCancel(
   const finished =
     settled || flow.step === 'failed' || flow.step === 'pin_cancelled';
   useEffect(() => {
-    if (!finished || closedInFlight.current !== attempt) return;
+    if (closedInFlight.current !== attempt) return;
+    if (flow.step === 'pin') {
+      // An issue closed mid-flight that now needs the PIN: nothing was sent,
+      // so it is abandoned rather than opening a hidden PIN prompt.
+      closedInFlight.current = null;
+      setHeld(null);
+      setAttempt((value) => value + 1);
+      return;
+    }
+    if (!finished) return;
     closedInFlight.current = null;
     setHeld(null);
-  }, [finished, attempt]);
+  }, [finished, attempt, flow.step]);
 
   return {
     goal: active,
@@ -128,7 +139,7 @@ export function useInSheetGoalCancel(
         return;
       }
       setHeld(null);
-      // Anything not yet sent (e.g. still issuing) is abandoned: a new
+      // Anything not yet sent (a review, a PIN step) is abandoned: a new
       // attempt invalidates it, so a late reply never opens a hidden PIN step.
       setAttempt((value) => value + 1);
     },

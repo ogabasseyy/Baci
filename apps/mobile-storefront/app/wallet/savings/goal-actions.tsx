@@ -4,6 +4,7 @@ import { ActivityIndicator } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
 import { notifySavings } from '@/components/wallet/savings/savings-notice';
+import { useSavingsNoticeStore } from '@/components/wallet/savings/savings-notice-store';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useWallet } from '@/hooks/use-wallet';
 import { goalIdParamSchema } from '@/schemas/goal-link';
@@ -94,6 +95,8 @@ export default function WalletGoalActionsRoute() {
       "It's finished or isn't on this account, so here's your wallet.",
       'info'
     );
+    // Not tied to any goal: the wallet's next goal must not clear it.
+    useSavingsNoticeStore.setState({ goalId: null });
   }, [gone]);
   // After sign-in the customer comes back here, so the ownership check runs.
   const back = goalId

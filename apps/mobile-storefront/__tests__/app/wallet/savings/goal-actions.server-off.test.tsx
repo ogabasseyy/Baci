@@ -77,6 +77,8 @@ describe('old goal-actions links', () => {
     expect(useSavingsNoticeStore.getState().notice?.title).toBe(
       'That savings plan has closed'
     );
+    // Not tied to a goal, so the wallet's next goal keeps it on screen.
+    expect(useSavingsNoticeStore.getState().goalId).toBeNull();
   });
 
   it('keep the link with a retry when the fresh read fails', async () => {

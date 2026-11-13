@@ -183,6 +183,33 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(result.current.goal).toBeNull();
   });
 
+  it('keeps tracking an issue closed mid-flight until it settles', () => {
+    const refresh = jest.fn();
+    const { result, rerender } = renderHook(() =>
+      useInSheetGoalCancel(goal, refresh)
+    );
+    act(() => result.current.start());
+    mockStep.current = 'issuing';
+    rerender({});
+    act(() => result.current.closed());
+    expect(result.current.goal?.id).toBe('goal-1');
+    mockStep.current = 'done';
+    rerender({});
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(result.current.goal).toBeNull();
+  });
+
+  it('abandons an issue closed mid-flight once it only needs the PIN', () => {
+    const { result, rerender } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start());
+    mockStep.current = 'issuing';
+    rerender({});
+    act(() => result.current.closed());
+    mockStep.current = 'pin';
+    rerender({});
+    expect(result.current.goal).toBeNull();
+  });
+
   it('keeps a held step when the sheet is reopened before the action settles', () => {
     const { result, rerender } = renderHook(
       ({ visible }: { visible: boolean }) =>
@@ -211,19 +238,6 @@ describe('in-sheet goal cancel with the server off', () => {
     act(() => result.current.closed());
     expect(result.current.goal).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
-  });
-
-  it('abandons an action still being issued when the sheet closes', () => {
-    const { result, rerender } = renderHook(() => useInSheetGoalCancel(goal));
-    act(() => result.current.start());
-    const opened = mockLifecycle.mock.calls.at(-1)?.[0] as { resetKey: number };
-    mockStep.current = 'issuing';
-    rerender({});
-    act(() => result.current.closed());
-    const after = mockLifecycle.mock.calls.at(-1)?.[0] as { resetKey: number };
-    expect(result.current.goal).toBeNull();
-    // A new attempt invalidates the pending request, so no hidden PIN step.
-    expect(after.resetKey).toBeGreaterThan(opened.resetKey);
   });
 
   it('clears an earlier savings notice when a cancel or complete starts', () => {

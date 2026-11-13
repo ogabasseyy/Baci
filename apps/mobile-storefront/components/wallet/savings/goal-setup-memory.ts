@@ -9,6 +9,8 @@ type Entry = {
   /** Seen not started, then waiting: setup began after the plan was made. */
   startedLater: boolean;
   lastPhase: SavingsPlanFundingPhase;
+  /** When `lastPhase` last changed, so screens can tell newer answers. */
+  updatedAt: number;
 };
 
 /**
@@ -54,6 +56,7 @@ export function rememberGoalSetupPhase(
     scopeKey,
     {
       lastPhase: phase,
+      updatedAt: changed ? now : (entry?.updatedAt ?? now),
       firstWaitingAt: waiting ? (entry?.firstWaitingAt ?? now) : null,
       startedLater: waiting
         ? (entry?.startedLater ?? false) || entry?.lastPhase === 'not_started'
@@ -77,6 +80,11 @@ export function lastGoalSetupPhase(
  */
 export function goalSetupStartedLater(scopeKey: string): boolean {
   return entries.get(scopeKey)?.startedLater ?? false;
+}
+
+/** When the goal's remembered status last changed; 0 if never learned. */
+export function goalSetupPhaseUpdatedAt(scopeKey: string): number {
+  return entries.get(scopeKey)?.updatedAt ?? 0;
 }
 
 export function goalSetupFirstWaitingAt(scopeKey: string): number | null {

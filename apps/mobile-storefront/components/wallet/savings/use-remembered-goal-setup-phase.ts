@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import {
+  goalSetupPhaseUpdatedAt,
   lastGoalSetupPhase,
   subscribeGoalSetupMemory,
 } from './goal-setup-memory';
@@ -15,5 +16,12 @@ export function useRememberedGoalSetupPhase(
 ): SavingsPlanFundingPhase | null {
   return useSyncExternalStore(subscribeGoalSetupMemory, () =>
     lastGoalSetupPhase(scopeKey)
+  );
+}
+
+/** When that remembered status last changed (0 if never), kept up to date. */
+export function useRememberedGoalSetupPhaseAt(scopeKey: string): number {
+  return useSyncExternalStore(subscribeGoalSetupMemory, () =>
+    goalSetupPhaseUpdatedAt(scopeKey)
   );
 }

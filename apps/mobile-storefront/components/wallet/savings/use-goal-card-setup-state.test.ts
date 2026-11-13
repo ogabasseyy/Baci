@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import {
   rememberGoalSetupPhase,
@@ -145,5 +145,22 @@ describe('useGoalCardSetupState', () => {
       expect.objectContaining({ goalId: null, loadExisting: false })
     );
     expect(mockPollInput).toHaveBeenLastCalledWith('idle');
+  });
+
+  describe('bugfix: the paused card kept the slow notice up after the sheet found the plan ready', () => {
+    it('follows a newer answer from the sheet and stops reporting the plan pending', () => {
+      mockPhase = 'pending';
+      const view = renderHook(() => useGoalCardSetupState(goal(), true));
+      expect(view.result.current).toBe('getting_ready');
+      act(() =>
+        rememberGoalSetupPhase(
+          JSON.stringify(['user-1', 'merchant-1', 'goal-1']),
+          'ready',
+          Date.now() + 1000
+        )
+      );
+      expect(view.result.current).toBeNull();
+      expect(mockPollInput).toHaveBeenLastCalledWith('ready');
+    });
   });
 });

@@ -1,7 +1,12 @@
+import { useEffect, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { shownGoalSetupPhase } from './shown-goal-setup-phase';
 import { useGoalSetupScope } from './use-goal-setup-scope';
 import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
+import {
+  useRememberedGoalSetupPhase,
+  useRememberedGoalSetupPhaseAt,
+} from './use-remembered-goal-setup-phase';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
@@ -48,7 +53,21 @@ export function useGoalCardSetupState(
     loadExisting: checked,
     notFoundMeansNotStarted: true,
   });
-  const phase = shownGoalSetupPhase(funding.planFundingPhase, scopeKey);
+  const ownPhase = shownGoalSetupPhase(funding.planFundingPhase, scopeKey);
+  // The newest answer wins: when the sheet has learned more recently than
+  // the card's own read (e.g. setup finished while the sheet was open), the
+  // card follows it, so it stops reporting slow and shows "Add to savings",
+  // and never overwrites that answer with its own older one.
+  const [ownReadAt, setOwnReadAt] = useState(0);
+  useEffect(() => {
+    const read = funding.planFundingPhase;
+    if (read !== 'idle' && read !== 'loading' && read !== 'error')
+      setOwnReadAt(Date.now());
+  }, [funding.planFundingPhase]);
+  const remembered = useRememberedGoalSetupPhase(scopeKey);
+  const rememberedAt = useRememberedGoalSetupPhaseAt(scopeKey);
+  const phase =
+    remembered !== null && rememberedAt > ownReadAt ? remembered : ownPhase;
   // The poll only reads status, so a stalled setup (which the sheet may
   // re-run) keeps being read like a pending one: the card turns back to
   // "Add to savings" on its own once the plan is ready.

@@ -46,6 +46,17 @@ describe('claimDegradedPage', () => {
       }
     });
 
+    it('asks Redis again next run after a transient outage outside the window', async () => {
+      expect(
+        await claimDegradedPage('transfers', 1, none, HOUR + 20 * 60_000)
+      ).toBe(false);
+      const recovered = vi.fn(async () => true);
+      expect(
+        await claimDegradedPage('transfers', 1, recovered, HOUR + 25 * 60_000)
+      ).toBe(true);
+      expect(recovered).toHaveBeenCalledWith('transfers:1');
+    });
+
     it('still trusts the shared store when it answers', async () => {
       expect(
         await claimDegradedPage(

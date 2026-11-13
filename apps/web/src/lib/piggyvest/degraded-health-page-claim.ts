@@ -58,8 +58,11 @@ export async function claimDegradedPage(
     if (oldest !== undefined) claimedPages.delete(oldest);
   }
   const sharedResult = await shared(key);
-  if (sharedResult !== null) return sharedResult;
-  return nowMs % MS_PER_HOUR < FALLBACK_PAGE_WINDOW_MS;
+  const allowed = sharedResult ?? nowMs % MS_PER_HOUR < FALLBACK_PAGE_WINDOW_MS;
+  // Keep this copy's claim only when it paged or another copy did; a run
+  // that could not ask Redis and was outside the window tries again next run.
+  if (!allowed && sharedResult === null) claimedPages.delete(key);
+  return allowed;
 }
 
 /** Test-only: forget which pages were already sent in this copy. */

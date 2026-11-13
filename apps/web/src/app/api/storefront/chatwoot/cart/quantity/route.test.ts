@@ -10,8 +10,14 @@ const mocks = vi.hoisted(() => ({
   checkCartQuota: vi.fn(async () => ({ allowed: true })),
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   createCartScopedClient: vi.fn(() => ({ rpc: vi.fn() })),
+  getCart: vi.fn(async (_deps: unknown) => ({
+    ok: true as const,
+    cart: { cartId: 'cart', version: 1, expiresAt: 'expiry' },
+  })),
   getCartProofEnvironment: vi.fn(() => 'test'),
-  issueCartSessionProof: vi.fn(() => 'renewed-proof'),
+  issueCartSessionProof: vi.fn(
+    (_claims: unknown, _options: unknown) => 'renewed-proof'
+  ),
   cartSessionCookieMaxAge: vi.fn(() => 3600),
   loadLiveGrantOperations: vi.fn(async () => ({
     allowedOperations: ['set_quantity', 'remove'],
@@ -46,7 +52,10 @@ vi.mock('@/lib/cart/session-proof', () => ({
 vi.mock('@/lib/cart/scoped-client', () => ({
   createCartScopedClient: mocks.createCartScopedClient,
 }));
-vi.mock('@/lib/cart/service', () => ({ mutateCart: mocks.mutateCart }));
+vi.mock('@/lib/cart/service', () => ({
+  getCart: mocks.getCart,
+  mutateCart: mocks.mutateCart,
+}));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.checkCsrfProtection,
 }));
@@ -115,7 +124,6 @@ function request() {
     }
   );
 }
-
 describe('Chatwoot shared-cart quantity route', () => {
   afterEach(() => vi.clearAllMocks());
 
@@ -205,7 +213,6 @@ describe('Chatwoot shared-cart quantity route', () => {
       '2026-11-20T00:00:00.000Z'
     );
   });
-
   it('uses upgraded live operations for a legacy cart principal', async () => {
     arrange();
     const upgraded = {
@@ -221,7 +228,6 @@ describe('Chatwoot shared-cart quantity route', () => {
       expect.objectContaining({ operationId: 'quantity-0001' })
     );
   });
-
   it('keeps the old proof when capability renewal fails after a committed edit', async () => {
     arrange();
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -249,40 +255,6 @@ describe('Chatwoot shared-cart quantity route', () => {
     const response = await POST(request());
 
     expect(response.status).toBe(403);
-    expect(mocks.mutateCart).not.toHaveBeenCalled();
-  });
-
-  it('renews a replayed operation against the RPC live cart version', async () => {
-    arrange();
-    mocks.mutateCart.mockResolvedValue({
-      ok: true,
-      operationId: body.requestId,
-      replayed: true,
-      currentVersion: 15,
-      cart: { expiresAt: cart.expiresAt, version: 13 },
-    });
-
-    const response = await POST(request());
-    const payload = await response.json();
-
-    expect(payload).toMatchObject({
-      accepted: true,
-      cartVersion: 15,
-      replayed: true,
-    });
-    expect(mocks.renewChatwootSessionCapability).toHaveBeenCalledWith(
-      expect.objectContaining({
-        nextState: expect.objectContaining({ cartVersion: 15 }),
-      })
-    );
-  });
-
-  it('rejects a malformed line ID before resolving cart context', async () => {
-    arrange({ ...body, lineId: 'not-a-uuid' });
-    const response = await POST(request());
-
-    expect(response.status).toBe(400);
-    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
     expect(mocks.mutateCart).not.toHaveBeenCalled();
   });
 

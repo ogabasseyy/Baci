@@ -23,6 +23,7 @@ function input(overrides: Partial<Parameters<typeof handleChatwootInlineCartQuan
   return {
     conversationId: 905,
     isCurrentAction: () => true,
+    isCurrentCartContext: () => true,
     isCurrentContext: () => true,
     lineTokens: new Map([['opaque-line-token', 'server-line']]),
     message,
@@ -78,6 +79,23 @@ describe('handleChatwootInlineCartQuantity', () => {
       accepted: true,
       cartVersion: 9,
     });
+  });
+
+  it('refreshes an accepted commit only in the same cart after context replacement', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ accepted: true, cartVersion: 9 }))
+    );
+    const value = input({
+      isCurrentAction: () => false,
+      isCurrentContext: () => false,
+      isCurrentCartContext: () => true,
+    });
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).not.toHaveBeenCalled();
   });
 
   it('surfaces refresh-required and refreshes the snapshot on conflict', async () => {

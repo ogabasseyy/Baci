@@ -141,6 +141,7 @@ export function useChatwootInlineCartBridge(
       const actionGeneration = ++latestActionGeneration;
       let actionSessionToken = authorizedSessionToken;
       const requestedCartRef = latestState.current.sharedCartRef ?? null;
+      const requestedMerchantSlug = latestState.current.merchantSlug;
       let authorized: Awaited<
         ReturnType<typeof authorizeChatwootBridgeSession>
       >;
@@ -212,6 +213,15 @@ export function useChatwootInlineCartBridge(
             isCurrentTarget(frame, actionTarget, conversationId) &&
             actionGeneration === latestActionGeneration &&
             sessionTokenAliases.has(messageSessionToken),
+          isCurrentCartContext: () => {
+            const currentCart = latestState.current.sharedCartRef;
+            return (
+              isCurrentTarget(frame, actionTarget, conversationId) &&
+              latestState.current.merchantSlug === requestedMerchantSlug &&
+              requestedCartRef !== null &&
+              currentCart?.cartId === requestedCartRef.cartId
+            );
+          },
           isCurrentContext: () =>
             isCurrentTarget(frame, actionTarget, conversationId) &&
             sessionTokenAliases.has(messageSessionToken) &&

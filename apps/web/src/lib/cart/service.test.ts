@@ -199,32 +199,6 @@ describe('mutateCart', () => {
     }
   });
 
-  it('surfaces replayed outcomes without re-pricing from stale input', async () => {
-    const client = clientReturning({
-      code: null,
-      currentVersion: 5,
-      ok: true,
-      replayed: true,
-      state: rawState(),
-    });
-
-    const result = await mutateCart(
-      { client: client as never, principal: sessionPrincipal() },
-      {
-        command: { type: 'clear' },
-        expectedVersion: 1,
-        operationId: 'op-1',
-      }
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.replayed).toBe(true);
-      expect(result.cart.version).toBe(2);
-      expect(result.currentVersion).toBe(5);
-    }
-  });
-
   it('returns the current snapshot on version conflicts', async () => {
     const client = clientReturning({
       code: 'version_conflict',

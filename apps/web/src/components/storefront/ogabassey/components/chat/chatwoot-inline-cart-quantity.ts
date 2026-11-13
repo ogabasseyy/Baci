@@ -11,6 +11,7 @@ type QuantityMessage = Extract<
 export async function handleChatwootInlineCartQuantity(input: {
   conversationId: number;
   isCurrentAction: () => boolean;
+  isCurrentCartContext: () => boolean;
   isCurrentContext: () => boolean;
   lineTokens: Map<string, string>;
   message: QuantityMessage;
@@ -82,7 +83,7 @@ export async function handleChatwootInlineCartQuantity(input: {
   }
   if (
     (mutation?.accepted === true || refreshRequired) &&
-    input.isCurrentContext()
+    input.isCurrentCartContext()
   ) {
     try {
       await input.refreshSharedCart?.();

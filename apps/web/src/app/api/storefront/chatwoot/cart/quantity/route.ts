@@ -10,7 +10,7 @@ import { readCartJsonBody } from '@/lib/cart/request-context';
 import { checkCartQuota } from '@/lib/cart/request-quota';
 import { setCartSessionCookie } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
-import { mutateCart } from '@/lib/cart/service';
+import { getCart, mutateCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
   issueCartSessionProof,
@@ -132,7 +132,8 @@ export async function POST(request: NextRequest) {
   if (!result.ok) {
     const status =
       result.code === 'version_conflict' ||
-      result.code === 'idempotency_conflict'
+      result.code === 'idempotency_conflict' ||
+      result.code === 'cart_locked'
         ? 409
         : result.code === 'unauthorized'
           ? 403
@@ -156,13 +157,8 @@ export async function POST(request: NextRequest) {
   } catch {
     // Retain the incoming proof's expiry when live grant refresh is unavailable.
   }
-  const proofGrantExpiry = resolveChatwootCartProofExpiry({
-    cartExpiresAt: result.cart.expiresAt,
-    existingProofExpiresAt: principal.expiresAt,
-    liveGrantExpiresAt: liveGrant?.grantExpiresAt,
-  });
   const reportedCartVersion = result.currentVersion;
-  const liveCartVersion =
+  let liveCartVersion =
     typeof reportedCartVersion === 'number' &&
     Number.isSafeInteger(reportedCartVersion) &&
     reportedCartVersion >= result.cart.version &&
@@ -171,9 +167,28 @@ export async function POST(request: NextRequest) {
       : !result.replayed && result.cart.version >= cartContext.state.cartVersion
         ? result.cart.version
         : null;
+  let proofCartExpiresAt = result.cart.expiresAt;
+  if (result.replayed && liveCartVersion !== null) {
+    const latestCart = await getCart({ client, principal });
+    if (
+      !latestCart.ok ||
+      latestCart.cart.cartId !== principal.cartId ||
+      latestCart.cart.version < liveCartVersion
+    ) {
+      return unavailable(409, 'refresh_required');
+    }
+    liveCartVersion = latestCart.cart.version;
+    proofCartExpiresAt = latestCart.cart.expiresAt;
+  }
   if (liveCartVersion === null) {
     return unavailable(409, 'refresh_required');
   }
+
+  const proofGrantExpiry = resolveChatwootCartProofExpiry({
+    cartExpiresAt: proofCartExpiresAt,
+    existingProofExpiresAt: principal.expiresAt,
+    liveGrantExpiresAt: liveGrant?.grantExpiresAt,
+  });
   let proof: string | null = null;
   if (proofGrantExpiry !== null) {
     try {

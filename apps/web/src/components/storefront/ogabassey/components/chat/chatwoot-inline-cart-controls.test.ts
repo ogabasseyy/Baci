@@ -72,6 +72,7 @@ describe('Chatwoot canonical cart adapter', () => {
     await handleChatwootInlineCartQuantity({
       conversationId: 905,
       isCurrentAction: () => true,
+      isCurrentCartContext: () => true,
       isCurrentContext: () => true,
       lineTokens,
       message: {

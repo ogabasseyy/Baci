@@ -112,7 +112,7 @@ export async function sweepPendingGoalCancelForfeits(input: {
     });
     try {
       schemas.ackRows.parse(
-        (await execute(sql.workerAck, bound(item.operationId))).rows
+        (await execute(sql.workerAck, bound(item.forfeitId))).rows
       );
     } catch {
       result.failed += 1;

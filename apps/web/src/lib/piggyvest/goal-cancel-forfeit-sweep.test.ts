@@ -73,7 +73,7 @@ beforeEach(() => {
 describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
   it('sends a forfeit nobody polled for and settles it', async () => {
     db(
-      [{ operationId: opA, state: 'reserved', alert: false }],
+      [{ operationId: opA, forfeitId, state: 'reserved', alert: false }],
       { status: 'claimed', forfeit },
       'posting'
     );
@@ -101,8 +101,8 @@ describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
 it('sends nothing new while savings are switched off, but still settles in-flight forfeits', async () => {
   db(
     [
-      { operationId: opA, state: 'reserved', alert: false },
-      { operationId: opB, state: 'dispatched', alert: false },
+      { operationId: opA, forfeitId, state: 'reserved', alert: false },
+      { operationId: opB, forfeitId, state: 'dispatched', alert: false },
     ],
     { status: 'pending', forfeitId }
   );
@@ -118,10 +118,14 @@ it('sends nothing new while savings are switched off, but still settles in-fligh
 });
 
 it('pages an overdue in-flight forfeit, then acknowledges the page', async () => {
-  db([{ operationId: opB, state: 'dispatched', alert: true }], true, {
-    status: 'pending',
-    forfeitId,
-  });
+  db(
+    [{ operationId: opB, forfeitId, state: 'dispatched', alert: true }],
+    true,
+    {
+      status: 'pending',
+      forfeitId,
+    }
+  );
   await sweepPendingGoalCancelForfeits(input(false));
   expect(mocks.alert).toHaveBeenCalledWith(
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
@@ -129,7 +133,8 @@ it('pages an overdue in-flight forfeit, then acknowledges the page', async () =>
   );
   expect(mocks.execute.mock.calls[1]).toEqual([
     sql.workerAck,
-    [integrationId, 'staging', opB],
+    // Only the forfeit that was paged, never its siblings.
+    [integrationId, 'staging', forfeitId],
   ]);
   // Regression: the alert is recorded as sent only after it was emitted.
   expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
@@ -142,7 +147,11 @@ it('counts a failed page acknowledgement as a failure and still drives the forfe
   mocks.execute
     .mockResolvedValueOnce({
       rows: [
-        { result: [{ operationId: opB, state: 'dispatched', alert: true }] },
+        {
+          result: [
+            { operationId: opB, forfeitId, state: 'dispatched', alert: true },
+          ],
+        },
       ],
     })
     .mockRejectedValueOnce(new Error('db'))
@@ -163,8 +172,8 @@ it('counts a failing forfeit and carries on with the next', async () => {
       rows: [
         {
           result: [
-            { operationId: opA, state: 'reserved', alert: false },
-            { operationId: opB, state: 'dispatched', alert: false },
+            { operationId: opA, forfeitId, state: 'reserved', alert: false },
+            { operationId: opB, forfeitId, state: 'dispatched', alert: false },
           ],
         },
       ],
@@ -193,7 +202,7 @@ it('refuses evidence bound to another integration', async () => {
 });
 
 it('counts a stuck forfeit as needing attention, not as ordinary pending work', async () => {
-  db([{ operationId: opA, state: 'reserved', alert: false }], {
+  db([{ operationId: opA, forfeitId, state: 'reserved', alert: false }], {
     status: 'unavailable',
   });
   expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
@@ -205,8 +214,8 @@ it('counts a stuck forfeit as needing attention, not as ordinary pending work', 
 it('starts no new forfeit once the deadline has passed', async () => {
   db(
     [
-      { operationId: opA, state: 'reserved', alert: false },
-      { operationId: opB, state: 'reserved', alert: false },
+      { operationId: opA, forfeitId, state: 'reserved', alert: false },
+      { operationId: opB, forfeitId, state: 'reserved', alert: false },
     ],
     { status: 'claimed', forfeit },
     'posting'
@@ -226,7 +235,7 @@ it('starts no new forfeit once the deadline has passed', async () => {
 });
 
 it('pages an overdue forfeit even when the deadline defers its item', async () => {
-  db([{ operationId: opB, state: 'dispatched', alert: true }], true);
+  db([{ operationId: opB, forfeitId, state: 'dispatched', alert: true }], true);
   const result = await sweepPendingGoalCancelForfeits({
     ...input(true),
     deadlineAt: 0,
@@ -251,7 +260,10 @@ it('lists only in-flight forfeits while new transfers are off', async () => {
 });
 
 it('pages a review nobody was paged about and drives nothing for it', async () => {
-  db([{ operationId: opA, state: 'needs_review', alert: true }], true);
+  db(
+    [{ operationId: opA, forfeitId, state: 'needs_review', alert: true }],
+    true
+  );
   expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
     listed: 1,
     attention: 1,

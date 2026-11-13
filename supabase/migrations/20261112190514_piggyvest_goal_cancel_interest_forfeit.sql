@@ -547,11 +547,20 @@ BEGIN
     RETURN 'conflict';
   END IF;
   v_residual := COALESCE((proof ->> 'residualKobo')::bigint, 0);
-  -- Interest planned for the forfeit leg and not yet sent or settled is meant
-  -- to still be in the goal wallet.
-  SELECT COALESCE(pg_catalog.sum(forfeit.amount_kobo), 0) INTO v_expected_residual
+  -- Interest forfeited and not yet moved out is meant to still be in the goal
+  -- wallet: every live forfeit leg, and the whole forfeited total less what
+  -- has settled (which also covers interest held in review, such as interest
+  -- above the per-transfer ceiling, whose row carries only a marker amount).
+  -- Only the internal interest leg needs a person then, not the customer's
+  -- cancel.
+  SELECT GREATEST(
+           COALESCE(pg_catalog.sum(forfeit.amount_kobo)
+                      FILTER (WHERE forfeit.state IN ('reserved', 'dispatched')), 0),
+           COALESCE(v_operation.forfeited_interest_kobo, 0)
+             - COALESCE(pg_catalog.sum(forfeit.amount_kobo) FILTER (WHERE forfeit.state = 'confirmed'), 0))
+    INTO v_expected_residual
     FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
-   WHERE forfeit.cancel_operation_id = v_operation.id AND forfeit.state IN ('reserved', 'dispatched');
+   WHERE forfeit.cancel_operation_id = v_operation.id;
   SELECT goal.current_amount INTO v_goal_amount FROM public.customer_savings_goals AS goal
    WHERE goal.id = v_operation.goal_id AND goal.customer_id = v_intent.customer_id
      AND goal.merchant_id = v_intent.merchant_id FOR UPDATE;
@@ -1002,20 +1011,21 @@ BEGIN
      LIMIT p_limit
   )
   SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-      'operationId', work.cancel_operation_id, 'state', work.state,
+      'operationId', work.cancel_operation_id, 'forfeitId', work.id, 'state', work.state,
       'alert', work.overdue) ORDER BY work.rank), '[]'::jsonb)
     INTO v_result FROM work;
   RETURN v_result;
 END;
 $$;
 
--- Records that the sweep has emitted the page for a cancel attempt's overdue
--- or unpaged forfeit, so it is not paged again. Called only after the page;
--- true when something was acknowledged.
+-- Records that the sweep has emitted the page for this one overdue or
+-- unpaged forfeit (the listed forfeitId, never its siblings, so a sibling that
+-- became alertable meanwhile is still paged), so it is not paged again.
+-- Called only after the page; true when something was acknowledged.
 CREATE FUNCTION piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(
   integration_id uuid,
   environment text,
-  operation_id uuid
+  forfeit_id uuid
 )
 RETURNS boolean
 LANGUAGE plpgsql
@@ -1028,7 +1038,7 @@ BEGIN
   v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
      SET alerted_at = pg_catalog.clock_timestamp()
-   WHERE forfeit.cancel_operation_id = ack_goal_cancel_forfeit_alert_worker.operation_id
+   WHERE forfeit.id = ack_goal_cancel_forfeit_alert_worker.forfeit_id
      AND forfeit.integration_id = v_binding.id
      AND forfeit.alerted_at IS NULL
      AND ((forfeit.state = 'dispatched'

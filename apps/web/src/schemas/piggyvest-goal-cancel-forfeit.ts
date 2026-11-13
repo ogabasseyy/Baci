@@ -95,6 +95,7 @@ export const piggyvestGoalCancelForfeitSchemas = {
           .array(
             z.strictObject({
               operationId: z.uuid(),
+              forfeitId: z.uuid(),
               state: z.enum(['reserved', 'dispatched', 'needs_review']),
               alert: z.boolean(),
             })

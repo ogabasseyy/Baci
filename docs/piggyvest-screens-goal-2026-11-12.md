@@ -224,9 +224,21 @@ PiggyVest is enabled for the Ogabassey merchant only (owner, 11-13). Holds and P
 | Item | Where | Status |
 | --- | --- | --- |
 | Fund screens (Add money, onboarding, Money received) | #4230 | Built; walked; low findings with the fund session |
-| PiggyVest wallet activity list | #4230 session (stacked PR) | **Building**: needs a customer-scoped read (migration + route) |
-| Airtime/data/bills from the wallet | #4227 | Built; **high**: airtime never offers the wallet with a ready balance (covers() false); fix owed, then re-walk to PIN |
+| PiggyVest wallet activity list | #4232 | Built; Fable-walked: rows, labels, AI-button inset, Show more (cursor fix a41e1a35a3) pass |
+| Airtime/data/bills from the wallet | #4227 | Built; wallet offered and shortfall shown (walked). Pay → PIN not reachable locally (no Monnify catalogue / no real MTN number); **owed on staging** |
 | Checkout payment step | walked 11-13 | No wallet row, by design (wallet pays IMEI and VTU only); storefront findings in #4229 |
 | #4216 holds | #4216 | Being scoped to Ogabassey only |
 | Data/bills catalogues, live money steps | staging | Owed: no Monnify catalogue locally; PiggyVest outbound transfers paused |
+
+## Walks (2026-11-13, late)
+
+- Fund screens (#4230): no iOS alerts anywhere; "Money received" appears inline while Add money is open. Low fixes are done.
+- Wallet activity (#4232): passes. The test account has 20 rows, so page 2 is covered by paging tests.
+- IMEI wallet chip (#4225): shows "Savings ₦551,600". IMEI checks have no catalogue locally, so the pay sheet is owed on staging.
+- Airtime (#4227): the savings wallet is offered and the over-balance shortfall is shown. Pay stops before the PIN locally, because the biller lookup needs Monnify; **owed on staging**.
+- Provider names: customer wallet history and billers errors no longer show providers (#4233; owner, 11-13).
+
+### Still owed (not runnable locally)
+- On staging, once PiggyVest resumes outbound transfers: airtime/data/bills and IMEI pay to the PIN and settlement, and the money steps end to end.
+- Owner actions: the `allow-silent-revert` label on #4224; marking #4223 ready.
 

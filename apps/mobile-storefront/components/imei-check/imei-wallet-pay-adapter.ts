@@ -138,7 +138,8 @@ export function createImeiWalletPayAdapter(input: {
         const { operationId, amountKobo } = payment.data;
         if (payment.data.status === 'payment_required')
           return { kind: 'pin', operationId, amountKobo };
-        if (payment.data.status === 'payment_review') return outcome('review');
+        // Pending or under review: keep the operation and check on it, so
+        // a payment PiggyVest confirms later still delivers the check.
         return { kind: 'recheck', operationId, amountKobo };
       }
       // A replayed start: the purchase already finished (its result or its
@@ -162,10 +163,10 @@ export function createImeiWalletPayAdapter(input: {
         pin,
       });
       const proof = z
-        .object({ proof: z.string().regex(/^[0-9a-f]{64}$/) })
+        .object({ proof: z.string().regex(/^[0-9a-f]{64}$/i) })
         .safeParse(reply.body);
       if (reply.httpStatus === 200 && proof.success)
-        return { kind: 'proof', proof: proof.data.proof };
+        return { kind: 'proof', proof: proof.data.proof.toLowerCase() };
       // A 200 we can't read moved nothing: let the customer try again.
       if (reply.httpStatus === 200)
         return {

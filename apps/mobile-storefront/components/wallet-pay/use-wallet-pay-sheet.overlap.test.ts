@@ -229,4 +229,46 @@ describe('bugfix: overlapping wallet pay calls (Muse review)', () => {
     });
     expect(adapter.pay).toHaveBeenCalledWith(OP, PROOF);
   });
+
+  it('bugfix: keeps re-checking a payment under review (Codex P2)', async () => {
+    jest.useFakeTimers();
+    const hook = setup();
+    const pay = jest
+      .fn()
+      .mockResolvedValueOnce({ kind: 'outcome', outcome: { kind: 'review' } })
+      .mockResolvedValueOnce({ kind: 'delivered', result: 'clean' });
+    const adapter = makeAdapter({
+      start: jest.fn(async () => ({
+        kind: 'recheck' as const,
+        operationId: OP,
+        amountKobo: 30_000,
+      })),
+      pay,
+    });
+    await act(async () => {
+      await hook.result.current.open(adapter);
+    });
+    expect(hook.result.current.outcome).toEqual({ kind: 'review' });
+    await act(async () => {
+      jest.advanceTimersByTime(3_000);
+    });
+    expect(pay).toHaveBeenNthCalledWith(2, OP, '');
+    expect(hook.result.current.step).toBe('closed');
+    jest.useRealTimers();
+  });
+
+  it('bugfix: Verify does not restart a sheet that is already open (Muse)', async () => {
+    const hook = setup();
+    const adapter = makeAdapter();
+    await act(async () => {
+      await hook.result.current.open(adapter);
+    });
+    act(() => hook.result.current.setPin('12'));
+    const again = makeAdapter();
+    await act(async () => {
+      await hook.result.current.open(again);
+    });
+    expect(again.start).not.toHaveBeenCalled();
+    expect(hook.result.current.pin).toBe('12');
+  });
 });

@@ -86,8 +86,9 @@ export function useWalletPaySheet<Result>({
   };
 
   const open = async (next: WalletPayAdapter<Result>) => {
-    // A double tap must not start a second payment over the first.
-    if (inFlight.current) return;
+    // A double tap must not start a second payment over the first, and a
+    // sheet already open is never restarted under the customer.
+    if (inFlight.current || step !== 'closed') return;
     inFlight.current = true;
     lastAdapter.current = next;
     generation.current += 1;
@@ -179,7 +180,11 @@ export function useWalletPaySheet<Result>({
     setStep('closed');
   };
 
-  const pending = step === 'outcome' && outcome?.kind === 'pending';
+  // Under review is re-checked too: a payment PiggyVest confirms later must
+  // still reach the pay step (with the IMEI) to deliver the purchase.
+  const pending =
+    step === 'outcome' &&
+    (outcome?.kind === 'pending' || outcome?.kind === 'review');
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-armed only by a new pending answer; recheck reads the live refs.
   useEffect(() => {
     if (!pending || rechecks >= WALLET_PAY_AUTO_RECHECKS) return;
@@ -203,7 +208,8 @@ export function useWalletPaySheet<Result>({
     recheck,
     /** Runs the same start again (same purchase key) after it never answered. */
     retryStart: async () => {
-      if (lastAdapter.current) await open(lastAdapter.current);
+      if (lastAdapter.current && !inFlight.current)
+        await begin(lastAdapter.current, generation.current);
     },
     close,
     /**

@@ -316,3 +316,32 @@ describe('bugfix: a re-check refusal claimed nothing was taken (Muse)', () => {
     ).toMatchObject({ outcome: { kind: 'not_completed' } });
   });
 });
+
+describe('bugfix: a reviewed payment stopped being checked (Codex P2)', () => {
+  it('keeps the operation of a start under review and checks on it', async () => {
+    api.start.mockResolvedValue(
+      reply(202, {
+        status: 'payment_review',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 30_000,
+      })
+    );
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'recheck',
+      operationId: OP,
+      amountKobo: 30_000,
+    });
+  });
+});
+
+describe('bugfix: an uppercase proof looped on try again (Muse)', () => {
+  it('accepts it and sends it lowercased', async () => {
+    const pay = await started();
+    api.verifyPin.mockResolvedValue(reply(200, { proof: 'A'.repeat(64) }));
+    await expect(pay.verifyPin(OP, '1234')).resolves.toEqual({
+      kind: 'proof',
+      proof: 'a'.repeat(64),
+    });
+  });
+});

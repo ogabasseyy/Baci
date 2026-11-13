@@ -45,7 +45,7 @@ export function walletPayNotice(
       title: 'Payment under review',
       message: `We're checking ${amount} with PiggyVest. Nothing more will be taken, and if your ${purchase} can't be completed the money comes back to your PiggyVest wallet.`,
       tone: 'info',
-      action: null,
+      action: 'check_again',
     },
     refunded: {
       title: 'Refunded to your PiggyVest wallet',

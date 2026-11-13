@@ -44,15 +44,23 @@ describe('bugfix: a kept VTU purchase could not resume while switched off (Codex
     expect(refusal).not.toHaveBeenCalled();
   });
 
-  it('refuses a start with nothing paid (or only an issued payment)', async () => {
-    for (const state of ['issued', null]) {
-      const response = await answerWhileSwitchedOff(
-        deps(state) as never,
-        input,
-        refusal
-      );
-      expect(response.status).toBe(503);
-    }
+  it('bugfix: refuses a start that moved nothing, releasing and closing it (Codex P2)', async () => {
+    const issued = deps('issued');
+    const response = await answerWhileSwitchedOff(
+      issued as never,
+      input,
+      refusal
+    );
+    expect(response.status).toBe(503);
+    expect(issued.closeUnpaid).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: TXN, cancelOperationId: OP })
+    );
+    // No live attempt (e.g. it expired): the purchase is still closed.
+    const none = deps(null);
+    await answerWhileSwitchedOff(none as never, input, refusal);
+    expect(none.closeUnpaid).toHaveBeenCalledWith(
+      expect.not.objectContaining({ cancelOperationId: expect.anything() })
+    );
   });
 
   it('never answers for another store or customer', async () => {

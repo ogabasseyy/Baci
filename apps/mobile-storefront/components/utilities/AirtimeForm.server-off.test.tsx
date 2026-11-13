@@ -34,10 +34,15 @@ jest.mock('@/hooks/use-utility-payment', () => ({
     hasRetainedVtuAttempt: () => false,
   }),
 }));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: object) => unknown) =>
-    selector({ customer: null, session: null, user: null }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = Object.assign(
+    (selector: (state: object) => unknown) =>
+      selector({ customer: null, session: null, user: null }),
+    // The wallet pay hand-over reads the signed-in account directly.
+    { getState: () => ({ user: null }) }
+  );
+  return { useAuthStore };
+});
 jest.mock('./UtilityPaymentOptions', () => {
   const { Text } =
     jest.requireActual<typeof import('react-native')>('react-native');

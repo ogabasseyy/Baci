@@ -64,12 +64,17 @@ jest.mock('@/hooks/use-utility-payment', () => ({
 
 // Mutable auth state so tests can simulate logout/login between renders.
 let mockAuthCustomer: { id: string } | null = null;
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: jest.fn(
-    (selector: (state: { customer: { id: string } | null }) => unknown) =>
-      selector({ customer: mockAuthCustomer })
-  ),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = Object.assign(
+    jest.fn(
+      (selector: (state: { customer: { id: string } | null }) => unknown) =>
+        selector({ customer: mockAuthCustomer })
+    ),
+    // The wallet pay hand-over reads the signed-in account directly.
+    { getState: () => ({ user: null }) }
+  );
+  return { useAuthStore };
+});
 
 jest.mock('@/hooks/use-keyboard', () => ({
   useKeyboard: () => ({

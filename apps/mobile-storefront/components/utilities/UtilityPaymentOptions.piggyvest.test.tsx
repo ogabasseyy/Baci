@@ -121,3 +121,21 @@ describe('bugfix: a kept PiggyVest attempt showed store credit as the method (Co
     expect(screen.getByText('Savings wallet · NGN')).toBeTruthy();
   });
 });
+
+describe('bugfix: a kept PiggyVest attempt was hidden during a rollback (Codex P2)', () => {
+  it('shows the savings wallet resuming even with no live balance', () => {
+    useVtuWalletPayStore.setState({ covers: () => false, balanceKobo: null });
+    render(
+      <UtilityPaymentOptions
+        amount={500}
+        returnToHref={RETURN_TO}
+        walletBalance={1_000}
+        walletIsLoading={false}
+        walletIsSettled
+        walletIsStoreCredit
+        retainedPiggyvest
+      />
+    );
+    expect(screen.getByText('Finishing your earlier payment')).toBeTruthy();
+  });
+});

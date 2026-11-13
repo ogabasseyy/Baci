@@ -52,7 +52,9 @@ export function openVtuWalletPay(
   request: VtuWalletPayRequest,
   onDelivered: (result: VtuWalletPayResult) => void,
   /** A retained PiggyVest attempt: replay it whatever covers() says. */
-  replay = false
+  replay = false,
+  /** The account that submitted it (captured before any await). */
+  owner: string | null = useAuthStore.getState().user?.id ?? null
 ): boolean {
   const state = useVtuWalletPayStore.getState();
   if (state.pending || !(replay || state.covers(request.amount))) return false;
@@ -62,7 +64,7 @@ export function openVtuWalletPay(
     pending: {
       request,
       onDelivered,
-      userId: useAuthStore.getState().user?.id ?? null,
+      userId: owner,
     },
   });
   return true;
@@ -99,12 +101,17 @@ export async function payFromPiggyvest(
   // A store credit attempt that was charged but never answered must replay
   // on its own key, never be forked into a second (PiggyVest) purchase.
   if (isRetainedReplay) return false;
+  // The submitting account, captured before the lookup below: an account
+  // switch during it never hands this form to another account (Codex P1).
+  const owner = useAuthStore.getState().user?.id ?? null;
   // Likewise a retained PiggyVest attempt replays on PiggyVest, even when
   // store credit would now cover it (Codex P1).
   const replay = await useVtuWalletPayStore
     .getState()
     .retains(request)
     .catch(() => true);
+  // Switched meanwhile: the stale form is dropped (handled, nothing paid).
+  if ((useAuthStore.getState().user?.id ?? null) !== owner) return true;
   return openVtuWalletPay(
     request,
     (result) =>
@@ -124,6 +131,7 @@ export async function payFromPiggyvest(
           ? { address: request.customerAddress }
           : {}),
       }),
-    replay
+    replay,
+    owner
   );
 }

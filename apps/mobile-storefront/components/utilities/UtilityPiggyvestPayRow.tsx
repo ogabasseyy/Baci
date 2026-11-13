@@ -18,21 +18,25 @@ export function UtilityPiggyvestPayRow({
   mode = 'pays',
   amount = 0,
 }: {
-  balanceKobo: number;
+  /** Null only for 'resumes' (no live balance during a rollback). */
+  balanceKobo: number | null;
   colors: (typeof Colors)['light'];
-  mode?: 'pays' | 'available' | 'short';
+  /** 'resumes': an earlier payment from it is being finished. */
+  mode?: 'pays' | 'available' | 'short' | 'resumes';
   /** The purchase amount in naira (for the shortfall). */
   amount?: number;
 }) {
-  const balance = balanceKobo / 100;
+  const balance = (balanceKobo ?? 0) / 100;
   const available = `₦${balance.toLocaleString()} available`;
   const meta =
-    mode === 'pays'
-      ? `${available} · covers this purchase`
-      : mode === 'short'
-        ? `${available} · ₦${Math.max(amount - balance, 0).toLocaleString()} more needed`
-        : available;
-  const selected = mode === 'pays';
+    mode === 'resumes'
+      ? 'Finishing your earlier payment'
+      : mode === 'pays'
+        ? `${available} · covers this purchase`
+        : mode === 'short'
+          ? `${available} · ₦${Math.max(amount - balance, 0).toLocaleString()} more needed`
+          : available;
+  const selected = mode === 'pays' || mode === 'resumes';
   return (
     <View
       style={[

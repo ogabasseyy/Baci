@@ -324,6 +324,10 @@ jest.mock('@/services/push-notifications', () => ({
     mockScheduleLocalNotification(...args),
 }));
 
+// The account that started a top-up is still signed in.
+jest.mock('@/components/wallet/is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (
     selector: (state: {

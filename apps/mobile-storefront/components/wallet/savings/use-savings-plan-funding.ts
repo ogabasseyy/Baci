@@ -7,6 +7,7 @@ import {
 import { PLAN_NOT_SET_UP_MESSAGE } from '@/lib/customer-savings-plan-funding';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { getErrorMessage } from './start-savings-controller.utils';
 
 export type SavingsPlanFundingPhase =
@@ -81,7 +82,12 @@ export function useSavingsPlanFunding({
   const planFundingRequiresBvn =
     !isPiggyvestPrimaryMerchant(activeMerchantId) ||
     primaryCapability !== true ||
-    verdictNow === false;
+    verdictNow === false ||
+    // A rollback whose ruling-out just expired (Codex): keep BVN until a
+    // fresh positive verdict lands, so a legacy fallback never sends it empty.
+    (verdictNow === null &&
+      !!activeMerchantId &&
+      wasPiggyvestLastRuledOut(activeMerchantId));
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,

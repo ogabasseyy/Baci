@@ -104,9 +104,16 @@ export function WalletFundModal({
   // A store credit top-up opened from a purchase pushes the wallet page;
   // dismissing the sheet returns straight to that purchase instead of
   // leaving the customer on the pushed page (walk-through M8).
+  // Latched while open (Codex): a verdict change mid-sheet must not strand
+  // a customer who arrived from a purchase on the wallet page.
+  const [returnOnDismiss, setReturnOnDismiss] = useState(false);
+  if (showFundPanel && storeCreditTopUp && !returnOnDismiss)
+    setReturnOnDismiss(true);
   const dismissFund = () => {
     onResetFund();
-    if (!storeCreditTopUp || !fundReturnTo) return;
+    const returnToPurchase = storeCreditTopUp || returnOnDismiss;
+    setReturnOnDismiss(false);
+    if (!returnToPurchase || !fundReturnTo) return;
     // A deep link has no history underneath: open the purchase instead.
     if (router.canGoBack()) router.back();
     else router.replace(fundReturnTo);

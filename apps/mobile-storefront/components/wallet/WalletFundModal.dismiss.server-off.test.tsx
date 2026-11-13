@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
   clearObservedPiggyvestPrimaryCapability,
   observePiggyvestPrimaryCapability,
@@ -260,5 +260,24 @@ describe('owner decision 2026-11-13: card funding held only for the Ogabassey pi
     );
 
     expect(screen.getAllByText(/card/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe('bugfix: rollback while the sheet was open stranded the customer', () => {
+  it('still returns to the purchase when the verdict rolls back before close', () => {
+    // Arrange: opened from IMEI as a PiggyVest store credit top-up.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const onResetFund = renderModal(false, '/imei-check');
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+
+    // Act: the verdict rolls back while the sheet is open, then it closes.
+    act(() => observePiggyvestPrimaryCapability('merchant-1', false));
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert
+    expect(onResetFund).toHaveBeenCalledTimes(1);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    clearObservedPiggyvestPrimaryCapability();
   });
 });

@@ -470,12 +470,14 @@ VALUES ('f3860000-0000-4000-8000-0000000000c1', 'f3860000-0000-4000-8000-0000000
   repeat('a', 64), repeat('b', 64), 'synthetic-goal-cancel-forfeit-fixture',
   'provider_net_is_customer_plan_interest', true);
 SET LOCAL session_replication_role = origin;
-CREATE FUNCTION pg_temp.gf_receipt(p_payout text, p_net bigint) RETURNS void LANGUAGE sql AS $$
+CREATE FUNCTION pg_temp.gf_receipt(p_payout text, p_net bigint,
+  p_paid_at timestamptz DEFAULT pg_catalog.clock_timestamp()) RETURNS void LANGUAGE sql AS $$
   INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
     goal_id, merchant_id, customer_id, net_kobo, financial_identity, body_digest)
   VALUES ('f3860000-0000-4000-8000-000000000006', p_payout, 'f3860000-0000-4000-8000-0000000000c1',
     'f3860000-0000-4000-8000-000000000005', 'f3860000-0000-4000-8000-000000000002',
-    'f3860000-0000-4000-8000-000000000003', p_net, jsonb_build_object('payoutId', p_payout), repeat('a', 64));
+    'f3860000-0000-4000-8000-000000000003', p_net,
+    jsonb_build_object('payoutId', p_payout, 'paidAt', p_paid_at), repeat('a', 64));
 $$;
 DO $late$
 DECLARE
@@ -502,16 +504,38 @@ BEGIN
   VALUES ('f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003', c_goal::uuid,
     'primary-interest:' || c_integration::text || ':gf-during', 'interest_credited', 'Interest', 'Interest')
   ON CONFLICT DO NOTHING;
+  -- Regression (double count): interest PiggyVest paid BEFORE the balance
+  -- read is already inside the planned forfeit, so a late receipt for it
+  -- plans nothing more.
+  PERFORM pg_temp.gf_receipt('gf-before-read', 900, pg_catalog.clock_timestamp() - interval '1 hour');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12000,
+    'interest already inside the planned forfeit was counted twice');
   PERFORM pg_temp.gf_receipt('gf-during', 500);
-  PERFORM pg_temp.gc_assert((SELECT voided_at IS NOT NULL FROM savings_notifications.events
+  -- While the principal is in flight the notice stays (the cancel may fail).
+  PERFORM pg_temp.gc_assert((SELECT voided_at IS NULL FROM savings_notifications.events
                               WHERE event_key = 'primary-interest:' || c_integration::text || ':gf-during'),
-    'the customer was told forfeited interest was added to their savings');
+    'the interest notice was voided before the cancel was confirmed');
   PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 1
     AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12500,
     'interest paid during the cancel was not merged into the unsent forfeit');
   PERFORM pg_temp.gc_assert(
     pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12500}'::jsonb) = 'confirmed',
     'the principal did not settle with the merged interest still in the goal wallet');
+  -- Confirmed: the customer is no longer told that forfeited interest was
+  -- added to their savings.
+  PERFORM pg_temp.gc_assert((SELECT voided_at IS NOT NULL FROM savings_notifications.events
+                              WHERE event_key = 'primary-interest:' || c_integration::text || ':gf-during'),
+    'the customer was told forfeited interest was added to their savings');
+  -- A single payout above the per-transfer ceiling is recorded for review.
+  BEGIN
+    PERFORM pg_temp.gf_receipt('gf-huge', 10000000000);
+    PERFORM pg_temp.gc_assert(EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                                       WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                                         AND alerted_at IS NULL),
+      'an oversized late payout was ignored instead of going to review');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   PERFORM piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid);
   v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
   -- Paid after the forfeit was sent: a second, separate forfeit is planned.

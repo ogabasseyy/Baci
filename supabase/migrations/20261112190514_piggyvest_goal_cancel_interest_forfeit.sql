@@ -562,6 +562,20 @@ BEGIN
         'principal_kobo', v_operation.amount_kobo,
         'forfeited_interest_kobo', v_operation.forfeited_interest_kobo));
   END IF;
+  -- Interest paid after the dispatch is forfeited now that the cancel is
+  -- confirmed: its "interest added" notice is voided (it was kept while the
+  -- cancel could still fail).
+  IF NOT v_review THEN
+    UPDATE savings_notifications.events AS event
+       SET voided_at = COALESCE(event.voided_at, pg_catalog.clock_timestamp())
+      FROM piggyvest_primary.paid_interest_receipts AS receipt
+     WHERE receipt.goal_id = v_operation.goal_id AND receipt.integration_id = v_operation.integration_id
+       AND (receipt.financial_identity ->> 'paidAt') IS NOT NULL
+       AND (receipt.financial_identity ->> 'paidAt')::timestamptz > v_operation.dispatched_at
+       AND event.merchant_id = receipt.merchant_id AND event.customer_id = receipt.customer_id
+       AND event.goal_id = receipt.goal_id
+       AND event.event_key = 'primary-interest:' || receipt.integration_id::text || ':' || receipt.payout_id;
+  END IF;
   IF v_review THEN RETURN 'conflict'; END IF;
   RETURN 'confirmed';
 END;
@@ -799,8 +813,11 @@ BEGIN
                               THEN v_forfeit.amount_kobo + v_other.amount_kobo ELSE v_forfeit.amount_kobo END
      WHERE id = v_forfeit.id;
     IF v_forfeit.amount_kobo + v_other.amount_kobo > 9999999999 THEN
-      -- Not merged: the other plan stays as it was, this one goes to review.
+      -- Not merged: the other plan stays as it was, this one goes to review
+      -- unstamped, so the daily sweep pages the review (not a wallet page).
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'reserved' WHERE id = v_other.id;
+      UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET alerted_at = NULL WHERE id = v_forfeit.id;
+      RETURN 'unclaimed';
     END IF;
   ELSE
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits
@@ -1340,8 +1357,9 @@ AS $$
 DECLARE
   v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
   v_wallet text;
+  v_paid_at timestamptz;
 BEGIN
-  IF NEW.net_kobo IS NULL OR NEW.net_kobo < 1 OR NEW.net_kobo > 9999999999 THEN RETURN NEW; END IF;
+  IF NEW.net_kobo IS NULL OR NEW.net_kobo < 1 THEN RETURN NEW; END IF;
   SELECT cancel.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS cancel
    WHERE cancel.goal_id = NEW.goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed')
@@ -1356,14 +1374,30 @@ BEGIN
    WHERE cancel.id = v_operation.id AND cancel.state IN ('dispatched', 'confirmed')
      FOR SHARE;
   IF NOT FOUND THEN RETURN NEW; END IF;
-  -- The customer must not be told this interest was added to their savings:
-  -- it belongs to a cancelled goal and is forfeited. The credit notice is
-  -- voided (this trigger runs after the notification trigger, by name).
-  UPDATE savings_notifications.events AS event
-     SET voided_at = COALESCE(event.voided_at, pg_catalog.clock_timestamp())
-   WHERE event.merchant_id = NEW.merchant_id AND event.customer_id = NEW.customer_id
-     AND event.goal_id = NEW.goal_id
-     AND event.event_key = 'primary-interest:' || NEW.integration_id::text || ':' || NEW.payout_id;
+  -- Only interest PiggyVest paid AFTER the cancel read the balance is new:
+  -- anything paid before is already inside the planned forfeit (the split was
+  -- sized from that balance), so counting it again would over-forfeit. A
+  -- payout with no provider time, or one paid in the moment between the read
+  -- and the dispatch, is left to the settlement residual check (review), never
+  -- added twice.
+  BEGIN
+    v_paid_at := (NEW.financial_identity ->> 'paidAt')::timestamptz;
+  EXCEPTION WHEN OTHERS THEN
+    v_paid_at := NULL;
+  END;
+  IF v_paid_at IS NULL OR v_paid_at <= v_operation.dispatched_at THEN RETURN NEW; END IF;
+  -- The customer must not be told interest was added to a goal they have
+  -- cancelled. While the principal is still in flight the notice stays (the
+  -- cancel may yet fail and the interest stay theirs); settle_goal_cancel
+  -- voids it once the cancel is confirmed. This trigger runs after the
+  -- notification trigger, by name.
+  IF v_operation.state = 'confirmed' THEN
+    UPDATE savings_notifications.events AS event
+       SET voided_at = COALESCE(event.voided_at, pg_catalog.clock_timestamp())
+     WHERE event.merchant_id = NEW.merchant_id AND event.customer_id = NEW.customer_id
+       AND event.goal_id = NEW.goal_id
+       AND event.event_key = 'primary-interest:' || NEW.integration_id::text || ':' || NEW.payout_id;
+  END IF;
   SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
    WHERE wallet.integration_id = v_operation.integration_id;
   IF NOT FOUND OR v_wallet = v_operation.source_wallet_id
@@ -1371,6 +1405,18 @@ BEGIN
     RETURN NEW;
   END IF;
   BEGIN
+  IF NEW.net_kobo > 9999999999 THEN
+    -- Above the per-transfer ceiling: recorded for review (paged once by the
+    -- daily sweep), never ignored. The amount is the ceiling marker; the
+    -- receipt holds the real figure.
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+      'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+      v_operation.source_wallet_id, v_wallet, 9999999999, pg_catalog.clock_timestamp());
+    RETURN NEW;
+  END IF;
   INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
     cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
     source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)

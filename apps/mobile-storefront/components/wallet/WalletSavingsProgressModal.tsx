@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
 import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
@@ -54,6 +55,12 @@ export function WalletSavingsProgressModal({
   // Matches the wallet card: "View plan" there means not "Add to savings" here.
   const settingUp = usePlanStillSettingUp(goal);
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
+  // A funding question still waiting in this sheet is declined on close
+  // (Codex): otherwise its funding never settles.
+  const closeSheet = () => {
+    answerWalletFundPrompt(false);
+    onClose();
+  };
   // The sheet is sized to what it shows, so it never ends in empty space.
   const [cancelHeight, setCancelHeight] = useState(0);
   const [swapHeight, setSwapHeight] = useState(0);
@@ -78,7 +85,7 @@ export function WalletSavingsProgressModal({
         contentHeight={cancelHeight}
         onClose={() => {
           cancel.closed();
-          onClose();
+          closeSheet();
         }}
         overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
       >
@@ -123,7 +130,7 @@ export function WalletSavingsProgressModal({
         colors={colors}
         snapPoints={COMPACT_SNAP_POINTS}
         contentHeight={swapHeight}
-        onClose={onClose}
+        onClose={closeSheet}
       >
         <BottomSheetScrollView
           keyboardDismissMode="on-drag"
@@ -168,7 +175,7 @@ export function WalletSavingsProgressModal({
           ? headerHeight + HEADER_GAP + bodyHeight
           : undefined
       }
-      onClose={onClose}
+      onClose={closeSheet}
       overlay={overlay}
     >
       {(dismiss) => (

@@ -4,6 +4,7 @@ import {
   clearObservedPiggyvestPrimaryCapability,
   observePiggyvestPrimaryCapability,
 } from '@/lib/piggyvest-primary-capability-cache';
+import { useWalletFundPromptStore } from './fund/wallet-fund-prompt-store';
 import { WalletFundModal } from './WalletFundModal';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { createWalletContentProps } from './wallet-content.test-utils';
@@ -329,5 +330,29 @@ describe('bugfix: warm deep link returned to unrelated history', () => {
     // Assert: navigate to the purchase itself; never a bare back().
     expect(mockDismissTo).toHaveBeenCalledWith('/utilities/airtime');
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: closing the sheet left its funding question unanswered', () => {
+  it('declines a waiting question when the sheet is dismissed', () => {
+    // Arrange: a funding question is waiting in the sheet.
+    const resolve = jest.fn();
+    useWalletFundPromptStore.setState({
+      prompt: {
+        title: 'Resume card payment?',
+        message: 'An earlier card payment is saved.',
+        confirmLabel: 'Resume',
+        scope: ':merchant-1',
+        resolve,
+      },
+    });
+    renderModal(false, '/imei-check');
+
+    // Act
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert: settled as declined, so the funding can finish.
+    expect(resolve).toHaveBeenCalledWith(false);
+    expect(useWalletFundPromptStore.getState().prompt).toBeNull();
   });
 });

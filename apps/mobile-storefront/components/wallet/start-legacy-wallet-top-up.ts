@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { createLogger } from '@/lib/logger';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
-import type { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
+import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
 import { isSameSignedInUser } from './is-same-signed-in-user';
 import {
   buildWalletTopUpGatewayParams,
@@ -81,7 +81,9 @@ export async function startLegacyWalletTopUp({
     if (user?.id && !isSameSignedInUser(user.id)) {
       const message =
         'You switched accounts. Start the top-up again from this account.';
-      notify(
+      // A fresh notifier (Codex): the one made before the request is bound
+      // to the previous account's scope, so its notice would never show.
+      walletOutcomeNotifier(activeMerchantId)(
         { title: 'Signed-in account changed', message, tone: 'warning' },
         { title: 'Signed-in account changed', message }
       );

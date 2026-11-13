@@ -95,3 +95,32 @@ describe('bugfix: legacy checkout carried no owner stamp', () => {
     );
   });
 });
+
+describe('bugfix: account-change notice bound to the previous account', () => {
+  it('reports the switch through a fresh notifier, not the pre-request one', async () => {
+    // Arrange: the switch happens while the request is in flight.
+    const staleNotify = jest.fn();
+    jest.mocked(initializeWalletTopUp).mockImplementation(async () => {
+      mockSameUser = false;
+      return {
+        authorization_url: 'https://checkout.example.com/pay',
+        checkout_url: 'https://checkout.example.com/pay',
+        gateway: 'paystack',
+        reference: 'WAL-1',
+        success: true,
+      } as never;
+    });
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    // Act
+    await startLegacyWalletTopUp({ ...params, notify: staleNotify });
+
+    // Assert: the stale scope's notifier is never used for this outcome.
+    expect(staleNotify).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith(
+      'Signed-in account changed',
+      expect.any(String)
+    );
+    alert.mockRestore();
+  });
+});

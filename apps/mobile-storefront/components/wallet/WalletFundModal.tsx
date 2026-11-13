@@ -11,6 +11,7 @@ import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
 import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
@@ -119,6 +120,9 @@ export function WalletFundModal({
     setLatchedReturn(fundReturnTo);
   if (!showFundPanel && latchedReturn) setLatchedReturn(null);
   const dismissFund = () => {
+    // A question still waiting here is declined (Codex): otherwise its
+    // funding never settles and later top-ups for this account are dropped.
+    answerWalletFundPrompt(false);
     onResetFund();
     const returnToPurchase =
       storeCreditTopUp || (!!fundReturnTo && latchedReturn === fundReturnTo);

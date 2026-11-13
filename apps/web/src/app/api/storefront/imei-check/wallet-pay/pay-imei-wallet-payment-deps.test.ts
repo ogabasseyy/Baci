@@ -68,6 +68,7 @@ describe('createPayImeiWalletPaymentDeps', () => {
       lookup: {} as never,
       operationId: 'op',
       normalizedImei: 'I',
+      payment: { purpose: 'imei_check', purchaseRef: 'l', amountKobo: 1 },
     });
     expect(mocks.refund).toHaveBeenCalledWith({ runtime, paymentId: 'op' });
     expect(mocks.claim).toHaveBeenCalledWith('op');

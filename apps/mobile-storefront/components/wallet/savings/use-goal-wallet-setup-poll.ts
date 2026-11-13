@@ -6,6 +6,7 @@ import {
 import {
   GOAL_SETUP_FIRST_MINUTE_MS,
   goalSetupFirstWaitingAt,
+  goalSetupStartedLater,
   rememberGoalSetupPhase,
 } from './goal-setup-memory';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
@@ -106,8 +107,12 @@ export function useGoalWalletSetupPoll({
   useEffect(() => {
     rememberGoalSetupPhase(scopeKey, phase);
     const seenAt = goalSetupFirstWaitingAt(scopeKey);
+    // A setup the customer started later runs from when it was seen
+    // starting, not from the plan's creation.
     const since =
-      typeof pendingSince === 'number' && Number.isFinite(pendingSince)
+      typeof pendingSince === 'number' &&
+      Number.isFinite(pendingSince) &&
+      !goalSetupStartedLater(scopeKey)
         ? pendingSince
         : null;
     const firstAt =

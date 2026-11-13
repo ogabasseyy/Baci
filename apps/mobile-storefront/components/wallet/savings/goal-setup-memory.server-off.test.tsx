@@ -1,5 +1,6 @@
 import {
   goalSetupFirstWaitingAt,
+  goalSetupStartedLater,
   lastGoalSetupPhase,
   rememberGoalSetupPhase,
   resetGoalSetupMemory,
@@ -43,5 +44,18 @@ describe('bugfix: the per-goal memory grew without limit', () => {
     for (let n = 0; n <= 64; n += 1) rememberGoalSetupPhase(`g${n}`, 'ready');
     expect(lastGoalSetupPhase('g0')).toBeNull();
     expect(lastGoalSetupPhase('g64')).toBe('ready');
+  });
+});
+
+describe('setup started after the plan was made', () => {
+  it('is marked when the goal was seen not started, then waiting', () => {
+    rememberGoalSetupPhase('a', 'not_started');
+    rememberGoalSetupPhase('a', 'pending');
+    expect(goalSetupStartedLater('a')).toBe(true);
+  });
+
+  it('is not marked for a setup first seen already waiting', () => {
+    rememberGoalSetupPhase('b', 'pending');
+    expect(goalSetupStartedLater('b')).toBe(false);
   });
 });

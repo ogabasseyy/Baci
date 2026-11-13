@@ -237,6 +237,22 @@ describe('useGoalWalletSetupPoll', () => {
       expect(result.current.slow).toBe(true);
     });
 
+    it('bugfix: a setup started long after the plan gets its own first minute', async () => {
+      const view = setup({
+        phase: 'not_started',
+        pendingSince: Date.now() - 3 * 60 * 60 * 1000,
+      });
+      await advance(0);
+      view.rerender({
+        phase: 'pending',
+        pendingSince: Date.now() - 3 * 60 * 60 * 1000,
+      });
+      await advance(0);
+      expect(view.result.current.slow).toBe(false);
+      await advance(61_000);
+      expect(view.result.current.slow).toBe(true);
+    });
+
     it('counts the first minute from when the plan was created', async () => {
       const { result } = setup({
         phase: 'pending',

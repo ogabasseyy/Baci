@@ -6,6 +6,8 @@ export const GOAL_SETUP_FIRST_MINUTE_MS = 60_000;
 
 type Entry = {
   firstWaitingAt: number | null;
+  /** Seen not started, then waiting: setup began after the plan was made. */
+  startedLater: boolean;
   lastPhase: SavingsPlanFundingPhase;
 };
 
@@ -53,6 +55,9 @@ export function rememberGoalSetupPhase(
     {
       lastPhase: phase,
       firstWaitingAt: waiting ? (entry?.firstWaitingAt ?? now) : null,
+      startedLater: waiting
+        ? (entry?.startedLater ?? false) || entry?.lastPhase === 'not_started'
+        : false,
     },
     MAX_REMEMBERED_GOALS
   );
@@ -63,6 +68,15 @@ export function lastGoalSetupPhase(
   scopeKey: string
 ): SavingsPlanFundingPhase | null {
   return entries.get(scopeKey)?.lastPhase ?? null;
+}
+
+/**
+ * True when this app run saw the goal's setup not started and then waiting:
+ * the customer started setup long after creating the plan, so the plan's
+ * creation time says nothing about how long setup has been running.
+ */
+export function goalSetupStartedLater(scopeKey: string): boolean {
+  return entries.get(scopeKey)?.startedLater ?? false;
 }
 
 export function goalSetupFirstWaitingAt(scopeKey: string): number | null {

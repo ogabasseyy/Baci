@@ -8,10 +8,9 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
 import type { SavingsVariantResolveResult } from './resolve-completed-savings-goal-variant';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
-import { SavingsPhoneSwapStep } from './savings/SavingsPhoneSwapStep';
-import { SavingsVariantPickStep } from './savings/SavingsVariantPickStep';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -271,25 +270,14 @@ export function WalletContent(props: WalletContentProps) {
         onRefreshWallet={async () => onRefresh()}
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
         overlay={savingsSheetOpen ? props.pinPrompt : null}
-        phoneSwapStep={
-          showSavingsVariantResolution &&
-          activeSavingsGoal?.status === 'completed' &&
-          activeSavingsGoal.selection_unresolved === true ? (
-            <SavingsVariantPickStep
-              colors={colors}
-              goal={activeSavingsGoal}
-              onBack={() => setShowSavingsVariantResolution(false)}
-              onResolve={onResolveSavingsVariant}
-              options={activeSavingsGoal.variant_resolution_options ?? []}
-            />
-          ) : swap.showSavingsDeviceSwap && activeSavingsGoal ? (
-            <SavingsPhoneSwapStep
-              colors={colors}
-              goal={activeSavingsGoal}
-              swap={swap}
-            />
-          ) : null
-        }
+        phoneSwapStep={renderWalletSavingsSheetStep({
+          colors,
+          goal: activeSavingsGoal,
+          showVariantPick: showSavingsVariantResolution,
+          onCloseVariantPick: () => setShowSavingsVariantResolution(false),
+          onResolveVariant: onResolveSavingsVariant,
+          swap,
+        })}
         visible={showSavingsProgress}
         walletBalance={spendableBalance}
       />

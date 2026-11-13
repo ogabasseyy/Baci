@@ -1,11 +1,9 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
-import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
@@ -18,35 +16,11 @@ import { WalletPinSheet } from './savings/WalletPinSheet';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
+import type { WalletSavingsProgressModalProps } from './wallet-savings-progress-modal.types';
 
 const COMPACT_SNAP_POINTS = ['64%', '92%'];
 /** The header's bottom margin (SPACING.md), outside its measured height. */
 const HEADER_GAP = 16;
-
-type WalletColors = (typeof Colors)['light'];
-
-type WalletSavingsProgressModalProps = {
-  addAmount: string;
-  colors: WalletColors;
-  goal: WalletActiveSavingsGoal | null;
-  isAdding: boolean;
-  hasPendingContribution?: boolean;
-  isFundPending?: boolean;
-  onAddAmountChange: (value: string) => void;
-  onAddSavings: () => void;
-  onChangeDevice: () => void;
-  onClose: () => void;
-  onFundWallet: () => void;
-  onRefreshWallet?: () => Promise<unknown>;
-  onResolveVariant?: () => void;
-  /** Rendered inside the sheet's modal so it can appear above it on iOS. */
-  overlay?: ReactNode;
-  /** Change phone, shown in this same sheet in place of the savings view. */
-  phoneSwapStep?: ReactNode;
-  visible: boolean;
-  walletBalance: number;
-  walletUpdatedAt?: number;
-};
 
 export function WalletSavingsProgressModal({
   addAmount,
@@ -85,6 +59,12 @@ export function WalletSavingsProgressModal({
   }
   if (cancel.goal) {
     const cancelGoal = cancel.goal;
+    // Sign in, then come back to this goal's savings sheet.
+    const signIn = (dismiss: () => void) => {
+      dismiss();
+      const back = `/wallet?action=savings&savingsGoalId=${cancelGoal.id}`;
+      router.push(`/auth/login?returnTo=${encodeURIComponent(back)}`);
+    };
     return (
       <SavingsBottomSheet
         visible={visible}
@@ -113,12 +93,7 @@ export function WalletSavingsProgressModal({
                 goal={cancelGoal}
                 onDone={dismiss}
                 onNotNow={cancel.keep}
-                onSignIn={() => {
-                  dismiss();
-                  router.push(
-                    `/auth/login?returnTo=${encodeURIComponent(`/wallet?action=savings&savingsGoalId=${cancelGoal.id}`)}`
-                  );
-                }}
+                onSignIn={() => signIn(dismiss)}
               />
             ) : (
               <GoalCancelStep
@@ -127,12 +102,7 @@ export function WalletSavingsProgressModal({
                 goal={cancelGoal}
                 onDone={dismiss}
                 onKeep={cancel.keep}
-                onSignIn={() => {
-                  dismiss();
-                  router.push(
-                    `/auth/login?returnTo=${encodeURIComponent(`/wallet?action=savings&savingsGoalId=${cancelGoal.id}`)}`
-                  );
-                }}
+                onSignIn={() => signIn(dismiss)}
               />
             )}
           </BottomSheetScrollView>

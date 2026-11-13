@@ -19,6 +19,22 @@ describe('savings phone rows', () => {
     });
   });
 
+  it('never offers a variant without a real price', () => {
+    const rows = savingsPhoneRows({
+      ...base,
+      variants: [
+        { attributes: { storage: '128GB' }, id: 'v0', name: '128GB', price: 0 },
+        {
+          attributes: { storage: '256GB' },
+          id: 'v1',
+          name: '256GB',
+          price: 650000,
+        },
+      ],
+    } as Product);
+    expect(rows.map((row) => row.variantId)).toEqual(['v1']);
+  });
+
   it('offers each exact variant with its own price, ignoring colour in the label', () => {
     const rows = savingsPhoneRows({
       ...base,

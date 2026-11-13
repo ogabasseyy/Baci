@@ -18,12 +18,19 @@ export function useInSheetGoalCancel(
   sheetVisible = true
 ) {
   const userId = useAuthStore((state) => state.user?.id);
+  const merchantId = useAuthStore((state) => state.merchantId ?? undefined);
   const [held, setHeld] = useState<{
     goal: WalletActiveSavingsGoal;
     kind: GoalActionKind;
     userId: string | undefined;
+    merchantId: string | undefined;
   } | null>(null);
-  const active = held && held.userId === userId ? held.goal : null;
+  // Held for the account AND store it was opened in: another store never
+  // sees (or acts on) this goal.
+  const active =
+    held && held.userId === userId && held.merchantId === merchantId
+      ? held.goal
+      : null;
   const kind: GoalActionKind = held?.kind ?? 'cancel';
   // Each time the step opens it starts fresh, never on a stale outcome.
   const [attempt, setAttempt] = useState(0);
@@ -66,7 +73,7 @@ export function useInSheetGoalCancel(
     start: (next: GoalActionKind = 'cancel') => {
       if (!goal) return;
       setAttempt((value) => value + 1);
-      setHeld({ goal, kind: next, userId });
+      setHeld({ goal, kind: next, userId, merchantId });
     },
     /** Back to the savings view; nothing was sent unless the flow says so. */
     keep: () => setHeld(null),

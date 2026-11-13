@@ -112,7 +112,7 @@ export function SavingsNotificationPreferences({
           style={[styles.subtitle, { color: colors.textSecondary }]}
         >
           {/* Same 24-hour times as the fields below. */}
-          {`${preferences.quietHoursStart} – ${preferences.quietHoursEnd}`}
+          {`${quietHoursStart} – ${quietHoursEnd}`}
         </Text>
         <View style={styles.timeFields}>
           <SavingsQuietHoursTimeField

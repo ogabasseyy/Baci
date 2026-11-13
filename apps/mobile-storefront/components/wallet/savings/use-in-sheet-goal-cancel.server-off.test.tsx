@@ -191,4 +191,14 @@ describe('in-sheet goal cancel with the server off', () => {
     signIn('user-b');
     expect(result.current.goal).toBeNull();
   });
+
+  it('never shows one store the goal held in another store', () => {
+    const { result } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start());
+    expect(result.current.goal?.id).toBe('goal-1');
+    act(() => {
+      useAuthStore.setState({ merchantId: 'm-2' });
+    });
+    expect(result.current.goal).toBeNull();
+  });
 });

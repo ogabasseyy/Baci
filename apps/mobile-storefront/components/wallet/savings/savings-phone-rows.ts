@@ -1,6 +1,7 @@
 import type { Product } from '@/types/product';
 import { formatVariantAxisLabel } from '@/types/product';
 import { toSelectedProductChoice } from './start-savings-controller.utils';
+import { isSavingsVariantSelectable } from './start-savings-product-choice';
 
 /** One choosable phone: a product, or one of its exact variants. */
 export type SavingsPhoneRow = {
@@ -30,19 +31,24 @@ function variantLabel(attributes: Record<string, string> | undefined) {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-/** Every exact choice a product offers (its variants, or the product). */
+/**
+ * Every exact choice a product offers (its variants, or the product). A
+ * variant without a real price (a ₦0 placeholder) is not a choice.
+ */
 export function savingsPhoneRows(product: Product): SavingsPhoneRow[] {
   if (product.variants?.length) {
-    return product.variants.map((variant) => ({
-      image: variant.image ?? variant.images?.[0] ?? product.image,
-      key: `${product.id}:${variant.id}`,
-      meta: variantMeta(product, variant.id),
-      price: variant.price,
-      product,
-      title: product.name,
-      variantId: variant.id,
-      variantLabel: variantLabel(variant.attributes),
-    }));
+    return product.variants
+      .filter(isSavingsVariantSelectable)
+      .map((variant) => ({
+        image: variant.image ?? variant.images?.[0] ?? product.image,
+        key: `${product.id}:${variant.id}`,
+        meta: variantMeta(product, variant.id),
+        price: variant.price,
+        product,
+        title: product.name,
+        variantId: variant.id,
+        variantLabel: variantLabel(variant.attributes),
+      }));
   }
   return [
     {

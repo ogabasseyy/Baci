@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import { notifySavings, useSavingsNotice } from './savings-notice';
 import { useInSheetGoalCancel } from './use-in-sheet-goal-cancel';
 
 const mockStep = { current: 'review' };
@@ -183,6 +184,15 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(result.current.goal).toBeNull();
     // A new attempt invalidates the pending request, so no hidden PIN step.
     expect(after.resetKey).toBeGreaterThan(opened.resetKey);
+  });
+
+  it('clears an earlier savings notice when a cancel or complete starts', () => {
+    const notice = renderHook(() => useSavingsNotice());
+    act(() => notifySavings('Savings updated', 'Keep it going!', 'success'));
+    expect(notice.result.current.notice?.title).toBe('Savings updated');
+    const { result } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start('cancel'));
+    expect(notice.result.current.notice).toBeNull();
   });
 
   it('never shows one account the goal another account was cancelling', () => {

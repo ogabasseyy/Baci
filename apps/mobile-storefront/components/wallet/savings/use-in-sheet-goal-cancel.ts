@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
+import { clearSavingsNotice } from './savings-notice';
 import { useGoalLifecycle } from './use-goal-lifecycle';
 
 const IN_FLIGHT = new Set(['submitting', 'polling']);
@@ -72,6 +73,9 @@ export function useInSheetGoalCancel(
     flow,
     start: (next: GoalActionKind = 'cancel') => {
       if (!goal) return;
+      // Earlier news ("Savings updated" for this plan) never outlives the
+      // plan: cancelling or completing starts with a clean slate.
+      clearSavingsNotice();
       setAttempt((value) => value + 1);
       setHeld({ goal, kind: next, userId, merchantId });
     },

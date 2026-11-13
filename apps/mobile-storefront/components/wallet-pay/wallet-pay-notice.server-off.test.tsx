@@ -4,7 +4,7 @@ import { walletPayNotice } from './wallet-pay-notice';
 describe('walletPayNotice', () => {
   it('says a failed purchase is refunded exactly once', () => {
     const notice = walletPayNotice({ kind: 'refunded' }, 250_000, 'IMEI check');
-    expect(notice.title).toBe('Refunded to your PiggyVest wallet');
+    expect(notice.title).toBe('Refunded to your savings wallet');
     expect(notice.message).toContain('₦2,500');
     expect(notice.message).toContain('refunded exactly once');
     expect(notice.action).toBeNull();
@@ -82,5 +82,32 @@ describe('bugfix: a replayed start said "nothing was taken" (Codex P2)', () => {
     expect(notice.message).toContain("Please don't pay again");
     expect(notice.message).not.toContain('Nothing was taken');
     expect(notice.action).toBe('try_again');
+  });
+});
+
+describe('bugfix: customer copy named the provider (Fable F7)', () => {
+  it('never names PiggyVest in any outcome, maybe-paid or not', () => {
+    const kinds = [
+      'pending',
+      'review',
+      'refunded',
+      'insufficient',
+      'not_completed',
+      'unavailable',
+      'pin_locked',
+      'pin_setup',
+      'sign_in',
+      'not_started',
+      'failed',
+    ] as const;
+    for (const kind of kinds)
+      for (const maybePaid of [false, true]) {
+        const notice = walletPayNotice(
+          { kind, maybePaid },
+          50_000,
+          'IMEI check'
+        );
+        expect(`${notice.title} ${notice.message}`).not.toMatch(/PiggyVest/);
+      }
   });
 });

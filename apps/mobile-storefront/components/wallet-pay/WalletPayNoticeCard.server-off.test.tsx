@@ -9,7 +9,7 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
 
 // Pure UI: it shows what it is given and calls no server.
 describe('WalletPayNoticeCard', () => {
-  it('shows the title and message as an alert card', () => {
+  it('shows the message as an alert card (the sheet header shows the title)', () => {
     render(
       <WalletPayNoticeCard
         colors={Colors.light}
@@ -22,7 +22,8 @@ describe('WalletPayNoticeCard', () => {
       />
     );
     expect(screen.getByTestId('wallet-pay-notice')).toHaveTextContent(
-      'PiggyVest payments are pausedNothing was taken.'
+      'Nothing was taken.'
     );
+    expect(screen.queryByText('PiggyVest payments are paused')).toBeNull();
   });
 });

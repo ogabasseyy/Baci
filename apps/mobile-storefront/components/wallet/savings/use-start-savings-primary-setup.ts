@@ -27,9 +27,13 @@ export function useStartSavingsPrimarySetup({
   // Known once the wallet read has answered and was not unavailable.
   const walletKnown =
     wallet !== undefined && wallet.primary_unavailable !== true;
-  // PiggyVest when the wallet says so or the merchant is a PiggyVest one:
-  // the form, review and submit all use this one answer (askInterest).
-  const primary = primaryWallet || isPiggyvestPrimaryMerchant(activeMerchantId);
+  // PiggyVest when the wallet says so. The merchant only decides while the
+  // customer's own wallet type is still unknown; once the read shows a
+  // legacy wallet, that customer stays on the legacy rail. The form, review
+  // and submit all use this one answer (askInterest).
+  const primary =
+    primaryWallet ||
+    (!walletKnown && isPiggyvestPrimaryMerchant(activeMerchantId));
   const [answer, setAnswer] = useState<{
     userId?: string;
     value: boolean | null;

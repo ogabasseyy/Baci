@@ -65,12 +65,18 @@ describe('bugfix: auto debit was offered before the wallet type was known', () =
     expect(unavailable.result.current.allowAutoDebit).toBe(false);
   });
 
-  it('treats a PiggyVest merchant as PiggyVest even before the balance reads', () => {
+  it.each([
+    ['still loading', undefined],
+    [
+      'unavailable',
+      { balance: 0, loyalty_points: 0, primary_unavailable: true as const },
+    ],
+  ])('treats a PiggyVest merchant as PiggyVest while the wallet is %s', (_label, wallet) => {
     const { result } = renderHook(() =>
       useStartSavingsPrimarySetup({
         activeMerchantId: 'pv-merchant',
         primaryWallet: false,
-        wallet: { balance: 0, loyalty_points: 0 },
+        wallet,
       })
     );
     expect(result.current.allowAutoDebit).toBe(false);
@@ -140,5 +146,20 @@ describe('bugfix: switching accounts and back brought an old interest answer bac
     expect(result.current.interestChoice).toBeNull();
     rerender({ userId: 'user-a' });
     expect(result.current.interestChoice).toBeNull();
+  });
+});
+
+describe('bugfix: a legacy-wallet customer at a PiggyVest merchant was treated as PiggyVest', () => {
+  it('keeps the legacy rail once the wallet read shows a legacy wallet', () => {
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'pv-merchant',
+        primaryWallet: false,
+        wallet: { balance: 0, loyalty_points: 0 },
+      })
+    );
+    expect(result.current.askInterest).toBe(false);
+    expect(result.current.allowAutoDebit).toBe(true);
+    expect(result.current.formInterestChoice).toBeUndefined();
   });
 });

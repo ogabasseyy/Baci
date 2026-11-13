@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
@@ -74,6 +75,13 @@ export function WalletFundModal({
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
   const hideCardFunding = primaryReady && !storeCreditTopUp;
+  // A store credit top-up opened from a purchase pushes the wallet page;
+  // dismissing the sheet returns straight to that purchase instead of
+  // leaving the customer on the pushed page (walk-through M8).
+  const dismissFund = () => {
+    onResetFund();
+    if (storeCreditTopUp && router.canGoBack()) router.back();
+  };
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
@@ -105,8 +113,8 @@ export function WalletFundModal({
       keyboardAutomaticOffset
       keyboardSurfaceColor={colors.card}
       visible={showFundPanel}
-      onRequestClose={onResetFund}
-      onBackdropPress={onResetFund}
+      onRequestClose={dismissFund}
+      onBackdropPress={dismissFund}
       onClosed={() => setRetainContent(false)}
     >
       {showFundPanel || retainContent ? (
@@ -141,7 +149,7 @@ export function WalletFundModal({
               onChangeFundAmount={onChangeFundAmount}
               onConfirmFund={onConfirmFund}
               onCreateFundingAccount={onCreateFundingAccount}
-              onResetFund={onResetFund}
+              onResetFund={dismissFund}
               onSubmitPhone={onSubmitPhone}
               returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
               storeCreditTopUp={storeCreditTopUp}

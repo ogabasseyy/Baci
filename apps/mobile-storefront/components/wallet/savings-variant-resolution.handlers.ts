@@ -1,6 +1,13 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { resolveSavingsGoalVariant } from '@/lib/customer-savings';
 
+/**
+ * True when saved and refreshed; `{ saved }` when saved but the wallet could
+ * not refresh (the one-time choice must not be sent again); otherwise a
+ * message for a choice that was not saved.
+ */
+export type SavingsVariantResolveResult = true | string | { saved: string };
+
 interface ResolveSavingsGoalVariantParams {
   activeMerchantId?: string;
   activeMerchantSlug?: string;
@@ -35,7 +42,7 @@ export async function resolveCompletedSavingsGoalVariant({
   goal,
   refetchWallet,
   variantId,
-}: ResolveSavingsGoalVariantParams): Promise<true | string> {
+}: ResolveSavingsGoalVariantParams): Promise<SavingsVariantResolveResult> {
   const eligibleVariant = goal?.variant_resolution_options?.find(
     (option) => option.id === variantId
   );
@@ -64,7 +71,9 @@ export async function resolveCompletedSavingsGoalVariant({
         // try once more
       }
     }
-    return 'Your choice is saved. Pull down on the wallet to refresh it.';
+    return {
+      saved: 'Your choice is saved. Pull down on the wallet to refresh it.',
+    };
   } catch (error) {
     await refetchWallet().catch(() => undefined);
     return error instanceof Error && error.message

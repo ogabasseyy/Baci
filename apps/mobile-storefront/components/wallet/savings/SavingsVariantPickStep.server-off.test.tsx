@@ -9,6 +9,7 @@ import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { SavingsBottomSheet } from '../SavingsBottomSheet';
+import type { SavingsVariantResolveResult } from '../savings-variant-resolution.handlers';
 import { SavingsVariantPickStep } from './SavingsVariantPickStep';
 
 const goal = {
@@ -28,7 +29,9 @@ const options = [
   { id: 'v2', label: '256GB Blue' },
 ];
 
-function renderStep(onResolve: (id: string) => Promise<true | string>) {
+function renderStep(
+  onResolve: (id: string) => Promise<SavingsVariantResolveResult>
+) {
   const onBack = jest.fn();
   render(
     <SavingsVariantPickStep
@@ -172,5 +175,67 @@ describe('Choose your exact phone, server off', () => {
     });
     expect(onBack).not.toHaveBeenCalled();
     expect(screen.queryByText('Old store says no')).toBeNull();
+  });
+
+  it('once saved without a refresh, shows the note and never sends the choice again', async () => {
+    const onResolve = jest.fn(
+      async (): Promise<SavingsVariantResolveResult> => ({
+        saved: 'Your choice is saved. Pull down on the wallet to refresh it.',
+      })
+    );
+    const onBack = renderStep(onResolve);
+    fireEvent.press(screen.getByRole('radio', { name: '128GB Black' }));
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Confirm this option' })
+      );
+    });
+    expect(
+      screen.getByText(
+        'Your choice is saved. Pull down on the wallet to refresh it.'
+      )
+    ).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Confirm this option' })
+      );
+    });
+    expect(onResolve).toHaveBeenCalledTimes(1);
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it('going back and reopening after a saved-without-refresh choice keeps it locked', async () => {
+    act(() => {
+      useAuthStore.setState({
+        user: { id: 'user-r' } as never,
+        merchantId: 'm-r',
+      });
+    });
+    const onResolve = jest.fn(
+      async (): Promise<SavingsVariantResolveResult> => ({
+        saved: 'Your choice is saved. Pull down on the wallet to refresh it.',
+      })
+    );
+    renderStep(onResolve);
+    fireEvent.press(screen.getByRole('radio', { name: '128GB Black' }));
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Confirm this option' })
+      );
+    });
+    screen.unmount();
+    renderStep(onResolve);
+    expect(
+      screen.getByText(
+        'Your choice is saved. Pull down on the wallet to refresh it.'
+      )
+    ).toBeTruthy();
+    fireEvent.press(screen.getByRole('radio', { name: '256GB Blue' }));
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Confirm this option' })
+      );
+    });
+    expect(onResolve).toHaveBeenCalledTimes(1);
   });
 });

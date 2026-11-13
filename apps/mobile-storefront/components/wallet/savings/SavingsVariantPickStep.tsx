@@ -8,6 +8,7 @@ import type {
 } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSavingsSheetLock } from '../SavingsSheetLock';
+import type { SavingsVariantResolveResult } from '../savings-variant-resolution.handlers';
 import { styles } from './savings-phone-swap.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -17,12 +18,17 @@ type WalletColors = (typeof Colors)['light'];
  * inside the savings sheet, before the store team can fulfil the order.
  * Problems show inline; nothing is saved until "Confirm this option".
  */
+// Choices saved while the wallet could not refresh, by account, store and goal.
+// Kept outside the picker so going back and reopening never re-sends the
+// one-time choice; the picker stops opening once the wallet shows it resolved.
+const savedWithoutRefresh = new Map<string, string>();
+
 type PickProps = {
   colors: WalletColors;
   goal: WalletActiveSavingsGoal;
   onBack: () => void;
-  /** True when saved, or a message to show when it was not. */
-  onResolve: (variantId: string) => Promise<true | string>;
+  /** True when saved, `{ saved }` when saved but not refreshed, or a message. */
+  onResolve: (variantId: string) => Promise<SavingsVariantResolveResult>;
   options: WalletSavingsVariantResolutionOption[];
 };
 
@@ -30,17 +36,28 @@ type PickProps = {
 export function SavingsVariantPickStep(props: PickProps) {
   const userId = useAuthStore((state) => state.user?.id);
   const merchantId = useAuthStore((state) => state.merchantId ?? undefined);
-  return (
-    <VariantPick key={`${userId}:${merchantId}:${props.goal.id}`} {...props} />
-  );
+  const scopeKey = `${userId}:${merchantId}:${props.goal.id}`;
+  return <VariantPick key={scopeKey} scopeKey={scopeKey} {...props} />;
 }
 
-function VariantPick({ colors, goal, onBack, onResolve, options }: PickProps) {
+function VariantPick({
+  colors,
+  goal,
+  onBack,
+  onResolve,
+  options,
+  scopeKey,
+}: PickProps & { scopeKey: string }) {
   const [chosen, setChosen] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // The choice is a one-time assignment: the sheet stays open while it saves.
   useSavingsSheetLock(pending);
   const [error, setError] = useState<string | null>(null);
+  // Saved but the wallet didn't refresh: the one-time choice is never sent again.
+  const [savedNote, setSavedNote] = useState<string | null>(
+    () => savedWithoutRefresh.get(scopeKey) ?? null
+  );
+  const locked = pending || savedNote !== null;
 
   // Blocks a second tap before React re-renders with `pending` set.
   const inFlight = useRef(false);
@@ -55,15 +72,19 @@ function VariantPick({ colors, goal, onBack, onResolve, options }: PickProps) {
   }, []);
 
   const confirm = async () => {
-    if (!chosen || inFlight.current) return;
+    if (!chosen || inFlight.current || savedNote) return;
     inFlight.current = true;
     setPending(true);
     setError(null);
     try {
       const result = await onResolve(chosen);
+      // Recorded even if the picker closed meanwhile: it is saved either way.
+      if (typeof result === 'object')
+        savedWithoutRefresh.set(scopeKey, result.saved);
       if (!mounted.current) return;
       if (result === true) onBack();
-      else setError(result);
+      else if (typeof result === 'string') setError(result);
+      else setSavedNote(result.saved);
     } catch {
       if (mounted.current)
         setError("We couldn't save your choice. Please try again.");
@@ -108,8 +129,8 @@ function VariantPick({ colors, goal, onBack, onResolve, options }: PickProps) {
               key={option.id}
               accessibilityRole="radio"
               accessibilityLabel={option.label}
-              accessibilityState={{ checked: selected, disabled: pending }}
-              disabled={pending}
+              accessibilityState={{ checked: selected, disabled: locked }}
+              disabled={locked}
               onPress={() => {
                 setChosen(option.id);
                 setError(null);
@@ -136,6 +157,14 @@ function VariantPick({ colors, goal, onBack, onResolve, options }: PickProps) {
           );
         })
       )}
+      {savedNote ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.note, { color: colors.textSecondary }]}
+        >
+          {savedNote}
+        </Text>
+      ) : null}
       {error ? (
         <Text
           accessibilityRole="alert"
@@ -147,8 +176,8 @@ function VariantPick({ colors, goal, onBack, onResolve, options }: PickProps) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Confirm this option"
-        accessibilityState={{ disabled: !chosen || pending, busy: pending }}
-        disabled={!chosen || pending}
+        accessibilityState={{ disabled: !chosen || locked, busy: pending }}
+        disabled={!chosen || locked}
         onPress={() => void confirm()}
         style={[
           styles.primary,

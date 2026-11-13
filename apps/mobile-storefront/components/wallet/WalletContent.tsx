@@ -11,6 +11,7 @@ import type { Product } from '@/types/product';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { SavingsPhoneSwapStep } from './savings/SavingsPhoneSwapStep';
 import { SavingsVariantPickStep } from './savings/SavingsVariantPickStep';
+import type { SavingsVariantResolveResult } from './savings-variant-resolution.handlers';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -70,7 +71,9 @@ export interface WalletContentProps {
     variantId?: string | null
   ) => Promise<boolean>;
   onChangeSavingsContributionAmount: (value: string) => void;
-  onResolveSavingsVariant: (variantId: string) => Promise<true | string>;
+  onResolveSavingsVariant: (
+    variantId: string
+  ) => Promise<SavingsVariantResolveResult>;
   onCloseSavingsProgress: () => void;
   onManageCards: () => void;
   onFundSavingsWallet: () => void;
@@ -157,7 +160,10 @@ export function WalletContent(props: WalletContentProps) {
   });
   const [showSavingsVariantResolution, setShowSavingsVariantResolution] =
     useState(false);
-  const swap = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const swap = useSavingsDeviceSwap(
+    onChangeSavingsDevice,
+    activeSavingsGoal?.id
+  );
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (

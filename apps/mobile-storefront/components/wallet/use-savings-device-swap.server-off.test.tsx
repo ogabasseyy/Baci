@@ -48,4 +48,34 @@ describe('server keeps PiggyVest off: useSavingsDeviceSwap', () => {
     );
     expect(result.current.showSavingsDeviceSwap).toBe(true);
   });
+
+  it('a change that finishes after the goal switched never closes the new picker', async () => {
+    let finish: (value: boolean) => void = () => undefined;
+    const change = jest.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { result, rerender } = renderHook(
+      ({ goalId }: { goalId: string }) => useSavingsDeviceSwap(change, goalId),
+      { initialProps: { goalId: 'goal-1' } }
+    );
+    act(() => {
+      result.current.setShowSavingsDeviceSwap(true);
+      result.current.setSavingsDeviceSearch('iphone');
+    });
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.handleSelectSavingsDevice(product, 'v');
+    });
+    rerender({ goalId: 'goal-2' });
+    await act(async () => {
+      finish(true);
+      await pending;
+    });
+    expect(result.current.showSavingsDeviceSwap).toBe(true);
+    expect(result.current.savingsDeviceSearch).toBe('iphone');
+    expect(result.current.isChangingSavingsDevice).toBe(false);
+  });
 });

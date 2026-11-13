@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useProductSearch } from '@/hooks/use-product-search';
+import { useAuthStore } from '@/stores/auth-store';
 import type { Product } from '@/types/product';
 import { savingsNotifier } from './savings/savings-notice';
 
@@ -8,8 +9,14 @@ export function useSavingsDeviceSwap(
   onChangeSavingsDevice: (
     product: Product,
     variantId?: string | null
-  ) => Promise<boolean>
+  ) => Promise<boolean>,
+  /** The goal being changed; a reply for another goal never closes this one. */
+  goalId?: string
 ) {
+  const userId = useAuthStore((state) => state.user?.id);
+  const merchantId = useAuthStore((state) => state.merchantId ?? undefined);
+  const scope = useRef('');
+  scope.current = `${userId}:${merchantId}:${goalId}`;
   const [showSavingsDeviceSwap, setShowSavingsDeviceSwap] = useState(false);
   const [savingsDeviceSearch, setSavingsDeviceSearch] = useState('');
   const [isChangingSavingsDevice, setIsChangingSavingsDevice] = useState(false);
@@ -28,10 +35,12 @@ export function useSavingsDeviceSwap(
     variantId?: string | null
   ) => {
     const notify = savingsNotifier();
+    const started = scope.current;
     setIsChangingSavingsDevice(true);
     try {
       const didChange = await onChangeSavingsDevice(product, variantId);
-      if (didChange) {
+      // The account, store or goal changed meanwhile: leave the new picker be.
+      if (didChange && scope.current === started) {
         setShowSavingsDeviceSwap(false);
         setSavingsDeviceSearch('');
       }

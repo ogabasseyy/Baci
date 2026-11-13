@@ -54,9 +54,9 @@ describe('saving the exact option of a completed goal', () => {
         refetchWallet,
         variantId: 'v1',
       })
-    ).resolves.toBe(
-      'Your choice is saved. Pull down on the wallet to refresh it.'
-    );
+    ).resolves.toEqual({
+      saved: 'Your choice is saved. Pull down on the wallet to refresh it.',
+    });
   });
 
   it('refuses an option the goal does not offer, without calling the server', async () => {

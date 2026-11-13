@@ -98,6 +98,28 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('Airtime MTN 08031234567');
   });
 
+  it('keeps a payment method or actor after via/by/through', () => {
+    for (const description of [
+      'Payment by card',
+      'Refund by merchant',
+      'Wallet top-up via transfer',
+      'Paid through wallet',
+    ]) {
+      expect(
+        customerWalletTransactionLabel({ description, sourceType: null })
+      ).toBe(description);
+    }
+  });
+
+  it('strips PiggyVest from an unmapped row as a backstop', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'PiggyVest bank transfer',
+        sourceType: null,
+      })
+    ).toBe('Bank transfer');
+  });
+
   it('keeps an amount and a multi-word "via" phrase', () => {
     expect(
       customerWalletTransactionLabel({

@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { usePiggyvestSlowdownStore } from '@/stores/piggyvest-slowdown-store';
+import { resetGoalSetupMemory } from './goal-setup-memory';
 import {
   MAX_SLOW_ATTEMPTS,
   useGoalWalletSetupPoll,
@@ -34,11 +35,14 @@ const ticks = async (count: number) => {
   for (let tick = 0; tick < count; tick += 1) await advance(5000);
 };
 
-beforeEach(() => jest.useFakeTimers());
+beforeEach(() => {
+  jest.useFakeTimers();
+  resetGoalSetupMemory();
+});
 afterEach(() => jest.useRealTimers());
 
 describe('useGoalWalletSetupPoll', () => {
-  it('reports slow after 12 pending reads, and Check again reads now and polls afresh', async () => {
+  it('reports slow after 12 pending reads, and Check again reads now and polls afresh while staying slow', async () => {
     const { result, reread } = setup({ phase: 'pending' });
     expect(result.current.slow).toBe(false);
     await ticks(12);
@@ -47,7 +51,8 @@ describe('useGoalWalletSetupPoll', () => {
     await act(async () => result.current.checkAgain());
     expect(reread).toHaveBeenCalledTimes(13);
     expect(reread).toHaveBeenLastCalledWith({ silent: true });
-    expect(result.current.slow).toBe(false);
+    // A minute has passed: the "about a minute" promise never comes back.
+    expect(result.current.slow).toBe(true);
     await ticks(1);
     expect(reread).toHaveBeenCalledTimes(14);
   });
@@ -193,6 +198,43 @@ describe('useGoalWalletSetupPoll', () => {
       hook.rerender({ phase: 'error' });
       await advance(20_000);
       expect(reread).toHaveBeenCalledTimes(13);
+    });
+  });
+
+  describe('bugfix: reopening the sheet brought back "about a minute" forever', () => {
+    it('stays slow after a remount once a minute has passed since it was first seen waiting', async () => {
+      const first = setup({ phase: 'pending' });
+      await advance(30_000);
+      first.unmount();
+      await advance(31_000);
+      const { result } = setup({ phase: 'pending' });
+      await advance(0);
+      expect(result.current.slow).toBe(true);
+    });
+
+    it('turns slow a minute in even when each sheet visit is short', async () => {
+      const first = setup({ phase: 'pending' });
+      await advance(20_000);
+      first.unmount();
+      const { result } = setup({ phase: 'pending' });
+      await advance(20_000);
+      expect(result.current.slow).toBe(false);
+      await advance(20_000);
+      expect(result.current.slow).toBe(true);
+    });
+
+    it('turns a stalled setup slow after a minute too', async () => {
+      const { result } = setup({ phase: 'setup_retryable' });
+      expect(result.current.slow).toBe(false);
+      await advance(60_000);
+      expect(result.current.slow).toBe(true);
+    });
+
+    it('is not slow once the plan is ready', async () => {
+      const view = setup({ phase: 'pending' });
+      await advance(61_000);
+      view.rerender({ phase: 'ready' });
+      expect(view.result.current.slow).toBe(false);
     });
   });
 });

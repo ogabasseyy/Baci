@@ -2,19 +2,34 @@ import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { ManualPrimaryGoalSection } from './ManualPrimaryGoalSection';
+import {
+  rememberGoalSetupPhase,
+  resetGoalSetupMemory,
+} from './savings/goal-setup-memory';
+import type { SavingsPlanFundingPhase } from './savings/use-savings-plan-funding';
+
+let mockPhase: SavingsPlanFundingPhase = 'loading';
+const mockStatusNote = jest.fn();
 
 jest.mock('./savings/use-savings-plan-funding', () => ({
   useSavingsPlanFunding: () => ({
-    planFundingPhase: 'loading',
+    planFundingPhase: mockPhase,
     fetchExistingPlanFunding: jest.fn(),
     failExistingPlanFunding: jest.fn(),
   }),
 }));
 jest.mock('./savings/use-goal-wallet-setup-poll', () => ({
-  useGoalWalletSetupPoll: () => ({ exhausted: false, checkAgain: jest.fn() }),
+  useGoalWalletSetupPoll: () => ({
+    slow: false,
+    paused: false,
+    checkAgain: jest.fn(),
+  }),
 }));
 jest.mock('./savings/SavingsPlanStatusNote', () => ({
-  SavingsPlanStatusNote: () => null,
+  SavingsPlanStatusNote: (props: { funding: { planFundingPhase: string } }) => {
+    mockStatusNote(props.funding.planFundingPhase);
+    return null;
+  },
 }));
 jest.mock('./WalletSavingsContributionFlow', () => ({
   WalletSavingsContributionFlow: () => {
@@ -23,18 +38,20 @@ jest.mock('./WalletSavingsContributionFlow', () => ({
   },
 }));
 
-it('shows the amount form at once while the goal wallet is confirmed in the background', () => {
-  const goal: WalletActiveSavingsGoal = {
-    contribution_amount: 1000,
-    contribution_frequency: 'weekly',
-    current_amount: 400,
-    id: 'goal-a',
-    maturity_date: '2026-12-01',
-    source_mode: 'manual',
-    status: 'active',
-    target_amount: 250000,
-    title: 'Phone',
-  };
+const goal: WalletActiveSavingsGoal = {
+  contribution_amount: 1000,
+  contribution_frequency: 'weekly',
+  current_amount: 0,
+  id: 'goal-a',
+  maturity_date: '2026-12-01',
+  source_mode: 'manual',
+  status: 'active',
+  target_amount: 250000,
+  title: 'Phone',
+};
+const scopeKey = JSON.stringify(['customer-a', 'merchant-a', 'goal-a']);
+
+function renderSection() {
   render(
     <ManualPrimaryGoalSection
       addAmount="1000"
@@ -46,16 +63,57 @@ it('shows the amount form at once while the goal wallet is confirmed in the back
       onAddAmountChange={jest.fn()}
       onAddSavings={jest.fn()}
       onFundWallet={jest.fn()}
-      remainingAmount={249600}
+      remainingAmount={250000}
       usesPlanFunding={false}
       userId="customer-a"
       visible
       walletBalance={0}
     />
   );
+}
 
-  // No loading panel: the server refuses the transfer until the goal
-  // wallet exists, so the form need not wait for that answer.
-  expect(screen.queryByText('Almost ready')).toBeNull();
+beforeEach(() => {
+  resetGoalSetupMemory();
+  mockStatusNote.mockClear();
+  mockPhase = 'loading';
+});
+
+describe('bugfix: the amount entry flashed while the plan status loaded', () => {
+  it('shows a quiet placeholder, not the amount entry, on a first status read', () => {
+    renderSection();
+    expect(screen.queryByText('contribution-actions')).toBeNull();
+    expect(screen.getByText('Almost ready')).toBeOnTheScreen();
+  });
+
+  it('keeps a plan last seen getting ready on that card while re-reading', () => {
+    rememberGoalSetupPhase(scopeKey, 'pending');
+    renderSection();
+    expect(screen.queryByText('contribution-actions')).toBeNull();
+    expect(screen.queryByText('Almost ready')).toBeNull();
+    expect(mockStatusNote).toHaveBeenLastCalledWith('pending');
+  });
+
+  it('never re-runs setup on stale news: a stalled plan shows as getting ready', () => {
+    rememberGoalSetupPhase(scopeKey, 'setup_retryable');
+    renderSection();
+    expect(mockStatusNote).toHaveBeenLastCalledWith('pending');
+  });
+});
+
+it('shows the amount entry at once for a plan last seen ready', () => {
+  rememberGoalSetupPhase(scopeKey, 'ready');
+  renderSection();
   expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
+});
+
+it('shows the amount entry once the status read says ready', () => {
+  mockPhase = 'ready';
+  renderSection();
+  expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
+});
+
+it('shows no amount entry for a plan still being set up', () => {
+  mockPhase = 'pending';
+  renderSection();
+  expect(screen.queryByText('contribution-actions')).toBeNull();
 });

@@ -223,3 +223,37 @@ describe('slow pending setup', () => {
     expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   });
 });
+
+describe('bugfix: a stalled setup said "about a minute" for 25 minutes with no Check now', () => {
+  beforeEach(() => {
+    mockIsPrimary.mockReturnValue(true);
+    // A retry is in flight, so the automatic retry stays quiet.
+    mockSetup.mockReturnValue({
+      choice: null,
+      setChoice: jest.fn(),
+      submitting: true,
+      attempted: false,
+      error: null,
+      submit: jest.fn(),
+      retry: jest.fn().mockResolvedValue(true),
+    });
+  });
+
+  it('drops the promise and offers Check now on a stalled setup once slow', () => {
+    const onCheckAgain = jest.fn();
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture({ planFundingPhase: 'setup_retryable' })}
+        slow
+        onCheckAgain={onCheckAgain}
+      />
+    );
+    expect(screen.queryByText(/about a minute/)).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
+    expect(onCheckAgain).toHaveBeenCalledTimes(1);
+  });
+});

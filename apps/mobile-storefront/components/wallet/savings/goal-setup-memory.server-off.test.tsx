@@ -1,0 +1,39 @@
+import {
+  goalSetupFirstWaitingAt,
+  lastGoalSetupPhase,
+  rememberGoalSetupPhase,
+  resetGoalSetupMemory,
+} from './goal-setup-memory';
+
+beforeEach(() => resetGoalSetupMemory());
+
+describe('goal setup memory with PiggyVest off', () => {
+  it('remembers when the setup was first seen waiting, across later reads', () => {
+    rememberGoalSetupPhase('a', 'pending', 1000);
+    rememberGoalSetupPhase('a', 'setup_retryable', 9000);
+    rememberGoalSetupPhase('a', 'pending', 20_000);
+    expect(goalSetupFirstWaitingAt('a')).toBe(1000);
+    expect(lastGoalSetupPhase('a')).toBe('pending');
+  });
+
+  it('forgets the waiting time once the plan is ready', () => {
+    rememberGoalSetupPhase('a', 'pending', 1000);
+    rememberGoalSetupPhase('a', 'ready', 2000);
+    expect(goalSetupFirstWaitingAt('a')).toBeNull();
+    expect(lastGoalSetupPhase('a')).toBe('ready');
+  });
+
+  it('ignores reads that have not settled', () => {
+    rememberGoalSetupPhase('a', 'pending', 1000);
+    rememberGoalSetupPhase('a', 'loading', 2000);
+    rememberGoalSetupPhase('a', 'error', 3000);
+    rememberGoalSetupPhase('a', 'idle', 4000);
+    expect(lastGoalSetupPhase('a')).toBe('pending');
+  });
+
+  it('keeps each account, merchant and goal apart', () => {
+    rememberGoalSetupPhase('a', 'ready');
+    expect(lastGoalSetupPhase('b')).toBeNull();
+    expect(goalSetupFirstWaitingAt('b')).toBeNull();
+  });
+});

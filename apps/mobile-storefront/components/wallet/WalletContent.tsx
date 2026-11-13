@@ -17,7 +17,7 @@ import { WalletHeroSection } from './WalletHeroSection';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
-import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
+import { WalletSavingsPlanCardWithSetup } from './WalletSavingsPlanCardWithSetup';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 import { WalletSavingsVariantResolutionModal } from './WalletSavingsVariantResolutionModal';
 import {
@@ -209,7 +209,7 @@ export function WalletContent(props: WalletContentProps) {
           utilityAccentColor={colors.primary}
         />
         {activeSavingsGoal ? (
-          <WalletSavingsPlanCard
+          <WalletSavingsPlanCardWithSetup
             colors={colors}
             awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}

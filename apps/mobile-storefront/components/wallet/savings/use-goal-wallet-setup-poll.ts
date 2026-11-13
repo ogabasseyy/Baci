@@ -3,6 +3,11 @@ import {
   usePiggyvestSlowdown,
   useReportPiggyvestSlow,
 } from '@/hooks/use-piggyvest-slowdown';
+import {
+  GOAL_SETUP_FIRST_MINUTE_MS,
+  goalSetupFirstWaitingAt,
+  rememberGoalSetupPhase,
+} from './goal-setup-memory';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
 const FAST_POLL_MS = 5000;
@@ -22,7 +27,10 @@ export const MAX_SLOW_ATTEMPTS = 180;
  * open never polls forever). The customer is never left on a dead end; after
  * the first minute `slow` is set so the screen can say it is taking a little
  * longer. Reads are silent, stop the moment the goal is ready, and start over
- * for another account or goal. Only reads status; it never re-sends setup. A
+ * for another account or goal. `slow` also counts from when this app run
+ * first saw the setup waiting, so closing and reopening the sheet never
+ * brings back the "about a minute" promise or hides Check now. Only reads
+ * status; it never re-sends setup. A
  * read that fails is retried on the next tick; if the last read of the first
  * minute also failed, `onExhausted` is called with that error, so one network
  * blip never ends the automatic checks.
@@ -84,7 +92,25 @@ export function useGoalWalletSetupPoll({
     };
   }, [active, count, scopeKey, phase]);
 
-  const slow = active && count >= FAST_ATTEMPTS;
+  // Waited past the first minute since this app first saw the setup waiting
+  // (survives the sheet closing and reopening).
+  const waiting = phase === 'pending' || phase === 'setup_retryable';
+  const [overdueScope, setOverdueScope] = useState<string | null>(null);
+  useEffect(() => {
+    rememberGoalSetupPhase(scopeKey, phase);
+    const firstAt = goalSetupFirstWaitingAt(scopeKey);
+    if (!waiting || firstAt === null) return;
+    const left = firstAt + GOAL_SETUP_FIRST_MINUTE_MS - Date.now();
+    if (left <= 0) {
+      setOverdueScope(scopeKey);
+      return;
+    }
+    const timer = setTimeout(() => setOverdueScope(scopeKey), left);
+    return () => clearTimeout(timer);
+  }, [phase, scopeKey, waiting]);
+  const overdue = waiting && overdueScope === scopeKey;
+
+  const slow = (active && count >= FAST_ATTEMPTS) || overdue;
   // The hour-long window is used up: checks wait for Check now or a reopen.
   const paused = active && count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS;
   // Only a still-pending setup raises the signal: an errored read kept alive

@@ -128,7 +128,16 @@ function StatusNoteView({
       />
     );
   if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))
-    return <SavingsPlanGettingReady colors={colors} />;
+    return (
+      <SavingsPlanGettingReady
+        colors={colors}
+        slow={slow}
+        paused={paused}
+        onCheckNow={
+          onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
+        }
+      />
+    );
   if (phase === 'not_started' || rereadingAfterSetup)
     return (
       <SavingsGoalSetupPrompt

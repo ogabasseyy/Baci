@@ -11,6 +11,7 @@ import { getSavingsProgress } from './get-savings-progress';
 import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
 import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
+import type { GoalCardSetupState } from './savings/use-goal-card-setup-state';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
@@ -18,6 +19,8 @@ type WalletSavingsPlanCardProps = {
   awaitingSettlement?: boolean;
   goal: WalletActiveSavingsGoal;
   onOpen: () => void;
+  /** The plan's savings wallet is not ready: show that, not "add money". */
+  setupState?: GoalCardSetupState;
 };
 
 export function WalletSavingsPlanCard({
@@ -25,6 +28,7 @@ export function WalletSavingsPlanCard({
   colors: themeColors,
   goal,
   onOpen,
+  setupState = null,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
   // This is the Ogabassey app: savings actions retain its brand across appearance modes.
@@ -50,7 +54,9 @@ export function WalletSavingsPlanCard({
       ? 'Move your savings'
       : goal.status === 'completed'
         ? 'Start another plan'
-        : goal.status === 'paused' || goal.source_mode !== 'manual'
+        : goal.status === 'paused' ||
+            goal.source_mode !== 'manual' ||
+            setupState !== null
           ? 'View plan'
           : 'Add to savings';
   const hasSavingsGlow = actionLabel === 'Add to savings';
@@ -146,9 +152,13 @@ export function WalletSavingsPlanCard({
         ) : null}
       </View>
       <View style={styles.footer}>
-        {!hasStarted ? (
+        {setupState || !hasStarted ? (
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            Start with your first contribution
+            {setupState === 'getting_ready'
+              ? 'Getting your plan ready'
+              : setupState === 'needs_setup'
+                ? 'Finish setting up your plan'
+                : 'Start with your first contribution'}
           </Text>
         ) : null}
         {goal.maturity_date ? (

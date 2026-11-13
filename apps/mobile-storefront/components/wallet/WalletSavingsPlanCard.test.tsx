@@ -233,3 +233,47 @@ describe('WalletSavingsPlanCard', () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('bugfix: the card invited a first contribution while the plan was being set up', () => {
+  it('shows the setup state and a View plan action while the plan is getting ready', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={goal}
+        onOpen={jest.fn()}
+        setupState="getting_ready"
+      />
+    );
+    expect(screen.getByText('Getting your plan ready')).toBeOnTheScreen();
+    expect(screen.queryByText('Start with your first contribution')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'View plan for iPhone 15 Pro' })
+    ).toBeOnTheScreen();
+    expect(screen.UNSAFE_queryByType(LinearGradient)).toBeNull();
+  });
+
+  it('asks to finish setup when it never started', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={goal}
+        onOpen={jest.fn()}
+        setupState="needs_setup"
+      />
+    );
+    expect(screen.getByText('Finish setting up your plan')).toBeOnTheScreen();
+  });
+
+  it('still invites the first contribution once the plan is ready', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={goal}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByText('Start with your first contribution')
+    ).toBeOnTheScreen();
+  });
+});

@@ -52,12 +52,12 @@ describe('bugfix: PiggyVest purchases skipped the screen-wide checkout guard (Co
 });
 
 describe('bugfix: PiggyVest-paid success dropped the credited cashback (Codex P2)', () => {
-  it('forwards a credited cashback and drops one that was not credited', () => {
+  it('forwards a credited cashback and drops one that was not credited', async () => {
     for (const credited of [true, false]) {
       useVtuWalletPayStore.setState({ covers: () => true, pending: null });
       releaseUtilityCheckout();
       const onSuccess = jest.fn();
-      payFromPiggyvest(request, onSuccess, '08031234567', false);
+      await payFromPiggyvest(request, onSuccess, '08031234567', false);
       useVtuWalletPayStore.getState().pending?.onDelivered({
         reference: 'REF',
         cashback: { amount: 3, credited, newBalance: 3 },

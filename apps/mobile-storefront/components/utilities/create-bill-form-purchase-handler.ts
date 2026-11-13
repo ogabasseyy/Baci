@@ -130,7 +130,9 @@ export function createBillFormPurchaseHandler({
       }
       const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
       // The finally below also resets it; explicit like the other forms.
-      if (payFromPiggyvest(request, onSuccess, customerId, isRetainedReplay))
+      if (
+        await payFromPiggyvest(request, onSuccess, customerId, isRetainedReplay)
+      )
         return void setIsSubmitting(false);
       // Retained-replay peek (R65): a charged retry bypasses the gate.
       if (

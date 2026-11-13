@@ -121,7 +121,9 @@ export function createDataFormPurchaseHandler({
       return;
     }
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
-    if (payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay))
+    if (
+      await payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay)
+    )
       return void setIsSubmitting(false);
     // Retained-replay peek (R65): a charged retry bypasses the gate.
     if (

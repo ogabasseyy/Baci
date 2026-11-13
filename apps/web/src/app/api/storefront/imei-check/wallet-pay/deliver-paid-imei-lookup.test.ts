@@ -217,6 +217,7 @@ describe('deliverPaidImeiLookup', () => {
         amountKobo: 50000,
         claimToken: 'tok-2',
       })),
+      readStatus: vi.fn(async () => 'pending'),
     });
     const response = await deliverPaidImeiLookup(base, d);
     expect(response.status).toBe(502);

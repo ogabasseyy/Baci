@@ -242,16 +242,16 @@ export function useAirtimePurchaseHandler({
       type: 'airtime' as const,
       walletAmount: numericAmount,
     };
-    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
-    // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Sync ref guard admits no second submit;
-    // shared helper re-checks the owner after the await (R103).
+    // Settle-then-submit gate (R60) BEFORE the retained peek (R66); the
+    // sync ref guard admits no second submit, owner re-checked (R103).
     if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
       isSubmittingRef.current = false;
       return;
     }
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
-    if (payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay)) {
+    if (
+      await payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay)
+    ) {
       isSubmittingRef.current = false;
       return;
     }

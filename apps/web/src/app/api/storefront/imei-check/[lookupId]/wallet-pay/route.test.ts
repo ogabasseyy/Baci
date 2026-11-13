@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
   pay: vi.fn(),
+  rate: vi.fn(),
+}));
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: mocks.rate,
+  createRateLimitResponse: () => new Response('{}', { status: 429 }),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -35,6 +40,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.auth.mockResolvedValue({ user: { id: 'u' }, supabase: {} });
   mocks.csrf.mockResolvedValue({ valid: true });
+  mocks.rate.mockResolvedValue({ allowed: true });
   mocks.pay.mockResolvedValue(
     new Response('{"status":"complete"}', { status: 200 })
   );
@@ -88,5 +94,17 @@ describe('POST /imei-check/[lookupId]/wallet-pay', () => {
     expect(
       (await call({ operationId: OP, imei: '356938035643809' })).status
     ).toBe(403);
+  });
+
+  it('bugfix: throttles the status poll like the IMEI check (Muse)', async () => {
+    mocks.rate.mockResolvedValue({
+      allowed: false,
+      limit: 50,
+      remaining: 0,
+      resetTime: Date.now() + 60_000,
+    });
+    const response = await call({ operationId: OP, imei: '356938035643809' });
+    expect(response.status).toBe(429);
+    expect(mocks.pay).not.toHaveBeenCalled();
   });
 });

@@ -197,7 +197,10 @@ export function WalletContent(props: WalletContentProps) {
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
         />
-        {savingsSheetOpen ? null : <SavingsNoticeCard colors={colors} />}
+        {savingsSheetOpen ? null : (
+          // Same side inset as the wallet's cards.
+          <SavingsNoticeCard colors={colors} style={{ marginHorizontal: 16 }} />
+        )}
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard
             colors={colors}

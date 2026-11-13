@@ -1,7 +1,14 @@
 import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  type StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import { type SavingsNoticeTone, useSavingsNotice } from './savings-notice';
@@ -21,7 +28,14 @@ function toneColor(tone: SavingsNoticeTone, colors: WalletColors) {
 }
 
 /** The latest savings outcome as a calm, dismissible card. */
-export function SavingsNoticeCard({ colors }: { colors: WalletColors }) {
+export function SavingsNoticeCard({
+  colors,
+  style,
+}: {
+  colors: WalletColors;
+  /** Outer spacing: the wallet insets it like its cards; the sheet doesn't. */
+  style?: StyleProp<ViewStyle>;
+}) {
   const { notice, clear } = useSavingsNotice();
   if (!notice) return null;
   const tint = toneColor(notice.tone, colors);
@@ -29,7 +43,7 @@ export function SavingsNoticeCard({ colors }: { colors: WalletColors }) {
     <View
       accessibilityRole="alert"
       testID="savings-notice"
-      style={[styles.card, { backgroundColor: withAlpha(tint, 0.1) }]}
+      style={[styles.card, { backgroundColor: withAlpha(tint, 0.1) }, style]}
     >
       <Ionicons name={ICONS[notice.tone]} size={20} color={tint} />
       <View style={styles.text}>

@@ -62,4 +62,17 @@ describe('server keeps PiggyVest off: SavingsNoticeCard', () => {
       { name: 'close', color: Colors.dark.textSecondary },
     ]);
   });
+
+  it('takes the outer spacing it is given (the wallet insets it like its cards)', () => {
+    act(() => notifySavings('Savings updated', undefined, 'success'));
+    render(
+      <SavingsNoticeCard
+        colors={Colors.light}
+        style={{ marginHorizontal: 16 }}
+      />
+    );
+    expect(screen.getByTestId('savings-notice')).toHaveStyle({
+      marginHorizontal: 16,
+    });
+  });
 });

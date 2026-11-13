@@ -20,7 +20,7 @@ export function goalCancelForfeitTransfersAllowed(
 }
 
 /**
- * The daily cron's forfeit sweep. Inert (null) wherever the PiggyVest savings
+ * The hourly cron's forfeit sweep. Inert (null) wherever the PiggyVest savings
  * credentials are not configured; a sweep that fails answers
  * { status: 'failed' } (and logs the reason). Never throws, so it can not fail
  * the reconciliation report it runs beside. Counts only, never transfer

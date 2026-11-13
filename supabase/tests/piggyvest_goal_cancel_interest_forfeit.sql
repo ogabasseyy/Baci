@@ -230,6 +230,16 @@ BEGIN
   PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'released'
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'none',
     'a rejected cancel still had a sendable forfeit');
+  -- Regression: a plan already moved to review (never sent) is released with
+  -- the cancel too, so nobody is paged to forfeit interest of a cancel that
+  -- did not happen.
+  v_op := pg_temp.gc_reserved('review-then-rejected');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'split');
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'needs_review'
+   WHERE cancel_operation_id = v_op::uuid;
+  PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'release', 0), 'release');
+  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'released',
+    'an unsent review plan survived its released cancel');
 
   -- A cancel settled into review whose review an operator clears retires its
   -- unsent forfeit too (no unreachable reserved row is left behind).
@@ -249,7 +259,7 @@ BEGIN
   -- References are never reused: the next forfeit takes a fresh suffix.
   v_op := pg_temp.gc_reserved('forfeit-rejected');
   PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'second split');
-  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'reference') = 'pvb-forfeit-' || c_goal || '-1',
+  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'reference') = 'pvb-forfeit-' || c_goal || '-2',
     'a forfeit reference was reused: ' || pg_temp.gf_forfeit(v_op, 'reference'));
   PERFORM pg_temp.gc_assert(pg_temp.gc_settle(pg_temp.gc_proof(v_op)) = 'confirmed', 'principal settle');
 
@@ -298,7 +308,7 @@ BEGIN
   END LOOP;
   PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits
                               WHERE cancel_operation_id = v_op::uuid) = 3
-    AND (SELECT pg_catalog.count(DISTINCT reference) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 4
+    AND (SELECT pg_catalog.count(DISTINCT reference) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 5
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
       = '{"status":"needs_review"}'::jsonb,
     'forfeit replacements are unbounded or reuse references, or the cap paged twice');
@@ -587,45 +597,25 @@ BEGIN
           WHERE proc.oid = 'piggyvest_primary.plan_forfeit_for_late_goal_interest()'::regprocedure)
       ~ 'pg_advisory_xact_lock[\s\S]*cancel\.state IN \(''dispatched'', ''confirmed''\)\s*FOR SHARE',
     'the late-interest plan is not serialized on the customer lock, or its failure could refuse the payout');
-  -- Regression: while another forfeit of the cancel is in flight a reversal
-  -- may belong to it, so the unsent plan goes to review instead of being
-  -- shrunk for interest that is still there.
+  -- Regression: a reversal can not be attributed to one payout inside a
+  -- merged plan, so the unsent plan goes to review instead of being shrunk
+  -- or released for interest that may still be there.
   BEGIN
-    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-       SET state = 'dispatched', provider_transaction_id = NULL
-     WHERE id = v_forfeit::uuid;
     INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
       amount_kobo, provider_evidence_sha256, evidence_reference)
-    VALUES (c_integration, 'gf-reversal-0', 'gf-after', 100, repeat('c', 64), 'synthetic-reversal');
+    VALUES (c_integration, 'gf-reversal-1', 'gf-after', 100, repeat('c', 64), 'synthetic-reversal');
     PERFORM pg_temp.gc_assert(
       (SELECT state FROM piggyvest_primary.goal_cancel_interest_forfeits
-        WHERE cancel_operation_id = v_op::uuid AND amount_kobo = 300) = 'needs_review',
-      'a reversal shrank an unrelated unsent plan while another forfeit was in flight');
-    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
-  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
-  END;
-  -- PiggyVest reverses part of the late payout with nothing in flight: the
-  -- unsent forfeit shrinks; a full reversal releases it.
-  INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
-    amount_kobo, provider_evidence_sha256, evidence_reference)
-  VALUES (c_integration, 'gf-reversal-1', 'gf-after', 100, repeat('c', 64), 'synthetic-reversal');
-  PERFORM pg_temp.gc_assert(
-    (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
-      WHERE cancel_operation_id = v_op::uuid AND state = 'reserved') = 200,
-    'a partial reversal did not shrink the unsent forfeit');
-  BEGIN
-    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
-      amount_kobo, provider_evidence_sha256, evidence_reference)
-    VALUES (c_integration, 'gf-reversal-2', 'gf-after', 200, repeat('c', 64), 'synthetic-reversal');
-    PERFORM pg_temp.gc_assert(NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
-                                           WHERE cancel_operation_id = v_op::uuid AND state = 'reserved'),
-      'a full reversal left the forfeit sendable');
+        WHERE cancel_operation_id = v_op::uuid AND amount_kobo = 300) = 'needs_review'
+      AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true)
+        -> 0 ->> 'alert' = 'true',
+      'a reversal shrank or released an unsent plan instead of sending it to review');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
   -- The planned late forfeit is next.
   PERFORM pg_temp.gc_assert(
-    (piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) #>> '{forfeit,amountKobo}')::bigint = 200,
+    (piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) #>> '{forfeit,amountKobo}')::bigint = 300,
     'the late forfeit was not claimed after the first settled');
 END
 $late$;

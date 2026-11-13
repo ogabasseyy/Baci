@@ -243,7 +243,7 @@ async function finish<T extends { status: string }>(
     allowForfeitTransfers: boolean;
   }
 ) {
-  // With savings switched off the daily worker sweep still settles in-flight
+  // With savings switched off the hourly worker sweep still settles in-flight
   // forfeits; nothing new is sent from here.
   if (result.status === 'confirmed' && input.allowForfeitTransfers)
     await sweepGoalCancelForfeit(input);

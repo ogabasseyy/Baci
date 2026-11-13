@@ -814,7 +814,7 @@ BEGIN
      WHERE id = v_forfeit.id;
     IF v_forfeit.amount_kobo + v_other.amount_kobo > 9999999999 THEN
       -- Not merged: the other plan stays as it was, this one goes to review
-      -- unstamped, so the daily sweep pages the review (not a wallet page).
+      -- unstamped, so the hourly sweep pages the review (not a wallet page).
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'reserved' WHERE id = v_other.id;
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET alerted_at = NULL WHERE id = v_forfeit.id;
       RETURN 'unclaimed';
@@ -1333,9 +1333,13 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
+  -- Unsent plans, including one already moved to review, are released:
+  -- interest is only ever forfeited for a cancel that happened.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
      SET state = 'released'
-   WHERE forfeit.cancel_operation_id = NEW.id AND forfeit.state = 'reserved';
+   WHERE forfeit.cancel_operation_id = NEW.id
+     AND (forfeit.state = 'reserved'
+          OR (forfeit.state = 'needs_review' AND forfeit.dispatched_at IS NULL));
   RETURN NEW;
 END;
 $$;
@@ -1413,7 +1417,7 @@ BEGIN
   BEGIN
   IF NEW.net_kobo > 9999999999 THEN
     -- Above the per-transfer ceiling: recorded for review (paged once by the
-    -- daily sweep), never ignored. The amount is the ceiling marker; the
+    -- hourly sweep), never ignored. The amount is the ceiling marker; the
     -- receipt holds the real figure.
     INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
       cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
@@ -1439,7 +1443,7 @@ BEGIN
     state = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
       THEN 'reserved' ELSE 'needs_review' END,
-    -- A review entered here pages afresh (the daily sweep pages unstamped
+    -- A review entered here pages afresh (the hourly sweep pages unstamped
     -- reviews), whatever an earlier wallet-check page left behind.
     alerted_at = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
@@ -1457,10 +1461,10 @@ CREATE TRIGGER primary_paid_interest_post_cancel_forfeit
   AFTER INSERT ON piggyvest_primary.paid_interest_receipts
   FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.plan_forfeit_for_late_goal_interest();
 
--- Interest PiggyVest reverses is no longer in the goal wallet, so an unsent
--- forfeit of the goal's live cancel shrinks by the reversal (released when
--- nothing is left). A forfeit already sent is not touched: if the money is
--- short PiggyVest refuses it, and the third refusal goes to review.
+-- Interest PiggyVest reverses is no longer in the goal wallet: an unsent
+-- forfeit of the goal's live cancel goes to review (see below). A forfeit
+-- already sent is not touched: if the money is short PiggyVest refuses it,
+-- and the third refusal goes to review.
 CREATE FUNCTION piggyvest_primary.reduce_forfeit_for_reversed_goal_interest()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1473,21 +1477,13 @@ BEGIN
   SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
    WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
   IF NOT FOUND OR NEW.amount_kobo IS NULL OR NEW.amount_kobo < 1 THEN RETURN NEW; END IF;
-  -- Only when nothing of that cancel is in flight is the unsent plan known to
-  -- contain the reversed interest. With a forfeit already sent, the reversal
-  -- may belong to it instead, so the unsent plan goes to review (paged once
-  -- by the daily sweep) rather than being shrunk for interest still there.
+  -- A plan merges payouts and the split's own interest, so which of them a
+  -- reversal belongs to can not be told from here: the unsent plan is never
+  -- shrunk or released automatically, it goes to review (paged once by the
+  -- hourly sweep) and a person sizes it. Nothing already sent is touched.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
-     SET amount_kobo = CASE WHEN in_flight.cancel_operation_id IS NULL AND forfeit.amount_kobo > NEW.amount_kobo
-                            THEN forfeit.amount_kobo - NEW.amount_kobo ELSE forfeit.amount_kobo END,
-         state = CASE WHEN in_flight.cancel_operation_id IS NOT NULL THEN 'needs_review'
-                      WHEN forfeit.amount_kobo > NEW.amount_kobo THEN 'reserved' ELSE 'released' END,
-         alerted_at = CASE WHEN in_flight.cancel_operation_id IS NOT NULL THEN NULL ELSE forfeit.alerted_at END
+     SET state = 'needs_review', alerted_at = NULL
     FROM piggyvest_primary.goal_cancel_operations AS cancel
-    LEFT JOIN LATERAL (
-      SELECT sent.cancel_operation_id FROM piggyvest_primary.goal_cancel_interest_forfeits AS sent
-       WHERE sent.cancel_operation_id = cancel.id AND sent.state = 'dispatched' LIMIT 1
-    ) AS in_flight ON true
    WHERE forfeit.cancel_operation_id = cancel.id AND forfeit.state = 'reserved'
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');

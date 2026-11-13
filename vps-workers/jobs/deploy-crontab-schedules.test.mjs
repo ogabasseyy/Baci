@@ -13,8 +13,14 @@ function readDeployScript() {
 describe('deploy crontab schedules', () => {
   it('schedules the gated Oxygen callback drain every five minutes', () => {
     const script = readDeployScript();
-    assert.match(script, /\*\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/oxygen-callback-reconciliation\.lock/);
-    assert.match(script, /run-web-cron\.mjs \/api\/cron\/oxygen-callback-reconciliation/);
+    assert.match(
+      script,
+      /\*\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/oxygen-callback-reconciliation\.lock/
+    );
+    assert.match(
+      script,
+      /run-web-cron\.mjs \/api\/cron\/oxygen-callback-reconciliation/
+    );
   });
   it('schedules the gateway paid-order reconcile drain hourly through run-web-cron', () => {
     const deployScript = readDeployScript();
@@ -43,6 +49,19 @@ describe('deploy crontab schedules', () => {
     assert.match(
       lines[0],
       /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
+    );
+  });
+
+  it('schedules the dark early-cancel interest forfeit sweep hourly through run-web-cron', () => {
+    const deployScript = readDeployScript();
+    const lines = deployScript
+      .split('\n')
+      .filter((line) => line.includes('piggyvest-goal-cancel-forfeit-sweep'));
+
+    assert.equal(lines.length, 1);
+    assert.match(
+      lines[0],
+      /^17 \* {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-goal-cancel-forfeit-sweep\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep' >> \$REMOTE_DIR\/logs\/piggyvest-goal-cancel-forfeit-sweep\.log 2>&1$/
     );
   });
 
@@ -214,10 +233,7 @@ describe('deploy crontab schedules', () => {
       deployScript,
       /^\s*(\*\/\d+|\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*process-redvault-refunds/m
     );
-    assert.match(
-      deployScript,
-      /process-redvault-refunds stays unscheduled/
-    );
+    assert.match(deployScript, /process-redvault-refunds stays unscheduled/);
   });
 
   it('restarts the drain receiver after promotion before installing cleanup cron', () => {

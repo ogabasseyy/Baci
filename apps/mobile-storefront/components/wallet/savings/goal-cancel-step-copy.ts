@@ -6,6 +6,7 @@ export const GOAL_CANCEL_STEP_COPY = {
   emptyBody: 'You haven’t saved anything yet, so no money moves.',
   savedBody: 'Your savings go back to your main wallet.',
   saved: 'Saved',
+  savedSoFar: GOAL_LIFECYCLE_COPY.savedSoFar,
   interestForfeited: 'Interest (not refunded)',
   forfeitNote: 'Cancelling early means you lose the interest on this goal.',
   unknownSplitNote:

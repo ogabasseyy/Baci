@@ -1,3 +1,4 @@
+import { customerWalletTransactionLabel } from '@/lib/customer-wallet-transaction-label';
 /**
  * DB fetchers for `GET /api/storefront/customer/wallet`. Extracted from the
  * route so the handler stays focused on auth + orchestration. Pure helpers live
@@ -160,6 +161,15 @@ export async function fetchCustomerWallet({
     kind: 'ok',
     totalEarned: toNumber(wallet.total_earned),
     totalRedeemed: toNumber(wallet.total_redeemed),
-    transactions: (transactions ?? []) as CustomerWalletTransactionRow[],
+    // Customers never see provider names or internal ids in their history.
+    transactions: ((transactions ?? []) as CustomerWalletTransactionRow[]).map(
+      (tx) => ({
+        ...tx,
+        description: customerWalletTransactionLabel({
+          description: tx.description,
+          sourceType: tx.source_type,
+        }),
+      })
+    ),
   };
 }

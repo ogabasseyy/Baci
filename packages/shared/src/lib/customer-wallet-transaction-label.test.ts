@@ -68,13 +68,7 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('Check for ref');
   });
 
-  it('strips an unlisted provider named after via/by/through, and known stack providers', () => {
-    expect(
-      customerWalletTransactionLabel({
-        description: 'Wallet top-up via Acmepay',
-        sourceType: null,
-      })
-    ).toBe('Wallet top-up');
+  it('strips known stack providers wherever they appear', () => {
     expect(
       customerWalletTransactionLabel({
         description: 'Refund from Kuda for bill payment',
@@ -104,6 +98,18 @@ describe('customerWalletTransactionLabel', () => {
       'Refund by merchant',
       'Wallet top-up via transfer',
       'Paid through wallet',
+    ]) {
+      expect(
+        customerWalletTransactionLabel({ description, sourceType: null })
+      ).toBe(description);
+    }
+  });
+
+  it('keeps a network or biller after via, and an international phone number', () => {
+    for (const description of [
+      'Airtime purchase via MTN',
+      'Electricity via IKEDC',
+      'Airtime MTN 2348031234567',
     ]) {
       expect(
         customerWalletTransactionLabel({ description, sourceType: null })

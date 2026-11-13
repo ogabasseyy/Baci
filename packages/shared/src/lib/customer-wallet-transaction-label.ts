@@ -24,11 +24,6 @@ const JOINED_PROVIDER = new RegExp(
   'gi'
 );
 const PROVIDER = new RegExp(`\\b(?:${PROVIDERS})\\b`, 'gi');
-// A provider we don't know yet, named in a trailing "via Acmepay". Only
-// "via" (never "by"/"through": "Payment by card", "Refund by merchant"), and
-// never a payment method the customer chose.
-const TRAILING_VIA_ONE_WORD =
-  /\s+\bvia\s+(?!(?:card|transfer|bank|wallet|cash|ussd|savings|store)\b)[A-Za-z][\w.-]*\s*$/i;
 // Internal ids: UUIDs, shortened hex ("3f2b…"), long mixed hex tokens, and
 // long digit runs such as an IMEI or provider reference (never an amount or
 // the customer's own phone number).
@@ -36,8 +31,9 @@ const IDS = [
   /:?\s*\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
   /:?\s*\b(?=[0-9a-f]*\d)[0-9a-f]{3,}(?:…|\.{3})/gi,
   /\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi,
-  // 14+ digits: an IMEI (15) or a provider reference, never a phone number.
-  /(?<![₦\d,.])\b\d{14,}\b/g,
+  // 15+ digits: an IMEI or long provider reference. A phone number, even with
+  // +234 (13 digits), stays.
+  /(?<![₦\d,.])\b\d{15,}\b/g,
 ];
 
 export function customerWalletTransactionLabel(input: {
@@ -53,7 +49,6 @@ export function customerWalletTransactionLabel(input: {
     .replace(PROVIDER, '');
   for (const id of IDS) cleaned = cleaned.replace(id, '');
   cleaned = cleaned
-    .replace(TRAILING_VIA_ONE_WORD, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/^[\s:–-]+|[\s:–-]+$/g, '')
     .trim();

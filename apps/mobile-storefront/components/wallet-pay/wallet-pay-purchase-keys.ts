@@ -89,7 +89,14 @@ export const walletPayPurchaseKeys = {
       if (open) return open.key;
       const key = mint();
       purchases[purchase] = { key, at: Date.now() };
-      await save(purchases);
+      // Nothing is sent until the new key is saved: a key that only lives in
+      // memory could be lost on a restart while its payment is pending.
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(purchases));
+      } catch (error) {
+        delete purchases[purchase];
+        throw error;
+      }
       return key;
     });
   },

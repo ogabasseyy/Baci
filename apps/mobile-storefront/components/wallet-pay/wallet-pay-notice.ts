@@ -100,7 +100,22 @@ export function walletPayNotice(
       action: null,
     },
   };
-  const notice = notices[outcome.kind];
+  // A refusal after the payment may have been sent: never "nothing taken".
+  const maybePaid: Partial<Record<WalletPayOutcomeKind, WalletPayNotice>> = {
+    sign_in: {
+      ...notices.sign_in,
+      message: `Your session ended. If PiggyVest already took ${amount}, your ${purchase} will finish or the money comes back automatically. Please don't pay again.`,
+    },
+    unavailable: {
+      title: "Can't check this payment right now",
+      message: `If PiggyVest already took ${amount}, your ${purchase} will finish or the money comes back automatically. Please don't pay again.`,
+      tone: 'info',
+      action: 'check_again',
+    },
+  };
+  const notice =
+    (outcome.maybePaid ? maybePaid[outcome.kind] : undefined) ??
+    notices[outcome.kind];
   // Callers pass only the app's own wording here, never server text.
   return outcome.message && outcome.kind === 'failed'
     ? { ...notice, message: outcome.message }

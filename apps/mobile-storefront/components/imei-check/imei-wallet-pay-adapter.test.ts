@@ -261,3 +261,20 @@ describe('bugfix: a replayed start was treated as failed and forgotten (Codex P1
     });
   });
 });
+
+describe('bugfix: a refused re-check claimed nothing was taken (Codex P2)', () => {
+  it('marks a lost session or pause after a payment as maybe paid', () => {
+    expect(
+      imeiPayAnswer(reply(401, { code: 'UNAUTHORIZED' }), 'basic')
+    ).toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'sign_in', maybePaid: true },
+    });
+    expect(
+      imeiPayAnswer(reply(409, { code: 'PIGGYVEST_WALLET_NOT_READY' }), 'basic')
+    ).toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'unavailable', maybePaid: true },
+    });
+  });
+});

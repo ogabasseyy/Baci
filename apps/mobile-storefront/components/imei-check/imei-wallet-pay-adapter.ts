@@ -87,7 +87,18 @@ export function imeiPayAnswer(
   if (code === 'PIN_PROOF_REQUIRED' || code === 'PIN_PROOF_REFUSED')
     return { kind: 'pin_again', message: 'Please enter your PIN again.' };
   if (code === 'IMEI_MISMATCH') return outcome('failed', IMEI_MISMATCH_TEXT);
-  return refusal(reply) ?? outcome('pending');
+  const refused = refusal(reply);
+  // A lost session or a pause says nothing about a payment already sent.
+  if (
+    refused &&
+    (refused.outcome.kind === 'sign_in' ||
+      refused.outcome.kind === 'unavailable')
+  )
+    return {
+      kind: 'outcome',
+      outcome: { kind: refused.outcome.kind, maybePaid: true },
+    };
+  return refused ?? outcome('pending');
 }
 
 /**

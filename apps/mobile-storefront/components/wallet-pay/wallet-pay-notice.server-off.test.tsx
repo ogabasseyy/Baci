@@ -38,4 +38,16 @@ describe('walletPayNotice', () => {
       ).message
     ).toContain('your payment is going back');
   });
+
+  it('never says nothing was taken when the payment may have been sent', () => {
+    for (const kind of ['sign_in', 'unavailable'] as const) {
+      const notice = walletPayNotice(
+        { kind, maybePaid: true },
+        30_000,
+        'IMEI check'
+      );
+      expect(notice.message).not.toContain('Nothing was taken');
+      expect(notice.message).toContain("Please don't pay again");
+    }
+  });
 });

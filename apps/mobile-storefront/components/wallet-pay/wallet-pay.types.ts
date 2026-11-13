@@ -21,6 +21,11 @@ export type WalletPayOutcome = {
   kind: WalletPayOutcomeKind;
   /** The server's own words, when they say more than the default. */
   message?: string;
+  /**
+   * The payment may already have been sent (a refusal on a re-check), so
+   * the wording must not claim that nothing was taken.
+   */
+  maybePaid?: boolean;
 };
 
 export type WalletPayStart<Result> =

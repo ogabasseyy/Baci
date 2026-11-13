@@ -21,7 +21,8 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
     )
   );
   const releaseModeStep = readStep(job, 'Record release mode');
-  const mode = releaseModeStep.text;
+  const summaryScript = join(ROOT, '.github/scripts/record-ios-storefront-release-mode.sh');
+  const mode = repository.readFile('.github/scripts/record-ios-storefront-release-mode.sh');
   const fastfile = repository.readFile('apps/mobile-storefront/fastlane/Fastfile');
   const manualWorkflow = repository.readFile('.github/workflows/ios-storefront-submit.yml');
   const manualJob = readJob(manualWorkflow, 'submit');
@@ -35,7 +36,7 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
     const directory = mkdtempSync(join(tmpdir(), 'ios-release-summary-'));
     const summaryPath = join(directory, 'summary.md');
     try {
-      execFileSync('bash', ['-c', releaseModeStep.run], {
+      execFileSync('bash', [summaryScript], {
         env: {
           ...process.env,
           TESTFLIGHT_ONLY: String(testflightOnly),
@@ -63,6 +64,7 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
     runSummary({ outcome: 'success', result: 'skipped' }),
     /version slot is occupied/
   );
+  assert.match(releaseModeStep.run, /record-ios-storefront-release-mode\.sh/);
   assert.match(mode, /intentionally skipped/);
   assert.match(mode, /submitted it for App Store review/);
   assert.match(mode, /version slot is occupied/);

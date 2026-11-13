@@ -3,7 +3,6 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { useSavingsSheetLock } from '../SavingsSheetLock';
 import { GoalCancelRow as Row } from './GoalCancelRow';
 import { GoalCancelButton as Button } from './GoalCancelStepParts';

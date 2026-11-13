@@ -202,6 +202,29 @@ describe('WalletSavingsProgressModal', () => {
     ).toBeNull();
   });
 
+  it('says the purchase was requested for a settled completed goal', () => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount=""
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 0, status: 'completed' }}
+        isAdding={false}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={125000}
+      />
+    );
+    expect(
+      screen.getByText(
+        'Purchase requested. Your savings have moved to your order.'
+      )
+    ).toBeOnTheScreen();
+  });
+
   it('hides manual controls when the savings goal is completed', () => {
     render(
       <WalletSavingsProgressModal

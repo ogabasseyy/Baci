@@ -14,7 +14,8 @@ describe('server keeps PiggyVest off: savingsSwapPace', () => {
     expect(pace?.unit).toBe('a month');
     // About twelve months left: roughly ₦10,000 each.
     expect(pace?.amount).toBeGreaterThanOrEqual(10_000);
-    expect(pace?.amount).toBeLessThan(10_100);
+    expect(pace?.amount).toBeLessThanOrEqual(10_100);
+    expect((pace?.amount ?? 1) % 100).toBe(0);
   });
 
   it('quotes a weekly plan per week', () => {

@@ -122,7 +122,9 @@ export function SavingsPhoneSwapConfirm({
           <Line
             colors={colors}
             label={
-              pace.due ? `Due by ${pace.endsOn}` : `To finish by ${pace.endsOn}`
+              pace.due
+                ? `Due by ${pace.endsOn}`
+                : `Suggested to finish by ${pace.endsOn}`
             }
             value={
               pace.due

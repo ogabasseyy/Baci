@@ -36,5 +36,7 @@ export function savingsSwapPace({
   const today = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(end) || end <= today) return null;
   const periods = Math.max(1, (end - today) / 86_400_000 / DAYS[frequency]);
-  return { amount: Math.ceil(remaining / periods), unit: UNIT[frequency] };
+  // A suggestion, not a quote: rounded up to the next ₦100 so it reads cleanly.
+  const amount = Math.ceil(remaining / periods / 100) * 100;
+  return { amount, unit: UNIT[frequency] };
 }

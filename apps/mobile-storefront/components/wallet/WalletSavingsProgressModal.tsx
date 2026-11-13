@@ -10,6 +10,7 @@ import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalCancelStep } from './savings/GoalCancelStep';
 import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
+import { isFundedUnsettledGoal } from './savings/goal-settlement';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { WalletPinSheet } from './savings/WalletPinSheet';
@@ -158,7 +159,9 @@ export function WalletSavingsProgressModal({
         !goal.variant_resolution_options?.length));
   const unavailableContributionMessage =
     goal.status === 'completed'
-      ? 'This savings goal is complete.'
+      ? isFundedUnsettledGoal(goal)
+        ? 'This savings goal is complete.'
+        : 'Purchase requested. Your savings have moved to your order.'
       : 'This goal is funded by scheduled auto-debit.';
 
   return (

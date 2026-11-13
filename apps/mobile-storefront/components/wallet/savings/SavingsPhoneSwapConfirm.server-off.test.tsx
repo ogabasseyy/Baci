@@ -48,7 +48,9 @@ describe('Change phone confirm, server off', () => {
     expect(screen.getByText('Your savings move over')).toBeOnTheScreen();
     expect(screen.getByText('₦120,000')).toBeOnTheScreen();
     expect(screen.getByText('₦780,000')).toBeOnTheScreen();
-    expect(screen.getByText(/To finish by 1 Jan 2999/)).toBeOnTheScreen();
+    expect(
+      screen.getByText(/Suggested to finish by 1 Jan 2999/)
+    ).toBeOnTheScreen();
     expect(screen.getByText(/a week$/)).toBeOnTheScreen();
   });
 

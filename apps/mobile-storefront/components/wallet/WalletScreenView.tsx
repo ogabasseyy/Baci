@@ -1,10 +1,11 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
+import { leaveStackedWallet } from '@/lib/leave-stacked-wallet';
 import { WalletContent, type WalletContentProps } from './WalletContent';
+import { WalletScreenHeader } from './WalletScreenHeader';
 import { styles } from './wallet.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -23,32 +24,28 @@ export function WalletScreenView({
   walletContentProps,
 }: WalletScreenViewProps) {
   const hasWalletContent = Boolean(walletContentProps);
+  const title = hasWalletContent ? 'Wallet & Loyalty' : 'Wallet';
 
   return (
     <>
       {presentation === 'stack' ? (
-        <Stack.Screen
-          options={{ title: hasWalletContent ? 'Wallet & Loyalty' : 'Wallet' }}
-        />
+        // The page draws the same header as the tab, plus a back button
+        // that falls back to the Wallet tab when there is no history.
+        <Stack.Screen options={{ headerShown: false, title }} />
       ) : null}
       <StorefrontScreenShell
         style={[styles.container, { backgroundColor: colors.background }]}
-        edges={presentation === 'tab' ? ['top'] : ['bottom']}
+        edges={presentation === 'tab' ? ['top'] : ['top', 'bottom']}
       >
         {presentation === 'tab' ? (
-          <View style={styles.tabHeader}>
-            <Ionicons
-              name="wallet-outline"
-              size={24}
-              color={colors.text}
-              accessible={false}
-              importantForAccessibility="no"
-            />
-            <Text style={[styles.tabHeaderTitle, { color: colors.text }]}>
-              Wallet & Loyalty
-            </Text>
-          </View>
-        ) : null}
+          <WalletScreenHeader colors={colors} title="Wallet & Loyalty" />
+        ) : (
+          <WalletScreenHeader
+            colors={colors}
+            onBack={leaveStackedWallet}
+            title={title}
+          />
+        )}
         {walletContentProps ? (
           <WalletContent colors={colors} {...walletContentProps} />
         ) : (

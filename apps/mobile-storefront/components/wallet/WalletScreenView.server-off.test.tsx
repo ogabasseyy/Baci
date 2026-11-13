@@ -14,6 +14,7 @@ const mockStackScreen = jest.fn();
 const mockScreenShell = jest.fn();
 
 jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), canGoBack: () => false, replace: jest.fn() },
   Stack: {
     Screen: (props: unknown) => {
       mockStackScreen(props);
@@ -100,11 +101,16 @@ describe('WalletScreenView', () => {
 
     expect(screen.getByText('wallet-balance:125000')).toBeOnTheScreen();
     expect(mockStackScreen).toHaveBeenCalledWith({
-      options: { title: 'Wallet & Loyalty' },
+      options: { headerShown: false, title: 'Wallet & Loyalty' },
     });
     expect(mockScreenShell).toHaveBeenCalledWith(
-      expect.objectContaining({ edges: ['bottom'] })
+      expect.objectContaining({ edges: ['top', 'bottom'] })
     );
+    // Same left-aligned header as the tab, plus a way out.
+    expect(
+      screen.getByRole('header', { name: 'Wallet & Loyalty' })
+    ).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Go back' })).toBeOnTheScreen();
   });
 
   it('renders a tab loading state with a provided status message', () => {
@@ -137,10 +143,10 @@ describe('WalletScreenView', () => {
     expect(screen.getByLabelText('Preparing wallet')).toBeOnTheScreen();
     expect(screen.getByText('Preparing your wallet...')).toBeOnTheScreen();
     expect(mockStackScreen).toHaveBeenCalledWith({
-      options: { title: 'Wallet' },
+      options: { headerShown: false, title: 'Wallet' },
     });
     expect(mockScreenShell).toHaveBeenCalledWith(
-      expect.objectContaining({ edges: ['bottom'] })
+      expect.objectContaining({ edges: ['top', 'bottom'] })
     );
   });
 

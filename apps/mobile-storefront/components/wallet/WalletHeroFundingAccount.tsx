@@ -13,6 +13,7 @@ type Props = {
 };
 
 const COPIED = 'Copied';
+const COPIED_FEEDBACK_MS = 2000;
 
 export function WalletHeroFundingAccount({
   account,
@@ -22,7 +23,9 @@ export function WalletHeroFundingAccount({
   sandbox = false,
 }: Props) {
   const { copyToClipboard, feedback } = useCopyToClipboard(
-    emphasizeCopied ? { successMessage: COPIED } : undefined
+    emphasizeCopied
+      ? { successMessage: COPIED, timeoutMs: COPIED_FEEDBACK_MS }
+      : undefined
   );
   const copied = emphasizeCopied && feedback === COPIED;
   const isSavingsAccount = purpose === 'savings' && !preview;

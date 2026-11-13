@@ -97,7 +97,13 @@ describe('forfeit transfer', () => {
   it('lets only a stuck forfeit ask for a page', () => {
     expect(
       schemas.claimRows.safeParse([
-        { result: { status: 'unavailable', alert: true } },
+        {
+          result: {
+            status: 'unavailable',
+            forfeitId: '77777777-7777-4777-8777-777777777777',
+            alert: true,
+          },
+        },
       ]).success
     ).toBe(true);
     expect(

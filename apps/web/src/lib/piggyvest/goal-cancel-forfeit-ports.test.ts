@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { forfeitDriverPorts } from './goal-cancel-forfeit-ports';
 
 vi.mock('server-only', () => ({}));
@@ -36,13 +36,21 @@ beforeEach(() => vi.clearAllMocks());
 it('pages only on the first report of a stuck claim', async () => {
   const claim = vi
     .fn()
-    .mockResolvedValueOnce({ status: 'unavailable', alert: true })
-    .mockResolvedValueOnce({ status: 'unavailable' });
+    .mockResolvedValueOnce({
+      status: 'unavailable',
+      forfeitId: forfeit.operationId,
+      alert: true,
+    })
+    .mockResolvedValueOnce({
+      status: 'unavailable',
+      forfeitId: forfeit.operationId,
+    });
   const ports = forfeitDriverPorts({
     claim,
     release: vi.fn(),
     unclaim: vi.fn(),
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: null,
     operationId,
@@ -64,6 +72,7 @@ it('sends the forfeit from the goal wallet to the interest wallet under its own 
     release: vi.fn(),
     unclaim: vi.fn(),
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: null,
     operationId,
@@ -87,6 +96,7 @@ it('pages when a release caps the forfeit into review, and binds evidence reconc
     release: vi.fn().mockResolvedValue('needs_review'),
     unclaim: vi.fn(),
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: { integrationId: 'i' },
     operationId,
@@ -121,6 +131,7 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
     release: vi.fn(),
     unclaim: vi.fn(),
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: null,
     operationId,
@@ -152,6 +163,7 @@ it('pages once per forfeit when a failed wallet check hands it back', async () =
     release: vi.fn(),
     unclaim,
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: null,
     operationId,
@@ -176,6 +188,7 @@ it('refuses a wallet the deployment does not name as the interest wallet, even i
       release: vi.fn(),
       unclaim: vi.fn(),
       markPosting: vi.fn(),
+      ackAlert: vi.fn().mockResolvedValue('acked'),
       provider,
       evidence: null,
       operationId,
@@ -192,6 +205,7 @@ it('pages a wallet-check outage as a failed check, not a mismatch', async () => 
     release: vi.fn(),
     unclaim: vi.fn().mockResolvedValue('unclaimed_first'),
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: null,
     operationId,
@@ -211,6 +225,7 @@ it('pages when a rejected forfeit could not be merged under the ceiling', async 
     release: vi.fn().mockResolvedValue('released_needs_review'),
     unclaim: vi.fn(),
     markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
     provider,
     evidence: null,
     operationId,
@@ -238,6 +253,7 @@ it('refuses a wallet that is not owned by the configured Ogabassey owner, even w
       release: vi.fn(),
       unclaim: vi.fn(),
       markPosting: vi.fn(),
+      ackAlert: vi.fn().mockResolvedValue('acked'),
       provider,
       evidence: null,
       operationId,
@@ -246,4 +262,74 @@ it('refuses a wallet that is not owned by the configured Ogabassey owner, even w
     });
     expect(await ports.verifyDestination(forfeit)).toBe(false);
   }
+});
+
+describe('bugfix: an alert was marked sent before it was emitted', () => {
+  it('acknowledges a stuck claim only after paging, by its forfeit id', async () => {
+    const ackAlert = vi.fn().mockResolvedValue('acked');
+    const ports = forfeitDriverPorts({
+      claim: vi.fn().mockResolvedValue({
+        status: 'needs_review',
+        forfeitId: forfeit.operationId,
+        alert: true,
+      }),
+      release: vi.fn(),
+      unclaim: vi.fn(),
+      markPosting: vi.fn(),
+      ackAlert,
+      provider,
+      evidence: null,
+      operationId,
+      expectedDestinationWalletId: 'interest-wallet',
+      expectedDestinationOwnerId: 'ogabassey',
+    });
+    await ports.claim(operationId);
+    expect(ackAlert).toHaveBeenCalledWith(forfeit.operationId);
+    expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
+      ackAlert.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('acknowledges a hand-back page after emitting it', async () => {
+    const ackAlert = vi.fn().mockResolvedValue('acked');
+    const ports = forfeitDriverPorts({
+      claim: vi.fn(),
+      release: vi.fn(),
+      unclaim: vi.fn().mockResolvedValue('unclaimed_first'),
+      markPosting: vi.fn(),
+      ackAlert,
+      provider,
+      evidence: null,
+      operationId,
+      expectedDestinationWalletId: 'interest-wallet',
+      expectedDestinationOwnerId: 'ogabassey',
+    });
+    await ports.unclaim(forfeit.operationId, 'mismatch');
+    expect(ackAlert).toHaveBeenCalledWith(forfeit.operationId);
+    expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
+      ackAlert.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('still answers the claim when the acknowledgement fails (the page repeats)', async () => {
+    const claim = {
+      status: 'unavailable',
+      forfeitId: forfeit.operationId,
+      alert: true,
+    } as const;
+    const ports = forfeitDriverPorts({
+      claim: vi.fn().mockResolvedValue(claim),
+      release: vi.fn(),
+      unclaim: vi.fn(),
+      markPosting: vi.fn(),
+      ackAlert: vi.fn().mockRejectedValue(new Error('db')),
+      provider,
+      evidence: null,
+      operationId,
+      expectedDestinationWalletId: 'interest-wallet',
+      expectedDestinationOwnerId: 'ogabassey',
+    });
+    expect(await ports.claim(operationId)).toEqual(claim);
+    expect(mocks.alert).toHaveBeenCalledOnce();
+  });
 });

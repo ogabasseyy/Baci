@@ -202,13 +202,20 @@ it('refuses evidence bound to another integration', async () => {
 });
 
 it('counts a stuck forfeit as needing attention, not as ordinary pending work', async () => {
-  db([{ operationId: opA, forfeitId, state: 'reserved', alert: false }], {
-    status: 'unavailable',
-  });
+  db(
+    [{ operationId: opA, forfeitId, state: 'reserved', alert: false }],
+    { status: 'unavailable', forfeitId, alert: true },
+    true
+  );
   expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
     attention: 1,
     pending: 0,
   });
+  // Paged, then acknowledged by the forfeit id through the worker statement.
+  expect(mocks.execute.mock.calls[2]).toEqual([
+    sql.workerAck,
+    [integrationId, 'staging', forfeitId],
+  ]);
 });
 
 it('starts no new forfeit once the deadline has passed', async () => {

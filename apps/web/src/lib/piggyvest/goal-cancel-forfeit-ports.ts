@@ -12,14 +12,18 @@ type Ports = Parameters<typeof driveGoalCancelForfeit>[1];
  * The provider, settlement and paging half of the forfeit driver, shared by
  * the customer status path (customer scope) and the scheduled worker sweep
  * (integration authority), which differ only in how they claim and release.
- * Pages a person once per stuck forfeit: the database stamps the first
- * report (claim "alert") and the third-rejection cap (release needs_review).
+ * Pages a person once per stuck forfeit: the database answers "alert" until
+ * the page is acknowledged (ackAlert, called only after the page is emitted,
+ * so a crash or lost answer repeats the page rather than losing it). Reviews
+ * entered by a release are also paged by the daily sweep until acknowledged.
  */
 export function forfeitDriverPorts(input: {
   claim: Ports['claim'];
   release: Ports['release'];
   unclaim: Ports['unclaim'];
   markPosting: Ports['markPosting'];
+  // Records an emitted page for a forfeit; a failure only means it pages again.
+  ackAlert: (forfeitId: string) => Promise<unknown>;
   provider: { token: string; baseUrl: string };
   evidence: unknown | null;
   operationId: string;
@@ -31,13 +35,17 @@ export function forfeitDriverPorts(input: {
   expectedDestinationOwnerId: string | null;
 }): Ports {
   const { provider, evidence, operationId } = input;
+  // Never fails the caller: an unacknowledged page is simply sent again.
+  const acknowledge = async (forfeitId: string) => {
+    await input.ackAlert(forfeitId).catch(() => undefined);
+  };
   return {
     claim: async (id) => {
       const claim = await input.claim(id);
       if (
         (claim.status === 'needs_review' || claim.status === 'unavailable') &&
         claim.alert === true
-      )
+      ) {
         emitPiggyvestWebhookAlert(
           claim.status === 'needs_review'
             ? 'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW'
@@ -50,6 +58,8 @@ export function forfeitDriverPorts(input: {
             operationId,
           }
         );
+        await acknowledge(claim.forfeitId);
+      }
       return claim;
     },
     verifyDestination: async (forfeit) => {
@@ -100,9 +110,9 @@ export function forfeitDriverPorts(input: {
     markPosting: input.markPosting,
     unclaim: async (id, reason) => {
       const unclaimed = await input.unclaim(id, reason);
-      // The database stamps the first hand-back of a forfeit, so a lasting
-      // wallet mismatch (or check outage) pages once, not on every attempt.
-      if (unclaimed === 'unclaimed_first')
+      // Acknowledged after the page, so a lasting wallet mismatch (or check
+      // outage) pages once, not on every attempt, and never silently.
+      if (unclaimed === 'unclaimed_first') {
         emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
           reason:
             reason === 'mismatch'
@@ -110,11 +120,13 @@ export function forfeitDriverPorts(input: {
               : 'interest_wallet_check_failed',
           operationId,
         });
+        await acknowledge(id);
+      }
       return unclaimed;
     },
     release: async (id) => {
       const released = await input.release(id);
-      // Both are stamped by the database, so each pages once.
+      // Paged now; the daily sweep repeats it until a page is acknowledged.
       if (released === 'needs_review' || released === 'released_needs_review')
         emitPiggyvestWebhookAlert(
           'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',

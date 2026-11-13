@@ -113,8 +113,11 @@ CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   reserved_at timestamptz NOT NULL,
   dispatched_at timestamptz,
   settled_at timestamptz,
-  -- Set the first time a claim reports this forfeit stuck (needs_review or
-  -- unavailable), so a person is paged once, not on every status poll.
+  -- Set only AFTER a page about this forfeit was emitted (the caller
+  -- acknowledges it: ack_goal_cancel_forfeit_alert_worker, or
+  -- manage_goal_cancel_forfeit 'ack'), never when the alert is decided, so a
+  -- crash or lost answer can not suppress the page. An unacknowledged review
+  -- is paged by the daily sweep.
   alerted_at timestamptz,
   -- Stamped right before the single POST. A claimed (dispatched) forfeit
   -- without it was never sent, so it can always be handed back and retried.
@@ -642,10 +645,10 @@ BEGIN
      -- merged away before sending.
      AND prior.dispatched_at IS NOT NULL;
   IF v_released >= 2 THEN
-    -- Stamped as alerted: the caller of this transition pages, so later
-    -- claims do not page again.
+    -- The caller of this transition pages; not stamped, so a lost page is
+    -- repeated (a claim or the daily sweep pages until one is acknowledged).
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-       SET state = 'needs_review', alerted_at = pg_catalog.clock_timestamp()
+       SET state = 'needs_review', alerted_at = NULL
      WHERE id = v_forfeit.id;
     RETURN 'needs_review';
   END IF;
@@ -671,18 +674,20 @@ BEGIN
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
       THEN 'reserved' ELSE 'needs_review' END;
   -- The replacement could not be merged under the ceiling: the plan is now in
-  -- review, so the caller pages for it once (stamped here).
-  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS review
-     SET alerted_at = pg_catalog.clock_timestamp()
-   WHERE review.cancel_operation_id = v_forfeit.cancel_operation_id
-     AND review.state = 'needs_review' AND review.alerted_at IS NULL;
-  IF FOUND THEN RETURN 'released_needs_review'; END IF;
+  -- review, so the caller pages for it. Not stamped: the daily sweep pages it
+  -- again until it acknowledges a page, so a lost page is never silent.
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS review
+              WHERE review.cancel_operation_id = v_forfeit.cancel_operation_id
+                AND review.state = 'needs_review' AND review.alerted_at IS NULL) THEN
+    RETURN 'released_needs_review';
+  END IF;
   RETURN 'released';
 END;
 $$;
 
--- A stuck forfeit's claim answer; "alert" only the first time (stamps
--- alerted_at). Caller holds the row lock.
+-- A stuck forfeit's claim answer with its id; "alert" while no page about it
+-- has been acknowledged. Nothing is stamped here: the caller acknowledges the
+-- page after emitting it. Caller holds the row lock.
 CREATE FUNCTION piggyvest_primary.report_stuck_goal_cancel_forfeit(p_forfeit_id uuid, p_status text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -690,13 +695,11 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-     SET alerted_at = pg_catalog.clock_timestamp()
-   WHERE id = p_forfeit_id AND alerted_at IS NULL;
-  IF FOUND THEN
-    RETURN pg_catalog.jsonb_build_object('status', p_status, 'alert', true);
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+              WHERE id = p_forfeit_id AND alerted_at IS NULL) THEN
+    RETURN pg_catalog.jsonb_build_object('status', p_status, 'forfeitId', p_forfeit_id, 'alert', true);
   END IF;
-  RETURN pg_catalog.jsonb_build_object('status', p_status);
+  RETURN pg_catalog.jsonb_build_object('status', p_status, 'forfeitId', p_forfeit_id);
 END;
 $$;
 
@@ -707,8 +710,8 @@ $$;
 --   waiting                                principal not confirmed yet
 --   confirmed / needs_review / none        nothing to send
 --   unavailable                            interest wallet no longer enabled
--- needs_review and unavailable carry "alert": true the first time they are
--- reported for a forfeit (alerted_at is stamped), so the caller pages once.
+-- needs_review and unavailable carry the forfeitId, and "alert": true until
+-- the caller acknowledges the page it emitted, so it pages once.
 -- The claim itself, shared by the customer path and the worker sweep. The
 -- caller has resolved the attempt's authority and holds the intent lock.
 CREATE FUNCTION piggyvest_primary.claim_goal_cancel_forfeit_core(
@@ -817,9 +820,9 @@ $$;
 -- Hands a claimed forfeit back unsent (dispatched -> reserved, same
 -- reference: nothing was POSTed under it). Used when the destination check
 -- fails or can not run before the POST: retryable, never a rejection. Merges
--- with an unsent forfeit planned meanwhile. Answers 'unclaimed_first' the
--- first time for a forfeit (stamps alerted_at, so the caller pages once) and
--- 'unclaimed' after that. Caller holds the intent lock.
+-- with an unsent forfeit planned meanwhile. Answers 'unclaimed_first' while
+-- no page about the forfeit has been acknowledged (the caller pages, then
+-- acknowledges) and 'unclaimed' after that. Caller holds the intent lock.
 CREATE FUNCTION piggyvest_primary.unclaim_goal_cancel_forfeit_row(p_forfeit_id uuid, p_page boolean)
 RETURNS text
 LANGUAGE plpgsql
@@ -862,11 +865,7 @@ BEGIN
        SET state = 'reserved', dispatched_at = NULL
      WHERE id = v_forfeit.id;
   END IF;
-  IF NOT p_page THEN RETURN 'unclaimed'; END IF;
-  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-     SET alerted_at = pg_catalog.clock_timestamp()
-   WHERE id = v_forfeit.id AND alerted_at IS NULL;
-  IF FOUND THEN RETURN 'unclaimed_first'; END IF;
+  IF p_page AND v_forfeit.alerted_at IS NULL THEN RETURN 'unclaimed_first'; END IF;
   RETURN 'unclaimed';
 END;
 $$;
@@ -896,6 +895,8 @@ $$;
 -- Returns the new state ('released' or 'needs_review', so the caller pages on
 -- the cap), or 'not_released' when the forfeit was not dispatched.
 -- 'unclaim': hands an unsent claimed forfeit back (answers 'unclaimed').
+-- 'ack': records that a page about this forfeit was emitted (answers 'acked',
+-- or 'not_released' when there was nothing to acknowledge).
 CREATE FUNCTION piggyvest_primary.manage_goal_cancel_forfeit(scope jsonb, forfeit_id uuid, action text)
 RETURNS text
 LANGUAGE plpgsql
@@ -906,7 +907,7 @@ DECLARE
   v_intent_id uuid;
   v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
 BEGIN
-  IF forfeit_id IS NULL OR action IS NULL OR action NOT IN ('release', 'unclaim', 'posting') THEN
+  IF forfeit_id IS NULL OR action IS NULL OR action NOT IN ('release', 'unclaim', 'posting', 'ack') THEN
     RAISE EXCEPTION 'invalid goal cancel forfeit transition' USING ERRCODE = '22023';
   END IF;
   v_intent_id := piggyvest_primary.assert_savings_scope(scope);
@@ -916,7 +917,14 @@ BEGIN
    WHERE forfeit.id = manage_goal_cancel_forfeit.forfeit_id AND forfeit.intent_id = v_intent_id
      AND forfeit.integration_id = (scope ->> 'integrationId')::uuid
      FOR UPDATE;
-  IF NOT FOUND OR v_forfeit.state <> 'dispatched' THEN RETURN 'not_released'; END IF;
+  IF FOUND AND action = 'ack' THEN
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET alerted_at = pg_catalog.clock_timestamp()
+     WHERE id = v_forfeit.id AND alerted_at IS NULL;
+    IF FOUND THEN RETURN 'acked'; END IF;
+    RETURN 'not_released';
+  END IF;
+  IF NOT FOUND OR v_forfeit.state <> 'dispatched' OR action = 'ack' THEN RETURN 'not_released'; END IF;
   IF action = 'unclaim' THEN
     RETURN piggyvest_primary.unclaim_goal_cancel_forfeit_row(v_forfeit.id, true);
   END IF;
@@ -1040,10 +1048,7 @@ BEGIN
      SET alerted_at = pg_catalog.clock_timestamp()
    WHERE forfeit.id = ack_goal_cancel_forfeit_alert_worker.forfeit_id
      AND forfeit.integration_id = v_binding.id
-     AND forfeit.alerted_at IS NULL
-     AND ((forfeit.state = 'dispatched'
-           AND forfeit.dispatched_at < pg_catalog.clock_timestamp() - interval '1 day')
-          OR forfeit.state = 'needs_review');
+     AND forfeit.alerted_at IS NULL;
   RETURN FOUND;
 END;
 $$;
@@ -1305,16 +1310,17 @@ BEGIN
     IF v_forfeit.state = 'released' AND v_forfeit.dispatched_at IS NOT NULL THEN
       -- Any live replacement, sent or not: an unsent one must not be sent, and
       -- a sent one must not be settled or replaced automatically (that could
-      -- move the same interest twice). Paged by the caller (conflict).
+      -- move the same interest twice). Paged by the caller (conflict), and by
+      -- the daily sweep until a page is acknowledged.
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS replacement
-         SET state = 'needs_review', alerted_at = pg_catalog.clock_timestamp()
+         SET state = 'needs_review', alerted_at = NULL
        WHERE replacement.cancel_operation_id = v_forfeit.cancel_operation_id
          AND replacement.state IN ('reserved', 'dispatched');
       -- The old row itself records the verified success (in review), so a
       -- redelivery of the same record is a duplicate and pages no one again.
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits
          SET state = 'needs_review', provider_transaction_id = proof ->> 'providerTransactionId',
-             settled_at = pg_catalog.clock_timestamp(), alerted_at = pg_catalog.clock_timestamp()
+             settled_at = pg_catalog.clock_timestamp(), alerted_at = NULL
        WHERE id = v_forfeit.id;
     END IF;
     RETURN 'conflict';
@@ -1330,20 +1336,30 @@ BEGIN
                   AND funding.provider_transaction_id = proof ->> 'providerTransactionId') THEN
     RETURN 'conflict';
   END IF;
-  -- Money left in the goal wallet is expected only for this cancel's other
-  -- planned or in-flight forfeits (interest paid after the cancel).
-  v_review := COALESCE((proof ->> 'residualKobo')::bigint, 0) > (
-    SELECT COALESCE(pg_catalog.sum(other.amount_kobo), 0)
-      FROM piggyvest_primary.goal_cancel_interest_forfeits AS other
-     WHERE other.cancel_operation_id = v_forfeit.cancel_operation_id AND other.id <> v_forfeit.id
-       AND other.state IN ('reserved', 'dispatched'));
+  -- Money left in the goal wallet is expected only for this cancel's
+  -- interest not yet moved out: its other planned or in-flight forfeits, and
+  -- the whole forfeited total less what has settled (this transfer included),
+  -- which also covers interest held in review (an over-ceiling sibling's row
+  -- carries only a marker amount; the total carries the real figure).
+  SELECT COALESCE((proof ->> 'residualKobo')::bigint, 0) > GREATEST(
+           COALESCE(pg_catalog.sum(other.amount_kobo)
+                      FILTER (WHERE other.id <> v_forfeit.id AND other.state IN ('reserved', 'dispatched')), 0),
+           COALESCE(cancel.forfeited_interest_kobo, 0) - v_forfeit.amount_kobo
+             - COALESCE(pg_catalog.sum(other.amount_kobo)
+                          FILTER (WHERE other.id <> v_forfeit.id AND other.state = 'confirmed'), 0))
+    INTO v_review
+    FROM piggyvest_primary.goal_cancel_operations AS cancel
+    LEFT JOIN piggyvest_primary.goal_cancel_interest_forfeits AS other
+      ON other.cancel_operation_id = cancel.id
+   WHERE cancel.id = v_forfeit.cancel_operation_id
+   GROUP BY cancel.forfeited_interest_kobo;
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
      SET state = CASE WHEN v_review THEN 'needs_review' ELSE 'confirmed' END,
          provider_transaction_id = proof ->> 'providerTransactionId',
          settled_at = pg_catalog.clock_timestamp(),
-         -- The caller pages this review (conflict); stamped so the sweep and
-         -- later claims do not page it again.
-         alerted_at = CASE WHEN v_review THEN pg_catalog.clock_timestamp() ELSE alerted_at END
+         -- The caller pages this review (conflict); the daily sweep pages it
+         -- again until a page is acknowledged.
+         alerted_at = CASE WHEN v_review THEN NULL ELSE alerted_at END
    WHERE id = v_forfeit.id;
   SELECT intent.* INTO v_intent FROM piggyvest_primary.onboarding_intents AS intent
    WHERE intent.id = v_forfeit.intent_id;

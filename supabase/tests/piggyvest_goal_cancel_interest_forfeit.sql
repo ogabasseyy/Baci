@@ -190,8 +190,12 @@ BEGIN
     PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
         pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":5}'::jsonb) = 'conflict'
       AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
-      AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NOT NULL,
-      'money left in the goal wallet after the forfeit was not reviewed, or would be paged twice');
+      -- Regression: not stamped before anyone is paged; the daily sweep pages
+      -- it until a page is acknowledged.
+      AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NULL
+      AND pg_temp.gf_work(10, true) @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'operationId', v_op, 'state', 'needs_review', 'alert', true)),
+      'money left in the goal wallet after the forfeit was not reviewed, or its page could be lost');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -321,8 +325,14 @@ BEGIN
   PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits
                               WHERE cancel_operation_id = v_op::uuid) = 3
     AND (SELECT pg_catalog.count(DISTINCT reference) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 5
+    -- Regression: the cap is not stamped before the page is emitted; the
+    -- claim keeps alerting until the caller acknowledges, then never again.
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
-      = '{"status":"needs_review"}'::jsonb,
+      = pg_catalog.jsonb_build_object('status', 'needs_review', 'forfeitId', v_forfeit, 'alert', true)
+    AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'ack') = 'acked'
+    AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'ack') = 'not_released'
+    AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
+      = pg_catalog.jsonb_build_object('status', 'needs_review', 'forfeitId', v_forfeit),
     'forfeit replacements are unbounded or reuse references, or the cap paged twice');
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release') = 'not_released',
@@ -492,8 +502,9 @@ BEGIN
     'a redelivered late success paged again');
   -- The money moved under the old reference: the replacement is frozen, so
   -- nothing can send the interest a second time.
+  -- Only listed to be paged (until a page is acknowledged), never to send.
   PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
-    AND pg_temp.gf_work(10, true) = '[]'::jsonb
+    AND NOT pg_catalog.jsonb_path_exists(pg_temp.gf_work(10, true), '$[*] ? (@.state != "needs_review")')
     AND piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid) ->> 'status' = 'needs_review',
     'a late success left the replacement sendable');
   PERFORM pg_temp.gc_assert(
@@ -687,8 +698,16 @@ BEGIN
       CASE WHEN v_round % 2 = 0
         THEN piggyvest_primary.unclaim_goal_cancel_forfeit_worker(c_integration, 'staging', v_forfeit::uuid)
         ELSE piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') END
-        = CASE WHEN v_round = 1 THEN 'unclaimed_first' ELSE 'unclaimed' END,
+        -- Regression: the hand-back is not stamped before the page is
+        -- emitted, so it keeps answering unclaimed_first until the caller
+        -- acknowledges the page (after round 2 here), then never again.
+        = CASE WHEN v_round <= 2 THEN 'unclaimed_first' ELSE 'unclaimed' END,
       'round ' || v_round || ' was not handed back, or paged more than once');
+    IF v_round = 2 THEN
+      PERFORM pg_temp.gc_assert(
+        piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'ack') = 'acked',
+        'the hand-back page was not acknowledged');
+    END IF;
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'reserved'
       AND pg_temp.gf_forfeit(v_op, 'reference') = v_ref
       AND pg_temp.gf_forfeit(v_op, 'dispatched_at') IS NULL,
@@ -843,6 +862,37 @@ BEGIN
     PERFORM pg_temp.gc_assert(
       pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed',
       'interest held in review moved the customer''s cancel into review');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: settling a sent forfeit expects a sibling held in review
+  -- (interest paid after the cancel, then reviewed) to still be in the goal
+  -- wallet, so the successful transfer is confirmed, not reviewed.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('sibling-review');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'sibling split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'sibling principal');
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := (SELECT id::text FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'dispatched');
+    PERFORM pg_temp.gf_receipt('gf-sibling', 300);
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'needs_review'
+     WHERE cancel_operation_id = v_op::uuid AND state = 'reserved';
+    BEGIN
+      PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(
+          'f3860000-0000-4000-8000-000000000006', 'staging',
+          pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":301}'::jsonb) = 'conflict',
+        'a residual above the review-held sibling was not reviewed');
+      RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP98';
+    EXCEPTION WHEN SQLSTATE 'PVP98' THEN NULL;
+    END;
+    PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(
+        'f3860000-0000-4000-8000-000000000006', 'staging',
+        pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":300}'::jsonb) = 'confirmed',
+      'a sibling held in review moved a successful forfeit into review');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

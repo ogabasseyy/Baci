@@ -124,13 +124,23 @@ describe('forfeit leg', () => {
     { status: 'pending', forfeitId },
     { status: 'waiting' },
     { status: 'confirmed' },
-    { status: 'needs_review' },
-    { status: 'needs_review', alert: true },
+    { status: 'needs_review', forfeitId },
+    { status: 'needs_review', forfeitId, alert: true },
     { status: 'none' },
-    { status: 'unavailable' },
+    { status: 'unavailable', forfeitId },
   ])('passes %j through', async (result) => {
     const { store: s } = store([{ result }]);
     expect(await s.claimForfeit(operationId)).toEqual(result);
+  });
+
+  it('acknowledges an emitted page through the fixed statement', async () => {
+    const { execute, store: s } = store([{ result: 'acked' }]);
+    expect(await s.ackForfeitAlert(forfeitId)).toBe('acked');
+    expect(execute).toHaveBeenCalledWith(forfeitSql.manage, [
+      scopeText,
+      forfeitId,
+      'ack',
+    ]);
   });
 
   it('releases a rejected forfeit through the fixed statement', async () => {

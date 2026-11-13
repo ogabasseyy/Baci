@@ -11,7 +11,7 @@ type Claim =
   | { status: 'claimed'; forfeit: unknown }
   | { status: 'pending'; forfeitId: string }
   | { status: 'waiting' | 'confirmed' | 'none' }
-  | { status: 'needs_review' | 'unavailable'; alert?: true };
+  | { status: 'needs_review' | 'unavailable'; forfeitId: string; alert?: true };
 
 export type GoalCancelForfeitOutcome =
   | 'pending'

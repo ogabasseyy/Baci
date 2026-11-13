@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 
 const mockGetCapability = jest.fn<(...args: unknown[]) => Promise<boolean>>();
@@ -28,5 +29,22 @@ describe('wallet top-up rail with the server keeping PiggyVest off', () => {
       resolveFundWalletRail(MERCHANT, { walletReturnTo: '/imei-check' })
     ).resolves.toBe('legacy');
     expect(mockGetCapability).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: corrupt saved card funding let a purchase top-up charge again', () => {
+  it('blocks a purchase top-up while a saved funding is unreadable', async () => {
+    // Arrange: a corrupt saved PiggyVest card funding for this customer.
+    const USER = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    await AsyncStorage.setItem(`@baci_primary_card:${MERCHANT}:${USER}`, 'x');
+
+    // Act + Assert: never the regular top-up next to it.
+    await expect(
+      resolveFundWalletRail(MERCHANT, {
+        userId: USER,
+        walletReturnTo: '/imei-check',
+      })
+    ).resolves.toBe('blocked');
+    await AsyncStorage.clear();
   });
 });

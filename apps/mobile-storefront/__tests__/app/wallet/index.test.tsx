@@ -45,6 +45,7 @@ jest.mock('@/lib/piggyvest-primary-savings-recovery', () => {
 jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: (...args: unknown[]) =>
     mockFundPrimaryWalletCard(...args),
+  NOTHING_TO_RECOVER: 'nothing-to-recover',
 }));
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';

@@ -29,3 +29,37 @@ describe('primary wallet watch with the server off', () => {
     jest.useRealTimers();
   });
 });
+
+describe('bugfix: pending PiggyVest account sheet never re-checks after a transfer', () => {
+  it('refetches while the Add money sheet is open on a pending PiggyVest account', () => {
+    // Arrange: PiggyVest account shown, balance still pending.
+    jest.useFakeTimers();
+    const wallet = {
+      balance: 0,
+      funding_account: {
+        account_name: 'Ada Obi',
+        account_number: '3685660013',
+        bank_name: 'Provider Bank',
+        provider: 'piggyvest',
+      },
+      loyalty_points: 0,
+      primary_pending: true,
+    } as WalletData;
+    const refetch = jest.fn();
+    renderHook(() =>
+      usePrimaryWalletWatch({
+        wallet,
+        showFundPanel: true,
+        scopeKey: 'u:m',
+        refetch,
+      })
+    );
+
+    // Act: a poll interval passes after the customer transfers.
+    jest.advanceTimersByTime(10_000);
+
+    // Assert: the wallet is re-read so the new balance can appear.
+    expect(refetch).toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+});

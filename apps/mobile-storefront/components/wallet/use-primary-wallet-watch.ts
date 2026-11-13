@@ -56,9 +56,15 @@ export function usePrimaryWalletWatch({
     scopeKey,
     refetch,
   });
+  // Also poll a PiggyVest account whose balance is still pending (Codex):
+  // its Add money sheet shows the account but has no other credit check,
+  // so a transfer that makes the balance available must refetch.
+  const pendingAccount =
+    wallet?.primary_pending === true &&
+    wallet.funding_account?.provider === 'piggyvest';
   usePrimaryWalletCreditPoll({
     balanceKobo: kobo,
-    enabled: showFundPanel && kobo !== null,
+    enabled: showFundPanel && (kobo !== null || pendingAccount),
     scopeKey,
     refetch,
   });

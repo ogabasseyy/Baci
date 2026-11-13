@@ -12,6 +12,7 @@ import {
   getPendingVtuKey,
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
 import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
@@ -64,7 +65,12 @@ export function useUtilityPayment() {
   // Rotated only after a definitive HTTP response (success or 4xx).
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
-  const authMerchantId = useAuthStore((state) => state.merchantId);
+  // Resolved once, like the wallet reads (Codex): every verdict hook and
+  // live read follows the same merchant, including the CONFIG fallback.
+  const authMerchantId = pickMerchantId(
+    useAuthStore((state) => state.merchantId),
+    CONFIG.MERCHANT_ID
+  );
   const piggyvestPossible = usePiggyvestPossible(authMerchantId);
   const verdictNow = usePiggyvestCapabilityNow(authMerchantId);
   const queryClient = useQueryClient();

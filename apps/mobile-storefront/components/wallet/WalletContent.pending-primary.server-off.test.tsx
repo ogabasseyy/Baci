@@ -60,3 +60,26 @@ describe('server keeps PiggyVest off', () => {
     expect(screen.getByText('Recent Transactions')).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: pending PiggyVest balance shown as an authoritative ₦0', () => {
+  it('shows "—" for the savings wallet while its balance is pending', () => {
+    // Arrange: confirmed PiggyVest, balance pending, no account yet.
+    render(
+      <WalletContent
+        {...createWalletContentProps()}
+        fundingAccount={null}
+        primaryReady={false}
+        savingsPrimary
+        storeCreditBalance={1200}
+        transactions={[]}
+        walletBalance={0}
+      />
+    );
+
+    // Assert: a savings wallet, balance unknown, older money as store credit.
+    expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(screen.getByText('Store credit')).toBeOnTheScreen();
+    expect(screen.getByText('Store credit activity')).toBeOnTheScreen();
+  });
+});

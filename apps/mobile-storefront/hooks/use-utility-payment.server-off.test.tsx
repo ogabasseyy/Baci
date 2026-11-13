@@ -290,3 +290,33 @@ describe('bugfix: stale render-time capability at utility submit', () => {
     expect(verdict?.walletPrimaryUnknown).toBe(true);
   });
 });
+
+describe('bugfix: utility verdict follows the configured merchant fallback', () => {
+  afterEach(() => {
+    mockAuthState.merchantId = 'merchant-1';
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('keeps the bank-transfer nudge once the fallback merchant is ruled out', () => {
+    // Arrange: the startup merchant lookup failed; CONFIG supplies it.
+    const { CONFIG } =
+      jest.requireActual<typeof import('@/lib/config')>('@/lib/config');
+    mockAuthState.merchantId = null;
+    mockCapability = false;
+    observePiggyvestPrimaryCapability(CONFIG.MERCHANT_ID || 'x', false);
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: true },
+    });
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0 } },
+    };
+
+    // Act
+    const { result } = renderHook(() => useUtilityPayment());
+
+    // Assert: the configured merchant's ruling-out applies.
+    expect(result.current.walletPrimaryUnknown).toBeUndefined();
+  });
+});

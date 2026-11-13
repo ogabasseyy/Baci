@@ -174,7 +174,6 @@ export function WalletContent(props: WalletContentProps) {
   } = useSavingsDeviceSwap(onChangeSavingsDevice);
   const pullRefresh = useUserPullRefresh(onRefresh);
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
-
   return (
     <WalletPrimaryContext.Provider value={isPrimaryWallet(props)}>
       <AppKeyboardAwareScrollView
@@ -204,6 +203,7 @@ export function WalletContent(props: WalletContentProps) {
           onOpenFundPanel={onOpenFundPanel}
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
+          primaryBalanceReady={props.primaryReady === true}
           savingsBalance={savingsBalance}
           savingsWalletBalance={walletBalance}
           storeCreditBalance={props.storeCreditBalance}

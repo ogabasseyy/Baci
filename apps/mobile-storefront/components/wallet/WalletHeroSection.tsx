@@ -39,6 +39,8 @@ type WalletHeroSectionProps = {
   savingsBalance: number;
   /** PiggyVest only: the PiggyVest main wallet balance (naira). */
   savingsWalletBalance?: number;
+  /** PiggyVest balance ready (vs pending); defaults to the context. */
+  primaryBalanceReady?: boolean;
   /** PiggyVest only: the legacy balance purchases can spend. */
   storeCreditBalance?: number;
   totalBalance: number;
@@ -68,6 +70,7 @@ export function WalletHeroSection({
   onOpenFundPanel,
   onOpenRedeemPanel,
   onStartSavings,
+  primaryBalanceReady,
   savingsBalance,
   savingsWalletBalance,
   storeCreditBalance,
@@ -77,10 +80,15 @@ export function WalletHeroSection({
   // PiggyVest money (main wallet plus goals) funds savings only: never call
   // it spendable.
   const primaryReady = useWalletPrimaryReady();
+  // The context says "savings wallet" also while the PiggyVest balance is
+  // pending; readiness of the balance itself is separate (Codex), so an
+  // unknown balance shows "—", never an authoritative ₦0.
+  const balanceReady = primaryBalanceReady ?? primaryReady;
   // A PiggyVest account whose balance isn't ready yet is still a savings
   // wallet (Codex): its older balance is store credit, not the total.
   const pendingPiggyvest =
-    !primaryReady && fundingAccount?.provider === 'piggyvest';
+    (primaryReady && !balanceReady) ||
+    (!primaryReady && fundingAccount?.provider === 'piggyvest');
   const savingsView = primaryReady || pendingPiggyvest;
   const storeCredit = storeCreditBalance;
   // A legacy account number from a wallet cached before the merchant's

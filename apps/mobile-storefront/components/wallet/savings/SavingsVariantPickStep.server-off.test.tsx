@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { SavingsBottomSheet } from '../SavingsBottomSheet';
 import { SavingsVariantPickStep } from './SavingsVariantPickStep';
 
 const goal = {
@@ -40,6 +41,36 @@ function renderStep(onResolve: (id: string) => Promise<true | string>) {
 }
 
 describe('Choose your exact phone, server off', () => {
+  it('keeps the savings sheet open while the choice saves', async () => {
+    let finish: (value: true) => void = () => undefined;
+    const onResolve = jest.fn(
+      () =>
+        new Promise<true | string>((resolve) => {
+          finish = resolve;
+        })
+    );
+    render(
+      <SavingsBottomSheet colors={Colors.light} onClose={jest.fn()} visible>
+        <SavingsVariantPickStep
+          colors={Colors.light}
+          goal={goal}
+          onBack={jest.fn()}
+          onResolve={onResolve}
+          options={options}
+        />
+      </SavingsBottomSheet>
+    );
+    const sheet = () => screen.getByTestId('gorhom-bottom-sheet');
+    expect(sheet().props.enablePanDownToClose).toBe(true);
+    fireEvent.press(screen.getByRole('radio', { name: '128GB Black' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Confirm this option' })
+    );
+    await waitFor(() => expect(sheet().props.enablePanDownToClose).toBe(false));
+    finish(true);
+    await waitFor(() => expect(sheet().props.enablePanDownToClose).toBe(true));
+  });
+
   it('keeps Confirm off until an option is picked', () => {
     const onResolve = jest.fn(async (): Promise<true | string> => true);
     renderStep(onResolve);

@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
 import { SavingsSheetContext } from './SavingsSheetContext';
+import { SavingsSheetLockContext } from './SavingsSheetLock';
 import { SavingsSheetPinCancelContext } from './SavingsSheetPinCancelContext';
 
 const DEFAULT_SNAP_POINTS = ['72%', '92%'];
@@ -22,6 +23,19 @@ function SavingsBackdrop(props: BottomSheetBackdropProps) {
       appearsOnIndex={0}
       disappearsOnIndex={-1}
       pressBehavior="close"
+      opacity={0.5}
+    />
+  );
+}
+
+/** The same backdrop while a step is saving: a tap does nothing. */
+function LockedSavingsBackdrop(props: BottomSheetBackdropProps) {
+  return (
+    <BottomSheetBackdrop
+      {...props}
+      appearsOnIndex={0}
+      disappearsOnIndex={-1}
+      pressBehavior="none"
       opacity={0.5}
     />
   );
@@ -74,6 +88,8 @@ export function SavingsBottomSheet({
   // While a PIN step covers the sheet, the savings controls under it are
   // hidden from VoiceOver and TalkBack too, not only from sight.
   const [pinActive, setPinActive] = useState(false);
+  // A step that is saving (see useSavingsSheetLock) keeps the sheet open.
+  const [locked, setLocked] = useState(false);
   const registerPinCancel = (cancel: (() => void) | null) => {
     pinCancel.current = cancel;
     setPinActive(cancel !== null);
@@ -84,7 +100,9 @@ export function SavingsBottomSheet({
   useEffect(() => {
     if (fittedHeight !== undefined) sheet.current?.snapToIndex(0);
   }, [fittedHeight]);
-  const dismiss = () => sheet.current?.close();
+  const dismiss = () => {
+    if (!locked) sheet.current?.close();
+  };
   const close = () => {
     const cancel = pinCancel.current;
     pinCancel.current = null;
@@ -103,51 +121,55 @@ export function SavingsBottomSheet({
       <GestureHandlerRootView style={styles.root}>
         <SavingsSheetContext.Provider value={true}>
           <SavingsSheetPinCancelContext.Provider value={registerPinCancel}>
-            <BottomSheet
-              ref={sheet}
-              index={0}
-              snapPoints={fitted ?? snapPoints}
-              enableDynamicSizing={false}
-              enablePanDownToClose
-              enableBlurKeyboardOnGesture
-              keyboardBehavior="interactive"
-              keyboardBlurBehavior="restore"
-              android_keyboardInputMode="adjustResize"
-              topInset={insets.top}
-              backdropComponent={SavingsBackdrop}
-              onClose={close}
-              backgroundStyle={[
-                styles.background,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.primary,
-                },
-              ]}
-              handleIndicatorStyle={{
-                backgroundColor: colors.primary,
-                width: 40,
-              }}
-            >
-              <View
-                accessibilityViewIsModal
-                style={[styles.content, { paddingBottom: bottomPadding }]}
+            <SavingsSheetLockContext.Provider value={setLocked}>
+              <BottomSheet
+                ref={sheet}
+                index={0}
+                snapPoints={fitted ?? snapPoints}
+                enableDynamicSizing={false}
+                enablePanDownToClose={!locked}
+                enableBlurKeyboardOnGesture
+                keyboardBehavior="interactive"
+                keyboardBlurBehavior="restore"
+                android_keyboardInputMode="adjustResize"
+                topInset={insets.top}
+                backdropComponent={
+                  locked ? LockedSavingsBackdrop : SavingsBackdrop
+                }
+                onClose={close}
+                backgroundStyle={[
+                  styles.background,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.primary,
+                  },
+                ]}
+                handleIndicatorStyle={{
+                  backgroundColor: colors.primary,
+                  width: 40,
+                }}
               >
                 <View
-                  style={styles.body}
-                  accessibilityElementsHidden={pinActive}
-                  importantForAccessibility={
-                    pinActive ? 'no-hide-descendants' : 'auto'
-                  }
+                  accessibilityViewIsModal
+                  style={[styles.content, { paddingBottom: bottomPadding }]}
                 >
-                  {typeof children === 'function'
-                    ? children(dismiss)
-                    : children}
-                </View>
-                {/* The PIN step takes over this same sheet rather than opening
+                  <View
+                    style={styles.body}
+                    accessibilityElementsHidden={pinActive}
+                    importantForAccessibility={
+                      pinActive ? 'no-hide-descendants' : 'auto'
+                    }
+                  >
+                    {typeof children === 'function'
+                      ? children(dismiss)
+                      : children}
+                  </View>
+                  {/* The PIN step takes over this same sheet rather than opening
                   a second one on top. */}
-                {overlay}
-              </View>
-            </BottomSheet>
+                  {overlay}
+                </View>
+              </BottomSheet>
+            </SavingsSheetLockContext.Provider>
           </SavingsSheetPinCancelContext.Provider>
         </SavingsSheetContext.Provider>
       </GestureHandlerRootView>

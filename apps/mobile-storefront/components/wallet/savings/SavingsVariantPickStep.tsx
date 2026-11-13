@@ -7,6 +7,7 @@ import type {
   WalletActiveSavingsGoal,
   WalletSavingsVariantResolutionOption,
 } from '@/hooks/wallet-query';
+import { useSavingsSheetLock } from '../SavingsSheetLock';
 import { styles } from './savings-phone-swap.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -32,6 +33,8 @@ export function SavingsVariantPickStep({
 }) {
   const [chosen, setChosen] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // The choice is a one-time assignment: the sheet stays open while it saves.
+  useSavingsSheetLock(pending);
   const [error, setError] = useState<string | null>(null);
 
   const confirm = async () => {

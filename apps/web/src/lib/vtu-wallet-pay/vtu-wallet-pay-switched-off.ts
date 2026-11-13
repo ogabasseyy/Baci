@@ -58,10 +58,15 @@ export async function answerWhileSwitchedOff(
     // stuck holding a store credit retry (Codex P2).
     const ref = { runtime, scope, transactionId };
     await Promise.resolve()
-      .then(() =>
-        existing
-          ? cancelVtuWalletPay(deps.closeUnpaid, ref, existing.operationId)
-          : deps.closeUnpaid(ref)
+      .then(
+        async (): Promise<unknown> =>
+          existing
+            ? await cancelVtuWalletPay(
+                deps.closeUnpaid,
+                ref,
+                existing.operationId
+              )
+            : await deps.closeUnpaid(ref)
       )
       .catch(() => null);
     return await refusal();

@@ -1,4 +1,8 @@
-import { GOAL_LIFECYCLE_COPY } from './goal-lifecycle-outcomes';
+import {
+  GOAL_LIFECYCLE_COPY,
+  messageOf,
+  NOT_STARTABLE_CODES,
+} from './goal-lifecycle-outcomes';
 
 describe('bugfix: the cancel copy promised the interest back', () => {
   it('never tells the customer an early cancel returns the interest', () => {
@@ -16,5 +20,20 @@ describe('bugfix: the cancel copy promised the interest back', () => {
     expect(GOAL_LIFECYCLE_COPY.complete.reviewBody).toMatch(
       /including interest already paid into it/
     );
+  });
+});
+
+describe('bugfix: a goal whose PiggyVest setup never finished showed a generic error and Start again', () => {
+  it("shows the server's explanation and never offers Start again", () => {
+    const error = Object.assign(
+      new Error(
+        "This plan is still being set up, so there's nothing to cancel yet."
+      ),
+      { code: 'GOAL_NOT_SET_UP' }
+    );
+    expect(messageOf(error)).toBe(
+      "This plan is still being set up, so there's nothing to cancel yet."
+    );
+    expect(NOT_STARTABLE_CODES).toContain('GOAL_NOT_SET_UP');
   });
 });

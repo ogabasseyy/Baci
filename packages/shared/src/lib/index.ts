@@ -126,6 +126,7 @@ export {
   type SearchAssistanceFrame,
 } from './shopping-assistance-stream';
 export * from './string-values';
+export * from './strip-provider-names';
 export * from './supabase-error-log';
 export * from './to-ascii-lower-case';
 export * from './to-finite-number';

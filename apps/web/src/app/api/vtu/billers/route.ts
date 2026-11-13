@@ -1,3 +1,4 @@
+import { stripProviderNames } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getBillerCategories } from '@/lib/monnify-bills';
 import { billersQuerySchema } from '@/schemas/vtu';
@@ -126,7 +127,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const payload: BillersResponsePayload = { billers: mergedBillers };
+    // Biller and plan names come from the providers verbatim (e.g. "Ikeja
+    // Electric (Kuda)"); customers never see the provider in them.
+    const payload: BillersResponsePayload = {
+      billers: mergedBillers.map((biller) => ({
+        ...biller,
+        billerName: stripProviderNames(biller.billerName) || biller.billerName,
+        billItems: biller.billItems?.map((item) => ({
+          ...item,
+          itemName: stripProviderNames(item.itemName) || item.itemName,
+        })),
+      })),
+    };
     // Older clients read these fields as the message to show, so they carry
     // neutral text; the provider detail only goes to the server log.
     if (kudaBillers.length === 0 && kudaError) {

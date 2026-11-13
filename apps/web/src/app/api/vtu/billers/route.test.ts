@@ -327,6 +327,43 @@ describe('GET /api/vtu/billers', () => {
     }
   });
 
+  it('never shows the provider in biller or plan names', async () => {
+    const { GET } = await import('./route');
+
+    mockGetBillersByCategory.mockResolvedValue([
+      {
+        billerId: 'kuda-biller-9',
+        billerName: 'Ikeja Electric (Kuda)',
+        billerType: 'electricity',
+        categoryId: 'cat-1',
+        categoryName: 'Electricity',
+        billItems: [
+          {
+            itemCode: 'kuda-item-9',
+            itemName: 'Prepaid (Kuda)',
+            amount: 0,
+            itemCurrencySymbol: 'NGN',
+            isAmountFixed: false,
+            itemFee: 0,
+          },
+        ],
+      },
+    ]);
+
+    const response = await GET(makeRequest({ type: 'electricity' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    const names = data.billers.flatMap(
+      (biller: { billerName: string; billItems?: { itemName: string }[] }) => [
+        biller.billerName,
+        ...(biller.billItems ?? []).map((item) => item.itemName),
+      ]
+    );
+    expect(names).toContain('Ikeja Electric');
+    expect(names.join(' ')).not.toMatch(/kuda|monnify/i);
+  });
+
   it('folds Monnify electricity into the Kuda card (Kuda display + Monnify fulfillment)', async () => {
     const { GET } = await import('./route');
 

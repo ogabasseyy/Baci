@@ -3,7 +3,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { palette } from '@/constants/Colors';
-import { useTheme } from '@/hooks/useTheme';
+import { type ThemeColors, useTheme } from '@/hooks/useTheme';
 import { getFilterBarStyles } from './FilterBar.styles';
 
 type FilterType = 'price' | 'brand' | 'condition' | 'rating';
@@ -11,6 +11,7 @@ const MAX_PRICE_CEILING = 3_000_000;
 
 interface FilterBarActiveControlsProps {
   activeFilterType: FilterType;
+  colorsOverride?: ThemeColors;
   minPrice: number;
   maxPrice: number;
   onPriceChange: (min: number, max: number) => void;
@@ -60,6 +61,7 @@ function getBrandOptions(brands: string[]) {
 
 export function FilterBarActiveControls({
   activeFilterType,
+  colorsOverride,
   minPrice,
   maxPrice,
   onPriceChange,
@@ -79,7 +81,8 @@ export function FilterBarActiveControls({
   );
   const [prevMinPrice, setPrevMinPrice] = useState(minPrice);
   const [prevMaxPrice, setPrevMaxPrice] = useState(maxPrice);
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
+  const colors = colorsOverride ?? themeColors;
   const styles = getFilterBarStyles(colors);
 
   // Re-sync the draft inputs inline during render (prev-prop comparison)

@@ -1,0 +1,287 @@
+.page {
+  max-width: 80rem;
+  margin-inline: auto;
+  padding: 1.5rem 1rem;
+}
+
+.hero {
+  display: grid;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid #393034;
+  border-radius: 1.5rem;
+  background: radial-gradient(ellipse at 80% 85%, #37090d, #09090b 72%);
+  color: #fff;
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  padding: clamp(1.25rem, 4vw, 4rem);
+}
+
+.preview {
+  margin-bottom: 0.75rem;
+  color: #d4d4d8;
+  font-size: 0.875rem;
+}
+
+.title {
+  font-size: clamp(2.75rem, 8vw, 7rem);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -0.065em;
+}
+
+.accent {
+  display: block;
+  color: #ff626a;
+}
+
+.description {
+  max-width: 28ch;
+  margin-top: 1rem;
+  color: #e4e4e7;
+}
+
+.heroLink {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding: 0.55rem 1rem;
+  border-radius: 0.625rem;
+  background: #fff;
+  color: #18181b;
+  font-weight: 700;
+}
+
+.heroLink:hover {
+  background: #ffe4e6;
+}
+
+.heroLink:focus-visible {
+  outline: 2px solid #ff626a;
+  outline-offset: 4px;
+}
+
+.heroArt {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  object-position: center 50%;
+  mask-image: linear-gradient(to bottom, transparent, #000 6%);
+}
+
+.products {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--store-border);
+  border-radius: 1rem;
+  background: var(--store-background);
+  color: var(--store-background-text);
+}
+
+.card:hover {
+  border-color: #ef4444;
+}
+
+.card:focus-visible {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
+}
+
+.image {
+  background: #fafafa;
+}
+
+.imageContent {
+  padding: 0.75rem;
+}
+
+.cardContent {
+  padding: 1rem;
+}
+
+.name,
+.price {
+  font-weight: 700;
+}
+
+.prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.comparePrice {
+  color: color-mix(in srgb, var(--store-background-text) 75%, transparent);
+  font-size: 0.875rem;
+}
+
+@media (min-width: 28rem) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .heroArt {
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    max-height: 35rem;
+    aspect-ratio: 1;
+    object-position: center;
+    mask-image: linear-gradient(to right, transparent, #000 22%);
+  }
+}
+
+@media (min-width: 40rem) {
+  .page {
+    padding: 2.5rem 1.5rem;
+  }
+
+  .products {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+.offers {
+  position: relative;
+  margin-top: 1.5rem;
+}
+
+.offersAnchor {
+  position: absolute;
+  inset-block-start: -9.5rem;
+}
+
+.filters {
+  margin-bottom: 1rem;
+  border: 1px solid var(--store-border);
+  border-radius: 0.875rem;
+  background: var(--store-background);
+  color: var(--store-background-text);
+}
+
+.filterTrigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 3rem;
+  border-radius: inherit;
+  background: var(--store-primary);
+  color: var(--store-primary-text);
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+}
+
+.offerCount {
+  margin-inline-start: auto;
+  font-weight: 400;
+}
+
+.filterForm {
+  display: grid;
+  margin-top: 1rem;
+}
+
+.filterForm label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.filterForm select {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--store-border);
+  border-radius: 0.5rem;
+  background: var(--store-background);
+  color: var(--store-background-text);
+}
+
+.desktopFilters {
+  display: none;
+}
+
+.applyFilters {
+  width: 100%;
+  min-height: 2.75rem;
+  margin-top: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--store-primary);
+  color: var(--store-primary-text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+@media (min-width: 64rem) {
+  .offers {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    align-items: start;
+    gap: 1.5rem;
+  }
+
+  .desktopFilters {
+    display: block;
+  }
+
+  .filters {
+    display: none;
+  }
+
+  .products {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 80rem) {
+  .products {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.filtersPlaceholder,
+.productPlaceholder {
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--store-background-text) 7%, transparent);
+}
+
+.filtersPlaceholder {
+  min-height: 3rem;
+  margin-bottom: 1rem;
+}
+
+.productPlaceholder {
+  aspect-ratio: 4 / 5;
+}
+
+.emptyOffers {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 64rem) {
+  .filtersPlaceholder {
+    min-height: 18rem;
+    margin-bottom: 0;
+  }
+}

@@ -158,6 +158,20 @@ describe('HomeServiceCards', () => {
     });
   });
 
+  it('exposes checkout financing and Wallet savings from distinct Home tiles', () => {
+    render(<HomeServiceCards placement="underSearch" />);
+
+    expect(screen.getAllByRole('button')).toHaveLength(8);
+    fireEvent.press(screen.getByRole('button', { name: /^Pay Small Small/ }));
+    expect(mockPush).toHaveBeenLastCalledWith({
+      pathname: '/category/[slug]',
+      params: { slug: 'phones', sort: 'price_asc' },
+    });
+
+    fireEvent.press(screen.getByRole('button', { name: /^Save & Earn/ }));
+    expect(mockPush).toHaveBeenLastCalledWith('/wallet');
+  });
+
   it('routes each shortcut to its service screen', () => {
     render(<HomeServiceCards />);
 

@@ -17,6 +17,12 @@
     z-index: 90;
   }
 
+  /* Keep consent actions above the floating assistant while the prompt is open. */
+  :root:has([data-storefront-cookie-consent], [data-storefront-filter-drawer])
+    .ogabassey-chat-anchor {
+    visibility: hidden;
+  }
+
   .ogabassey-chat-anchor--hidden {
     display: none;
   }

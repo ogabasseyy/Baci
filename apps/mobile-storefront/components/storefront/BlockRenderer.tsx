@@ -24,6 +24,8 @@ interface Category {
 
 interface BlockRendererProps {
   blocks: Block[];
+  blackFridayHeroBlockId?: string;
+  nextDropHeroBlockId?: string;
   selectedCategoryId: string | null;
   onCategorySelect: (id: string | null) => void;
   blockWrapperStyle?: StyleProp<ViewStyle>;
@@ -51,6 +53,8 @@ interface BlockRendererProps {
 
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
   blocks,
+  blackFridayHeroBlockId,
+  nextDropHeroBlockId,
   selectedCategoryId,
   onCategorySelect,
   blockWrapperStyle,
@@ -116,6 +120,34 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 ctaText: slide.ctaText,
                 ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
               }));
+
+              if (
+                nextDropHeroBlockId &&
+                heroBlock.props.id === nextDropHeroBlockId
+              ) {
+                slides.unshift({
+                  campaign: 'next-drop',
+                  title: 'Earn interest while saving for your device',
+                  subtitle: 'Reach your goal faster.',
+                  image: '',
+                  ctaText: 'Explore savings',
+                  ctaLink: '/wallet',
+                });
+              }
+
+              if (
+                blackFridayHeroBlockId &&
+                heroBlock.props.id === blackFridayHeroBlockId
+              ) {
+                slides.push({
+                  campaign: 'black-friday',
+                  title: 'Black Friday',
+                  subtitle: '',
+                  image: '',
+                  ctaText: 'Shop the lineup',
+                  ctaLink: '/black-friday',
+                });
+              }
 
               if (slides.length === 0) {
                 return null;

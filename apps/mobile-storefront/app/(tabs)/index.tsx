@@ -37,10 +37,11 @@ export default function HomeScreen() {
   const lastHomeStateBreadcrumbRef = useRef<string | null>(null);
 
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
+  const utilitiesInWallet = CONFIG.MERCHANT_SLUG === 'ogabassey';
   const isChatWidgetEnabled = template.features?.chatWidget ?? true;
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
-    template.headerStyle === 'elite' ? 'u-airtime' : null
+    template.headerStyle === 'elite' && !utilitiesInWallet ? 'u-airtime' : null
   );
 
   const queryClient = useQueryClient();
@@ -150,9 +151,10 @@ export default function HomeScreen() {
         runOnJS(setIsScrolledJS)(nextScrolled);
       }
 
-      // Sliding header collapse transitions
-      if (currentOffsetY <= 0) {
-        setHeaderVisibilityTarget(1);
+      // Keep the header visible while its list spacer is still on screen.
+      if (normalizedOffsetY < headerHeight) {
+        headerVisibilityTarget.set(1);
+        headerVisibility.set(1);
       } else if (currentOffsetY > prevOffsetY) {
         setHeaderVisibilityTarget(0);
       } else if (prevOffsetY - currentOffsetY > 15) {
@@ -176,7 +178,8 @@ export default function HomeScreen() {
   const blocks = resolveHomeBlocks(
     pageConfig?.content,
     template.headerStyle === 'elite',
-    isConfigLoading && !pageConfig
+    isConfigLoading && !pageConfig,
+    utilitiesInWallet
   );
   const { primaryProductGridIndex, productGridBlockCount } =
     getHomeProductGridSummary(blocks);

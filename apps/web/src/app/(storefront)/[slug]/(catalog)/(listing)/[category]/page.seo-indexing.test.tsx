@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 
 const mockGetCachedMerchant = vi.fn();
 const mockGetCachedCategoryPageData = vi.fn();
@@ -145,5 +146,23 @@ describe('category metadata SEO indexing', () => {
     });
 
     expect(metadata.robots).toEqual(expectedRobots(false));
+  });
+});
+
+describe('Black Friday campaign metadata', () => {
+  it('uses the Ogabassey campaign URL and keeps the empty preview out of search', async () => {
+    mockGetCachedMerchant.mockResolvedValueOnce({
+      ...merchant,
+      id: OGABASSEY_MERCHANT_ID,
+    });
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey', category: 'black-friday' }),
+      searchParams: Promise.resolve({}),
+    });
+    expect(metadata).toMatchObject({
+      title: 'Black Friday',
+      alternates: { canonical: 'https://ogabassey.com/black-friday' },
+      robots: { index: false, follow: true },
+    });
   });
 });

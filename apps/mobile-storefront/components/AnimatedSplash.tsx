@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -21,6 +22,7 @@ type AnimatedSplashProps = {
   isVisible?: boolean;
   onAnimationEnd: () => void;
   children: ReactNode;
+  playOgabasseyIntro?: boolean;
 };
 
 /**
@@ -34,7 +36,19 @@ export function AnimatedSplash({
   isVisible = true,
   onAnimationEnd,
   children,
+  playOgabasseyIntro = false,
 }: AnimatedSplashProps) {
+  const reduceMotion = useReducedMotion();
+  const showScene = playOgabasseyIntro && !reduceMotion;
+  const [introFinished, setIntroFinished] = useState(false);
+  const readyToExit = isReady && (!showScene || introFinished);
+  const Scene =
+    showScene && isVisible
+      ? (
+          require('./OgabasseySplashScene') as typeof import('./OgabasseySplashScene')
+        ).OgabasseySplashScene
+      : null;
+
   // SharedValue (not useRef) so the guard is accessible inside worklets
   const hasExited = useSharedValue(0);
   const logoScale = useSharedValue(1);
@@ -43,7 +57,7 @@ export function AnimatedSplash({
 
   // Shimmer pulse: fade in then loop
   useEffect(() => {
-    if (!isVisible) return;
+    if (!isVisible || showScene) return;
 
     shimmerOpacity.set(
       withDelay(
@@ -67,11 +81,11 @@ export function AnimatedSplash({
         })
       )
     );
-  }, [isVisible, shimmerOpacity]);
+  }, [isVisible, shimmerOpacity, showScene]);
 
   // Exit animation when app is ready
   useEffect(() => {
-    if (!isVisible || !isReady || hasExited.get() === 1) return;
+    if (!isVisible || !readyToExit || hasExited.get() === 1) return;
 
     // Stop the infinite shimmer loop so the worklet is released cleanly
     cancelAnimation(shimmerOpacity);
@@ -85,10 +99,10 @@ export function AnimatedSplash({
 
     containerOpacity.set(
       withDelay(
-        100,
+        showScene ? 0 : 100,
         withTiming(
           0,
-          { duration: 400, easing: Easing.in(Easing.cubic) },
+          { duration: showScene ? 180 : 400, easing: Easing.out(Easing.cubic) },
           () => {
             if (hasExited.get() === 0) {
               hasExited.set(1);
@@ -99,7 +113,8 @@ export function AnimatedSplash({
       )
     );
   }, [
-    isReady,
+    readyToExit,
+    showScene,
     isVisible,
     logoScale,
     containerOpacity,
@@ -128,24 +143,30 @@ export function AnimatedSplash({
           style={[
             styles.container,
             containerStyle,
-            { pointerEvents: isReady ? 'none' : 'auto' },
+            { pointerEvents: readyToExit ? 'none' : 'auto' },
           ]}
         >
-          <Animated.View style={[styles.logoContainer, logoStyle]}>
-            <Image
-              source={iconImage}
-              style={styles.logo}
-              contentFit="contain"
-            />
-          </Animated.View>
+          {Scene ? (
+            <Scene onFinish={() => setIntroFinished(true)} />
+          ) : (
+            <>
+              <Animated.View style={[styles.logoContainer, logoStyle]}>
+                <Image
+                  source={iconImage}
+                  style={styles.logo}
+                  contentFit="contain"
+                />
+              </Animated.View>
 
-          <Animated.View style={[styles.shimmerBar, shimmerStyle]}>
-            <View style={styles.shimmerFill} />
-          </Animated.View>
+              <Animated.View style={[styles.shimmerBar, shimmerStyle]}>
+                <View style={styles.shimmerFill} />
+              </Animated.View>
 
-          <Animated.Text style={[styles.tagline, shimmerStyle]}>
-            Buy Now, Pay Later
-          </Animated.Text>
+              <Animated.Text style={[styles.tagline, shimmerStyle]}>
+                Buy Now, Pay Later
+              </Animated.Text>
+            </>
+          )}
         </Animated.View>
       ) : null}
     </View>

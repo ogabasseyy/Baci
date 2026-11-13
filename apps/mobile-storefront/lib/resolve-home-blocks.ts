@@ -50,13 +50,22 @@ function isBlockArray(content: unknown): content is Block[] {
 export function resolveHomeBlocks(
   content: unknown,
   isElite: boolean,
-  isInitialLoading: boolean
+  isInitialLoading: boolean,
+  utilitiesInWallet = false
 ): Block[] {
   if (isInitialLoading) {
     return [];
   }
 
   let blocks = isBlockArray(content) ? content : DEFAULT_HOME_BLOCKS;
+
+  if (utilitiesInWallet) {
+    blocks = blocks.filter((block) => {
+      if (block.type !== 'CategoryRail') return true;
+      const { slug } = block.props;
+      return Boolean(slug && slug !== 'utility' && slug !== 'utilities');
+    });
+  }
 
   // Injection order matters: each `insertAfterHero` splices at heroIndex + 1, so
   // a later injection lands *before* an earlier one. JustLaunched is injected
@@ -74,7 +83,11 @@ export function resolveHomeBlocks(
   }
 
   // Elite template still forces the utility category rail after the hero.
-  if (isElite && !blocks.some((block) => block.type === 'CategoryRail')) {
+  if (
+    !utilitiesInWallet &&
+    isElite &&
+    !blocks.some((block) => block.type === 'CategoryRail')
+  ) {
     blocks = insertAfterHero(blocks, {
       type: 'CategoryRail',
       props: { id: 'forced-categories', slug: 'utility' },

@@ -7,9 +7,11 @@ import { useTheme } from '@/hooks/useTheme';
 export function TabBarLabel({
   focused,
   label,
+  activeColor,
 }: {
   focused: boolean;
   label: string;
+  activeColor?: string;
 }) {
   const { colors } = useTheme();
 
@@ -17,7 +19,12 @@ export function TabBarLabel({
   if (!focused) return null;
 
   return (
-    <Animated.Text style={[styles.tabLabel, { color: colors.tabIconSelected }]}>
+    <Animated.Text
+      style={[
+        styles.tabLabel,
+        { color: activeColor ?? colors.tabIconSelected },
+      ]}
+    >
       {label}
     </Animated.Text>
   );
@@ -27,10 +34,12 @@ export function TabBarIcon({
   name,
   focused,
   badge,
+  activeColor,
 }: {
   name: React.ComponentProps<typeof Ionicons>['name'];
   focused: boolean;
   badge?: number;
+  activeColor?: string;
 }) {
   const { colors } = useTheme();
 
@@ -40,7 +49,11 @@ export function TabBarIcon({
         <Ionicons
           name={name}
           size={22}
-          color={focused ? colors.tabIconSelected : colors.tabIconDefault}
+          color={
+            focused
+              ? (activeColor ?? colors.tabIconSelected)
+              : colors.tabIconDefault
+          }
           style={{ opacity: focused ? 1 : 0.6 }}
         />
         {badge !== undefined && badge > 0 && (

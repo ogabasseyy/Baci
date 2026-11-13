@@ -7,6 +7,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from 'react-native-reanimated';
+import { NextDropHeroSlide } from '@/components/home/NextDropHeroSlide';
 import {
   getMobileAdUnitId,
   type MobileAdBannerPlacementKey,
@@ -15,6 +16,7 @@ import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
+import { BlackFridayHeroSlide } from './BlackFridayHeroSlide';
 import { EliteSlide } from './EliteSlide';
 import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
@@ -24,6 +26,7 @@ import { nextOffsetAfterAdToggle } from './launch-ad-offset';
 import { StandardSlide } from './StandardSlide';
 
 export interface HeroSlide {
+  campaign?: 'black-friday' | 'next-drop';
   title: string;
   subtitle: string;
   image: string;
@@ -184,6 +187,23 @@ export function Hero({
             adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
           }
         />
+      );
+    }
+    if (item.campaign === 'next-drop') {
+      return (
+        <NextDropHeroSlide
+          width={screenWidth}
+          height={getHeroHeight()}
+          title={item.title}
+          subtitle={item.subtitle}
+          ctaText={item.ctaText}
+          ctaLink={item.ctaLink}
+        />
+      );
+    }
+    if (item.campaign === 'black-friday') {
+      return (
+        <BlackFridayHeroSlide width={screenWidth} height={getHeroHeight()} />
       );
     }
     switch (template.heroVariant) {

@@ -16,6 +16,7 @@ import { useAppTrackingTransparency } from '@/hooks/use-app-tracking-transparenc
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
+import { CONFIG } from '@/lib/config';
 import {
   installCrashDiagnostics,
   recordCrashBreadcrumb,
@@ -283,6 +284,7 @@ export default function RootLayout() {
 
   return (
     <AnimatedSplash
+      playOgabasseyIntro={CONFIG.MERCHANT_SLUG === 'ogabassey'}
       isReady={isInitialized && isStorageReady}
       isVisible={showSplash}
       onAnimationEnd={() => setShowSplash(false)}

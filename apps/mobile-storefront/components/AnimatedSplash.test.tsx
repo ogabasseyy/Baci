@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Text, View } from 'react-native';
 import { AnimatedSplash } from './AnimatedSplash';
 
@@ -31,11 +31,13 @@ jest.mock('react-native-reanimated', () => {
     Easing: {
       in: jest.fn(),
       inOut: jest.fn(),
+      out: jest.fn(),
       ease: jest.fn(),
       cubic: jest.fn(),
     },
     runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
     useSharedValue: makeSharedValue,
+    useReducedMotion: () => false,
     useAnimatedStyle: () => ({}),
     withDelay: (_delay: number, anim: unknown) => anim,
     withRepeat: (anim: unknown) => anim,
@@ -51,6 +53,16 @@ jest.mock('react-native-reanimated', () => {
 jest.mock('expo-image', () => ({
   Image: 'Image',
 }));
+
+jest.mock('./OgabasseySplashScene', () => {
+  const { Pressable } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    OgabasseySplashScene: ({ onFinish }: { onFinish: () => void }) => (
+      <Pressable testID="finish-intro" onPress={onFinish} />
+    ),
+  };
+});
 
 describe('AnimatedSplash', () => {
   it('renders children correctly and renders the splash branding elements', () => {
@@ -92,6 +104,27 @@ describe('AnimatedSplash', () => {
 
     await act(async () => {
       await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+
+    expect(onAnimationEnd).toHaveBeenCalledTimes(1);
+  });
+  it('reveals an already mounted Home when the Ogabassey scene finishes', async () => {
+    const onAnimationEnd = jest.fn();
+    render(
+      <AnimatedSplash
+        isReady
+        playOgabasseyIntro
+        onAnimationEnd={onAnimationEnd}
+      >
+        <Text>Get connected.</Text>
+      </AnimatedSplash>
+    );
+
+    expect(screen.getByText('Get connected.')).toBeTruthy();
+    expect(onAnimationEnd).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('finish-intro'));
     });
 
     expect(onAnimationEnd).toHaveBeenCalledTimes(1);

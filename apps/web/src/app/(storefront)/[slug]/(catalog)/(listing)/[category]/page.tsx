@@ -2,11 +2,20 @@ import type { Metadata } from 'next';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
+import { OGABASSEY_URL } from '@/config/ogabassey';
+import {
+  BLACK_FRIDAY_PATH,
+  IS_BLACK_FRIDAY_PREVIEW,
+} from '@/config/ogabassey-black-friday';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
+import {
+  getBlackFridayProducts,
+  isPublishedOgabassey,
+} from '@/lib/ogabassey-black-friday';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
@@ -95,6 +104,19 @@ export async function generateMetadata({
   if (!merchant) {
     return {
       title: 'Store Not Found',
+    };
+  }
+
+  if (`/${category}` === BLACK_FRIDAY_PATH && isPublishedOgabassey(merchant)) {
+    const products = await getBlackFridayProducts().catch(() => []);
+    return {
+      title: 'Black Friday',
+      description: 'Explore the Ogabassey Black Friday lineup.',
+      alternates: { canonical: `${OGABASSEY_URL}${BLACK_FRIDAY_PATH}` },
+      robots: {
+        index: !IS_BLACK_FRIDAY_PREVIEW && products.length > 0,
+        follow: true,
+      },
     };
   }
 

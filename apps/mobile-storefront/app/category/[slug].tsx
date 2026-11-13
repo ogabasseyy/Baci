@@ -49,7 +49,10 @@ const getCategoryTitle = (slug: string): string => {
 };
 
 export default function CategoryScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug, sort } = useLocalSearchParams<{
+    slug: string;
+    sort?: string;
+  }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { getListContentStyle } = useStorefrontInsets();
@@ -62,13 +65,22 @@ export default function CategoryScreen() {
   // H10 FIX: Resolve category slug to UUID since Supabase query uses category_id
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
-  const categoryId = categories.find((c) => c.slug === slug)?.id;
+  const budgetPhones = slug === 'phones' && sort === 'price_asc';
+  const categoryId =
+    categories.find((category) => category.slug === slug)?.id ??
+    (budgetPhones
+      ? categories.find((category) =>
+          ['smartphones', 'mobile-phones'].includes(category.slug)
+        )?.id
+      : undefined);
+  const sortBy = sort === 'price_asc' || sort === 'newest' ? sort : undefined;
 
   const { products, isLoading, error, hasMore, refetch, loadMore } =
     useProducts({
       category: isValidSlug ? categoryId : undefined,
       limit: 20,
-      enabled: !categoriesLoading,
+      sortBy,
+      enabled: !categoriesLoading && (!budgetPhones || Boolean(categoryId)),
     });
 
   const [refreshing, setRefreshing] = React.useState(false);

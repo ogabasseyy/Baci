@@ -60,8 +60,10 @@ export const EMPTY_AVAILABLE_FILTER_OPTIONS: AvailableFilterOptions = {
  * disabled (server pre-paginated only a slice, so a client index would be
  * misleading).
  */
+type FilterableProduct = Pick<Product, keyof AvailableFilterOptions | 'rawPrice'>;
+
 export function buildAvailableFilterOptions(
-  products: Product[],
+  products: FilterableProduct[],
   canUseClientFilters: boolean
 ): AvailableFilterOptions {
   if (!canUseClientFilters) {
@@ -125,11 +127,11 @@ export function buildAvailableFilterOptions(
  * facet, AND logic between facets. Returns the products unchanged when
  * client-side filtering is disabled.
  */
-export function filterCategoryProducts(
-  products: Product[],
+export function filterCategoryProducts<T extends FilterableProduct>(
+  products: T[],
   filters: FilterState,
   canUseClientFilters: boolean
-): Product[] {
+): T[] {
   if (!canUseClientFilters) {
     return products;
   }

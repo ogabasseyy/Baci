@@ -85,7 +85,7 @@ describe('CookieConsent', () => {
       screen.getByText('We use cookies to improve your experience.')
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/By using our store, you agree to our/i)
+      screen.getByText(/Optional cookies are up to you/i)
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Customize' })).toHaveClass(
       'min-h-11'

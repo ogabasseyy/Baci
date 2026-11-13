@@ -14,12 +14,14 @@ export function HomeFeedListItemView({
   index,
   target,
   currentVariant,
+  neutralPrice,
   onProductDataEndReached,
 }: {
   item: HomeFeedListItem;
   index: number;
   target?: string;
   currentVariant: CardVariant;
+  neutralPrice?: boolean;
   onProductDataEndReached: () => void;
 }) {
   if (item.kind === 'product-list-end') {
@@ -42,14 +44,22 @@ export function HomeFeedListItemView({
             : homeFeedStyles.productRight,
         ]}
       >
-        <ProductCard product={item.product} variant="grid" />
+        <ProductCard
+          neutralPrice={neutralPrice}
+          product={item.product}
+          variant="grid"
+        />
       </View>
     );
   }
 
   return (
     <View style={homeFeedStyles.fullWidthCell}>
-      <ProductCard product={item.product} variant={currentVariant} />
+      <ProductCard
+        neutralPrice={neutralPrice}
+        product={item.product}
+        variant={currentVariant}
+      />
     </View>
   );
 }

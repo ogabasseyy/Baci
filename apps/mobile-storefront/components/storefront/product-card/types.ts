@@ -7,6 +7,7 @@ import type { Product } from '@/types/product';
 
 export interface BaseProductCardVariantProps {
   product: Product;
+  priceColor?: string;
   imageSource: { uri: string };
   imageProps: Omit<ImageProps, 'source' | 'style'>;
   showLocalPlaceholder: boolean;

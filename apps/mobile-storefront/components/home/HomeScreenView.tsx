@@ -15,11 +15,13 @@ import Animated, {
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Header } from '@/components/storefront/Header';
+import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
 import { SearchDropdown } from '@/components/storefront/SearchDropdown';
 import { HeroSkeleton, ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { SnowEffect } from '@/components/ui/SnowEffect';
 import { useColorScheme } from '@/components/useColorScheme';
 import { ELITE_BACKDROP_HEIGHT } from '@/constants/layout';
+import { CONFIG } from '@/lib/config';
 import type { Block } from '@/types/blocks';
 import { HomeFeedList } from './HomeFeedList';
 import { homeScreenStyles as styles } from './home-screen.styles';
@@ -88,7 +90,9 @@ export function HomeScreenView({
   shouldRenderDecorations,
   showSearchMinLengthHint,
 }: HomeScreenViewProps) {
+  const nextDrop = CONFIG.MERCHANT_SLUG === 'ogabassey' && isElite;
   const colorScheme = useColorScheme();
+  const useWarmDarkSurface = nextDrop && colorScheme === 'dark';
   useHomeNavigationBarStyle(colorScheme, !isConfigLoading);
 
   const headerOverlayAnimatedStyle = useAnimatedStyle(() => {
@@ -110,9 +114,10 @@ export function HomeScreenView({
   if (isConfigLoading) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
-        <Header showSearch />
+        <Header showSearch useWarmDarkSurface={useWarmDarkSurface} />
+        {nextDrop && <HomeServiceCards placement="underSearch" />}
         <HeroSkeleton />
-        <ProductGridSkeleton count={4} />
+        <ProductGridSkeleton count={4} fullWidth={nextDrop} />
       </View>
     );
   }
@@ -136,7 +141,7 @@ export function HomeScreenView({
         </View>
       )}
 
-      {isElite && (
+      {isElite && !nextDrop && (
         <View
           style={[
             styles.eliteBackground,
@@ -170,7 +175,8 @@ export function HomeScreenView({
             onSearchQueryChange={onSearchQueryChange}
             onSearchSubmit={onSearchSubmit}
             onSearchCancel={onSearchCancel}
-            isScrolled={isScrolled}
+            isScrolled={isScrolled || nextDrop}
+            useWarmDarkSurface={useWarmDarkSurface}
           />
 
           {!isOnline && hasPageConfig && (
@@ -197,6 +203,7 @@ export function HomeScreenView({
 
       <HomeFeedList
         blocks={blocks}
+        nextDrop={nextDrop}
         primaryProductGridIndex={primaryProductGridIndex}
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}

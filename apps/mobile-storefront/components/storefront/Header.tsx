@@ -27,6 +27,7 @@ interface HeaderProps {
   onSearchSubmit?: () => void;
   onSearchCancel?: () => void;
   isScrolled?: boolean;
+  useWarmDarkSurface?: boolean;
 }
 
 // Background pattern from web (SVG Data URI)
@@ -40,6 +41,7 @@ export function Header({
   onSearchSubmit,
   onSearchCancel,
   isScrolled = false,
+  useWarmDarkSurface = false,
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
   const searchInputRef = useRef<TextInputInstance>(null);
@@ -80,6 +82,7 @@ export function Header({
         style={[
           styles.eliteContainer,
           isScrolled && { backgroundColor: colors.black },
+          useWarmDarkSurface && { backgroundColor: '#181416' },
           { paddingTop: eliteTopPadding },
           isSanta && { backgroundColor: seasonalTokens.holidayBg },
         ]}
@@ -148,6 +151,7 @@ export function Header({
               <View
                 style={[
                   styles.searchPill,
+                  useWarmDarkSurface && { backgroundColor: colors.muted },
                   isSanta && styles.santaSearchPill,
                   isSearchActive && styles.activeSearchPill,
                 ]}

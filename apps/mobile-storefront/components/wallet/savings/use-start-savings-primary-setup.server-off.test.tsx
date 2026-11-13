@@ -96,3 +96,29 @@ describe('bugfix: the interest answer carried over to another account', () => {
     expect(result.current.startGoalWalletSetup).toBeUndefined();
   });
 });
+
+describe('the interest gate: null means unanswered, undefined means never asked', () => {
+  it('never gives a PiggyVest plan an undefined answer, so the submit gate always sees it', () => {
+    for (const input of [
+      { activeMerchantId: 'm', primaryWallet: true },
+      { activeMerchantId: 'pv-merchant', primaryWallet: false },
+    ]) {
+      const { result } = renderHook(() => useStartSavingsPrimarySetup(input));
+      expect(result.current.askInterest).toBe(true);
+      expect(result.current.formInterestChoice).toBeNull();
+      act(() => result.current.setInterestChoice(false));
+      expect(result.current.formInterestChoice).toBe(false);
+    }
+  });
+
+  it('gives a legacy plan undefined, which the submit gate lets through', () => {
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'm',
+        primaryWallet: false,
+        wallet: { balance: 0, loyalty_points: 0 },
+      })
+    );
+    expect(result.current.formInterestChoice).toBeUndefined();
+  });
+});

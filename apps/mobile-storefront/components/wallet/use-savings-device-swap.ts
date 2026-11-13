@@ -16,6 +16,9 @@ export function useSavingsDeviceSwap(
   const userId = useAuthStore((state) => state.user?.id);
   const merchantId = useAuthStore((state) => state.merchantId ?? undefined);
   const scope = useRef('');
+  // Blocks a second "Switch phone" tap before React re-renders as busy:
+  // the swap is not idempotent.
+  const inFlight = useRef(false);
   scope.current = `${userId}:${merchantId}:${goalId}`;
   const [showSavingsDeviceSwap, setShowSavingsDeviceSwap] = useState(false);
   const [savingsDeviceSearch, setSavingsDeviceSearch] = useState('');
@@ -34,6 +37,8 @@ export function useSavingsDeviceSwap(
     product: Product,
     variantId?: string | null
   ) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     const notify = savingsNotifier();
     const started = scope.current;
     setIsChangingSavingsDevice(true);
@@ -51,6 +56,7 @@ export function useSavingsDeviceSwap(
         'warning'
       );
     }
+    inFlight.current = false;
     setIsChangingSavingsDevice(false);
   };
   return {

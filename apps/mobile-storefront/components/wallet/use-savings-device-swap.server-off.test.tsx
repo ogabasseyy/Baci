@@ -78,4 +78,26 @@ describe('server keeps PiggyVest off: useSavingsDeviceSwap', () => {
     expect(result.current.savingsDeviceSearch).toBe('iphone');
     expect(result.current.isChangingSavingsDevice).toBe(false);
   });
+
+  it('sends one swap when "Switch phone" is tapped twice before it re-renders', async () => {
+    let finish: (value: boolean) => void = () => undefined;
+    const change = jest.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { result } = renderHook(() => useSavingsDeviceSwap(change, 'goal-1'));
+    let first: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.handleSelectSavingsDevice(product, 'v');
+      void result.current.handleSelectSavingsDevice(product, 'v');
+    });
+    expect(change).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish(true);
+      await first;
+    });
+    expect(result.current.isChangingSavingsDevice).toBe(false);
+  });
 });

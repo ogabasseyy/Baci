@@ -107,13 +107,17 @@ export function WalletFundModal({
   // leaving the customer on the pushed page (walk-through M8).
   // Latched while open (Codex): a verdict change mid-sheet must not strand
   // a customer who arrived from a purchase on the wallet page.
-  const [returnOnDismiss, setReturnOnDismiss] = useState(false);
-  if (showFundPanel && storeCreditTopUp && !returnOnDismiss)
-    setReturnOnDismiss(true);
+  // Scoped to that purchase and cleared whenever the sheet closes (Codex),
+  // including programmatic closes, so a later savings sheet never inherits it.
+  const [latchedReturn, setLatchedReturn] = useState<string | null>(null);
+  if (showFundPanel && storeCreditTopUp && fundReturnTo && !latchedReturn)
+    setLatchedReturn(fundReturnTo);
+  if (!showFundPanel && latchedReturn) setLatchedReturn(null);
   const dismissFund = () => {
     onResetFund();
-    const returnToPurchase = storeCreditTopUp || returnOnDismiss;
-    setReturnOnDismiss(false);
+    const returnToPurchase =
+      storeCreditTopUp || (!!fundReturnTo && latchedReturn === fundReturnTo);
+    setLatchedReturn(null);
     if (!returnToPurchase || !fundReturnTo) return;
     // A deep link has no history underneath: open the purchase instead.
     if (router.canGoBack()) router.back();

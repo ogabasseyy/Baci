@@ -281,3 +281,38 @@ describe('bugfix: rollback while the sheet was open stranded the customer', () =
     clearObservedPiggyvestPrimaryCapability();
   });
 });
+
+describe('bugfix: purchase latch leaked into a later savings sheet', () => {
+  it('does not navigate back when a savings sheet opens after a programmatic close', () => {
+    // Arrange: opened from IMEI as a PiggyVest store credit top-up.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const onResetFund = jest.fn();
+    const view = (show: boolean, fundReturnTo: string) => (
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletFundModal
+          {...createWalletContentProps()}
+          creditWatch={creditWatch}
+          fundReturnTo={fundReturnTo as never}
+          fundingAccount={account}
+          merchantId="merchant-1"
+          onResetFund={onResetFund}
+          showFundPanel={show}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    const { rerender } = render(view(true, '/imei-check'));
+
+    // Act: the funding flow closes the sheet itself (resetFundPanel), then
+    // a savings funding opens the sheet and the customer dismisses it.
+    rerender(view(false, '/imei-check'));
+    rerender(view(true, '/wallet/savings/start'));
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert: the savings sheet just closes; no purchase navigation.
+    expect(onResetFund).toHaveBeenCalledTimes(1);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});

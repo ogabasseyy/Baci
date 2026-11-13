@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SavingsPlanStatusNote } from './SavingsPlanStatusNote';
+import { resetAutoSetupRetries } from './use-auto-retry-setup';
 
 jest.mock('./use-goal-wallet-setup-poll', () => ({
   useGoalWalletSetupPoll: () => ({ slow: false, checkAgain: jest.fn() }),
@@ -60,6 +61,7 @@ const renderExhausted = (change: Record<string, unknown> = {}) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetAutoSetupRetries();
   retry.mockResolvedValue(true);
   mockSetupHook.mockReturnValue(setupState());
 });

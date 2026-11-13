@@ -1,5 +1,9 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { AUTO_SETUP_RETRIES, useAutoRetrySetup } from './use-auto-retry-setup';
+import {
+  AUTO_SETUP_RETRIES,
+  resetAutoSetupRetries,
+  useAutoRetrySetup,
+} from './use-auto-retry-setup';
 
 type Props = { active: boolean; submitting: boolean; scopeKey: string };
 
@@ -14,7 +18,30 @@ function setup(initial: Props) {
   return { ...hook, retry };
 }
 
+beforeEach(() => resetAutoSetupRetries());
+
 describe('useAutoRetrySetup with PiggyVest off', () => {
+  describe('bugfix: reopening the sheet refilled the automatic tries', () => {
+    it('keeps the tries spent on a goal after the screen closes and reopens', async () => {
+      const first = setup({ active: true, submitting: false, scopeKey: 'a' });
+      await act(async () => {});
+      first.rerender({ active: true, submitting: true, scopeKey: 'a' });
+      first.rerender({ active: true, submitting: false, scopeKey: 'a' });
+      await act(async () => {});
+      expect(first.retry).toHaveBeenCalledTimes(AUTO_SETUP_RETRIES);
+      first.unmount();
+
+      const reopened = setup({
+        active: true,
+        submitting: false,
+        scopeKey: 'a',
+      });
+      await act(async () => {});
+      expect(reopened.retry).not.toHaveBeenCalled();
+      expect(reopened.result.current.exhausted).toBe(true);
+    });
+  });
+
   it('does nothing while setup is not retryable', () => {
     const { retry, result } = setup({
       active: false,

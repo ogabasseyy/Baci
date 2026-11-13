@@ -173,6 +173,8 @@ export async function deliverPaidImeiLookup(
     return cached(lookup);
   }
   // Refunded: retry any refund still owed (exactly once in the database).
+  // The caller has already checked this operation is this lookup's own
+  // payment (same customer, purchase and price) before calling.
   if (
     lookup.status === 'refunded_error' ||
     lookup.status === 'refunded_not_found'
@@ -201,9 +203,20 @@ export async function deliverPaidImeiLookup(
   )
     throw new WalletPaymentMismatchError();
   // A previous delivery died mid-flight. Sickw has no lookup by reference,
-  // so re-submitting could buy the check twice: refund instead.
-  if (claim.status === 'reclaimed')
+  // so re-submitting could buy the check twice: refund instead, unless it
+  // saved its result after this request read the lookup (Codex P1). Then
+  // record it delivered; the next poll answers the saved result.
+  if (claim.status === 'reclaimed') {
+    const now = await deps.readStatus(lookup.id);
+    if (now === 'completed') {
+      await deps
+        .finish(operationId, 'fulfilled', claim.claimToken)
+        .catch(() => 'conflict');
+      return pending('delivering');
+    }
+    if (now !== 'pending') return pending('delivering');
     return await failAndRefund(input, deps, claim.claimToken, NOT_COMPLETED);
+  }
 
   const prepared = await deps.prepare(lookup);
   if ('response' in prepared || prepared.binding.provider !== 'sickw')

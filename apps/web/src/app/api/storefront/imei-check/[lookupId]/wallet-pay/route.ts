@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
 import { payImeiWalletPayment } from '../../wallet-pay/pay-imei-wallet-payment';
 import { createPayImeiWalletPaymentDeps } from '../../wallet-pay/pay-imei-wallet-payment-deps';
@@ -22,6 +23,11 @@ export async function POST(
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase)
     return refuse('Please sign in again.', 'UNAUTHORIZED', 401);
+  // Throttled like the IMEI check itself: empty-proof re-checks are a poll
+  // (Muse).
+  const rate = await checkRateLimit(request);
+  if (!rate.allowed)
+    return createRateLimitResponse(rate.limit, rate.remaining, rate.resetTime);
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid)
     return (

@@ -1,6 +1,4 @@
-import { CONFIG } from '@/lib/config';
-import { pickMerchantId } from '@/lib/pick-merchant-id';
-import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 
 /**
  * Call-time twin of usePiggyvestPossible for submit-time checks: a render
@@ -11,9 +9,5 @@ import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-
 export function isPiggyvestPossibleNow(
   merchantId: string | null | undefined
 ): boolean {
-  const activeMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
-  if (!activeMerchantId) {
-    return false;
-  }
-  return readObservedPiggyvestPrimaryCapability(activeMerchantId) !== false;
+  return readPiggyvestCapabilityNow(merchantId) !== false;
 }

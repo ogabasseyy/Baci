@@ -14,12 +14,12 @@ import {
   useMerchantPaymentSettings,
 } from '@/hooks/useMerchantPaymentSettings';
 import { calculateCommerce } from '@/lib/commerce-brain';
-import { isPiggyvestPossibleNow } from '@/lib/is-piggyvest-possible-now';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   getKlumpDisabledReason,
   shouldHideKlumpPaymentMethod,
 } from '@/lib/klump-checkout';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
@@ -196,6 +196,9 @@ export function useCheckoutPaymentController({
       // Merchants the server rules out keep today's behaviour (Muse).
       walletPrimaryUnknown:
         isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
+        // No authoritative verdict yet (Codex): a restored legacy wallet
+        // can't be trusted until the merchant's PiggyVest status is known.
+        readPiggyvestCapabilityNow(merchantId) === null ||
         (piggyvestPossible &&
           (!walletQuery.data?.wallet ||
             walletQuery.data.wallet.owner_unresolved === true ||
@@ -269,14 +272,14 @@ export function useCheckoutPaymentController({
     walletFundedBankTransferOptionEnabled,
     // Live re-check at submit: a refresh may land as PiggyVest mid-submit,
     // and the capability is read now, not at render (Codex).
-    // A ruled-out verdict that has since expired holds until the wallet
-    // is reclassified (Codex): the cached legacy wallet can't say yet.
+    // Unknown verdict (never probed, expired, failed) holds until the
+    // merchant's PiggyVest status is authoritative (Codex).
     isWalletFundedBankTransferHeld: () => {
-      const possibleNow = isPiggyvestPossibleNow(merchantId);
-      if (!piggyvestPossible && possibleNow) return true;
+      const capabilityNow = readPiggyvestCapabilityNow(merchantId);
+      if (capabilityNow === null) return true;
       return isLiveWalletTransferHeld(
         walletQuery,
-        piggyvestPossible || possibleNow
+        piggyvestPossible || capabilityNow
       );
     },
     walletIsStoreCredit,

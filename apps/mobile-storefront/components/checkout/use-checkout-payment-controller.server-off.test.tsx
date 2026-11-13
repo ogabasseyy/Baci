@@ -99,6 +99,12 @@ function renderController() {
 describe('checkout wallet with the server keeping PiggyVest off', () => {
   beforeEach(() => {
     mockWallet = undefined;
+    mockCapability = false;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
   });
 
   it('keeps the wallet wording and bank transfer to wallet as today', () => {
@@ -118,6 +124,11 @@ describe('checkout wallet with the server keeping PiggyVest off', () => {
 describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
   beforeEach(() => {
     mockWallet = undefined;
+    // PiggyVest confirmed for the merchant: the wallet decides the rest.
+    observePiggyvestPrimaryCapability('merchant-1', true);
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
   });
 
   it('shows ₦0 store credit and the direct bank transfer for ₦5,000 PiggyVest, ₦0 legacy', () => {
@@ -165,6 +176,7 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
   it('keeps bank transfer to wallet through a refresh where the server rules PiggyVest out', () => {
     // Arrange: non-PiggyVest merchant, cached legacy wallet, failing refresh.
     mockCapability = false;
+    observePiggyvestPrimaryCapability('merchant-1', false);
     mockWallet = { balance: 0 };
     mockIsRefetching = true;
     mockIsError = true;
@@ -293,6 +305,30 @@ describe('bugfix: stale render-time capability at checkout submit', () => {
     mockFetchingNow = false;
 
     // Act + Assert
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: restored legacy wallet trusted before the PiggyVest verdict', () => {
+  beforeEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('holds bank transfer to wallet until the merchant verdict is known', () => {
+    // Arrange: cold start; a fresh legacy wallet is restored from the
+    // persisted cache and the capability probe has not answered yet.
+    mockCapability = null;
+    mockWallet = { balance: 0 };
+
+    // Act
+    const { result } = renderController();
+
+    // Assert
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
   });
 });

@@ -1,7 +1,6 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { CONFIG } from '@/lib/config';
-import { isPiggyvestPossibleNow } from '@/lib/is-piggyvest-possible-now';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   buildVtuPurchaseDescriptor,
@@ -13,6 +12,7 @@ import {
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
 import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
@@ -83,12 +83,12 @@ export function useUtilityPayment() {
   } = readLiveVerdict
     ? {
         getWalletVerdict: () => {
-          const possibleNow = isPiggyvestPossibleNow(authMerchantId);
+          const capabilityNow = readPiggyvestCapabilityNow(authMerchantId);
           const verdict = readLiveVerdict({
-            holdUnsettled: piggyvestPossible || possibleNow,
+            holdUnsettled: piggyvestPossible || capabilityNow !== false,
           });
-          // Expired ruling-out, not yet reclassified (Codex): unknown.
-          return !piggyvestPossible && possibleNow
+          // No authoritative verdict (Codex): the wallet kind is unknown.
+          return capabilityNow === null
             ? { ...verdict, walletPrimaryUnknown: true }
             : verdict;
         },
@@ -174,6 +174,7 @@ export function useUtilityPayment() {
     // PiggyVest check failed, or a refresh may change the verdict (Codex):
     // hold bank-transfer top-ups until the wallet settles.
     ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
+    readPiggyvestCapabilityNow(authMerchantId) === null ||
     (piggyvestPossible &&
       (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
       ? { walletPrimaryUnknown: true as const }

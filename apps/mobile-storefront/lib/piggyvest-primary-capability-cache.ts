@@ -49,13 +49,33 @@ export function msUntilNegativeCapabilityExpires(
   return remaining > 0 ? remaining : null;
 }
 
+// Version + listeners so render-time readers re-render on any cache write,
+// including a rollback from a mounted funding flow (Codex).
+let cacheVersion = 0;
+const listeners = new Set<() => void>();
+function notifyCacheChanged() {
+  cacheVersion += 1;
+  for (const listener of listeners) listener();
+}
+
+export function subscribeCapabilityCache(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getCapabilityCacheVersion(): number {
+  return cacheVersion;
+}
+
 export function observePiggyvestPrimaryCapability(
   merchantId: string,
   available: boolean
 ) {
   capabilityCache.set(merchantId, { available, observedAt: Date.now() });
+  notifyCacheChanged();
 }
 
 export function clearObservedPiggyvestPrimaryCapability() {
   capabilityCache.clear();
+  notifyCacheChanged();
 }

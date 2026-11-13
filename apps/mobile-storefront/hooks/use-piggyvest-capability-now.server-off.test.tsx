@@ -46,3 +46,22 @@ describe('bugfix: stale ruling-out kept after its real expiry', () => {
     expect(result.current).toBeNull();
   });
 });
+
+describe('bugfix: render verdict kept after a positive verdict was rolled back', () => {
+  it('re-renders to "ruled out" when a mounted flow rolls the cache back', () => {
+    // Arrange: PiggyVest confirmed while the screen is mounted.
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const { result } = renderHook(() =>
+      usePiggyvestCapabilityNow('merchant-1')
+    );
+    expect(result.current).toBe(true);
+
+    // Act: a funding call answers NOT_READY and rolls the verdict back.
+    act(() => {
+      observePiggyvestPrimaryCapability('merchant-1', false);
+    });
+
+    // Assert
+    expect(result.current).toBe(false);
+  });
+});

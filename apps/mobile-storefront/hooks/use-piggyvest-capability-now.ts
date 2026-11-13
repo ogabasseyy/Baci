@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
-import { msUntilNegativeCapabilityExpires } from '@/lib/piggyvest-primary-capability-cache';
+import {
+  getCapabilityCacheVersion,
+  msUntilNegativeCapabilityExpires,
+  subscribeCapabilityCache,
+} from '@/lib/piggyvest-primary-capability-cache';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 
 // The extra arguments are render keys: React Compiler memoizes plain calls
@@ -32,7 +36,13 @@ export function usePiggyvestCapabilityNow(
   merchantId: string | null | undefined
 ): boolean | null {
   const capability = usePiggyvestPrimaryCapability(merchantId);
-  const [tick, setTick] = useState(0);
+  const [expiryTick, setTick] = useState(0);
+  // Any cache write (a probe, a rollback to "not ready") re-renders here.
+  const cacheVersion = useSyncExternalStore(
+    subscribeCapabilityCache,
+    getCapabilityCacheVersion
+  );
+  const tick = expiryTick + cacheVersion;
   const remaining = msLeftFor(merchantId, capability, tick);
   useEffect(() => {
     if (remaining === null) return;

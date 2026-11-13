@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import {
   fetchExistingSavingsPlanFunding,
   fetchSavingsPlanFunding,
@@ -73,8 +74,14 @@ export function useSavingsPlanFunding({
   // legacy path. Primary provisioning ignores client BVN (it resolves
   // identity from auth plus goal ownership), so an early primary
   // confirmation never misuses the collected value.
+  // The live verdict too (Codex): a wallet-read rollback written elsewhere
+  // shows the BVN field again without a remount, so the legacy fallback
+  // never submits an empty BVN.
+  const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   const planFundingRequiresBvn =
-    !isPiggyvestPrimaryMerchant(activeMerchantId) || primaryCapability !== true;
+    !isPiggyvestPrimaryMerchant(activeMerchantId) ||
+    primaryCapability !== true ||
+    verdictNow === false;
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
 
@@ -31,5 +31,41 @@ describe('hasRetainedPrimaryCardFunding (server off)', () => {
     await expect(
       hasRetainedPrimaryCardFunding('merchant-1', 'user-1')
     ).resolves.toBe(false);
+  });
+});
+
+describe('bugfix: corrupt saved card funding treated as nothing saved', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it('reports an unreadable record instead of no funding, and keeps it', async () => {
+    // Arrange: a saved record the schema can no longer read.
+    const key = `@baci_primary_card:${MERCHANT}:${USER}`;
+    await AsyncStorage.setItem(key, '{"not":"a funding"}');
+
+    // Act
+    const retained = await hasRetainedPrimaryCardFunding(MERCHANT, USER);
+
+    // Assert: flagged, and still saved for the wallet's recovery path.
+    expect(retained).toBe('unreadable');
+    expect(await AsyncStorage.getItem(key)).not.toBeNull();
+  });
+
+  it('peeks at the same key the card client reads', async () => {
+    // The card client drops a corrupt record under its own key: if the key
+    // here ever drifts, this record would survive.
+    const { createPrimaryWalletCardFundingClient } = jest.requireActual<
+      typeof import('@/lib/primary-wallet-card')
+    >('@/lib/primary-wallet-card');
+    const key = `@baci_primary_card:${MERCHANT}:${USER}`;
+    await AsyncStorage.setItem(key, 'corrupt');
+
+    await createPrimaryWalletCardFundingClient().readPending({
+      merchantId: MERCHANT,
+      userId: USER,
+    });
+
+    expect(await AsyncStorage.getItem(key)).toBeNull();
   });
 });

@@ -24,7 +24,7 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
           sessionToken,
           lineToken: requestId,
           cartVersion: z.number().int().positive(),
-          expectedQuantity: z.number().int().min(1).max(1000),
+          expectedQuantity: z.number().int().min(1).max(10),
           quantity: z.number().int().min(0).max(10),
         })
         .strict(),

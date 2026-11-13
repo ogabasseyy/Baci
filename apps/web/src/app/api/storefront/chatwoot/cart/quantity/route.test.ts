@@ -45,7 +45,7 @@ const cart = {
   cartId: principal.cartId,
   merchantId: principal.merchantId,
   version: 12,
-  lines: [{ id: 'server-line-1', quantity: 2 }],
+  lines: [{ id: '11111111-1111-4111-8111-111111111111', quantity: 2 }],
 };
 const state = {
   cartId: principal.cartId,
@@ -68,7 +68,7 @@ const body = {
   cartVersion: 12,
   conversationId: 905,
   expectedQuantity: 2,
-  lineId: 'server-line-1',
+  lineId: '11111111-1111-4111-8111-111111111111',
   quantity: 3,
   requestId: 'quantity-0001',
   sessionToken: 'baci.signed.session.capability',
@@ -128,7 +128,7 @@ describe('Chatwoot shared-cart quantity route', () => {
       { client: expect.anything(), principal },
       {
         command: {
-          lineId: 'server-line-1',
+          lineId: '11111111-1111-4111-8111-111111111111',
           quantity: 3,
           type: 'set_quantity',
         },
@@ -160,6 +160,33 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(response.status).toBe(403);
     expect(mocks.checkCartQuota).not.toHaveBeenCalled();
     expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed line ID before resolving cart context', async () => {
+    arrange({ ...body, lineId: 'not-a-uuid' });
+    const response = await POST(request());
+
+    expect(response.status).toBe(400);
+    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+
+  it('maps quantity zero to the explicit remove command', async () => {
+    arrange({ ...body, quantity: 0 });
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.mutateCart).toHaveBeenCalledWith(
+      { client: expect.anything(), principal },
+      {
+        command: {
+          lineId: '11111111-1111-4111-8111-111111111111',
+          type: 'remove',
+        },
+        expectedVersion: 12,
+        operationId: 'quantity-0001',
+      }
+    );
   });
 
   it('rejects a current-version line or quantity mismatch before mutation', async () => {

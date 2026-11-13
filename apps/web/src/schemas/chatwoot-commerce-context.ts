@@ -43,7 +43,7 @@ export const chatwootCartQuantityMutationRequestSchema = z
     cartVersion: z.number().int().positive(),
     conversationId: z.number().int().positive().safe(),
     expectedQuantity: z.number().int().min(1).max(1000),
-    lineId: z.string().trim().min(1).max(64),
+    lineId: z.uuid(),
     quantity: z.number().int().min(0).max(10),
     requestId: z
       .string()

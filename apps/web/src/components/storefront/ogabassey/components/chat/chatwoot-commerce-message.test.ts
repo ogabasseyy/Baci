@@ -90,7 +90,7 @@ describe('Chatwoot commerce messages', () => {
   it('accepts only bounded cart line changes', () => {
     const valid = { event: 'baci-cart-quantity', data: { requestId: 'r3', lineToken: 'line-1', cartVersion: 8, expectedQuantity: 2, quantity: 3, ...context } };
     expect(readChatwootCommerceMessage(event('https://widget.test', frame, valid), 'https://widget.test', frame)).toEqual(valid);
-    expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { ...valid.data, expectedQuantity: 12, quantity: 10 } }), 'https://widget.test', frame)).not.toBeNull();
+    expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { ...valid.data, expectedQuantity: 12, quantity: 10 } }), 'https://widget.test', frame)).toBeNull();
     expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { ...valid.data, expectedQuantity: 1001 } }), 'https://widget.test', frame)).toBeNull();
     for (const quantity of [-1, 1.5, 11, 1001]) {
       expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { ...valid.data, quantity } }), 'https://widget.test', frame)).toBeNull();

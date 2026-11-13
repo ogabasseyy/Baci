@@ -61,6 +61,7 @@ const withFirebaseModularHeaders = (config) => {
       // 2. Define the new surgical fix
       const surgicalPostInstall = `
     # Added by withFirebaseModularHeaders
+    react_native_common_path = File.expand_path(File.join(config[:reactNativePath], 'ReactCommon'), __dir__)
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         # Ensure pods have DEFINES_MODULE set for static framework linkage
@@ -81,7 +82,7 @@ const withFirebaseModularHeaders = (config) => {
           # Nitro's ReactCommon includes resolve through jserrorhandler; CocoaPods
           # does not add this React Native source directory to these pod targets.
           config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) '
-          config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/../../node_modules/react-native/ReactCommon" '
+          config.build_settings['HEADER_SEARCH_PATHS'] << %Q{"#{react_native_common_path}" }
         end
       end
     end

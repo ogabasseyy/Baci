@@ -38,7 +38,11 @@ describe('withFirebaseModularHeaders', () => {
       "['NitroModules', 'NitroMmkv', 'RNSplashMotion'].include?(target.name)"
     );
     expect(podfile).toContain(
-      '"$(PODS_ROOT)/../../node_modules/react-native/ReactCommon"'
+      "react_native_common_path = File.expand_path(File.join(config[:reactNativePath], 'ReactCommon'), __dir__)"
+    );
+    expect(podfile).toContain('"#{react_native_common_path}"');
+    expect(podfile).not.toContain(
+      '$(PODS_ROOT)/../../node_modules/react-native/ReactCommon'
     );
   });
 

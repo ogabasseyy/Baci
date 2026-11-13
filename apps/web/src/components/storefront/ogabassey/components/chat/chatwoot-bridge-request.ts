@@ -13,7 +13,6 @@ export async function postChatwootBridgeJson(
     headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  if (!response.ok) return null;
   const value: unknown = await response.json();
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)

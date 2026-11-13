@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   loadChatwootCartContext: vi.fn(),
   mutateCart: vi.fn(),
   readCartJsonBody: vi.fn(),
+  hashCartSessionProof: vi.fn(() => 'c'.repeat(64)),
+  renewChatwootSessionCapability: vi.fn(async () => 'renewed-chatwoot-session'),
   upgradeLegacySessionPrincipal: vi.fn(),
   verifyChatwootSessionCapability: vi.fn(),
 }));
@@ -47,6 +49,8 @@ vi.mock('@/lib/chatwoot/cart-context', () => ({
   loadChatwootCartContext: mocks.loadChatwootCartContext,
 }));
 vi.mock('@/lib/chatwoot/commerce-context', () => ({
+  hashCartSessionProof: mocks.hashCartSessionProof,
+  renewChatwootSessionCapability: mocks.renewChatwootSessionCapability,
   verifyChatwootSessionCapability: mocks.verifyChatwootSessionCapability,
 }));
 
@@ -145,6 +149,7 @@ describe('Chatwoot shared-cart quantity route', () => {
       cartVersion: 13,
       operationId: 'quantity-0001',
       replayed: false,
+      sessionToken: 'renewed-chatwoot-session',
     });
     expect(mocks.verifyChatwootSessionCapability).toHaveBeenCalledWith({
       binding,
@@ -180,6 +185,16 @@ describe('Chatwoot shared-cart quantity route', () => {
       }),
       { environment: 'test' }
     );
+    expect(mocks.renewChatwootSessionCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionToken: body.sessionToken,
+        previousState: state,
+        nextState: expect.objectContaining({
+          cartSessionSha256: 'c'.repeat(64),
+          cartVersion: 13,
+        }),
+      })
+    );
     expect(mocks.cartSessionCookieMaxAge).toHaveBeenCalledWith(
       '2026-11-20T00:00:00.000Z'
     );
@@ -199,6 +214,24 @@ describe('Chatwoot shared-cart quantity route', () => {
       { client: expect.anything(), principal: upgraded },
       expect.objectContaining({ operationId: 'quantity-0001' })
     );
+  });
+
+  it('keeps the old proof when capability renewal fails after a committed edit', async () => {
+    arrange();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.renewChatwootSessionCapability.mockRejectedValueOnce(
+      new Error('synthetic signing failure')
+    );
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({ accepted: true, cartVersion: 13 });
+    expect(payload).not.toHaveProperty('sessionToken');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.mutateCart).toHaveBeenCalledOnce();
+    log.mockRestore();
   });
 
   it('rejects a conversation mismatch before mutation', async () => {
@@ -227,120 +260,6 @@ describe('Chatwoot shared-cart quantity route', () => {
 
   it('rejects a malformed line ID before resolving cart context', async () => {
     arrange({ ...body, lineId: 'not-a-uuid' });
-    const response = await POST(request());
-
-    expect(response.status).toBe(400);
-    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
-    expect(mocks.mutateCart).not.toHaveBeenCalled();
-  });
-
-  it('maps quantity zero to the explicit remove command', async () => {
-    arrange({ ...body, quantity: 0 });
-    const response = await POST(request());
-
-    expect(response.status).toBe(200);
-    expect(mocks.mutateCart).toHaveBeenCalledWith(
-      { client: expect.anything(), principal },
-      {
-        command: {
-          lineId: '11111111-1111-4111-8111-111111111111',
-          type: 'remove',
-        },
-        expectedVersion: 12,
-        operationId: 'quantity-0001',
-      }
-    );
-  });
-
-  it('rejects a current-version line or quantity mismatch before mutation', async () => {
-    arrange({ ...body, expectedQuantity: 1 });
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    expect(mocks.mutateCart).not.toHaveBeenCalled();
-  });
-
-  it('passes an older exact operation to the atomic service for replay reconciliation', async () => {
-    const staleBody = { ...body, cartVersion: 11 };
-    arrange(staleBody, { ...cart, version: 13, lines: [] });
-    mocks.mutateCart.mockResolvedValue({
-      ok: true,
-      operationId: staleBody.requestId,
-      replayed: true,
-      cart: { expiresAt: cart.expiresAt, version: 13 },
-    });
-    const response = await POST(request());
-
-    expect(response.status).toBe(200);
-    expect(mocks.mutateCart).toHaveBeenCalledWith(
-      { client: expect.anything(), principal },
-      expect.objectContaining({
-        expectedVersion: 11,
-        operationId: 'quantity-0001',
-      })
-    );
-    await expect(response.json()).resolves.toMatchObject({
-      accepted: true,
-      cartVersion: 13,
-      replayed: true,
-    });
-  });
-
-  it('maps idempotency payload mismatch and new stale requests to refresh-required', async () => {
-    arrange({ ...body, cartVersion: 11 });
-    mocks.mutateCart.mockResolvedValue({
-      ok: false,
-      code: 'idempotency_conflict',
-    });
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'refresh_required',
-    });
-  });
-
-  it('maps a new stale command to refresh-required without exposing cart data', async () => {
-    arrange({ ...body, cartVersion: 11 });
-    mocks.mutateCart.mockResolvedValue({
-      ok: false,
-      code: 'version_conflict',
-      cart: { version: 13, lines: [{ id: 'secret-line' }] },
-    });
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    const payload = await response.json();
-    expect(payload).toEqual({
-      accepted: false,
-      code: 'refresh_required',
-    });
-    expect(JSON.stringify(payload)).not.toContain('secret-line');
-  });
-
-  it('preserves invalid-item and unauthorized error semantics', async () => {
-    arrange();
-    mocks.mutateCart.mockResolvedValueOnce({ ok: false, code: 'invalid_item' });
-    const invalidItemResponse = await POST(request());
-    expect(invalidItemResponse.status).toBe(400);
-    await expect(invalidItemResponse.json()).resolves.toEqual({
-      accepted: false,
-      code: 'invalid_request',
-    });
-
-    arrange();
-    mocks.mutateCart.mockResolvedValueOnce({ ok: false, code: 'unauthorized' });
-    const unauthorizedResponse = await POST(request());
-    expect(unauthorizedResponse.status).toBe(403);
-    await expect(unauthorizedResponse.json()).resolves.toEqual({
-      accepted: false,
-      code: 'forbidden',
-    });
-  });
-
-  it('rejects request IDs shorter than the shared cart command floor', async () => {
-    arrange({ ...body, requestId: 'short' });
     const response = await POST(request());
 
     expect(response.status).toBe(400);

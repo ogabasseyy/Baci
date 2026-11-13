@@ -15,7 +15,11 @@ import {
   issueCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
-import { verifyChatwootSessionCapability } from '@/lib/chatwoot/commerce-context';
+import {
+  hashCartSessionProof,
+  renewChatwootSessionCapability,
+  verifyChatwootSessionCapability,
+} from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { chatwootCartQuantityMutationRequestSchema } from '@/schemas/chatwoot-commerce-context';
 
@@ -137,15 +141,6 @@ export async function POST(request: NextRequest) {
     return unavailable(status, code);
   }
 
-  const response = NextResponse.json(
-    {
-      accepted: true,
-      cartVersion: result.cart.version,
-      operationId: result.operationId,
-      replayed: result.replayed,
-    },
-    { headers: NO_STORE_HEADERS }
-  );
   let liveGrant: Awaited<ReturnType<typeof loadLiveGrantOperations>> = null;
   try {
     liveGrant = await loadLiveGrantOperations(client, principal);
@@ -178,7 +173,38 @@ export async function POST(request: NextRequest) {
     });
   }
   const maxAge = cartSessionCookieMaxAge(proofGrantExpiry);
+  let sessionToken: string | null = null;
   if (proof && maxAge > 0) {
+    try {
+      sessionToken = await renewChatwootSessionCapability({
+        binding: cartContext.binding,
+        sessionToken: parsed.data.sessionToken,
+        previousState: cartContext.state,
+        nextState: {
+          ...cartContext.state,
+          cartSessionSha256: hashCartSessionProof(proof),
+          cartVersion: result.cart.version,
+        },
+      });
+    } catch (error) {
+      console.error('Chatwoot session renewal failed after cart commit', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+    }
+  }
+  const response = NextResponse.json(
+    {
+      accepted: true,
+      cartVersion: result.cart.version,
+      operationId: result.operationId,
+      replayed: result.replayed,
+      ...(sessionToken ? { sessionToken } : {}),
+    },
+    { headers: NO_STORE_HEADERS }
+  );
+  // Keep the old proof in place if capability rebinding failed after commit;
+  // the old session remains usable and an idempotent retry can recover.
+  if (proof && sessionToken && maxAge > 0) {
     setCartSessionCookie(response, cartContext.state.merchantId, proof, maxAge);
   }
   return response;

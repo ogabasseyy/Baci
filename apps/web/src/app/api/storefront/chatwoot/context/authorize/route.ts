@@ -5,6 +5,7 @@ import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
 import { projectChatwootCartReview } from '@/lib/chatwoot/cart-review-projection';
 import {
   ChatwootCommerceContextError,
+  rebindChatwootSessionCapability,
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -40,12 +41,32 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const authorized = await verifyChatwootSessionCapability({
-      binding: cartContext.binding,
-      sessionToken: parsed.data.sessionToken,
-      state: cartContext.state,
-    });
-    const response = { authorized: true, ...authorized };
+    let authorized: {
+      conversationId: number;
+      sessionExpiresAt: number;
+    };
+    let renewedSessionToken: string | undefined;
+    try {
+      authorized = await verifyChatwootSessionCapability({
+        binding: cartContext.binding,
+        sessionToken: parsed.data.sessionToken,
+        state: cartContext.state,
+      });
+    } catch {
+      const rebound = await rebindChatwootSessionCapability({
+        binding: cartContext.binding,
+        sessionToken: parsed.data.sessionToken,
+        state: cartContext.state,
+      });
+      authorized = rebound;
+      renewedSessionToken = rebound.sessionToken;
+    }
+    const response = {
+      authorized: true,
+      conversationId: authorized.conversationId,
+      sessionExpiresAt: authorized.sessionExpiresAt,
+      ...(renewedSessionToken ? { sessionToken: renewedSessionToken } : {}),
+    };
     if (includeCartSnapshot) {
       const projectedCartSnapshot = projectChatwootCartReview(
         cartContext.cart,

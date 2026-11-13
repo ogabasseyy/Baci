@@ -14,6 +14,7 @@ export async function handleChatwootInlineCartQuantity(input: {
   isCurrentContext: () => boolean;
   lineTokens: Map<string, string>;
   message: QuantityMessage;
+  onSessionTokenRenewed?: (sessionToken: string) => void;
   post: (value: unknown) => void;
   refreshSharedCart?: () => Promise<void>;
   sessionExpiresAt: number;
@@ -61,7 +62,20 @@ export async function handleChatwootInlineCartQuantity(input: {
   // Refresh the storefront's serialized shared-cart client after a commit
   // whenever this same authorized context remains current. A later action can
   // supersede the reply while this mutation still commits successfully.
-  if (mutation?.accepted === true && input.isCurrentContext()) {
+  const refreshRequired = mutation?.code === 'refresh_required';
+  if (
+    mutation?.accepted === true &&
+    input.isCurrentContext() &&
+    typeof mutation.sessionToken === 'string' &&
+    mutation.sessionToken.length > 0 &&
+    mutation.sessionToken.length <= 12_000
+  ) {
+    input.onSessionTokenRenewed?.(mutation.sessionToken);
+  }
+  if (
+    (mutation?.accepted === true || refreshRequired) &&
+    input.isCurrentContext()
+  ) {
     try {
       await input.refreshSharedCart?.();
     } catch {
@@ -72,6 +86,16 @@ export async function handleChatwootInlineCartQuantity(input: {
   input.post({
     requestId,
     accepted: mutation?.accepted === true,
+    ...(mutation?.accepted === true
+      ? {}
+      : {
+          code:
+            mutation?.code === 'refresh_required' ||
+            mutation?.code === 'forbidden' ||
+            mutation?.code === 'invalid_request'
+              ? mutation.code
+              : 'temporarily_unavailable',
+        }),
     ...(typeof mutation?.cartVersion === 'number'
       ? { cartVersion: mutation.cartVersion }
       : {}),

@@ -96,3 +96,36 @@ describe('bugfix: stale PiggyVest balance after a rollback', () => {
     expect(result.current?.balance).toBe(900);
   });
 });
+
+describe('bugfix: rolled-back balance returns when the ruling-out expires', () => {
+  it('keeps PiggyVest fields hidden through the unknown window until re-confirmed', () => {
+    // Arrange: rolled back to "not ready"; the reload failed.
+    const wallet = {
+      balance: 900,
+      loyalty_points: 0,
+      primary_balance_kobo: 500_000,
+    } as WalletData;
+    mockVerdict = false;
+    const { result, rerender } = renderHook(() =>
+      usePrimaryWalletWatch({
+        wallet,
+        showFundPanel: false,
+        scopeKey: 'u:m',
+        refetch: jest.fn(),
+      })
+    );
+
+    // Act: the ruling-out expires; the re-probe is pending (unknown).
+    mockVerdict = null;
+    rerender({});
+
+    // Assert: still hidden.
+    expect(result.current?.primary_balance_kobo).toBeUndefined();
+
+    // A positive verdict re-confirms PiggyVest.
+    mockVerdict = true;
+    rerender({});
+    expect(result.current?.primary_balance_kobo).toBe(500_000);
+    mockVerdict = null;
+  });
+});

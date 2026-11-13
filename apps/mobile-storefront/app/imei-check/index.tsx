@@ -26,8 +26,8 @@ import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
 import { useCardOnlyPurchaseTopUp } from '@/hooks/use-card-only-purchase-top-up';
+import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
-import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { createLogger } from '@/lib/logger';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
 import {
@@ -74,7 +74,7 @@ export default function ImeiCheckerScreen() {
   // Checks spend the older balance: store credit for PiggyVest customers.
   const wallet = walletQuery.data?.wallet;
   const walletBalance = wallet?.balance ?? 0;
-  const walletIsStoreCredit = isStoreCreditPurchaseCopy(wallet);
+  const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, wallet);
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const cardOnlyTopUp = useCardOnlyPurchaseTopUp(merchantId, wallet);
   const fundWallet = (amount: number) =>

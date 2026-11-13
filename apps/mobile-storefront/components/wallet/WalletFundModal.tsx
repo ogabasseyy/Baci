@@ -7,6 +7,7 @@ import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
@@ -77,7 +78,10 @@ export function WalletFundModal({
     isWalletPurchaseReturnHref(fundReturnTo) &&
     (primaryReady ||
       piggyvestMerchant ||
-      (walletPrimaryUnsettled && primaryCapability !== false));
+      (walletPrimaryUnsettled && primaryCapability !== false) ||
+      // No verdict yet: a restored legacy wallet isn't trusted (Codex).
+      (primaryCapability === null &&
+        readPiggyvestCapabilityNow(merchantId) === null));
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
   const hideCardFunding = primaryReady && !storeCreditTopUp;
@@ -148,7 +152,13 @@ export function WalletFundModal({
               createFundingAccountUnavailableMessage={
                 createFundingAccountUnavailableMessage
               }
-              creditWatch={primaryReady ? undefined : creditWatch}
+              creditWatch={
+                // PiggyVest transfers never reach the store-credit ledger,
+                // also while the PiggyVest balance is still pending (Codex).
+                primaryReady || fundingAccount?.provider === 'piggyvest'
+                  ? undefined
+                  : creditWatch
+              }
               fundAmount={fundAmount}
               fundingAccount={fundingAccount}
               hideCardFunding={hideCardFunding}

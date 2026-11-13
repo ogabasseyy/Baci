@@ -10,6 +10,13 @@ jest.mock('@/lib/piggyvest-primary-capability', () => ({
 
 const KEY = ['wallet', 'data', 'merchant-1', 'owner-1'] as const;
 
+// What useWallet passes: the query's current wallet.
+function walletOf(queryClient: QueryClient) {
+  const read = (queryClient as unknown as { getQueryData?: () => unknown })
+    .getQueryData;
+  return (read?.() as { wallet?: never } | undefined)?.wallet;
+}
+
 function setup(
   initial: boolean | null,
   cachedWallet: Record<string, unknown> | undefined = undefined
@@ -23,7 +30,12 @@ function setup(
     invalidateQueries,
   } as unknown as QueryClient;
   const hook = renderHook(() =>
-    useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY)
+    useWalletRecheckOnPiggyvest(
+      queryClient,
+      'merchant-1',
+      KEY,
+      walletOf(queryClient)
+    )
   );
   return { hook, invalidateQueries };
 }
@@ -108,7 +120,12 @@ describe('bugfix: account switch restores a legacy wallet while PiggyVest is on'
     const OTHER = ['wallet', 'data', 'merchant-1', 'owner-2'] as const;
     const hook = renderHook(
       ({ key }: { key: readonly string[] }) =>
-        useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', key),
+        useWalletRecheckOnPiggyvest(
+          queryClient,
+          'merchant-1',
+          key,
+          walletOf(queryClient)
+        ),
       { initialProps: { key: KEY as readonly string[] } }
     );
 
@@ -134,12 +151,49 @@ describe('bugfix: account switch restores a legacy wallet while PiggyVest is on'
     } as unknown as QueryClient;
     const hook = renderHook(
       ({ key }: { key: readonly string[] }) =>
-        useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', key),
+        useWalletRecheckOnPiggyvest(
+          queryClient,
+          'merchant-1',
+          key,
+          walletOf(queryClient)
+        ),
       { initialProps: { key: KEY as readonly string[] } }
     );
 
     hook.rerender({ key: ['wallet', 'data', 'merchant-1', 'owner-2'] });
 
     expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: persisted wallet restored after the positive verdict', () => {
+  it('refetches when a legacy wallet lands in the cache after PiggyVest is confirmed', () => {
+    // Arrange: the probe answers before the persisted cache is restored.
+    mockCapability = true;
+    let cached: unknown;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = {
+      getQueryData: () => cached,
+      invalidateQueries,
+    } as unknown as QueryClient;
+    const hook = renderHook(() =>
+      useWalletRecheckOnPiggyvest(
+        queryClient,
+        'merchant-1',
+        KEY,
+        walletOf(queryClient)
+      )
+    );
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    // Act: the restore inserts a still-fresh legacy-shaped wallet.
+    cached = { transactions: [], wallet: { balance: 0 } };
+    hook.rerender({});
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: KEY,
+      exact: true,
+    });
   });
 });

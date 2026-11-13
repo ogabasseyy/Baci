@@ -181,7 +181,10 @@ export function WalletHeroSection({
       ) : null}
       {/* The checker reads the store-credit ledger, where PiggyVest
           transfers never appear: hidden on the PiggyVest path (Codex). */}
-      {fundingAccount && creditWatch && !primaryReady ? (
+      {fundingAccount &&
+      creditWatch &&
+      !primaryReady &&
+      fundingAccount.provider !== 'piggyvest' ? (
         <WalletCreditCheckPanel
           accentColor="#F8B84C"
           textColor="#FFFFFF"

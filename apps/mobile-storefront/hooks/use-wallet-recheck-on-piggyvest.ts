@@ -20,33 +20,37 @@ import type { WalletQueryData } from './wallet-query';
 export function useWalletRecheckOnPiggyvest(
   queryClient: QueryClient,
   merchantId: string | null | undefined,
-  walletQueryKey: QueryKey
+  walletQueryKey: QueryKey,
+  /** The query's wallet: reactive, so a restore after the verdict re-runs. */
+  cached: WalletQueryData['wallet'] | undefined
 ): void {
   const capability = usePiggyvestPrimaryCapability(merchantId);
   // The wallet's scope (user, owner, merchant): a new account can restore
   // its own legacy wallet cached before PiggyVest was enabled (Codex).
   const scope = JSON.stringify(walletQueryKey);
-  const previous = useRef({ capability, scope });
+  const cachedLegacy =
+    cached !== undefined &&
+    cached.owner_unresolved !== true &&
+    !isWalletStoreCredit(cached) &&
+    !isWalletPrimaryUnknown(cached);
+  const previous = useRef({ cachedLegacy, capability, scope });
   // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): `scope` is its serialised form; the key is read at that moment.
   useEffect(() => {
     const was = previous.current;
-    previous.current = { capability, scope };
-    const cached =
-      queryClient.getQueryData<WalletQueryData>(walletQueryKey)?.wallet;
-    const cachedLegacy =
-      cached !== undefined &&
-      !isWalletStoreCredit(cached) &&
-      !isWalletPrimaryUnknown(cached);
+    previous.current = { cachedLegacy, capability, scope };
     const turnedOn = was.capability === false && capability !== false;
-    const firstVerdictOnLegacyCache =
-      was.capability === null && capability === true && cachedLegacy;
-    const newScopeOnLegacyCache =
-      was.scope !== scope && capability === true && cachedLegacy;
-    if (turnedOn || firstVerdictOnLegacyCache || newScopeOnLegacyCache) {
+    // A legacy-shaped wallet appearing while PiggyVest is confirmed: the
+    // first verdict over a restored cache, a new account scope, or a
+    // persisted restore landing after the verdict (Codex).
+    const legacyUnderVerdict =
+      capability === true &&
+      cachedLegacy &&
+      (was.capability !== true || was.scope !== scope || !was.cachedLegacy);
+    if (turnedOn || legacyUnderVerdict) {
       void queryClient.invalidateQueries({
         queryKey: walletQueryKey,
         exact: true,
       });
     }
-  }, [capability, queryClient, scope]);
+  }, [cachedLegacy, capability, queryClient, scope]);
 }

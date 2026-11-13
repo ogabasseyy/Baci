@@ -50,6 +50,7 @@ function renderModal(
         creditWatch={creditWatch}
         fundReturnTo={fundReturnTo as never}
         fundingAccount={account}
+        merchantId="merchant-1"
         onResetFund={onResetFund}
         showFundPanel
         walletPrimaryUnsettled={walletPrimaryUnsettled}
@@ -136,5 +137,20 @@ describe('bugfix: unobserved rollout merchant with an unsettled wallet on a purc
     renderModal(false, '/imei-check', true);
 
     expect(screen.queryByText('Add store credit')).toBeNull();
+  });
+});
+
+describe('bugfix: restored legacy wallet before any PiggyVest verdict on a purchase top-up', () => {
+  it('treats the purchase return as a store credit top-up and returns on close', () => {
+    // Arrange: no verdict at all yet (hook and cache unknown).
+    mockCapability = null;
+    renderModal(false, '/utilities/airtime');
+
+    // Act
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

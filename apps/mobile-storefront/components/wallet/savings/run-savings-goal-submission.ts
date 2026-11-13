@@ -51,6 +51,8 @@ export type UseStartSavingsSubmitInput = {
   acceptsNonWithdrawableTerms?: boolean;
   /** PiggyVest only: the interest answer; null until chosen. */
   interestChoice?: boolean | null;
+  /** The customer's own PiggyVest verdict: picks a new payment's rail. */
+  primaryRail?: boolean;
   /** The plan exists but its hand-off could not finish (wallet not loaded). */
   onHandOffPending?: (goalId: string) => void;
   effectiveInitialContribution: number;

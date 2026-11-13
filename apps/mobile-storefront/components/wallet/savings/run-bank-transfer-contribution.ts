@@ -31,7 +31,10 @@ export async function runBankTransferContribution(
   ctx: { isMounted: () => boolean; requestPinProof?: PinProofRequester }
 ): Promise<void> {
   try {
-    const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
+    // The customer's own wallet verdict when known (a legacy-wallet customer
+    // at a PiggyVest merchant stays on legacy); else the merchant decides.
+    const isPrimary =
+      input.primaryRail ?? isPiggyvestPrimaryMerchant(input.activeMerchantId);
     const storedKey = input.initialContributionIdempotencyKey;
     // The rail is persisted with the stored id (same state, same scope,
     // cleared together). A truly unrecorded id is only an id from before the

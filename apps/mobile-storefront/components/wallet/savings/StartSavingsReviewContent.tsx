@@ -105,7 +105,9 @@ export function StartSavingsReviewContent({ colors, controller }: Props) {
           controller.setShowPreviewModal(false);
           controller.setShowFundingModal(false);
         }}
-        disabled={controller.isSubmitting}
+        // Also while a card authorization is starting: closing the sheet then
+        // would still navigate to the payment page when it lands.
+        disabled={busy}
       >
         <Text style={[styles.modalCloseText, { color: colors.textSecondary }]}>
           Edit plan

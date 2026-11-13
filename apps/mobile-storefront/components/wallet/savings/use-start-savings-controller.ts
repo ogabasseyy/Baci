@@ -32,7 +32,6 @@ import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { useStartSavingsVariantSelection } from './use-start-savings-variant-selection';
 
 export const DEFAULT_PREFERRED_DEBIT_TIME = '08:00'; // round; editable
-
 export function useStartSavingsController() {
   const [goalIdempotencyKey, setGoalIdempotencyKey] = useState<string | null>(
     null
@@ -191,6 +190,7 @@ export function useStartSavingsController() {
     startGoalWalletSetup: primarySetup.startGoalWalletSetup,
     acceptsNonWithdrawableTerms,
     interestChoice: primarySetup.formInterestChoice,
+    primaryRail: primarySetup.askInterest,
     targetValue,
     variantId: selectedProduct?.variantId ?? null,
   });

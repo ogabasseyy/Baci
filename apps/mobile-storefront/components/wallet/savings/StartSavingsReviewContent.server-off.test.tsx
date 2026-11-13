@@ -81,4 +81,20 @@ describe('StartSavingsReviewContent for a PiggyVest wallet', () => {
     expect(screen.getByText('Savings only')).toBeOnTheScreen();
     expect(screen.queryByText(/lose your interest/)).toBeNull();
   });
+
+  describe('bugfix: Edit closed the sheet while a card authorization was starting', () => {
+    it('keeps Edit plan disabled while the card authorization is in flight', () => {
+      const controller = createStartSavingsController({
+        isAuthorizingCard: true,
+      });
+      render(
+        <StartSavingsReviewContent
+          colors={Colors.light}
+          controller={controller}
+        />
+      );
+      fireEvent.press(screen.getByRole('button', { name: 'Edit plan' }));
+      expect(controller.setShowPreviewModal).not.toHaveBeenCalled();
+    });
+  });
 });

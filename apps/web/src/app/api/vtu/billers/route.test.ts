@@ -276,7 +276,12 @@ describe('GET /api/vtu/billers', () => {
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toBe('Failed to fetch billers: Kuda API unavailable');
+    expect(data.error).toBe(
+      "We couldn't load billers right now. Please try again."
+    );
+    expect(data.code).toBe('BILLERS_UNAVAILABLE');
+    expect(JSON.stringify(data)).not.toMatch(/kuda api|unavailable:/i);
+    expect(data).not.toHaveProperty('kudaError');
   });
 
   it('keeps biller submenu caching short-lived', async () => {
@@ -539,9 +544,10 @@ describe('GET /api/vtu/billers', () => {
         provider: 'kuda',
       }),
     ]);
-    expect(data.monnifyError).toContain(
-      'Failed to fetch Monnify products for IKEDC'
+    expect(data.monnifyError).toBe(
+      "Some billers couldn't be loaded right now. Please try again shortly."
     );
+    expect(data.monnifyError).not.toMatch(/monnify|IKEDC/i);
   });
 
   it('limits concurrent Monnify product lookups for large categories', async () => {
@@ -672,7 +678,9 @@ describe('GET /api/vtu/billers', () => {
     expect(response.status).toBe(200);
     expect(data.billers).toHaveLength(1);
     expect(data.billers[0].provider).toBe('kuda');
-    expect(data.monnifyError).toBe('Monnify API down');
+    expect(data.monnifyError).toBe(
+      "Some billers couldn't be loaded right now. Please try again shortly."
+    );
   });
 
   it('rejects malformed Kuda biller payloads instead of accepting type assertions', async () => {
@@ -707,7 +715,10 @@ describe('GET /api/vtu/billers', () => {
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toContain('Kuda biller payload failed validation');
+    expect(data.error).toBe(
+      "We couldn't load billers right now. Please try again."
+    );
+    expect(JSON.stringify(data)).not.toMatch(/kuda|validation/i);
   });
 
   it('falls back gracefully if Kuda throws but Monnify succeeds', async () => {

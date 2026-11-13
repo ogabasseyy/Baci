@@ -13,6 +13,12 @@ import {
 } from './biller-route-helpers';
 import { dedupeElectricityBillers } from './dedupe-electricity-billers';
 
+// Customers never see provider names or provider error text; details are logged.
+const BILLERS_UNAVAILABLE =
+  "We couldn't load billers right now. Please try again.";
+const SOME_BILLERS_MISSING =
+  "Some billers couldn't be loaded right now. Please try again shortly.";
+
 /**
  * GET /api/vtu/billers?type=electricity
  * Returns available billers/providers for a given bill category.
@@ -109,23 +115,27 @@ export async function GET(request: NextRequest) {
     if (mergedBillers.length === 0) {
       const providerError = kudaError ?? monnifyError;
       if (providerError) {
+        console.error('Failed to fetch billers:', {
+          kudaError: getErrorMessage(kudaError),
+          monnifyError: getErrorMessage(monnifyError),
+        });
         return NextResponse.json(
-          {
-            error: `Failed to fetch billers: ${providerError.message}`,
-            kudaError: getErrorMessage(kudaError),
-            monnifyError: getErrorMessage(monnifyError),
-          },
+          { error: BILLERS_UNAVAILABLE, code: 'BILLERS_UNAVAILABLE' },
           { status: 500 }
         );
       }
     }
 
     const payload: BillersResponsePayload = { billers: mergedBillers };
+    // Older clients read these fields as the message to show, so they carry
+    // neutral text; the provider detail only goes to the server log.
     if (kudaBillers.length === 0 && kudaError) {
-      payload.kudaError = kudaError.message;
+      console.error('Billers partially unavailable:', kudaError.message);
+      payload.kudaError = SOME_BILLERS_MISSING;
     }
     if (monnifyCategory && monnifyBillers.length === 0 && monnifyError) {
-      payload.monnifyError = monnifyError.message;
+      console.error('Billers partially unavailable:', monnifyError.message);
+      payload.monnifyError = SOME_BILLERS_MISSING;
     }
 
     return NextResponse.json(payload, {
@@ -137,7 +147,7 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch billers:', message, error);
     return NextResponse.json(
-      { error: `Failed to fetch billers: ${message}` },
+      { error: BILLERS_UNAVAILABLE, code: 'BILLERS_UNAVAILABLE' },
       { status: 500 }
     );
   }

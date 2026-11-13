@@ -7,10 +7,10 @@ import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
 describe('ogabasseyBlogLcpSnapshot', () => {
   it('is a sync JSON snapshot so leaf loading can commit the parent PPR slot', () => {
     expect(ogabasseyBlogLcpSnapshot.featuredPost.slug).toBe(
-      'hp-elitebook-x-flip-g1i-who-should-pay-for-the-32gb-flip-business-laptop-1788846889'
+      'galaxy-buds-on-bring-95-hour-open-ear-audio-nigeria-price-pending-1794029354'
     );
     expect(ogabasseyBlogLcpSnapshot.imageSrc).toContain(
-      'hp-elitebook-x-flip-g1i-who-should-pay-for-the-32gb-flip-busines'
+      'galaxy-buds-on-bring-95-hour-open-ear-audio-nigeria-price-pendin'
     );
   });
 

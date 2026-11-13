@@ -1,5 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import {
+  getPiggyvestPrimaryCapability,
+  usePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability';
 import {
   getCapabilityCacheVersion,
   msUntilNegativeCapabilityExpires,
@@ -46,11 +49,16 @@ export function usePiggyvestCapabilityNow(
   const remaining = msLeftFor(merchantId, capability, tick);
   useEffect(() => {
     if (remaining === null) return;
-    const timer = setTimeout(
-      () => setTick((value) => value + 1),
-      remaining + 1
-    );
+    const timer = setTimeout(() => {
+      setTick((value) => value + 1);
+      // Ask again at the boundary (Codex): after a rollback the nested
+      // hook still holds its old verdict and schedules no re-probe of its
+      // own, so the verdict would otherwise stay unknown until remount.
+      if (merchantId) {
+        void getPiggyvestPrimaryCapability(merchantId).catch(() => undefined);
+      }
+    }, remaining + 1);
     return () => clearTimeout(timer);
-  }, [remaining]);
+  }, [merchantId, remaining]);
   return verdictFor(merchantId, capability, tick);
 }

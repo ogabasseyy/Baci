@@ -8,6 +8,7 @@ import { useLegacyFundingUnconfirmed } from './use-legacy-funding-unconfirmed';
 
 let mockCapability: boolean | null = null;
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  getPiggyvestPrimaryCapability: async () => false,
   usePiggyvestPrimaryCapability: () => mockCapability,
 }));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: '' } }));

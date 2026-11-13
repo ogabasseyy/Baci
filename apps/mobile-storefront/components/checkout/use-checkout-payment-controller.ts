@@ -29,6 +29,7 @@ import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
 import { isLiveWalletTransferHeld } from './is-live-wallet-transfer-held';
 import { useRedvaultAvailability } from './use-redvault-availability';
+import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
 
@@ -120,12 +121,15 @@ export function useCheckoutPaymentController({
     }
   };
 
+  const transferMode = useTransferModeAtSelection();
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
+    transferMode.capture(method, walletFundedBankTransferOptionEnabled);
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));
   };
 
   const resetPaymentSelection = () => {
+    transferMode.capture(null, false);
     setSelectedPaymentState(null);
     setPaymentTab(null);
   };
@@ -194,17 +198,11 @@ export function useCheckoutPaymentController({
       walletBalance,
       walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
-      // Where PiggyVest is possible, not loaded, refreshing or a failed
-      // refresh (stale data) counts as unknown (Codex): a PiggyVest customer
-      // must never pick this before the wallet says which kind it is.
-      // Merchants the server rules out keep today's behaviour (Muse).
+      // Unknown where PiggyVest is possible (not loaded, refreshing, failed
+      // refresh) or the verdict is unknown/positive (Codex); ruled out = today.
       walletPrimaryUnknown:
         isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
-        // No authoritative verdict yet (Codex): a restored legacy wallet
-        // can't be trusted until the merchant's PiggyVest status is known.
         verdictNow === null ||
-        // PiggyVest confirmed: a wallet transfer would fund savings or a
-        // stale legacy wallet not yet reclassified (Codex).
         (verdictNow === true && !walletIsStoreCredit) ||
         (piggyvestPossible &&
           (!walletQuery.data?.wallet ||
@@ -276,11 +274,10 @@ export function useCheckoutPaymentController({
     setWalletSelection,
     total,
     walletBalance,
-    walletFundedBankTransferOptionEnabled,
-    // Live re-check at submit: a refresh may land as PiggyVest mid-submit,
-    // and the capability is read now, not at render (Codex).
-    // Unknown verdict (never probed, expired, failed) holds until the
-    // merchant's PiggyVest status is authoritative (Codex).
+    walletFundedBankTransferOptionEnabled: transferMode.effective(
+      walletFundedBankTransferOptionEnabled
+    ),
+    // Live re-check at submit: verdict and wallet read now, not at render.
     isWalletFundedBankTransferHeld: () => {
       const capabilityNow = readPiggyvestCapabilityNow(merchantId);
       // Unknown, or PiggyVest confirmed before the wallet is reclassified

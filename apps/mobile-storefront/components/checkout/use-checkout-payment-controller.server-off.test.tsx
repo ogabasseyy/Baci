@@ -233,8 +233,9 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
       walletPrimaryUnknown: false,
     };
 
-    // Act
+    // Act: PiggyVest turns on before Place Order.
     const { result } = renderController();
+    observePiggyvestPrimaryCapability('merchant-1', true);
     const held = result.current.isWalletFundedBankTransferHeld();
     mockLiveVerdict = {
       walletIsStoreCredit: false,

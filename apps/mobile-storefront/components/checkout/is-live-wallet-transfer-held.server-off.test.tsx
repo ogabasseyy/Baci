@@ -75,3 +75,11 @@ describe('bugfix: a ruled-out merchant held by a timed-out wallet read', () => {
     expect(isLiveWalletTransferHeld(live, false)).toBe(false);
   });
 });
+
+describe('bugfix: stale PiggyVest cache holds a ruled-out merchant', () => {
+  it('does not hold on a stale store-credit cache where PiggyVest is ruled out', () => {
+    expect(
+      isLiveWalletTransferHeld(readers({ storeCredit: true }), false)
+    ).toBe(false);
+  });
+});

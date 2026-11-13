@@ -26,8 +26,13 @@ describe('blog HTML attribute utilities', () => {
     const tag = '<img alt="notes src=text" src="old.png" />';
 
     expect(setHtmlAttribute(tag, 'src', 'new.png')).toBe(
-      '<img alt="notes src=text" src="new.png">'
+      '<img alt="notes src=text" src="new.png" />'
     );
     expect(stripHtmlAttribute(tag, 'src')).toBe('<img alt="notes src=text" />');
+  });
+
+  it('handles malformed self-closing separators without hanging', () => {
+    expect(readHtmlTagAttribute('<img src="a.jpg" / >', 'title')).toBeNull();
+    expect(readHtmlTagAttribute('<img src="a.jpg" / >', 'src')).toBe('a.jpg');
   });
 });

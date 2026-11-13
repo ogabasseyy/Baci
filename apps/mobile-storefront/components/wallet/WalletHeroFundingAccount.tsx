@@ -5,18 +5,26 @@ import type { WalletDisplayFundingAccount } from './wallet.types';
 
 type Props = {
   account: WalletDisplayFundingAccount;
+  /** PiggyVest card: a clear "Copied" with a check icon after a copy. */
+  emphasizeCopied?: boolean;
   preview?: boolean;
   purpose?: 'wallet' | 'savings';
   sandbox?: boolean;
 };
 
+const COPIED = 'Copied';
+
 export function WalletHeroFundingAccount({
   account,
+  emphasizeCopied = false,
   preview = false,
   purpose = 'wallet',
   sandbox = false,
 }: Props) {
-  const { copyToClipboard, feedback } = useCopyToClipboard();
+  const { copyToClipboard, feedback } = useCopyToClipboard(
+    emphasizeCopied ? { successMessage: COPIED } : undefined
+  );
+  const copied = emphasizeCopied && feedback === COPIED;
   const isSavingsAccount = purpose === 'savings' && !preview;
 
   return (
@@ -57,14 +65,25 @@ export function WalletHeroFundingAccount({
             {account.accountNumber}
           </Text>
           {!preview ? (
-            <Ionicons name="copy-outline" size={15} color="#F8B84C" />
+            <Ionicons
+              name={copied ? 'checkmark-circle' : 'copy-outline'}
+              size={15}
+              color="#F8B84C"
+            />
           ) : null}
         </View>
         <Text style={styles.bank} numberOfLines={1}>
           {account.bankName}
         </Text>
       </Pressable>
-      {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+      {feedback ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={copied ? styles.copied : styles.feedback}
+        >
+          {feedback}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -94,4 +113,5 @@ const styles = StyleSheet.create({
   number: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   bank: { color: '#AEB4BE', fontSize: 10, marginTop: 2 },
   feedback: { color: '#AEB4BE', fontSize: 9 },
+  copied: { color: '#F8B84C', fontSize: 12, fontWeight: '700', marginTop: 2 },
 });

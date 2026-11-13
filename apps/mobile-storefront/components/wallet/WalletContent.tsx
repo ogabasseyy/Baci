@@ -4,6 +4,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import type Colors from '@/constants/Colors';
+import { useUserPullRefresh } from '@/hooks/use-user-pull-refresh';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
@@ -119,7 +120,6 @@ export function WalletContent(props: WalletContentProps) {
     isCreatingFundingAccount,
     isFundPending,
     isRedeemPending,
-    isRefetching,
     loyaltyPoints,
     loyaltyTier,
     needsPhone,
@@ -169,6 +169,7 @@ export function WalletContent(props: WalletContentProps) {
     showSavingsDeviceSwap,
     handleSelectSavingsDevice,
   } = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const pullRefresh = useUserPullRefresh(onRefresh);
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (
@@ -180,11 +181,7 @@ export function WalletContent(props: WalletContentProps) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl {...pullRefresh} tintColor={colors.primary} />
         }
       >
         <WalletHeroSection

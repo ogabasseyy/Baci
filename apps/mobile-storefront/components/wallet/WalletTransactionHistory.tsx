@@ -4,6 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { styles } from './wallet.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -63,13 +64,16 @@ export function WalletTransactionHistory({
   colors,
   transactions,
 }: WalletTransactionHistoryProps) {
+  // PiggyVest customers: this list is store credit only. Savings wallet
+  // credits are not in it yet, so never imply it is the whole history.
+  const primaryReady = useWalletPrimaryReady();
   return (
     <Animated.View
       entering={FadeIn.duration(400).delay(200)}
       style={[styles.historySection, { backgroundColor: colors.card }]}
     >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        Recent Transactions
+        {primaryReady ? 'Store credit activity' : 'Recent Transactions'}
       </Text>
 
       {transactions.length === 0 ? (
@@ -82,7 +86,9 @@ export function WalletTransactionHistory({
             color={colors.textSecondary}
           />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No transactions yet
+            {primaryReady
+              ? 'No store credit activity yet'
+              : 'No transactions yet'}
           </Text>
         </View>
       ) : (

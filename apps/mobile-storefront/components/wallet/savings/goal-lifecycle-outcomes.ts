@@ -81,6 +81,8 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
       'BUSY',
       'UNAVAILABLE',
       'NOT_FOUND',
+      // The PIN step's "no longer valid, please start again" answer.
+      'OPERATION_INVALID',
     ].map((suffix) => `${K}_${suffix}`)
   ),
 ]);

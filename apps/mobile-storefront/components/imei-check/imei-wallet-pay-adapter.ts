@@ -89,7 +89,11 @@ export function imeiPayAnswer(
   const code = codeOf(reply);
   if (code === 'PIN_PROOF_REQUIRED' || code === 'PIN_PROOF_REFUSED')
     return { kind: 'pin_again', message: 'Please enter your PIN again.' };
-  if (code === 'IMEI_MISMATCH') return outcome('failed', 'imei_mismatch');
+  // With a proof the mismatch comes before any transfer (nothing taken); on a
+  // re-check the payment may already be confirmed, so it is under review
+  // (the drain refunds a paid check nobody can collect).
+  if (code === 'IMEI_MISMATCH')
+    return recheck ? outcome('review') : outcome('failed', 'imei_mismatch');
   // On a re-check only the payment record's own end states (short of money,
   // released or expired, refunded) can say nothing was taken; a mismatched
   // operation says nothing about it, so keep confirming.

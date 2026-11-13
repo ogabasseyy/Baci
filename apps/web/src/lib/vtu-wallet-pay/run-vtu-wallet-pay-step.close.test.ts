@@ -32,6 +32,7 @@ const deps = {
   })),
   pay: vi.fn(),
   closeUnpaid: vi.fn(async () => true),
+  closeUnissued: vi.fn(async () => true),
   delivery: vi.fn(),
 };
 const base = {
@@ -169,5 +170,32 @@ describe('bugfix: an unavailable issue left the prepared purchase live (Codex P2
       expect.objectContaining({ cancelIssued: true })
     );
     expect(deps.pay).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: a start refused before any payment left its purchase live (Codex P2)', () => {
+  it('closes the purchase when the PiggyVest wallet is not ready', async () => {
+    deps.resolveIdentity.mockResolvedValueOnce(null as never);
+    const response = await runVtuWalletPayStep(base, deps as never);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PIGGYVEST_WALLET_NOT_READY',
+    });
+    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN);
+  });
+
+  it('closes the purchase when wallet pay is off', async () => {
+    deps.readRuntime.mockReturnValueOnce(null as never);
+    const response = await runVtuWalletPayStep(base, deps as never);
+    expect(response.status).toBe(503);
+    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN);
+  });
+
+  it('never closes on a re-check or payment refusal', async () => {
+    deps.resolveIdentity.mockResolvedValueOnce(null as never);
+    await runVtuWalletPayStep(
+      { ...base, operationId: OP, pinProof: 'a'.repeat(64) },
+      deps as never
+    );
+    expect(deps.closeUnissued).not.toHaveBeenCalled();
   });
 });

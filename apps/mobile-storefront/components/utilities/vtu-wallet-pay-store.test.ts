@@ -6,6 +6,7 @@ import {
 import {
   clearVtuWalletPay,
   openVtuWalletPay,
+  payFromPiggyvest,
   useVtuWalletPayStore,
 } from './vtu-wallet-pay-store';
 
@@ -47,5 +48,28 @@ describe('bugfix: PiggyVest purchases skipped the screen-wide checkout guard (Co
     useVtuWalletPayStore.setState({ covers: () => false });
     expect(openVtuWalletPay(request, jest.fn())).toBe(false);
     expect(tryAcquireUtilityCheckout()).toBe(true);
+  });
+});
+
+describe('bugfix: PiggyVest-paid success dropped the credited cashback (Codex P2)', () => {
+  it('forwards a credited cashback and drops one that was not credited', () => {
+    for (const credited of [true, false]) {
+      useVtuWalletPayStore.setState({ covers: () => true, pending: null });
+      releaseUtilityCheckout();
+      const onSuccess = jest.fn();
+      payFromPiggyvest(request, onSuccess, '08031234567', false);
+      useVtuWalletPayStore.getState().pending?.onDelivered({
+        reference: 'REF',
+        cashback: { amount: 3, credited, newBalance: 3 },
+      });
+      if (credited)
+        expect(onSuccess).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cashback: { amount: 3, credited: true, newBalance: 3 },
+          })
+        );
+      else expect(onSuccess.mock.calls[0][0]).not.toHaveProperty('cashback');
+      clearVtuWalletPay();
+    }
   });
 });

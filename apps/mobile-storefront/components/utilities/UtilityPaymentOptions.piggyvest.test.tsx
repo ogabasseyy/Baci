@@ -82,3 +82,24 @@ describe('bugfix: airtime never offered a ready PiggyVest wallet (Fable walk)', 
     expect(screen.getByText('Pay with wallet')).toBeTruthy();
   });
 });
+
+describe('bugfix: the savings wallet showed while a store credit replay was pending (Codex P2)', () => {
+  it('never shows the savings wallet for a purchase with a retained store credit attempt', () => {
+    useVtuWalletPayStore.setState({
+      covers: () => true,
+      balanceKobo: 54_970_000,
+    });
+    render(
+      <UtilityPaymentOptions
+        amount={100}
+        returnToHref={RETURN_TO}
+        walletBalance={0}
+        walletIsLoading={false}
+        walletIsSettled
+        walletIsStoreCredit
+        retainedStoreCredit
+      />
+    );
+    expect(screen.queryByText('Savings wallet · NGN')).toBeNull();
+  });
+});

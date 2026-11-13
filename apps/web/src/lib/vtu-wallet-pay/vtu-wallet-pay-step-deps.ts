@@ -65,6 +65,14 @@ export function createVtuWalletPayStepDeps(auth: {
     check: (input) => checkWalletPayment(input),
     pay: (input) => payFromWallet(input),
     closeUnpaid: (input) => closeUnpaidVtuWalletPurchase(input),
+    closeUnissued: async (transactionId) => {
+      const { data, error } = await auth.supabase.rpc(
+        'close_unissued_vtu_wallet_purchase',
+        { p_transaction_id: transactionId }
+      );
+      if (error) throw new Error('VTU wallet pay close failed');
+      return data === true;
+    },
     delivery: (runtime) => {
       const delivery = walletPayDelivery(runtime);
       return {

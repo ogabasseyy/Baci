@@ -18,6 +18,8 @@ export type VtuWalletPayResult = {
   amount?: number;
   reference: string;
   voucherPin?: string;
+  /** The cashback the server reports (forwarded only when credited). */
+  cashback?: { amount: number; credited: boolean; newBalance: number };
 };
 
 const issued = z.object({
@@ -58,10 +60,18 @@ function delivered(
   const parsed = WalletOnlyVtuResponseSchema.safeParse(reply.body);
   if (reply.httpStatus !== 200 || !parsed.success) return null;
   if (parsed.data.status !== 'successful') return null;
-  const { reference, voucherPin } = parsed.data;
+  const { reference, voucherPin, cashback } = parsed.data;
   const amount =
     parsed.data.amount ?? (paidKobo === null ? undefined : paidKobo / 100);
-  return { kind: 'delivered', result: { amount, reference, voucherPin } };
+  return {
+    kind: 'delivered',
+    result: {
+      amount,
+      reference,
+      voucherPin,
+      ...(cashback ? { cashback } : {}),
+    },
+  };
 }
 
 /** Maps a pay (or re-check) answer. Money may have moved: unknown = pending. */

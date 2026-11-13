@@ -3,6 +3,7 @@ import {
   acquireUtilityCheckoutOrAlert,
   releaseUtilityCheckout,
 } from '@/lib/utility-checkout-inflight';
+import { creditedVtuCashback } from '@/lib/vtu-checkout-helpers';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import type { VtuWalletPayResult } from './vtu-wallet-pay-adapter';
 
@@ -60,6 +61,7 @@ export type VtuPiggyvestSuccess = {
   status: 'successful';
   voucherPin?: string;
   address?: string;
+  cashback?: { amount: number; credited: boolean; newBalance: number };
 };
 
 /**
@@ -87,6 +89,10 @@ export function payFromPiggyvest(
       reference: result.reference,
       status: 'successful',
       ...(result.voucherPin ? { voucherPin: result.voucherPin } : {}),
+      // Only a credited cashback, as the store credit path shows it.
+      ...(creditedVtuCashback(result.cashback)
+        ? { cashback: creditedVtuCashback(result.cashback) }
+        : {}),
       ...(request.customerAddress ? { address: request.customerAddress } : {}),
     })
   );

@@ -33,6 +33,7 @@ const deps = {
   check: vi.fn(),
   pay: vi.fn(),
   closeUnpaid: vi.fn(),
+  closeUnissued: vi.fn(),
   delivery: () => delivery,
 };
 const fulfil = vi.fn();

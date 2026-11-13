@@ -14,6 +14,7 @@ DECLARE
   v_paid boolean;
   v_amount numeric;
 BEGIN
+  PERFORM pg_temp.wp_collection();
   INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider, phone_number,
     request_reference, source, metadata, amount, status)
   VALUES
@@ -36,6 +37,23 @@ BEGIN
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);
   PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.get_vtu_wallet_pay_purchase(c_paid)),
     'another user read the purchase');
+  -- REGRESSION (Codex P2): a purchase refused before any payment was
+  -- issued is closed by its owner only; one with any payment is not.
+  PERFORM pg_temp.wp_assert(NOT public.close_unissued_vtu_wallet_purchase(c_paid),
+    'another user closed the purchase');
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', c_user, true);
+  PERFORM pg_temp.wp_assert(NOT public.close_unissued_vtu_wallet_purchase(c_credit),
+    'a store credit purchase was closed');
+  PERFORM pg_temp.wp_issue(c_paid::text, 100000, 'vtu');
+  PERFORM pg_temp.wp_assert(NOT public.close_unissued_vtu_wallet_purchase(c_paid),
+    'a purchase with an issued payment was closed');
+  DELETE FROM piggyvest_primary.wallet_payments WHERE purchase_ref = c_paid::text;
+  PERFORM pg_temp.wp_assert(public.close_unissued_vtu_wallet_purchase(c_paid),
+    'an unissued purchase was not closed');
+  PERFORM pg_temp.wp_assert((SELECT status = 'failed' AND (metadata ->> 'refundSkipped')::boolean
+    FROM public.vtu_transactions WHERE id = c_paid), 'the unissued purchase was not closed as unpaid');
+  UPDATE public.vtu_transactions SET status = 'pending' WHERE id = c_paid;
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
   PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.get_vtu_wallet_pay_purchase(c_paid)),
     'a session-less call read the purchase');
@@ -43,6 +61,12 @@ BEGIN
   -- Only signed-in customers may call it.
   PERFORM pg_temp.wp_assert(pg_catalog.has_function_privilege('authenticated',
     'public.get_vtu_wallet_pay_purchase(uuid)', 'EXECUTE'), 'authenticated can not read');
+  PERFORM pg_temp.wp_assert(pg_catalog.has_function_privilege('authenticated',
+    'public.close_unissued_vtu_wallet_purchase(uuid)', 'EXECUTE'), 'the owner can not close');
+  PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('anon',
+    'public.close_unissued_vtu_wallet_purchase(uuid)', 'EXECUTE'), 'anon can close');
+  PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('service_role',
+    'public.close_unissued_vtu_wallet_purchase(uuid)', 'EXECUTE'), 'service_role can close');
   PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('anon',
     'public.get_vtu_wallet_pay_purchase(uuid)', 'EXECUTE'), 'anon can read');
 END;

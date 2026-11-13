@@ -45,3 +45,21 @@ export async function cancelVtuWalletPay(close: Close, ref: PurchaseRef) {
     { status: 200, headers: { 'Cache-Control': 'no-store' } }
   );
 }
+
+/**
+ * A start refused before any payment was issued (wallet pay off, another
+ * merchant, the wallet not ready) closes the purchase it just prepared, so it
+ * never holds the purchase intent with nothing that could pay or vend it
+ * (Codex P2). A re-check or payment keeps its purchase.
+ */
+export async function refuseBeforeIssue(
+  closeUnissued: (transactionId: string) => Promise<boolean>,
+  start: { transactionId: string; isStart: boolean },
+  response: Response
+) {
+  if (start.isStart)
+    await Promise.resolve()
+      .then(() => closeUnissued(start.transactionId))
+      .catch(() => false);
+  return response;
+}

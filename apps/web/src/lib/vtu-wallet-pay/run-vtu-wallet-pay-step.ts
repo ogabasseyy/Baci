@@ -11,7 +11,6 @@ import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import type { FulfilledVtuResult } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import {
-  type DeliverVtuWalletPaymentDeps,
   deliverVtuWalletPayment,
   VtuWalletPaymentMismatchError,
 } from './deliver-vtu-wallet-payment';
@@ -20,75 +19,11 @@ import {
   closeUnpaidQuietly,
   ENDED_UNPAID,
   recheckStatus,
+  refuseBeforeIssue,
 } from './vtu-wallet-pay-close';
+import type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
 
-type Identity = { merchantId: string; customerId: string; userId: string };
-type Scope = ReturnType<typeof walletPayScope>;
-type Issued =
-  | {
-      status: 'issued';
-      operationId: string;
-      amountKobo: number;
-      expiresAt?: string;
-    }
-  | {
-      status: 'pending' | 'confirmed' | 'needs_review';
-      operationId: string;
-      amountKobo: number;
-    }
-  | { status: 'unavailable' | 'conflict' };
-
-export interface VtuWalletPayStepDeps {
-  /** The caller's own purchase: PiggyVest-paid or not, and its amount. */
-  readPurchase: (transactionId: string) => Promise<{
-    piggyvestPaid: boolean;
-    amount: number;
-    /** The row's status; only a pending row may get a new payment. */
-    status?: string;
-    merchantId?: string;
-    customerId?: string;
-  } | null>;
-  readRuntime: () => WalletPayRuntime | null;
-  readRecoveryRuntime: () => WalletPayRuntime;
-  resolveIdentity: (runtime: WalletPayRuntime) => Promise<Identity | null>;
-  findForPurchase: (input: {
-    runtime: WalletPayRuntime;
-    scope: Scope;
-    purpose: 'vtu';
-    purchaseRef: string;
-  }) => Promise<{ operationId: string; state: string } | null>;
-  issue: (input: {
-    runtime: WalletPayRuntime;
-    scope: Scope;
-    request: { purpose: 'vtu'; purchaseRef: string; amountKobo: number };
-  }) => Promise<Issued>;
-  check: (input: {
-    runtime: WalletPayRuntime;
-    scope: Scope;
-    operationId: string;
-  }) => Promise<{
-    state: string;
-    purpose: string;
-    purchaseRef: string;
-    amountKobo: number;
-  } | null>;
-  pay: (input: {
-    runtime: WalletPayRuntime;
-    scope: Scope;
-    operationId: string;
-    pinProof: string;
-  }) => Promise<WalletPayAnswer>;
-  delivery: (
-    runtime: WalletPayRuntime
-  ) => Omit<DeliverVtuWalletPaymentDeps, 'fulfil'>;
-  /** Closes the purchase once its payment ended unpaid (best effort). */
-  closeUnpaid: (input: {
-    runtime: WalletPayRuntime;
-    scope: Scope;
-    transactionId: string;
-    cancelIssued?: boolean;
-  }) => Promise<boolean>;
-}
+export type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
 
 const unavailable = () =>
   walletPayRefuse(
@@ -161,20 +96,27 @@ export async function runVtuWalletPayStep(
   }
   // Starting or paying needs wallet pay switched on; a re-check of money
   // already sent runs on the recovery runtime so nothing is stranded.
-  if (!live && !recheck) return unavailable();
+  const start = { transactionId, isStart: operationId === undefined };
+  const refuse = (response: Response) =>
+    refuseBeforeIssue(deps.closeUnissued, start, response);
+  if (!live && !recheck) return await refuse(unavailable());
   const runtime = live ?? deps.readRecoveryRuntime();
   if (runtime.merchantId !== input.merchantId)
-    return walletPayRefuse(
-      'Paying from your PiggyVest wallet is not available yet.',
-      'PIGGYVEST_PAY_UNAVAILABLE',
-      409
+    return await refuse(
+      walletPayRefuse(
+        'Paying from your PiggyVest wallet is not available yet.',
+        'PIGGYVEST_PAY_UNAVAILABLE',
+        409
+      )
     );
   const identity = await deps.resolveIdentity(runtime);
   if (!identity || identity.customerId !== input.customerId)
-    return walletPayRefuse(
-      'Finish setting up your PiggyVest wallet to pay from it.',
-      'PIGGYVEST_WALLET_NOT_READY',
-      409
+    return await refuse(
+      walletPayRefuse(
+        'Finish setting up your PiggyVest wallet to pay from it.',
+        'PIGGYVEST_WALLET_NOT_READY',
+        409
+      )
     );
   const scope = walletPayScope(runtime, identity);
   // Closed before any PIN: release the issued payment (never a reserved

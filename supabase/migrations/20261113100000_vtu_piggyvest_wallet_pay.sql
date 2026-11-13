@@ -206,4 +206,46 @@ REVOKE ALL ON FUNCTION piggyvest_primary.close_unpaid_vtu_wallet_purchase(jsonb,
 GRANT EXECUTE ON FUNCTION piggyvest_primary.close_unpaid_vtu_wallet_purchase(jsonb, jsonb)
   TO piggyvest_primary_authorizer;
 
+-- The checkout's own close of a purchase it prepared as PiggyVest-paid but
+-- refused before any payment was issued (wallet pay off, another merchant,
+-- the wallet not ready): no row may hold the purchase intent with nothing
+-- that could ever pay or vend it. Owner-scoped like
+-- get_vtu_wallet_pay_purchase; only a pending, PiggyVest-marked checkout row
+-- with no wallet payment of any state is closed, and nothing was collected.
+CREATE FUNCTION public.close_unissued_vtu_wallet_purchase(p_transaction_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_id uuid;
+BEGIN
+  SELECT t.id INTO v_id FROM public.vtu_transactions AS t
+   WHERE t.id = p_transaction_id
+     AND t.status = 'pending'
+     AND t.source = 'checkout'
+     AND t.metadata ->> 'paymentSource' = 'piggyvest_wallet'
+     AND EXISTS (SELECT 1 FROM public.customers AS c
+                  WHERE c.id = t.customer_id AND c.user_id = (SELECT auth.uid()))
+     FOR UPDATE;
+  IF NOT FOUND THEN RETURN false; END IF;
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
+              WHERE payment.purpose = 'vtu' AND payment.purchase_ref = v_id::text) THEN
+    RETURN false;
+  END IF;
+  UPDATE public.vtu_transactions AS t
+     SET status = 'failed',
+         error_message = 'This purchase was not paid. Nothing was taken from your PiggyVest wallet.',
+         metadata = COALESCE(t.metadata, '{}'::jsonb) || pg_catalog.jsonb_build_object(
+           'refundSkipped', true, 'refundSkipReason', 'piggyvest_unpaid')
+   WHERE t.id = v_id;
+  RETURN true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.close_unissued_vtu_wallet_purchase(uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.close_unissued_vtu_wallet_purchase(uuid) TO authenticated;
+
 COMMIT;

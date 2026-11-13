@@ -60,6 +60,7 @@ const base = {
   operationId: OP,
   normalizedImei: '356938035643809',
   supabaseAdmin: {} as never,
+  payment: { purpose: 'imei_check', purchaseRef: LOOKUP, amountKobo: 50000 },
 };
 
 beforeEach(() => {

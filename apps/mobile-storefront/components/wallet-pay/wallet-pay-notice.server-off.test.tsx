@@ -32,6 +32,13 @@ describe('walletPayNotice', () => {
     ).toContain('This IMEI does not match');
     expect(
       walletPayNotice(
+        { kind: 'failed', failedReason: 'price_changed' },
+        null,
+        'IMEI check'
+      ).message
+    ).toContain('Please update the app');
+    expect(
+      walletPayNotice(
         { kind: 'refunded', failedReason: 'imei_mismatch' },
         null,
         'IMEI check'

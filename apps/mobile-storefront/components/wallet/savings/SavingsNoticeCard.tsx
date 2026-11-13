@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
-import { type SavingsNoticeTone, useSavingsNotice } from './savings-notice';
+import type { SavingsNoticeTone } from './savings-notice-store';
+import { useSavingsNotice } from './use-savings-notice';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -30,13 +31,16 @@ function toneColor(tone: SavingsNoticeTone, colors: WalletColors) {
 /** The latest savings outcome as a calm, dismissible card. */
 export function SavingsNoticeCard({
   colors,
+  goalId,
   style,
 }: {
   colors: WalletColors;
+  /** The goal on screen: another goal's notice is never shown here. */
+  goalId?: string | null;
   /** Outer spacing: the wallet insets it like its cards; the sheet doesn't. */
   style?: StyleProp<ViewStyle>;
 }) {
-  const { notice, clear } = useSavingsNotice();
+  const { notice, clear } = useSavingsNotice(goalId);
   if (!notice) return null;
   const tint = toneColor(notice.tone, colors);
   return (

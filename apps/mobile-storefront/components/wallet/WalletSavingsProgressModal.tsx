@@ -158,7 +158,7 @@ export function WalletSavingsProgressModal({
             setSwapHeight(Math.ceil(height))
           }
         >
-          <SavingsNoticeCard colors={colors} />
+          <SavingsNoticeCard colors={colors} goalId={goal?.id} />
           {phoneSwapStep}
         </BottomSheetScrollView>
       </SavingsBottomSheet>
@@ -243,7 +243,7 @@ export function WalletSavingsProgressModal({
               setBodyHeight(Math.ceil(height))
             }
           >
-            <SavingsNoticeCard colors={colors} />
+            <SavingsNoticeCard colors={colors} goalId={goal?.id} />
             <SavingsGoalSummary
               colors={colors}
               goal={goal}

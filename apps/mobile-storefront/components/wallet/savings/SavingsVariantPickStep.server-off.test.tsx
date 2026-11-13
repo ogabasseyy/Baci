@@ -8,8 +8,8 @@ import {
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import type { SavingsVariantResolveResult } from '../resolve-completed-savings-goal-variant';
 import { SavingsBottomSheet } from '../SavingsBottomSheet';
-import type { SavingsVariantResolveResult } from '../savings-variant-resolution.handlers';
 import { SavingsVariantPickStep } from './SavingsVariantPickStep';
 
 const goal = {

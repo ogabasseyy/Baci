@@ -8,10 +8,10 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import type { SavingsVariantResolveResult } from './resolve-completed-savings-goal-variant';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { SavingsPhoneSwapStep } from './savings/SavingsPhoneSwapStep';
 import { SavingsVariantPickStep } from './savings/SavingsVariantPickStep';
-import type { SavingsVariantResolveResult } from './savings-variant-resolution.handlers';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -207,6 +207,7 @@ export function WalletContent(props: WalletContentProps) {
           // Same side inset as the wallet's cards.
           <SavingsNoticeCard
             colors={colors}
+            goalId={activeSavingsGoal?.id}
             style={{ marginHorizontal: 16, marginTop: 12 }}
           />
         )}

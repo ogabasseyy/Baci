@@ -7,8 +7,8 @@ import type {
   WalletSavingsVariantResolutionOption,
 } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import type { SavingsVariantResolveResult } from '../resolve-completed-savings-goal-variant';
 import { useSavingsSheetLock } from '../SavingsSheetLock';
-import type { SavingsVariantResolveResult } from '../savings-variant-resolution.handlers';
 import { styles } from './savings-phone-swap.styles';
 
 type WalletColors = (typeof Colors)['light'];

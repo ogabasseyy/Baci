@@ -227,7 +227,5 @@ export async function changeSavingsGoalDevice({
   }
 }
 
-export {
-  createSavingsVariantResolutionHandler,
-  resolveCompletedSavingsGoalVariant,
-} from './savings-variant-resolution.handlers';
+export { resolveCompletedSavingsGoalVariant } from './resolve-completed-savings-goal-variant';
+export { createSavingsVariantResolutionHandler } from './savings-variant-resolution.handlers';

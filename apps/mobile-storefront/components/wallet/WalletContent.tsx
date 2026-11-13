@@ -250,7 +250,7 @@ export function WalletContent(props: WalletContentProps) {
             redeemPoints={redeemPoints}
           />
         ) : null}
-        <WalletTransactionHistory colors={colors} transactions={transactions} />
+        <WalletTransactionHistory {...props} />
       </AppKeyboardAwareScrollView>
       <WalletSavingsProgressModal
         addAmount={savingsContributionAmount}

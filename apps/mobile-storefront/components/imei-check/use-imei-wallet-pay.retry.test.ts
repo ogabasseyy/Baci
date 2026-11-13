@@ -7,11 +7,13 @@ import { useImeiWalletPay } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: {
-    getState: () => ({ user: { id: 'user-1' }, merchantId: 'merchant-1' }),
-  },
-}));
+jest.mock('@/stores/auth-store', () => {
+  const state = { user: { id: 'user-1' }, merchantId: 'merchant-1' };
+  const useAuthStore = (selector: (s: typeof state) => unknown) =>
+    selector(state);
+  useAuthStore.getState = () => state;
+  return { useAuthStore };
+});
 jest.mock('@/lib/wallet-pay/imei-wallet-pay-api', () => ({
   imeiWalletPayApi: { start: jest.fn(), verifyPin: jest.fn(), pay: jest.fn() },
 }));

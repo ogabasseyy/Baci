@@ -89,6 +89,13 @@ export function useImeiWalletPay({
 }) {
   const sheet = useWalletPaySheet<ImeiWalletPayResult>({ onDelivered });
   const wallet = walletQuery.data?.wallet;
+  // A sheet opened for one account never stays open for another.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const [openedFor, setOpenedFor] = useState(userId);
+  if (openedFor !== userId) {
+    setOpenedFor(userId);
+    if (sheet.step !== 'closed' && sheet.step !== 'paying') sheet.close();
+  }
   const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();
@@ -128,10 +135,12 @@ export function useImeiWalletPay({
             tiers.includes(tier) ? tiers : [...tiers, tier]
           ),
       });
-      // Settled purchases may have moved money: show the new balance.
+      // Settled purchases may have moved money: show the new balance. The
+      // whole payment is bound to the account that opened it.
       await sheet.open(
-        trackWalletPayPurchase(adapter, purchase, () => {
-          void walletQuery.refetch?.();
+        trackWalletPayPurchase(adapter, purchase, {
+          onSettled: () => void walletQuery.refetch?.(),
+          stillOwner: () => useAuthStore.getState().user?.id === user?.id,
         })
       );
     },

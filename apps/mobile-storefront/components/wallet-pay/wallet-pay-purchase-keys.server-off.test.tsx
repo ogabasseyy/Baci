@@ -11,7 +11,18 @@ beforeEach(async () => {
   walletPayPurchaseKeys.resetMemory();
 });
 
-// Bookkeeping only: it calls no server, so it works the same either way.
+const options = (stillOwner = true) => ({
+  onSettled: jest.fn(),
+  stillOwner: () => stillOwner,
+});
+const adapter = (payAnswer: unknown, startAnswer: unknown = null) => ({
+  start: jest.fn(async () => startAnswer as never),
+  verifyPin: jest.fn(),
+  pay: jest.fn(async () => payAnswer as never),
+});
+const outcome = (kind: string) => ({ kind: 'outcome', outcome: { kind } });
+
+// Bookkeeping only: it calls no server itself, so it works the same either way.
 describe('walletPayPurchaseKeys', () => {
   it('keeps one key per open purchase, across a restart, until it settles', async () => {
     const mint = jest.fn().mockReturnValueOnce('a').mockReturnValueOnce('b');
@@ -22,54 +33,91 @@ describe('walletPayPurchaseKeys', () => {
     walletPayPurchaseKeys.resetMemory();
     await expect(walletPayPurchaseKeys.keyFor('p', mint)).resolves.toBe('b');
   });
+
+  it('bugfix: two quick taps on a cold start get the same key (Codex P1)', async () => {
+    let n = 0;
+    const mint = () => {
+      n += 1;
+      return `key-${n}`;
+    };
+    const [first, second] = await Promise.all([
+      walletPayPurchaseKeys.keyFor('p', mint),
+      walletPayPurchaseKeys.keyFor('p', mint),
+    ]);
+    expect(first).toBe('key-1');
+    expect(second).toBe('key-1');
+    walletPayPurchaseKeys.resetMemory();
+    await expect(walletPayPurchaseKeys.keyFor('p', mint)).resolves.toBe(
+      'key-1'
+    );
+  });
 });
 
 describe('trackWalletPayPurchase', () => {
-  const adapter = (payAnswer: unknown, startAnswer: unknown = null) => ({
-    start: jest.fn(async () => startAnswer as never),
-    verifyPin: jest.fn(),
-    pay: jest.fn(async () => payAnswer as never),
-  });
-
   it('keeps the key while PiggyVest is still confirming or reviewing', async () => {
     await walletPayPurchaseKeys.keyFor('p', () => 'a');
-    const onSettled = jest.fn();
-    for (const kind of ['pending', 'review']) {
-      const tracked = trackWalletPayPurchase(
-        adapter({ kind: 'outcome', outcome: { kind } }),
-        'p',
-        onSettled
+    const opts = options();
+    for (const kind of ['pending', 'review'])
+      await trackWalletPayPurchase(adapter(outcome(kind)), 'p', opts).pay(
+        OP,
+        ''
       );
-      await tracked.pay(OP, '');
-    }
-    expect(onSettled).not.toHaveBeenCalled();
+    expect(opts.onSettled).not.toHaveBeenCalled();
     await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
       'a'
     );
   });
 
-  it('forgets the key and reports when delivered, refunded or refused', async () => {
-    const onSettled = jest.fn();
+  it('bugfix: a lost session or pause after a PIN keeps the key (Codex P1)', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    const opts = options();
+    for (const kind of ['sign_in', 'unavailable', 'failed'])
+      await trackWalletPayPurchase(adapter(outcome(kind)), 'p', opts).pay(
+        OP,
+        ''
+      );
+    await trackWalletPayPurchase(
+      adapter(null, outcome('sign_in')),
+      'p',
+      opts
+    ).start();
+    expect(opts.onSettled).not.toHaveBeenCalled();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'a'
+    );
+  });
+
+  it('forgets the key and reports when delivered, refunded or refused before paying', async () => {
+    const opts = options();
     await walletPayPurchaseKeys.keyFor('p', () => 'a');
     await trackWalletPayPurchase(
       adapter({ kind: 'delivered', result: 'ok' }),
       'p',
-      onSettled
+      opts
     ).pay(OP, 'proof');
     await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
       'b'
     );
-
+    await trackWalletPayPurchase(adapter(outcome('refunded')), 'p', opts).pay(
+      OP,
+      ''
+    );
     await trackWalletPayPurchase(
-      adapter({ kind: 'outcome', outcome: { kind: 'refunded' } }),
+      adapter(null, outcome('insufficient')),
       'p',
-      onSettled
-    ).pay(OP, '');
-    await trackWalletPayPurchase(
-      adapter(null, { kind: 'outcome', outcome: { kind: 'unavailable' } }),
-      'p',
-      onSettled
+      opts
     ).start();
-    expect(onSettled).toHaveBeenCalledTimes(3);
+    expect(opts.onSettled).toHaveBeenCalledTimes(3);
+  });
+
+  it('bugfix: sends nothing once the signed-in account changed (Codex P1)', async () => {
+    const inner = adapter({ kind: 'delivered', result: 'ok' });
+    const tracked = trackWalletPayPurchase(inner, 'p', options(false));
+    await expect(tracked.verifyPin(OP, '1234')).resolves.toEqual(
+      outcome('sign_in')
+    );
+    await expect(tracked.pay(OP, 'proof')).resolves.toEqual(outcome('sign_in'));
+    expect(inner.verifyPin).not.toHaveBeenCalled();
+    expect(inner.pay).not.toHaveBeenCalled();
   });
 });

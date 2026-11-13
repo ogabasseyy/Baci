@@ -21,33 +21,47 @@ async function post(
   body: Record<string, unknown>,
   idempotencyKey?: string
 ): Promise<WalletPayReply> {
-  // A hung request rejects instead of holding the sheet on "Paying...":
-  // the caller treats it as unknown (pending) and re-checks.
+  // The whole request, body included, gives up after the timeout: a hung
+  // request (or a body that never finishes) rejects instead of holding the
+  // sheet on "Paying...", and the caller treats it as unknown and re-checks.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), WALLET_PAY_TIMEOUT_MS);
-  const response = await (connection.fetchImpl ?? fetch)(
-    `${connection.apiBaseUrl}${path}`,
-    {
-      signal: controller.signal,
-      body: JSON.stringify(body),
-      headers: {
-        ...(connection.accessToken
-          ? { Authorization: `Bearer ${connection.accessToken}` }
-          : {}),
-        'Content-Type': 'application/json',
-        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
-      },
-      method: 'POST',
-    }
-  ).finally(() => clearTimeout(timer));
-  const parsed: unknown = await response.json().catch(() => null);
-  return {
-    httpStatus: response.status,
-    body:
-      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {},
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Wallet pay request timed out'));
+    }, WALLET_PAY_TIMEOUT_MS);
+  });
+  const send = async (): Promise<WalletPayReply> => {
+    const response = await (connection.fetchImpl ?? fetch)(
+      `${connection.apiBaseUrl}${path}`,
+      {
+        signal: controller.signal,
+        body: JSON.stringify(body),
+        headers: {
+          ...(connection.accessToken
+            ? { Authorization: `Bearer ${connection.accessToken}` }
+            : {}),
+          'Content-Type': 'application/json',
+          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+        },
+        method: 'POST',
+      }
+    );
+    const parsed: unknown = await response.json().catch(() => null);
+    return {
+      httpStatus: response.status,
+      body:
+        parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {},
+    };
   };
+  try {
+    return await Promise.race([send(), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const lookupPath = (lookupId: string, step: 'wallet-pin' | 'wallet-pay') =>

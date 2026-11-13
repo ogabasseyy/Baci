@@ -123,7 +123,31 @@ describe('bugfix: a hung wallet pay request held the sheet on "Paying..." (Muse 
       }
     );
     jest.advanceTimersByTime(WALLET_PAY_TIMEOUT_MS);
-    await expect(reply).rejects.toThrow('aborted');
+    await expect(reply).rejects.toThrow('timed out');
+    jest.useRealTimers();
+  });
+});
+
+describe('bugfix: a body that never finished outlived the timeout (Codex P2)', () => {
+  it('gives up when the headers arrive but the body stalls', async () => {
+    jest.useFakeTimers();
+    const fetchImpl = jest.fn(async () => ({
+      status: 200,
+      json: () => new Promise(() => undefined),
+    })) as unknown as typeof fetch;
+    const reply = imeiWalletPayApi.pay(
+      { apiBaseUrl: 'https://api.test', accessToken: 'token', fetchImpl },
+      {
+        lookupId: LOOKUP,
+        operationId: OP,
+        pinProof: '',
+        imei: '356938035643809',
+      }
+    );
+    const settled = expect(reply).rejects.toThrow('timed out');
+    await Promise.resolve();
+    jest.advanceTimersByTime(WALLET_PAY_TIMEOUT_MS);
+    await settled;
     jest.useRealTimers();
   });
 });

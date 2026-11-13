@@ -3,9 +3,13 @@ import { useImeiWalletPay } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: { getState: () => ({ user: null, merchantId: null }) },
-}));
+jest.mock('@/stores/auth-store', () => {
+  const state = { user: null, merchantId: null };
+  const useAuthStore = (selector: (s: typeof state) => unknown) =>
+    selector(state);
+  useAuthStore.getState = () => state;
+  return { useAuthStore };
+});
 
 describe('useImeiWalletPay while paying from PiggyVest is switched off', () => {
   it('never offers the PiggyVest wallet, even to a funded PiggyVest customer', () => {

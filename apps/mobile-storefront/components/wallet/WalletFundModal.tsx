@@ -32,6 +32,7 @@ type WalletFundModalProps = Pick<
   | 'onResetFund'
   | 'onSubmitPhone'
   | 'showFundPanel'
+  | 'walletPrimaryUnsettled'
 > & { creditWatch: WalletCreditWatch };
 
 export function WalletFundModal({
@@ -53,6 +54,7 @@ export function WalletFundModal({
   onResetFund,
   onSubmitPhone,
   showFundPanel,
+  walletPrimaryUnsettled = false,
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
   const isDark = useColorScheme() === 'dark';
@@ -69,9 +71,13 @@ export function WalletFundModal({
   // only a card top-up adds: the PiggyVest account would fund savings.
   // Also when the PiggyVest read is unknown (timed out) or not set up yet,
   // so the purchase never detours into PiggyVest setup.
+  // Same rule as the purchase screens (useCardOnlyPurchaseTopUp): an
+  // unsettled wallet at a merchant not ruled out is a store credit top-up.
   const storeCreditTopUp =
     isWalletPurchaseReturnHref(fundReturnTo) &&
-    (primaryReady || piggyvestMerchant);
+    (primaryReady ||
+      piggyvestMerchant ||
+      (walletPrimaryUnsettled && primaryCapability !== false));
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
   const hideCardFunding = primaryReady && !storeCreditTopUp;

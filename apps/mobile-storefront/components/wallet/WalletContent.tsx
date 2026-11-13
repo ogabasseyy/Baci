@@ -59,6 +59,7 @@ export interface WalletContentProps {
   loyaltyTier?: string | null;
   needsPhone: boolean;
   primaryReady?: boolean;
+  walletPrimaryUnsettled?: boolean;
   onCreateFundingAccount: () => void;
   onChangeFundAmount: (value: string) => void;
   onChangeRedeemPoints: (value: string) => void;

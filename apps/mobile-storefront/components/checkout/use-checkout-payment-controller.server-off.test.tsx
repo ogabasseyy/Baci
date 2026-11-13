@@ -285,4 +285,14 @@ describe('bugfix: stale render-time capability at checkout submit', () => {
 
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
   });
+
+  it('bugfix: holds when the ruling-out expired before the wallet refetch starts', () => {
+    // Arrange: rendered as ruled out; the cached negative has expired, but
+    // nothing has refetched yet and the cached wallet is still legacy.
+    const { result } = renderController();
+    mockFetchingNow = false;
+
+    // Act + Assert
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
 });

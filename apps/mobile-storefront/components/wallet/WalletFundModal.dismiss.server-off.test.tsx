@@ -7,6 +7,7 @@ import { createWalletContentProps } from './wallet-content.test-utils';
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 let mockCanGoBack = true;
+let mockCapability: boolean | null = false;
 jest.mock('expo-router', () => ({
   router: {
     back: () => mockBack(),
@@ -19,7 +20,7 @@ jest.mock('@/hooks/use-copy-to-clipboard', () => ({
   useCopyToClipboard: () => ({ copyToClipboard: jest.fn(), feedback: null }),
 }));
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
-  usePiggyvestPrimaryCapability: () => false,
+  usePiggyvestPrimaryCapability: () => mockCapability,
 }));
 
 const creditWatch = {
@@ -36,7 +37,11 @@ const account = {
   provider: 'piggyvest',
 };
 
-function renderModal(primaryReady: boolean, fundReturnTo?: string) {
+function renderModal(
+  primaryReady: boolean,
+  fundReturnTo?: string,
+  walletPrimaryUnsettled = false
+) {
   const onResetFund = jest.fn();
   render(
     <WalletPrimaryContext.Provider value={primaryReady}>
@@ -47,6 +52,7 @@ function renderModal(primaryReady: boolean, fundReturnTo?: string) {
         fundingAccount={account}
         onResetFund={onResetFund}
         showFundPanel
+        walletPrimaryUnsettled={walletPrimaryUnsettled}
       />
     </WalletPrimaryContext.Provider>
   );
@@ -57,6 +63,7 @@ beforeEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
   mockCanGoBack = true;
+  mockCapability = false;
 });
 
 describe('bugfix: closing Add store credit strands the customer on a pushed wallet page', () => {
@@ -107,5 +114,27 @@ describe('server keeps PiggyVest off', () => {
 
     expect(mockBack).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: unobserved rollout merchant with an unsettled wallet on a purchase top-up', () => {
+  it('shows the store credit sheet and returns to the purchase on close', () => {
+    // Arrange: capability not observed yet, PiggyVest check unsettled.
+    mockCapability = null;
+    renderModal(false, '/imei-check', true);
+
+    // Act
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the plain sheet where the server rules PiggyVest out', () => {
+    mockCapability = false;
+    renderModal(false, '/imei-check', true);
+
+    expect(screen.queryByText('Add store credit')).toBeNull();
   });
 });

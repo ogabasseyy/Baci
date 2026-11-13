@@ -237,4 +237,21 @@ describe('bugfix: stale render-time capability at utility submit', () => {
 
     expect(getWalletVerdict).toHaveBeenCalledWith({ holdUnsettled: false });
   });
+
+  it('bugfix: reports unknown when the ruling-out expired before reclassification', () => {
+    // Arrange: rendered as ruled out; the negative verdict has expired.
+    mockCapability = false;
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0 } },
+      getWalletVerdict: () => ({ walletPrimaryUnknown: false }),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    // Act
+    const verdict = result.current.getWalletVerdict?.();
+
+    // Assert
+    expect(verdict?.walletPrimaryUnknown).toBe(true);
+  });
 });

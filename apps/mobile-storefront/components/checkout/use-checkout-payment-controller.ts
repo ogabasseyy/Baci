@@ -269,11 +269,16 @@ export function useCheckoutPaymentController({
     walletFundedBankTransferOptionEnabled,
     // Live re-check at submit: a refresh may land as PiggyVest mid-submit,
     // and the capability is read now, not at render (Codex).
-    isWalletFundedBankTransferHeld: () =>
-      isLiveWalletTransferHeld(
+    // A ruled-out verdict that has since expired holds until the wallet
+    // is reclassified (Codex): the cached legacy wallet can't say yet.
+    isWalletFundedBankTransferHeld: () => {
+      const possibleNow = isPiggyvestPossibleNow(merchantId);
+      if (!piggyvestPossible && possibleNow) return true;
+      return isLiveWalletTransferHeld(
         walletQuery,
-        piggyvestPossible || isPiggyvestPossibleNow(merchantId)
-      ),
+        piggyvestPossible || possibleNow
+      );
+    },
     walletIsStoreCredit,
     walletSelection,
   };

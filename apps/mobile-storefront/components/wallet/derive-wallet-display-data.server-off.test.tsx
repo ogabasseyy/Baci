@@ -40,3 +40,22 @@ describe('wallet display data with the server off', () => {
     expect(data.activeSavingsGoal).toBeNull();
   });
 });
+
+describe('bugfix: unsettled PiggyVest check not passed to the Add money sheet', () => {
+  it('flags a wallet whose PiggyVest check failed or has no owner yet', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 0, primary_unavailable: true })
+        .walletPrimaryUnsettled
+    ).toBe(true);
+    expect(
+      deriveWalletDisplayData({ balance: 0, owner_unresolved: true })
+        .walletPrimaryUnsettled
+    ).toBe(true);
+  });
+
+  it('leaves a plain legacy wallet unflagged', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 0 }).walletPrimaryUnsettled
+    ).toBeUndefined();
+  });
+});

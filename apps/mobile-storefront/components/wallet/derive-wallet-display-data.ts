@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
@@ -15,7 +16,10 @@ interface WalletDataLike {
   earnings_available?: boolean | null;
   earnings_balance?: number | null;
   funding_account?: WalletFundingAccountLike | null;
+  owner_unresolved?: boolean | null;
   primary_balance_kobo?: number | null;
+  primary_pending?: boolean | null;
+  primary_unavailable?: boolean | null;
   savings_balance?: number | null;
   savings_goals?: WalletActiveSavingsGoal[] | null;
   total_balance?: number | null;
@@ -104,6 +108,12 @@ export function deriveWalletDisplayData(
     // legacy rail also validates against it, never the savings wallet.
     ...(primaryReady
       ? { primaryReady: true as const, legacyBalance: walletData.balance ?? 0 }
+      : {}),
+    // The PiggyVest check is unsettled (failed, pending, or no customer row
+    // yet): purchase top-ups stay card-only store credit, like IMEI's.
+    ...(isWalletPrimaryUnknown(walletData) ||
+    walletData.owner_unresolved === true
+      ? { walletPrimaryUnsettled: true as const }
       : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),

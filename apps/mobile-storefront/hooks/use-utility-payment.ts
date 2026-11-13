@@ -82,11 +82,16 @@ export function useUtilityPayment() {
     getWalletVerdict?: () => PiggyvestShortfallVerdict;
   } = readLiveVerdict
     ? {
-        getWalletVerdict: () =>
-          readLiveVerdict({
-            holdUnsettled:
-              piggyvestPossible || isPiggyvestPossibleNow(authMerchantId),
-          }),
+        getWalletVerdict: () => {
+          const possibleNow = isPiggyvestPossibleNow(authMerchantId);
+          const verdict = readLiveVerdict({
+            holdUnsettled: piggyvestPossible || possibleNow,
+          });
+          // Expired ruling-out, not yet reclassified (Codex): unknown.
+          return !piggyvestPossible && possibleNow
+            ? { ...verdict, walletPrimaryUnknown: true }
+            : verdict;
+        },
       }
     : {};
   return {

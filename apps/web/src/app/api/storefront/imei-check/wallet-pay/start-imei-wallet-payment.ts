@@ -153,9 +153,18 @@ export async function startImeiWalletPayment(
       purpose: 'imei_check',
       purchaseRef: String(existing.id),
     });
+    // No live wallet payment (its issued attempt expired, or none was ever
+    // issued): nothing was charged, so the client starts again with a new
+    // key rather than waiting on a lookup no payment will ever complete.
+    if (!owned)
+      return refuse(
+        'PAYMENT_NOT_COMPLETED',
+        'This payment did not go through. Please start again.',
+        409
+      );
     // Only a payment still open (not yet settled) is re-asked: a confirmed or
     // refunded one must never be followed by a second payment for the check.
-    if (!owned || !['issued', 'reserved', 'dispatched'].includes(owned.state))
+    if (!['issued', 'reserved', 'dispatched'].includes(owned.state))
       return mapExistingLookup(existing, input.replayContext);
     lookupId = String(existing.id);
     // The price recorded on the lookup, never today's tier price.

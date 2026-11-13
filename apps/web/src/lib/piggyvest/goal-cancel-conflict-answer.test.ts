@@ -28,12 +28,20 @@ it('bugfix: names three or more rows too', () => {
 it.each([
   'confirmed',
   'conflict',
-  `conflict:${Array(11).fill(a).join(',')}`,
+  `conflict:${a},`,
   'conflict:not-an-id',
   null,
 ])('passes %j through unchanged', (answer) => {
   expect(readConflictAnswer(answer)).toEqual({
     result: answer,
     reviewedIds: [],
+  });
+});
+
+it('bugfix: accepts any number of named rows, never failing a long answer', () => {
+  const ids = Array(12).fill(a);
+  expect(readConflictAnswer(`conflict:${ids.join(',')}`)).toEqual({
+    result: 'conflict',
+    reviewedIds: ids,
   });
 });

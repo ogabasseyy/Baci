@@ -65,6 +65,12 @@ describe('GoalLifecycleEntry', () => {
     expect(cancel()).toBeNull();
   });
 
+  it('does not offer Complete when only credited interest reaches the target', () => {
+    renderEntry(makeGoal({ current_amount: 5200, principal_amount: 4900 }));
+    expect(cancel()).toBeOnTheScreen();
+    expect(complete()).toBeNull();
+  });
+
   it('offers both once the target is reached', () => {
     renderEntry(makeGoal({ current_amount: 5000 }));
     expect(cancel()).toBeOnTheScreen();

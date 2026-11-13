@@ -124,6 +124,23 @@ describe('Complete goal inside the savings sheet, server off', () => {
     expect(screen.queryByText(/fully saved/)).toBeNull();
   });
 
+  it('does not call a plan fully saved when only interest reaches the target', () => {
+    render(
+      <GoalCompleteStep
+        colors={Colors.light}
+        flow={makeFlow()}
+        goal={{ ...goal, current_amount: 790000, principal_amount: 770000 }}
+        onDone={jest.fn()}
+        onNotNow={jest.fn()}
+        onSignIn={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByRole('header', { name: 'Your plan is ready' })
+    ).toBeTruthy();
+    expect(screen.queryByText(/fully saved/)).toBeNull();
+  });
+
   it('starts the PIN-protected complete, or steps back with Not now', () => {
     const flow = makeFlow();
     const handlers = {

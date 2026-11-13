@@ -148,14 +148,29 @@ export function createWalletSavingsActions({
       return;
     }
     if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {
+      // A check answers only for the operation it started with. If the
+      // stored id changed meanwhile (another account, merchant or goal took
+      // over the screen), its late answer must not clear that newer
+      // operation, its amount or its busy flag.
+      const operationId = idempotencyKeyRef.current;
+      let released = false;
+      const ours = () => idempotencyKeyRef.current === operationId;
       return checkPendingPrimarySavings({
         goal,
         merchantId: activeMerchantId,
-        operationId: idempotencyKeyRef.current,
-        clearOperation: releaseOperation,
-        clearAmount: () => setSavingsContributionAmount(''),
+        operationId,
+        clearOperation: () => {
+          if (!ours()) return;
+          released = true;
+          releaseOperation();
+        },
+        clearAmount: () => {
+          if (released || ours()) setSavingsContributionAmount('');
+        },
         refetchWallet,
-        setPending: setIsAddingSavingsContribution,
+        setPending: (value) => {
+          if (released || ours()) setIsAddingSavingsContribution(value);
+        },
       });
     }
     const rail: ContributionRail =

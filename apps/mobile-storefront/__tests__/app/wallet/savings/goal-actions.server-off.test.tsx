@@ -87,6 +87,17 @@ describe('old goal-actions links', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('wait while the wallet read is held after an account switch', () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: undefined,
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+  });
+
   it('open the plain wallet for a malformed goal id', () => {
     mockParams.mockReturnValue({ goalId: 'goal 1', kind: 'cancel' });
     render(<WalletGoalActionsRoute />);

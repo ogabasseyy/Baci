@@ -29,7 +29,10 @@ export default function WalletGoalActionsRoute() {
   if (auth.isLoading) return null;
   if (auth.redirectTo) return <Redirect href={login} />;
   if (!goalId) return <Redirect href="/wallet" />;
-  if (wallet.isLoading && !wallet.data) return null;
+  // No data and no error means the wallet read has not settled yet (still
+  // loading, or held while the signed-in identities catch up after an
+  // account switch): wait rather than drop a valid goal link.
+  if (!wallet.data && !wallet.isError) return null;
   // A failed wallet read keeps the link: the customer can retry instead of
   // landing on the plain wallet without the goal they opened.
   if (wallet.isError && !wallet.data) {

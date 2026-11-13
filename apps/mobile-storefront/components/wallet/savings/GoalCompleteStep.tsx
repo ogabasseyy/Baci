@@ -49,7 +49,9 @@ export function GoalCompleteStep({
   useSavingsSheetLock(flow.step === 'submitting');
   const done = flow.step === 'done';
   // A plan can also be completed at its end date without reaching the target.
-  const reachedTarget = total >= goal.target_amount;
+  // Same test as the database: saved principal, not principal plus interest.
+  const reachedTarget =
+    (goal.principal_amount ?? goal.current_amount) >= goal.target_amount;
   const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
     flow.step
   );

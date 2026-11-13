@@ -77,6 +77,15 @@ BEGIN
   -- What each wallet payment bought, in customer words (masked numbers).
   paid AS (
     SELECT payment.id, payment.intent_id, payment.amount_kobo, payment.state,
+           -- Money that moved for the purchase: listed. A failed transfer
+           -- that only charged a fee is not a purchase (the amount never
+           -- moved, Codex P2); a released attempt proven successful while
+           -- another was unresolved did move money (Codex P2).
+           (payment.state IN ('reserved', 'dispatched', 'confirmed')
+             OR (payment.state = 'needs_review'
+                 AND payment.review_reason IS DISTINCT FROM 'failed_with_fee')
+             OR (payment.state = 'released'
+                 AND payment.review_reason = 'late_success_deferred')) AS listed,
            -- Set once when the PIN reserved it: a row never moves between
            -- keyset pages as the payment settles.
            COALESCE(payment.reserved_at, payment.issued_at) AS occurred_at,
@@ -189,7 +198,7 @@ BEGIN
            CASE WHEN paid.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
            paid.occurred_at
       FROM paid
-     WHERE paid.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')
+     WHERE paid.listed
     UNION ALL
     -- Refunded to the wallet: once the refund is sent.
     SELECT refund.id,
@@ -206,7 +215,7 @@ BEGIN
       JOIN paid ON paid.id = refund.payment_id
      -- Only a refund of a listed spend (money that moved), so a refund never
      -- shows without the spend it returns (Muse).
-     WHERE paid.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')
+     WHERE paid.listed
        AND (refund.state IN ('dispatched', 'confirmed', 'needs_review')
             -- A released attempt later proven successful (it credited the
             -- customer while another attempt was live) is a refund too.

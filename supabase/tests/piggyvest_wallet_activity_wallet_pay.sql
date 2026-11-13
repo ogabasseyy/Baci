@@ -24,6 +24,8 @@ DECLARE
   v_imei text;
   v_vtu text;
   v_rows jsonb;
+  v_fee text;
+  v_deferred text;
 BEGIN
   PERFORM pg_temp.wp_collection();
   -- An IMEI check paid and confirmed, then refunded (refund sent).
@@ -154,6 +156,24 @@ BEGIN
     'long reserve');
   PERFORM pg_temp.wp_assert((SELECT pg_catalog.max(pg_catalog.char_length(row.label))
     FROM public.list_piggyvest_wallet_activity(c_merchant) AS row) <= 120, 'a label exceeded 120 characters');
+
+  -- REGRESSION (Codex P2): a failed transfer that only charged a fee is not a
+  -- purchase; a released attempt proven successful while another attempt was
+  -- unresolved did move money and shows as a pending spend.
+  v_fee := pg_temp.wp_dispatched('f9a10000-0000-4000-8000-0000000000aa', 100000);
+  UPDATE piggyvest_primary.wallet_payments
+     SET state = 'needs_review', review_reason = 'failed_with_fee',
+         provider_transaction_id = 'txn-activity-fee', settled_at = pg_catalog.clock_timestamp()
+   WHERE id = v_fee::uuid;
+  v_deferred := pg_temp.wp_dispatched('f9a10000-0000-4000-8000-0000000000ab', 100000);
+  UPDATE piggyvest_primary.wallet_payments
+     SET state = 'released', review_reason = 'late_success_deferred'
+   WHERE id = v_deferred::uuid;
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = v_fee::uuid), 'a fee-only failure was listed as a purchase');
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = v_deferred::uuid AND row.kind = 'wallet_spend' AND row.status = 'pending'),
+    'a deferred late success was hidden');
 
   -- Another user sees none of it.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);

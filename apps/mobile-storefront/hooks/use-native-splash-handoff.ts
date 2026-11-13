@@ -14,8 +14,8 @@ function readNativeSplashVisibility() {
   try {
     return SplashMotion.isVisible();
   } catch {
-    // Do not claim the recovery UI is visible while native UI may cover it.
-    return true;
+    // Fail open to recovery when the native visibility API is unavailable.
+    return false;
   }
 }
 
@@ -26,6 +26,7 @@ export function useNativeSplashHandoff({
   const [showSplash, setShowSplash] = useState(initialVisible);
   const [timedOut, setTimedOut] = useState(false);
   const [hideFailed, setHideFailed] = useState(false);
+  const [recoverySettled, setRecoverySettled] = useState(false);
   const [nativeSplashVisible, setNativeSplashVisible] = useState(true);
   const [hasLayout, setHasLayout] = useState(false);
   const firstLayoutRecorded = useRef(false);
@@ -42,7 +43,11 @@ export function useNativeSplashHandoff({
   }, [showSplash]);
 
   useEffect(() => {
-    if (!showSplash || !(timedOut || (intro.settled && hasLayout && ready)))
+    if (
+      !showSplash ||
+      hideFailed ||
+      !(timedOut || (intro.settled && hasLayout && ready))
+    )
       return;
     let active = true;
     if (!hidePromiseRef.current) {
@@ -89,7 +94,7 @@ export function useNativeSplashHandoff({
     return () => {
       active = false;
     };
-  }, [showSplash, timedOut, ready, hasLayout, intro.settled]);
+  }, [showSplash, timedOut, ready, hasLayout, intro.settled, hideFailed]);
 
   useEffect(() => {
     if (!showSplash || !hideFailed) return;
@@ -109,6 +114,7 @@ export function useNativeSplashHandoff({
       );
     void hidePromiseRef.current.then((hidden) => {
       if (!active) return;
+      setRecoverySettled(true);
       if (hidden) {
         markStartupTiming('splash_hide_completed');
         setHideFailed(false);
@@ -160,5 +166,7 @@ export function useNativeSplashHandoff({
     hasLayout,
     hideFailed,
     nativeSplashVisible,
+    shouldShowStartupRecovery:
+      hideFailed && recoverySettled && !nativeSplashVisible,
   };
 }

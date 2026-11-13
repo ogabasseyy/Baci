@@ -7,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import type React from 'react';
+import { registerRootLayoutPendingSplashRecoveryTest } from './root-layout-pending-splash-recovery-test-cases';
 
 interface SplashRecoveryTestContext {
   RootLayout: React.ComponentType;
@@ -287,5 +288,13 @@ export function registerRootLayoutSplashRecoveryTests({
       );
     });
     expect(hideSplash).toHaveBeenCalledTimes(1);
+  });
+
+  registerRootLayoutPendingSplashRecoveryTest({
+    RootLayout,
+    initializeStorage,
+    hideSplash,
+    isSplashVisible,
+    rootLayoutNavUnmount,
   });
 }

@@ -5,7 +5,7 @@ import { useNativeSplashHandoff } from './use-native-splash-handoff';
 
 jest.mock('react-native-splash-motion', () => ({
   __esModule: true,
-  default: { hide: jest.fn(), waitForIntro: jest.fn() },
+  default: { hide: jest.fn(), isVisible: jest.fn(), waitForIntro: jest.fn() },
 }));
 jest.mock('@/lib/crash-diagnostics', () => ({
   recordCrashBreadcrumb: jest.fn(),
@@ -134,6 +134,49 @@ it('keeps persistent native hide failures bounded before exposing recovery', asy
 
   expect(result.current.showSplash).toBe(true);
   expect(result.current.hideFailed).toBe(true);
+});
+
+it('exposes startup recovery when native splash visibility cannot be read', async () => {
+  mockHide.mockRejectedValue(new Error('native hide unavailable'));
+  jest.mocked(SplashMotion.isVisible).mockImplementation(() => {
+    throw new Error('native visibility unavailable');
+  });
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: true })
+  );
+
+  await act(async () => intro.resolve(true));
+  act(() => result.current.onFirstLayout());
+  await waitFor(() => expect(result.current.hideFailed).toBe(true));
+
+  expect(result.current.nativeSplashVisible).toBe(false);
+  expect(result.current.shouldShowStartupRecovery).toBe(true);
+});
+
+it('waits for the bounded native recovery attempt before releasing the app to recovery UI', async () => {
+  const recovery = deferred<void>();
+  mockHide
+    .mockRejectedValueOnce(new Error('native hide failed'))
+    .mockRejectedValueOnce(new Error('native hide fallback failed'))
+    .mockReturnValueOnce(recovery.promise);
+  jest.mocked(SplashMotion.isVisible).mockImplementation(() => {
+    throw new Error('native visibility unavailable');
+  });
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: true })
+  );
+
+  await act(async () => intro.resolve(true));
+  act(() => result.current.onFirstLayout());
+  await waitFor(() => expect(mockHide).toHaveBeenCalledTimes(3));
+  expect(result.current.hideFailed).toBe(true);
+  expect(result.current.shouldShowStartupRecovery).toBe(false);
+
+  await act(async () => recovery.reject(new Error('bounded recovery failed')));
+  await waitFor(() =>
+    expect(result.current.shouldShowStartupRecovery).toBe(true)
+  );
+  expect(result.current.nativeSplashVisible).toBe(false);
 });
 
 it('keeps holding after intro and layout while initialization is not ready', async () => {

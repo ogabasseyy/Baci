@@ -94,8 +94,7 @@ export default function RootLayout() {
     onFirstLayout,
     shouldRenderApp,
     timedOut,
-    hideFailed,
-    nativeSplashVisible,
+    shouldShowStartupRecovery,
   } = useNativeSplashHandoff({
     initialVisible: !bootstrapState.hasCompletedInitialBoot,
     ready: loaded && isInitialized && isStorageReady,
@@ -267,7 +266,7 @@ export default function RootLayout() {
   }, [error]);
 
   if (
-    (hideFailed && !nativeSplashVisible) ||
+    shouldShowStartupRecovery ||
     (timedOut && (!shouldRenderApp || !loaded || !isStorageReady))
   ) {
     return <StartupRecoveryScreen />;

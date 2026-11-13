@@ -19,6 +19,7 @@ import { useSearchStorage } from '@/hooks/use-search-storage';
 import { searchDropdownStyles as styles } from './search/SearchDropdown.styles';
 import { SearchDropdownList } from './search/SearchDropdownList';
 import { useProductSearchNavigation } from './search/use-product-search-navigation';
+import { useSearchNavigationGuard } from './search/use-search-navigation-guard';
 import { useSearchDropdownState } from './search/useSearchDropdownState';
 
 const MAX_RESULTS = 6;
@@ -104,6 +105,10 @@ export function SearchDropdown({
     onSelectionStart: onProductSelectionStart,
     onNavigate: (product) => router.push(`/product/${product.slug}`),
   });
+  const navigateSafely = useSearchNavigationGuard({
+    isVisible,
+    invalidationKey: activeQuery,
+  });
 
   const handleSuggestionPress = (term: string) => {
     setQuery(term);
@@ -113,10 +118,11 @@ export function SearchDropdown({
     }
   };
 
-  const handleCategoryPress = (slug: string) => {
-    onClose();
-    router.push({ pathname: '/category/[slug]', params: { slug } });
-  };
+  const handleCategoryPress = (slug: string) =>
+    navigateSafely(() => {
+      onClose();
+      router.push({ pathname: '/category/[slug]', params: { slug } });
+    });
 
   const handleSubmit = () => {
     // The results screen owns search-history writes for submitted queries,

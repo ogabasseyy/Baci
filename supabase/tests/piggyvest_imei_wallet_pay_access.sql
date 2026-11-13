@@ -115,6 +115,12 @@ SET LOCAL ROLE authenticated;
 DO $$
 DECLARE id text := current_setting('test.failed_lookup'); r jsonb;
 BEGIN
+  -- Muse: once the PiggyVest refund is owed the check stays refunded_*,
+  -- never a plain failure that hides the refund.
+  IF NOT pg_temp.imei_refused('cache', pg_temp.cache_patch('failed_error', 502) || jsonb_build_object('lookup_id', id),
+    'imei_access_charged_lookup_failure_denied') THEN
+    RAISE EXCEPTION 'a lookup owing a PiggyVest refund was failed without it';
+  END IF;
   PERFORM pg_temp.imei_call('cache', pg_temp.cache_patch('refunded_error', 502) || jsonb_build_object('lookup_id', id));
   r := pg_temp.imei_call('read_status', jsonb_build_object('lookup_id', id));
   IF r ->> 'status' <> 'refunded_error' THEN RAISE EXCEPTION 'failed lookup not refunded: %', r; END IF;

@@ -194,6 +194,19 @@ export async function findWalletPaymentForPurchase(input: {
     .readForPurchase(input.purpose, input.purchaseRef);
 }
 
+/** Whether this customer's wallet flow ever issued a payment for one purchase. */
+export async function walletPaymentAttemptedForPurchase(input: {
+  runtime: WalletPayRuntime;
+  scope: unknown;
+  purpose: 'imei_check' | 'vtu';
+  purchaseRef: string;
+}) {
+  const ports = createWalletPayPorts(input.runtime);
+  return await ports
+    .customerStore(input.scope)
+    .wasAttempted(input.purpose, input.purchaseRef);
+}
+
 /** Delivery claim and outcome for confirmed payments (worker side). */
 export function walletPayDelivery(runtime: WalletPayRuntime) {
   const { worker } = createWalletPayPorts(runtime);

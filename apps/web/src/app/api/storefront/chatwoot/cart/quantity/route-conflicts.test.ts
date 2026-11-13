@@ -211,7 +211,7 @@ describe('Chatwoot shared-cart quantity route', () => {
     });
   });
 
-  it('requires refresh for a replay that has no trustworthy live version', async () => {
+  it('recovers a replay from the live snapshot when the RPC omits its version', async () => {
     arrange({ ...body, cartVersion: 11 }, { ...cart, version: 15, lines: [] });
     mocks.mutateCart.mockResolvedValue({
       ok: true,
@@ -223,12 +223,13 @@ describe('Chatwoot shared-cart quantity route', () => {
     const response = await POST(request());
     const payload = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(payload).toEqual({ accepted: false, code: 'refresh_required' });
-    expect(payload).not.toHaveProperty('cartVersion');
-    expect(payload).not.toHaveProperty('sessionToken');
-    expect(response.headers.get('set-cookie')).toBeNull();
-    expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      accepted: true,
+      cartVersion: 15,
+      replayed: true,
+    });
+    expect(mocks.getCart).toHaveBeenCalledOnce();
   });
 
   it('maps idempotency payload mismatch and new stale requests to refresh-required', async () => {

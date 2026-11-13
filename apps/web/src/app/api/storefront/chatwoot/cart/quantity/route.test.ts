@@ -213,6 +213,24 @@ describe('Chatwoot shared-cart quantity route', () => {
       '2026-11-20T00:00:00.000Z'
     );
   });
+
+  it('returns the stable unavailable response when scoped proof creation expires', async () => {
+    arrange();
+    mocks.createCartScopedClient.mockImplementationOnce(() => {
+      throw new Error('cart proof has expired');
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      accepted: false,
+      code: 'temporarily_unavailable',
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
   it('uses upgraded live operations for a legacy cart principal', async () => {
     arrange();
     const upgraded = {

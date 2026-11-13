@@ -99,7 +99,12 @@ export async function POST(request: NextRequest) {
   }
   if (!quota.allowed) return unavailable(429, 'quota_exceeded');
 
-  const client = createCartScopedClient(cartContext.principal);
+  let client: ReturnType<typeof createCartScopedClient>;
+  try {
+    client = createCartScopedClient(cartContext.principal);
+  } catch {
+    return unavailable(503, 'temporarily_unavailable');
+  }
   let principal: typeof cartContext.principal | null;
   try {
     principal = await upgradeLegacySessionPrincipal(
@@ -168,34 +173,40 @@ export async function POST(request: NextRequest) {
         ? result.cart.version
         : null;
   let proofCartExpiresAt = result.cart.expiresAt;
-  if (result.replayed && liveCartVersion !== null) {
-    let latestCart: Awaited<ReturnType<typeof getCart>>;
+  let canRenewProof = true;
+  if (result.replayed) {
+    let latestCart: Awaited<ReturnType<typeof getCart>> | null = null;
     try {
       latestCart = await getCart({ client, principal });
     } catch {
-      return unavailable(503, 'temporarily_unavailable');
+      canRenewProof = false;
     }
-    if (
-      !latestCart.ok ||
-      latestCart.cart.cartId !== principal.cartId ||
-      latestCart.cart.version < liveCartVersion
-    ) {
-      return unavailable(409, 'refresh_required');
+    if (canRenewProof) {
+      if (
+        !latestCart?.ok ||
+        latestCart.cart.cartId !== principal.cartId ||
+        latestCart.cart.version < cartContext.state.cartVersion ||
+        (liveCartVersion !== null && latestCart.cart.version < liveCartVersion)
+      ) {
+        canRenewProof = false;
+      } else {
+        liveCartVersion = latestCart.cart.version;
+        proofCartExpiresAt = latestCart.cart.expiresAt;
+      }
     }
-    liveCartVersion = latestCart.cart.version;
-    proofCartExpiresAt = latestCart.cart.expiresAt;
   }
   if (liveCartVersion === null) {
-    return unavailable(409, 'refresh_required');
+    canRenewProof = false;
   }
 
-  const proofGrantExpiry = liveGrant
-    ? resolveChatwootCartProofExpiry({
-        cartExpiresAt: proofCartExpiresAt,
-        existingProofExpiresAt: principal.expiresAt,
-        liveGrantExpiresAt: liveGrant.grantExpiresAt,
-      })
-    : null;
+  const proofGrantExpiry =
+    canRenewProof && liveGrant
+      ? resolveChatwootCartProofExpiry({
+          cartExpiresAt: proofCartExpiresAt,
+          existingProofExpiresAt: principal.expiresAt,
+          liveGrantExpiresAt: liveGrant.grantExpiresAt,
+        })
+      : null;
   let proof: string | null = null;
   if (proofGrantExpiry !== null && liveGrant !== null) {
     try {
@@ -221,7 +232,12 @@ export async function POST(request: NextRequest) {
     ? cartSessionCookieMaxAge(proofGrantExpiry)
     : 0;
   let sessionToken: string | null = null;
-  if (proof && maxAge > 0 && proofGrantExpiry !== null) {
+  if (
+    proof &&
+    maxAge > 0 &&
+    proofGrantExpiry !== null &&
+    liveCartVersion !== null
+  ) {
     try {
       sessionToken = await renewChatwootSessionCapability({
         binding: cartContext.binding,
@@ -242,7 +258,7 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json(
     {
       accepted: true,
-      cartVersion: liveCartVersion,
+      ...(liveCartVersion !== null ? { cartVersion: liveCartVersion } : {}),
       operationId: result.operationId,
       replayed: result.replayed,
       ...(sessionToken ? { sessionToken } : {}),

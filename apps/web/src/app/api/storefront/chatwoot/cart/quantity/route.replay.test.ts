@@ -211,7 +211,7 @@ describe('Chatwoot cart mutation replay', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
-  it('fails closed when the replay snapshot read throws', async () => {
+  it('preserves a successful replay when the follow-up snapshot read throws', async () => {
     arrange();
     mocks.getCart.mockRejectedValue(new Error('private repository details'));
     mocks.mutateCart.mockResolvedValue({
@@ -224,12 +224,15 @@ describe('Chatwoot cart mutation replay', () => {
 
     const response = await POST(request());
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      accepted: false,
-      code: 'temporarily_unavailable',
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      accepted: true,
+      cartVersion: 15,
+      replayed: true,
     });
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
+    expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
   });
 });

@@ -115,6 +115,10 @@ export function walletPayNotice(
       ...notices.sign_in,
       message: `Your session ended. If PiggyVest already took ${amount}, your ${purchase} will finish or the money comes back automatically. Please don't pay again.`,
     },
+    not_started: {
+      ...notices.not_started,
+      message: `If PiggyVest already took ${amount}, your ${purchase} will finish or the money comes back automatically. Please don't pay again. Try again to check.`,
+    },
     unavailable: {
       title: "Can't check this payment right now",
       message: `If PiggyVest already took ${amount}, your ${purchase} will finish or the money comes back automatically. Please don't pay again.`,

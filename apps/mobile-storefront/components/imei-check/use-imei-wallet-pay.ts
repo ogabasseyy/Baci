@@ -11,6 +11,7 @@ import {
   piggyvestPayingBalanceKobo,
   piggyvestWalletCovers,
 } from '@/components/wallet-pay/piggyvest-wallet-covers';
+import { startWithReplayCaution } from '@/components/wallet-pay/replay-start-caution';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
 import {
@@ -147,9 +148,15 @@ export function useImeiWalletPay({
             imei.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
           );
           purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imeiHash}`;
+          // Minted now = a new purchase; reused = a replay of an earlier
+          // attempt whose payment may already have gone through.
+          let minted = false;
           const idempotencyKey = await walletPayPurchaseKeys.keyFor(
             purchase,
-            Crypto.randomUUID
+            () => {
+              minted = true;
+              return Crypto.randomUUID();
+            }
           );
           // The account may have changed during the awaits above: never send
           // the new account's token with the old account's key.
@@ -172,7 +179,8 @@ export function useImeiWalletPay({
                 tiers.includes(tier) ? tiers : [...tiers, tier]
               ),
           });
-          return await inner.start();
+          const started = inner;
+          return await startWithReplayCaution(!minted, () => started.start());
         },
         verifyPin: async (operationId, pin) => {
           if (!inner) throw new Error('Wallet payment not started');

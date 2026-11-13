@@ -66,6 +66,12 @@ const WEB_CRON_CONFIG = new Map([
     '/api/cron/piggyvest-goal-cancel-forfeit-sweep',
     { method: 'GET', timeoutMs: 6 * 60_000 },
   ],
+  [
+    // PiggyVest wallet pay drain: settles, delivers and refunds payments a
+    // customer request left behind. Not configured = a 200 no-op.
+    '/api/cron/piggyvest-wallet-pay-drain',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
   ['/api/cron/wallet-payouts', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/order-notifications', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/quiz/finalize', { method: 'GET', timeoutMs: 5 * 60_000 }],

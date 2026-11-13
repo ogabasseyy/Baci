@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import WalletGoalActionsRoute from '@/app/wallet/savings/goal-actions';
 
 const mockParams = jest.fn();
@@ -70,6 +70,21 @@ describe('old goal-actions links', () => {
     mockParams.mockReturnValue({ goalId: GOAL });
     render(<WalletGoalActionsRoute />);
     expect(screen.queryByText(/Redirect:/)).toBeNull();
+  });
+
+  it('keep the link and offer a retry when the wallet fails to load', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      isError: true,
+      data: undefined,
+      refetch,
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it('open the plain wallet for a malformed goal id', () => {

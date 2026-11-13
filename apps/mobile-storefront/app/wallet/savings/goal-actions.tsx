@@ -1,4 +1,5 @@
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
+import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useWallet } from '@/hooks/use-wallet';
 import { goalIdParamSchema } from '@/schemas/goal-link';
@@ -29,6 +30,11 @@ export default function WalletGoalActionsRoute() {
   if (auth.redirectTo) return <Redirect href={login} />;
   if (!goalId) return <Redirect href="/wallet" />;
   if (wallet.isLoading && !wallet.data) return null;
+  // A failed wallet read keeps the link: the customer can retry instead of
+  // landing on the plain wallet without the goal they opened.
+  if (wallet.isError && !wallet.data) {
+    return <GoalLinkLoadError onRetry={() => void wallet.refetch()} />;
+  }
   // A goal that is no longer the customer's (settled, cancelled, someone
   // else's) opens the plain wallet: the sheet would otherwise fall back to a
   // different goal and offer to cancel or complete that one.

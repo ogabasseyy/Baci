@@ -47,6 +47,7 @@ export function useInSheetGoalCancel(
   const flow = useGoalLifecycle({
     kind,
     goalId: active?.id ?? goal?.id ?? '',
+    goalTitle: active?.title ?? goal?.title,
     resetKey: attempt,
   });
   // Refresh once an action actually settles (or may have), whether or not

@@ -15,7 +15,7 @@ jest.mock('./savings/savings-notice', () => {
   return { notifySavings, savingsNotifier: () => notifySavings };
 });
 
-const product = { id: 'p' } as Product;
+const product = { id: 'p', name: 'iPhone 16' } as Product;
 
 describe('useSavingsDeviceSwap', () => {
   it('closes and clears the search after a successful change', async () => {
@@ -32,6 +32,11 @@ describe('useSavingsDeviceSwap', () => {
     expect(result.current.showSavingsDeviceSwap).toBe(false);
     expect(result.current.savingsDeviceSearch).toBe('');
     expect(result.current.isChangingSavingsDevice).toBe(false);
+    expect(notifySavings).toHaveBeenCalledWith(
+      'Phone changed',
+      'Your savings now go towards iPhone 16.',
+      'success'
+    );
   });
 
   it('shows a warning notice and stays open when the change throws', async () => {

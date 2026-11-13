@@ -62,9 +62,10 @@ function contextLine(request: WalletPinSheetBinding['request']) {
   if (!request) return null;
   if ('amountKobo' in request)
     return `Adding ${formatNgnCurrency(request.amountKobo / 100)} to savings`;
+  const goal = request.goalTitle?.trim() || 'this goal';
   return request.action === 'cancel'
-    ? 'Cancelling this goal'
-    : 'Completing this goal';
+    ? `Cancelling ${goal}`
+    : `Completing ${goal}`;
 }
 
 /**

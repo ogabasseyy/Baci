@@ -58,6 +58,7 @@ function db(...results: unknown[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('PIGGYVEST_INTEREST_WALLET_ID', 'interest-wallet');
+  vi.stubEnv('PIGGYVEST_INTEREST_WALLET_OWNER_ID', 'ogabassey');
   mocks.transfer.mockResolvedValue({ accepted: true });
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
   mocks.retrieve.mockResolvedValue({

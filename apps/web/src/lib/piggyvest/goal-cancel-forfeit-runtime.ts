@@ -5,7 +5,10 @@ import {
 } from './goal-cancel-forfeit';
 import { forfeitDriverPorts } from './goal-cancel-forfeit-ports';
 import type { createGoalCancelStore } from './goal-cancel-store';
-import { readGoalInterestWalletId } from './goal-interest-wallet-env';
+import {
+  readGoalInterestWalletId,
+  readGoalInterestWalletOwnerId,
+} from './goal-interest-wallet-env';
 
 type Store = ReturnType<typeof createGoalCancelStore>;
 
@@ -36,6 +39,7 @@ export async function sweepGoalCancelForfeit(input: {
         evidence,
         operationId,
         expectedDestinationWalletId: readGoalInterestWalletId(),
+        expectedDestinationOwnerId: readGoalInterestWalletOwnerId(),
       })
     );
   } catch {

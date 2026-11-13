@@ -82,7 +82,7 @@ it('runs the daily report before the forfeit sweep, and bounds the sweep', async
   await GET(request());
   expect(order).toEqual(['report', 'sweep']);
   const deadline = mocks.sweep.mock.calls[0][2] as number;
-  expect(deadline).toBeGreaterThanOrEqual(before + 200_000);
+  expect(deadline).toBeGreaterThanOrEqual(before + 150_000);
   expect(deadline).toBeLessThan(before + 300_000);
 });
 

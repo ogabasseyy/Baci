@@ -47,6 +47,7 @@ it('pages only on the first report of a stuck claim', async () => {
     evidence: null,
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   await ports.claim(operationId);
   await ports.claim(operationId);
@@ -67,6 +68,7 @@ it('sends the forfeit from the goal wallet to the interest wallet under its own 
     evidence: null,
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   await ports.transfer(forfeit);
   expect(mocks.transfer).toHaveBeenCalledWith(provider, {
@@ -89,6 +91,7 @@ it('pages when a release caps the forfeit into review, and binds evidence reconc
     evidence: { integrationId: 'i' },
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   expect(await ports.release(forfeit.operationId)).toBe('needs_review');
   expect(mocks.alert).toHaveBeenCalledWith(
@@ -122,6 +125,7 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
     evidence: null,
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   mocks.retrieve.mockResolvedValue(ownWallet);
   expect(await ports.verifyDestination(forfeit)).toBe(true);
@@ -152,6 +156,7 @@ it('pages once per forfeit when a failed wallet check hands it back', async () =
     evidence: null,
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   await ports.unclaim(forfeit.operationId, 'mismatch');
   await ports.unclaim(forfeit.operationId, 'mismatch');
@@ -175,6 +180,7 @@ it('refuses a wallet the deployment does not name as the interest wallet, even i
       evidence: null,
       operationId,
       expectedDestinationWalletId: expected,
+      expectedDestinationOwnerId: 'ogabassey',
     });
     expect(await ports.verifyDestination(forfeit)).toBe(false);
   }
@@ -190,6 +196,7 @@ it('pages a wallet-check outage as a failed check, not a mismatch', async () => 
     evidence: null,
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   await ports.unclaim(forfeit.operationId, 'check_failed');
   expect(mocks.alert).toHaveBeenCalledWith(
@@ -208,6 +215,7 @@ it('pages when a rejected forfeit could not be merged under the ceiling', async 
     evidence: null,
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
   });
   expect(await ports.release(forfeit.operationId)).toBe(
     'released_needs_review'
@@ -216,4 +224,26 @@ it('pages when a rejected forfeit could not be merged under the ceiling', async 
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
     { reason: 'forfeit_over_ceiling', operationId }
   );
+});
+
+it('refuses a wallet that is not owned by the configured Ogabassey owner, even when both wallet settings agree', async () => {
+  // Another (non-cancelling) customer's wallet in the same business.
+  mocks.retrieve.mockResolvedValue({
+    ...ownWallet,
+    api_customer_id: 'someone-else',
+  });
+  for (const owner of ['ogabassey', null]) {
+    const ports = forfeitDriverPorts({
+      claim: vi.fn(),
+      release: vi.fn(),
+      unclaim: vi.fn(),
+      markPosting: vi.fn(),
+      provider,
+      evidence: null,
+      operationId,
+      expectedDestinationWalletId: 'interest-wallet',
+      expectedDestinationOwnerId: owner,
+    });
+    expect(await ports.verifyDestination(forfeit)).toBe(false);
+  }
 });

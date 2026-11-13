@@ -15,3 +15,18 @@ export function readGoalInterestWalletId(
   );
   return parsed.success ? parsed.data : null;
 }
+
+/**
+ * PIGGYVEST_INTEREST_WALLET_OWNER_ID: the PiggyVest customer id that owns
+ * Ogabassey's interest wallet (its api_customer_id). The wallet must match it
+ * exactly, a positive proof of ownership rather than "not this customer".
+ * Unset or invalid means no interest transfer is sent.
+ */
+export function readGoalInterestWalletOwnerId(
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  const parsed = piggyvestProviderIdSchema.safeParse(
+    env.PIGGYVEST_INTEREST_WALLET_OWNER_ID?.trim()
+  );
+  return parsed.success ? parsed.data : null;
+}

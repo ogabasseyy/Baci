@@ -6,7 +6,10 @@ import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary
 import { driveGoalCancelForfeit } from './goal-cancel-forfeit';
 import { forfeitDriverPorts } from './goal-cancel-forfeit-ports';
 import { GOAL_CANCEL_FORFEIT_STATEMENTS as sql } from './goal-cancel-forfeit-statements';
-import { readGoalInterestWalletId } from './goal-interest-wallet-env';
+import {
+  readGoalInterestWalletId,
+  readGoalInterestWalletOwnerId,
+} from './goal-interest-wallet-env';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
@@ -143,6 +146,7 @@ export async function sweepPendingGoalCancelForfeits(input: {
           evidence,
           operationId: item.operationId,
           expectedDestinationWalletId: readGoalInterestWalletId(),
+          expectedDestinationOwnerId: readGoalInterestWalletOwnerId(),
         })
       );
       if (outcome === 'confirmed') result.confirmed += 1;

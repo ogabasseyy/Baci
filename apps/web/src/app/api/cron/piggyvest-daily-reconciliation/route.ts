@@ -6,7 +6,7 @@ import { runScheduledGoalCancelForfeitSweep } from '@/lib/piggyvest/goal-cancel-
 export const maxDuration = 300;
 // The forfeit sweep starts no new forfeit after this much of the budget, so
 // one started forfeit (provider timeouts included) still ends in time.
-const FORFEIT_SWEEP_BUDGET_MS = 200_000;
+const FORFEIT_SWEEP_BUDGET_MS = 150_000;
 
 // Daily PiggyVest reconciliation (read-only). Inert until the owner sets
 // PIGGYVEST_RECONCILIATION_ENABLED=true; then it emails the report and pages

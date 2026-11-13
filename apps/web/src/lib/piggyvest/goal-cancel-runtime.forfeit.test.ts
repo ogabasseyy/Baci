@@ -80,6 +80,7 @@ const statusInput = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('PIGGYVEST_INTEREST_WALLET_ID', 'interest-wallet');
+  vi.stubEnv('PIGGYVEST_INTEREST_WALLET_OWNER_ID', 'ogabassey');
   mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
     id,
     api_customer_id: id === 'interest-wallet' ? 'ogabassey' : 'customer',

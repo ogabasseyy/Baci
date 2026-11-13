@@ -26,6 +26,9 @@ export function forfeitDriverPorts(input: {
   // PIGGYVEST_INTEREST_WALLET_ID: the deployment's own record of
   // Ogabassey's interest wallet; it must match the database's.
   expectedDestinationWalletId: string | null;
+  // PIGGYVEST_INTEREST_WALLET_OWNER_ID: the PiggyVest customer that owns
+  // Ogabassey's interest wallet; the wallet must belong to exactly it.
+  expectedDestinationOwnerId: string | null;
 }): Ports {
   const { provider, evidence, operationId } = input;
   return {
@@ -69,6 +72,8 @@ export function forfeitDriverPorts(input: {
         forfeit.destinationWalletId === input.expectedDestinationWalletId &&
         wallet.id === forfeit.destinationWalletId &&
         wallet.business_id === forfeit.businessId &&
+        input.expectedDestinationOwnerId !== null &&
+        wallet.api_customer_id === input.expectedDestinationOwnerId &&
         wallet.api_customer_id !== forfeit.providerCustomerId &&
         wallet.currency === 'NGN' &&
         wallet.status === 'active';

@@ -127,5 +127,11 @@ describe('Change phone search previews, server off', () => {
       await screen.findByText(/are hidden. You've already saved more./)
     ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: /64GB/ })).toBeNull();
+    // The customer is told why the phone they picked isn't offered.
+    expect(
+      screen.getByText(
+        /iPhone 15 Pro costs less than the .*120,000 you've saved, so you can't switch to it\./
+      )
+    ).toBeOnTheScreen();
   });
 });

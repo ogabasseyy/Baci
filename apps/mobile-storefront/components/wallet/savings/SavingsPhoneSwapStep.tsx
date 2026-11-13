@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import type { useSavingsDeviceSwap } from '../use-savings-device-swap';
 import { SavingsPhonePickList } from './SavingsPhonePickList';
@@ -100,8 +101,18 @@ export function SavingsPhoneSwapStep({
     setLoadError(null);
     try {
       const current = await resolveProduct(row.product);
-      if (version === request.current)
-        setResolved({ query: searchValue, product: current });
+      if (version !== request.current) return;
+      setResolved({ query: searchValue, product: current });
+      // Its real price can be below what's saved: say so rather than letting
+      // the phone silently drop out of the list.
+      const options = savingsPhoneRows({ ...current, searchPreview: false });
+      if (
+        options.length > 0 &&
+        options.every((option) => option.price < goal.current_amount)
+      )
+        setLoadError(
+          `${current.name} costs less than the ${formatNgnCurrency(goal.current_amount)} you've saved, so you can't switch to it.`
+        );
     } catch {
       if (version === request.current)
         setLoadError("Couldn't load this phone's options. Please try again.");

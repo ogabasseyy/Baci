@@ -13,7 +13,8 @@ CREATE FUNCTION public.check_staff_permission(uuid, uuid, text, text)
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT $2 = '6b5cb8a4-5575-456c-b936-8cdfae30db74'::uuid AND $3 = 'marketing'
     AND ($1 = '00000000-0000-0000-0000-000000000001'::uuid
-      OR ($1 = '00000000-0000-0000-0000-000000000002'::uuid AND $4 = 'edit'))
+      OR ($1 = '00000000-0000-0000-0000-000000000002'::uuid AND $4 = 'edit')
+      OR ($1 = '00000000-0000-0000-0000-000000000004'::uuid AND $4 = 'create'))
 $$;
 CREATE TABLE public.blog_posts (
   id int PRIMARY KEY, merchant_id uuid, status text, published_at timestamptz
@@ -33,6 +34,7 @@ INSERT INTO public.blog_posts VALUES
 \if :{?before_patch}
 \else
 \ir ../20261111044550_restrict_ogabassey_blog_draft_reads.sql
+\ir ../20261113045037_narrow_ogabassey_blog_editorial_reads.sql
 \endif
 SET LOCAL ROLE anon;
 DO $$ BEGIN
@@ -45,6 +47,12 @@ SET LOCAL fixture.actor = '00000000-0000-0000-0000-000000000003';
 DO $$ BEGIN
   IF ARRAY(SELECT id FROM public.blog_posts ORDER BY id) <> ARRAY[1,7,8] THEN
     RAISE EXCEPTION 'unrelated authenticated visibility regression';
+  END IF;
+END $$;
+SET LOCAL fixture.actor = '00000000-0000-0000-0000-000000000004';
+DO $$ BEGIN
+  IF ARRAY(SELECT id FROM public.blog_posts ORDER BY id) <> ARRAY[1,7,8] THEN
+    RAISE EXCEPTION 'create-only staff visibility regression';
   END IF;
 END $$;
 SET LOCAL fixture.actor = '00000000-0000-0000-0000-000000000001';

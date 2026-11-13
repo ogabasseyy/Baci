@@ -37,3 +37,11 @@ describe('goal setup memory with PiggyVest off', () => {
     expect(goalSetupFirstWaitingAt('b')).toBeNull();
   });
 });
+
+describe('bugfix: the per-goal memory grew without limit', () => {
+  it('forgets the oldest goal after 64', () => {
+    for (let n = 0; n <= 64; n += 1) rememberGoalSetupPhase(`g${n}`, 'ready');
+    expect(lastGoalSetupPhase('g0')).toBeNull();
+    expect(lastGoalSetupPhase('g64')).toBe('ready');
+  });
+});

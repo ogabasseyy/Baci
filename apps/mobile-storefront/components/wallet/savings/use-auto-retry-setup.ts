@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { boundedMapSet } from '@/lib/bounded-map-set';
 
 /** Automatic re-starts of a stalled setup before asking the customer. */
 export const AUTO_SETUP_RETRIES = 2;
@@ -8,6 +9,10 @@ export const AUTO_SETUP_RETRIES = 2;
  * screen: closing and reopening the wallet or sheet never refills them.
  */
 const spentTries = new Map<string, number>();
+/** Goals remembered at once; the oldest is forgotten first. */
+const MAX_REMEMBERED_GOALS = 64;
+const setTriesFor = (scopeKey: string, count: number) =>
+  boundedMapSet(spentTries, scopeKey, count, MAX_REMEMBERED_GOALS);
 const triesFor = (scopeKey: string) => spentTries.get(scopeKey) ?? 0;
 
 /** Tests only: forget every spent try. */
@@ -50,11 +55,11 @@ export function useAutoRetrySetup({
     if (!active || submitting || exhausted) return;
     // Spend a try now (so this effect never sends twice); only real sends
     // keep it spent.
-    spentTries.set(scopeKey, count + 1);
+    setTriesFor(scopeKey, count + 1);
     setTries({ scopeKey, count: count + 1 });
     const giveBack = () => {
       const left = Math.max(0, triesFor(scopeKey) - 1);
-      spentTries.set(scopeKey, left);
+      setTriesFor(scopeKey, left);
       setTries((current) =>
         current.scopeKey === scopeKey ? { scopeKey, count: left } : current
       );

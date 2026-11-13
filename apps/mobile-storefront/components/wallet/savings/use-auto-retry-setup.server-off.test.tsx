@@ -123,3 +123,26 @@ describe('useAutoRetrySetup with PiggyVest off', () => {
     expect(result.current.exhausted).toBe(false);
   });
 });
+
+describe('bugfix: the retry counter grew without limit', () => {
+  it('forgets the oldest goal after 64, so its tries start over', async () => {
+    const first = setup({ active: true, submitting: false, scopeKey: 'g0' });
+    await act(async () => {});
+    first.rerender({ active: true, submitting: true, scopeKey: 'g0' });
+    first.rerender({ active: true, submitting: false, scopeKey: 'g0' });
+    await act(async () => {});
+    expect(first.result.current.exhausted).toBe(true);
+    first.unmount();
+    for (let n = 1; n <= 64; n += 1) {
+      const other = setup({
+        active: true,
+        submitting: false,
+        scopeKey: `g${n}`,
+      });
+      await act(async () => {});
+      other.unmount();
+    }
+    const again = setup({ active: false, submitting: false, scopeKey: 'g0' });
+    expect(again.result.current.exhausted).toBe(false);
+  });
+});

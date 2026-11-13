@@ -16,7 +16,9 @@ export type GoalCardSetupState = 'getting_ready' | 'needs_setup' | null;
  * ready, and shares what it learns with the savings sheet.
  */
 export function useGoalCardSetupState(
-  goal: WalletActiveSavingsGoal
+  goal: WalletActiveSavingsGoal,
+  /** The savings sheet is open and checks this goal itself: don't double up. */
+  pausePolling = false
 ): GoalCardSetupState {
   const userId = useAuthStore((state) => state.user?.id) ?? '';
   const storeMerchantId = useAuthStore((state) => state.merchantId);
@@ -40,7 +42,12 @@ export function useGoalCardSetupState(
   // re-run) keeps being read like a pending one: the card turns back to
   // "Add to savings" on its own once the plan is ready.
   useGoalWalletSetupPoll({
-    phase: !checked ? 'idle' : phase === 'setup_retryable' ? 'pending' : phase,
+    phase:
+      !checked || pausePolling
+        ? 'idle'
+        : phase === 'setup_retryable'
+          ? 'pending'
+          : phase,
     scopeKey,
     reread: funding.fetchExistingPlanFunding,
   });

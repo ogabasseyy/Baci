@@ -44,8 +44,8 @@ const goal = (change: Partial<WalletActiveSavingsGoal> = {}) =>
     status: 'active',
     ...change,
   }) as WalletActiveSavingsGoal;
-const run = (g = goal()) =>
-  renderHook(() => useGoalCardSetupState(g)).result.current;
+const run = (g = goal(), pausePolling = false) =>
+  renderHook(() => useGoalCardSetupState(g, pausePolling)).result.current;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -60,6 +60,12 @@ describe('useGoalCardSetupState', () => {
     mockPhase = 'pending';
     expect(run()).toBe('getting_ready');
     expect(mockPollInput).toHaveBeenLastCalledWith('pending');
+  });
+
+  it('bugfix: stops its own checks while the savings sheet checks the same plan', () => {
+    mockPhase = 'pending';
+    expect(run(goal(), true)).toBe('getting_ready');
+    expect(mockPollInput).toHaveBeenLastCalledWith('idle');
   });
 
   it('says getting ready for a stalled setup', () => {

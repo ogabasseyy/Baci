@@ -214,6 +214,7 @@ export function WalletContent(props: WalletContentProps) {
             awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}
             onOpen={onStartSavings}
+            pausePolling={savingsSheetOpen}
           />
         ) : null}
         <WalletActionsRow

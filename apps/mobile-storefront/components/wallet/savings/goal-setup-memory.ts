@@ -1,3 +1,4 @@
+import { boundedMapSet } from '@/lib/bounded-map-set';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
 /** After this long the setup is "taking longer than usual". */
@@ -19,6 +20,8 @@ type Entry = {
  * It never holds money or personal data, only a status word and a time.
  */
 const entries = new Map<string, Entry>();
+/** Goals remembered at once; the oldest is forgotten first. */
+const MAX_REMEMBERED_GOALS = 64;
 
 const SETTLED: readonly SavingsPlanFundingPhase[] = [
   'ready',
@@ -36,10 +39,15 @@ export function rememberGoalSetupPhase(
   if (!SETTLED.includes(phase)) return;
   const entry = entries.get(scopeKey);
   const waiting = phase === 'pending' || phase === 'setup_retryable';
-  entries.set(scopeKey, {
-    lastPhase: phase,
-    firstWaitingAt: waiting ? (entry?.firstWaitingAt ?? now) : null,
-  });
+  boundedMapSet(
+    entries,
+    scopeKey,
+    {
+      lastPhase: phase,
+      firstWaitingAt: waiting ? (entry?.firstWaitingAt ?? now) : null,
+    },
+    MAX_REMEMBERED_GOALS
+  );
 }
 
 export function lastGoalSetupPhase(

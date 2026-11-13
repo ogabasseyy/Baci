@@ -346,3 +346,17 @@ it('bugfix: stops acknowledging pages at the deadline, still paging every alert'
   ).toHaveLength(1);
   expect(result).toMatchObject({ failed: 0 });
 });
+
+it('bugfix: never sends a recovered stale claim while new transfers are off', async () => {
+  db(
+    [{ operationId: opB, forfeitId, state: 'dispatched', alert: false }],
+    { status: 'claimed', forfeit },
+    'unclaimed'
+  );
+  await sweepPendingGoalCancelForfeits(input(false));
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.execute.mock.calls[2]).toEqual([
+    sql.workerUnclaim,
+    [integrationId, 'staging', forfeit.operationId],
+  ]);
+});

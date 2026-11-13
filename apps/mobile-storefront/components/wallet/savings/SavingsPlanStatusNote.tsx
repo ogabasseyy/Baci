@@ -102,6 +102,9 @@ function StatusNoteView({
   });
   // The customer tapped Try again (not an automatic retry).
   const [manualRetried, setManualRetried] = useState(false);
+  // The customer picked an answer on the prompt themselves: a saved answer
+  // that finishes loading later must never replace it.
+  const [customerChose, setCustomerChose] = useState(false);
   const phase = funding.planFundingPhase;
   const slowdown = usePiggyvestSlowdown();
   const autoRetry = useAutoRetrySetup({
@@ -124,7 +127,7 @@ function StatusNoteView({
     goalId,
     phase,
     failed: setup.error !== null,
-    attempted: setup.attempted,
+    attempted: setup.attempted || customerChose,
     setChoice: setup.setChoice,
     submit: setup.submit,
   });
@@ -175,7 +178,10 @@ function StatusNoteView({
         statusReady={phase === 'not_started'}
         submitting={setup.submitting}
         error={setup.error}
-        onChoose={setup.setChoice}
+        onChoose={(answer) => {
+          setCustomerChose(true);
+          setup.setChoice(answer);
+        }}
         onSubmit={() => void setup.submit()}
       />
     );

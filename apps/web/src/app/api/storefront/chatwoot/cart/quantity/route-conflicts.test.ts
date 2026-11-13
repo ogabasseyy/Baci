@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   checkCartQuota: vi.fn(async () => ({ allowed: true })),
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   createCartScopedClient: vi.fn(() => ({ rpc: vi.fn() })),
+  getCart: vi.fn(),
   getCartProofEnvironment: vi.fn(() => 'test'),
   issueCartSessionProof: vi.fn(() => 'renewed-proof'),
   cartSessionCookieMaxAge: vi.fn(() => 3600),
@@ -41,7 +42,10 @@ vi.mock('@/lib/cart/session-proof', () => ({
 vi.mock('@/lib/cart/scoped-client', () => ({
   createCartScopedClient: mocks.createCartScopedClient,
 }));
-vi.mock('@/lib/cart/service', () => ({ mutateCart: mocks.mutateCart }));
+vi.mock('@/lib/cart/service', () => ({
+  getCart: mocks.getCart,
+  mutateCart: mocks.mutateCart,
+}));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.checkCsrfProtection,
 }));
@@ -114,6 +118,7 @@ describe('Chatwoot shared-cart quantity route', () => {
   afterEach(() => vi.clearAllMocks());
 
   function arrange(input = body, snapshot = cart) {
+    mocks.getCart.mockResolvedValue({ ok: true, cart: snapshot });
     mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: input });
     mocks.loadChatwootCartContext.mockResolvedValue({
       ok: true,

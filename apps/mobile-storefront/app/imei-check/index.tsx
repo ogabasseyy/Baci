@@ -25,7 +25,6 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
-import { useCardOnlyPurchaseTopUp } from '@/hooks/use-card-only-purchase-top-up';
 import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
 import { createLogger } from '@/lib/logger';
@@ -76,9 +75,8 @@ export default function ImeiCheckerScreen() {
   const walletBalance = wallet?.balance ?? 0;
   const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, wallet);
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
-  const cardOnlyTopUp = useCardOnlyPurchaseTopUp(merchantId, wallet);
   const fundWallet = (amount: number) =>
-    imeiCheckScreenActions.fundWallet(amount, cardOnlyTopUp, merchantId);
+    imeiCheckScreenActions.fundWallet(amount, merchantId);
 
   const clearIdempotencyKey = () => {
     requestIdentity.clear();

@@ -3,6 +3,8 @@ import { Alert } from 'react-native';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 
+const IMEI_CHECK_RETURN_HREF = '/imei-check';
+
 export const imeiCheckScreenActions = {
   alertInvalidIdentifier(identifier: 'imei' | 'serial' | 'both') {
     Alert.alert(
@@ -16,7 +18,6 @@ export const imeiCheckScreenActions = {
   },
   fundWallet(
     amount: number,
-    _storeCredit = false,
     merchantId: string | null | undefined = undefined
   ) {
     // A store credit top-up is card-only, so a real shortfall is never
@@ -25,17 +26,17 @@ export const imeiCheckScreenActions = {
     // Re-read at navigation (Codex): the PiggyVest verdict may have turned
     // positive (or unknown) while the check request was in flight, and the
     // wallet sheet classifies this return by the verdict it sees now.
-    // The live verdict decides, not the captured mode (Codex): a rollback
-    // mid-request means a legacy top-up of the exact shortfall. The captured
-    // mode only ever came from a verdict that wasn't false.
+    // The live verdict alone decides (Codex): a rollback mid-request means
+    // a legacy top-up of the exact shortfall, so no captured mode is taken.
     const storeCreditNow = readPiggyvestCapabilityNow(merchantId) !== false;
     const requiredAmount = storeCreditNow
       ? amount > 0
         ? Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(amount))
         : 0
       : Math.max(0, Math.ceil(amount));
+    // Encoded like every other wallet return link (Muse).
     router.push(
-      `/wallet?action=fund&requiredAmount=${requiredAmount}&returnTo=/imei-check`
+      `/wallet?action=fund&requiredAmount=${requiredAmount}&returnTo=${encodeURIComponent(IMEI_CHECK_RETURN_HREF)}`
     );
   },
   networkErrorMessage(error: unknown) {

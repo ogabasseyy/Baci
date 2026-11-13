@@ -80,7 +80,7 @@ export function WalletFundModal({
   // only a card top-up adds: the PiggyVest account would fund savings.
   // Also when the PiggyVest read is unknown (timed out) or not set up yet,
   // so the purchase never detours into PiggyVest setup.
-  // Same rule as the purchase screens (useCardOnlyPurchaseTopUp): an
+  // Same rule as the purchase screens: an
   // unsettled wallet at a merchant not ruled out is a store credit top-up.
   const storeCreditTopUp =
     isWalletPurchaseReturnHref(fundReturnTo) &&

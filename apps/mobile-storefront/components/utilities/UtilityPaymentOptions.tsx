@@ -3,8 +3,10 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SPACING } from '@/constants/Colors';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { UtilityPiggyvestPayRow } from './UtilityPiggyvestPayRow';
 import { UtilityWalletTransferNudge } from './UtilityWalletTransferNudge';
 import { getUtilityWalletCopy } from './utility-wallet-copy';
+import { useVtuWalletPayStore } from './vtu-wallet-pay-store';
 
 interface UtilityPaymentOptionsProps {
   amount: number;
@@ -65,6 +67,21 @@ export function UtilityPaymentOptions({
   const balance = walletBalance ?? 0;
   const coversBill = amount > 0 && balance >= amount;
   const shortfall = amount > 0 ? Math.max(amount - balance, 0) : 0;
+  // The PiggyVest savings wallet pays this (switched on, and it covers the
+  // amount while store credit doesn't): it is the payment method shown, with
+  // no store credit shortfall. Never for customers without one.
+  const savingsKobo = useVtuWalletPayStore((state) =>
+    amount > 0 && state.covers(amount) ? state.balanceKobo : null
+  );
+  if (savingsKobo !== null)
+    return (
+      <View style={styles.container}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          Payment Method
+        </Text>
+        <UtilityPiggyvestPayRow balanceKobo={savingsKobo} colors={colors} />
+      </View>
+    );
 
   return (
     <View style={styles.container}>

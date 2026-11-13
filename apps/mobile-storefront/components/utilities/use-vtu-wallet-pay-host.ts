@@ -1,7 +1,10 @@
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useRef } from 'react';
-import { piggyvestWalletCovers } from '@/components/wallet-pay/piggyvest-wallet-covers';
+import {
+  piggyvestPayingBalanceKobo,
+  piggyvestWalletCovers,
+} from '@/components/wallet-pay/piggyvest-wallet-covers';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
 import {
@@ -53,15 +56,20 @@ export function useVtuWalletPayHost({
 
   // A stale balance during a refresh never chooses PiggyVest over store credit.
   useEffect(() => {
+    const covers = (amount: number) =>
+      !refreshing && piggyvestWalletCovers({ canPay, wallet, price: amount });
     useVtuWalletPayStore.setState({
-      covers: (amount) =>
-        !refreshing && piggyvestWalletCovers({ canPay, wallet, price: amount }),
+      covers,
+      // Shown only while it could pay something (switched on, fresh, ready).
+      balanceKobo: refreshing
+        ? null
+        : piggyvestPayingBalanceKobo({ canPay, wallet }),
     });
   }, [canPay, wallet, refreshing]);
   useEffect(
     () => () => {
       clearVtuWalletPay();
-      useVtuWalletPayStore.setState({ covers: () => false });
+      useVtuWalletPayStore.setState({ covers: () => false, balanceKobo: null });
     },
     []
   );

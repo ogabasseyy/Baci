@@ -115,3 +115,27 @@ describe('bugfix: an answer after an account switch reached the new account (Cod
     hook.unmount();
   });
 });
+
+describe('bugfix: a ready ₦549,700 PiggyVest wallet was not offered for ₦100 airtime (Fable walk)', () => {
+  it('covers ₦100 and publishes the savings balance', () => {
+    const loaded = mockWallet.data;
+    mockWallet.data = {
+      wallet: { balance: 0, primary_balance_kobo: 54_970_000 },
+    };
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    expect(useVtuWalletPayStore.getState().covers(100)).toBe(true);
+    expect(useVtuWalletPayStore.getState().balanceKobo).toBe(54_970_000);
+    hook.unmount();
+    mockWallet.data = loaded;
+  });
+
+  it('offers nothing to a customer the server reports no PiggyVest wallet for', () => {
+    const loaded = mockWallet.data;
+    mockWallet.data = { wallet: { balance: 0 } };
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    expect(useVtuWalletPayStore.getState().covers(100)).toBe(false);
+    expect(useVtuWalletPayStore.getState().balanceKobo).toBeNull();
+    hook.unmount();
+    mockWallet.data = loaded;
+  });
+});

@@ -14,6 +14,8 @@ export type VtuWalletPayPending = {
 type State = {
   /** Set by the screen's host: whether the PiggyVest wallet pays this. */
   covers: (amount: number) => boolean;
+  /** The PiggyVest wallet balance shown when it pays (null = not offered). */
+  balanceKobo: number | null;
   pending: VtuWalletPayPending | null;
 };
 
@@ -24,6 +26,7 @@ type State = {
  */
 export const useVtuWalletPayStore = create<State>(() => ({
   covers: () => false,
+  balanceKobo: null,
   pending: null,
 }));
 

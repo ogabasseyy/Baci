@@ -27,18 +27,29 @@ export default function WalletGoalActionsRoute() {
   // A goal missing from the cached wallet (created or changed elsewhere since
   // the last read) gets one fresh read before the link gives up on it.
   const missing = Boolean(goalId && wallet.data && !owned);
-  const [rechecked, setRechecked] = useState(false);
+  // Keyed by goal: a link to another missing goal gets its own fresh read.
+  // `failed` keeps the link (with a retry) when that read itself errored.
+  const [recheck, setRecheck] = useState<{
+    goalId: string;
+    failed: boolean;
+  } | null>(null);
+  const recheckedThis = recheck !== null && recheck.goalId === goalId;
   const { refetch } = wallet;
   useEffect(() => {
-    if (!missing || rechecked) return;
+    if (!missing || recheckedThis || !goalId) return;
     let live = true;
-    void refetch().finally(() => {
-      if (live) setRechecked(true);
-    });
+    void refetch().then(
+      (result) => {
+        if (live) setRecheck({ goalId, failed: Boolean(result?.isError) });
+      },
+      () => {
+        if (live) setRecheck({ goalId, failed: true });
+      }
+    );
     return () => {
       live = false;
     };
-  }, [missing, rechecked, refetch]);
+  }, [missing, recheckedThis, goalId, refetch]);
   // After sign-in the customer comes back here, so the ownership check runs.
   const back = goalId
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`
@@ -56,7 +67,11 @@ export default function WalletGoalActionsRoute() {
   if (wallet.isError && !wallet.data) {
     return <GoalLinkLoadError onRetry={() => void wallet.refetch()} />;
   }
-  if (missing && !rechecked) return null;
+  if (missing && !recheckedThis) return null;
+  // The fresh read failed: the goal may still be theirs, so keep the link.
+  if (missing && recheck?.failed) {
+    return <GoalLinkLoadError onRetry={() => setRecheck(null)} />;
+  }
   // A goal that is no longer the customer's (settled, cancelled, someone
   // else's) opens the plain wallet: the sheet would otherwise fall back to a
   // different goal and offer to cancel or complete that one.

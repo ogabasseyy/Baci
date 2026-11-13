@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import WalletGoalActionsRoute from '@/app/wallet/savings/goal-actions';
 
 const mockParams = jest.fn();
@@ -66,6 +71,39 @@ describe('old goal-actions links', () => {
     render(<WalletGoalActionsRoute />);
     expect(await screen.findByText('Redirect:/wallet')).toBeOnTheScreen();
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keep the link with a retry when the fresh read fails', async () => {
+    const refetch = jest.fn().mockResolvedValue({ isError: true });
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: { wallet: { savings_goals: [{ id: 'another-goal' }] } },
+      refetch,
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(
+      await screen.findByRole('button', { name: 'Try again' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(2));
+  });
+
+  it('give each missing goal its own fresh read', async () => {
+    const OTHER = '1c8e4d63-7a0b-4e2c-8d3f-4f5a6b7c8d9e';
+    const refetch = jest.fn().mockResolvedValue({ isError: false });
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: { wallet: { savings_goals: [{ id: 'another-goal' }] } },
+      refetch,
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    const view = render(<WalletGoalActionsRoute />);
+    await screen.findByText('Redirect:/wallet');
+    mockParams.mockReturnValue({ goalId: OTHER });
+    view.rerender(<WalletGoalActionsRoute />);
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(2));
   });
 
   it('open a goal the fresh read finds, though the cached wallet missed it', async () => {

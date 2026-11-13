@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
+import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError, type OrderResponse } from '@/services/orders';
@@ -31,7 +32,7 @@ interface FinalizeCheckoutPaymentParams {
   setShowCryptoSelection: (value: boolean) => void;
   shouldCreateWalletFundedBankTransferOrder: boolean;
   /** Bank transfer to wallet was chosen but held at Place Order. */
-  walletTransferFallback?: boolean;
+  walletTransferFallback?: WalletTransferFallback;
 }
 
 export async function finalizeCheckoutPayment({
@@ -50,7 +51,7 @@ export async function finalizeCheckoutPayment({
   setPendingOrder,
   setShowCryptoSelection,
   shouldCreateWalletFundedBankTransferOrder,
-  walletTransferFallback = false,
+  walletTransferFallback,
 }: FinalizeCheckoutPaymentParams) {
   if (selectedPayment === 'uba_redvault')
     throw new OrderError(

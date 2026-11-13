@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { styles } from './bank-transfer.styles';
@@ -31,7 +32,7 @@ interface BankTransferViewProps {
   pollingTimedOut?: boolean;
   remainingAmount?: number;
   /** The final check switched "Bank transfer to wallet" to this transfer. */
-  walletTransferFallback?: boolean;
+  walletTransferFallback?: WalletTransferFallback;
   walletFundingStatus?: WalletFundingStatus;
 }
 
@@ -88,7 +89,7 @@ export function BankTransferView({
   orderNumber,
   pollingTimedOut = false,
   remainingAmount,
-  walletTransferFallback = false,
+  walletTransferFallback,
   walletFundingStatus,
 }: BankTransferViewProps) {
   const isWalletFunded = mode === 'wallet_funded';
@@ -135,7 +136,10 @@ export function BankTransferView({
     >
       <View style={styles.content}>
         {walletTransferFallback ? (
-          <WalletTransferFallbackNotice colors={colors} />
+          <WalletTransferFallbackNotice
+            colors={colors}
+            reason={walletTransferFallback}
+          />
         ) : null}
         <View
           style={[styles.amountCard, { backgroundColor: BRAND.primaryAlpha06 }]}

@@ -33,7 +33,7 @@ const props = {
 describe('bugfix: payment method switched at Place Order without telling the customer', () => {
   it('explains the one-time bank transfer when wallet transfer was held', () => {
     // Arrange + Act: the final check switched to the per-order transfer.
-    render(<BankTransferView {...props} walletTransferFallback />);
+    render(<BankTransferView {...props} walletTransferFallback="piggyvest" />);
 
     // Assert: a calm in-page notice, alongside the transfer details.
     expect(screen.getByText(WALLET_TRANSFER_FALLBACK_COPY)).toBeOnTheScreen();

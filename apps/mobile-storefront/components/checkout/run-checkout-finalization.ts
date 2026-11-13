@@ -13,6 +13,7 @@ import type { CheckoutSnapshot } from './checkout-order-builders';
 import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
+import { walletTransferFallbackReason } from './wallet-transfer-fallback';
 
 type CreateOrderResult = Awaited<ReturnType<typeof createOrder>>;
 
@@ -176,6 +177,8 @@ export async function runCheckoutFinalization({
     shouldCreateWalletFundedBankTransferOrder:
       walletTransferChosen && !walletTransferHeld,
     // Tell the customer the order switched to a one-time transfer (Muse).
-    walletTransferFallback: walletTransferHeld,
+    walletTransferFallback: walletTransferHeld
+      ? walletTransferFallbackReason()
+      : undefined,
   });
 }

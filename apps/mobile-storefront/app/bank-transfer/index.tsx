@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, Pressable } from 'react-native';
 import { BankTransferView } from '@/components/bank-transfer/BankTransferView';
 import { validateBankTransferParams } from '@/components/bank-transfer/validate-bank-transfer-params';
+import { parseWalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { WALLET_FUNDING_POLLING } from '@/constants/wallet-funding';
@@ -269,7 +270,9 @@ export default function BankTransferScreen() {
           walletFundingPolling.intent
         )}
         walletFundingStatus={walletFundingPolling.intent?.status}
-        walletTransferFallback={params.walletTransferFallback === '1'}
+        walletTransferFallback={parseWalletTransferFallback(
+          params.walletTransferFallback
+        )}
       />
     </>
   );

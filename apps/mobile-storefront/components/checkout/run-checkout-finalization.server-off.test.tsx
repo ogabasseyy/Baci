@@ -90,7 +90,7 @@ describe('bugfix: wallet-funded transfer kept after the wallet turned PiggyVest 
       expect.objectContaining({
         shouldCreateWalletFundedBankTransferOrder: false,
         // The bank-transfer page tells the customer about the switch.
-        walletTransferFallback: true,
+        walletTransferFallback: 'unconfirmed',
       })
     );
   });
@@ -101,7 +101,7 @@ describe('bugfix: wallet-funded transfer kept after the wallet turned PiggyVest 
     expect(runFinalizeCheckoutPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         shouldCreateWalletFundedBankTransferOrder: true,
-        walletTransferFallback: false,
+        walletTransferFallback: undefined,
       })
     );
   });

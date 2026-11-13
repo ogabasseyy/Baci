@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render } from '@testing-library/react-native';
 
 let mockRouteParams: Record<string, string> = {};
-let mockViewProps: { walletTransferFallback?: boolean } | undefined;
+let mockViewProps: { walletTransferFallback?: string } | undefined;
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
@@ -14,7 +14,7 @@ jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
 jest.mock('@/components/bank-transfer/BankTransferView', () => ({
-  BankTransferView: (props: { walletTransferFallback?: boolean }) => {
+  BankTransferView: (props: { walletTransferFallback?: string }) => {
     mockViewProps = props;
     return null;
   },
@@ -57,11 +57,24 @@ beforeEach(async () => {
 
 describe('bugfix: wallet transfer switched at Place Order without a notice', () => {
   it('shows the notice when checkout routed with the fallback flag', () => {
-    mockRouteParams = { ...legacyParams, walletTransferFallback: '1' };
+    mockRouteParams = { ...legacyParams, walletTransferFallback: 'piggyvest' };
 
     render(<BankTransferScreen />);
 
-    expect(mockViewProps?.walletTransferFallback).toBe(true);
+    expect(mockViewProps?.walletTransferFallback).toBe('piggyvest');
+  });
+});
+
+describe('bugfix: unconfirmed wallet shown with the "not available" copy', () => {
+  it('passes the unconfirmed reason through to the notice', () => {
+    mockRouteParams = {
+      ...legacyParams,
+      walletTransferFallback: 'unconfirmed',
+    };
+
+    render(<BankTransferScreen />);
+
+    expect(mockViewProps?.walletTransferFallback).toBe('unconfirmed');
   });
 });
 
@@ -71,6 +84,6 @@ describe('server keeps PiggyVest off', () => {
 
     render(<BankTransferScreen />);
 
-    expect(mockViewProps?.walletTransferFallback).toBe(false);
+    expect(mockViewProps?.walletTransferFallback).toBeUndefined();
   });
 });

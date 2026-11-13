@@ -328,13 +328,13 @@ describe('initializeGatewayAndRoute', () => {
     await initializeGatewayAndRoute(
       createParams({
         selectedPayment: 'bank_transfer',
-        walletTransferFallback: true,
+        walletTransferFallback: 'piggyvest',
       })
     );
 
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/bank-transfer',
-      params: expect.objectContaining({ walletTransferFallback: '1' }),
+      params: expect.objectContaining({ walletTransferFallback: 'piggyvest' }),
     });
   });
 

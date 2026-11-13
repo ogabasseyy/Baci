@@ -53,6 +53,8 @@ type Input = {
   operationId: string;
   normalizedImei: string;
   supabaseAdmin: ImeiAccessClient;
+  /** The payment the caller read for this operation (customer-scoped). */
+  payment: { purpose: string; purchaseRef: string; amountKobo: number };
 };
 type Outcome = {
   body: Record<string, unknown>;
@@ -172,13 +174,20 @@ export async function deliverPaidImeiLookup(
         .catch(() => 'conflict');
     return cached(lookup);
   }
-  // Refunded: retry any refund still owed (exactly once in the database).
-  // The caller has already checked this operation is this lookup's own
-  // payment (same customer, purchase and price) before calling.
+  // Refunded: retry any refund still owed (exactly once in the database),
+  // only for this lookup's own payment (same purchase and price), checked
+  // here too, as the other branches do (Muse).
   if (
     lookup.status === 'refunded_error' ||
     lookup.status === 'refunded_not_found'
   ) {
+    const { payment } = input;
+    if (
+      payment.purpose !== 'imei_check' ||
+      payment.purchaseRef !== lookup.id ||
+      payment.amountKobo !== lookupPriceKobo(lookup)
+    )
+      throw new WalletPaymentMismatchError();
     await deps.refund(operationId).catch(() => 'pending');
     return cached(lookup);
   }

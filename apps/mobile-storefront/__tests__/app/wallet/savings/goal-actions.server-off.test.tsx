@@ -16,6 +16,8 @@ jest.mock('expo-router', () => ({
 
 // The full-page cancel/complete screen is retired: these steps live in the
 // savings sheet, so old links open that sheet without calling the server.
+const GOAL = '0b7d3c52-6f0e-4d1a-9c2b-3e4f5a6b7c8d';
+
 describe('old goal-actions links', () => {
   beforeEach(() => {
     mockAuth.mockReturnValue({ isLoading: false, redirectTo: null });
@@ -23,28 +25,34 @@ describe('old goal-actions links', () => {
 
   it('send a signed-out customer to sign in and back to the same goal', () => {
     mockAuth.mockReturnValue({ isLoading: false, redirectTo: '/auth/login' });
-    mockParams.mockReturnValue({ goalId: 'g1', kind: 'complete' });
+    mockParams.mockReturnValue({ goalId: GOAL, kind: 'complete' });
     render(<WalletGoalActionsRoute />);
     expect(
       screen.getByText(
-        `Redirect:/auth/login?returnTo=${encodeURIComponent('/wallet?action=savings&savingsGoalId=g1')}`
+        `Redirect:/auth/login?returnTo=${encodeURIComponent(`/wallet?action=savings&savingsGoalId=${GOAL}`)}`
       )
     ).toBeOnTheScreen();
   });
 
   it('wait while the session is restored', () => {
     mockAuth.mockReturnValue({ isLoading: true, redirectTo: null });
-    mockParams.mockReturnValue({ goalId: 'g1' });
+    mockParams.mockReturnValue({ goalId: GOAL });
     render(<WalletGoalActionsRoute />);
     expect(screen.queryByText(/Redirect:/)).toBeNull();
   });
 
   it('open the savings sheet for the same goal', () => {
-    mockParams.mockReturnValue({ goalId: 'goal 1', kind: 'cancel' });
+    mockParams.mockReturnValue({ goalId: GOAL, kind: 'cancel' });
     render(<WalletGoalActionsRoute />);
     expect(
-      screen.getByText('Redirect:/wallet?action=savings&savingsGoalId=goal%201')
+      screen.getByText(`Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`)
     ).toBeOnTheScreen();
+  });
+
+  it('open the plain wallet for a malformed goal id', () => {
+    mockParams.mockReturnValue({ goalId: 'goal 1', kind: 'cancel' });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
   });
 
   it('fall back to the wallet without a goal', () => {

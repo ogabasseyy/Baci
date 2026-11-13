@@ -1,5 +1,6 @@
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
+import { goalIdParamSchema } from '@/schemas/goal-lifecycle';
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
@@ -14,7 +15,9 @@ const first = (value: string | string[] | undefined) =>
 export default function WalletGoalActionsRoute() {
   const params = useLocalSearchParams<{ goalId?: string | string[] }>();
   const auth = useRequireAuth();
-  const goalId = first(params.goalId);
+  // Only a well-formed goal id is passed on; anything else opens the wallet.
+  const parsed = goalIdParamSchema.safeParse(first(params.goalId));
+  const goalId = parsed.success ? parsed.data : undefined;
   const target = goalId
     ? `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goalId)}`
     : '/wallet';

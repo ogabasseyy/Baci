@@ -117,12 +117,11 @@ export function useCheckoutPaymentController({
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);
     if (selectedPayment && getPaymentTabForMethod(selectedPayment) !== tab) {
-      transferMode.capture(null, false); // its captured mode too (Codex)
-      setSelectedPaymentState(null);
+      transferMode.clearSelection();
     }
   };
 
-  const transferMode = useTransferModeAtSelection();
+  const transferMode = useTransferModeAtSelection(setSelectedPaymentState);
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
     transferMode.capture(method, walletFundedBankTransferOptionEnabled);
     setSelectedPaymentState(method);
@@ -130,15 +129,12 @@ export function useCheckoutPaymentController({
   };
 
   const resetPaymentSelection = () => {
-    transferMode.capture(null, false);
-    setSelectedPaymentState(null);
+    transferMode.clearSelection();
     setPaymentTab(null);
   };
 
-  // Render-phase adjustment (react.dev "adjusting state when a prop
-  // changes"): every branch converges, so React settles on a valid
-  // payment selection before commit instead of flashing a stale frame
-  // through an effect.
+  // Render-phase adjustment (react.dev): every branch converges, so React
+  // settles on a valid payment selection before commit.
   const currentTabMethods = availablePaymentMethods.filter(
     (method) => paymentTab && getPaymentTabForMethod(method) === paymentTab
   );
@@ -147,9 +143,9 @@ export function useCheckoutPaymentController({
     selectedPayment !== 'uba_redvault' &&
     !availablePaymentMethods.includes(selectedPayment)
   ) {
-    setSelectedPaymentState(null);
+    transferMode.clearSelection();
   } else if (selectedPayment === 'uba_redvault' && !redvaultAvailable) {
-    setSelectedPaymentState(null);
+    transferMode.clearSelection();
   } else if (
     selectedPayment &&
     paymentTab !== getPaymentTabForMethod(selectedPayment)
@@ -279,6 +275,8 @@ export function useCheckoutPaymentController({
     walletFundedBankTransferOptionEnabled: transferMode.effective(
       walletFundedBankTransferOptionEnabled
     ),
+    // Unknown verdict (Ogabassey pilot only): show "Checking…", not a gap.
+    walletFundedBankTransferChecking: verdictNow === null,
     // Live re-check at submit: verdict and wallet read now, not at render.
     isWalletFundedBankTransferHeld: () => {
       // Chosen earlier but no longer eligible: fall back with the notice.

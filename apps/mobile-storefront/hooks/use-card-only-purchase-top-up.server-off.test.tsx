@@ -36,8 +36,9 @@ describe('useCardOnlyPurchaseTopUp', () => {
   });
 
   it('is card-only once the wallet is store credit', () => {
+    mockCapability = null;
     const { result } = renderHook(() =>
-      useCardOnlyPurchaseTopUp('merchant-1', { primary_balance_kobo: 500_000 })
+      useCardOnlyPurchaseTopUp(PILOT, { primary_balance_kobo: 500_000 })
     );
     expect(result.current).toBe(true);
   });
@@ -50,7 +51,7 @@ describe('bugfix: unobserved rollout merchant with a timed-out PiggyVest read', 
 
     // Act
     const { result } = renderHook(() =>
-      useCardOnlyPurchaseTopUp(ROLLOUT, {
+      useCardOnlyPurchaseTopUp(PILOT, {
         primary_unavailable: true,
       })
     );
@@ -62,7 +63,7 @@ describe('bugfix: unobserved rollout merchant with a timed-out PiggyVest read', 
   it('is card-only while the PiggyVest account is pending', () => {
     mockCapability = null;
     const { result } = renderHook(() =>
-      useCardOnlyPurchaseTopUp(ROLLOUT, { primary_pending: true })
+      useCardOnlyPurchaseTopUp(PILOT, { primary_pending: true })
     );
     expect(result.current).toBe(true);
   });
@@ -74,7 +75,7 @@ describe('bugfix: unobserved rollout merchant with a timed-out PiggyVest read', 
 
     // Act
     const { result } = renderHook(() =>
-      useCardOnlyPurchaseTopUp(ROLLOUT, LEGACY_WALLET)
+      useCardOnlyPurchaseTopUp(PILOT, LEGACY_WALLET)
     );
 
     // Assert
@@ -99,7 +100,7 @@ describe('bugfix: IMEI top-up below the card minimum for an unresolved wallet ow
 
     // Act
     const { result } = renderHook(() =>
-      useCardOnlyPurchaseTopUp(ROLLOUT, { owner_unresolved: true })
+      useCardOnlyPurchaseTopUp(PILOT, { owner_unresolved: true })
     );
 
     // Assert
@@ -110,6 +111,16 @@ describe('bugfix: IMEI top-up below the card minimum for an unresolved wallet ow
     mockCapability = false;
     const { result } = renderHook(() =>
       useCardOnlyPurchaseTopUp(ROLLOUT, { owner_unresolved: true })
+    );
+    expect(result.current).toBe(false);
+  });
+});
+
+describe('owner decision 2026-11-13: PiggyVest is only for the Ogabassey pilot', () => {
+  it("keeps today's exact prefill for any other merchant while the verdict is unknown", () => {
+    mockCapability = null;
+    const { result } = renderHook(() =>
+      useCardOnlyPurchaseTopUp(ROLLOUT, { primary_unavailable: true })
     );
     expect(result.current).toBe(false);
   });

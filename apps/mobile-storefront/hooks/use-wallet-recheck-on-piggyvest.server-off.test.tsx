@@ -7,6 +7,18 @@ import {
 } from '@/lib/piggyvest-primary-capability-cache';
 import { useWalletRecheckOnPiggyvest } from './use-wallet-recheck-on-piggyvest';
 
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
+
 let mockCapability: boolean | null = false;
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
   usePiggyvestPrimaryCapability: () => mockCapability,

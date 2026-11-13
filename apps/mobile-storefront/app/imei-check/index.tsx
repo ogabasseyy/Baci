@@ -78,7 +78,7 @@ export default function ImeiCheckerScreen() {
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const cardOnlyTopUp = useCardOnlyPurchaseTopUp(merchantId, wallet);
   const fundWallet = (amount: number) =>
-    imeiCheckScreenActions.fundWallet(amount, cardOnlyTopUp);
+    imeiCheckScreenActions.fundWallet(amount, cardOnlyTopUp, merchantId);
 
   const clearIdempotencyKey = () => {
     requestIdentity.clear();

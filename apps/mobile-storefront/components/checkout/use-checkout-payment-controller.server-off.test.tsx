@@ -14,6 +14,18 @@ import {
 import type { CartItem } from '@/stores/cart-store';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
 
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
+
 let mockWallet: Record<string, unknown> | undefined;
 let mockIsRefetching = false;
 let mockIsError = false;
@@ -79,7 +91,7 @@ const items: CartItem[] = [
   },
 ];
 
-function renderController() {
+function renderController(merchantId = 'merchant-1') {
   return renderHook(() =>
     useCheckoutPaymentController({
       assuranceFee: 0,
@@ -88,7 +100,7 @@ function renderController() {
       deliveryFee: 0,
       isAuthenticated: true,
       items,
-      merchantId: 'merchant-1',
+      merchantId,
       merchantSlug: 'ogabassey',
       step: 'payment',
       subtotal: 500_000,
@@ -463,5 +475,37 @@ describe('bugfix: tab switch kept a stale captured transfer mode', () => {
     // Assert: no captured choice survives the switch.
     expect(result.current.selectedPayment).toBeNull();
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+  });
+});
+
+describe('owner decision 2026-11-13: PiggyVest holds apply only to the Ogabassey pilot', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('keeps bank transfer to wallet for any other merchant while the verdict is unknown', () => {
+    // Arrange: a non-pilot merchant, no verdict yet, legacy wallet.
+    mockCapability = null;
+    mockWallet = { balance: 0 };
+
+    // Act
+    const { result } = renderController('merchant-2');
+
+    // Assert: today's behaviour, no hold, no "Checking…".
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+    expect(result.current.walletFundedBankTransferChecking).toBe(false);
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
+  });
+
+  it('holds and says "Checking…" for the pilot while its verdict is unknown', () => {
+    mockCapability = null;
+    mockWallet = { balance: 0 };
+
+    const { result } = renderController('merchant-1');
+
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+    expect(result.current.walletFundedBankTransferChecking).toBe(true);
   });
 });

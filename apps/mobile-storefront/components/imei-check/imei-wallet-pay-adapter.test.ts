@@ -345,3 +345,16 @@ describe('bugfix: an uppercase proof looped on try again (Muse)', () => {
     });
   });
 });
+
+describe('bugfix: an IMEI mismatch on a re-check said nothing was taken (Muse)', () => {
+  it('reports it as under review, never "nothing taken"', () => {
+    expect(
+      imeiPayAnswer(reply(409, { code: 'IMEI_MISMATCH' }), 'basic', true)
+    ).toEqual({ kind: 'outcome', outcome: { kind: 'review' } });
+    expect(
+      imeiPayAnswer(reply(409, { code: 'IMEI_MISMATCH' }), 'basic')
+    ).toMatchObject({
+      outcome: { kind: 'failed', failedReason: 'imei_mismatch' },
+    });
+  });
+});

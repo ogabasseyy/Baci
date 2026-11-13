@@ -9,7 +9,8 @@ export const GOAL_CANCEL_STEP_COPY = {
   // The goal's balance as it stands; with the split unknown, never labelled
   // as an amount coming back (some of it may be interest).
   inThisGoal: 'In this goal',
-  interestForfeited: 'Interest (not refunded)',
+  // "So far": interest PiggyVest hasn't reported yet is forfeited too.
+  interestForfeited: 'Interest so far (not refunded)',
   forfeitNote: 'Cancelling early means you lose the interest on this goal.',
   unknownSplitNote:
     'Your savings go back to your main wallet. Any interest on this goal is not refunded.',

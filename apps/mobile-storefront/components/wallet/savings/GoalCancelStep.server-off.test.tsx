@@ -65,7 +65,9 @@ describe('Cancel goal step inside the savings sheet', () => {
       principal_amount: 120000,
     });
     expect(screen.getByText(/lose the interest/)).toBeOnTheScreen();
-    expect(screen.getByText('Interest (not refunded)')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Interest so far (not refunded)')
+    ).toBeOnTheScreen();
     expect(screen.getByText('Back to your wallet')).toBeOnTheScreen();
     expect(screen.getAllByText('₦120,000')).toHaveLength(2);
   });

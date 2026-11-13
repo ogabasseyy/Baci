@@ -1797,6 +1797,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_goal_id uuid;
+  v_paid_at timestamptz;
 BEGIN
   SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
    WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
@@ -1814,15 +1815,28 @@ BEGIN
      AND (forfeit.state = 'reserved' OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL))
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');
-  -- The reversed interest is no longer forfeited: the cancel's forfeited
-  -- total (shown as interest not refunded, and deducted from Earnings, which
-  -- already net the reversal out of the payout) drops by it, never below
-  -- zero, so neither figure counts the reversed amount.
-  UPDATE piggyvest_primary.goal_cancel_operations AS cancel
-     SET forfeited_interest_kobo = GREATEST(0, cancel.forfeited_interest_kobo - NEW.amount_kobo)
-   WHERE cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
-     AND cancel.state IN ('dispatched', 'confirmed')
-     AND cancel.forfeited_interest_kobo IS NOT NULL;
+  -- A reversed payout that this cancel's forfeited total explicitly added
+  -- (one PiggyVest paid after the cancel read the balance, added by 8b) is no
+  -- longer forfeited: the total (shown as interest not refunded, and
+  -- deducted from Earnings, which already net the reversal out) drops by it,
+  -- never below zero. A payout paid before that read was inside the balance
+  -- snapshot, which may or may not already have excluded the reversal, so it
+  -- is left to the review above rather than subtracted a second time.
+  BEGIN
+    v_paid_at := (SELECT (receipt.financial_identity ->> 'paidAt')::timestamptz
+                    FROM piggyvest_primary.paid_interest_receipts AS receipt
+                   WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id);
+  EXCEPTION WHEN OTHERS THEN
+    v_paid_at := NULL;
+  END;
+  IF v_paid_at IS NOT NULL THEN
+    UPDATE piggyvest_primary.goal_cancel_operations AS cancel
+       SET forfeited_interest_kobo = GREATEST(0, cancel.forfeited_interest_kobo - NEW.amount_kobo)
+     WHERE cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
+       AND cancel.state IN ('dispatched', 'confirmed')
+       AND cancel.forfeited_interest_kobo IS NOT NULL
+       AND v_paid_at > cancel.dispatched_at;
+  END IF;
   RETURN NEW;
 END;
 $$;

@@ -693,6 +693,17 @@ BEGIN
       (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
         = v_text::bigint - 100,
       'a reversed late payout stayed in the forfeited total: was ' || v_text);
+    -- Regression: a reversal of interest paid before the cancel read the
+    -- balance is not subtracted (the snapshot may already exclude it).
+    v_text := (SELECT forfeited_interest_kobo::text FROM piggyvest_primary.goal_cancel_operations
+                WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES (c_integration, 'gf-reversal-before', 'gf-before-read', 100, repeat('e', 64), 'synthetic-reversal-3');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
+        = v_text::bigint,
+      'a reversal of interest inside the balance snapshot was subtracted a second time');
     PERFORM pg_temp.gc_assert(
       (SELECT state FROM piggyvest_primary.goal_cancel_interest_forfeits
         WHERE cancel_operation_id = v_op::uuid AND amount_kobo = 300) = 'needs_review'

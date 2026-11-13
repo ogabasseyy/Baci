@@ -5,13 +5,14 @@ import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
 let mockCanGoBack = true;
 jest.mock('expo-router', () => ({
   router: {
     back: () => mockBack(),
     canGoBack: () => mockCanGoBack,
     push: jest.fn(),
-    replace: jest.fn(),
+    replace: (href: string) => mockReplace(href),
   },
 }));
 jest.mock('@/hooks/use-copy-to-clipboard', () => ({
@@ -54,6 +55,7 @@ function renderModal(primaryReady: boolean, fundReturnTo?: string) {
 
 beforeEach(() => {
   mockBack.mockClear();
+  mockReplace.mockClear();
   mockCanGoBack = true;
 });
 
@@ -73,14 +75,18 @@ describe('bugfix: closing Add store credit strands the customer on a pushed wall
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('only resets when there is no screen to go back to', () => {
+  it('bugfix: opens the purchase when a deep link left no screen to go back to', () => {
+    // Arrange: /wallet?action=fund&returnTo=/utilities/airtime opened cold.
     mockCanGoBack = false;
     const onResetFund = renderModal(true, '/utilities/airtime');
 
+    // Act
     fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
 
+    // Assert
     expect(onResetFund).toHaveBeenCalledTimes(1);
     expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith('/utilities/airtime');
   });
 });
 
@@ -100,5 +106,6 @@ describe('server keeps PiggyVest off', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
 
     expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

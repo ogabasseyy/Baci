@@ -80,7 +80,10 @@ export function WalletFundModal({
   // leaving the customer on the pushed page (walk-through M8).
   const dismissFund = () => {
     onResetFund();
-    if (storeCreditTopUp && router.canGoBack()) router.back();
+    if (!storeCreditTopUp || !fundReturnTo) return;
+    // A deep link has no history underneath: open the purchase instead.
+    if (router.canGoBack()) router.back();
+    else router.replace(fundReturnTo);
   };
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy

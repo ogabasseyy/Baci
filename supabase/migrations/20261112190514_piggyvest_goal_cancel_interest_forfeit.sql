@@ -1507,16 +1507,18 @@ CREATE TRIGGER release_unsent_goal_cancel_forfeit
 
 -- 8a. The customer's Earnings never include interest forfeited by an early
 -- cancel: each goal's paid interest (net of provider reversals, as before)
--- less the forfeits confirmed for it, never below zero. Same signature, so
+-- less the interest forfeited by its confirmed cancel (the cancel's
+-- forfeited total, final for the customer as soon as the principal confirms,
+-- whatever the internal interest transfer's state), never below zero. Same signature, so
 -- its grants (none beyond the owner) persist through CREATE OR REPLACE.
 CREATE OR REPLACE FUNCTION piggyvest_primary.customer_paid_interest(p_merchant uuid,p_customer uuid)
 RETURNS TABLE(goal_id uuid,amount numeric)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
   SELECT paid.goal_id,
          GREATEST(0, paid.amount - COALESCE((
-           SELECT sum(forfeit.amount_kobo)::numeric
-             FROM piggyvest_primary.goal_cancel_interest_forfeits forfeit
-            WHERE forfeit.goal_id=paid.goal_id AND forfeit.state='confirmed'), 0))
+           SELECT sum(cancel.forfeited_interest_kobo)::numeric
+             FROM piggyvest_primary.goal_cancel_operations cancel
+            WHERE cancel.goal_id=paid.goal_id AND cancel.state='confirmed'), 0))
   FROM (
     SELECT receipt.goal_id,sum(receipt.net_kobo-coalesce(reversal.amount,0))::numeric AS amount
     FROM piggyvest_primary.paid_interest_receipts receipt
@@ -1593,11 +1595,21 @@ BEGIN
   END IF;
   SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
    WHERE wallet.integration_id = v_operation.integration_id;
+  BEGIN
   IF NOT FOUND OR v_wallet = v_operation.source_wallet_id
     OR v_wallet = v_operation.destination_wallet_id THEN
-    RETURN NEW;
-  END IF;
-  BEGIN
+    -- No usable interest wallet (a cancel that owed no interest never needed
+    -- one): the payout is still forfeited, recorded for review so the sweep
+    -- pages it, with a placeholder destination that can never be sent to
+    -- (review rows are never claimed for sending).
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+      'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+      v_operation.source_wallet_id, 'interest-wallet-not-configured',
+      LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp());
+  ELSE
   SELECT forfeit.amount_kobo INTO v_planned FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.cancel_operation_id = v_operation.id AND forfeit.state = 'reserved'
      FOR UPDATE;
@@ -1624,6 +1636,7 @@ BEGIN
     VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
       'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
       v_operation.source_wallet_id, v_wallet, NEW.net_kobo, pg_catalog.clock_timestamp());
+  END IF;
   END IF;
   -- The cancel's forfeited total (what the app shows as interest not
   -- refunded) includes this late payout too, never only the dispatch-time

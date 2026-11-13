@@ -944,22 +944,25 @@ BEGIN
   -- Regression: interest forfeited by an early cancel leaves the customer's
   -- Earnings (it was still counted there after the transfer went out).
   BEGIN
-    UPDATE piggyvest_primary.integrations SET environment = 'production'
-     WHERE id = 'f3860000-0000-4000-8000-000000000006';
     UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
      WHERE id = c_goal;
     PERFORM pg_temp.gf_receipt('gf-earned', 12000, pg_catalog.clock_timestamp() - interval '1 day');
+    -- Earnings count production payouts only: switched just for the reads.
+    UPDATE piggyvest_primary.integrations SET environment = 'production'
+     WHERE id = 'f3860000-0000-4000-8000-000000000006';
     v_before := COALESCE((SELECT amount FROM piggyvest_primary.customer_paid_interest(
       'f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003') WHERE goal_id = c_goal), 0);
-    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
-      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
-      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at, dispatched_at, settled_at,
-      provider_transaction_id)
-    SELECT forfeit.cancel_operation_id, forfeit.integration_id, forfeit.intent_id, forfeit.goal_id, 'confirmed',
-      piggyvest_primary.next_goal_cancel_forfeit_reference(forfeit.goal_id), forfeit.source_wallet_id,
-      forfeit.destination_wallet_id, 12000, pg_catalog.clock_timestamp(), pg_catalog.clock_timestamp(),
-      pg_catalog.clock_timestamp(), 'synthetic-gf-earned'
-      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit LIMIT 1;
+    UPDATE piggyvest_primary.integrations SET environment = 'staging'
+     WHERE id = 'f3860000-0000-4000-8000-000000000006';
+    -- Regression: deducted as soon as the cancel confirms, while the
+    -- internal interest transfer has not even been sent.
+    v_op := pg_temp.gc_reserved('earnings');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'earnings split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed'
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'reserved', 'earnings principal');
+    UPDATE piggyvest_primary.integrations SET environment = 'production'
+     WHERE id = 'f3860000-0000-4000-8000-000000000006';
     PERFORM pg_temp.gc_assert(
       COALESCE((SELECT amount FROM piggyvest_primary.customer_paid_interest(
         'f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003') WHERE goal_id = c_goal), 0)
@@ -983,6 +986,27 @@ BEGIN
       piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0)
       AND pg_temp.gf_forfeit(v_op, 'state') = 'released',
       'a claimed but unposted forfeit was stranded behind a released cancel');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: interest paid into a goal cancelled with no interest (so no
+  -- interest wallet was ever needed) is still forfeited and becomes review
+  -- work the sweep pages, never a silent surplus in the goal wallet.
+  BEGIN
+    DELETE FROM piggyvest_primary.goal_interest_forfeit_wallets;
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('no-wallet-late');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 250000) ->> 'status' = 'dispatched', 'no-interest split');
+    PERFORM pg_temp.gc_assert(pg_temp.gc_settle(pg_temp.gc_proof(v_op)) = 'confirmed', 'no-interest principal');
+    PERFORM pg_temp.gf_receipt('gf-no-wallet', 300);
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 300
+      AND (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = 300
+      AND pg_temp.gf_work(10, true) @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'operationId', v_op, 'state', 'needs_review', 'alert', true)),
+      'late interest with no interest wallet was left silently in the goal wallet');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

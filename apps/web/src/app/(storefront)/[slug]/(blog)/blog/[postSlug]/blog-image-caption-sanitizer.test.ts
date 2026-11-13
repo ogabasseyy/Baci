@@ -47,11 +47,15 @@ describe('sanitizeBlogImageCaptionText', () => {
     );
   });
 
-  it('bounds over-length captions and still strips leaked prompt prefixes', () => {
+  it('bounds over-length captions and still strips leaked prompt prefixes and boundary guardrails', () => {
     const overLength = `Editorial illustration: ${'a'.repeat(1005)}`;
     const result = sanitizeBlogImageCaptionText(overLength);
     expect(result.length).toBeLessThanOrEqual(1000);
     expect(result.startsWith('A')).toBe(true);
     expect(result).not.toContain('Editorial illustration:');
+
+    const boundaryGuardrail = `${'a'.repeat(985)}. No readable text or logos.`;
+    const cleanedBoundary = sanitizeBlogImageCaptionText(boundaryGuardrail);
+    expect(cleanedBoundary).toBe(`${'a'.repeat(985)}.`);
   });
 });

@@ -75,13 +75,17 @@ export function sanitizeBlogImageCaptionText(rawCaption: string): string {
   let text = rawCaption.trim();
   if (!text) return '';
 
-  if (text.length > MAX_CAPTION_SANITIZE_LENGTH) {
-    text = text.slice(0, MAX_CAPTION_SANITIZE_LENGTH).trim();
+  if (text.length > MAX_CAPTION_SANITIZE_LENGTH * 2) {
+    text = text.slice(0, MAX_CAPTION_SANITIZE_LENGTH * 2).trim();
   }
 
   const withoutPrefix = text.replace(PROMPT_PREFIX_REGEX, '').trim();
   const prefixRemoved = withoutPrefix !== text;
   text = stripTrailingGuardrails(withoutPrefix);
+
+  if (text.length > MAX_CAPTION_SANITIZE_LENGTH) {
+    text = text.slice(0, MAX_CAPTION_SANITIZE_LENGTH).trim();
+  }
 
   if (!text) return '';
 

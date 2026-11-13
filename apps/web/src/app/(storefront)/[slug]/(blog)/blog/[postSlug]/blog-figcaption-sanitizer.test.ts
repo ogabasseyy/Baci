@@ -51,6 +51,14 @@ describe('sanitizeFigcaptionHtml', () => {
     ).toBe('Battery &lt; 10 hours and price &gt; $500.');
   });
 
+  it('preserves spacing across <br> when stripping trailing guardrails', () => {
+    expect(
+      sanitizeFigcaptionHtml(
+        'A phone comparison.<br>No readable text or logos.'
+      )
+    ).toBe('A phone comparison.');
+  });
+
   it('bounds over-length inputs and still strips leaked prompt prefixes', () => {
     const longHtml = `<p>Editorial illustration: ${'a'.repeat(1005)}</p>`;
     const result = sanitizeFigcaptionHtml(longHtml);

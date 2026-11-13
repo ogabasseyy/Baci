@@ -109,14 +109,21 @@ function stripTrailingGuardrailsFromHtml(input: string): string {
   return text;
 }
 
+function extractFigcaptionText(html: string): string {
+  return html
+    .replace(/<(?:br\s*\/?|\/?(?:p|div|li|blockquote|h[1-6]))\b[^>]*>/gi, ' ')
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .replace(/[ \t\r\n]+/g, ' ');
+}
+
 /**
  * Sanitizes `<figcaption>` inner HTML, stripping leaked AI prompt directives
  * while preserving valid inline markup when balanced.
  */
 export function sanitizeFigcaptionHtml(innerHtml: string): string {
-  const textContent = innerHtml
-    .slice(0, MAX_CAPTION_SANITIZE_LENGTH * 4)
-    .replace(/<\/?[a-z][^>]*>/gi, '');
+  const textContent = extractFigcaptionText(
+    innerHtml.slice(0, MAX_CAPTION_SANITIZE_LENGTH * 4)
+  );
   if (
     innerHtml.length > MAX_CAPTION_SANITIZE_LENGTH * 4 ||
     textContent.length > MAX_CAPTION_SANITIZE_LENGTH
@@ -154,9 +161,7 @@ export function sanitizeFigcaptionHtml(innerHtml: string): string {
     );
   }
 
-  const resultingText = unescapeHtmlText(
-    result.replace(/<\/?[a-z][^>]*>/gi, '')
-  ).trim();
+  const resultingText = unescapeHtmlText(extractFigcaptionText(result)).trim();
 
   // If tags are balanced and text content matches sanitized text, keep inline markup;
   // otherwise fallback to safely escaped text to prevent malformed or unbalanced HTML.

@@ -42,6 +42,10 @@ export function readHtmlTagAttribute(
       index += 1;
     }
 
+    if (index === nameStart) {
+      break;
+    }
+
     const name = tag.slice(nameStart, index).toLowerCase();
 
     while (index < tag.length && /\s/.test(tag[index] ?? '')) {

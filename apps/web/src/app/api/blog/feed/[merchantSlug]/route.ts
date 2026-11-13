@@ -2,7 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
-import { transformImageTitlesToFigureCaptions } from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/blog-post-image-html';
+import {
+  transformImageTitlesToFigureCaptions,
+  unescapeHtmlText,
+} from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/blog-post-image-html';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import {
   normalizeBlogFeedPostForFilter,
@@ -14,6 +17,7 @@ import {
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
 import { getImageMimeType } from '@/lib/get-blog-feed-image-mime-type';
+import { pinDeterministicFeedImageFormat } from '@/lib/pin-deterministic-feed-image-format';
 import {
   isPublicBlogCategory,
   isPublicBlogPost,
@@ -320,47 +324,6 @@ const getCachedFeedByMerchantId = unstable_cache(
   }
 );
 
-const DETERMINISTIC_FORMAT_BY_EXT: Readonly<Record<string, string>> = {
-  jpg: 'jpeg',
-  jpeg: 'jpeg',
-  png: 'png',
-  webp: 'webp',
-  avif: 'avif',
-  gif: 'gif',
-};
-
-function pinDeterministicFeedImageFormat(url: string): string {
-  try {
-    const parsedUrl = new URL(url);
-    const lowerPath = parsedUrl.pathname.toLowerCase();
-    const lastDot = lowerPath.lastIndexOf('.');
-    if (lastDot === -1) {
-      return url;
-    }
-    const ext = lowerPath.slice(lastDot + 1);
-    const targetFormat = Object.hasOwn(DETERMINISTIC_FORMAT_BY_EXT, ext)
-      ? DETERMINISTIC_FORMAT_BY_EXT[ext]
-      : undefined;
-    if (!targetFormat) {
-      return url;
-    }
-
-    if (parsedUrl.searchParams.get('format')?.toLowerCase() === 'auto') {
-      parsedUrl.searchParams.set('format', targetFormat);
-    }
-    if (parsedUrl.searchParams.get('f')?.toLowerCase() === 'auto') {
-      parsedUrl.searchParams.set('f', targetFormat);
-    }
-    parsedUrl.pathname = parsedUrl.pathname.replace(
-      /(^|[/,;])(format|f)=auto(?=$|[/,;])/gi,
-      `$1$2=${targetFormat}`
-    );
-    return parsedUrl.toString();
-  } catch {
-    return url;
-  }
-}
-
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { merchantSlug } = await params;
@@ -451,7 +414,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         post.content || ''
       );
       const excerpt =
-        post.excerpt || truncateFeedText(stripHtml(captionedContent), 300);
+        post.excerpt ||
+        truncateFeedText(unescapeHtmlText(stripHtml(captionedContent)), 300);
       const sanitizedContent = sanitizeForFeed(captionedContent);
       const imageUrls = getBlogStructuredDataImageUrls(post);
       const rawPrimaryImageUrl = xmlSafeFeedImageUrl(imageUrls[0]);

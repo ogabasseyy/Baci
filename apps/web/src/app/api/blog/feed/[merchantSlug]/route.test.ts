@@ -985,4 +985,35 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
       })
     );
   });
+
+  it('decodes HTML entities in fallback excerpts derived from captioned content', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'entity-caption-post',
+          title: 'Carrier Guide',
+          slug: 'carrier-guide',
+          content:
+            '<img src="https://cdn.example.com/att.jpg" title="AT&amp;T 5G" /><p>Coverage notes.</p>',
+          excerpt: null,
+          featured_image_url: 'https://cdn.example.com/att.jpg',
+          category: 'Guides',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'AT&T 5G Coverage notes.',
+      })
+    );
+  });
 });

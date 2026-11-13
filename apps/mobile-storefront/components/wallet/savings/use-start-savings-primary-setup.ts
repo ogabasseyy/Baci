@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import type { WalletData } from '@/hooks/wallet-query';
 import { setupExistingSavingsGoal } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
@@ -31,9 +32,14 @@ export function useStartSavingsPrimarySetup({
   // customer's own wallet type is still unknown; once the read shows a
   // legacy wallet, that customer stays on the legacy rail. The form, review
   // and submit all use this one answer (askInterest).
+  // A live ruling-out wins (Codex): a cached PiggyVest wallet whose
+  // reclassification refetch is slow or failing must not keep the PiggyVest
+  // form (interest, no auto debit, goal-wallet setup) after a rollback.
+  const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   const primary =
-    primaryWallet ||
-    (!walletKnown && isPiggyvestPrimaryMerchant(activeMerchantId));
+    verdictNow !== false &&
+    (primaryWallet ||
+      (!walletKnown && isPiggyvestPrimaryMerchant(activeMerchantId)));
   const [answer, setAnswer] = useState<{
     userId?: string;
     value: boolean | null;

@@ -1,5 +1,9 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { setupExistingSavingsGoal } from '@/lib/customer-savings';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 import { useStartSavingsPrimarySetup } from './use-start-savings-primary-setup';
 
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
@@ -30,7 +34,7 @@ describe('useStartSavingsPrimarySetup for a PiggyVest wallet', () => {
   it('starts the plan wallet setup with the interest answer from the form', async () => {
     const { result } = renderHook(() =>
       useStartSavingsPrimarySetup({
-        activeMerchantId: 'm',
+        activeMerchantId: 'pv-merchant',
         primaryWallet: true,
       })
     );
@@ -40,7 +44,7 @@ describe('useStartSavingsPrimarySetup for a PiggyVest wallet', () => {
     await result.current.startGoalWalletSetup?.('goal-1');
     expect(setupExistingSavingsGoal).toHaveBeenCalledWith({
       goalId: 'goal-1',
-      merchantId: 'm',
+      merchantId: 'pv-merchant',
       interestAccepted: true,
     });
   });
@@ -106,7 +110,7 @@ describe('bugfix: the interest answer carried over to another account', () => {
 describe('the interest gate: null means unanswered, undefined means never asked', () => {
   it('never gives a PiggyVest plan an undefined answer, so the submit gate always sees it', () => {
     for (const input of [
-      { activeMerchantId: 'm', primaryWallet: true },
+      { activeMerchantId: 'pv-merchant', primaryWallet: true },
       { activeMerchantId: 'pv-merchant', primaryWallet: false },
     ]) {
       const { result } = renderHook(() => useStartSavingsPrimarySetup(input));
@@ -134,7 +138,7 @@ describe('bugfix: switching accounts and back brought an old interest answer bac
     const { result, rerender } = renderHook(
       (props: { userId: string }) =>
         useStartSavingsPrimarySetup({
-          activeMerchantId: 'm',
+          activeMerchantId: 'pv-merchant',
           primaryWallet: true,
           userId: props.userId,
         }),
@@ -161,5 +165,36 @@ describe('bugfix: a legacy-wallet customer at a PiggyVest merchant was treated a
     expect(result.current.askInterest).toBe(false);
     expect(result.current.allowAutoDebit).toBe(true);
     expect(result.current.formInterestChoice).toBeUndefined();
+  });
+});
+
+describe('bugfix: cached PiggyVest wallet kept the PiggyVest form after a rollback', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+  });
+
+  it('drops to the legacy form once the live verdict rules PiggyVest out', () => {
+    // Arrange: a known PiggyVest wallet at the pilot; its reclassification
+    // refetch failed, so the cached wallet still reads as PiggyVest.
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'pv-merchant',
+        primaryWallet: true,
+        wallet: {
+          balance: 0,
+          loyalty_points: 0,
+          primary_balance_kobo: 500_000,
+        },
+      })
+    );
+    expect(result.current.askInterest).toBe(true);
+
+    // Act: another request rolls the shared verdict back to false.
+    act(() => observePiggyvestPrimaryCapability('pv-merchant', false));
+
+    // Assert: legacy form, no PiggyVest goal-wallet setup.
+    expect(result.current.askInterest).toBe(false);
+    expect(result.current.allowAutoDebit).toBe(true);
+    expect(result.current.startGoalWalletSetup).toBeUndefined();
   });
 });

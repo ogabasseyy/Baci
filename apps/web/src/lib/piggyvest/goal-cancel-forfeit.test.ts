@@ -130,7 +130,7 @@ it('hands the forfeit back unsent, never as a rejection, when the interest walle
   p.verifyDestination.mockResolvedValue(false);
   expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
   expect(p.transfer).not.toHaveBeenCalled();
-  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId);
+  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId, 'mismatch');
   expect(p.release).not.toHaveBeenCalled();
 });
 
@@ -139,7 +139,7 @@ it('hands the forfeit back unsent when the interest wallet can not be checked', 
   p.verifyDestination.mockRejectedValue(new Error('down'));
   expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
   expect(p.transfer).not.toHaveBeenCalled();
-  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId);
+  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId, 'check_failed');
   expect(p.release).not.toHaveBeenCalled();
 });
 

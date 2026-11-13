@@ -40,7 +40,10 @@ interface Ports {
   // Hands a claimed forfeit back unsent (same reference): retryable, never a
   // rejection, for a destination check that fails or can not run.
   unclaim: (
-    forfeitId: string
+    forfeitId: string,
+    // Why it is handed back: the wallet answered and is not ours, or the
+    // check itself could not run (a PiggyVest or network outage).
+    reason: 'mismatch' | 'check_failed'
   ) => Promise<'unclaimed_first' | 'unclaimed' | 'not_released'>;
   // Stamps the forfeit right before its single POST. Until it is stamped the
   // forfeit is known unsent, so an abandoned claim is recovered later.
@@ -72,8 +75,12 @@ export async function driveGoalCancelForfeit(
   // Nothing has been sent yet, so a destination that fails the check (or a
   // check that can not run) hands the forfeit back unsent: retryable once the
   // configuration or PiggyVest is fixed, and never counted as a rejection.
-  if (!(await ports.verifyDestination(forfeit).catch(() => false))) {
-    await ports.unclaim(forfeit.operationId);
+  const verified = await ports
+    .verifyDestination(forfeit)
+    .then((ours) => (ours ? 'ours' : 'mismatch'))
+    .catch(() => 'check_failed' as const);
+  if (verified !== 'ours') {
+    await ports.unclaim(forfeit.operationId, verified);
     return 'unavailable';
   }
   // Nothing is sent unless the database recorded that it is about to be: if

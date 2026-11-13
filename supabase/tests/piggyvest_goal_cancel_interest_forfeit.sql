@@ -635,6 +635,13 @@ BEGIN
     piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'claimed'
     AND pg_temp.gf_forfeit(v_op, 'reference') = v_ref,
     'an abandoned unposted claim was not recovered');
+  -- Posting clears a spent wallet-check page, so a later overdue page can fire.
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET alerted_at = pg_catalog.clock_timestamp()
+   WHERE id = v_forfeit::uuid;
+  PERFORM pg_temp.gc_assert( piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting') = 'posting'
+    AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NULL,
+    'posting did not clear the wallet-check page stamp');
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET posted_at = NULL WHERE id = v_forfeit::uuid;
   -- A fresh unposted claim is left alone (it may be mid-send).
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'pending',
@@ -654,6 +661,21 @@ BEGIN
   END;
 END
 $unclaim$;
+
+-- 17. A goal whose PiggyVest setup never finished (no savings destination)
+--     answers not_set_up at issue instead of raising.
+DO $notsetup$
+BEGIN
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+   WHERE id = 'f3860000-0000-4000-8000-000000000005';
+  PERFORM pg_temp.gc_unbind();
+  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"not_set_up"}'::jsonb,
+    'a goal without a PiggyVest destination did not answer not_set_up');
+  PERFORM pg_temp.gc_bind();
+END
+$notsetup$;
 
 -- 13. Catalog: both new tables are row-level-secured and closed; every new
 --     function is SECURITY DEFINER with an empty search_path and not PUBLIC.

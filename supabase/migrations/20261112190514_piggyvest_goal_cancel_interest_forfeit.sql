@@ -314,6 +314,86 @@ BEGIN
 END;
 $$;
 
+-- issue_goal_cancel (20261103085004 definition): a goal whose PiggyVest
+-- setup never finished (no savings destination) now answers
+-- {"status":"not_set_up"} instead of raising, so the route can say so.
+-- Everything else is unchanged; same signature, grants persist.
+CREATE OR REPLACE FUNCTION piggyvest_primary.issue_goal_cancel(scope jsonb, goal_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_intent_id uuid;
+  v_goal public.customer_savings_goals%ROWTYPE;
+  v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
+  v_now timestamptz;
+BEGIN
+  IF scope IS NULL OR goal_id IS NULL THEN
+    RAISE EXCEPTION 'invalid goal cancel request' USING ERRCODE = '22023';
+  END IF;
+  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('primary-savings:' || v_intent_id::text, 0));
+  SELECT goal.* INTO v_goal FROM public.customer_savings_goals AS goal
+   WHERE goal.id = issue_goal_cancel.goal_id
+     AND goal.customer_id = (scope ->> 'customerId')::uuid
+     AND goal.merchant_id = (scope ->> 'merchantId')::uuid
+     AND goal.status IN ('active', 'paused')
+     FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'savings goal unavailable' USING ERRCODE = '42501';
+  END IF;
+  PERFORM 1 FROM piggyvest_primary.savings_destinations AS destination
+   WHERE destination.integration_id = (scope ->> 'integrationId')::uuid
+     AND destination.goal_id = v_goal.id AND destination.intent_id = v_intent_id
+     FOR SHARE;
+  IF NOT FOUND THEN
+    -- The goal's PiggyVest setup never finished, so it holds no PiggyVest
+    -- money and there is nothing to cancel here. An honest answer, never an
+    -- error the customer reads as "check the status" of an attempt that was
+    -- never made.
+    RETURN pg_catalog.jsonb_build_object('status', 'not_set_up');
+  END IF;
+  SELECT live.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS live
+   WHERE live.goal_id = v_goal.id AND live.state IN ('reserved', 'dispatched')
+     FOR UPDATE;
+  IF FOUND THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'pending', 'operationId', v_operation.id);
+  END IF;
+  -- An attempt waiting for an operator blocks a new cancel until it is cleared.
+  IF piggyvest_primary.goal_cancel_needs_review(v_goal.id) IS NOT FALSE
+    OR EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS review
+                WHERE review.goal_id = v_goal.id AND review.state = 'needs_review') THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'needs_review');
+  END IF;
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations AS funding
+              WHERE funding.goal_id = v_goal.id AND funding.state IN ('reserved', 'dispatched')) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'busy');
+  END IF;
+  UPDATE piggyvest_primary.goal_cancel_operations AS stale SET state = 'released'
+   WHERE stale.goal_id = v_goal.id AND stale.state = 'issued'
+     AND stale.expires_at <= pg_catalog.clock_timestamp();
+  -- The clock is read after every lock above (including the row locks the
+  -- update just took) has been acquired.
+  v_now := pg_catalog.clock_timestamp();
+  SELECT fresh.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS fresh
+   WHERE fresh.goal_id = v_goal.id AND fresh.state = 'issued' AND fresh.expires_at > v_now
+     AND fresh.integration_id = (scope ->> 'integrationId')::uuid AND fresh.intent_id = v_intent_id
+   ORDER BY fresh.issued_at DESC LIMIT 1;
+  IF NOT FOUND THEN
+    INSERT INTO piggyvest_primary.goal_cancel_operations
+      (id, integration_id, intent_id, goal_id, state, issued_at, expires_at)
+    VALUES (pg_catalog.gen_random_uuid(), (scope ->> 'integrationId')::uuid, v_intent_id,
+      v_goal.id, 'issued', v_now, v_now + interval '10 minutes')
+    RETURNING * INTO v_operation;
+  END IF;
+  RETURN pg_catalog.jsonb_build_object(
+    'status', 'issued', 'operationId', v_operation.id, 'expiresAt', v_operation.expires_at);
+END;
+$$;
+
 -- 4. What a dispatched (or later) attempt returns to the customer and what it
 -- forfeits, for the app to show from the server. NULL before dispatch and for
 -- attempts dispatched before the split existed.
@@ -730,7 +810,10 @@ SET search_path = ''
 AS $$
 BEGIN
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-     SET posted_at = pg_catalog.clock_timestamp()
+     SET posted_at = pg_catalog.clock_timestamp(),
+         -- A page about an earlier failed wallet check is spent; this
+         -- transfer must still be able to raise its own overdue page.
+         alerted_at = NULL
    WHERE id = p_forfeit_id AND state = 'dispatched' AND posted_at IS NULL;
   IF FOUND THEN RETURN 'posting'; END IF;
   RETURN 'not_released';
@@ -1351,6 +1434,7 @@ CREATE TRIGGER primary_goal_cancel_forfeit_block_customer_deletion
 -- 9. Grants.
 REVOKE ALL ON FUNCTION
   piggyvest_primary.next_goal_cancel_forfeit_reference(uuid),
+  piggyvest_primary.issue_goal_cancel(jsonb, uuid),
   piggyvest_primary.dispatch_goal_cancel_split(jsonb, uuid, bigint),
   piggyvest_primary.manage_goal_cancel(jsonb, uuid, text, bigint),
   piggyvest_primary.read_goal_cancel_amounts(jsonb, uuid),
@@ -1381,6 +1465,8 @@ REVOKE ALL ON FUNCTION
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 
 GRANT EXECUTE ON FUNCTION piggyvest_primary.dispatch_goal_cancel_split(jsonb, uuid, bigint)
+  TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.issue_goal_cancel(jsonb, uuid)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.manage_goal_cancel(jsonb, uuid, text, bigint)
   TO piggyvest_primary_authorizer;

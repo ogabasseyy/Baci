@@ -70,6 +70,8 @@ export const piggyvestGoalCancelSchemas = {
           }),
           z.strictObject({ status: z.literal('busy') }),
           z.strictObject({ status: z.literal('needs_review') }),
+          // The goal's PiggyVest setup never finished: nothing to cancel.
+          z.strictObject({ status: z.literal('not_set_up') }),
         ]),
       })
     )

@@ -93,13 +93,16 @@ export function forfeitDriverPorts(input: {
         baseUrl: provider.baseUrl,
       }),
     markPosting: input.markPosting,
-    unclaim: async (id) => {
-      const unclaimed = await input.unclaim(id);
+    unclaim: async (id, reason) => {
+      const unclaimed = await input.unclaim(id, reason);
       // The database stamps the first hand-back of a forfeit, so a lasting
       // wallet mismatch (or check outage) pages once, not on every attempt.
       if (unclaimed === 'unclaimed_first')
         emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
-          reason: 'interest_wallet_not_ours',
+          reason:
+            reason === 'mismatch'
+              ? 'interest_wallet_not_ours'
+              : 'interest_wallet_check_failed',
           operationId,
         });
       return unclaimed;

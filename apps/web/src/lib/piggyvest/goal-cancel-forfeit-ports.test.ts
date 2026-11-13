@@ -153,8 +153,8 @@ it('pages once per forfeit when a failed wallet check hands it back', async () =
     operationId,
     expectedDestinationWalletId: 'interest-wallet',
   });
-  await ports.unclaim(forfeit.operationId);
-  await ports.unclaim(forfeit.operationId);
+  await ports.unclaim(forfeit.operationId, 'mismatch');
+  await ports.unclaim(forfeit.operationId, 'mismatch');
   expect(mocks.alert).toHaveBeenCalledOnce();
   expect(mocks.alert).toHaveBeenCalledWith(
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
@@ -178,4 +178,22 @@ it('refuses a wallet the deployment does not name as the interest wallet, even i
     });
     expect(await ports.verifyDestination(forfeit)).toBe(false);
   }
+});
+
+it('pages a wallet-check outage as a failed check, not a mismatch', async () => {
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn(),
+    unclaim: vi.fn().mockResolvedValue('unclaimed_first'),
+    markPosting: vi.fn(),
+    provider,
+    evidence: null,
+    operationId,
+    expectedDestinationWalletId: 'interest-wallet',
+  });
+  await ports.unclaim(forfeit.operationId, 'check_failed');
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
+    { reason: 'interest_wallet_check_failed', operationId }
+  );
 });

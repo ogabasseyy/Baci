@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   identity: vi.fn(),
   submit: vi.fn(),
   status: vi.fn(),
+  issue: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -21,6 +22,10 @@ vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
 vi.mock('@/lib/piggyvest/goal-cancel-runtime', () => ({
   submitPrimaryWalletGoalCancel: mocks.submit,
   checkPrimaryWalletGoalCancelStatus: mocks.status,
+  issuePrimaryWalletGoalCancel: mocks.issue,
+}));
+vi.mock('@/lib/piggyvest/goal-pin-fund-eligibility', () => ({
+  isCancellableOwnGoal: async () => true,
 }));
 vi.mock('@/lib/piggyvest/goal-cancel-switch', () => ({
   isPiggyvestGoalCancelDisabled: () => false,
@@ -126,5 +131,18 @@ describe('bugfix: a cancel refused for a missing interest wallet read as a Piggy
       'This cancellation did not go through. Nothing was moved and your savings are unchanged. You can try again later.'
     );
     expect(payload.error).not.toMatch(/PiggyVest/);
+  });
+});
+
+describe('bugfix: cancelling a goal whose PiggyVest setup never finished answered a false 503', () => {
+  it('says honestly that there is nothing to cancel yet', async () => {
+    mocks.issue.mockResolvedValue({ status: 'not_set_up' });
+    const response = await post({ step: 'issue', merchantId, goalId });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error:
+        "This plan is still being set up, so there's nothing to cancel yet.",
+      code: 'GOAL_NOT_SET_UP',
+    });
   });
 });

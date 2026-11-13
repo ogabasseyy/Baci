@@ -168,6 +168,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           409
         );
       if (issued.status === 'needs_review') return NEEDS_REVIEW();
+      if (issued.status === 'not_set_up')
+        return refuse(
+          "This plan is still being set up, so there's nothing to cancel yet.",
+          'GOAL_NOT_SET_UP',
+          409
+        );
       // 'pending' means an attempt is already live: its id is for polling the
       // PATCH status check, not for a PIN (the PIN route only accepts ids in
       // the issued state).

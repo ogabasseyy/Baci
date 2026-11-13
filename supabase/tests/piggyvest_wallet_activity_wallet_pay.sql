@@ -72,6 +72,19 @@ BEGIN
       AND v_rows::text NOT LIKE '%' || c_lookup || '%',
     'a full number or purchase id leaked');
 
+  -- REGRESSION (Muse): a long biller name never exceeds the row schema.
+  INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider,
+    phone_number, request_reference, source, metadata, amount, status, biller_name, customer_identifier)
+  VALUES ('f9a10000-0000-4000-8000-0000000000d9', c_customer, c_merchant, 'electricity', '',
+    '08031234567', 'vtu-activity-2', 'checkout', '{"paymentSource":"piggyvest_wallet"}', 700, 'pending',
+    pg_catalog.repeat('Long Biller ', 80), '45031234567');
+  v_vtu := pg_temp.wp_issue('f9a10000-0000-4000-8000-0000000000d9', 70000, 'vtu') ->> 'operationId';
+  PERFORM pg_temp.wp_assert(pg_temp.wp_reserve(v_vtu, pg_temp.wp_proof('activity-long', 'wallet_pay',
+    70000, pg_temp.wp_key(v_vtu, 'f9a10000-0000-4000-8000-0000000000d9', 'vtu'))) ->> 'status' = 'claimed',
+    'long reserve');
+  PERFORM pg_temp.wp_assert((SELECT pg_catalog.max(pg_catalog.char_length(row.label))
+    FROM public.list_piggyvest_wallet_activity(c_merchant) AS row) <= 120, 'a label exceeded 120 characters');
+
   -- Another user sees none of it.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);
   PERFORM pg_catalog.set_config('request.jwt.claims', pg_catalog.jsonb_build_object(

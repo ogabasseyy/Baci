@@ -16,6 +16,10 @@
 -- the phone or meter number masked to its first and last four characters,
 -- read from the caller's own vtu_transactions row (same customer and store).
 --
+-- Spends are dated when the PIN reserved the money and refunds when they
+-- were opened (both fixed), so keyset pages stay stable as they settle.
+-- Labels are capped at 120 characters.
+--
 -- Never returned: provider ids, references, wallet ids, purchase ids, the
 -- full phone or meter number. Read-only and STABLE. No table policy changes.
 
@@ -69,8 +73,9 @@ BEGIN
   -- What each wallet payment bought, in customer words (masked numbers).
   paid AS (
     SELECT payment.id, payment.intent_id, payment.amount_kobo, payment.state,
-           COALESCE(payment.settled_at, payment.dispatched_at, payment.reserved_at,
-                    payment.issued_at) AS occurred_at,
+           -- Set once when the PIN reserved it: a row never moves between
+           -- keyset pages as the payment settles.
+           COALESCE(payment.reserved_at, payment.issued_at) AS occurred_at,
            CASE
              WHEN payment.purpose = 'imei_check' THEN 'IMEI check'
              WHEN purchase.id IS NULL THEN 'Airtime, data or bill'
@@ -178,13 +183,15 @@ BEGIN
            refund.amount_kobo,
            'Refund: ' || paid.label,
            CASE WHEN refund.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
-           COALESCE(refund.settled_at, refund.dispatched_at, refund.created_at)
+           refund.created_at
       FROM piggyvest_primary.wallet_payment_refunds AS refund
       JOIN paid ON paid.id = refund.payment_id
      WHERE refund.state IN ('dispatched', 'confirmed', 'needs_review')
   )
+  -- Labels carry free text (biller names, goal titles): capped well under
+  -- the row schema's 600 characters so one long name never fails a page.
   SELECT movement.id, movement.kind, movement.direction, movement.amount_kobo,
-         movement.label, movement.status, movement.occurred_at
+         pg_catalog.left(movement.label, 120), movement.status, movement.occurred_at
     FROM movements AS movement
    WHERE p_before_at IS NULL
       OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id)

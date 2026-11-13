@@ -17,13 +17,15 @@ describe('bugfix: one-time bank transfer turned wallet-funded at Place Order', (
     expect(effective).toBe(false);
   });
 
-  it('drops wallet transfer if it stops being eligible after selection', () => {
+  it('bugfix: keeps a chosen wallet transfer so Place Order can fall back with a notice', () => {
+    // Arrange: "Bank transfer to wallet" chosen while eligible.
     const { result } = renderHook(() => useTransferModeAtSelection());
     act(() => {
       result.current.capture('bank_transfer', true);
     });
 
-    expect(result.current.effective(false)).toBe(false);
+    // Act + Assert: the choice stands; the submit hold decides the fallback.
+    expect(result.current.effective(false)).toBe(true);
     expect(result.current.effective(true)).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ import {
   it,
   jest,
 } from '@jest/globals';
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import {
   clearObservedPiggyvestPrimaryCapability,
   observePiggyvestPrimaryCapability,
@@ -359,6 +359,37 @@ describe('bugfix: positive verdict before the wallet is reclassified', () => {
     observePiggyvestPrimaryCapability('merchant-1', true);
 
     // Assert
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: chosen wallet transfer dropped without the fallback notice', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('keeps the choice and holds at Place Order once it stops being eligible', () => {
+    // Arrange: merchant ruled out, legacy wallet: wallet transfer eligible.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+    const { result, rerender } = renderController();
+    act(() => {
+      result.current.setSelectedPayment('bank_transfer');
+    });
+
+    // Act: the wallet turns PiggyVest before Place Order.
+    mockWallet = { balance: 0, primary_balance_kobo: 0 };
+    rerender({});
+
+    // Assert: still the chosen option; the submit hold falls back (notice).
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
   });
 });

@@ -279,6 +279,8 @@ export function useCheckoutPaymentController({
     ),
     // Live re-check at submit: verdict and wallet read now, not at render.
     isWalletFundedBankTransferHeld: () => {
+      // Chosen earlier but no longer eligible: fall back with the notice.
+      if (!walletFundedBankTransferOptionEnabled) return true;
       const capabilityNow = readPiggyvestCapabilityNow(merchantId);
       // Unknown, or PiggyVest confirmed before the wallet is reclassified
       // (Codex): never a wallet-funded transfer for a PiggyVest merchant.

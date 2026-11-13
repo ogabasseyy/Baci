@@ -17,10 +17,11 @@ export function useTransferModeAtSelection() {
         method === 'bank_transfer' ? walletFundedOffered : null
       );
     },
+    // The customer's choice stands once made (Codex): if wallet transfer
+    // stops being eligible later, the Place Order hold falls back to a
+    // one-time transfer and the bank-transfer page says so.
     effective(walletFundedOffered: boolean): boolean {
-      return walletFundedAtSelection === null
-        ? walletFundedOffered
-        : walletFundedOffered && walletFundedAtSelection;
+      return walletFundedAtSelection ?? walletFundedOffered;
     },
   };
 }

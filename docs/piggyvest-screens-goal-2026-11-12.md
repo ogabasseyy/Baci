@@ -151,3 +151,27 @@ Confirmed fixed on the simulator:
 | "Copied" label nudges the wallet card down ~4pt for 2 s | #4216 session | Sent |
 | Backing out of Forgot PIN could later submit an abandoned reset PIN (Codex P1) | #4224 | **Fixed** (b9985072ce) |
 | Sheet grows as "Cancel goal" and the banner arrive; App Settings' Security row appears after first paint | — | Noted (loading order, low) |
+
+## Money walk-through on a local mock PiggyVest (2026-11-13)
+
+Live PiggyVest staging transfers are paused, so the money steps were walked on
+the simulator against a local stand-in built from the repo's mock sandbox
+(local only, never committed).
+
+Confirmed end to end:
+- Add to savings with the PIN.
+- Change phone.
+- Cancel: the saved ₦52,000 came back; the ₦1,000 interest stayed and wasn't
+  refunded.
+- Complete: ₦250,000 moved to the wallet; purchase request sent.
+- Server and mock balances matched the app.
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| PIN step closed the whole savings sheet (Gorhom `snapToPosition` reads as closed) — every money action | #4224 (bug from #4215 on main) | **Fixed** (7bba9efdd1), re-walked |
+| Reviews showed no amounts | #4224 | **Fixed** (5560c1abf4): Cancel "Saved so far", Complete "Moves to your wallet". A full saved/interest split needs the server to expose the principal (follow-up) |
+| Empty fifth PIN box after four digits | #4224 | **Fixed** (5560c1abf4) |
+| Savings notice edge to edge on the wallet | #4224 | **Fixed** (af0b741459) |
+| Completed plan card after Complete shows ₦0 / target and "Start with your first contribution" | #4223 session | Sent |
+| No savings movements in any wallet history | — | Follow-up (no list exists yet) |
+| Cancel was rejected locally | — | Local build drift (missing #4222's latest); fixed by updating the local build |

@@ -50,6 +50,13 @@ export function savingsPhoneRows(product: Product): SavingsPhoneRow[] {
         variantLabel: variantLabel(variant.attributes),
       }));
   }
+  // The product itself needs a real price too; a search preview's price is
+  // only confirmed once it loads, so it is checked then.
+  if (
+    !product.searchPreview &&
+    !(Number.isFinite(product.price) && product.price > 0)
+  )
+    return [];
   return [
     {
       image: product.image,

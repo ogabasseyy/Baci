@@ -19,6 +19,13 @@ describe('savings phone rows', () => {
     });
   });
 
+  it('never offers a product without a real price, but keeps an unloaded preview', () => {
+    expect(savingsPhoneRows({ ...base, price: 0 } as Product)).toEqual([]);
+    expect(
+      savingsPhoneRows({ ...base, price: 0, searchPreview: true } as Product)
+    ).toHaveLength(1);
+  });
+
   it('never offers a variant without a real price', () => {
     const rows = savingsPhoneRows({
       ...base,

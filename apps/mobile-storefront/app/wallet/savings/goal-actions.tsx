@@ -1,6 +1,6 @@
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
-import { goalIdParamSchema } from '@/schemas/goal-lifecycle';
+import { goalIdParamSchema } from '@/schemas/goal-link';
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;

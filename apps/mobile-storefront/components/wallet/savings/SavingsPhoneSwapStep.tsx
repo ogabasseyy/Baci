@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { useAuthStore } from '@/stores/auth-store';
 import type { Product } from '@/types/product';
 import type { useSavingsDeviceSwap } from '../use-savings-device-swap';
 import { SavingsPhonePickList } from './SavingsPhonePickList';
@@ -38,15 +39,30 @@ export function SavingsPhoneSwapStep({
   const products = swap.savingsDeviceProducts;
   const resolveProduct = swap.resolveProduct;
   const isPending = swap.isChangingSavingsDevice;
-  const [chosen, setChosen] = useState<SavingsPhoneRow | null>(null);
-  const [resolved, setResolved] = useState<{
+  // A pick or loaded preview only counts for the account, store and goal it
+  // was made for: switching any of them never carries it over.
+  const userId = useAuthStore((state) => state.user?.id ?? '');
+  const merchantId = useAuthStore((state) => state.merchantId ?? '');
+  const scope = `${userId}:${merchantId}:${goal.id}`;
+  const [picked, setPicked] = useState<{
+    row: SavingsPhoneRow;
+    scope: string;
+  } | null>(null);
+  const chosen = picked && picked.scope === scope ? picked.row : null;
+  const setChosen = (row: SavingsPhoneRow | null) =>
+    setPicked(row ? { row, scope } : null);
+  const [loaded, setLoaded] = useState<{
     query: string;
     product: Product;
+    scope: string;
   } | null>(null);
+  const resolved = loaded && loaded.scope === scope ? loaded : null;
+  const setResolved = (value: { query: string; product: Product } | null) =>
+    setLoaded(value ? { ...value, scope } : null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const request = useRef(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new search invalidates a preview being loaded.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new search, account, store or goal invalidates a preview being loaded.
   useEffect(() => {
     setLoadingPreview(false);
     setLoadError(null);
@@ -55,7 +71,7 @@ export function SavingsPhoneSwapStep({
     return () => {
       request.current++;
     };
-  }, [searchValue]);
+  }, [searchValue, scope]);
 
   if (chosen)
     return (

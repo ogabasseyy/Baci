@@ -107,6 +107,25 @@ describe('Change phone inside the savings sheet, server off', () => {
     ).toHaveAccessibilityState({ disabled: true, busy: true });
   });
 
+  it('drops a picked phone when the goal changes', () => {
+    const { swap, view } = renderStep();
+    fireEvent.press(
+      screen.getByRole('button', {
+        name: 'Choose iPhone 15 Pro Storage: 256GB',
+      })
+    );
+    expect(screen.getByRole('button', { name: 'Switch phone' })).toBeTruthy();
+    view.rerender(
+      <SavingsPhoneSwapStep
+        colors={Colors.light}
+        goal={{ ...goal, id: 'goal-2' }}
+        swap={swap}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Switch phone' })).toBeNull();
+    expect(screen.getByRole('header', { name: 'Change phone' })).toBeTruthy();
+  });
+
   it('does not offer the phone already being saved for', () => {
     renderStep({}, { ...goal, title: 'iPhone 15 Pro', target_amount: 650000 });
     expect(

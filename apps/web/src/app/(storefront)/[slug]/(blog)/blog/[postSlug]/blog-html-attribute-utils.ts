@@ -160,7 +160,9 @@ export function setHtmlAttribute(
   const withoutAttribute = stripHtmlAttribute(tag, attributeName);
   const insertion = ` ${attributeName}="${value}"`;
   return withoutAttribute.replace(/\s*\/?>$/, (ending) => {
-    return ending.startsWith('/') ? `${insertion} />` : `${insertion}>`;
+    return ending.trimStart().startsWith('/')
+      ? `${insertion} />`
+      : `${insertion}>`;
   });
 }
 

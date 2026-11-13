@@ -32,6 +32,14 @@ describe('sanitizeFigcaptionHtml', () => {
     ).toBe('Compare models.');
   });
 
+  it('preserves camelCase brand casing inside inline markup after prefix strip', () => {
+    expect(
+      sanitizeFigcaptionHtml(
+        'Editorial illustration: <em>iPhone 17 Pro</em> and <em>macOS</em>.'
+      )
+    ).toBe('<em>iPhone 17 Pro</em> and <em>macOS</em>.');
+  });
+
   it('bounds over-length inputs and still strips leaked prompt prefixes', () => {
     const longHtml = `<p>Editorial illustration: ${'a'.repeat(1005)}</p>`;
     const result = sanitizeFigcaptionHtml(longHtml);

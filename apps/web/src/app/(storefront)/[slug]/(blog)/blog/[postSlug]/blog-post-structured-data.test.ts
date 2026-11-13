@@ -189,7 +189,7 @@ describe('buildBlogPostStructuredData', () => {
     });
   });
 
-  it('emits NewsArticle and BlogPosting @type for Tech News posts', () => {
+  it('emits NewsArticle @type for Tech News posts', () => {
     const data = buildBlogPostStructuredData({
       author: {
         name: 'Bassey John',
@@ -213,10 +213,10 @@ describe('buildBlogPostStructuredData', () => {
       postUrl: 'https://ogabassey.com/blog/galaxy-buds-on',
     });
 
-    expect(data.blogSchema['@type']).toEqual(['BlogPosting', 'NewsArticle']);
+    expect(data.blogSchema['@type']).toBe('NewsArticle');
   });
 
-  it('emits NewsArticle and BlogPosting @type for tech news with whitespace and mixed case', () => {
+  it('emits NewsArticle @type for tech news with whitespace and mixed case', () => {
     const data = buildBlogPostStructuredData({
       author: {
         name: 'Bassey John',
@@ -239,7 +239,7 @@ describe('buildBlogPostStructuredData', () => {
       postUrl: 'https://ogabassey.com/blog/m6-macbook-pro',
     });
 
-    expect(data.blogSchema['@type']).toEqual(['BlogPosting', 'NewsArticle']);
+    expect(data.blogSchema['@type']).toBe('NewsArticle');
   });
 
   it('retains BlogPosting @type for other categories', () => {

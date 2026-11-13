@@ -143,7 +143,7 @@ export function buildBlogPostStructuredData({
   });
 
   if (post.category?.trim().toLowerCase() === 'tech news') {
-    blogSchema['@type'] = ['BlogPosting', 'NewsArticle'];
+    blogSchema['@type'] = 'NewsArticle';
   }
 
   return {

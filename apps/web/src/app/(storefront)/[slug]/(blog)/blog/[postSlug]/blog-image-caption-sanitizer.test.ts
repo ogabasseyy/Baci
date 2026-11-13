@@ -33,10 +33,15 @@ describe('sanitizeBlogImageCaptionText', () => {
     ).toBe('');
   });
 
-  it('preserves brand casing when no prompt prefix was removed', () => {
+  it('preserves brand casing when no prompt prefix was removed or on camelCase brands', () => {
     expect(sanitizeBlogImageCaptionText('iPhone 17 Pro in Titanium.')).toBe(
       'iPhone 17 Pro in Titanium.'
     );
+    expect(
+      sanitizeBlogImageCaptionText(
+        'Editorial illustration: iPhone 17 Pro camera plateau.'
+      )
+    ).toBe('iPhone 17 Pro camera plateau.');
   });
 
   it('bounds over-length captions and still strips leaked prompt prefixes', () => {

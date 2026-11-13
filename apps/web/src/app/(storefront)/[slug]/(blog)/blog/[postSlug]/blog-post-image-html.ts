@@ -1,8 +1,12 @@
 import { escapeHtmlText } from '@/lib/sanitize';
 import { sanitizeFigcaptionHtml } from './blog-figcaption-sanitizer';
-import { escapeHtmlAttr } from './blog-html-attribute-utils';
+import {
+  escapeHtmlAttr,
+  readHtmlTagAttribute,
+  setHtmlAttribute,
+  stripHtmlAttribute,
+} from './blog-html-attribute-utils';
 import { sanitizeBlogImageCaptionText } from './blog-image-caption-sanitizer';
-import { findTitleAttribute } from './find-title-attribute';
 import { unescapeHtmlText } from './unescape-html-text';
 
 export { sanitizeBlogImageCaptionText, unescapeHtmlText };
@@ -79,41 +83,34 @@ function formatFigureAttributes(attributes: string | undefined): string {
 }
 
 function sanitizeImageTitleAttribute(imgTag: string): string {
-  const titleAttr = findTitleAttribute(imgTag);
-  if (!titleAttr) return imgTag;
-  const rawTitle = titleAttr.value;
-  const trimmed = rawTitle.trim();
-  if (!trimmed) return imgTag;
+  const rawTitle = readHtmlTagAttribute(imgTag, 'title');
+  if (rawTitle === null) return imgTag;
+  if (!rawTitle.trim()) return imgTag;
   const unescapedTitle = unescapeHtmlText(rawTitle);
   const sanitized = sanitizeBlogImageCaptionText(unescapedTitle);
   if (!sanitized) {
-    return imgTag.slice(0, titleAttr.start) + imgTag.slice(titleAttr.end);
+    return stripHtmlAttribute(imgTag, 'title');
   }
   // Only rewrite title if sanitization changed the text, avoiding needless round-trips
   if (sanitized === unescapedTitle) {
     return imgTag;
   }
-  const replacement = ` title="${escapeHtmlAttr(sanitized)}"`;
-  return (
-    imgTag.slice(0, titleAttr.start) + replacement + imgTag.slice(titleAttr.end)
-  );
+  return setHtmlAttribute(imgTag, 'title', escapeHtmlAttr(sanitized));
 }
 
 function buildFigureFromTitledImage(
   imgTag: string,
   figureAttributes?: string
 ): string | null {
-  const titleAttr = findTitleAttribute(imgTag);
-  if (!titleAttr) return null;
-  const rawTitle = titleAttr.value;
+  const rawTitle = readHtmlTagAttribute(imgTag, 'title');
+  if (rawTitle === null) return null;
   const trimmedTitle = rawTitle.trim();
   if (!trimmedTitle) return null;
 
   const sanitizedCaption = sanitizeBlogImageCaptionText(
     unescapeHtmlText(trimmedTitle)
   );
-  const imageWithoutTitle =
-    imgTag.slice(0, titleAttr.start) + imgTag.slice(titleAttr.end);
+  const imageWithoutTitle = stripHtmlAttribute(imgTag, 'title');
 
   if (!sanitizedCaption) {
     return figureAttributes !== undefined
@@ -184,13 +181,7 @@ export function transformImageTitlesToFigureCaptions(html: string): string {
       if (/<figcaption\b/i.test(content)) {
         const cleanedContent = content.replace(
           /<img\b[^<>]*>/gi,
-          (imgTag: string) => {
-            const titleAttr = findTitleAttribute(imgTag);
-            if (!titleAttr) return imgTag;
-            return (
-              imgTag.slice(0, titleAttr.start) + imgTag.slice(titleAttr.end)
-            );
-          }
+          (imgTag: string) => stripHtmlAttribute(imgTag, 'title')
         );
         return `<figure${attrs}>${cleanedContent}</figure>`;
       }

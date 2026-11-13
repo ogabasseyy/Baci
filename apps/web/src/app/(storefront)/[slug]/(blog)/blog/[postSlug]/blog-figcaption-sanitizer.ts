@@ -1,6 +1,13 @@
 import { escapeHtmlText } from '@/lib/sanitize';
-import { sanitizeBlogImageCaptionText } from './blog-image-caption-sanitizer';
+import {
+  buildHtmlPromptPrefixRegex,
+  PROMPT_PREFIX_REGEX,
+  sanitizeBlogImageCaptionText,
+} from './blog-image-caption-sanitizer';
 import { unescapeHtmlText } from './unescape-html-text';
+
+const HTML_PROMPT_PREFIX_REGEX =
+  buildHtmlPromptPrefixRegex(PROMPT_PREFIX_REGEX);
 
 const MAX_CAPTION_SANITIZE_LENGTH = 1000;
 
@@ -136,16 +143,13 @@ export function sanitizeFigcaptionHtml(innerHtml: string): string {
 
   // If inner HTML contains inline markup, strip prompt directives from the markup
   let result = innerHtml.trim();
-  const withoutPrefix = result.replace(
-    /^((?:<[a-z0-9]+[^>]*>\s*)*)(?:planned\s+)?(?:editorial\s+|conceptual\s+)?(?:illustration|infographic|diagram|visual)(?:\s+concept)?\s*:\s*/i,
-    '$1'
-  );
+  const withoutPrefix = result.replace(HTML_PROMPT_PREFIX_REGEX, '$1');
   const prefixRemoved = withoutPrefix !== result;
   result = stripTrailingGuardrailsFromHtml(withoutPrefix);
 
   if (prefixRemoved) {
     result = result.replace(
-      /^((?:<[a-z0-9]+[^>]*>\s*)*)([a-z])/i,
+      /^((?:<[a-z0-9]+[^>]*>\s*)*)([a-z])(?![A-Z])/,
       (_match, tags, char) => `${tags}${char.toUpperCase()}`
     );
   }

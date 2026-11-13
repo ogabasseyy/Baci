@@ -1,7 +1,14 @@
 const MAX_CAPTION_SANITIZE_LENGTH = 1000;
 
-const PROMPT_PREFIX_REGEX =
+export const PROMPT_PREFIX_REGEX =
   /^(?:planned\s+)?(?:editorial\s+|conceptual\s+)?(?:illustration|infographic|diagram|visual)(?:\s+concept)?\s*:\s*/i;
+
+export function buildHtmlPromptPrefixRegex(regex: RegExp): RegExp {
+  return new RegExp(
+    `^((?:<[a-z0-9]+[^>]*>\\s*)*)${regex.source.slice(1)}`,
+    'i'
+  );
+}
 
 const GUARDRAIL_ITEMS = [
   'readable\\s+(?:text|interface(?:\\s+elements|\\s+chrome)?)',
@@ -78,10 +85,10 @@ export function sanitizeBlogImageCaptionText(rawCaption: string): string {
 
   if (!text) return '';
 
-  // Capitalize the first letter only when a prompt prefix was stripped,
-  // preserving brand casing for names like "iPhone", "iPad", or "macOS".
+  // Capitalize the first letter only when a prompt prefix was stripped and it
+  // does not start a camelCase brand name like "iPhone", "iPad", or "macOS".
   if (prefixRemoved) {
-    text = text.charAt(0).toUpperCase() + text.slice(1);
+    text = text.replace(/^[a-z](?![A-Z])/, (char) => char.toUpperCase());
   }
   return text.trim();
 }

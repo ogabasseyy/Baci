@@ -126,10 +126,15 @@ export async function POST(request: NextRequest) {
           : result.code === 'invalid_item'
             ? 400
             : 503;
-    return unavailable(
-      status,
-      status === 409 ? 'refresh_required' : 'temporarily_unavailable'
-    );
+    const code =
+      status === 409
+        ? 'refresh_required'
+        : status === 400
+          ? 'invalid_request'
+          : status === 403
+            ? 'forbidden'
+            : 'temporarily_unavailable';
+    return unavailable(status, code);
   }
 
   const response = NextResponse.json(

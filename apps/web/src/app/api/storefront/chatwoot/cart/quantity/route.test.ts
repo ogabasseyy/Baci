@@ -319,6 +319,35 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(JSON.stringify(payload)).not.toContain('secret-line');
   });
 
+  it('preserves invalid-item and unauthorized error semantics', async () => {
+    arrange();
+    mocks.mutateCart.mockResolvedValueOnce({ ok: false, code: 'invalid_item' });
+    const invalidItemResponse = await POST(request());
+    expect(invalidItemResponse.status).toBe(400);
+    await expect(invalidItemResponse.json()).resolves.toEqual({
+      accepted: false,
+      code: 'invalid_request',
+    });
+
+    arrange();
+    mocks.mutateCart.mockResolvedValueOnce({ ok: false, code: 'unauthorized' });
+    const unauthorizedResponse = await POST(request());
+    expect(unauthorizedResponse.status).toBe(403);
+    await expect(unauthorizedResponse.json()).resolves.toEqual({
+      accepted: false,
+      code: 'forbidden',
+    });
+  });
+
+  it('rejects request IDs shorter than the shared cart command floor', async () => {
+    arrange({ ...body, requestId: 'short' });
+    const response = await POST(request());
+
+    expect(response.status).toBe(400);
+    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+
   it('checks CSRF before reading request data', async () => {
     mocks.checkCsrfProtection.mockResolvedValue({ valid: false });
     const response = await POST(request());

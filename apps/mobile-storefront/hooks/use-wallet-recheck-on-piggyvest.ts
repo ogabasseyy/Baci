@@ -1,7 +1,6 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
-import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { usePiggyvestCapabilityNow } from './use-piggyvest-capability-now';
@@ -26,9 +25,10 @@ export function useWalletRecheckOnPiggyvest(
   /** The query's wallet: reactive, so a restore after the verdict re-runs. */
   cached: WalletQueryData['wallet'] | undefined
 ): void {
-  const capability = usePiggyvestPrimaryCapability(merchantId);
-  // The live verdict also sees a rollback written by a mounted flow.
-  const verdictNow = usePiggyvestCapabilityNow(merchantId);
+  // The live verdict alone (Codex): it follows rollbacks, and an unknown one
+  // stays unknown during the re-probe. Every positive probe is recorded in
+  // the cache, so the capability hook adds nothing but a stale true.
+  const verdict = usePiggyvestCapabilityNow(merchantId);
   // The wallet's scope (user, owner, merchant): a new account can restore
   // its own legacy wallet cached before PiggyVest was enabled (Codex).
   const scope = JSON.stringify(walletQueryKey);
@@ -47,17 +47,22 @@ export function useWalletRecheckOnPiggyvest(
       (!!merchantId &&
         isWalletPrimaryUnknown(cached) &&
         readObservedPiggyvestPrimaryCapability(merchantId) === false));
-  // The live verdict (it follows rollbacks), else the hook's own answer.
-  const verdict = verdictNow ?? capability;
   // State, not transitions (Codex): whenever the current verdict and the
   // cached wallet's shape disagree, reload once for that combination. This
   // covers rollbacks before mount, restores after a verdict, account
   // switches and a re-probe that turns positive again.
+  // A timed-out PiggyVest read cached no account: a positive verdict that
+  // lands later reloads it, or checkout stays held (Codex).
+  const cachedUnavailable = cached?.primary_unavailable === true;
   const mismatch =
-    (verdict === true && cachedLegacy) || (verdict === false && cachedPrimary);
-  const mismatchKey = mismatch
-    ? `${scope}|${String(verdict)}|${cachedLegacy ? 'legacy' : 'primary'}`
-    : null;
+    (verdict === true && (cachedLegacy || cachedUnavailable)) ||
+    (verdict === false && cachedPrimary);
+  const shape = cachedLegacy
+    ? 'legacy'
+    : cachedUnavailable
+      ? 'unavailable'
+      : 'primary';
+  const mismatchKey = mismatch ? `${scope}|${String(verdict)}|${shape}` : null;
   // Only a mismatch reloads (Codex): a ruled-out merchant's negative-cache
   // expiry alone never does, since the live verdict stays false for it.
   const previous = useRef<string | null>(null);

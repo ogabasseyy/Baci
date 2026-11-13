@@ -36,8 +36,11 @@ export function useGoalCardSetupState(
     notFoundMeansNotStarted: true,
   });
   const phase = shownGoalSetupPhase(funding.planFundingPhase, scopeKey);
+  // The poll only reads status, so a stalled setup (which the sheet may
+  // re-run) keeps being read like a pending one: the card turns back to
+  // "Add to savings" on its own once the plan is ready.
   useGoalWalletSetupPoll({
-    phase: checked ? phase : 'idle',
+    phase: !checked ? 'idle' : phase === 'setup_retryable' ? 'pending' : phase,
     scopeKey,
     reread: funding.fetchExistingPlanFunding,
   });

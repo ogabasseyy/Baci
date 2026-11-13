@@ -67,6 +67,13 @@ describe('useGoalCardSetupState', () => {
     expect(run()).toBe('getting_ready');
   });
 
+  it('bugfix: keeps reading a stalled setup so the card recovers once the plan is ready', () => {
+    mockPhase = 'setup_retryable';
+    run();
+    // Read like a pending setup (status reads only, never a setup re-run).
+    expect(mockPollInput).toHaveBeenLastCalledWith('pending');
+  });
+
   it('asks to finish setup when it never started', () => {
     mockPhase = 'not_started';
     expect(run()).toBe('needs_setup');

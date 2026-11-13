@@ -1163,11 +1163,17 @@ BEGIN
       amount_kobo, provider_evidence_sha256, evidence_reference)
     VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-posted', 'gf-reversed-posted', 100,
       repeat('7', 64), 'synthetic-reversal-5');
+    -- Regression: it stays findable so the success is recorded (transaction
+    -- id), but settles into review, never confirming the unreduced amount.
     PERFORM pg_temp.gc_assert(
-      pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      pg_temp.gf_forfeit(v_op, 'state') = 'dispatched'
+      AND piggyvest_primary.read_dispatched_goal_cancel_forfeit('f3860000-0000-4000-8000-000000000006',
+            'staging', v_forfeit::uuid) IS NOT NULL
       AND piggyvest_primary.settle_goal_cancel_forfeit('f3860000-0000-4000-8000-000000000006', 'staging',
-            pg_temp.gf_forfeit_proof(v_forfeit)) LIKE 'conflict%',
-      'a reversal after the posting mark let the unreduced forfeit confirm');
+            pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict'
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND pg_temp.gf_forfeit(v_op, 'provider_transaction_id') IS NOT NULL,
+      'a reversal after the posting mark lost the provider record or let the forfeit confirm');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -1224,6 +1230,17 @@ BEGIN
         @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('operationId', v_op))
       AND piggyvest_primary.ack_goal_cancel_hold_worker('f3860000-0000-4000-8000-000000000006', 'staging', v_op::uuid),
       'a hold still open a day after its page was not paged again');
+    -- Regression: a never-paged hold comes before daily repeats, so a backlog
+    -- of repeats can not starve it.
+    UPDATE piggyvest_primary.goal_cancel_operations
+       SET held_alerted_at = pg_catalog.clock_timestamp() - interval '3 days',
+           held_reason = 'provider_balance_below_principal'
+     WHERE id <> v_op::uuid AND state = 'released';
+    UPDATE piggyvest_primary.goal_cancel_operations SET held_alerted_at = NULL WHERE id = v_op::uuid;
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.list_goal_cancel_holds_worker('f3860000-0000-4000-8000-000000000006', 'staging')
+        -> 0 ->> 'operationId' = v_op,
+      'a never-paged hold was listed after daily repeats');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

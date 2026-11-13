@@ -40,3 +40,14 @@ it('bugfix: a scheduling failure never turns a confirmed cancel into an error', 
   );
   warn.mockRestore();
 });
+
+it('bugfix: logs a leg that reports failure without throwing', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  deferGoalCancelForfeit(vi.fn().mockResolvedValue('failed'));
+  await after.mock.calls[0][0]();
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringContaining('interest leg failed'),
+    'failed'
+  );
+  warn.mockRestore();
+});

@@ -132,6 +132,10 @@ CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   -- (its reply was lost) is told to go ahead, so a committed mark whose
   -- answer never arrived can not strand the forfeit unsent.
   posting_token uuid,
+  -- Set when interest behind a forfeit already marked posting is reversed:
+  -- the forfeit stays findable for its provider record (transaction id,
+  -- settlement time) but settles into review instead of confirming.
+  review_on_settle boolean NOT NULL DEFAULT false,
   CONSTRAINT goal_cancel_forfeit_reference_key UNIQUE (reference),
   CHECK (source_wallet_id <> destination_wallet_id),
   CHECK (state = 'reserved' OR state = 'released' OR state = 'needs_review' OR dispatched_at IS NOT NULL),
@@ -1268,15 +1272,19 @@ DECLARE
   v_result jsonb;
 BEGIN
   v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
+  -- Never-paged holds first, then the longest-unpaged repeats, so a backlog
+  -- of daily repeats can never starve a hold that was never paged.
   SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-      'operationId', hold.id, 'reason', hold.held_reason) ORDER BY hold.issued_at), '[]'::jsonb)
+      'operationId', hold.id, 'reason', hold.held_reason) ORDER BY hold.rank), '[]'::jsonb)
     INTO v_result
-    FROM (SELECT op.id, op.held_reason, op.issued_at
+    FROM (SELECT op.id, op.held_reason,
+                 pg_catalog.row_number() OVER (
+                   ORDER BY op.held_alerted_at NULLS FIRST, op.issued_at, op.id) AS rank
             FROM piggyvest_primary.goal_cancel_operations AS op
            WHERE op.integration_id = v_binding.id AND op.held_reason IS NOT NULL
              AND (op.held_alerted_at IS NULL
                   OR op.held_alerted_at < pg_catalog.clock_timestamp() - interval '1 day')
-           ORDER BY op.issued_at LIMIT 50) AS hold;
+           ORDER BY op.held_alerted_at NULLS FIRST, op.issued_at, op.id LIMIT 50) AS hold;
   RETURN v_result;
 END;
 $$;
@@ -1545,6 +1553,9 @@ BEGIN
       ON other.cancel_operation_id = cancel.id
    WHERE cancel.id = v_forfeit.cancel_operation_id
    GROUP BY cancel.forfeited_interest_kobo;
+  -- Interest behind it was reversed after it was marked posting: the record
+  -- is kept, but a person checks it (review), it never confirms by itself.
+  v_review := v_review OR v_forfeit.review_on_settle;
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
      SET state = CASE WHEN v_review THEN 'needs_review' ELSE 'confirmed' END,
          provider_transaction_id = proof ->> 'providerTransactionId',
@@ -1855,11 +1866,20 @@ BEGIN
      SET state = 'needs_review', alerted_at = NULL
     FROM piggyvest_primary.goal_cancel_operations AS cancel
    WHERE forfeit.cancel_operation_id = cancel.id
-     -- Including any claimed one not yet settled: an unposted one is then
-     -- refused its posting mark and never sent; one marked posting (sent, or
-     -- about to be) settles into review instead of confirming, so a person
-     -- checks it against the reversal rather than it settling unreduced.
-     AND forfeit.state IN ('reserved', 'dispatched')
+     -- Including one claimed but not yet posted: its posting mark then finds
+     -- it in review and nothing is sent (the row lock orders the two).
+     AND (forfeit.state = 'reserved' OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL))
+     AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
+     AND cancel.state IN ('dispatched', 'confirmed');
+  -- One already marked posting (sent, or about to be) stays dispatched, so
+  -- its provider record can still be found and recorded, but settles into
+  -- review instead of confirming: a person checks it against the reversal
+  -- rather than it settling an unreduced amount.
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+     SET review_on_settle = true
+    FROM piggyvest_primary.goal_cancel_operations AS cancel
+   WHERE forfeit.cancel_operation_id = cancel.id
+     AND forfeit.state = 'dispatched' AND forfeit.posted_at IS NOT NULL
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');
   -- A reversed payout lowers the cancel's forfeited total (shown as interest

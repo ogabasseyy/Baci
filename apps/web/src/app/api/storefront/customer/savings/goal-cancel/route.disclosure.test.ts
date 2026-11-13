@@ -88,6 +88,7 @@ beforeEach(() => {
 describe('bugfix: an app that never showed the interest forfeit could still cancel', () => {
   it.each([
     ['missing', undefined],
+    ['null', null],
     ['false', false],
   ])('refuses a submit with the acknowledgement %s, moving nothing', async (_why, value) => {
     const response = await post({

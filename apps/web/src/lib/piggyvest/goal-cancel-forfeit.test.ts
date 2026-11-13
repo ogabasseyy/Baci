@@ -134,6 +134,17 @@ it('hands the forfeit back unsent, never as a rejection, when the interest walle
   expect(p.release).not.toHaveBeenCalled();
 });
 
+it("hands the forfeit back unsent with its own reason when the goal wallet is short or not the customer's", async () => {
+  const p = ports();
+  p.verifyDestination.mockResolvedValue('source_unavailable');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
+  expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.unclaim).toHaveBeenCalledWith(
+    forfeit.operationId,
+    'source_unavailable'
+  );
+});
+
 it('hands the forfeit back unsent when the interest wallet can not be checked', async () => {
   const p = ports();
   p.verifyDestination.mockRejectedValue(new Error('down'));

@@ -157,6 +157,25 @@ CREATE POLICY goal_cancel_interest_forfeits_deny ON piggyvest_primary.goal_cance
 REVOKE ALL ON piggyvest_primary.goal_cancel_interest_forfeits
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 
+-- What each late payout actually added to a cancel's forfeited total
+-- (written in the same step as the total, so a payout whose plan failed adds
+-- nothing here either), so a reversal subtracts only that contribution.
+CREATE TABLE piggyvest_primary.goal_cancel_late_interest_contributions (
+  integration_id uuid NOT NULL REFERENCES piggyvest_primary.integrations(id),
+  payout_id text NOT NULL,
+  cancel_operation_id uuid NOT NULL REFERENCES piggyvest_primary.goal_cancel_operations(id),
+  amount_kobo bigint NOT NULL CHECK (amount_kobo >= 0),
+  PRIMARY KEY (integration_id, payout_id)
+);
+CREATE INDEX goal_cancel_late_interest_contributions_cancel_idx
+  ON piggyvest_primary.goal_cancel_late_interest_contributions (cancel_operation_id);
+ALTER TABLE piggyvest_primary.goal_cancel_late_interest_contributions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY goal_cancel_late_interest_contributions_deny
+  ON piggyvest_primary.goal_cancel_late_interest_contributions
+  AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
+REVOKE ALL ON piggyvest_primary.goal_cancel_late_interest_contributions
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
+
 -- The next never-used forfeit reference for a goal (the bare one counts as 0).
 CREATE FUNCTION piggyvest_primary.next_goal_cancel_forfeit_reference(p_goal_id uuid)
 RETURNS text
@@ -1676,6 +1695,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_planned bigint;
+  v_added bigint;
   v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
   v_wallet text;
   v_paid_at timestamptz;
@@ -1771,7 +1791,13 @@ BEGIN
   UPDATE piggyvest_primary.goal_cancel_operations
      SET forfeited_interest_kobo = LEAST(999999999999999,
            COALESCE(forfeited_interest_kobo, 0) + NEW.net_kobo)
-   WHERE id = v_operation.id;
+   WHERE id = v_operation.id
+  RETURNING forfeited_interest_kobo - COALESCE(v_operation.forfeited_interest_kobo, 0) INTO v_added;
+  -- Exactly what this payout added (a capped total adds less), recorded in
+  -- the same step so a failed plan records nothing.
+  INSERT INTO piggyvest_primary.goal_cancel_late_interest_contributions (
+    integration_id, payout_id, cancel_operation_id, amount_kobo)
+  VALUES (NEW.integration_id, NEW.payout_id, v_operation.id, GREATEST(0, COALESCE(v_added, 0)));
   EXCEPTION WHEN unique_violation OR check_violation THEN
     -- Never refuse the payout over the forfeit plan.
     NULL;
@@ -1797,7 +1823,8 @@ SET search_path = ''
 AS $$
 DECLARE
   v_goal_id uuid;
-  v_paid_at timestamptz;
+  v_cancel_id uuid;
+  v_removed bigint;
 BEGIN
   SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
    WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
@@ -1815,27 +1842,25 @@ BEGIN
      AND (forfeit.state = 'reserved' OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL))
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');
-  -- A reversed payout that this cancel's forfeited total explicitly added
-  -- (one PiggyVest paid after the cancel read the balance, added by 8b) is no
-  -- longer forfeited: the total (shown as interest not refunded, and
-  -- deducted from Earnings, which already net the reversal out) drops by it,
-  -- never below zero. A payout paid before that read was inside the balance
-  -- snapshot, which may or may not already have excluded the reversal, so it
-  -- is left to the review above rather than subtracted a second time.
-  BEGIN
-    v_paid_at := (SELECT (receipt.financial_identity ->> 'paidAt')::timestamptz
-                    FROM piggyvest_primary.paid_interest_receipts AS receipt
-                   WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id);
-  EXCEPTION WHEN OTHERS THEN
-    v_paid_at := NULL;
-  END;
-  IF v_paid_at IS NOT NULL THEN
-    UPDATE piggyvest_primary.goal_cancel_operations AS cancel
-       SET forfeited_interest_kobo = GREATEST(0, cancel.forfeited_interest_kobo - NEW.amount_kobo)
-     WHERE cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
-       AND cancel.state IN ('dispatched', 'confirmed')
-       AND cancel.forfeited_interest_kobo IS NOT NULL
-       AND v_paid_at > cancel.dispatched_at;
+  -- A reversed payout lowers the cancel's forfeited total (shown as interest
+  -- not refunded, and deducted from Earnings, which already net the reversal
+  -- out) only by what that payout actually added to it, recorded when it was
+  -- added (a late payout; never one inside the balance snapshot, which may
+  -- already exclude the reversal, nor one whose plan failed or was capped
+  -- beyond what it added). The contribution is consumed, so repeated partial
+  -- reversals never subtract more than was added.
+  SELECT added.cancel_operation_id, LEAST(added.amount_kobo, NEW.amount_kobo)
+    INTO v_cancel_id, v_removed
+    FROM piggyvest_primary.goal_cancel_late_interest_contributions AS added
+   WHERE added.integration_id = NEW.integration_id AND added.payout_id = NEW.payout_id
+     FOR UPDATE;
+  IF FOUND AND v_removed > 0 THEN
+    UPDATE piggyvest_primary.goal_cancel_late_interest_contributions
+       SET amount_kobo = amount_kobo - v_removed
+     WHERE integration_id = NEW.integration_id AND payout_id = NEW.payout_id;
+    UPDATE piggyvest_primary.goal_cancel_operations
+       SET forfeited_interest_kobo = GREATEST(0, forfeited_interest_kobo - v_removed)
+     WHERE id = v_cancel_id AND forfeited_interest_kobo IS NOT NULL;
   END IF;
   RETURN NEW;
 END;

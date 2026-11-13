@@ -693,6 +693,31 @@ BEGIN
       (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
         = v_text::bigint - 100,
       'a reversed late payout stayed in the forfeited total: was ' || v_text);
+    -- Regression: a payout whose contribution to the total was not recorded
+    -- (its plan failed and rolled back) is never subtracted, and a second
+    -- reversal of the same payout can not subtract more than it added.
+    v_text := (SELECT forfeited_interest_kobo::text FROM piggyvest_primary.goal_cancel_operations
+                WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES (c_integration, 'gf-reversal-1b', 'gf-after', 200, repeat('f', 64), 'synthetic-reversal-1b');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
+        = v_text::bigint - 200
+      AND (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_late_interest_contributions
+            WHERE integration_id = c_integration AND payout_id = 'gf-after') = 0,
+      'a second reversal of a payout did not consume exactly what remained of its contribution');
+    DELETE FROM piggyvest_primary.goal_cancel_late_interest_contributions
+     WHERE integration_id = c_integration AND payout_id = 'gf-during';
+    v_text := (SELECT forfeited_interest_kobo::text FROM piggyvest_primary.goal_cancel_operations
+                WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES (c_integration, 'gf-reversal-during', 'gf-during', 100, repeat('9', 64), 'synthetic-reversal-4');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
+        = v_text::bigint,
+      'a reversal subtracted a payout that never added to the total');
     -- Regression: a reversal of interest paid before the cancel read the
     -- balance is not subtracted (the snapshot may already exclude it).
     v_text := (SELECT forfeited_interest_kobo::text FROM piggyvest_primary.goal_cancel_operations
@@ -1226,8 +1251,13 @@ BEGIN
     'the cancel-operation foreign key has no full index');
   PERFORM pg_temp.gc_assert(COALESCE((SELECT bool_and(class.relrowsecurity) FROM pg_catalog.pg_class AS class
     WHERE class.oid IN ('piggyvest_primary.goal_cancel_interest_forfeits'::regclass,
-                        'piggyvest_primary.goal_interest_forfeit_wallets'::regclass)), false),
-    'a forfeit table has no row level security');
+                        'piggyvest_primary.goal_interest_forfeit_wallets'::regclass,
+                        'piggyvest_primary.goal_cancel_late_interest_contributions'::regclass)), false)
+    AND NOT has_table_privilege('piggyvest_primary_authorizer',
+      'piggyvest_primary.goal_cancel_late_interest_contributions', 'SELECT')
+    AND NOT has_table_privilege('service_role',
+      'piggyvest_primary.goal_cancel_late_interest_contributions', 'SELECT'),
+    'a forfeit table has no row level security, or is readable');
   FOREACH v_signature IN ARRAY ARRAY[
     'piggyvest_primary.dispatch_goal_cancel_split(jsonb,uuid,bigint)',
     'piggyvest_primary.read_goal_cancel_amounts(jsonb,uuid)',

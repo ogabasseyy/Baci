@@ -116,7 +116,7 @@ export function forfeitDriverPorts(input: {
         >
       >;
       // Not paged here: the hand-back that follows pages once per forfeit.
-      return (
+      const sourceOk =
         source.id === forfeit.sourceWalletId &&
         source.business_id === forfeit.businessId &&
         source.api_customer_id === forfeit.providerCustomerId &&
@@ -124,8 +124,8 @@ export function forfeitDriverPorts(input: {
         source.status === 'active' &&
         typeof source.balance === 'number' &&
         Number.isSafeInteger(source.balance) &&
-        source.balance >= forfeit.amountKobo
-      );
+        source.balance >= forfeit.amountKobo;
+      return sourceOk ? true : 'source_unavailable';
     },
     transfer: async (forfeit) =>
       await transferToWallet(provider, {
@@ -150,13 +150,24 @@ export function forfeitDriverPorts(input: {
       // Acknowledged after the page, so a lasting wallet mismatch (or check
       // outage) pages once, not on every attempt, and never silently.
       if (unclaimed === 'unclaimed_first') {
-        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
-          reason:
-            reason === 'mismatch'
-              ? 'interest_wallet_not_ours'
-              : 'interest_wallet_check_failed',
-          operationId,
-        });
+        if (reason === 'source_unavailable')
+          // The goal wallet itself is wrong or short of the interest: a
+          // review of the goal wallet, not an interest-wallet setup problem.
+          emitPiggyvestWebhookAlert(
+            'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+            { reason: 'goal_wallet_short', operationId }
+          );
+        else
+          emitPiggyvestWebhookAlert(
+            'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
+            {
+              reason:
+                reason === 'mismatch'
+                  ? 'interest_wallet_not_ours'
+                  : 'interest_wallet_check_failed',
+              operationId,
+            }
+          );
         await acknowledge(id);
       }
       return unclaimed;

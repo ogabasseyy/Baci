@@ -49,7 +49,7 @@ export function SavingsTimelinePreview({
       <View style={styles.header}>
         <Ionicons name="calendar-outline" size={16} color={BRAND.primary} />
         <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
-          YOUR SAVINGS TIMELINE
+          Your savings timeline
         </Text>
       </View>
       <Text style={[styles.duration, { color: colors.text }]}>
@@ -85,9 +85,8 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyebrow: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontSize: 12,
+    fontWeight: '600',
   },
   duration: { fontSize: 21, fontWeight: '700' },
   detail: { fontSize: 11 },

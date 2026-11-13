@@ -3,6 +3,10 @@ import {
   retrySavingsGoalSetup,
   setupExistingSavingsGoal,
 } from '@/lib/customer-savings';
+import {
+  planInterestAnswer,
+  rememberPlanInterestAnswer,
+} from './plan-interest-answers';
 
 type Input = {
   goalId: string;
@@ -20,7 +24,10 @@ type Input = {
  * one stored for the goal is reused.
  */
 export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
-  const [choice, setChoice] = useState<boolean | null>(null);
+  // A plan created in this app run starts with the form's answer chosen.
+  const [choice, setChoice] = useState<boolean | null>(() =>
+    planInterestAnswer(goalId)
+  );
   const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [retried, setRetried] = useState(false);
@@ -34,14 +41,22 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
     []
   );
 
-  const run = async (send: () => Promise<unknown>, isRetry: boolean) => {
-    if (inFlight.current) return;
+  /** Resolves true when a send actually started (false when deduped). */
+  const run = async (
+    send: () => Promise<unknown>,
+    isRetry: boolean,
+    prepare?: () => Promise<void>
+  ): Promise<boolean> => {
+    if (inFlight.current) return false;
+    // Locked before anything is awaited, so a second tap while the answer
+    // is still being saved can never start a competing send.
     inFlight.current = true;
     setSubmitting(true);
     setAttempted(true);
     setRetried(isRetry);
     setError(null);
     try {
+      await prepare?.();
       await send();
     } catch {
       if (mounted.current)
@@ -55,17 +70,23 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
         onSettled();
       }
     }
+    return true;
   };
-  const submit = async () => {
-    if (choice === null) return;
+  /** Sends the chosen answer (or one passed in, e.g. the form's own). */
+  const submit = async (answer: boolean | null = choice) => {
+    if (answer === null) return;
     await run(
       () =>
         setupExistingSavingsGoal({
           goalId,
           merchantId,
-          interestAccepted: choice,
+          interestAccepted: answer,
         }),
-      false
+      false,
+      // The customer's latest explicit answer is the one any later resume
+      // (even after a restart) must send, never an older saved one. Saved
+      // only once this submit holds the lock, so a deduped tap saves nothing.
+      () => rememberPlanInterestAnswer(goalId, answer)
     );
   };
   const retry = () =>

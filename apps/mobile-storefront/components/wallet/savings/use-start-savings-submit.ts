@@ -58,6 +58,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     input.startDate,
     input.maturityDate,
     input.preferredDebitTime,
+    input.interestChoice ?? null, // fixed once the plan exists
   ]);
   useEffect(() => {
     const context = { active: true, key: contextKey };
@@ -88,7 +89,6 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       input.setFormError(validation.error);
       return;
     }
-
     if (!authUserIdRef.current) {
       input.setFormError(SIGN_IN_TO_START_SAVINGS_MESSAGE);
       return;

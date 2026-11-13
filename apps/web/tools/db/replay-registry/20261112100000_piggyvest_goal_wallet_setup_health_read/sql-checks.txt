@@ -1,0 +1,1 @@
+supabase/tests/piggyvest_goal_wallet_setup_health_read.sql

@@ -7,6 +7,7 @@ import {
   scheduleSavingsReminderNotification,
 } from '@/services/savings-reminder-notifications';
 import { handOffToWallet } from './hand-off-to-wallet';
+import { rememberPlanInterestAnswer } from './plan-interest-answers';
 import {
   getSavingsReminderScheduledAt,
   type SavingsFrequency,
@@ -40,6 +41,18 @@ export type UseStartSavingsSubmitInput = {
    * money through PiggyVest.
    */
   onContinueInWallet?: (goalId: string, amount: number) => void;
+  /**
+   * PiggyVest plans: starts the plan's savings wallet setup right after the
+   * plan is created, with the interest answer from the form. Best effort and
+   * time-boxed: the wallet keeps checking and retrying afterwards.
+   */
+  startGoalWalletSetup?: (goalId: string) => Promise<unknown>;
+  /** Re-checked at submit so no caller can skip the form's gates. */
+  acceptsNonWithdrawableTerms?: boolean;
+  /** PiggyVest only: the interest answer; null until chosen. */
+  interestChoice?: boolean | null;
+  /** The customer's own PiggyVest verdict: picks a new payment's rail. */
+  primaryRail?: boolean;
   /** The plan exists but its hand-off could not finish (wallet not loaded). */
   onHandOffPending?: (goalId: string) => void;
   effectiveInitialContribution: number;
@@ -79,6 +92,37 @@ type ValidatedSavingsInput = {
   formattedStartDate: string;
   selectedProduct: SavingsProductChoice;
 };
+
+/** How long plan creation waits for setup before moving on. */
+export const GOAL_WALLET_SETUP_WAIT_MS = 8000;
+
+/**
+ * Kicks off the savings wallet setup and waits a short while for it, so a
+ * quick provider answer lands before the customer sees the plan. A slow or
+ * failed start never blocks the plan: the wallet keeps checking afterwards.
+ * A start still running after the wait is left to finish, never cancelled:
+ * the server holds one setup per goal under a claim, and the automatic retry
+ * only runs once that claim has expired (setup_retryable), so the two never
+ * overlap.
+ */
+async function startSetupBriefly(
+  start: (goalId: string) => Promise<unknown>,
+  goalId: string
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve()
+        .then(() => start(goalId))
+        .catch(() => undefined),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, GOAL_WALLET_SETUP_WAIT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Runs the savings goal creation flow for `useStartSavingsSubmit`. Lives at
@@ -140,12 +184,24 @@ export async function runSavingsGoalSubmission(
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.onHandOffPending?.(result.goalId);
     }
+    // Kept (also on the device) so the sheet can finish setup if this start
+    // never lands, even after a restart.
+    if (input.startGoalWalletSetup && typeof input.interestChoice === 'boolean')
+      await rememberPlanInterestAnswer(result.goalId, input.interestChoice);
+    // Started now but waited for only after the reminder is scheduled, so a
+    // slow start can never leave a created plan without its reminder.
+    const setupStart = input.startGoalWalletSetup
+      ? startSetupBriefly(input.startGoalWalletSetup, result.goalId)
+      : Promise.resolve();
     if (requestIdempotencyKey) {
       input.setInitialContributionIdempotencyKey((currentKey) =>
         currentKey === requestIdempotencyKey ? null : currentKey
       );
     }
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      await setupStart;
+      return;
+    }
     if (input.sourceMode === 'manual') {
       try {
         // A deferred transfer is unconfirmed: the goal is created with an
@@ -176,6 +232,7 @@ export async function runSavingsGoalSubmission(
         // Reminder scheduling is best effort and must not block goal creation.
       }
     }
+    await setupStart;
     if (!isCurrent()) return;
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.setShowFundingModal(false);

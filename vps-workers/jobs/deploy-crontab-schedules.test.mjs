@@ -46,6 +46,19 @@ describe('deploy crontab schedules', () => {
     );
   });
 
+  it('schedules the dark PiggyVest degraded-health check every 5 minutes through run-web-cron', () => {
+    const deployScript = readDeployScript();
+    const lines = deployScript
+      .split('\n')
+      .filter((line) => line.includes('piggyvest-degraded-health'));
+
+    assert.equal(lines.length, 1);
+    assert.match(
+      lines[0],
+      /^\*\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-degraded-health\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-degraded-health' >> \$REMOTE_DIR\/logs\/piggyvest-degraded-health\.log 2>&1$/
+    );
+  });
+
   it('schedules the order notification outbox cron through run-web-cron', () => {
     const deployScript = readDeployScript();
 

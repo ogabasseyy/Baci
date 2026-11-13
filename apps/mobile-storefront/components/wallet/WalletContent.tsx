@@ -1,7 +1,6 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
 import { type ReactNode, useState } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
-import { RefreshControl } from 'react-native';
+import { RefreshControl, type StyleProp, type ViewStyle } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import type Colors from '@/constants/Colors';
 import { useUserPullRefresh } from '@/hooks/use-user-pull-refresh';
@@ -10,6 +9,7 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
 import { isPrimaryWallet } from './is-primary-wallet';
+import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -18,7 +18,7 @@ import { WalletHeroSection } from './WalletHeroSection';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
-import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
+import { WalletSavingsPlanCardWithSetup } from './WalletSavingsPlanCardWithSetup';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 import { WalletSavingsVariantResolutionModal } from './WalletSavingsVariantResolutionModal';
 import {
@@ -82,10 +82,7 @@ export interface WalletContentProps {
   onQuickSave: () => void;
   onRefresh: () => void;
   onResetFund: () => void;
-  /**
-   * The wallet PIN prompt. It is mounted inside the savings sheet while that
-   * sheet is open (iOS cannot stack sibling modals), and at the root otherwise.
-   */
+  /** The PIN prompt: inside the open savings sheet (iOS can't stack modals). */
   pinPrompt?: ReactNode;
   onResetRedeem: () => void;
   onStartSavings: () => void;
@@ -186,6 +183,7 @@ export function WalletContent(props: WalletContentProps) {
           <RefreshControl {...pullRefresh} tintColor={colors.primary} />
         }
       >
+        <PiggyvestSlowdownNotice inset hidden={savingsSheetOpen} />
         <WalletHeroSection
           canCreateFundingAccount={canCreateFundingAccount}
           createFundingAccountUnavailableMessage={
@@ -211,11 +209,12 @@ export function WalletContent(props: WalletContentProps) {
           utilityAccentColor={colors.primary}
         />
         {activeSavingsGoal ? (
-          <WalletSavingsPlanCard
+          <WalletSavingsPlanCardWithSetup
             colors={colors}
             awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}
             onOpen={onStartSavings}
+            pausePolling={savingsSheetOpen}
           />
         ) : null}
         <WalletActionsRow

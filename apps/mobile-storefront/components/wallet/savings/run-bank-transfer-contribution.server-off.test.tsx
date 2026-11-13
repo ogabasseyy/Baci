@@ -128,3 +128,60 @@ describe('bugfix: new-plan contribution routed by the allowlist after a rollback
     );
   });
 });
+
+describe('bugfix: caller rail and live verdict disagreed after merging #4223', () => {
+  const PILOT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+  });
+
+  it('keeps a legacy-wallet customer at the pilot on legacy (primaryRail false)', async () => {
+    jest.mocked(isPiggyvestPrimaryMerchant).mockReturnValue(true);
+    const input = createInput({
+      activeMerchantId: PILOT,
+      createdGoalId: 'goal-1',
+      primaryRail: false,
+    });
+
+    await runBankTransferContribution(input as never, 'goal-1', 20000, {
+      isMounted: () => true,
+    });
+
+    expect(addPiggyvestPrimarySavingsContribution).not.toHaveBeenCalled();
+    expect(addSavingsContribution).toHaveBeenCalled();
+  });
+
+  it('lets a live rollback override a caller that still says primary', async () => {
+    jest.mocked(isPiggyvestPrimaryMerchant).mockReturnValue(true);
+    observePiggyvestPrimaryCapability(PILOT, false);
+    const input = createInput({
+      activeMerchantId: PILOT,
+      createdGoalId: 'goal-1',
+      primaryRail: true,
+    });
+
+    await runBankTransferContribution(input as never, 'goal-1', 20000, {
+      isMounted: () => true,
+    });
+
+    expect(addPiggyvestPrimarySavingsContribution).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to legacy at the pilot while the verdict is unknown', async () => {
+    jest.mocked(isPiggyvestPrimaryMerchant).mockReturnValue(true);
+    jest
+      .mocked(addPiggyvestPrimarySavingsContribution)
+      .mockResolvedValue({ status: 'confirmed' } as never);
+    const input = createInput({
+      activeMerchantId: PILOT,
+      createdGoalId: 'goal-1',
+    });
+
+    await runBankTransferContribution(input as never, 'goal-1', 20000, {
+      isMounted: () => true,
+    });
+
+    expect(addSavingsContribution).not.toHaveBeenCalled();
+    expect(addPiggyvestPrimarySavingsContribution).toHaveBeenCalled();
+  });
+});

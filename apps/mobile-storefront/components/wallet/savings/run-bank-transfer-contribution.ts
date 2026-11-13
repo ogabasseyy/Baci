@@ -33,11 +33,17 @@ export async function runBankTransferContribution(
   ctx: { isMounted: () => boolean; requestPinProof?: PinProofRequester }
 ): Promise<void> {
   try {
-    // The live verdict follows a rollback (Codex): the allowlist alone would
-    // debit PiggyVest while the form shows the restored legacy balance.
+    // The caller's answer for this customer wins when it says legacy (a
+    // legacy-wallet customer at a PiggyVest merchant stays on legacy).
+    // Otherwise the merchant allowlist decides, and the live verdict follows a
+    // rollback (Codex): neither may debit PiggyVest while the form shows the
+    // restored legacy balance. An unknown verdict at the pilot stays primary,
+    // never legacy; a rollback whose ruling-out just expired waits below.
     const verdictNow = readPiggyvestCapabilityNow(input.activeMerchantId);
     const isPrimary =
-      isPiggyvestPrimaryMerchant(input.activeMerchantId) &&
+      input.primaryRail !== false &&
+      (input.primaryRail === true ||
+        isPiggyvestPrimaryMerchant(input.activeMerchantId)) &&
       verdictNow !== false;
     const storedKey = input.initialContributionIdempotencyKey;
     // The rail is persisted with the stored id (same state, same scope,

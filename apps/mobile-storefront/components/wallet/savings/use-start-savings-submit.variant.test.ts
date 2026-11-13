@@ -28,6 +28,7 @@ describe('submit exact variant boundary', () => {
   it('rejects an unresolved selection at final submission even after preview validation', async () => {
     const setFormError = jest.fn();
     const input: UseStartSavingsSubmitInput = {
+      acceptsNonWithdrawableTerms: true,
       contributionValue: 100,
       effectiveInitialContribution: 0,
       frequency: 'daily',

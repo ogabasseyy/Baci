@@ -148,6 +148,8 @@ export function sanitizeForFeed(dirty: string): string {
         'code',
         'a',
         'img',
+        'figure',
+        'figcaption',
       ],
       allowedAttributes: {
         a: ['href', 'title', 'rel'],

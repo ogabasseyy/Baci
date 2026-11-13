@@ -230,10 +230,13 @@ describe('startImeiWalletPayment', () => {
       expect(d.issue).toHaveBeenCalled();
     });
 
-    it('never wallet-pays a lookup a concurrent store-credit request owns', async () => {
+    it('bugfix: an expired (or never-issued) attempt asks to start again, never pays (Codex P2)', async () => {
       const d = deps({ findForPurchase: vi.fn(async () => null) });
       const response = await startImeiWalletPayment(replayInput(existing), d);
-      expect(response.status).not.toBe(202);
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PAYMENT_NOT_COMPLETED',
+      });
       expect(d.issue).not.toHaveBeenCalled();
     });
 

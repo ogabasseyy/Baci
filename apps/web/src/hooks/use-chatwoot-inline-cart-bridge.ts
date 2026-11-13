@@ -11,6 +11,7 @@ import { buildChatwootInlineReviewResponse } from '@/components/storefront/ogaba
 import { useCart } from '@/hooks/cart';
 import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
 import { handleChatwootInlineContextHandshake } from './chatwoot-inline-cart-context-handshake';
+import { rememberChatwootSessionToken } from './chatwoot-session-token-aliases';
 
 type ActiveCartState = ReturnType<typeof useCart>;
 
@@ -33,6 +34,7 @@ export function useChatwootInlineCartBridge(
     let challengeToken: string | null = null;
     let challengeExpiresAt = 0;
     let authorizedSessionToken: string | null = null;
+    let initialSessionToken: string | null = null;
     const sessionTokenAliases = new Set<string>();
     let sessionExpiresAt = 0;
     const lineTokens = new Map<string, string>();
@@ -89,19 +91,28 @@ export function useChatwootInlineCartBridge(
             challengeToken = null;
             challengeExpiresAt = 0;
             authorizedSessionToken = null;
+            initialSessionToken = null;
             sessionTokenAliases.clear();
             sessionExpiresAt = 0;
             lineTokens.clear();
           },
-          challenge: { token: challengeToken, expiresAt: challengeExpiresAt },
+          getChallenge: () => ({
+            token: challengeToken,
+            expiresAt: challengeExpiresAt,
+          }),
           setChallenge: (token, expiresAt) => {
             challengeToken = token;
             challengeExpiresAt = expiresAt;
           },
           setAuthorized: (token, expiresAt) => {
             authorizedSessionToken = token;
+            initialSessionToken = token;
             sessionTokenAliases.clear();
-            sessionTokenAliases.add(token);
+            rememberChatwootSessionToken(
+              sessionTokenAliases,
+              token,
+              initialSessionToken
+            );
             sessionExpiresAt = expiresAt;
           },
         });
@@ -155,12 +166,14 @@ export function useChatwootInlineCartBridge(
       }
       if (
         authorized?.sessionToken &&
-        sessionTokenAliases.has(messageSessionToken)
+        sessionTokenAliases.has(messageSessionToken) &&
+        actionGeneration === latestActionGeneration
       ) {
-        const initialToken = sessionTokenAliases.values().next().value;
-        sessionTokenAliases.clear();
-        if (initialToken) sessionTokenAliases.add(initialToken);
-        sessionTokenAliases.add(authorized.sessionToken);
+        rememberChatwootSessionToken(
+          sessionTokenAliases,
+          authorized.sessionToken,
+          initialSessionToken
+        );
         authorizedSessionToken = authorized.sessionToken;
         actionSessionToken = authorized.sessionToken;
       }
@@ -229,11 +242,15 @@ export function useChatwootInlineCartBridge(
           lineTokens,
           message,
           onSessionTokenRenewed: (sessionToken) => {
-            if (sessionTokenAliases.has(messageSessionToken)) {
-              const initialToken = sessionTokenAliases.values().next().value;
-              sessionTokenAliases.clear();
-              if (initialToken) sessionTokenAliases.add(initialToken);
-              sessionTokenAliases.add(sessionToken);
+            if (
+              actionGeneration === latestActionGeneration &&
+              sessionTokenAliases.has(messageSessionToken)
+            ) {
+              rememberChatwootSessionToken(
+                sessionTokenAliases,
+                sessionToken,
+                initialSessionToken
+              );
               authorizedSessionToken = sessionToken;
             }
           },

@@ -21,10 +21,7 @@ type HandshakeInput<Message extends ContextMessage> = {
   post: Post;
   isCurrent: (conversationId: number, requestId: string) => boolean;
   begin: (conversationId: number, requestId: string) => void;
-  challenge: {
-    token: string | null;
-    expiresAt: number;
-  };
+  getChallenge: () => { token: string | null; expiresAt: number };
   setChallenge: (token: string | null, expiresAt: number) => void;
   setAuthorized: (token: string, expiresAt: number) => void;
 };
@@ -78,11 +75,12 @@ async function issueChallenge(input: HandshakeInput<RequestMessage>) {
 async function verifyContext(input: HandshakeInput<ReadyMessage>) {
   const { requestId, conversationId, contextToken, expiresAt } =
     input.message.data;
-  const challengeToken = input.challenge.token;
+  const challenge = input.getChallenge();
+  const challengeToken = challenge.token;
   if (
     !input.isCurrent(conversationId, requestId) ||
     !challengeToken ||
-    input.challenge.expiresAt <= Date.now() ||
+    challenge.expiresAt <= Date.now() ||
     expiresAt * 1000 <= Date.now()
   ) {
     input.post('baci-commerce-context-denied:', { requestId });
@@ -98,9 +96,13 @@ async function verifyContext(input: HandshakeInput<ReadyMessage>) {
   } catch {
     verified = null;
   }
+  const latestChallenge = input.getChallenge();
+  const challengeStillCurrent =
+    latestChallenge.token === challengeToken &&
+    latestChallenge.expiresAt > Date.now();
   if (
     !input.isCurrent(conversationId, requestId) ||
-    input.challenge.token !== challengeToken ||
+    !challengeStillCurrent ||
     !verified ||
     verified.authorized !== true ||
     verified.requestId !== requestId ||
@@ -112,7 +114,7 @@ async function verifyContext(input: HandshakeInput<ReadyMessage>) {
     !Number.isSafeInteger(verified.sessionExpiresAt) ||
     verified.sessionExpiresAt * 1000 <= Date.now()
   ) {
-    if (input.isCurrent(conversationId, requestId)) {
+    if (input.isCurrent(conversationId, requestId) && challengeStillCurrent) {
       input.post('baci-commerce-context-denied:', { requestId });
     }
     return;

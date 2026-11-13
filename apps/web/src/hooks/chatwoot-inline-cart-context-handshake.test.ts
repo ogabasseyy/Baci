@@ -46,14 +46,17 @@ function input(
     expiresAt: 0,
   }
 ) {
+  let currentChallenge = challenge;
   return {
     begin: vi.fn(),
-    challenge,
+    getChallenge: () => currentChallenge,
     isCurrent: vi.fn(() => true),
     message,
     post: vi.fn(),
     setAuthorized: vi.fn(),
-    setChallenge: vi.fn(),
+    setChallenge: vi.fn((token: string | null, expiresAt: number) => {
+      currentChallenge = { token, expiresAt };
+    }),
     storeSlug: 'merchant-store',
     widgetOrigin,
   };
@@ -124,6 +127,40 @@ describe('handleChatwootInlineContextHandshake', () => {
       expiresAt * 1000
     );
     expect(value.setChallenge).toHaveBeenCalledWith(null, 0);
+    expect(value.post).toHaveBeenCalledWith(
+      'baci-commerce-context-authorized:',
+      expect.objectContaining({ requestId, conversationId })
+    );
+  });
+
+  it('does not post a denial when a duplicate verification loses the nonce race', async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 300;
+    const resolvers: Array<(value: Record<string, unknown>) => void> = [];
+    mocks.postChatwootBridgeJson.mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve))
+    );
+    const value = input(readyMessage(), {
+      token: 'signed-challenge-token',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const first = handleChatwootInlineContextHandshake(value);
+    const second = handleChatwootInlineContextHandshake(value);
+    expect(resolvers).toHaveLength(2);
+
+    resolvers[0]?.({
+      authorized: true,
+      requestId,
+      conversationId,
+      sessionToken: 'signed-session-token',
+      sessionExpiresAt: expiresAt,
+    });
+    await first;
+    resolvers[1]?.({ authorized: false });
+    await second;
+
+    expect(value.setAuthorized).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledTimes(1);
     expect(value.post).toHaveBeenCalledWith(
       'baci-commerce-context-authorized:',
       expect.objectContaining({ requestId, conversationId })

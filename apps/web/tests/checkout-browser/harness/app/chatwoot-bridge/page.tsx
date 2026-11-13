@@ -53,7 +53,9 @@ const cartContext: CartContextType = {
 };
 
 function ChatwootBridgeFixtureMount() {
-  useChatwootInlineCartBridge('ogabassey', widgetOrigin);
+  useChatwootInlineCartBridge('ogabassey', widgetOrigin, () => {
+    document.documentElement.dataset.chatwootBridgeReady = 'true';
+  });
 
   useEffect(() => {
     const untrustedFrame = document.getElementById('untrusted-chatwoot-widget');
@@ -70,9 +72,6 @@ function ChatwootBridgeFixtureMount() {
       }
     };
     window.addEventListener('message', observeUntrustedMessage);
-    // The bridge hook above registers its listener in an earlier useEffect;
-    // React runs these passive effects in declaration order before this signal.
-    document.documentElement.dataset.chatwootBridgeReady = 'true';
     return () => window.removeEventListener('message', observeUntrustedMessage);
   }, []);
 

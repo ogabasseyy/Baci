@@ -15,7 +15,8 @@ type ActiveCartState = ReturnType<typeof useCart>;
 /** Optional adapter; feature-gated storefront integration remains separate. */
 export function useChatwootInlineCartBridge(
   storeSlug: string,
-  widgetOrigin: string
+  widgetOrigin: string,
+  onListenerReady?: () => void
 ) {
   const cartState = useCart();
   const latestState = useRef<ActiveCartState>(cartState);
@@ -289,10 +290,11 @@ export function useChatwootInlineCartBridge(
     }
 
     window.addEventListener('message', onMessage);
+    onListenerReady?.();
     return () => {
       active = false;
       lineTokens.clear();
       window.removeEventListener('message', onMessage);
     };
-  }, [storeSlug, widgetOrigin]);
+  }, [storeSlug, widgetOrigin, onListenerReady]);
 }

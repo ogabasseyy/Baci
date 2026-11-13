@@ -139,4 +139,26 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       ).toBeOnTheScreen();
     });
   });
+
+  describe('bugfix: a PiggyVest head start said "Yours today" before the PIN payment', () => {
+    it('does not count a head start still to be paid from the PiggyVest wallet', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            primaryWallet: true,
+            initialContributionEnabled: true,
+            initialContributionAmount: '250000',
+            effectiveInitialContribution: 250_000,
+            startDate: '2026-11-12',
+            maturityDate: '2027-03-16',
+          })}
+        />
+      );
+      expect(screen.queryByText('Yours today')).toBeNull();
+      expect(
+        screen.getByText(formatDateTimeDisplay('2027-03-16', 'date'))
+      ).toBeOnTheScreen();
+    });
+  });
 });

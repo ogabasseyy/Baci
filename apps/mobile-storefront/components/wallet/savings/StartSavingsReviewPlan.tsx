@@ -109,11 +109,14 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
 function headStartShare(
   controller: StartSavingsController
 ): 'none' | 'part' | 'all' {
-  // A head start paid by bank transfer moves later, after the plan exists:
-  // until then it covers none of the target (never "Yours today").
+  // A head start paid later, after the plan exists (by bank transfer, or
+  // from the PiggyVest wallet with a PIN), covers none of the target yet,
+  // so it is never "Yours today". Only an immediate legacy-wallet debit at
+  // creation counts.
   const headStart =
     controller.sourceMode === 'auto_debit' ||
-    controller.selectedFundingOption === 'bank_transfer'
+    controller.selectedFundingOption === 'bank_transfer' ||
+    controller.primaryWallet
       ? 0
       : controller.effectiveInitialContribution;
   if (!(headStart > 0)) return 'none';

@@ -82,6 +82,8 @@ export function useVtuWalletPayHost({
     opened.current = true;
     const user = useAuthStore.getState().user;
     ownerId.current = user?.id ?? null;
+    // True while this sheet still takes answers (not closed or reopened).
+    const wanted = sheet.nextSession();
     let purchase: string | null = null;
     let inner: WalletPayAdapter<VtuWalletPayResult> | null = null;
     const lazy: WalletPayAdapter<VtuWalletPayResult> = {
@@ -115,8 +117,8 @@ export function useVtuWalletPayHost({
         });
         const answer = await inner.start();
         const issuedKey = purchase;
-        if (answer.kind === 'pin')
-          cancelUnpaid.current = async () => {
+        if (answer.kind === 'pin') {
+          const cancel = async () => {
             if (useAuthStore.getState().user?.id !== user.id) return;
             const reply = await vtuWalletPayApi.cancel(connection, {
               ...owned,
@@ -127,6 +129,10 @@ export function useVtuWalletPayHost({
             if (reply.httpStatus === 200 && reply.body.status === 'cancelled')
               await walletPayPurchaseKeys.forget(issuedKey);
           };
+          // Closed while the start was out: cancel now (Codex P2).
+          if (wanted()) cancelUnpaid.current = cancel;
+          else void cancel().catch(() => undefined);
+        }
         return answer;
       },
       verifyPin: async (operationId, pin) => {
@@ -144,7 +150,7 @@ export function useVtuWalletPayHost({
       trackWalletPayPurchase(lazy, () => purchase, {
         onSettled: () => void walletQuery.refetch?.(),
         stillOwner: () => useAuthStore.getState().user?.id === user?.id,
-        stillWanted: sheet.nextSession(),
+        stillWanted: wanted,
       })
     );
   });

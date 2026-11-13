@@ -7,26 +7,45 @@ import { BRAND, SPACING } from '@/constants/Colors';
 export const SAVINGS_WALLET_LABEL = 'Savings wallet · NGN';
 
 /**
- * The selected payment row when the PiggyVest savings wallet pays this
- * purchase (it covers the amount and store credit doesn't). Shown only while
- * paying from PiggyVest is switched on for this customer.
+ * The PiggyVest savings wallet row, shown only while paying from PiggyVest is
+ * switched on for this customer: selected when it pays this purchase (it
+ * covers the amount and store credit doesn't), its balance before an amount
+ * is chosen, or the real shortfall when the amount is more than it holds.
  */
 export function UtilityPiggyvestPayRow({
   balanceKobo,
   colors,
+  mode = 'pays',
+  amount = 0,
 }: {
   balanceKobo: number;
   colors: (typeof Colors)['light'];
+  mode?: 'pays' | 'available' | 'short';
+  /** The purchase amount in naira (for the shortfall). */
+  amount?: number;
 }) {
-  const available = `₦${(balanceKobo / 100).toLocaleString()} available`;
+  const balance = balanceKobo / 100;
+  const available = `₦${balance.toLocaleString()} available`;
+  const meta =
+    mode === 'pays'
+      ? `${available} · covers this purchase`
+      : mode === 'short'
+        ? `${available} · ₦${Math.max(amount - balance, 0).toLocaleString()} more needed`
+        : available;
+  const selected = mode === 'pays';
   return (
     <View
       style={[
         styles.row,
-        { backgroundColor: `${BRAND.primary}12`, borderColor: BRAND.primary },
+        selected
+          ? {
+              backgroundColor: `${BRAND.primary}12`,
+              borderColor: BRAND.primary,
+            }
+          : { backgroundColor: colors.card, borderColor: colors.border },
       ]}
       accessibilityRole="text"
-      accessibilityLabel={`${SAVINGS_WALLET_LABEL}. ${available}. Covers this purchase`}
+      accessibilityLabel={`${SAVINGS_WALLET_LABEL}. ${meta}`}
     >
       <View style={[styles.icon, { backgroundColor: `${BRAND.primary}15` }]}>
         <Ionicons name="wallet-outline" size={18} color={BRAND.primary} />
@@ -36,11 +55,16 @@ export function UtilityPiggyvestPayRow({
           {SAVINGS_WALLET_LABEL}
         </Text>
         <Text style={[styles.meta, { color: colors.textSecondary }]}>
-          {`${available} · covers this purchase`}
+          {meta}
         </Text>
       </View>
-      <View style={[styles.radioOuter, { borderColor: BRAND.primary }]}>
-        <View style={styles.radioInner} />
+      <View
+        style={[
+          styles.radioOuter,
+          { borderColor: selected ? BRAND.primary : colors.border },
+        ]}
+      >
+        {selected ? <View style={styles.radioInner} /> : null}
       </View>
     </View>
   );

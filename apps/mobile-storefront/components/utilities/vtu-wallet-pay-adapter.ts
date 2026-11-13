@@ -123,8 +123,14 @@ export function createVtuWalletPayAdapter(input: {
       // created: keep the key (a start never moves money) and try again.
       const refused = refusal(reply);
       if (refused) return refused;
-      return reply.httpStatus >= 500
-        ? outcome('not_started')
+      if (reply.httpStatus >= 500) return outcome('not_started');
+      // A request the checkout refused (e.g. an invalid number): app wording
+      // that says what to check, never the server's text.
+      return reply.httpStatus === 400
+        ? {
+            kind: 'outcome',
+            outcome: { kind: 'failed', failedReason: 'check_details' },
+          }
         : outcome('failed');
     },
     async verifyPin(operationId, pin) {

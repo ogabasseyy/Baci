@@ -192,3 +192,13 @@ describe('bugfix: success reported the request amount (Muse low)', () => {
     });
   });
 });
+
+describe('bugfix: a refused start showed "Something went wrong" with no reason (Fable walk)', () => {
+  it('asks the customer to check the details when the checkout refused the request', async () => {
+    api.start.mockResolvedValue(reply(400, { error: 'Invalid phone number' }));
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'failed', failedReason: 'check_details' },
+    });
+  });
+});

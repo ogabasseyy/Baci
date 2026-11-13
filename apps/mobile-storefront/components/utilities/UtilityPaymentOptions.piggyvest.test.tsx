@@ -45,14 +45,27 @@ describe('bugfix: airtime never offered a ready PiggyVest wallet (Fable walk)', 
     expect(screen.queryByText(/more needed/i)).toBeNull();
   });
 
-  it('keeps the store credit shortfall when the savings wallet is short too', () => {
+  it('bugfix: says the savings balance and real shortfall above it (Fable walk)', () => {
     useVtuWalletPayStore.setState({
       covers: (amount) => amount <= 549_700,
       balanceKobo: 54_970_000,
     });
     renderOptions(1_000_000);
-    expect(screen.queryByText('Savings wallet · NGN')).toBeNull();
-    expect(screen.getByText(/more needed/i)).toBeTruthy();
+    expect(screen.getByText('Savings wallet · NGN')).toBeTruthy();
+    expect(
+      screen.getByText('₦549,700 available · ₦450,300 more needed')
+    ).toBeTruthy();
+  });
+
+  it('bugfix: shows the savings wallet before an amount is chosen (Fable walk)', () => {
+    useVtuWalletPayStore.setState({
+      covers: (amount) => amount <= 549_700,
+      balanceKobo: 54_970_000,
+    });
+    renderOptions(0);
+    expect(screen.getByText('Savings wallet · NGN')).toBeTruthy();
+    expect(screen.getByText('₦549,700 available')).toBeTruthy();
+    expect(screen.queryByText(/Pay with store credit/)).toBeNull();
   });
 
   it('shows nothing new for a customer with no PiggyVest wallet (other merchants)', () => {

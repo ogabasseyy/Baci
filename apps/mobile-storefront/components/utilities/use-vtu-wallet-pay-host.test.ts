@@ -203,3 +203,40 @@ describe('bugfix: a sheet closed before the PIN left the purchase blocking store
     hook.unmount();
   });
 });
+
+describe('bugfix: a start that answered after the sheet closed stayed issued (Codex P2)', () => {
+  it('cancels the issued payment right away', async () => {
+    const cancel = vtuWalletPayApi.cancel as jest.Mock;
+    cancel.mockResolvedValue({
+      httpStatus: 200,
+      body: { status: 'cancelled' },
+    });
+    let answer: (value: unknown) => void = () => undefined;
+    start.mockImplementation(
+      () => new Promise((resolve) => (answer = resolve))
+    );
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    await act(async () => hook.result.current.sheet.close());
+    await act(async () => {
+      answer({
+        httpStatus: 202,
+        body: {
+          status: 'payment_required',
+          transactionId: '33333333-3333-4333-8333-333333333333',
+          operationId: '11111111-1111-4111-8111-111111111111',
+          amountKobo: 50_000,
+        },
+      });
+    });
+    expect(cancel).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        operationId: '11111111-1111-4111-8111-111111111111',
+      })
+    );
+    hook.unmount();
+  });
+});

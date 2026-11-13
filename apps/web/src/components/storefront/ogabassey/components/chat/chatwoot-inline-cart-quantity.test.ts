@@ -97,7 +97,7 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
-  it('fails closed without a request for unknown or stale line references', async () => {
+  it('refreshes the current snapshot on an unknown or stale local line reference', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const value = input({
@@ -110,6 +110,27 @@ describe('handleChatwootInlineCartQuantity', () => {
     expect(value.post).toHaveBeenCalledWith({
       requestId: 'quantity-0001',
       accepted: false,
+      code: 'refresh_required',
+    });
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+  });
+
+  it('does not refresh a superseded cart context on a stale local reference', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const value = input({
+      isCurrentContext: () => false,
+      lineTokens: new Map(),
+    });
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(value.refreshSharedCart).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: false,
+      code: 'refresh_required',
     });
   });
 });

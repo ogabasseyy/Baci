@@ -35,7 +35,15 @@ export async function handleChatwootInlineCartQuantity(input: {
       (!reviewedLine ||
         reviewedLine.quantity !== message.data.expectedQuantity))
   ) {
-    input.post({ requestId, accepted: false });
+    if (input.isCurrentContext()) {
+      try {
+        await input.refreshSharedCart?.();
+      } catch {
+        // The local snapshot is stale; keep the action rejected.
+      }
+    }
+    if (!input.isCurrentAction() || input.sessionExpiresAt <= Date.now()) return;
+    input.post({ requestId, accepted: false, code: 'refresh_required' });
     return;
   }
 

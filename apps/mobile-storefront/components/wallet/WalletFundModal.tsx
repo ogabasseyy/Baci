@@ -86,7 +86,8 @@ export function WalletFundModal({
     isWalletPurchaseReturnHref(fundReturnTo) &&
     (primaryReady ||
       piggyvestMerchant ||
-      (walletPrimaryUnsettled && primaryCapability !== false) ||
+      // The live verdict wins over this hook's own (Codex).
+      (walletPrimaryUnsettled && (verdictNow ?? primaryCapability) !== false) ||
       // No verdict yet: a restored legacy wallet isn't trusted (Codex).
       (primaryCapability === null && verdictNow === null));
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds

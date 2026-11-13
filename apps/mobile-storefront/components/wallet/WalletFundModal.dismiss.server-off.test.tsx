@@ -213,3 +213,19 @@ describe('bugfix: pilot sheet keeps PiggyVest after a rollback to not ready', ()
     clearObservedPiggyvestPrimaryCapability();
   });
 });
+
+describe('bugfix: unsettled wallet kept card-only after a rollback to not ready', () => {
+  it('drops the store-credit sheet for an unsettled wallet once rolled back', () => {
+    // Arrange: the hook still holds "on", the live verdict says "not
+    // ready", and the cached wallet's PiggyVest read is unavailable.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+
+    // Act
+    renderModal(false, '/imei-check', true);
+
+    // Assert
+    expect(screen.queryByText('Add store credit')).toBeNull();
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});

@@ -58,8 +58,8 @@ function setup(
 
 describe('bugfix: cached legacy wallet kept after the server enables PiggyVest', () => {
   it('refetches the cached wallet when the capability turns from false to true', () => {
-    // Arrange: wallet cached while the server ruled PiggyVest out.
-    const { hook, invalidateQueries } = setup(false);
+    // Arrange: legacy wallet cached while the server ruled PiggyVest out.
+    const { hook, invalidateQueries } = setup(false, { balance: 0 });
 
     // Act: the negative verdict expires and the server now enables it.
     mockCapability = true;
@@ -71,12 +71,47 @@ describe('bugfix: cached legacy wallet kept after the server enables PiggyVest',
       exact: true,
     });
   });
+});
 
-  it('refetches when a ruled-out verdict becomes unknown again', () => {
-    const { hook, invalidateQueries } = setup(false);
+describe('bugfix: ruled-out wallet reloaded at every negative-cache expiry', () => {
+  it('does not refetch a non-pilot merchant across a false, expiry, false cycle', () => {
+    // Arrange: a non-pilot merchant the server rules out, legacy wallet.
+    mockCapability = false;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = { invalidateQueries } as unknown as QueryClient;
+    const hook = renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-2', KEY, {
+        balance: 0,
+      } as never)
+    );
+
+    // Act: the negative verdict expires (hook goes unknown), then re-probes.
     mockCapability = null;
     hook.rerender({});
+    mockCapability = false;
+    hook.rerender({});
+
+    // Assert
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: unavailable wallet kept after a live rollback', () => {
+  it('reloads an unavailable-shaped wallet once the live verdict rolls back to false', () => {
+    // Arrange: the PiggyVest read timed out (no funding account cached).
+    const { hook, invalidateQueries } = setup(true, {
+      balance: 0,
+      primary_unavailable: true,
+    });
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    // Act: another flow rolls the live verdict back to false.
+    act(() => observePiggyvestPrimaryCapability('merchant-1', false));
+    hook.rerender({});
+
+    // Assert
     expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    clearObservedPiggyvestPrimaryCapability();
   });
 });
 

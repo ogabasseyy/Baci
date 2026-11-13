@@ -2,6 +2,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { usePiggyvestCapabilityNow } from './use-piggyvest-capability-now';
 import type { WalletQueryData } from './wallet-query';
@@ -36,10 +37,16 @@ export function useWalletRecheckOnPiggyvest(
     cached.owner_unresolved !== true &&
     !isWalletStoreCredit(cached) &&
     !isWalletPrimaryUnknown(cached);
-  // PiggyVest-shaped: a PiggyVest balance or a pending PiggyVest account.
+  // PiggyVest-shaped: a PiggyVest balance, a pending PiggyVest account, or
+  // an unavailable read (no funding account cached) once the server has
+  // actually ruled PiggyVest out (Codex); a default false never reloads it.
   const cachedPrimary =
     cached !== undefined &&
-    (isWalletStoreCredit(cached) || cached.primary_pending === true);
+    (isWalletStoreCredit(cached) ||
+      cached.primary_pending === true ||
+      (!!merchantId &&
+        isWalletPrimaryUnknown(cached) &&
+        readObservedPiggyvestPrimaryCapability(merchantId) === false));
   // The live verdict (it follows rollbacks), else the hook's own answer.
   const verdict = verdictNow ?? capability;
   // State, not transitions (Codex): whenever the current verdict and the
@@ -51,21 +58,18 @@ export function useWalletRecheckOnPiggyvest(
   const mismatchKey = mismatch
     ? `${scope}|${String(verdict)}|${cachedLegacy ? 'legacy' : 'primary'}`
     : null;
-  const previous = useRef<{
-    capability: boolean | null;
-    mismatchKey: string | null;
-  }>({ capability, mismatchKey: null });
+  // Only a mismatch reloads (Codex): a ruled-out merchant's negative-cache
+  // expiry alone never does, since the live verdict stays false for it.
+  const previous = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): `scope` (inside mismatchKey) is its serialised form; the key is read at that moment.
   useEffect(() => {
     const was = previous.current;
-    previous.current = { capability, mismatchKey };
-    const turnedOn = was.capability === false && capability !== false;
-    const newMismatch = mismatchKey !== null && mismatchKey !== was.mismatchKey;
-    if (turnedOn || newMismatch) {
+    previous.current = mismatchKey;
+    if (mismatchKey !== null && mismatchKey !== was) {
       void queryClient.invalidateQueries({
         queryKey: walletQueryKey,
         exact: true,
       });
     }
-  }, [capability, mismatchKey, queryClient]);
+  }, [mismatchKey, queryClient]);
 }

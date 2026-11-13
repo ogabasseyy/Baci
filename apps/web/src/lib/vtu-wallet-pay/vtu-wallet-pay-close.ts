@@ -7,9 +7,9 @@ type Close = (input: {
   runtime: WalletPayRuntime;
   scope: ReturnType<typeof walletPayScope>;
   transactionId: string;
-  cancelIssued?: boolean;
+  cancelOperationId?: string;
 }) => Promise<boolean>;
-type PurchaseRef = Omit<Parameters<Close>[0], 'cancelIssued'>;
+type PurchaseRef = Omit<Parameters<Close>[0], 'cancelOperationId'>;
 
 /**
  * Payment answers that end it unpaid: the purchase is closed so a later store
@@ -35,8 +35,14 @@ export async function closeUnpaidQuietly(close: Close, ref: PurchaseRef) {
  * The pay sheet closed before any PIN: release the issued payment (never a
  * reserved one, which the database refuses) and close the purchase.
  */
-export async function cancelVtuWalletPay(close: Close, ref: PurchaseRef) {
-  const closed = await close({ ...ref, cancelIssued: true });
+export async function cancelVtuWalletPay(
+  close: Close,
+  ref: PurchaseRef,
+  operationId: string
+) {
+  // Only the operation this sheet issued: a stale cancel never releases a
+  // newer attempt of the same purchase (Codex P2).
+  const closed = await close({ ...ref, cancelOperationId: operationId });
   return NextResponse.json(
     {
       status: closed ? 'cancelled' : 'not_cancelled',

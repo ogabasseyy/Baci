@@ -266,6 +266,24 @@ describe('createWalletPayWorkerStore', () => {
     ]);
     await expect(store.closeUnpaidVtu('not-a-uuid')).rejects.toThrow();
   });
+  it('sends a cancel with the one operation it releases', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(true)
+    );
+    const store = createWalletPayCustomerStore({ scope, execute });
+    await store.closeUnpaidVtu(
+      '33333333-3333-4333-8333-333333333333',
+      '44444444-4444-4444-8444-444444444444'
+    );
+    expect(execute).toHaveBeenCalledWith(customerSql.closeUnpaidVtu, [
+      JSON.stringify(scope),
+      JSON.stringify({
+        transactionId: '33333333-3333-4333-8333-333333333333',
+        cancelIssued: true,
+        operationId: '44444444-4444-4444-8444-444444444444',
+      }),
+    ]);
+  });
   it('refuses an attempted answer that is not a boolean', async () => {
     const store = createWalletPayCustomerStore({
       scope,

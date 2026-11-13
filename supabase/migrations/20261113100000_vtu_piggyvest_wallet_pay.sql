@@ -147,8 +147,12 @@ DECLARE
 BEGIN
   IF request IS NULL OR pg_catalog.jsonb_typeof(request) <> 'object'
     OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_object_keys(request) AS k
-                WHERE k NOT IN ('transactionId', 'cancelIssued'))
+                WHERE k NOT IN ('transactionId', 'cancelIssued', 'operationId'))
     OR pg_catalog.jsonb_typeof(COALESCE(request -> 'cancelIssued', 'true'::jsonb)) <> 'boolean'
+    -- A cancel names the one operation it releases (never another attempt).
+    OR ((request ->> 'cancelIssued')::boolean IS TRUE
+        AND COALESCE(request ->> 'operationId', '')
+            !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
     OR COALESCE(request ->> 'transactionId', '')
        !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     RAISE EXCEPTION 'invalid wallet payment request' USING ERRCODE = '22023';
@@ -178,6 +182,7 @@ BEGIN
           AND live.intent_id = v_intent_id
           AND live.purpose = 'vtu'
           AND live.purchase_ref = v_id::text
+          AND live.id = (request ->> 'operationId')::uuid
           AND live.state = 'issued'
         FOR UPDATE);
   END IF;

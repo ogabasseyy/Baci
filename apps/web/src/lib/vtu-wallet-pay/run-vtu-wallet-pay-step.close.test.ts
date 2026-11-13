@@ -167,7 +167,7 @@ describe('bugfix: an unavailable issue left the prepared purchase live (Codex P2
       status: 'cancelled',
     });
     expect(deps.closeUnpaid).toHaveBeenCalledWith(
-      expect.objectContaining({ cancelIssued: true })
+      expect.objectContaining({ cancelOperationId: OP })
     );
     expect(deps.pay).not.toHaveBeenCalled();
   });

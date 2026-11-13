@@ -3,6 +3,7 @@ import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now'
 import type { WalletData } from '@/hooks/wallet-query';
 import { setupExistingSavingsGoal } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 
 /**
  * PiggyVest-only parts of the savings form. The interest question is asked
@@ -44,9 +45,15 @@ export function useStartSavingsPrimarySetup({
   // reclassification refetch is slow or failing must not keep the PiggyVest
   // form (interest, no auto debit, goal-wallet setup) after a rollback.
   const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
+  // Also once that ruling-out has expired, until a fresh positive verdict
+  // (Codex): the wallet screen keeps the balance suppressed meanwhile.
+  const ruledOut =
+    verdictNow === false ||
+    (verdictNow === null &&
+      !!activeMerchantId &&
+      wasPiggyvestLastRuledOut(activeMerchantId));
   const primary =
-    verdictNow !== false &&
-    (primaryWallet || primaryPending || (!walletKnown && pilot));
+    !ruledOut && (primaryWallet || primaryPending || (!walletKnown && pilot));
   const [answer, setAnswer] = useState<{
     userId?: string;
     value: boolean | null;

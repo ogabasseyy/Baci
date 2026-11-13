@@ -9,6 +9,11 @@ import { useStartSavingsPrimarySetup } from './use-start-savings-primary-setup';
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: (id?: string) => id === 'pv-merchant',
 }));
+// The expiry re-probe stays in flight, so an expired verdict stays unknown.
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  getPiggyvestPrimaryCapability: () => new Promise(() => undefined),
+  usePiggyvestPrimaryCapability: () => null,
+}));
 jest.mock('@/lib/customer-savings', () => ({
   setupExistingSavingsGoal: jest.fn(() =>
     Promise.resolve({ status: 'pending' })
@@ -249,5 +254,42 @@ describe('bugfix: pending PiggyVest account treated as a known legacy wallet', (
     );
     expect(result.current.askInterest).toBe(false);
     expect(result.current.allowAutoDebit).toBe(true);
+  });
+});
+
+describe('bugfix: expired rollback restored the PiggyVest start-savings form', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    clearObservedPiggyvestPrimaryCapability();
+  });
+
+  it('keeps the legacy form after the ruling-out expires, until a positive verdict', () => {
+    // Arrange: cached PiggyVest wallet; rolled back, then the 60-second
+    // ruling-out expires with the re-probe unanswered.
+    jest.useFakeTimers();
+    const { result, rerender } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'pv-merchant',
+        primaryWallet: true,
+        wallet: {
+          balance: 0,
+          loyalty_points: 0,
+          primary_balance_kobo: 500_000,
+        },
+      })
+    );
+    act(() => observePiggyvestPrimaryCapability('pv-merchant', false));
+    act(() => {
+      jest.advanceTimersByTime(61_000);
+    });
+    rerender({});
+
+    // Assert: still the legacy form.
+    expect(result.current.askInterest).toBe(false);
+    expect(result.current.startGoalWalletSetup).toBeUndefined();
+
+    // A fresh positive verdict brings the PiggyVest form back.
+    act(() => observePiggyvestPrimaryCapability('pv-merchant', true));
+    expect(result.current.askInterest).toBe(true);
   });
 });

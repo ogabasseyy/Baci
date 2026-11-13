@@ -43,9 +43,15 @@ export async function GET(request: Request) {
     );
   }
   try {
-    return NextResponse.json(
-      await runWalletPayDrain({ runtime, deliverers: WALLET_PAY_DELIVERERS })
-    );
+    const summary = await runWalletPayDrain({
+      runtime,
+      deliverers: WALLET_PAY_DELIVERERS,
+    });
+    // Any item that threw fails the run (counts only), so a stuck delivery
+    // or refund pages instead of passing every five minutes (Codex P2).
+    return NextResponse.json(summary, {
+      status: summary.failed > 0 ? 500 : 200,
+    });
   } catch {
     return NextResponse.json(
       { error: 'Wallet pay drain failed' },

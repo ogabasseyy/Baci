@@ -14,7 +14,9 @@ vi.mock('./wallet-pay-store', () => ({
 }));
 
 const none = { settle: [], refund: [], deliver: [] };
-const env = {} as NodeJS.ProcessEnv;
+const env = {
+  PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD: 'set',
+} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -24,11 +26,18 @@ beforeEach(() => {
 });
 
 describe('isWalletPayWorkPending', () => {
-  it('is false when PiggyVest savings is not configured at all', async () => {
+  it('is false when PiggyVest savings was never installed', async () => {
+    await expect(isWalletPayWorkPending({} as NodeJS.ProcessEnv)).resolves.toBe(
+      false
+    );
+    expect(mocks.runtime).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: throws for a broken (partly removed) savings setting, never "no work" (Codex P2)', async () => {
     mocks.runtime.mockImplementation(() => {
       throw new Error('missing');
     });
-    await expect(isWalletPayWorkPending(env)).resolves.toBe(false);
+    await expect(isWalletPayWorkPending(env)).rejects.toThrow('missing');
   });
 
   it('is false when nothing waits and true when any work waits', async () => {

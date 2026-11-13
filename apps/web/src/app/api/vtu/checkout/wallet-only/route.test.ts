@@ -104,6 +104,8 @@ interface ClaimResult {
 }
 
 interface IdempotencyRowState {
+  /** The replayed row was prepared as PiggyVest-paid (owner-scoped read). */
+  piggyvestPaid?: boolean;
   row: {
     key: string;
     vtu_transaction_id: string;
@@ -369,6 +371,11 @@ function buildSupabase(
     }),
     rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
+      if (fn === 'get_vtu_wallet_pay_purchase')
+        return Promise.resolve({
+          data: state.piggyvestPaid ? [{ piggyvest_paid: true }] : [],
+          error: null,
+        });
       if (fn === 'vtu_admission_proof') {
         const stamp =
           state.admissionTimestamp === undefined
@@ -793,6 +800,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
+      piggyvestPaid: true,
     };
     userSupabaseMockRef.current = buildSupabase(state);
     mockWalletPayStep.mockResolvedValue(

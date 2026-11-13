@@ -132,6 +132,7 @@ async function paysFromPiggyvest(
   );
   if (error) throw new Error('VTU purchase payment source read failed');
   const row = (data as Array<{ piggyvest_paid: boolean }> | null)?.[0];
-  // No row for this owner: the PiggyVest step refuses it as before.
-  return row ? row.piggyvest_paid === true : true;
+  // No row this owner can see: never routed to the PiggyVest step; the
+  // store credit replay's own binding checks answer it (Muse).
+  return row?.piggyvest_paid === true;
 }

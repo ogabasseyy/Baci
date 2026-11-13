@@ -57,8 +57,13 @@ async function removePending(admin: ImeiAccessClient, lookupId: string) {
   return false;
 }
 
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
 function refuse(code: string, error: string, status: number) {
-  return NextResponse.json(errorBody({ code, error }), { status });
+  return NextResponse.json(errorBody({ code, error }), {
+    status,
+    headers: NO_STORE,
+  });
 }
 
 /**
@@ -178,8 +183,21 @@ export async function startImeiWalletPayment(
       if (!(await deps.wasAttempted(purchase)))
         return mapExistingLookup(existing, input.replayContext);
     } else if (!['issued', 'reserved', 'dispatched'].includes(owned.state))
-      // A confirmed or refunded payment is never followed by a second one.
-      return mapExistingLookup(existing, input.replayContext);
+      // Confirmed (or under review): never a second payment, but the
+      // operation is handed back so the client can re-check it and the
+      // check is delivered (Codex P2).
+      return NextResponse.json(
+        {
+          status:
+            owned.state === 'needs_review'
+              ? 'payment_review'
+              : 'payment_pending',
+          lookupId: String(existing.id),
+          operationId: owned.operationId,
+          amountKobo: Math.round(Number(existing.amount_ngn) * 100),
+        },
+        { status: 202, headers: NO_STORE }
+      );
     lookupId = String(existing.id);
     // The price recorded on the lookup, never today's tier price.
     amount = Number(existing.amount_ngn);
@@ -243,7 +261,7 @@ export async function startImeiWalletPayment(
         amountKobo: issued.amountKobo,
         expiresAt: issued.expiresAt,
       },
-      { status: 202, headers: { 'Cache-Control': 'no-store' } }
+      { status: 202, headers: NO_STORE }
     );
   return NextResponse.json(
     {
@@ -253,6 +271,6 @@ export async function startImeiWalletPayment(
       operationId: issued.operationId,
       amountKobo: issued.amountKobo,
     },
-    { status: 202, headers: { 'Cache-Control': 'no-store' } }
+    { status: 202, headers: NO_STORE }
   );
 }

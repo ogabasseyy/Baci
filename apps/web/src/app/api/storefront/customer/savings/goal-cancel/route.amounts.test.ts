@@ -115,8 +115,10 @@ it('omits the split when the server has none (before dispatch or an older attemp
   expect(await response.json()).toEqual({ status: 'not_started', operationId });
 });
 
-it('answers a cancel that owes interest with no interest wallet as a temporary outage', async () => {
-  mocks.submit.mockResolvedValue({ status: 'unavailable' });
+// The runtime maps the database's forfeit_unavailable split (interest owed,
+// no interest wallet) to needs_review: held for an operator, never retried.
+it('answers a cancel that owes interest with no interest wallet as under review', async () => {
+  mocks.submit.mockResolvedValue({ status: 'needs_review' });
   const response = await post({
     step: 'submit',
     merchantId,
@@ -125,8 +127,8 @@ it('answers a cancel that owes interest with no interest wallet as a temporary o
     pinProof,
     interestForfeitAcknowledged: true,
   });
-  expect(response.status).toBe(503);
-  expect((await response.json()).code).toBe('WALLET_UNAVAILABLE');
+  expect(response.status).toBe(409);
+  expect((await response.json()).code).toBe('GOAL_NEEDS_REVIEW');
 });
 
 describe('bugfix: a cancel refused for a missing interest wallet read as a PiggyVest rejection', () => {
@@ -150,7 +152,12 @@ describe('bugfix: a cancel refused for a missing interest wallet read as a Piggy
 describe('bugfix: cancelling a goal whose PiggyVest setup never finished answered a false 503', () => {
   it('says honestly that there is nothing to cancel yet', async () => {
     mocks.issue.mockResolvedValue({ status: 'not_set_up' });
-    const response = await post({ step: 'issue', merchantId, goalId });
+    const response = await post({
+      step: 'issue',
+      merchantId,
+      goalId,
+      interestForfeitAcknowledged: true,
+    });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error:

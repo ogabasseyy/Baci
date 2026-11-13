@@ -44,7 +44,12 @@ const merchantId = '11111111-1111-4111-8111-111111111111';
 const goalId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
 const pinProof = createHash('sha256').update('s6-route-proof').digest('hex');
-const issue = { step: 'issue', merchantId, goalId };
+const issue = {
+  step: 'issue',
+  merchantId,
+  goalId,
+  interestForfeitAcknowledged: true,
+};
 const submit = {
   step: 'submit',
   merchantId,

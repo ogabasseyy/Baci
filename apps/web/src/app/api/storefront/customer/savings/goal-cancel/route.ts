@@ -110,11 +110,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   // An app that never showed the interest forfeit (older builds say the
   // whole balance, interest included, comes back) can not move money: it is
-  // asked to update. Nothing is reserved; the issued attempt simply expires.
+  // asked to update, at the start (issue) as well as at submit, so it never
+  // starts an attempt it can not finish. Nothing is issued or reserved.
   // This is a disclosure control (the client attests it showed the copy), not
   // an authorization or money-safety control: the split is always sized by
   // the database, whatever the client sends.
-  if (input.step === 'submit' && input.interestForfeitAcknowledged !== true)
+  if (input.interestForfeitAcknowledged !== true)
     return refuse(
       'Please update the app to cancel this goal.',
       'APP_UPDATE_REQUIRED',

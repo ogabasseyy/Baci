@@ -12,12 +12,20 @@ export function deferGoalCancelForfeit(task: () => Promise<unknown>): void {
     after(async () => {
       try {
         await task();
-      } catch {
+      } catch (error) {
         // Swept later; never surfaces to the customer.
+        console.warn(
+          '[PiggyVest] Goal cancel interest leg failed after the answer; the daily sweep retries:',
+          error instanceof Error ? error.message : 'unknown error'
+        );
       }
     });
-  } catch {
+  } catch (error) {
     // Could not be scheduled (no request scope): the customer's confirmed
     // answer stands and the daily sweep sends the interest.
+    console.warn(
+      '[PiggyVest] Goal cancel interest leg not scheduled; the daily sweep sends it:',
+      error instanceof Error ? error.message : 'unknown error'
+    );
   }
 }

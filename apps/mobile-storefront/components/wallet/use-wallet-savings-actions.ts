@@ -154,6 +154,7 @@ export function createWalletSavingsActions({
       // operation, its amount or its busy flag.
       const operationId = idempotencyKeyRef.current;
       let released = false;
+      let pendingSet = false;
       const ours = () => idempotencyKeyRef.current === operationId;
       return checkPendingPrimarySavings({
         goal,
@@ -168,8 +169,14 @@ export function createWalletSavingsActions({
           if (released || ours()) setSavingsContributionAmount('');
         },
         refetchWallet,
+        // Busy is only ever set while this check still owns the operation,
+        // and that busy flag also blocks any new contribution; so the check
+        // always clears the flag it set, even after a scope change.
         setPending: (value) => {
-          if (released || ours()) setIsAddingSavingsContribution(value);
+          if (value && !ours()) return;
+          if (value) pendingSet = true;
+          else if (!pendingSet) return;
+          setIsAddingSavingsContribution(value);
         },
       });
     }

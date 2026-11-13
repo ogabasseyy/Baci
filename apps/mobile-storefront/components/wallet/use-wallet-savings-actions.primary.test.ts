@@ -155,6 +155,19 @@ describe('createWalletSavingsActions with PiggyVest', () => {
       expect(input.setIsAddingSavingsContribution).not.toHaveBeenCalled();
     });
 
+    it('still clears the busy flag it set before the scope changed', () => {
+      const { check, input } = startCheck();
+      check.setPending(true);
+      input.idempotencyKeyRef.current = 'op-2';
+      check.clearOperation();
+      check.setPending(false);
+      expect(input.idempotencyKeyRef.current).toBe('op-2');
+      expect(input.setIsAddingSavingsContribution.mock.calls).toEqual([
+        [true],
+        [false],
+      ]);
+    });
+
     it('settles its own operation, amount and busy flag', () => {
       const { check, input } = startCheck();
       check.setPending(true);

@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { Pressable } from 'react-native';
@@ -39,14 +40,24 @@ jest.mock('@/stores/quiz-badge-store', () => ({
     }),
 }));
 
+/**
+ * jest.config maps every react-native-css-interop specifier (and Jest's own
+ * resolver) to a mock, so find the real native runtime by walking up to the
+ * nearest node_modules that has the package, as Node would.
+ */
+function findInteropRuntime(fromDir: string): string {
+  const runtime =
+    'node_modules/react-native-css-interop/dist/runtime/native/api.js';
+  for (let dir = fromDir; dir !== dirname(dir); dir = dirname(dir)) {
+    const candidate = join(dir, runtime);
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error('react-native-css-interop native runtime not found');
+}
+
 const { cssInterop } = jest.requireActual<
   typeof import('react-native-css-interop')
->(
-  resolve(
-    __dirname,
-    '../../../../node_modules/react-native-css-interop/dist/runtime/native/api.js'
-  )
-);
+>(findInteropRuntime(__dirname));
 const NativeWindPressable = cssInterop(Pressable, { className: 'style' });
 
 const customer: Customer = {

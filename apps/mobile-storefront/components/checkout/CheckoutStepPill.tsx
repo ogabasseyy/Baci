@@ -7,6 +7,12 @@ type ColorsScheme = (typeof Colors)['light'];
 
 export type CheckoutStepPillStatus = 'completed' | 'current' | 'upcoming';
 
+const STATUS_SPOKEN: Record<CheckoutStepPillStatus, string> = {
+  completed: 'completed',
+  current: 'current',
+  upcoming: 'not yet available',
+};
+
 interface CheckoutStepPillProps {
   colors: ColorsScheme;
   isDark: boolean;
@@ -116,13 +122,9 @@ export function CheckoutStepPill({
   return (
     <View
       accessible
-      accessibilityLabel={
-        isCurrent
-          ? `${label} step, current`
-          : `${label} step, not yet available`
-      }
+      accessibilityLabel={`${label} step, ${STATUS_SPOKEN[status]}`}
       style={pillStyle}
-      testID={`checkout-step-pill-${status}`}
+      testID={`checkout-step-pill-${number}`}
     >
       {content}
     </View>

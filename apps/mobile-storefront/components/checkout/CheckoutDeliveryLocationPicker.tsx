@@ -2,12 +2,16 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import type { Control } from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { palette } from '@/constants/Colors';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { checkoutDeliveryCardStyles as styles } from './CheckoutDeliveryCard.styles';
 import type { CheckoutDeliveryCardColors } from './CheckoutDeliveryCard.types';
 import { getLocationPickerError } from './location-picker-error';
 
-const PICKER_ERROR_COLOR = '#EF4444';
+/** Matches the theme `error` token: red 500 in light, red 400 in dark. */
+function getPickerErrorColor(isDark: boolean): string {
+  return isDark ? palette.red[400] : palette.red[500];
+}
 
 type CheckoutDeliveryLocationPickerProps = {
   colors: CheckoutDeliveryCardColors;
@@ -64,7 +68,7 @@ export function CheckoutDeliveryLocationPicker({
                       ? 'rgba(255, 255, 255, 0.05)'
                       : '#F9FAFB',
                     borderColor: displayError
-                      ? PICKER_ERROR_COLOR
+                      ? getPickerErrorColor(isDark)
                       : 'transparent',
                   },
                 ]}
@@ -98,7 +102,10 @@ export function CheckoutDeliveryLocationPicker({
               {displayError ? (
                 <Text
                   accessibilityLiveRegion="polite"
-                  style={[styles.fieldError, { color: PICKER_ERROR_COLOR }]}
+                  style={[
+                    styles.fieldError,
+                    { color: getPickerErrorColor(isDark) },
+                  ]}
                 >
                   {displayError}
                 </Text>

@@ -14,6 +14,7 @@ vi.mock('./wallet-pay-store', () => ({
 }));
 
 const none = { settle: [], refund: [], deliver: [] };
+const env = {} as NodeJS.ProcessEnv;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -27,18 +28,18 @@ describe('isWalletPayWorkPending', () => {
     mocks.runtime.mockImplementation(() => {
       throw new Error('missing');
     });
-    await expect(isWalletPayWorkPending({})).resolves.toBe(false);
+    await expect(isWalletPayWorkPending(env)).resolves.toBe(false);
   });
 
   it('is false when nothing waits and true when any work waits', async () => {
     mocks.listWork.mockResolvedValueOnce(none);
-    await expect(isWalletPayWorkPending({})).resolves.toBe(false);
+    await expect(isWalletPayWorkPending(env)).resolves.toBe(false);
     mocks.listWork.mockResolvedValueOnce({ ...none, refund: ['r'] });
-    await expect(isWalletPayWorkPending({})).resolves.toBe(true);
+    await expect(isWalletPayWorkPending(env)).resolves.toBe(true);
   });
 
   it('throws when the work cannot be read (the caller pages)', async () => {
     mocks.listWork.mockRejectedValue(new Error('db down'));
-    await expect(isWalletPayWorkPending({})).rejects.toThrow('db down');
+    await expect(isWalletPayWorkPending(env)).rejects.toThrow('db down');
   });
 });

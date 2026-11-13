@@ -289,7 +289,9 @@ it('binds the forfeit worker statements to this integration and environment, wit
     const parameters =
       text === GOAL_CANCEL_FORFEIT_STATEMENTS.workerList
         ? [config.integrationId, config.environment, '50', 'true']
-        : [config.integrationId, config.environment, id];
+        : text === GOAL_CANCEL_FORFEIT_STATEMENTS.workerPosting
+          ? [config.integrationId, config.environment, id, id]
+          : [config.integrationId, config.environment, id];
     await execute(text, parameters);
     expect(mocks.query).toHaveBeenLastCalledWith(text, parameters);
     await expect(

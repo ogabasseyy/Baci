@@ -128,6 +128,10 @@ CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   -- Stamped right before the single POST. A claimed (dispatched) forfeit
   -- without it was never sent, so it can always be handed back and retried.
   posted_at timestamptz,
+  -- The claimer's token for that posting mark: a retry with the same token
+  -- (its reply was lost) is told to go ahead, so a committed mark whose
+  -- answer never arrived can not strand the forfeit unsent.
+  posting_token uuid,
   CONSTRAINT goal_cancel_forfeit_reference_key UNIQUE (reference),
   CHECK (source_wallet_id <> destination_wallet_id),
   CHECK (state = 'reserved' OR state = 'released' OR state = 'needs_review' OR dispatched_at IS NOT NULL),
@@ -943,21 +947,29 @@ END;
 $$;
 
 -- Stamps posted_at right before the single POST ('posting'); without it a
--- claimed forfeit is known never to have been sent. Caller holds the lock.
-CREATE FUNCTION piggyvest_primary.mark_goal_cancel_forfeit_posting_row(p_forfeit_id uuid)
+-- claimed forfeit is known never to have been sent. The claimer passes its
+-- own token: repeating the mark with the same token (its first answer was
+-- lost) answers 'posting' again, so that claimer, and only it, still makes
+-- the single POST. Caller holds the lock.
+CREATE FUNCTION piggyvest_primary.mark_goal_cancel_forfeit_posting_row(p_forfeit_id uuid, p_token uuid)
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
+  IF p_token IS NULL THEN RETURN 'not_released'; END IF;
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
-     SET posted_at = pg_catalog.clock_timestamp(),
+     SET posted_at = pg_catalog.clock_timestamp(), posting_token = p_token,
          -- A page about an earlier failed wallet check is spent; this
          -- transfer must still be able to raise its own overdue page.
          alerted_at = NULL
    WHERE id = p_forfeit_id AND state = 'dispatched' AND posted_at IS NULL;
   IF FOUND THEN RETURN 'posting'; END IF;
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+              WHERE id = p_forfeit_id AND state = 'dispatched' AND posting_token = p_token) THEN
+    RETURN 'posting';
+  END IF;
   RETURN 'not_released';
 END;
 $$;
@@ -969,6 +981,7 @@ $$;
 -- 'unclaim': hands an unsent claimed forfeit back (answers 'unclaimed').
 -- 'ack': records that a page about this forfeit was emitted (answers 'acked',
 -- or 'not_released' when there was nothing to acknowledge).
+-- 'posting:<token>': the posting mark, under the claimer's own token.
 CREATE FUNCTION piggyvest_primary.manage_goal_cancel_forfeit(scope jsonb, forfeit_id uuid, action text)
 RETURNS text
 LANGUAGE plpgsql
@@ -979,7 +992,9 @@ DECLARE
   v_intent_id uuid;
   v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
 BEGIN
-  IF forfeit_id IS NULL OR action IS NULL OR action NOT IN ('release', 'unclaim', 'posting', 'ack') THEN
+  IF forfeit_id IS NULL OR action IS NULL
+    OR (action NOT IN ('release', 'unclaim', 'ack')
+        AND action !~ '^posting:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') THEN
     RAISE EXCEPTION 'invalid goal cancel forfeit transition' USING ERRCODE = '22023';
   END IF;
   v_intent_id := piggyvest_primary.assert_savings_scope(scope);
@@ -1000,8 +1015,9 @@ BEGIN
   IF action = 'unclaim' THEN
     RETURN piggyvest_primary.unclaim_goal_cancel_forfeit_row(v_forfeit.id, true);
   END IF;
-  IF action = 'posting' THEN
-    RETURN piggyvest_primary.mark_goal_cancel_forfeit_posting_row(v_forfeit.id);
+  IF action LIKE 'posting:%' THEN
+    RETURN piggyvest_primary.mark_goal_cancel_forfeit_posting_row(
+      v_forfeit.id, pg_catalog.substr(action, 9)::uuid);
   END IF;
   RETURN piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
 END;
@@ -1215,7 +1231,8 @@ $$;
 CREATE FUNCTION piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(
   integration_id uuid,
   environment text,
-  forfeit_id uuid
+  forfeit_id uuid,
+  posting_token uuid
 )
 RETURNS text
 LANGUAGE plpgsql
@@ -1232,7 +1249,8 @@ BEGIN
   IF NOT FOUND THEN RETURN 'not_released'; END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('primary-savings:' || v_forfeit.intent_id::text, 0));
-  RETURN piggyvest_primary.mark_goal_cancel_forfeit_posting_row(v_forfeit.id);
+  RETURN piggyvest_primary.mark_goal_cancel_forfeit_posting_row(
+    v_forfeit.id, mark_goal_cancel_forfeit_posting_worker.posting_token);
 END;
 $$;
 
@@ -1915,8 +1933,8 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.release_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.unclaim_goal_cancel_forfeit_row(uuid, boolean),
-  piggyvest_primary.mark_goal_cancel_forfeit_posting_row(uuid),
-  piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid, text, uuid),
+  piggyvest_primary.mark_goal_cancel_forfeit_posting_row(uuid, uuid),
+  piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid, text, uuid, uuid),
   piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text),
   piggyvest_primary.assert_goal_cancel_evidence(uuid, text),
   piggyvest_primary.read_dispatched_goal_cancel_forfeit(uuid, text, uuid),
@@ -1959,7 +1977,7 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.release_goal_cancel_forfeit_worker(u
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid, text, uuid)
   TO piggyvest_primary_authorizer;
-GRANT EXECUTE ON FUNCTION piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid, text, uuid)
+GRANT EXECUTE ON FUNCTION piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid, text, uuid, uuid)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.settle_goal_cancel(uuid, text, jsonb)
   TO piggyvest_primary_evidence;

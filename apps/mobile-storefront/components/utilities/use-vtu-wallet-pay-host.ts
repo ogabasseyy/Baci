@@ -29,6 +29,21 @@ import {
   type VtuWalletPayPending,
 } from './vtu-wallet-pay-store';
 
+/**
+ * The saved-key name of one purchase (per account and store). Hashed: the
+ * saved key never holds the phone or meter number.
+ */
+async function vtuWalletPayPurchase(
+  userId: string,
+  request: VtuWalletPayPending['request']
+) {
+  const descriptor = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    buildVtuPurchaseDescriptor({ ...request })
+  );
+  return `vtu|${userId}|${CONFIG.MERCHANT_ID}|${descriptor}`;
+}
+
 /** Runs a cancellation, recording it as out until it settles. */
 function runCancel(
   cancelling: { current: Promise<void> | null },
@@ -80,6 +95,14 @@ export function useVtuWalletPayHost({
       !refreshing && piggyvestWalletCovers({ canPay, wallet, price: amount });
     useVtuWalletPayStore.setState({
       covers,
+      // A kept PiggyVest key (an answer that was lost) replays there.
+      retains: async (request) => {
+        const userId = useAuthStore.getState().user?.id;
+        if (!canPay || !userId) return false;
+        return await walletPayPurchaseKeys.has(
+          await vtuWalletPayPurchase(userId, request)
+        );
+      },
       // Shown only while it could pay something (switched on, fresh, ready).
       balanceKobo: refreshing
         ? null
@@ -89,7 +112,11 @@ export function useVtuWalletPayHost({
   useEffect(
     () => () => {
       clearVtuWalletPay();
-      useVtuWalletPayStore.setState({ covers: () => false, balanceKobo: null });
+      useVtuWalletPayStore.setState({
+        covers: () => false,
+        balanceKobo: null,
+        retains: async () => false,
+      });
     },
     []
   );
@@ -111,11 +138,7 @@ export function useVtuWalletPayHost({
         await cancelling.current;
         // One key per purchase (per account) until it settles, kept across
         // restarts. Hashed: the saved key never holds the phone or meter.
-        const descriptor = await Crypto.digestStringAsync(
-          Crypto.CryptoDigestAlgorithm.SHA256,
-          buildVtuPurchaseDescriptor({ ...next.request })
-        );
-        purchase = `vtu|${user?.id ?? ''}|${CONFIG.MERCHANT_ID}|${descriptor}`;
+        purchase = await vtuWalletPayPurchase(user.id, next.request);
         // Reused = a replay of an earlier attempt that may have paid.
         let minted = false;
         const idempotencyKey = await walletPayPurchaseKeys.keyFor(
@@ -144,9 +167,17 @@ export function useVtuWalletPayHost({
         );
         const issuedKey = purchase;
         if (answer.kind === 'pin') {
+          // The issuing account's own token, captured now: a cancellation
+          // that runs during an account switch still reaches the server for
+          // that account, never with the new one's token (Codex P2).
+          const issuedToken = useAuthStore.getState().session?.access_token;
           const cancel = async () => {
-            if (useAuthStore.getState().user?.id !== user.id) return;
-            const reply = await vtuWalletPayApi.cancel(connection, {
+            if (!issuedToken) return;
+            const ownConnection = {
+              ...connection,
+              accessToken: () => issuedToken,
+            };
+            const reply = await vtuWalletPayApi.cancel(ownConnection, {
               ...owned,
               expectedUserId: user.id,
               operationId: answer.operationId,

@@ -17,6 +17,13 @@ type State = {
   covers: (amount: number) => boolean;
   /** The PiggyVest wallet balance shown when it pays (null = not offered). */
   balanceKobo: number | null;
+  /**
+   * Whether an earlier PiggyVest attempt for this purchase is retained (its
+   * answer was lost). Such a purchase replays on PiggyVest whatever the
+   * balances say now, never on a second rail. A failed read counts as
+   * retained (the sheet then asks to try again).
+   */
+  retains: (request: VtuWalletPayRequest) => Promise<boolean>;
   pending: VtuWalletPayPending | null;
 };
 
@@ -28,6 +35,7 @@ type State = {
 export const useVtuWalletPayStore = create<State>(() => ({
   covers: () => false,
   balanceKobo: null,
+  retains: async () => false,
   pending: null,
 }));
 
@@ -39,10 +47,12 @@ export const useVtuWalletPayStore = create<State>(() => ({
  */
 export function openVtuWalletPay(
   request: VtuWalletPayRequest,
-  onDelivered: (result: VtuWalletPayResult) => void
+  onDelivered: (result: VtuWalletPayResult) => void,
+  /** A retained PiggyVest attempt: replay it whatever covers() says. */
+  replay = false
 ): boolean {
   const state = useVtuWalletPayStore.getState();
-  if (state.pending || !state.covers(request.amount)) return false;
+  if (state.pending || !(replay || state.covers(request.amount))) return false;
   // Another checkout is running: refused with its alert (true = handled).
   if (!acquireUtilityCheckoutOrAlert()) return true;
   useVtuWalletPayStore.setState({ pending: { request, onDelivered } });
@@ -70,30 +80,41 @@ export type VtuPiggyvestSuccess = {
  * success the way the form's store credit path does.
  * False = carry on with store credit, exactly as before.
  */
-export function payFromPiggyvest(
+export async function payFromPiggyvest(
   request: VtuWalletPayRequest & { customerAddress?: string },
   onSuccess: (result: VtuPiggyvestSuccess) => void,
   customerIdentifier: string,
   /** The form's retained-replay peek, taken once before this call. */
   isRetainedReplay: boolean
-): boolean {
+): Promise<boolean> {
   // A store credit attempt that was charged but never answered must replay
   // on its own key, never be forked into a second (PiggyVest) purchase.
   if (isRetainedReplay) return false;
-  return openVtuWalletPay(request, (result) =>
-    onSuccess({
-      // The server's amount; a replay without one bought this same request
-      // (the amount is part of its fingerprint).
-      amount: result.amount ?? request.amount,
-      customerIdentifier,
-      reference: result.reference,
-      status: 'successful',
-      ...(result.voucherPin ? { voucherPin: result.voucherPin } : {}),
-      // Only a credited cashback, as the store credit path shows it.
-      ...(creditedVtuCashback(result.cashback)
-        ? { cashback: creditedVtuCashback(result.cashback) }
-        : {}),
-      ...(request.customerAddress ? { address: request.customerAddress } : {}),
-    })
+  // Likewise a retained PiggyVest attempt replays on PiggyVest, even when
+  // store credit would now cover it (Codex P1).
+  const replay = await useVtuWalletPayStore
+    .getState()
+    .retains(request)
+    .catch(() => true);
+  return openVtuWalletPay(
+    request,
+    (result) =>
+      onSuccess({
+        // The server's amount; a replay without one bought this same request
+        // (the amount is part of its fingerprint).
+        amount: result.amount ?? request.amount,
+        customerIdentifier,
+        reference: result.reference,
+        status: 'successful',
+        ...(result.voucherPin ? { voucherPin: result.voucherPin } : {}),
+        // Only a credited cashback, as the store credit path shows it.
+        ...(creditedVtuCashback(result.cashback)
+          ? { cashback: creditedVtuCashback(result.cashback) }
+          : {}),
+        ...(request.customerAddress
+          ? { address: request.customerAddress }
+          : {}),
+      }),
+    replay
   );
 }

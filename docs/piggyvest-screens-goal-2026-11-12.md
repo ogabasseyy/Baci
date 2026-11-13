@@ -126,7 +126,7 @@ Confirmed fixed:
 | Cancel review says "You'll confirm with your wallet PIN" for a plan the server then refuses | #4224 | Kept: the review can't know setup state; the refusal message is clear |
 | "4 to 6 digits" while 4 boxes show | #4224 | Kept: the boxes grow as digits are typed (same pad as the in-sheet PIN step) |
 | Chat button covers the end of some rows (Settings chevron, Notifications text) | #4224 | Kept on purpose: Muse asked to keep in-app help on these screens |
-| White band clipping the last row on Notifications and App Settings | Not yet triaged | Open |
+| White band clipping the last row on Notifications and App Settings | — | Not a bug: the list scrolls behind the home-indicator safe area; the row shows in full when scrolled |
 
 Still owed: money steps (Add to savings with PIN, Complete goal, funded
 cancel breakdown, checkout and wallet payments) once PiggyVest staging

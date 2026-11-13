@@ -342,6 +342,17 @@ BEGIN
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
       = pg_catalog.jsonb_build_object('status', 'needs_review', 'forfeitId', v_forfeit),
     'forfeit replacements are unbounded or reuse references, or the cap paged twice');
+  -- Regression: a forfeit still stuck a day after its last page is paged
+  -- again (never paged once and then left silent).
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+     SET alerted_at = pg_catalog.clock_timestamp() - interval '2 days' WHERE id = v_forfeit::uuid;
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
+      = pg_catalog.jsonb_build_object('status', 'needs_review', 'forfeitId', v_forfeit, 'alert', true)
+    AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'ack') = 'acked'
+    AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
+      = pg_catalog.jsonb_build_object('status', 'needs_review', 'forfeitId', v_forfeit),
+    'a forfeit stuck a day after its page was never paged again');
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release') = 'not_released',
     'an undispatched forfeit was released');

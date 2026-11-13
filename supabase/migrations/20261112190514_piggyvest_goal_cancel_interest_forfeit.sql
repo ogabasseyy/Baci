@@ -724,7 +724,9 @@ END;
 $$;
 
 -- A stuck forfeit's claim answer with its id; "alert" while no page about it
--- has been acknowledged. Nothing is stamped here: the caller acknowledges the
+-- has been acknowledged in the last day (a stuck forfeit, such as a
+-- misconfigured interest wallet, is re-paged daily until it is fixed, never
+-- paged once and then left silent). Nothing is stamped here: the caller acknowledges the
 -- page after emitting it. Caller holds the row lock.
 CREATE FUNCTION piggyvest_primary.report_stuck_goal_cancel_forfeit(p_forfeit_id uuid, p_status text)
 RETURNS jsonb
@@ -734,7 +736,8 @@ SET search_path = ''
 AS $$
 BEGIN
   IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
-              WHERE id = p_forfeit_id AND alerted_at IS NULL) THEN
+              WHERE id = p_forfeit_id
+                AND (alerted_at IS NULL OR alerted_at < pg_catalog.clock_timestamp() - interval '1 day')) THEN
     RETURN pg_catalog.jsonb_build_object('status', p_status, 'forfeitId', p_forfeit_id, 'alert', true);
   END IF;
   RETURN pg_catalog.jsonb_build_object('status', p_status, 'forfeitId', p_forfeit_id);
@@ -903,7 +906,9 @@ BEGIN
        SET state = 'reserved', dispatched_at = NULL
      WHERE id = v_forfeit.id;
   END IF;
-  IF p_page AND v_forfeit.alerted_at IS NULL THEN RETURN 'unclaimed_first'; END IF;
+  IF p_page AND (v_forfeit.alerted_at IS NULL OR v_forfeit.alerted_at < pg_catalog.clock_timestamp() - interval '1 day') THEN
+    RETURN 'unclaimed_first';
+  END IF;
   RETURN 'unclaimed';
 END;
 $$;
@@ -958,7 +963,7 @@ BEGIN
   IF FOUND AND action = 'ack' THEN
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits
        SET alerted_at = pg_catalog.clock_timestamp()
-     WHERE id = v_forfeit.id AND alerted_at IS NULL;
+     WHERE id = v_forfeit.id AND (alerted_at IS NULL OR alerted_at < pg_catalog.clock_timestamp() - interval '1 day');
     IF FOUND THEN RETURN 'acked'; END IF;
     RETURN 'not_released';
   END IF;
@@ -1086,7 +1091,7 @@ BEGIN
      SET alerted_at = pg_catalog.clock_timestamp()
    WHERE forfeit.id = ack_goal_cancel_forfeit_alert_worker.forfeit_id
      AND forfeit.integration_id = v_binding.id
-     AND forfeit.alerted_at IS NULL;
+     AND (forfeit.alerted_at IS NULL OR forfeit.alerted_at < pg_catalog.clock_timestamp() - interval '1 day');
   RETURN FOUND;
 END;
 $$;
@@ -1438,7 +1443,7 @@ BEGIN
      SET alerted_at = pg_catalog.clock_timestamp()
    WHERE forfeit.id = ack_goal_cancel_forfeit_alert_evidence.forfeit_id
      AND forfeit.integration_id = v_binding.id
-     AND forfeit.alerted_at IS NULL;
+     AND (forfeit.alerted_at IS NULL OR forfeit.alerted_at < pg_catalog.clock_timestamp() - interval '1 day');
   RETURN FOUND;
 END;
 $$;

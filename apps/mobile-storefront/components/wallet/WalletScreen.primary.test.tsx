@@ -38,16 +38,18 @@ const mockUseWallet = jest.fn(() => ({
 }));
 const mockUseAuthStore = jest.fn(() => mockAuthState);
 const mockSetSavingsAmount = jest.fn();
-const mockDeriveWalletDisplayData = jest.fn(() => ({
-  activeSavingsGoal: mockGoal,
-  earningsAvailable: false,
-  earningsBalance: 0,
-  fundingAccount: null,
-  savingsBalance: 0,
-  showQuickSave: false,
-  walletBalance: 0,
-  totalBalance: 0,
-}));
+const mockDeriveWalletDisplayData = jest.fn<() => Record<string, unknown>>(
+  () => ({
+    activeSavingsGoal: mockGoal,
+    earningsAvailable: false,
+    earningsBalance: 0,
+    fundingAccount: null,
+    savingsBalance: 0,
+    showQuickSave: false,
+    walletBalance: 0,
+    totalBalance: 0,
+  })
+);
 
 jest.mock('expo-router', () => ({
   Redirect: () => null,

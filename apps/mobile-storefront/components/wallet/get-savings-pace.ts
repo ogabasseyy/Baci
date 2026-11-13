@@ -90,6 +90,7 @@ export function getSavingsPace({
   remaining: number;
 }): SavingsPace | null {
   if (!Number.isFinite(remaining) || remaining <= 0) return null;
+  const endDateUsable = daysUntil(maturityDate, now) !== null;
   const per = frequency ? PER[frequency] : undefined;
   if (
     per &&
@@ -99,7 +100,11 @@ export function getSavingsPace({
   ) {
     // Always the plan's own pace (the last payment may simply be smaller).
     const amount = formatNgnCurrency(contributionAmount);
-    const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });
+    // Only a real, future calendar date can carry an end date or a
+    // "behind" warning (2027-02-30 is no deadline at all).
+    const weekly = endDateUsable
+      ? getWeeklySavingsNudge({ maturityDate, now, remaining })
+      : null;
     // Only show the end date when this pace can still reach it: a plan that
     // is behind shows its pace alone rather than a date it cannot meet.
     const payments = Math.ceil(remaining / contributionAmount);
@@ -121,7 +126,9 @@ export function getSavingsPace({
       label: `${pace} until ${weekly.endsOn}`,
     };
   }
-  const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });
+  const weekly = endDateUsable
+    ? getWeeklySavingsNudge({ maturityDate, now, remaining })
+    : null;
   if (!weekly) return null;
   return {
     short: `${formatNgnCurrency(weekly.amountPerWeek)} ${weekly.due ? 'due' : 'a week'} · ${weekly.due ? 'by' : 'until'} ${weekly.endsOn}`,

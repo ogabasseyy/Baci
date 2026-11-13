@@ -154,4 +154,21 @@ describe('getSavingsPace', () => {
       expect(daysUntil('2027-02-28', now)).toBe(49);
     });
   });
+
+  describe('bugfix: an impossible end date was called "behind"', () => {
+    it('shows the plan pace alone when the stored date is not a real day', () => {
+      expect(
+        getSavingsPace({
+          contributionAmount: 100,
+          frequency: 'monthly',
+          maturityDate: '2027-02-30',
+          now,
+          remaining: 250000,
+        })
+      ).toEqual({
+        short: 'Your plan: ₦100 a month',
+        label: 'Your plan: ₦100 a month',
+      });
+    });
+  });
 });

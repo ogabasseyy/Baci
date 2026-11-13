@@ -15,6 +15,7 @@ vi.mock('./wallet-pay-store', () => ({
 
 const none = { settle: [], refund: [], deliver: [] };
 const env = {
+  NODE_ENV: 'test',
   PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD: 'set',
 } as NodeJS.ProcessEnv;
 

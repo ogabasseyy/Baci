@@ -86,12 +86,13 @@ async function installChatwootFixture(
   ]);
 
   for (const origin of [widgetOrigin, untrustedWidgetOrigin]) {
-    await page.route(`${origin}/widget`, (route) =>
-      route.fulfill({
+    await page.route(`${origin}/widget`, (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      return route.fulfill({
         contentType: 'text/html',
         body: widgetHtml(harnessOrigin),
-      })
-    );
+      });
+    });
   }
 
   await page.route(
@@ -104,16 +105,9 @@ async function installChatwootFixture(
       const url = new URL(route.request().url());
       const endpoint = url.pathname.split('/').at(-1) ?? '';
       const merchantSlug = url.searchParams.get('merchantSlug');
-      const headers = route.request().headers();
-      const cookieHeader = await route.request().headerValue('cookie');
-      // Some Playwright engines omit Cookie from intercepted headers. The
-      // context-cookie check is fixture state; requestCookieHeader records
-      // actual transport evidence when the engine exposes it.
+      const headers = await route.request().allHeaders();
+      const cookieHeader = headers.cookie ?? null;
       const csrfCookie =
-        (await page.context().cookies(harnessOrigin)).find(
-          (cookie) => cookie.name === 'csrf-token'
-        )?.value ?? null;
-      const requestCsrfCookie =
         cookieHeader
           ?.split(';')
           .map((cookie) => cookie.trim())
@@ -122,8 +116,7 @@ async function installChatwootFixture(
       const csrfHeader = headers['x-csrf-token'] ?? null;
       const csrfValid =
         csrfHeader === 'fixture-csrf-token' &&
-        csrfCookie === 'fixture-csrf-token' &&
-        (cookieHeader === null || requestCsrfCookie === 'fixture-csrf-token');
+        csrfCookie === 'fixture-csrf-token';
       const method = route.request().method();
       if (method !== 'POST' || !csrfValid) {
         requests.push({

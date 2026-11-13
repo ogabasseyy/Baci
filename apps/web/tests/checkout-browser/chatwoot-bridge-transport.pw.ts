@@ -12,18 +12,14 @@ type CapturedRequest = Awaited<
 >['requests'][number];
 
 function assertCookieHeaderObservation(requests: CapturedRequest[]) {
-  // Playwright may omit Cookie from intercepted WebKit headers. The fixture
-  // validates the cookie jar separately and checks transport when exposed.
   const observedCookies = requests.map(
     (request) => request.requestCookieHeader
   );
   expect(
-    observedCookies.every(
-      (cookie) =>
-        cookie === null ||
-        cookie
-          .split(';')
-          .some((entry) => entry.trim() === 'csrf-token=fixture-csrf-token')
+    observedCookies.every((cookie) =>
+      cookie
+        ?.split(';')
+        .some((entry) => entry.trim() === 'csrf-token=fixture-csrf-token')
     )
   ).toBe(true);
 }
@@ -61,6 +57,10 @@ test('rejects messages from an untrusted widget iframe', async ({
     { path: 'authorize', merchantSlug: 'ogabassey', method: 'POST' },
   ]);
   await expect(attacker.locator('#cart-result')).toHaveText('');
+  await expect(attacker.locator('html')).not.toHaveAttribute(
+    'data-authorized-message-seen',
+    'true'
+  );
   assertCookieHeaderObservation(requests);
 });
 

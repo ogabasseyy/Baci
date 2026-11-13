@@ -33,14 +33,21 @@ export const test = base.extend<{
       let redvaultLostCheckoutErrors = 0;
       let redvaultLostNetworkErrors = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
-      const harnessPort = Number(
+      const configuredHarnessPort = Number(
         process.env.CHECKOUT_BROWSER_PORT?.trim() || 3217
       );
+      const harnessPort =
+        Number.isInteger(configuredHarnessPort) &&
+        configuredHarnessPort >= 1 &&
+        configuredHarnessPort <= 65535
+          ? configuredHarnessPort
+          : 3217;
       const harnessOrigin = new URL(`http://127.0.0.1:${harnessPort}`).origin;
-      page.on('framenavigated', () => {
-        const navigatedUrl = new URL(page.url());
-        if (navigatedUrl.pathname === '/chatwoot-bridge')
-          chatwootBridgeFixtureVisited = true;
+      page.on('framenavigated', (frame) => {
+        if (frame !== page.mainFrame()) return;
+        const navigatedUrl = new URL(frame.url());
+        chatwootBridgeFixtureVisited =
+          navigatedUrl.pathname === '/chatwoot-bridge';
         const qaScenario = navigatedUrl.searchParams.get('qa');
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
         if (

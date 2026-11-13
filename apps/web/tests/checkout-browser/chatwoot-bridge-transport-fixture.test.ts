@@ -10,11 +10,8 @@ function installPageStub() {
     handler: (route: Route) => Promise<unknown> | unknown;
   }> = [];
   const addCookies = vi.fn(async () => undefined);
-  const cookies = vi.fn(async () => [
-    { name: 'csrf-token', value: 'fixture-csrf-token' },
-  ]);
   const page = {
-    context: () => ({ addCookies, cookies }),
+    context: () => ({ addCookies }),
     goto: vi.fn(async () => null),
     route: vi.fn((matcher: unknown, handler: unknown) => {
       registrations.push({
@@ -23,18 +20,18 @@ function installPageStub() {
       });
     }),
   } as unknown as Page;
-  return { addCookies, cookies, page, registrations };
+  return { addCookies, page, registrations };
 }
 
 function contextRoute(
   options: {
     headers?: Record<string, string>;
-    cookieHeader?: string | null;
     body?: Record<string, unknown>;
   } = {}
 ) {
+  const allHeaders = options.headers ?? {};
   const request = {
-    headerValue: vi.fn(async () => options.cookieHeader ?? null),
+    allHeaders: vi.fn(async () => allHeaders),
     headers: () => options.headers ?? {},
     method: () => 'POST',
     postDataJSON: () => options.body ?? {},
@@ -108,6 +105,27 @@ it('registers the isolated harness page and origin-scoped context endpoints', as
   ).toBe(false);
 });
 
+it('lets non-GET widget requests fall through to the network guard', async () => {
+  const { page, registrations } = installPageStub();
+  await chatwootBridgeTransportFixture.installChatwootFixture(
+    page,
+    harnessOrigin
+  );
+  const widgetRoute = registrations.find(
+    ({ matcher }) => matcher === 'https://support.example.test/widget'
+  );
+  if (!widgetRoute) throw new Error('Expected the trusted widget route');
+  const fallback = vi.fn(async () => undefined);
+  const route = {
+    fallback,
+    request: () => ({ method: () => 'POST' }),
+  } as unknown as Route;
+
+  await widgetRoute.handler(route);
+
+  expect(fallback).toHaveBeenCalledOnce();
+});
+
 it('rejects a context request without the synthetic CSRF header', async () => {
   const { page, registrations } = installPageStub();
   await chatwootBridgeTransportFixture.installChatwootFixture(
@@ -125,15 +143,18 @@ it('rejects a context request without the synthetic CSRF header', async () => {
   });
 });
 
-it('returns a synthetic challenge when the CSRF header and jar cookie match', async () => {
-  const { cookies, page, registrations } = installPageStub();
+it('returns a synthetic challenge when the request carries the CSRF header and cookie', async () => {
+  const { page, registrations } = installPageStub();
   await chatwootBridgeTransportFixture.installChatwootFixture(
     page,
     harnessOrigin
   );
   const { handler } = getContextHandler(registrations);
   const { fulfill, route } = contextRoute({
-    headers: { 'x-csrf-token': 'fixture-csrf-token' },
+    headers: {
+      'x-csrf-token': 'fixture-csrf-token',
+      cookie: 'csrf-token=fixture-csrf-token',
+    },
     body: {
       conversationId: chatwootBridgeTransportFixture.conversationId,
       requestId: chatwootBridgeTransportFixture.requestId,
@@ -142,7 +163,6 @@ it('returns a synthetic challenge when the CSRF header and jar cookie match', as
 
   await handler(route);
 
-  expect(cookies).toHaveBeenCalledWith(harnessOrigin);
   expect(fulfill).toHaveBeenCalledWith({
     json: {
       requestId: chatwootBridgeTransportFixture.requestId,

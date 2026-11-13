@@ -35,6 +35,19 @@ it('limits Chatwoot harness traffic to exact origins, paths, methods, and querie
   expect(request('https://support.example.test/other', 'GET')).toBe(false);
   expect(request('https://support.example.test/widget', 'POST')).toBe(false);
   expect(
+    request(
+      `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=ogabassey`,
+      'GET'
+    )
+  ).toBe(false);
+  expect(
+    request(
+      `${harnessOrigin}/api/storefront/chatwoot/context/challenge?merchantSlug=ogabassey`,
+      'POST',
+      false
+    )
+  ).toBe(false);
+  expect(
     request(`${harnessOrigin}/api/storefront/chatwoot/context/other`, 'POST')
   ).toBe(false);
   expect(
@@ -55,11 +68,4 @@ it('limits Chatwoot harness traffic to exact origins, paths, methods, and querie
   expect(request('https://support.example.test/widget', 'GET', false)).toBe(
     false
   );
-  expect(
-    request(
-      `${harnessOrigin}/api/storefront/chatwoot/context/challenge`,
-      'POST',
-      false
-    )
-  ).toBe(false);
 });

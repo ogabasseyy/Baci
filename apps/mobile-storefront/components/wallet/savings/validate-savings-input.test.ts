@@ -17,6 +17,19 @@ describe('validateSavingsInput', () => {
     });
   });
 
+  it('bugfix: a PiggyVest plan with no interest answer at all is refused', () => {
+    expect(
+      validate({
+        interestChoice: undefined,
+        startGoalWalletSetup: async () => undefined,
+      })
+    ).toEqual({
+      error: 'Choose whether your plan earns interest.',
+      ok: false,
+    });
+    expect(validate({ interestChoice: undefined }).ok).toBe(true);
+  });
+
   it('bugfix: refuses a negative head start instead of sending it on', () => {
     expect(validate({ effectiveInitialContribution: -5000 })).toEqual({
       error: 'Enter a valid savings amount.',

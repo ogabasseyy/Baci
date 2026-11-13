@@ -72,8 +72,12 @@ export function validateSavingsInput(
       ok: false,
     };
   }
-  // undefined = not asked (legacy); a PiggyVest plan passes boolean | null.
-  if (input.interestChoice === null) {
+  // undefined = not asked (legacy). A plan that starts PiggyVest setup must
+  // carry an explicit answer, so a missing one is never read as "not asked".
+  if (
+    input.interestChoice === null ||
+    (input.startGoalWalletSetup && typeof input.interestChoice !== 'boolean')
+  ) {
     return { error: 'Choose whether your plan earns interest.', ok: false };
   }
 

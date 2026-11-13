@@ -182,3 +182,16 @@ describe('bugfix: the badge read store credit ₦0 for a funded savings wallet (
     expect(screen.queryByText(/^Savings/)).toBeNull();
   });
 });
+
+describe('bugfix: the savings badge showed beside a store credit top-up (Codex P2)', () => {
+  it('shows store credit when the chosen check is not paid from the savings wallet', () => {
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        walletIsStoreCredit
+        walletPay={{ covers: () => false, savingsKobo: 1_000_000 }}
+      />
+    );
+    expect(screen.queryByText(/^Savings/)).toBeNull();
+  });
+});

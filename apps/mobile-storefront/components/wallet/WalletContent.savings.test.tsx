@@ -76,16 +76,15 @@ it('passes the exact resolver to completed savings recovery and closes on succes
   fireEvent.press(
     screen.getByRole('button', { name: 'Resolve savings device variant' })
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Resolve savings variant 256GB' })
-  );
+  // Choosing only selects; nothing is saved until the customer confirms.
+  fireEvent.press(screen.getByRole('radio', { name: '256GB' }));
+  expect(props.onResolveSavingsVariant).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Confirm this option' }));
   await waitFor(() =>
     expect(props.onResolveSavingsVariant).toHaveBeenCalledWith('variant-1')
   );
   await waitFor(() =>
-    expect(
-      screen.queryByRole('button', { name: 'Resolve savings variant 256GB' })
-    ).toBeNull()
+    expect(screen.queryByRole('radio', { name: '256GB' })).toBeNull()
   );
 });
 
@@ -124,10 +123,13 @@ it('renders savings progress modal and wires manual contribution actions', async
   fireEvent.press(
     screen.getByRole('button', { name: 'Change savings device' })
   );
+  // Picking a phone only previews the switch; nothing is sent until the
+  // customer confirms it.
+  fireEvent.press(screen.getByRole('button', { name: 'Choose iPhone 16 Pro' }));
+  expect(props.onChangeSavingsDevice).not.toHaveBeenCalled();
+  expect(screen.getByText('Switch to iPhone 16 Pro?')).toBeOnTheScreen();
   await act(async () => {
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Select iPhone 16 Pro' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Switch phone' }));
     await Promise.resolve();
   });
 

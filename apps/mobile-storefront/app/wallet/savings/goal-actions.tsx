@@ -1,22 +1,28 @@
-import { Redirect, useLocalSearchParams } from 'expo-router';
-import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
-import { GoalLifecycleScreen } from '@/components/wallet/savings/GoalLifecycleScreen';
+import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
+import { useRequireAuth } from '@/hooks/use-auth-guard';
+import { goalIdParamSchema } from '@/schemas/goal-link';
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
+/**
+ * Cancel and Complete now happen inside the savings sheet on the wallet. Old
+ * links to the full-page screen open that sheet for the same goal instead;
+ * the customer picks Cancel or Complete there (the old `kind` is not acted
+ * on, so a link can never start a money action by itself). A signed-out
+ * customer signs in first and comes back to the same goal.
+ */
 export default function WalletGoalActionsRoute() {
-  const params = useLocalSearchParams<{
-    goalId?: string | string[];
-    kind?: string | string[];
-  }>();
-  const goalId = first(params.goalId);
-  const kind = first(params.kind);
-  if (!goalId || (kind !== 'cancel' && kind !== 'complete'))
-    return <Redirect href="/wallet" />;
-  return (
-    <StorefrontScreenShell edges={['bottom']} themeBackground>
-      <GoalLifecycleScreen kind={kind} goalId={goalId} />
-    </StorefrontScreenShell>
-  );
+  const params = useLocalSearchParams<{ goalId?: string | string[] }>();
+  const auth = useRequireAuth();
+  // Only a well-formed goal id is passed on; anything else opens the wallet.
+  const parsed = goalIdParamSchema.safeParse(first(params.goalId));
+  const goalId = parsed.success ? parsed.data : undefined;
+  const target = goalId
+    ? `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goalId)}`
+    : '/wallet';
+  const login = `/auth/login?returnTo=${encodeURIComponent(target)}` as Href;
+  if (auth.isLoading) return null;
+  if (auth.redirectTo) return <Redirect href={login} />;
+  return <Redirect href={target as Href} />;
 }

@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { PIN_CANCELLED_CODE } from '@/lib/wallet-pin-proof';
+import { notifySavings } from './savings/savings-notice';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return {
+    clearSavingsNotice: jest.fn(),
+    notifySavings,
+    savingsNotifier: () => notifySavings,
+  };
+});
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,
@@ -51,9 +58,10 @@ describe('failed wallet contributions', () => {
       })
     );
     expect(clearIdempotencyKey).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Unable to add savings',
-      'Your wallet is unavailable.'
+      'Your wallet is unavailable.',
+      'warning'
     );
   });
 
@@ -69,7 +77,7 @@ describe('failed wallet contributions', () => {
       })
     );
     expect(clearIdempotencyKey).not.toHaveBeenCalled();
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(notifySavings).not.toHaveBeenCalled();
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
   });
 
@@ -79,10 +87,11 @@ describe('failed wallet contributions', () => {
         code: 'INSUFFICIENT_FUNDS',
       })
     );
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledTimes(1);
+    expect(notifySavings).toHaveBeenCalledWith(
       'Not enough money in your wallet',
-      'Add money to your wallet, then try again.'
+      'Add money to your wallet, then try again.',
+      'warning'
     );
     // Nothing moved, so the same operation id stays valid for the retry.
     expect(clearIdempotencyKey).not.toHaveBeenCalled();

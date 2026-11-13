@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -10,8 +10,10 @@ type Props = {
   colors: (typeof Colors)['light'];
   goal: WalletActiveSavingsGoal;
   hasPendingContribution: boolean;
-  /** Runs before navigating, e.g. to close the sheet this entry sits in. */
-  onBeforeNavigate?: () => void;
+  /** Opens the in-sheet Cancel step. */
+  onCancel: () => void;
+  /** Opens the in-sheet Complete step. */
+  onComplete: () => void;
   /** The wallet's last-updated time: re-reads the readiness gate. */
   walletUpdatedAt?: number;
 };
@@ -39,11 +41,29 @@ export function GoalLifecycleEntry({
   colors,
   goal,
   hasPendingContribution,
-  onBeforeNavigate,
+  onCancel,
+  onComplete,
   walletUpdatedAt,
 }: Props) {
-  const gate = usePrimaryGoalGate(walletUpdatedAt);
-  if (gate !== 'ready' || hasPendingContribution) return null;
+  // A failed readiness read offers a retry instead of hiding Cancel and
+  // Complete until something else refreshes the wallet.
+  const [retry, setRetry] = useState(0);
+  const gate = usePrimaryGoalGate(walletUpdatedAt, retry);
+  if (hasPendingContribution) return null;
+  if (gate === 'error')
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Try loading goal options again"
+        onPress={() => setRetry((value) => value + 1)}
+        style={styles.quietLink}
+      >
+        <Text style={[styles.quietText, { color: colors.textSecondary }]}>
+          Couldn't load your goal options. Try again
+        </Text>
+      </Pressable>
+    );
+  if (gate !== 'ready') return null;
   const kinds: GoalActionKind[] = [];
   if (goal.status === 'active' || goal.status === 'paused')
     kinds.push('cancel');
@@ -55,13 +75,7 @@ export function GoalLifecycleEntry({
           key={kind}
           accessibilityRole="button"
           accessibilityLabel={GOAL_LIFECYCLE_COPY[kind].entryLabel}
-          onPress={() => {
-            onBeforeNavigate?.();
-            router.push({
-              pathname: '/wallet/savings/goal-actions',
-              params: { goalId: goal.id, kind },
-            });
-          }}
+          onPress={kind === 'cancel' ? onCancel : onComplete}
           style={
             kind === 'cancel'
               ? styles.quietLink

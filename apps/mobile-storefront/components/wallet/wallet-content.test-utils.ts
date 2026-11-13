@@ -40,7 +40,7 @@ export function createWalletContentProps() {
     onChangeRedeemPoints: jest.fn(),
     onAddSavingsContribution: jest.fn(),
     onChangeSavingsDevice: jest.fn(async () => true),
-    onResolveSavingsVariant: jest.fn(async () => true),
+    onResolveSavingsVariant: jest.fn(async (): Promise<true | string> => true),
     onChangeSavingsContributionAmount: jest.fn(),
     onCloseSavingsProgress: jest.fn(),
     onConfirmFund: jest.fn(),

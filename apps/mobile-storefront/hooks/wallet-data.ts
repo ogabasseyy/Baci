@@ -195,6 +195,7 @@ export async function fetchWalletDataUnbounded(
   } = projectWalletSavingsInterest({
     goals: savingsGoalRows,
     goalInterestKobo: savingsInterest.goalInterestKobo,
+    goalInterestKnown: savingsInterest.goalInterestKnown,
   });
   const activeSavingsGoalRow = getActiveSavingsGoal(projectedSavingsGoalRows);
   const productsByGoalId = await hydrateWalletSavingsProducts(

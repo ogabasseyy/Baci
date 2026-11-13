@@ -1,12 +1,12 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
 import { WalletPinSettingsScreen } from './WalletPinSettingsScreen';
+import {
+  enterPin,
+  enterStep,
+  pressButton as press,
+} from './wallet-pin-settings.test-support';
 
 const mockRefresh = jest.fn();
 const mockSignOut = jest.fn();
@@ -19,6 +19,9 @@ jest.mock('./use-wallet-pin-settings-gate', () => ({
 jest.mock('@/lib/wallet-pin-api', () => ({ submitWalletPin: jest.fn() }));
 jest.mock('@/lib/wallet-pin-change-api', () => ({
   changeWalletPin: jest.fn(),
+}));
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: jest.fn(),
 }));
 jest.mock('expo-router', () => {
   const { Text } = jest.requireActual('react-native');
@@ -60,10 +63,6 @@ const status = (over: object = {}) => ({
 const ready = (over: object = {}) => {
   mockGate = { state: 'ready', status: status(over), refresh: mockRefresh };
 };
-const type = (label: string, value: string) =>
-  fireEvent.changeText(screen.getByLabelText(label), value);
-const press = (name: string) =>
-  fireEvent.press(screen.getByRole('button', { name }));
 
 describe('WalletPinSettingsScreen', () => {
   beforeEach(() => {
@@ -76,7 +75,7 @@ describe('WalletPinSettingsScreen', () => {
     mockGate = { state: 'checking', status: null, refresh: mockRefresh };
     render(<WalletPinSettingsScreen />);
     expect(screen.getByLabelText('Checking your wallet PIN')).toBeTruthy();
-    expect(screen.queryByText('Set a wallet PIN')).toBeNull();
+    expect(screen.queryByText('Choose a wallet PIN')).toBeNull();
   });
 
   it('shows the spinner, not a redirect, while auth is not initialized', () => {
@@ -93,86 +92,125 @@ describe('WalletPinSettingsScreen', () => {
     expect(screen.getByText('redirect:/settings')).toBeTruthy();
   });
 
-  it('set mode: heading, fields and button', () => {
+  it('set mode asks for a new PIN on the in-app pad, never the phone keyboard', () => {
     render(<WalletPinSettingsScreen />);
     expect(
-      screen.getByRole('header', { name: 'Set a wallet PIN' })
+      screen.getByRole('header', { name: 'Choose a wallet PIN' })
     ).toBeTruthy();
-    expect(screen.getByLabelText('New PIN')).toBeTruthy();
-    expect(screen.getByLabelText('Confirm PIN')).toBeTruthy();
-    expect(screen.queryByLabelText('Current PIN')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Save PIN' })).toBeTruthy();
+    expect(screen.getByText('4 to 6 digits')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Delete digit' })).toBeTruthy();
+    expect(
+      screen.UNSAFE_queryAllByType(require('react-native').TextInput)
+    ).toHaveLength(0);
+    expect(screen.queryByText('Enter your current PIN')).toBeNull();
   });
 
-  it('change mode: heading, fields, button and forgot link', () => {
+  it('keeps Continue grey and inactive until four digits are in', () => {
+    render(<WalletPinSettingsScreen />);
+    enterPin('123');
+    expect(
+      screen.getByRole('button', { name: 'Continue' }).props.accessibilityState
+        .disabled
+    ).toBe(true);
+    enterPin('4');
+    expect(
+      screen.getByRole('button', { name: 'Continue' }).props.accessibilityState
+        .disabled
+    ).toBe(false);
+  });
+
+  it('shows only the count of digits, never the digits', () => {
+    render(<WalletPinSettingsScreen />);
+    enterPin('1234');
+    expect(
+      screen.getByLabelText('Choose a wallet PIN, 4 of 6 digits entered')
+    ).toBeTruthy();
+    expect(screen.queryByText('1234')).toBeNull();
+  });
+
+  it('change mode starts with the current PIN and offers Forgot your PIN?', () => {
     ready({ hasPin: true });
     render(<WalletPinSettingsScreen />);
-    expect(screen.getByText('Change your PIN')).toBeTruthy();
-    for (const l of ['Current PIN', 'New PIN', 'Confirm new PIN'])
-      expect(screen.getByLabelText(l)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Change PIN' })).toBeTruthy();
+    expect(
+      screen.getByRole('header', { name: 'Enter your current PIN' })
+    ).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Forgot your PIN?' })
     ).toBeTruthy();
+    enterStep('1234');
+    expect(
+      screen.getByRole('header', { name: 'Choose a new PIN' })
+    ).toBeTruthy();
+    expect(screen.queryByText('Forgot your PIN?')).toBeNull();
+    enterStep('5678');
+    expect(
+      screen.getByRole('header', { name: 'Confirm your new PIN' })
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Change PIN' })).toBeTruthy();
   });
 
-  it('keeps the PIN fields in a keyboard-aware scroll area', () => {
-    ready({ hasPin: true });
-    render(<WalletPinSettingsScreen />);
-    const { KeyboardAwareScrollView } = jest.requireMock(
-      'react-native-keyboard-controller'
-    );
-    const scroll = screen.UNSAFE_getByType(KeyboardAwareScrollView);
-    expect(scroll.props.keyboardDismissMode).toBe('on-drag');
-    expect(within(scroll).getByLabelText('Confirm new PIN')).toBeTruthy();
-  });
-
-  it('reset mode when the server requires it', () => {
+  it('reset mode when the server requires it starts at the new PIN', () => {
     ready({ hasPin: true, resetRequired: true });
     render(<WalletPinSettingsScreen />);
-    expect(screen.getByText('Reset your PIN')).toBeTruthy();
-    expect(screen.getByText('Choose a new 4 to 6 digit PIN.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Reset PIN' })).toBeTruthy();
+    expect(
+      screen.getByRole('header', { name: 'Choose a new PIN' })
+    ).toBeTruthy();
     expect(screen.queryByText('Forgot your PIN?')).toBeNull();
+    enterStep('2468');
+    expect(screen.getByRole('button', { name: 'Reset PIN' })).toBeTruthy();
   });
 
   it('Forgot your PIN? switches to reset mode', () => {
     ready({ hasPin: true });
     render(<WalletPinSettingsScreen />);
     press('Forgot your PIN?');
-    expect(screen.getByText('Reset your PIN')).toBeTruthy();
-    expect(screen.queryByLabelText('Current PIN')).toBeNull();
+    expect(
+      screen.getByRole('header', { name: 'Choose a new PIN' })
+    ).toBeTruthy();
+    expect(screen.queryByText('Enter your current PIN')).toBeNull();
+    enterStep('2468');
+    expect(screen.getByRole('button', { name: 'Reset PIN' })).toBeTruthy();
   });
 
-  it('filters non-digits out of PIN fields', () => {
+  it('stops at six digits', () => {
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '12a3-45678');
-    expect(screen.getByLabelText('New PIN').props.value).toBe('123456');
+    enterPin('12345678');
+    expect(
+      screen.getByLabelText('Choose a wallet PIN, 6 of 6 digits entered')
+    ).toBeTruthy();
   });
 
-  it.each([
-    ['short PIN', '123', '123', 'Enter 4 to 6 digits.'],
-    ['mismatch', '1234', '4321', 'The two PINs do not match.'],
-  ])('%s shows an error and sends nothing', (_l, a, b, message) => {
+  it('a mismatch goes back to choosing the PIN and sends nothing', () => {
     render(<WalletPinSettingsScreen />);
-    type('New PIN', a);
-    type('Confirm PIN', b);
-    press('Save PIN');
+    enterStep('1234');
+    enterStep('4321', 'Save PIN');
     expect(screen.getByRole('alert')).toBeTruthy();
-    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByText('The two PINs do not match.')).toBeTruthy();
+    expect(
+      screen.getByRole('header', { name: 'Choose a wallet PIN' })
+    ).toBeTruthy();
     expect(set).not.toHaveBeenCalled();
   });
 
   it('change mode rejects a new PIN equal to the current one', () => {
     ready({ hasPin: true });
     render(<WalletPinSettingsScreen />);
-    type('Current PIN', '1234');
-    type('New PIN', '1234');
-    type('Confirm new PIN', '1234');
-    press('Change PIN');
+    enterStep('1234');
+    enterStep('1234');
     expect(
       screen.getByText('Choose a different PIN from your current one.')
     ).toBeTruthy();
+    expect(
+      screen.getByRole('header', { name: 'Choose a new PIN' })
+    ).toBeTruthy();
     expect(change).not.toHaveBeenCalled();
+  });
+
+  it('typing again clears the last error', () => {
+    render(<WalletPinSettingsScreen />);
+    enterStep('1234');
+    enterStep('4321', 'Save PIN');
+    enterPin('1');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

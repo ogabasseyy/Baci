@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import { resetGoalSetupMemory } from './savings/goal-setup-memory';
 import type { PrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 
@@ -155,6 +156,7 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetGoalSetupMemory();
     mockGate.mockReturnValue('ready');
     act(() => {
       useAuthStore.setState({ user: authUser, merchantId: 'merchant-1' });
@@ -254,7 +256,7 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
     expect(screen.queryByText('wallet-contribution')).toBeNull();
   });
 
-  it('waits only for an unknown main wallet, never for goal-wallet loading', () => {
+  it('waits for an unknown main wallet, and for the goal wallet before the amount form', () => {
     mockGate.mockReturnValue('checking');
     const fundingProps = props('manual', { usesPlanFunding: false });
     const view = render(<WalletSavingsFundingSection {...fundingProps} />);
@@ -267,8 +269,9 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
       <WalletSavingsFundingSection {...fundingProps} walletBalance={1} />
     );
     expect(screen.getByText('status-note:loading')).toBeOnTheScreen();
-    expect(screen.queryByText('Almost ready')).toBeNull();
-    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+    // A first read of the goal wallet: a quiet placeholder, no live form.
+    expect(screen.getByText('Almost ready')).toBeOnTheScreen();
+    expect(screen.queryByText('wallet-contribution')).toBeNull();
 
     mockPlanFunding.mockReturnValue(plan('ready'));
     view.rerender(

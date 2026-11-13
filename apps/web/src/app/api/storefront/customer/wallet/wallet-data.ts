@@ -1,4 +1,4 @@
-import { customerWalletTransactionLabel } from '@/lib/customer-wallet-transaction-label';
+import { customerWalletTransactionLabel } from '@baci/shared/lib';
 /**
  * DB fetchers for `GET /api/storefront/customer/wallet`. Extracted from the
  * route so the handler stays focused on auth + orchestration. Pure helpers live

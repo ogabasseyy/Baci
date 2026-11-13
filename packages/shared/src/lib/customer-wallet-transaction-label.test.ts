@@ -92,6 +92,21 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('Money added… to a faded deed');
   });
 
+  it('never re-punctuates a description that had nothing to hide', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Airtime - MTN 0800',
+        sourceType: 'vtu_transaction',
+      })
+    ).toBe('Airtime - MTN 0800');
+    expect(
+      customerWalletTransactionLabel({
+        description: 'cashback on order',
+        sourceType: 'cashback',
+      })
+    ).toBe('cashback on order');
+  });
+
   it('keeps networks and billers the customer chose', () => {
     expect(
       customerWalletTransactionLabel({

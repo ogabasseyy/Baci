@@ -46,10 +46,12 @@ export function customerWalletTransactionLabel(input: {
   for (const id of IDS) cleaned = cleaned.replace(id, '');
   cleaned = cleaned
     .replace(TRAILING_VIA_ONE_WORD, '')
-    .replace(/\s+-\s+(?=\S)/g, ' – ')
     .replace(/\s{2,}/g, ' ')
     .replace(/^[\s:–-]+|[\s:–-]+$/g, '')
     .trim();
   if (!cleaned) return 'Transaction';
+  // Untouched text is returned as written; only a cleaned label is re-capitalised.
+  const original = (input.description ?? '').trim();
+  if (cleaned === original) return original;
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }

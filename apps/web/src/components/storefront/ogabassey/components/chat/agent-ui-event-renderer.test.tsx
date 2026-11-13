@@ -156,6 +156,19 @@ describe('AgentUiEventRenderer', () => {
       '/ogabassey/smartphones/iphone-16'
     );
     expect(screen.getByRole('button', { name: 'Add to cart' })).toBeEnabled();
+    expect(
+      screen.getByText(
+        'Want to narrow these down? Tell me your budget, preferred brand, or what matters most.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('does not show the refinement prompt for an add-to-cart confirmation', () => {
+    render(
+      <AgentUiEventRenderer events={[{ ...event(), intent: 'add_to_cart' }]} />
+    );
+
+    expect(screen.queryByText(/Want to narrow these down/)).toBeNull();
   });
 
   it('adds a validated catalog product through the existing cart context', async () => {

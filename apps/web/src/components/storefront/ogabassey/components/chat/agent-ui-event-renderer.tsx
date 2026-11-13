@@ -234,6 +234,12 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
               );
             })}
           </div>
+          {(event.intent === 'discover' || event.intent === 'recommend') && (
+            <p className="mt-2 text-xs text-[var(--store-text-muted,#4b5563)]">
+              Want to narrow these down? Tell me your budget, preferred brand, or what matters
+              most.
+            </p>
+          )}
         </section>
       ))}
     </div>

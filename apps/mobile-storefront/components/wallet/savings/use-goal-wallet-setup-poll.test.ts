@@ -1,5 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { usePiggyvestSlowdownStore } from '@/stores/piggyvest-slowdown-store';
+import {
+  PIGGYVEST_SLOW_SIGNAL_TTL_MS,
+  usePiggyvestSlowdownStore,
+} from '@/stores/piggyvest-slowdown-store';
 import { resetGoalSetupMemory } from './goal-setup-memory';
 import {
   MAX_SLOW_ATTEMPTS,
@@ -206,6 +209,19 @@ describe('useGoalWalletSetupPoll', () => {
       hook.rerender({ phase: 'error' });
       await advance(20_000);
       expect(reread).toHaveBeenCalledTimes(13);
+    });
+  });
+
+  describe('bugfix: the slow notice was renewed forever after the checks paused', () => {
+    it('stops renewing the signal once the checks pause, so it lapses', async () => {
+      const { result } = setup({ phase: 'pending' });
+      await ticks(12);
+      for (let n = 0; n < MAX_SLOW_ATTEMPTS; n += 1) await advance(20_000);
+      expect(result.current.paused).toBe(true);
+      await advance(PIGGYVEST_SLOW_SIGNAL_TTL_MS + 1);
+      const now = Date.now();
+      const signal = usePiggyvestSlowdownStore.getState().signals['goal-setup'];
+      expect(signal === undefined || signal <= now).toBe(true);
     });
   });
 

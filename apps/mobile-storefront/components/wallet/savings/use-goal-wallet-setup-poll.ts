@@ -164,9 +164,15 @@ export function useGoalWalletSetupPoll({
   // card while the sheet checks the same plan) only ever raises it, so
   // neither clears the sheet's signal.
   const pendingSlow = phase === 'pending' && slow;
+  // Once the automatic checks have paused, nothing new is learned, so the
+  // signal is no longer renewed: it lapses on its own short expiry rather
+  // than keeping the notice up indefinitely (the card still offers Check
+  // now, which starts the checks, and the signal, again).
   useReportPiggyvestSlow(
     'goal-setup',
-    phase === 'idle' || (readsPaused && !pendingSlow) ? null : pendingSlow
+    phase === 'idle' || paused || (readsPaused && !pendingSlow)
+      ? null
+      : pendingSlow
   );
   // Reads once right away and starts the quick checks again.
   const checkAgain = () => {

@@ -159,7 +159,7 @@ describe('old goal-actions links', () => {
     expect(screen.queryByText(/Redirect:/)).toBeNull();
   });
 
-  it('offer a retry when the wallet read stays silent too long', () => {
+  it('offer to keep waiting when the wallet read stays silent too long', () => {
     jest.useFakeTimers();
     try {
       mockWallet.mockReturnValue({
@@ -169,15 +169,13 @@ describe('old goal-actions links', () => {
       });
       mockParams.mockReturnValue({ goalId: GOAL });
       render(<WalletGoalActionsRoute />);
-      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Keep waiting' })).toBeNull();
       act(() => {
         jest.advanceTimersByTime(15_000);
       });
-      expect(
-        screen.getByRole('button', { name: 'Try again' })
-      ).toBeOnTheScreen();
-      fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
-      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+      expect(screen.getByText('Still opening your savings')).toBeOnTheScreen();
+      fireEvent.press(screen.getByRole('button', { name: 'Keep waiting' }));
+      expect(screen.queryByRole('button', { name: 'Keep waiting' })).toBeNull();
     } finally {
       jest.useRealTimers();
     }

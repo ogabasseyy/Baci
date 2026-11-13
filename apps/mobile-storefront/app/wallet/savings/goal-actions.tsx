@@ -15,8 +15,8 @@ const SLOW_MS = 15_000;
 
 /**
  * What the link shows before it redirects: a spinner, or a retry notice when
- * a read failed or has said nothing for SLOW_MS (Try again waits once more;
- * the wallet read keeps going on its own meanwhile).
+ * a read failed (Try again re-reads) or has said nothing for SLOW_MS (Keep
+ * waiting restarts the wait; the wallet read keeps going on its own).
  */
 function GoalLinkShell({ onRetry }: { onRetry?: () => void }) {
   const [slow, setSlow] = useState(false);
@@ -30,7 +30,7 @@ function GoalLinkShell({ onRetry }: { onRetry?: () => void }) {
   return (
     <StorefrontScreenShell themeBackground>
       {retry ? (
-        <GoalLinkLoadError onRetry={retry} />
+        <GoalLinkLoadError onRetry={retry} slow={!onRetry} />
       ) : (
         <ActivityIndicator
           accessibilityLabel="Opening your savings"

@@ -1399,8 +1399,13 @@ describe('WalletScreen', () => {
         variantId: 'variant-256',
       });
       expect(mockRefetch).toHaveBeenCalled();
-      // The savings sheet shows the new phone; no notice on top of it.
-      expect(noticeSpy).not.toHaveBeenCalled();
+      // Only the calm inline confirmation, never an error on top of it.
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        'Phone changed',
+        expect.stringContaining('Your savings now go towards'),
+        'success'
+      );
     } finally {
       noticeSpy.mockClear();
     }
@@ -1592,8 +1597,13 @@ describe('WalletScreen', () => {
         })
       );
       expect(mockRefetch).toHaveBeenCalled();
-      // The savings sheet shows the new phone; no notice on top of it.
-      expect(noticeSpy).not.toHaveBeenCalled();
+      // Only the calm inline confirmation, never an error on top of it.
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        'Phone changed',
+        expect.stringContaining('Your savings now go towards'),
+        'success'
+      );
     } finally {
       noticeSpy.mockClear();
     }

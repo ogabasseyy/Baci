@@ -91,7 +91,7 @@ jest.mock('expo-haptics', () => ({
 jest.mock('expo-router', () => ({
   usePathname: jest.fn(() => '/'),
   useIsFocused: jest.fn(() => false),
-  useFocusEffect: jest.fn(),
+  useNavigation: jest.fn(() => ({ addListener: jest.fn(() => jest.fn()) })),
   useRouter: jest.fn(() => ({
     push: jest.fn(),
     replace: jest.fn(),

@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -10,25 +10,34 @@ import { useEffect, useRef, useState } from 'react';
  * While the sheet is locked (a cancel or complete is being sent) it is not
  * closed: a PIN re-prompt from that request must stay reachable. The close
  * then runs once the request settles, if the wallet is still out of focus.
+ *
+ * Listens to the navigation `blur` event, not `useFocusEffect`: a focus
+ * effect whose callback changes identity re-runs its cleanup on every
+ * render, which closed the sheet the moment it opened.
  */
 export function useCloseSavingsSheetOnBlur(
   visible: boolean,
   close: () => void,
   locked = false
 ) {
-  // Read at blur time, so the focus callback never changes identity (a new
-  // callback would run its cleanup, i.e. close the sheet, on every render).
+  const navigation = useNavigation();
   const latest = useRef({ visible, close, locked });
   latest.current = { visible, close, locked };
   const [closeWhenUnlocked, setCloseWhenUnlocked] = useState(false);
-  useFocusEffect(() => {
-    setCloseWhenUnlocked(false);
-    return () => {
+  useEffect(() => {
+    const offBlur = navigation.addListener('blur', () => {
       if (!latest.current.visible) return;
       if (latest.current.locked) setCloseWhenUnlocked(true);
       else latest.current.close();
+    });
+    const offFocus = navigation.addListener('focus', () =>
+      setCloseWhenUnlocked(false)
+    );
+    return () => {
+      offBlur();
+      offFocus();
     };
-  });
+  }, [navigation]);
   useEffect(() => {
     if (!closeWhenUnlocked || locked) return;
     setCloseWhenUnlocked(false);

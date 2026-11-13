@@ -99,8 +99,11 @@ export function WalletHeroSection({
   );
   // Utility shortcuts appear only when there is money to pay with; legacy
   // wallets always show them, as before.
+  // An unread store credit balance isn't "nothing to pay with" (Muse): the
+  // shortcuts stay, and each purchase screen handles a shortfall itself.
   const showUtilities =
     !savingsView ||
+    storeCredit === undefined ||
     hasSpendableBalance({
       savingsWalletBalance: pendingPiggyvest ? 0 : savingsWalletBalance,
       storeCreditBalance: storeCredit,

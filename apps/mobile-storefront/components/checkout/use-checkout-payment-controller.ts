@@ -27,7 +27,7 @@ import type { WalletSelection } from '@/lib/wallet-payment-helpers';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
-import { isSubmitWalletTransferHeld } from './is-submit-wallet-transfer-held';
+import { submitWalletTransferChecks } from './is-submit-wallet-transfer-held';
 import { useRedvaultAvailability } from './use-redvault-availability';
 import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 
@@ -279,14 +279,11 @@ export function useCheckoutPaymentController({
     // Unknown verdict (Ogabassey pilot only): show "Checking…", not a gap.
     walletFundedBankTransferChecking: verdictNow === null,
     // Live re-check at submit: verdict and wallet read now, not at render.
-    isWalletFundedBankTransferHeld: () =>
-      isSubmitWalletTransferHeld({
-        merchantId,
-        optionEnabled: walletFundedBankTransferOptionEnabled,
-        // The query cache as it stands when Place Order finalizes, not this
-        // render's snapshot (Codex).
-        walletVerdict: walletQuery.getWalletVerdict(),
-      }),
+    ...submitWalletTransferChecks({
+      getWalletVerdict: walletQuery.getWalletVerdict,
+      merchantId,
+      optionEnabled: walletFundedBankTransferOptionEnabled,
+    }),
     walletIsStoreCredit,
     walletSelection,
   };

@@ -45,6 +45,7 @@ export async function runCheckoutFinalization({
   walletFundedBankTransferOptionEnabled,
   isWalletFundedBankTransferHeld,
   merchantId,
+  walletTransferFallbackReason: liveFallbackReason,
 }: {
   accountPassword: UseCheckoutSubmitParams['accountPassword'];
   address: ShippingAddressInput;
@@ -74,6 +75,7 @@ export async function runCheckoutFinalization({
   isWalletFundedBankTransferHeld?: UseCheckoutSubmitParams['isWalletFundedBankTransferHeld'];
   /** The merchant this order was submitted to. */
   merchantId?: string | null;
+  walletTransferFallbackReason?: UseCheckoutSubmitParams['walletTransferFallbackReason'];
 }): Promise<void> {
   // Stamped order currency for both emission lanes: the creation
   // purchase must carry it (otherwise a successful claim permanently
@@ -181,7 +183,7 @@ export async function runCheckoutFinalization({
       walletTransferChosen && !walletTransferHeld,
     // Tell the customer the order switched to a one-time transfer (Muse).
     walletTransferFallback: walletTransferHeld
-      ? walletTransferFallbackReason(merchantId)
+      ? (liveFallbackReason?.() ?? walletTransferFallbackReason(merchantId))
       : undefined,
   });
 }

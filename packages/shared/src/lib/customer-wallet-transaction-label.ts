@@ -24,12 +24,14 @@ const PROVIDER = new RegExp(`\\b(?:${PROVIDERS})\\b`, 'gi');
 // A provider we don't know yet, named in a trailing "via Acmepay".
 const TRAILING_VIA_ONE_WORD = /\s+\b(?:via|by|through)\s+[A-Za-z][\w.-]*\s*$/i;
 // Internal ids: UUIDs, shortened hex ("3f2b…"), long mixed hex tokens, and
-// long digit runs such as an IMEI or provider reference (never an amount).
+// long digit runs such as an IMEI or provider reference (never an amount or
+// the customer's own phone number).
 const IDS = [
   /:?\s*\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
   /:?\s*\b(?=[0-9a-f]*\d)[0-9a-f]{3,}(?:…|\.{3})/gi,
   /\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi,
-  /(?<![₦\d,.])\b\d{10,}\b/g,
+  // 14+ digits: an IMEI (15) or a provider reference, never a phone number.
+  /(?<![₦\d,.])\b\d{14,}\b/g,
 ];
 
 export function customerWalletTransactionLabel(input: {

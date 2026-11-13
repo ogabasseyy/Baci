@@ -74,6 +74,15 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('Delivery fee');
   });
 
+  it("keeps the customer's own phone number on an airtime row", () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Airtime MTN 08031234567 via vtpass',
+        sourceType: null,
+      })
+    ).toBe('Airtime MTN 08031234567');
+  });
+
   it('keeps an amount and a multi-word "via" phrase', () => {
     expect(
       customerWalletTransactionLabel({

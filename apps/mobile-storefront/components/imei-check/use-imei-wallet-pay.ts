@@ -12,6 +12,7 @@ import {
   trackWalletPayPurchase,
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
+import { CONFIG } from '@/lib/config';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import {
   isWalletStoreCredit,
@@ -129,7 +130,10 @@ export function useImeiWalletPay({
     covers: (tier: ImeiServiceTierKey) =>
       imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
     open: async (tier: ImeiServiceTierKey, imei: string) => {
-      const { user, merchantId } = useAuthStore.getState();
+      // The build's merchant, never the hydrated one: that can still be
+      // null at startup, and the key must match after a restart.
+      const { user } = useAuthStore.getState();
+      const merchantId = CONFIG.MERCHANT_ID;
       let purchase: string | null = null;
       let inner: WalletPayAdapter<ImeiWalletPayResult> | null = null;
       // The key is read inside the start, so a phone that can't read its

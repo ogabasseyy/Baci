@@ -145,3 +145,16 @@ describe('bugfix: the raw IMEI was saved on the phone (Muse)', () => {
     expect(saved).not.toContain(IMEI);
   });
 });
+
+describe('bugfix: the key changed when the merchant hydrated late (Codex P1)', () => {
+  it('scopes the key by the build merchant, not the hydrated one', async () => {
+    start.mockRejectedValue(new Error('network'));
+    const hook = setup();
+    await openAndClose(hook);
+    const saved = String(
+      await AsyncStorage.getItem('baci.walletPay.openPurchases.v1')
+    );
+    expect(saved).not.toContain('merchant-1');
+    expect(saved).toContain('|user-1|');
+  });
+});

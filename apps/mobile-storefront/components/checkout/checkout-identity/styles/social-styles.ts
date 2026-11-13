@@ -36,7 +36,7 @@ export const socialStyles = {
   },
   socialCheckoutButton: {
     flex: 1,
-    height: 52,
+    minHeight: 44,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -45,12 +45,15 @@ export const socialStyles = {
     borderWidth: 1,
     borderColor: palette.gray[200],
     borderRadius: 14,
-    gap: 10,
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     ...SHADOWS.sm,
   },
   socialCheckoutButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
+    flexShrink: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
     color: palette.gray[900],
   },
   emailSignInButton: {

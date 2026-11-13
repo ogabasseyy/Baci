@@ -16,6 +16,14 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    {
+      "path": "components/checkout/checkout-identity/components/CheckoutSheetPresentation.tsx",
+      "justification": "Android presents the checkout sheet in the current window to avoid the native Modal opening stall and handles hardware Back there. Other platforms retain native Modal presentation."
+    },
+    {
+      "path": "components/cart/PriceChangeModal.tsx",
+      "justification": "iOS emits Modal onDismiss when the price-change modal is temporarily deferred behind checkout identity; suppress that platform-specific dismissal so checkout-ad gating remains active until the buyer reviews the changes."
+    },
     "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",

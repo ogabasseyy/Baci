@@ -80,6 +80,25 @@ it('deduplicates repeated taps and navigates only after the canonical cart is re
   expect(next).toHaveBeenCalledTimes(1);
   expect(alert).not.toHaveBeenCalled();
 });
+it('uses a post-recovery override for deferred guest checkout', async () => {
+  mockState.prepare = jest.fn(async () => {
+    mockState = {
+      ...mockState,
+      metadataReady: true,
+      snapshot: { state: 'active', lines: [{}] },
+    };
+  });
+  const next = jest.fn();
+  const continueAsGuest = jest.fn();
+  const { result } = renderHook(() => useCartCheckoutRecovery(next));
+
+  await act(async () => {
+    await result.current.recoverCheckout(continueAsGuest);
+  });
+
+  expect(next).not.toHaveBeenCalled();
+  expect(continueAsGuest).toHaveBeenCalledTimes(1);
+});
 it('keeps items parked and shows actionable retry guidance on failure', async () => {
   mockState.prepare = jest.fn().mockRejectedValue(new Error('offline'));
   const next = jest.fn();

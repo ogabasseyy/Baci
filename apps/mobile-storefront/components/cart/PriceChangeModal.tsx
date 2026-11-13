@@ -1,6 +1,14 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type React from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useLayoutEffect, useRef } from 'react';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import type {
@@ -18,6 +26,7 @@ interface PriceChangeModalProps {
   unavailableLines?: CartUnavailableLine[];
   onClose: () => void;
   onDismissed?: () => void;
+  isDeferred?: boolean;
   colors: (typeof Colors)['light'];
 }
 
@@ -28,8 +37,31 @@ export default function PriceChangeModal({
   unavailableLines = [],
   onClose,
   onDismissed,
+  isDeferred = false,
   colors,
 }: PriceChangeModalProps): React.JSX.Element {
+  const wasVisible = useRef(visible);
+  const skipDeferredDismiss = useRef(false);
+  useLayoutEffect(() => {
+    if (visible) {
+      wasVisible.current = true;
+      skipDeferredDismiss.current = false;
+    } else {
+      if (Platform.OS === 'ios' && isDeferred && wasVisible.current) {
+        skipDeferredDismiss.current = true;
+      }
+      wasVisible.current = false;
+    }
+  }, [isDeferred, visible]);
+
+  const handleDismiss = () => {
+    if (Platform.OS === 'ios' && skipDeferredDismiss.current) {
+      skipDeferredDismiss.current = false;
+      return;
+    }
+    onDismissed?.();
+  };
+
   const priceOnly =
     conditionChanges.length === 0 && unavailableLines.length === 0;
   const conditionOnly =
@@ -46,7 +78,7 @@ export default function PriceChangeModal({
       transparent
       animationType="fade"
       accessibilityViewIsModal
-      onDismiss={onDismissed}
+      onDismiss={handleDismiss}
       onRequestClose={onClose}
     >
       <View style={styles.warningOverlay}>

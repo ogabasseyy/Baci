@@ -20,17 +20,14 @@ export function SocialCheckoutButtons({
   const sharedButtonStyle = [
     styles.socialCheckoutButton,
     {
-      backgroundColor: theme.buttonPrimary,
-      borderColor: theme.buttonPrimary,
+      backgroundColor: theme.input,
+      borderColor: theme.border,
     },
     isLoading && styles.socialButtonDisabled,
   ];
 
   return (
     <View style={styles.socialCheckoutSection}>
-      <Text style={[styles.socialCheckoutLabel, { color: theme.mutedText }]}>
-        Continue with
-      </Text>
       <View style={styles.socialCheckoutRow}>
         {Platform.OS === 'ios' && (
           <TouchableOpacity
@@ -51,10 +48,7 @@ export function SocialCheckoutButtons({
               importantForAccessibility="no"
             />
             <Text
-              style={[
-                styles.socialCheckoutButtonText,
-                { color: theme.primaryForeground },
-              ]}
+              style={[styles.socialCheckoutButtonText, { color: theme.text }]}
             >
               Apple
             </Text>
@@ -67,18 +61,15 @@ export function SocialCheckoutButtons({
           disabled={isLoading}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel="Continue with Google"
+          accessibilityLabel="Sign in with Google"
           accessibilityHint="Sign in or create an account using your Google account"
           accessibilityState={{ disabled: isLoading }}
         >
           <GoogleLogo size={20} />
           <Text
-            style={[
-              styles.socialCheckoutButtonText,
-              { color: theme.primaryForeground },
-            ]}
+            style={[styles.socialCheckoutButtonText, { color: theme.text }]}
           >
-            Google
+            Sign in with Google
           </Text>
         </TouchableOpacity>
       </View>

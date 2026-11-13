@@ -38,6 +38,8 @@ import {
   setupCartMocks,
 } from './cart.test-utils';
 
+const mockOpenCheckoutIdentity = jest.fn();
+
 // These isolated screen fixtures represent a focused navigation route.
 jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
 
@@ -54,6 +56,25 @@ jest.mock('react-native-reanimated', () => mockReanimatedModule());
 jest.mock('@/components/useColorScheme', () => mockColorSchemeModule());
 jest.mock('@/components/checkout/checkout-identity', () =>
   mockCheckoutIdentityModule()
+);
+jest.mock(
+  '@/components/checkout/checkout-identity/useCheckoutIdentityOverlay',
+  () => {
+    const { useState } = jest.requireActual<typeof import('react')>('react');
+    return {
+      useCheckoutIdentityOverlay: () => {
+        const [isOpen, setIsOpen] = useState(false);
+        return {
+          isOpen,
+          open: (...args: unknown[]) => {
+            mockOpenCheckoutIdentity(...args);
+            setIsOpen(true);
+          },
+          close: () => setIsOpen(false),
+        };
+      },
+    };
+  }
 );
 jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
 jest.mock('@/stores/cart-store', () => mockCartStoreModule());
@@ -196,16 +217,17 @@ describe('CartScreen state', () => {
   });
 
   it('opens guest identity modal for guests and routes signed-in users straight to checkout', async () => {
-    const { rerender } = render(<CartScreen />);
+    const { unmount } = render(<CartScreen />);
 
     fireEvent.press(
       screen.getByRole('button', { name: /Proceed to checkout, total/i })
     );
 
     await waitFor(() =>
-      expect(screen.getByText('Checkout Identity Modal')).toBeTruthy()
+      expect(mockOpenCheckoutIdentity).toHaveBeenCalledTimes(1)
     );
     expect(mockRouterPush).not.toHaveBeenCalled();
+    unmount();
 
     mockUseAuthStatus.mockReturnValue(
       buildAuthStatus({
@@ -215,7 +237,7 @@ describe('CartScreen state', () => {
       })
     );
 
-    rerender(<CartScreen />);
+    render(<CartScreen />);
     jest.clearAllMocks();
     const checkoutButton = screen.getByRole('button', {
       name: /Proceed to checkout, total/i,

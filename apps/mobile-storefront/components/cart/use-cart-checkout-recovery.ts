@@ -37,7 +37,7 @@ export function useCartCheckoutRecovery(onReady: () => void) {
   useLayoutEffect(() => {
     session.current = user?.id ?? 'guest';
   }, [user]);
-  const recoverCheckout = async () => {
+  const recoverCheckout = async (onReadyOverride?: () => void) => {
     if (pending.current) return;
     pending.current = true;
     setIsPreparing(true);
@@ -70,7 +70,7 @@ export function useCartCheckoutRecovery(onReady: () => void) {
         );
         return;
       }
-      if (result.ready) onReadyRef.current();
+      if (result.ready) (onReadyOverride ?? onReadyRef.current)();
       else if (result.reason === 'cart_changed')
         Alert.alert(
           'Cart changed',

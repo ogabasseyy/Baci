@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 /**
  * useSignInForm Hook
  *
@@ -9,7 +10,6 @@
  * - Testable business logic
  */
 
-import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { AccessibilityInfo } from 'react-native';
@@ -140,7 +140,6 @@ export function useSignInForm({
       setIsLoading(false);
       triggerHaptic('success');
       onSuccess();
-      router.replace('/checkout');
     });
 
     return unsubscribe;
@@ -191,7 +190,6 @@ export function useSignInForm({
     } else {
       triggerHaptic('success');
       onSuccess();
-      router.replace('/checkout');
     }
 
     setIsLoading(false);

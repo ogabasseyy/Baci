@@ -114,6 +114,7 @@ let originalFetch: typeof global.fetch = global.fetch;
 jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
 
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ isFocused: () => true }),
   Stack: {
     Screen: () => null,
   },

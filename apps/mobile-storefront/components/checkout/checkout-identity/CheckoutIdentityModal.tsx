@@ -1,14 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import {
-  Keyboard,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { useRef, useState } from 'react';
+import { Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
@@ -17,11 +10,11 @@ import { getCheckoutIdentityTheme } from './colors';
 import {
   Divider,
   ErrorAlert,
-  GuestCheckoutCard,
   SecurityFooter,
-  SignInForm,
   SocialCheckoutButtons,
 } from './components';
+import { CheckoutCodeForm } from './components/CheckoutCodeForm';
+import { CheckoutSheetPresentation } from './components/CheckoutSheetPresentation';
 import {
   useBottomSheetAnimation,
   useHapticFeedback,
@@ -32,28 +25,53 @@ import { styles } from './styles';
 interface CheckoutIdentityModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onVerified?: () => void;
+  onGuestCheckout?: () => void;
 }
 
 export function CheckoutIdentityModal({
   isOpen,
   onClose,
+  onVerified,
+  onGuestCheckout,
 }: CheckoutIdentityModalProps) {
+  return isOpen ? (
+    <CheckoutIdentitySheet
+      onClose={onClose}
+      onGuestCheckout={onGuestCheckout}
+      onVerified={onVerified}
+    />
+  ) : null;
+}
+
+function CheckoutIdentitySheet({
+  onClose,
+  onGuestCheckout,
+  onVerified,
+}: Pick<
+  CheckoutIdentityModalProps,
+  'onClose' | 'onGuestCheckout' | 'onVerified'
+>) {
+  const otpBusy = useRef(false);
+  const otpVerificationBusy = useRef(false);
+  const [isOtpBusy, setIsOtpBusy] = useState(false);
+  const [isOtpVerificationBusy, setIsOtpVerificationBusy] = useState(false);
   const insets = useSafeAreaInsets();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
   const theme = getCheckoutIdentityTheme(colorScheme);
   const { triggerHaptic } = useHapticFeedback();
-  const [showEmailSignIn, setShowEmailSignIn] = useState(false);
 
   // Bottom sheet animations with reduced motion support
   const { animatedBackdropStyle, animatedSheetStyle } = useBottomSheetAnimation(
     {
-      isOpen,
+      isOpen: true,
     }
   );
 
   const handleSignInSuccess = () => {
-    setShowEmailSignIn(false);
     onClose();
+    if (onVerified) onVerified();
+    else router.push('/checkout');
   };
 
   const {
@@ -64,44 +82,42 @@ export function CheckoutIdentityModal({
   } = useSignInForm({ onSuccess: handleSignInSuccess });
 
   const handleClose = () => {
+    if (otpVerificationBusy.current || isSocialAuthLoading) return;
     triggerHaptic('light');
     Keyboard.dismiss();
-    setShowEmailSignIn(false);
     onClose();
   };
 
   const handleGuestCheckout = () => {
-    triggerHaptic('light');
-    setShowEmailSignIn(false);
-    onClose();
-    router.push('/checkout');
-  };
-
-  const handleShowEmailSignIn = () => {
-    triggerHaptic('light');
-    setShowEmailSignIn(true);
-  };
-
-  const handleShowCheckoutOptions = () => {
+    if (otpBusy.current || isSocialAuthLoading) return;
     triggerHaptic('light');
     Keyboard.dismiss();
-    setShowEmailSignIn(false);
+    onClose();
+    if (onGuestCheckout) onGuestCheckout();
+    else router.push('/checkout');
   };
 
-  // Early return for closed state
-  if (!isOpen) return null;
+  const handleVerified = () => {
+    Keyboard.dismiss();
+    onClose();
+    if (onVerified) onVerified();
+    else router.push('/checkout');
+  };
+
+  const handleOtpBusyChange = (busy: boolean) => {
+    otpBusy.current = busy;
+    setIsOtpBusy(busy);
+  };
+
+  const handleOtpVerificationBusyChange = (busy: boolean) => {
+    otpVerificationBusy.current = busy;
+    setIsOtpVerificationBusy(busy);
+  };
 
   return (
-    <Modal
-      key={`checkout-modal-${isOpen}`}
-      visible={isOpen}
-      transparent
-      animationType="none"
-      onRequestClose={handleClose}
-      statusBarTranslucent
-      accessible={true}
-      accessibilityViewIsModal={true}
-      accessibilityLabel="Checkout options modal"
+    <CheckoutSheetPresentation
+      busy={isOtpVerificationBusy || isSocialAuthLoading}
+      onClose={handleClose}
     >
       <AppKeyboardContainer style={styles.container}>
         {/* Backdrop */}
@@ -115,6 +131,10 @@ export function CheckoutIdentityModal({
           <Pressable
             style={styles.backdropPressable}
             onPress={handleClose}
+            disabled={isOtpVerificationBusy || isSocialAuthLoading}
+            accessibilityState={{
+              disabled: isOtpVerificationBusy || isSocialAuthLoading,
+            }}
             accessibilityRole="button"
             accessibilityLabel="Close modal"
             accessibilityHint="Double tap to close the checkout options"
@@ -128,126 +148,96 @@ export function CheckoutIdentityModal({
             animatedSheetStyle,
             {
               backgroundColor: theme.sheet,
-              paddingBottom: 0,
+              borderColor: theme.border,
             },
           ]}
           accessibilityRole="none"
         >
-          {/* Handle - decorative */}
-          <View
-            style={styles.handleContainer}
-            accessible={false}
-            importantForAccessibility="no"
-          >
-            <View style={[styles.handle, { backgroundColor: theme.handle }]} />
-          </View>
-          <Pressable
-            onPress={handleClose}
-            style={[
-              styles.floatingCloseButton,
-              { backgroundColor: theme.closeButton },
-            ]}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            accessibilityHint="Close checkout modal"
-          >
-            <Ionicons
-              name="close"
-              size={22}
-              color={theme.mutedText}
-              accessibilityElementsHidden={true}
-              importantForAccessibility="no"
-            />
-          </Pressable>
-
-          {/* Content */}
           <ScrollView
-            style={{ maxHeight: 600 }}
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            accessibilityRole="none"
           >
-            {showEmailSignIn ? (
-              <>
-                <Pressable
-                  onPress={handleShowCheckoutOptions}
-                  style={styles.emailBackButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to checkout options"
-                  accessibilityHint="Return to guest, Apple, and Google checkout options"
+            <View style={styles.identityHeader}>
+              <View style={styles.identityHeading}>
+                <Text
+                  style={[styles.identityEyebrow, { color: theme.primary }]}
                 >
-                  <Ionicons
-                    name="chevron-back"
-                    size={16}
-                    color={theme.primary}
-                    accessibilityElementsHidden
-                    importantForAccessibility="no"
-                  />
-                  <Text
-                    style={[
-                      styles.emailBackButtonText,
-                      { color: theme.primary },
-                    ]}
-                  >
-                    Checkout options
-                  </Text>
-                </Pressable>
-                <SignInForm
-                  onSuccess={handleSignInSuccess}
-                  showSocialButtons={false}
-                  theme={theme}
-                />
-              </>
-            ) : (
-              <>
-                <ErrorAlert error={socialAuthError} theme={theme} />
-                <GuestCheckoutCard
-                  onPress={handleGuestCheckout}
-                  theme={theme}
-                />
-                <Divider text="or sign in instantly" theme={theme} />
-                <SocialCheckoutButtons
-                  isLoading={isSocialAuthLoading}
-                  onAppleSignIn={handleAppleSignIn}
-                  onGoogleSignIn={handleGoogleSignIn}
-                  theme={theme}
-                />
-                <Pressable
-                  onPress={handleShowEmailSignIn}
+                  Checkout
+                </Text>
+                <Text
+                  accessibilityRole="header"
+                  style={[styles.identityTitle, { color: theme.text }]}
+                >
+                  Let’s get you started
+                </Text>
+                <Text
                   style={[
-                    styles.emailSignInButton,
-                    { borderColor: theme.border },
+                    styles.identityDescription,
+                    { color: theme.mutedText },
                   ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Sign in with email"
-                  accessibilityHint="Show the email and password sign in form"
                 >
-                  <Ionicons
-                    name="mail-outline"
-                    size={16}
-                    color={theme.mutedText}
-                    accessibilityElementsHidden
-                    importantForAccessibility="no"
+                  Sign in or create an account for a faster checkout.
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleClose}
+                disabled={isOtpVerificationBusy || isSocialAuthLoading}
+                accessibilityState={{
+                  disabled: isOtpVerificationBusy || isSocialAuthLoading,
+                }}
+                style={styles.identityClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={theme.mutedText} />
+              </Pressable>
+            </View>
+            <ErrorAlert error={socialAuthError} theme={theme} />
+            <CheckoutCodeForm
+              onVerified={handleVerified}
+              onBusyChange={handleOtpBusyChange}
+              onVerificationBusyChange={handleOtpVerificationBusyChange}
+              socialBusy={isSocialAuthLoading}
+              theme={theme}
+              renderSocial={(emailBusy) => (
+                <>
+                  <Divider theme={theme} />
+                  <SocialCheckoutButtons
+                    isLoading={emailBusy || isSocialAuthLoading}
+                    onAppleSignIn={handleAppleSignIn}
+                    onGoogleSignIn={handleGoogleSignIn}
+                    theme={theme}
                   />
-                  <Text
-                    style={[
-                      styles.emailSignInButtonText,
-                      { color: theme.mutedText },
-                    ]}
-                  >
-                    Sign in with email
-                  </Text>
-                </Pressable>
-              </>
-            )}
+                </>
+              )}
+            />
+            <Pressable
+              onPress={handleGuestCheckout}
+              disabled={isOtpBusy || isSocialAuthLoading}
+              accessibilityState={{
+                disabled: isOtpBusy || isSocialAuthLoading,
+              }}
+              style={styles.guestLink}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.guestLinkText, { color: theme.mutedText }]}>
+                Continue as Guest
+              </Text>
+              <Ionicons
+                name="arrow-forward"
+                size={16}
+                color={theme.mutedText}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
+            </Pressable>
           </ScrollView>
 
           {/* Footer */}
           <SecurityFooter bottomInset={insets.bottom} theme={theme} />
         </Animated.View>
       </AppKeyboardContainer>
-    </Modal>
+    </CheckoutSheetPresentation>
   );
 }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Modal } from 'react-native';
+import { Modal, Platform } from 'react-native';
 import {
   mockAdSlotModule,
   mockAuthGuardModule,
@@ -22,6 +22,8 @@ import {
   setupCartMocks,
 } from './cart.test-utils';
 
+let mockSetCheckoutIdentityOpen: ((open: boolean) => void) | null = null;
+
 // These isolated screen fixtures represent a focused navigation route.
 jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
 
@@ -38,6 +40,23 @@ jest.mock('react-native-reanimated', () => mockReanimatedModule());
 jest.mock('@/components/useColorScheme', () => mockColorSchemeModule());
 jest.mock('@/components/checkout/checkout-identity', () =>
   mockCheckoutIdentityModule()
+);
+jest.mock(
+  '@/components/checkout/checkout-identity/useCheckoutIdentityOverlay',
+  () => {
+    const { useState } = jest.requireActual<typeof import('react')>('react');
+    return {
+      useCheckoutIdentityOverlay: () => {
+        const [isOpen, setIsOpen] = useState(false);
+        mockSetCheckoutIdentityOpen = setIsOpen;
+        return {
+          isOpen,
+          open: () => setIsOpen(true),
+          close: () => setIsOpen(false),
+        };
+      },
+    };
+  }
 );
 jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
 jest.mock('@/stores/cart-store', () => mockCartStoreModule());
@@ -80,6 +99,79 @@ describe('CartScreen price-change modal', () => {
 
     expect(screen.getByText('Prices updated')).toBeTruthy();
     expect(screen.getByLabelText('Continue with updated prices')).toBeTruthy();
+  });
+
+  it('defers native cart repricing while the identity overlay is open on Android', () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    mockRepriceHolder.current = {
+      priceChanges: [
+        {
+          id: 'cart-1',
+          name: 'Lenovo ThinkPad E16 Gen 2',
+          oldPrice: 1428000,
+          newPrice: 1500000,
+        },
+      ],
+      conditionChanges: [],
+      unavailableLines: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    const { UNSAFE_getAllByType } = render(<CartScreen />);
+    const getPriceChangeModal = () =>
+      UNSAFE_getAllByType(Modal)
+        .filter((modal) => typeof modal.props.onDismiss === 'function')
+        .at(-1);
+    expect(getPriceChangeModal()?.props.visible).toBe(true);
+
+    act(() => mockSetCheckoutIdentityOpen?.(true));
+    expect(getPriceChangeModal()?.props.visible).toBe(false);
+
+    act(() => mockSetCheckoutIdentityOpen?.(false));
+    expect(getPriceChangeModal()?.props.visible).toBe(true);
+    jest.restoreAllMocks();
+  });
+
+  it('keeps the cart ad gated until a deferred iOS repricing modal is reviewed', () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    mockRepriceHolder.current = {
+      priceChanges: [
+        {
+          id: 'cart-1',
+          name: 'Lenovo ThinkPad E16 Gen 2',
+          oldPrice: 1428000,
+          newPrice: 1500000,
+        },
+      ],
+      conditionChanges: [],
+      unavailableLines: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    const { rerender, UNSAFE_getAllByType } = render(<CartScreen />);
+    act(() => mockSetCheckoutIdentityOpen?.(true));
+    const modalWhileDeferred = UNSAFE_getAllByType(Modal)
+      .filter((item) => typeof item.props.onDismiss === 'function')
+      .at(-1);
+    act(() => modalWhileDeferred?.props.onDismiss());
+
+    act(() => mockSetCheckoutIdentityOpen?.(false));
+    fireEvent.press(screen.getByLabelText('Continue with updated prices'));
+    mockRepriceHolder.current = {
+      priceChanges: [],
+      conditionChanges: [],
+      unavailableLines: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+    rerender(<CartScreen />);
+
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+    const dismissedModal = UNSAFE_getAllByType(Modal)
+      .filter((item) => typeof item.props.onDismiss === 'function')
+      .at(-1);
+    act(() => dismissedModal?.props.onDismiss());
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+    jest.restoreAllMocks();
   });
 
   it('surfaces unavailable lines in the cart without price drift', () => {

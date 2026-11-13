@@ -17,8 +17,11 @@ export function walletTransferFallbackReason(): WalletTransferFallback {
 
 /** Route param to reason; the original "1" meant the PiggyVest case. */
 export function parseWalletTransferFallback(
-  value: string | undefined
+  raw: string | string[] | undefined
 ): WalletTransferFallback | undefined {
+  // Router params can arrive as an array (repeated query key, Muse): the
+  // first value decides, so the notice is never silently dropped.
+  const value = Array.isArray(raw) ? raw[0] : raw;
   if (value === 'unconfirmed') return 'unconfirmed';
   if (value === 'piggyvest' || value === '1') return 'piggyvest';
   return undefined;

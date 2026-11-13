@@ -70,6 +70,15 @@ export async function resolveFundWalletRail(
       );
       return 'blocked';
     }
+    // The read awaited storage (Codex): an account switch meanwhile must not
+    // release this flow's funding under the new account's token.
+    if (options?.userId && !isSameSignedInUser(options.userId)) {
+      Alert.alert(
+        'Signed-in account changed',
+        'You switched accounts. Start the top-up again from this account.'
+      );
+      return 'blocked';
+    }
     return retained ? 'primary' : 'legacy';
   }
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) return 'primary';

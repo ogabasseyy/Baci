@@ -16,7 +16,10 @@ describe('isSubmitWalletTransferHeld', () => {
       isSubmitWalletTransferHeld({
         merchantId: MERCHANT,
         optionEnabled: true,
-        wallet: { primary_balance_kobo: null },
+        walletVerdict: {
+          walletIsStoreCredit: false,
+          walletPrimaryUnknown: false,
+        },
       })
     ).toBe(false);
   });
@@ -27,7 +30,7 @@ describe('isSubmitWalletTransferHeld', () => {
       isSubmitWalletTransferHeld({
         merchantId: MERCHANT,
         optionEnabled: false,
-        wallet: {},
+        walletVerdict: {},
       })
     ).toBe(true);
   });
@@ -38,7 +41,7 @@ describe('isSubmitWalletTransferHeld', () => {
       isSubmitWalletTransferHeld({
         merchantId: MERCHANT,
         optionEnabled: true,
-        wallet: {},
+        walletVerdict: {},
       })
     ).toBe(true);
   });
@@ -49,7 +52,7 @@ describe('isSubmitWalletTransferHeld', () => {
       isSubmitWalletTransferHeld({
         merchantId: MERCHANT,
         optionEnabled: true,
-        wallet: { primary_balance_kobo: 10_000 },
+        walletVerdict: { walletIsStoreCredit: true },
       })
     ).toBe(true);
   });

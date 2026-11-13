@@ -560,26 +560,40 @@ describe('bugfix: wallet turned PiggyVest after render while a ruling-out is cac
     clearObservedPiggyvestPrimaryCapability();
     mockCapability = null;
     mockWallet = undefined;
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
   });
 
-  it('holds the wallet-funded transfer when the latest wallet is PiggyVest', () => {
-    // Arrange: the cached verdict still rules PiggyVest out, but the wallet
-    // read that landed before Place Order carries a PiggyVest balance.
+  it('holds when a refetch during order creation lands a PiggyVest wallet', () => {
+    // Arrange: rendered ruled out with a legacy wallet; Place Order captures
+    // the callback from this render.
     observePiggyvestPrimaryCapability('merchant-1', false);
     mockCapability = false;
-    mockWallet = { balance: 0, primary_balance_kobo: 500_000 };
-
-    // Act
+    mockWallet = { balance: 0 };
     const { result } = renderController();
+    const heldAtFinalize = result.current.isWalletFundedBankTransferHeld;
 
-    // Assert
-    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+    // Act: the refetch lands a PiggyVest wallet in the query cache while the
+    // order is created (no re-render); the ruling-out is still cached.
+    mockLiveVerdict = {
+      walletIsStoreCredit: true,
+      walletPrimaryUnknown: false,
+    };
+
+    // Assert: the captured callback reads the cache now, not the render.
+    expect(heldAtFinalize()).toBe(true);
   });
 
-  it('holds while the latest wallet reports a pending PiggyVest account', () => {
+  it('holds while the live wallet reports a pending PiggyVest account', () => {
     observePiggyvestPrimaryCapability('merchant-1', false);
     mockCapability = false;
-    mockWallet = { balance: 0, primary_pending: true };
+    mockWallet = { balance: 0 };
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: true,
+    };
 
     const { result } = renderController();
 

@@ -120,3 +120,42 @@ describe('bugfix: corrupt saved card funding let a purchase top-up charge again'
     await AsyncStorage.clear();
   });
 });
+
+describe('bugfix: account switch during the saved-funding read released legacy funding', () => {
+  it('blocks when another account signs in while storage is read', async () => {
+    // Arrange: no saved record for the old account; the storage read is
+    // where another account signs in.
+    const USER = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    // A one-off implementation on the AsyncStorage mock (never restored:
+    // restoring the mock would wipe its in-memory behaviour).
+    jest.mocked(AsyncStorage.getItem).mockImplementationOnce(async () => {
+      mockSignedInUserId = '11111111-1111-4111-8111-111111111111';
+      return null;
+    });
+
+    // Act
+    const rail = await resolveFundWalletRail(MERCHANT, {
+      userId: USER,
+      walletReturnTo: '/imei-check',
+    });
+
+    // Assert: never released as legacy under the new account.
+    expect(rail).toBe('blocked');
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      'Signed-in account changed',
+      expect.any(String)
+    );
+    mockSignedInUserId = USER;
+    alertSpy.mockRestore();
+  });
+
+  it('still adds store credit when the same account stays signed in', async () => {
+    await expect(
+      resolveFundWalletRail(MERCHANT, {
+        userId: '0f8fad5b-d9cb-469f-a165-70867728950e',
+        walletReturnTo: '/imei-check',
+      })
+    ).resolves.toBe('legacy');
+  });
+});

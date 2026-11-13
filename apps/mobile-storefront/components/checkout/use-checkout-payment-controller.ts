@@ -281,7 +281,9 @@ export function useCheckoutPaymentController({
       isSubmitWalletTransferHeld({
         merchantId,
         optionEnabled: walletFundedBankTransferOptionEnabled,
-        wallet: walletQuery.data?.wallet,
+        // The query cache as it stands when Place Order finalizes, not this
+        // render's snapshot (Codex).
+        walletVerdict: walletQuery.getWalletVerdict(),
       }),
     walletIsStoreCredit,
     walletSelection,

@@ -36,3 +36,16 @@ describe('parseWalletTransferFallback', () => {
     expect(parseWalletTransferFallback('other')).toBeUndefined();
   });
 });
+
+describe('bugfix: repeated fallback query key dropped the notice', () => {
+  it('reads the first value when the router hands over an array', () => {
+    expect(parseWalletTransferFallback(['piggyvest', 'unconfirmed'])).toBe(
+      'piggyvest'
+    );
+    expect(parseWalletTransferFallback(['unconfirmed'])).toBe('unconfirmed');
+  });
+
+  it('stays unset for an empty array', () => {
+    expect(parseWalletTransferFallback([])).toBeUndefined();
+  });
+});

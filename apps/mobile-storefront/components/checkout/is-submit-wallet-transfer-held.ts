@@ -1,15 +1,12 @@
-import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
+import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
-import {
-  isWalletStoreCredit,
-  type WalletPrimaryLike,
-} from '@/lib/wallet-store-credit';
 
 /**
  * Place Order re-check for a wallet-funded bank transfer. Holds (the order
  * falls back to a one-time transfer with a notice) when the option is no
  * longer eligible, when the live verdict is not a ruling-out, or when the
- * latest wallet read is PiggyVest-shaped (Muse): a wallet that turned
+ * live wallet read (the query cache at call time, Codex) is
+ * PiggyVest-shaped (Muse): a wallet that turned
  * PiggyVest after render must never fund the order, even while a stale
  * ruling-out is still cached. Fetching or error flags are not read, so a
  * refresh in flight never switches the rail.
@@ -17,13 +14,16 @@ import {
 export function isSubmitWalletTransferHeld({
   merchantId,
   optionEnabled,
-  wallet,
+  walletVerdict,
 }: {
   merchantId: string;
   optionEnabled: boolean;
-  wallet: WalletPrimaryLike | null | undefined;
+  walletVerdict: PiggyvestShortfallVerdict;
 }): boolean {
   if (!optionEnabled) return true;
   if (readPiggyvestCapabilityNow(merchantId) !== false) return true;
-  return isWalletStoreCredit(wallet) || isWalletPrimaryUnknown(wallet);
+  return (
+    walletVerdict.walletIsStoreCredit === true ||
+    walletVerdict.walletPrimaryUnknown === true
+  );
 }

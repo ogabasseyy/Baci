@@ -4,11 +4,13 @@ import { runScheduledGoalCancelForfeitSweep } from '@/lib/piggyvest/goal-cancel-
 
 export const maxDuration = 300;
 // No new forfeit starts after this much of the budget, so the one in flight
-// (a wallet read, a posting mark, one POST and one status read, each with its
-// client timeout) still ends well inside maxDuration.
-const FORFEIT_SWEEP_BUDGET_MS = 200_000;
+// (wallet check, posting mark, one POST, the status read and the residual
+// wallet read, each with its 30 s client timeout, plus database round trips:
+// about 150 s at worst) still ends inside maxDuration.
+const FORFEIT_SWEEP_BUDGET_MS = 120_000;
 
-// Hourly sweep of early-cancel interest forfeits: sends forfeits nobody's
+// Daily sweep of early-cancel interest forfeits (run from the 23:00 VPS
+// crontab entry right after the reconciliation report, with its own budget): sends forfeits nobody's
 // status check picked up and settles in-flight ones (new transfers only while
 // PiggyVest savings are switched on). Inert (204-like empty answer) until the
 // PiggyVest savings credentials exist. The response carries counts only.

@@ -48,20 +48,10 @@ describe('deploy crontab schedules', () => {
     assert.equal(lines.length, 1);
     assert.match(
       lines[0],
-      /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
-    );
-  });
-
-  it('schedules the dark early-cancel interest forfeit sweep hourly through run-web-cron', () => {
-    const deployScript = readDeployScript();
-    const lines = deployScript
-      .split('\n')
-      .filter((line) => line.includes('piggyvest-goal-cancel-forfeit-sweep'));
-
-    assert.equal(lines.length, 1);
-    assert.match(
-      lines[0],
-      /^17 \* {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-goal-cancel-forfeit-sweep\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep' >> \$REMOTE_DIR\/logs\/piggyvest-goal-cancel-forfeit-sweep\.log 2>&1$/
+      // The early-cancel interest forfeit sweep runs right after the report,
+      // as its own route with its own time budget (deploy.sh is at its line
+      // limit, so it shares this entry).
+      /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation; \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
     );
   });
 

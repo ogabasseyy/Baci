@@ -17,7 +17,7 @@ type Store = ReturnType<typeof createGoalCancelStore>;
  * wallet once the customer's principal is confirmed (owner decision
  * 2026-11-12). Best effort and never throws: the customer's answer never
  * depends on this leg. A forfeit this misses is sent by the next status check
- * or by the hourly worker sweep (goal-cancel-forfeit-sweep). Pages a person
+ * or by the daily worker sweep (goal-cancel-forfeit-sweep). Pages a person
  * when the leg cannot finish by itself.
  */
 export async function sweepGoalCancelForfeit(input: {

@@ -48,8 +48,8 @@ it('sweeps with its own full time budget and reports counts only', async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ status: 'ok', forfeitSweep: counts });
   const deadline = mocks.sweep.mock.calls[0][2] as number;
-  expect(deadline).toBeGreaterThanOrEqual(before + 200_000);
-  expect(deadline).toBeLessThan(before + 300_000);
+  expect(deadline).toBeGreaterThanOrEqual(before + 120_000);
+  expect(deadline).toBeLessThanOrEqual(Date.now() + 120_000);
 });
 
 it('answers inert where the savings credentials are not configured', async () => {

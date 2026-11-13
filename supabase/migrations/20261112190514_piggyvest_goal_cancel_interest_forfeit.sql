@@ -814,7 +814,7 @@ BEGIN
      WHERE id = v_forfeit.id;
     IF v_forfeit.amount_kobo + v_other.amount_kobo > 9999999999 THEN
       -- Not merged: the other plan stays as it was, this one goes to review
-      -- unstamped, so the hourly sweep pages the review (not a wallet page).
+      -- unstamped, so the daily sweep pages the review (not a wallet page).
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'reserved' WHERE id = v_other.id;
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET alerted_at = NULL WHERE id = v_forfeit.id;
       RETURN 'unclaimed';
@@ -1245,6 +1245,12 @@ BEGIN
          SET state = 'needs_review', alerted_at = pg_catalog.clock_timestamp()
        WHERE replacement.cancel_operation_id = v_forfeit.cancel_operation_id
          AND replacement.state IN ('reserved', 'dispatched');
+      -- The old row itself records the verified success (in review), so a
+      -- redelivery of the same record is a duplicate and pages no one again.
+      UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+         SET state = 'needs_review', provider_transaction_id = proof ->> 'providerTransactionId',
+             settled_at = pg_catalog.clock_timestamp(), alerted_at = pg_catalog.clock_timestamp()
+       WHERE id = v_forfeit.id;
     END IF;
     RETURN 'conflict';
   END IF;
@@ -1417,7 +1423,7 @@ BEGIN
   BEGIN
   IF NEW.net_kobo > 9999999999 THEN
     -- Above the per-transfer ceiling: recorded for review (paged once by the
-    -- hourly sweep), never ignored. The amount is the ceiling marker; the
+    -- daily sweep), never ignored. The amount is the ceiling marker; the
     -- receipt holds the real figure.
     INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
       cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
@@ -1443,7 +1449,7 @@ BEGIN
     state = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
       THEN 'reserved' ELSE 'needs_review' END,
-    -- A review entered here pages afresh (the hourly sweep pages unstamped
+    -- A review entered here pages afresh (the daily sweep pages unstamped
     -- reviews), whatever an earlier wallet-check page left behind.
     alerted_at = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
@@ -1480,7 +1486,7 @@ BEGIN
   -- A plan merges payouts and the split's own interest, so which of them a
   -- reversal belongs to can not be told from here: the unsent plan is never
   -- shrunk or released automatically, it goes to review (paged once by the
-  -- hourly sweep) and a person sizes it. Nothing already sent is touched.
+  -- daily sweep) and a person sizes it. Nothing already sent is touched.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
      SET state = 'needs_review', alerted_at = NULL
     FROM piggyvest_primary.goal_cancel_operations AS cancel

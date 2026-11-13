@@ -30,7 +30,7 @@ export interface GoalCancelForfeitSweepResult {
 }
 
 /**
- * The scheduled sweep of early-cancel interest forfeits (run by its own hourly
+ * The scheduled sweep of early-cancel interest forfeits (run by its own daily
  * cron route). It sends forfeits nobody's status check picked up
  * (for example a cancel confirmed by the outflow webhook after the customer
  * left) and settles in-flight ones from a verified PiggyVest record. New

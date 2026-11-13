@@ -8,6 +8,13 @@ import {
   readPrimaryWalletSavingsRuntime,
 } from './primary-wallet-savings-runtime';
 
+function hasAnyPrimaryWalletSetting(env: NodeJS.ProcessEnv): boolean {
+  return Object.entries(env).some(
+    ([key, value]) =>
+      key.startsWith('PIGGYVEST_PRIMARY_') && (value ?? '').trim() !== ''
+  );
+}
+
 /** True only while PiggyVest savings are switched on (flags and kill switch). */
 export function goalCancelForfeitTransfersAllowed(
   env: NodeJS.ProcessEnv = process.env
@@ -20,7 +27,7 @@ export function goalCancelForfeitTransfersAllowed(
 }
 
 /**
- * The hourly cron's forfeit sweep. Inert (null) wherever the PiggyVest savings
+ * The daily cron's forfeit sweep. Inert (null) wherever the PiggyVest savings
  * credentials are not configured; a sweep that fails answers
  * { status: 'failed' } (and logs the reason). Never throws, so it can not fail
  * the reconciliation report it runs beside. Counts only, never transfer
@@ -34,9 +41,16 @@ export async function runScheduledGoalCancelForfeitSweep(
   let runtime: ReturnType<typeof readPrimaryWalletSavingsRecoveryRuntime>;
   try {
     runtime = readPrimaryWalletSavingsRecoveryRuntime(env);
-  } catch {
-    // Not configured here: the sweep is inert, not failing.
-    return null;
+  } catch (error) {
+    // Never configured here: inert. Configured but broken (a removed or
+    // malformed setting) is a failure, so in-flight forfeits are never
+    // silently left unswept.
+    if (!hasAnyPrimaryWalletSetting(env)) return null;
+    console.warn(
+      '[PiggyVest] Goal cancel forfeit sweep configuration invalid:',
+      error instanceof Error ? error.message : 'unknown error'
+    );
+    return { status: 'failed' };
   }
   try {
     return await sweep({

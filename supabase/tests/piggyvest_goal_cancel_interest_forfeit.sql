@@ -463,6 +463,12 @@ BEGIN
   PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
       pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict',
     'a late success of a released forfeit settled automatically');
+  -- Regression: a redelivery of the same late success is a duplicate (no
+  -- second page), and the old reference is no longer matched.
+  PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
+      pg_temp.gf_forfeit_proof(v_forfeit)) = 'duplicate'
+    AND piggyvest_primary.find_dispatched_goal_cancel_forfeit_by_reference(c_integration, 'staging', v_old_ref) IS NULL,
+    'a redelivered late success paged again');
   -- The money moved under the old reference: the replacement is frozen, so
   -- nothing can send the interest a second time.
   PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'

@@ -85,3 +85,19 @@ it('reports a failed sweep distinctly from an inert one, and never throws', asyn
   );
   warn.mockRestore();
 });
+
+it('reports a configured-but-broken installation as a failed sweep, never inert', async () => {
+  mocks.recovery.mockImplementation(() => {
+    throw new Error('Primary savings configuration unavailable');
+  });
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const sweep = vi.fn();
+  expect(
+    await runScheduledGoalCancelForfeitSweep(
+      { PIGGYVEST_PRIMARY_INTEGRATION_ID: 'x' } as unknown as NodeJS.ProcessEnv,
+      sweep
+    )
+  ).toEqual({ status: 'failed' });
+  expect(sweep).not.toHaveBeenCalled();
+  warn.mockRestore();
+});

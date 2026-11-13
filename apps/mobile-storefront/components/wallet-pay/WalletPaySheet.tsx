@@ -123,7 +123,7 @@ export function WalletPaySheet<Result>({
               ? notice.title
               : entering
                 ? 'Enter your wallet PIN'
-                : 'Pay from PiggyVest'
+                : 'Pay from savings wallet'
           }
           closeLabel={entering ? 'Cancel' : 'Close'}
           onClose={closable ? sheet.close : undefined}
@@ -137,7 +137,7 @@ export function WalletPaySheet<Result>({
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>
               {sheet.step === 'starting'
                 ? 'Getting your payment ready...'
-                : 'Paying from your PiggyVest wallet...'}
+                : 'Paying from your savings wallet...'}
             </Text>
           </View>
         ) : null}

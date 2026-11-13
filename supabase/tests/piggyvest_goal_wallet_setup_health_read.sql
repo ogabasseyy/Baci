@@ -129,7 +129,7 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 
--- Catalog: pinned SECURITY DEFINER, STABLE; EXECUTE reaches only the evidence role.
+-- Catalog: pinned SECURITY DEFINER, VOLATILE; EXECUTE reaches only the evidence role.
 DO $catalog$
 DECLARE routine regprocedure := 'piggyvest_primary.read_goal_wallet_setup_health(uuid,text,jsonb)'::regprocedure;
 BEGIN
@@ -140,8 +140,9 @@ BEGIN
     IS DISTINCT FROM ARRAY['search_path=pg_catalog'] THEN
     RAISE EXCEPTION 'read_goal_wallet_setup_health search_path is not pinned';
   END IF;
-  IF (SELECT provolatile FROM pg_catalog.pg_proc WHERE oid = routine) <> 's' THEN
-    RAISE EXCEPTION 'read_goal_wallet_setup_health is not STABLE';
+  -- It reads the wall clock (clock_timestamp()), so VOLATILE.
+  IF (SELECT provolatile FROM pg_catalog.pg_proc WHERE oid = routine) <> 'v' THEN
+    RAISE EXCEPTION 'read_goal_wallet_setup_health is not VOLATILE';
   END IF;
   IF (SELECT array_agg(grantee_name ORDER BY grantee_name) FROM (
       SELECT DISTINCT CASE WHEN privilege.grantee = 0 THEN 'PUBLIC'

@@ -63,7 +63,18 @@ export async function resolveFundWalletRail(
               void discardUnreadablePrimaryCardFunding(
                 activeMerchantId,
                 options?.userId
-              ).then(() => onRetry?.());
+              ).then((cleared) => {
+                if (cleared) {
+                  onRetry?.();
+                  return;
+                }
+                // Storage kept the record (Codex): retrying now would only
+                // reopen this prompt, so say so and let the customer retry.
+                Alert.alert(
+                  'Could not update this device',
+                  'We could not clear the earlier card payment from this device. Please try again in a moment.'
+                );
+              });
             },
           },
         ]

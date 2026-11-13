@@ -15,6 +15,7 @@ import {
   useMerchantPaymentSettings,
 } from '@/hooks/useMerchantPaymentSettings';
 import { calculateCommerce } from '@/lib/commerce-brain';
+import { hasMalformedPrimaryBalance } from '@/lib/has-malformed-primary-balance';
 import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
@@ -199,6 +200,7 @@ export function useCheckoutPaymentController({
         (verdictNow !== false &&
           isWalletPrimaryUnknown(walletQuery.data?.wallet)) ||
         verdictNow === null ||
+        hasMalformedPrimaryBalance(walletQuery.data?.wallet) ||
         (verdictNow === true && !walletIsStoreCredit) ||
         (verdictNow !== false &&
           piggyvestPossible &&

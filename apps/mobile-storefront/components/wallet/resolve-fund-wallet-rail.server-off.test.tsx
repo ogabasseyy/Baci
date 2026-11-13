@@ -159,3 +159,36 @@ describe('bugfix: account switch during the saved-funding read released legacy f
     ).resolves.toBe('legacy');
   });
 });
+
+describe('bugfix: failed discard reopened the unreadable-payment prompt', () => {
+  it('reports a storage error instead of retrying when removal fails', async () => {
+    // Arrange: a corrupt record that storage refuses to remove.
+    const USER = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    const key = `@baci_primary_card:${MERCHANT}:${USER}`;
+    await AsyncStorage.setItem(key, 'x');
+    jest
+      .mocked(AsyncStorage.removeItem)
+      .mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const onRetry = jest.fn();
+    await resolveFundWalletRail(MERCHANT, {
+      onRetry,
+      userId: USER,
+      walletReturnTo: '/imei-check',
+    });
+
+    // Act: the customer taps "Continue anyway".
+    const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
+    buttons.find((b) => b.text === 'Continue anyway')?.onPress?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Assert: no retry into the same prompt; a storage error is shown.
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      'Could not update this device',
+      expect.any(String)
+    );
+    alertSpy.mockRestore();
+    await AsyncStorage.clear();
+  });
+});

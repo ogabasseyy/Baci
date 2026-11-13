@@ -255,9 +255,9 @@ export function useCheckoutSubmit({
           isAuthenticated,
           isMountedRef,
           isOrderInFlight,
-          // Finalization observes the same reviewed items the order
-          // was created and bound with, not the pre-review cart.
+          // The reviewed items the order was bound with, not the cart.
           itemsSnapshot: boundItemsSnapshot,
+          merchantId,
           onRedvaultOrder,
           order,
           orderNumber,

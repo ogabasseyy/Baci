@@ -5,22 +5,35 @@ import {
 } from './wallet-transfer-fallback';
 
 let mockVerdict: boolean | null = null;
+const mockVerdictFor: Record<string, boolean | null> = {};
 jest.mock('@/lib/read-piggyvest-capability-now', () => ({
-  readPiggyvestCapabilityNow: () => mockVerdict,
-}));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: { getState: () => ({ merchantId: 'merchant-1' }) },
+  readPiggyvestCapabilityNow: (id?: string | null) =>
+    id && id in mockVerdictFor ? mockVerdictFor[id] : mockVerdict,
 }));
 
 describe('walletTransferFallbackReason', () => {
   it('is the PiggyVest case once the merchant is confirmed', () => {
     mockVerdict = true;
-    expect(walletTransferFallbackReason()).toBe('piggyvest');
+    expect(walletTransferFallbackReason('merchant-1')).toBe('piggyvest');
   });
 
   it('bugfix: is "unconfirmed" while the verdict is unknown', () => {
     mockVerdict = null;
-    expect(walletTransferFallbackReason()).toBe('unconfirmed');
+    expect(walletTransferFallbackReason('merchant-1')).toBe('unconfirmed');
+  });
+});
+
+describe('bugfix: fallback notice read a merchant switched to mid-submit', () => {
+  it('judges the merchant the order was submitted to', () => {
+    // Arrange: submitted at a PiggyVest merchant; the store now holds one
+    // whose verdict is unknown.
+    mockVerdictFor['submitted-merchant'] = true;
+    mockVerdictFor['switched-merchant'] = null;
+
+    // Act + Assert
+    expect(walletTransferFallbackReason('submitted-merchant')).toBe(
+      'piggyvest'
+    );
   });
 });
 

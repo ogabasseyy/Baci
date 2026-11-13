@@ -610,3 +610,21 @@ describe('bugfix: wallet turned PiggyVest after render while a ruling-out is cac
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
   });
 });
+
+describe('bugfix: malformed PiggyVest balance kept bank transfer to wallet', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('holds the offer for a negative PiggyVest balance', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0, primary_balance_kobo: -5 };
+
+    const { result } = renderController();
+
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+  });
+});

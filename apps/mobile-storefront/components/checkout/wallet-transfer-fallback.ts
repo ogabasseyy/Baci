@@ -1,5 +1,4 @@
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
-import { useAuthStore } from '@/stores/auth-store';
 
 /**
  * Why Place Order switched "Bank transfer to wallet" to a one-time
@@ -9,8 +8,12 @@ import { useAuthStore } from '@/stores/auth-store';
  */
 export type WalletTransferFallback = 'piggyvest' | 'unconfirmed';
 
-export function walletTransferFallbackReason(): WalletTransferFallback {
-  return readPiggyvestCapabilityNow(useAuthStore.getState().merchantId) === true
+/** Judged for the merchant the order was submitted to (Muse), not a live
+ * store read that a mid-submit merchant switch could change. */
+export function walletTransferFallbackReason(
+  merchantId: string | null | undefined
+): WalletTransferFallback {
+  return readPiggyvestCapabilityNow(merchantId) === true
     ? 'piggyvest'
     : 'unconfirmed';
 }

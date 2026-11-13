@@ -11,17 +11,15 @@ type CapturedRequest = Awaited<
   ReturnType<typeof installChatwootFixture>
 >['requests'][number];
 
-function assertCookieHeaderObservation(requests: CapturedRequest[]) {
-  const observedCookies = requests.map(
-    (request) => request.requestCookieHeader
-  );
-  expect(
-    observedCookies.every((cookie) =>
-      cookie
-        ?.split(';')
-        .some((entry) => entry.trim() === 'csrf-token=fixture-csrf-token')
-    )
-  ).toBe(true);
+function assertFixtureValidatedCsrf(requests: CapturedRequest[]) {
+  expect(requests.map((request) => request.responseStatus)).toEqual([
+    200, 200, 200,
+  ]);
+  expect(requests.map((request) => request.csrfCookieValidated)).toEqual([
+    true,
+    true,
+    true,
+  ]);
 }
 
 test('rejects messages from an untrusted widget iframe', async ({
@@ -61,7 +59,7 @@ test('rejects messages from an untrusted widget iframe', async ({
     'data-authorized-message-seen',
     'true'
   );
-  assertCookieHeaderObservation(requests);
+  assertFixtureValidatedCsrf(requests);
 });
 
 test('renders the canonical response from the trusted widget transport', async ({
@@ -83,19 +81,16 @@ test('renders the canonical response from the trusted widget transport', async (
   await expect(result).toContainText('Canonical server phone');
   await expect(result).toContainText('"cartVersion":8');
   await expect(result).not.toContainText('Forged local name');
-  assertCookieHeaderObservation(requests);
+  assertFixtureValidatedCsrf(requests);
 
   expect(
-    requests.map(
-      ({ path, merchantSlug, method, origin, csrfHeader, csrfCookie }) => ({
-        path,
-        merchantSlug,
-        method,
-        origin,
-        csrfHeader,
-        csrfCookie,
-      })
-    )
+    requests.map(({ path, merchantSlug, method, origin, csrfHeader }) => ({
+      path,
+      merchantSlug,
+      method,
+      origin,
+      csrfHeader,
+    }))
   ).toEqual([
     {
       path: 'challenge',
@@ -103,7 +98,6 @@ test('renders the canonical response from the trusted widget transport', async (
       method: 'POST',
       origin: harnessOrigin,
       csrfHeader: 'fixture-csrf-token',
-      csrfCookie: 'fixture-csrf-token',
     },
     {
       path: 'verify',
@@ -111,7 +105,6 @@ test('renders the canonical response from the trusted widget transport', async (
       method: 'POST',
       origin: harnessOrigin,
       csrfHeader: 'fixture-csrf-token',
-      csrfCookie: 'fixture-csrf-token',
     },
     {
       path: 'authorize',
@@ -119,9 +112,9 @@ test('renders the canonical response from the trusted widget transport', async (
       method: 'POST',
       origin: harnessOrigin,
       csrfHeader: 'fixture-csrf-token',
-      csrfCookie: 'fixture-csrf-token',
     },
   ]);
+  assertFixtureValidatedCsrf(requests);
   expect(requests[0]?.body).toEqual({
     conversationId,
     requestId,

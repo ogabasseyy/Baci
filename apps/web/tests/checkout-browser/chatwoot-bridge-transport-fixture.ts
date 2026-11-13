@@ -1,7 +1,6 @@
 import type { Page } from '@playwright/test';
+import { isChatwootBridgeFixtureRequest } from './chatwoot-bridge-request-allowlist';
 
-const widgetOrigin = 'https://support.example.test';
-const untrustedWidgetOrigin = 'https://untrusted.example.test';
 const requestId = 'fixture_context_123456';
 const conversationId = 905;
 const visitorTokenSha256 = 'b'.repeat(64);
@@ -12,8 +11,8 @@ type CapturedRequest = {
   method: string;
   origin: string;
   csrfHeader: string | null;
-  csrfCookie: string | null;
-  requestCookieHeader: string | null;
+  csrfCookieValidated: boolean | null;
+  responseStatus: number | null;
   body: unknown;
 };
 
@@ -74,8 +73,6 @@ async function installChatwootFixture(
   if (!baseURL) throw new Error('Checkout browser fixture requires baseURL');
   const harnessOrigin = new URL(baseURL).origin;
   const requests: CapturedRequest[] = [];
-  const contextPath =
-    /^\/api\/storefront\/chatwoot\/context\/(challenge|verify|authorize)$/;
   await page.context().addCookies([
     {
       name: 'csrf-token',
@@ -85,113 +82,65 @@ async function installChatwootFixture(
     },
   ]);
 
-  for (const origin of [widgetOrigin, untrustedWidgetOrigin]) {
-    await page.route(`${origin}/widget`, (route) => {
+  await page.route(
+    (url) =>
+      url.origin !== harnessOrigin &&
+      isChatwootBridgeFixtureRequest({
+        url: url.href,
+        method: 'GET',
+        harnessOrigin,
+        fixtureVisited: true,
+      }),
+    (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
       return route.fulfill({
         contentType: 'text/html',
         body: widgetHtml(harnessOrigin),
       });
-    });
-  }
-
-  await page.route(
-    (url) =>
-      url.origin === harnessOrigin &&
-      contextPath.test(url.pathname) &&
-      url.searchParams.size === 1 &&
-      url.searchParams.get('merchantSlug') === 'ogabassey',
-    async (route) => {
-      const url = new URL(route.request().url());
-      const endpoint = url.pathname.split('/').at(-1) ?? '';
-      const merchantSlug = url.searchParams.get('merchantSlug');
-      const headers = await route.request().allHeaders();
-      const cookieHeader = headers.cookie ?? null;
-      const csrfCookie =
-        cookieHeader
-          ?.split(';')
-          .map((cookie) => cookie.trim())
-          .find((cookie) => cookie.startsWith('csrf-token='))
-          ?.slice('csrf-token='.length) ?? null;
-      const csrfHeader = headers['x-csrf-token'] ?? null;
-      const csrfValid =
-        csrfHeader === 'fixture-csrf-token' &&
-        csrfCookie === 'fixture-csrf-token';
-      const method = route.request().method();
-      if (method !== 'POST' || !csrfValid) {
-        requests.push({
-          path: endpoint,
-          merchantSlug,
-          method,
-          origin: url.origin,
-          csrfHeader,
-          csrfCookie,
-          requestCookieHeader: cookieHeader,
-          body: null,
-        });
-        return route.fulfill({ status: 403, json: { error: 'forbidden' } });
-      }
-      const body = route.request().postDataJSON() as Record<string, unknown>;
-      requests.push({
-        path: endpoint,
-        merchantSlug,
-        method,
-        origin: url.origin,
-        csrfHeader,
-        csrfCookie,
-        requestCookieHeader: cookieHeader,
-        body,
-      });
-
-      if (endpoint === 'challenge') {
-        return route.fulfill({
-          json: {
-            requestId: body.requestId,
-            widgetOrigin,
-            challengeToken: 'synthetic-challenge-token',
-            expiresAt: Math.floor(Date.now() / 1000) + 60,
-          },
-        });
-      }
-      if (endpoint === 'verify') {
-        await route.fulfill({
-          json: {
-            authorized: true,
-            requestId,
-            conversationId,
-            sessionToken: 'synthetic-session-capability',
-            sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
-          },
-        });
-        return;
-      }
-      return route.fulfill({
-        json: {
-          authorized: true,
-          conversationId,
-          sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
-          cartSnapshot: {
-            cartVersion: 8,
-            currency: 'NGN',
-            estimatedTotals: false,
-            items: [
-              {
-                lineId: 'server-line-1',
-                name: 'Canonical server phone',
-                productId: 'server-product-1',
-                variantId: null,
-                condition: null,
-                quantity: 2,
-                unitPriceMinor: 125000,
-                lineTotalMinor: 250000,
-              },
-            ],
-            itemsSubtotalMinor: 250000,
-          },
-        },
-      });
     }
   );
+
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (
+      url.origin !== harnessOrigin ||
+      !url.pathname.includes('/api/storefront/chatwoot/context/')
+    )
+      return;
+    const headers = request.headers();
+    let body: unknown = null;
+    try {
+      body = request.postDataJSON();
+    } catch {
+      // Malformed bodies are captured as null; the harness route rejects them.
+    }
+    requests.push({
+      path: url.pathname.split('/').at(-1) ?? '',
+      merchantSlug: url.searchParams.get('merchantSlug'),
+      method: request.method(),
+      origin: url.origin,
+      csrfHeader: headers['x-csrf-token'] ?? null,
+      csrfCookieValidated: null,
+      responseStatus: null,
+      body,
+    });
+  });
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (
+      url.origin !== harnessOrigin ||
+      !url.pathname.includes('/api/storefront/chatwoot/context/')
+    )
+      return;
+    const endpoint = url.pathname.split('/').at(-1) ?? '';
+    const captured = requests.find(
+      (request) => request.path === endpoint && request.responseStatus === null
+    );
+    if (!captured) return;
+    captured.responseStatus = response.status();
+    captured.csrfCookieValidated =
+      response.headers()['x-fixture-csrf-cookie-validated'] === 'true';
+  });
 
   await page.goto('/chatwoot-bridge');
   return {

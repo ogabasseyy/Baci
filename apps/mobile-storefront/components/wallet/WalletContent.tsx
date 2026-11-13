@@ -186,7 +186,7 @@ export function WalletContent(props: WalletContentProps) {
           />
         }
       >
-        <PiggyvestSlowdownNotice />
+        <PiggyvestSlowdownNotice inset hidden={savingsSheetOpen} />
         <WalletHeroSection
           canCreateFundingAccount={canCreateFundingAccount}
           createFundingAccountUnavailableMessage={

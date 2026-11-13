@@ -52,4 +52,13 @@ describe('usePiggyvestSlowdown with PiggyVest off', () => {
       expect(result.current).toBe(true);
     });
   });
+
+  it('bugfix: a screen that is not checking never clears another screen signal', () => {
+    renderHook(() => useReportPiggyvestSlow('goal-setup', true));
+    const idle = renderHook(() => useReportPiggyvestSlow('goal-setup', null));
+    const { result } = renderHook(() => usePiggyvestSlowdown());
+    expect(result.current).toBe(true);
+    idle.unmount();
+    expect(result.current).toBe(true);
+  });
 });

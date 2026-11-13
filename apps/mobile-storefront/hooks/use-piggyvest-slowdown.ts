@@ -8,15 +8,18 @@ import {
 
 /**
  * Raises (while `slow` is true) or clears this source's PiggyVest slowdown
- * signal. A screen calls it with its own "still slow after retrying" state.
+ * signal. A screen calls it with its own "still slow after retrying" state;
+ * `null` means it has no say right now (it is not checking), so it leaves the
+ * signal to whichever screen is.
  */
 export function useReportPiggyvestSlow(
   source: PiggyvestSlowSource,
-  slow: boolean
+  slow: boolean | null
 ) {
   const markSlow = usePiggyvestSlowdownStore((state) => state.markSlow);
   const clearSlow = usePiggyvestSlowdownStore((state) => state.clearSlow);
   useEffect(() => {
+    if (slow === null) return;
     if (!slow) {
       clearSlow(source);
       return;

@@ -12,6 +12,7 @@ let mockPrimary = true;
 let mockUserId: string | undefined = 'user-1';
 const mockFundingInput = jest.fn();
 const mockPollInput = jest.fn();
+const mockPollSince = jest.fn();
 
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: 'merchant-1' } }));
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
@@ -31,8 +32,12 @@ jest.mock('./use-savings-plan-funding', () => ({
   },
 }));
 jest.mock('./use-goal-wallet-setup-poll', () => ({
-  useGoalWalletSetupPoll: (input: { phase: string }) => {
+  useGoalWalletSetupPoll: (input: {
+    phase: string;
+    pendingSince?: number | null;
+  }) => {
     mockPollInput(input.phase);
+    mockPollSince(input.pendingSince);
     return { slow: false, paused: false, checkAgain: jest.fn() };
   },
 }));
@@ -66,6 +71,14 @@ describe('useGoalCardSetupState', () => {
     mockPhase = 'pending';
     expect(run(goal(), true)).toBe('getting_ready');
     expect(mockPollInput).toHaveBeenLastCalledWith('idle');
+  });
+
+  it('times a slow setup from the plan creation time', () => {
+    mockPhase = 'pending';
+    run(goal({ created_at: '2026-11-12T08:00:00Z' }));
+    expect(mockPollSince).toHaveBeenLastCalledWith(
+      Date.parse('2026-11-12T08:00:00Z')
+    );
   });
 
   it('says getting ready for a stalled setup', () => {

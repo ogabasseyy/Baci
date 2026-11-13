@@ -50,6 +50,7 @@ export function useGoalCardSetupState(
           : phase,
     scopeKey,
     reread: funding.fetchExistingPlanFunding,
+    pendingSince: goal.created_at ? Date.parse(goal.created_at) : null,
   });
   if (!checked) return null;
   if (phase === 'pending' || phase === 'setup_retryable')

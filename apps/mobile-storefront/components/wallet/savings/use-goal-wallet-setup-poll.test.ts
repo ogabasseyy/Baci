@@ -7,7 +7,11 @@ import {
 } from './use-goal-wallet-setup-poll';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
-type Props = { phase: SavingsPlanFundingPhase; scope?: string };
+type Props = {
+  phase: SavingsPlanFundingPhase;
+  scope?: string;
+  pendingSince?: number | null;
+};
 
 function setup(
   initial: Props,
@@ -19,6 +23,7 @@ function setup(
         phase: props.phase,
         scopeKey: props.scope ?? 'a',
         reread,
+        pendingSince: props.pendingSince,
       }),
     { initialProps: initial }
   );
@@ -220,6 +225,26 @@ describe('useGoalWalletSetupPoll', () => {
       await advance(20_000);
       expect(result.current.slow).toBe(false);
       await advance(20_000);
+      expect(result.current.slow).toBe(true);
+    });
+
+    it('bugfix: a plan pending for hours is slow on the very first open', async () => {
+      const { result } = setup({
+        phase: 'pending',
+        pendingSince: Date.now() - 3 * 60 * 60 * 1000,
+      });
+      await advance(0);
+      expect(result.current.slow).toBe(true);
+    });
+
+    it('counts the first minute from when the plan was created', async () => {
+      const { result } = setup({
+        phase: 'pending',
+        pendingSince: Date.now() - 50_000,
+      });
+      await advance(5_000);
+      expect(result.current.slow).toBe(false);
+      await advance(5_000);
       expect(result.current.slow).toBe(true);
     });
 

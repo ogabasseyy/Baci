@@ -154,7 +154,7 @@ export async function fetchWalletDataUnbounded(
     supabase
       .from('customer_savings_goals')
       .select(
-        'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
+        'id, created_at, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
       )
       .eq('merchant_id', merchantId)
       .eq('customer_id', resolvedCustomerId)

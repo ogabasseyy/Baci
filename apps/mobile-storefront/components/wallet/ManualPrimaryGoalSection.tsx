@@ -27,6 +27,8 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
     scopeKey,
     reread: funding.fetchExistingPlanFunding,
     onExhausted: funding.failExistingPlanFunding,
+    // Setup starts with the plan, so "slow" counts from its creation.
+    pendingSince: goal.created_at ? Date.parse(goal.created_at) : null,
   });
   return (
     <>

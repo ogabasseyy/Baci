@@ -40,11 +40,18 @@ export function useGoalWalletSetupPoll({
   scopeKey,
   reread,
   onExhausted,
+  pendingSince,
 }: {
   phase: SavingsPlanFundingPhase;
   scopeKey: string;
   reread: (options: { silent: true }) => Promise<unknown>;
   onExhausted?: (error: unknown) => void;
+  /**
+   * When setup really started (the plan's creation time, ms). "Slow" counts
+   * from the earlier of this and when this app first saw the setup waiting,
+   * so a plan pending for hours is slow on the very first open.
+   */
+  pendingSince?: number | null;
 }) {
   const lastFailure = useRef<{ error: unknown } | null>(null);
   const [attempt, setAttempt] = useState({ scopeKey, count: 0 });
@@ -98,7 +105,17 @@ export function useGoalWalletSetupPoll({
   const [overdueScope, setOverdueScope] = useState<string | null>(null);
   useEffect(() => {
     rememberGoalSetupPhase(scopeKey, phase);
-    const firstAt = goalSetupFirstWaitingAt(scopeKey);
+    const seenAt = goalSetupFirstWaitingAt(scopeKey);
+    const since =
+      typeof pendingSince === 'number' && Number.isFinite(pendingSince)
+        ? pendingSince
+        : null;
+    const firstAt =
+      seenAt === null
+        ? since
+        : since === null
+          ? seenAt
+          : Math.min(seenAt, since);
     // Ready (or no longer waiting): a later stall starts its own minute.
     if (!waiting) {
       if (overdueScope !== null) setOverdueScope(null);
@@ -112,7 +129,7 @@ export function useGoalWalletSetupPoll({
     }
     const timer = setTimeout(() => setOverdueScope(scopeKey), left);
     return () => clearTimeout(timer);
-  }, [phase, scopeKey, waiting, overdueScope]);
+  }, [phase, scopeKey, waiting, overdueScope, pendingSince]);
   const overdue = waiting && overdueScope === scopeKey;
 
   const slow = (active && count >= FAST_ATTEMPTS) || overdue;
@@ -120,7 +137,12 @@ export function useGoalWalletSetupPoll({
   const paused = active && count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS;
   // Only a still-pending setup raises the signal: an errored read kept alive
   // by the signal must never renew it, or it would latch itself on.
-  useReportPiggyvestSlow('goal-setup', phase === 'pending' && slow);
+  // A paused or idle check (e.g. the wallet card while the sheet checks the
+  // same plan) has no say, so it never clears the sheet's signal.
+  useReportPiggyvestSlow(
+    'goal-setup',
+    phase === 'idle' ? null : phase === 'pending' && slow
+  );
   // Reads once right away and starts the quick checks again.
   const checkAgain = () => {
     setAttempt({ scopeKey, count: 0 });

@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
-import { BRAND, palette } from '@/constants/Colors';
+import { BRAND, palette, SPACING } from '@/constants/Colors';
 import { usePiggyvestSlowdown } from '@/hooks/use-piggyvest-slowdown';
 
 export const PIGGYVEST_SLOWDOWN_MESSAGE =
@@ -10,14 +10,22 @@ export const PIGGYVEST_SLOWDOWN_MESSAGE =
  * One shared, calm line for the wallet and savings screens while PiggyVest is
  * answering slowly. Renders nothing the rest of the time.
  */
-export function PiggyvestSlowdownNotice() {
+export function PiggyvestSlowdownNotice({
+  hidden = false,
+  inset = false,
+}: {
+  /** Shown elsewhere right now (the savings sheet is open on top). */
+  hidden?: boolean;
+  /** On a full-width screen: the same side margins as the cards, and gaps. */
+  inset?: boolean;
+}) {
   const slow = usePiggyvestSlowdown();
-  if (!slow) return null;
+  if (!slow || hidden) return null;
   return (
     <View
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
-      style={styles.notice}
+      style={[styles.notice, inset && styles.inset]}
     >
       <View style={styles.icon}>
         <Ionicons name="time-outline" size={16} color={BRAND.primary} />
@@ -28,6 +36,11 @@ export function PiggyvestSlowdownNotice() {
 }
 
 const styles = StyleSheet.create({
+  inset: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    marginBottom: 14,
+  },
   notice: {
     flexDirection: 'row',
     alignItems: 'center',

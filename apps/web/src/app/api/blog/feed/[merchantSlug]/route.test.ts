@@ -919,8 +919,41 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     );
   });
 
+  it('sanitizes leaked figcaption prompts before deriving fallback excerpt when excerpt is null', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'null-excerpt-post',
+          title: 'Battery Guide',
+          slug: 'battery-guide',
+          content:
+            '<figure><img src="https://cdn.example.com/cell.jpg" /><figcaption>Editorial illustration: compare battery wear. No text or logos.</figcaption></figure><p>Charging tips follow.</p>',
+          excerpt: null,
+          featured_image_url:
+            'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/cell.jpg',
+          category: 'Smartphones',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Compare battery wear. Charging tips follow.',
+        image: undefined,
+      })
+    );
+  });
+
   describe('getImageMimeType', () => {
-    it('maps image file extensions to valid IANA media types', () => {
+    it('maps image file extensions and CDN format transforms to valid IANA media types', () => {
       expect(getImageMimeType('https://cdn.example.com/photo.jpg')).toBe(
         'image/jpeg'
       );
@@ -942,19 +975,38 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
       expect(getImageMimeType('https://cdn.example.com/photo.svg')).toBe(
         'image/svg+xml'
       );
-      expect(getImageMimeType('https://cdn.example.com/photo.unknown')).toBe(
-        'image/jpeg'
-      );
+      expect(
+        getImageMimeType(
+          'https://cdn.example.com/cdn-cgi/image/width=800,format=webp/photo.jpg'
+        )
+      ).toBe('image/webp');
+      expect(
+        getImageMimeType('https://cdn.example.com/image/format=avif/photo.jpg')
+      ).toBe('image/avif');
+      expect(
+        getImageMimeType('https://cdn.example.com/photo.jpg?format=png')
+      ).toBe('image/png');
+      expect(
+        getImageMimeType(
+          'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/photo.jpg'
+        )
+      ).toBeUndefined();
+      expect(
+        getImageMimeType(
+          'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/photo.jpg?format=png'
+        )
+      ).toBeUndefined();
+      expect(
+        getImageMimeType('https://cdn.example.com/photo.unknown')
+      ).toBeUndefined();
       expect(
         getImageMimeType('https://cdn.example.com/photo.constructor')
-      ).toBe('image/jpeg');
-      expect(getImageMimeType('https://cdn.example.com/photo.__proto__')).toBe(
-        'image/jpeg'
-      );
-      expect(getImageMimeType('https://cdn.example.com/photo')).toBe(
-        'image/jpeg'
-      );
-      expect(getImageMimeType('not-a-valid-url')).toBe('image/jpeg');
+      ).toBeUndefined();
+      expect(
+        getImageMimeType('https://cdn.example.com/photo.__proto__')
+      ).toBeUndefined();
+      expect(getImageMimeType('https://cdn.example.com/photo')).toBeUndefined();
+      expect(getImageMimeType('not-a-valid-url')).toBeUndefined();
     });
   });
 });

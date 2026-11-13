@@ -124,31 +124,53 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   svg: 'image/svg+xml',
 };
 
+const CDN_FORMAT_TRANSFORM_REGEX =
+  /(?:^|[/,;])(?:format|f)=([a-z0-9]+)(?=$|[/,;])/i;
+
 /**
  * Derives an accurate IANA media type from an image URL for RSS enclosures.
  *
- * The RSS 2.0 <enclosure> specification requires a type attribute. The `feed`
- * library derives invalid types such as `image/jpg` from `.jpg` URLs or
- * `image//pathname` when no file extension is present. This normalizer maps
- * standard image extensions using an explicit lookup table.
- *
- * Note: When URLs lack a recognized extension (e.g. dynamic CDN URLs with
- * `format=auto`), this falls back to `image/jpeg` to ensure a valid enclosure
- * type is always emitted. Callers should be aware that the declared enclosure type
- * may differ from dynamic content negotiation on such URLs.
+ * Honors CDN format transforms (e.g. `/cdn-cgi/image/format=webp/...jpg` or
+ * `?format=avif`) before falling back to the pathname extension. Returns
+ * `undefined` when the served media type is indeterminate (such as
+ * `format=auto`, extension-less URLs, or unknown extensions) so callers do not
+ * emit mismatched `<enclosure type="...">` attributes.
  */
-export function getImageMimeType(url: string): string {
+export function getImageMimeType(url: string): string | undefined {
   try {
-    const pathname = new URL(url).pathname.toLowerCase();
+    const parsedUrl = new URL(url);
+    const pathname = parsedUrl.pathname.toLowerCase();
+    const queryFormat = (
+      parsedUrl.searchParams.get('format') ??
+      parsedUrl.searchParams.get('f') ??
+      ''
+    ).toLowerCase();
+    const pathFormat = (
+      pathname.match(CDN_FORMAT_TRANSFORM_REGEX)?.[1] ?? ''
+    ).toLowerCase();
+    if (pathFormat && queryFormat && pathFormat !== queryFormat) {
+      return undefined;
+    }
+    const transformFormat = pathFormat || queryFormat;
+
+    if (transformFormat) {
+      if (transformFormat === 'auto') {
+        return undefined;
+      }
+      return Object.hasOwn(MIME_BY_EXTENSION, transformFormat)
+        ? MIME_BY_EXTENSION[transformFormat]
+        : undefined;
+    }
+
     const lastDotIndex = pathname.lastIndexOf('.');
     if (lastDotIndex === -1) {
-      return 'image/jpeg';
+      return undefined;
     }
     const ext = pathname.slice(lastDotIndex + 1);
     return Object.hasOwn(MIME_BY_EXTENSION, ext)
-      ? (MIME_BY_EXTENSION[ext] ?? 'image/jpeg')
-      : 'image/jpeg';
+      ? MIME_BY_EXTENSION[ext]
+      : undefined;
   } catch {
-    return 'image/jpeg';
+    return undefined;
   }
 }

@@ -1,11 +1,9 @@
 import { escapeHtmlText } from '@/lib/sanitize';
+import { sanitizeFigcaptionHtml } from './blog-figcaption-sanitizer';
 import { escapeHtmlAttr } from './blog-html-attribute-utils';
-import {
-  findTitleAttribute,
-  sanitizeBlogImageCaptionText,
-  sanitizeFigcaptionHtml,
-  unescapeHtmlText,
-} from './blog-image-caption-sanitizer';
+import { sanitizeBlogImageCaptionText } from './blog-image-caption-sanitizer';
+import { findTitleAttribute } from './find-title-attribute';
+import { unescapeHtmlText } from './unescape-html-text';
 
 export { sanitizeBlogImageCaptionText, unescapeHtmlText };
 

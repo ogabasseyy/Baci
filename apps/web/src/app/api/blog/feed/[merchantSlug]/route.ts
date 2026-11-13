@@ -406,21 +406,24 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     for (const { post, publishedDate } of postsWithValidDates) {
       const postUrl = `${safeStoreUrl}/blog/${xmlSafeFeedPathSegment(post.slug)}`;
-      const excerpt =
-        post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
-
       const captionedContent = transformImageTitlesToFigureCaptions(
         post.content || ''
       );
+      const excerpt =
+        post.excerpt || truncateFeedText(stripHtml(captionedContent), 300);
       const sanitizedContent = sanitizeForFeed(captionedContent);
       const imageUrls = getBlogStructuredDataImageUrls(post);
       const primaryImageUrl = xmlSafeFeedImageUrl(imageUrls[0]);
-      const feedImage = primaryImageUrl
-        ? {
-            url: primaryImageUrl,
-            type: getImageMimeType(primaryImageUrl),
-          }
+      const primaryImageMimeType = primaryImageUrl
+        ? getImageMimeType(primaryImageUrl)
         : undefined;
+      const feedImage =
+        primaryImageUrl && primaryImageMimeType
+          ? {
+              url: primaryImageUrl,
+              type: primaryImageMimeType,
+            }
+          : undefined;
 
       feed.addItem({
         title: feedText(post.title),

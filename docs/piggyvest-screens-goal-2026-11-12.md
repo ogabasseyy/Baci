@@ -21,10 +21,10 @@ Rules that apply throughout:
 | Stage | Screen | Where | Status |
 | --- | --- | --- | --- |
 | Shell | Wallet hero card, account number, shortcuts | `WalletHeroSection` | One honest wallet in #4216 |
-| Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Done in #4230 (outcomes are the wallet notice in the sheet; questions are an inline card; no iOS alerts) |
-| Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | Done in #4230 (calm review card; offline/retry state on a failed check) |
-| Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` | Done in #4230 (success wallet notice, no alert) |
-| Fund | Wallet activity under the card | `WalletTransactionHistory` | Retitled "Older store credit" in #4230; **PiggyVest activity list owed**: needs a new server read (all PiggyVest ledgers deny customers; IMEI/VTU wallet spends not recorded yet) |
+| Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Built in #4230 (no alerts); Fable-walked 11-13: pass; low fixes done in 00c334bab7 (PiggyVest merchant only) |
+| Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | Built in #4230; walk owed with a fresh account (onboarding only shows before setup) |
+| Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` | Built in #4230; checked on the mock 11-13: inline "Money received" notice, balance updated |
+| Fund | Wallet activity under the card | `WalletTransactionHistory` | Retitled "Older store credit" in #4230; the PiggyVest activity list is #4232 |
 | Save | Start Savings, Check your plan | `StartSavingsScreen` and modals | Redesigned in #4223 |
 | Save | Add to savings + PIN step | `WalletSavingsProgressModal`, `WalletPinSheet` | Done (#4215) |
 | Save | Goal setup pending / retry / slow notice | `SavingsPlanStatusNote` | Done in #4223 |
@@ -217,4 +217,29 @@ wallet ₦50,000"; the forfeit line correctly stays hidden with no interest.
 | Checkout wallet rows not walked: shipping rates fail in the local stack | owner | Walk on staging, or allow local rate mocking |
 | #4227 conflicts with #4222 in the savings/evidence executors | pay-from-wallet session | Sent; reconcile by merging #4222 |
 | Storefront UI issues outside PiggyVest (blank toast, city error, Redeem contrast, home overlap, empty cart, settings footer) | proposed session | Awaiting owner start |
+
+## Status (2026-11-13, evening)
+
+PiggyVest is enabled for the Ogabassey merchant only (owner, 11-13). Holds and PiggyVest UI are scoped to it.
+
+| Item | Where | Status |
+| --- | --- | --- |
+| Fund screens (Add money, onboarding, Money received) | #4230 | Built; walked; low findings with the fund session |
+| PiggyVest wallet activity list | #4232 | Built; Fable-walked: rows, labels, AI-button inset, Show more (cursor fix a41e1a35a3) pass |
+| Airtime/data/bills from the wallet | #4227 | Built; wallet offered and shortfall shown (walked). Pay → PIN not reachable locally (no Monnify catalogue / no real MTN number); **owed on staging** |
+| Checkout payment step | walked 11-13 | No wallet row, by design (wallet pays IMEI and VTU only); storefront findings in #4229 |
+| #4216 holds | #4216 | Being scoped to Ogabassey only |
+| Data/bills catalogues, live money steps | staging | Owed: no Monnify catalogue locally; PiggyVest outbound transfers paused |
+
+## Walks (2026-11-13, late)
+
+- Fund screens (#4230): no iOS alerts anywhere; "Money received" appears inline while Add money is open. Low fixes are done.
+- Wallet activity (#4232): passes. The test account has 20 rows, so page 2 is covered by paging tests.
+- IMEI wallet chip (#4225): shows "Savings ₦551,600". IMEI checks have no catalogue locally, so the pay sheet is owed on staging.
+- Airtime (#4227): the savings wallet is offered and the over-balance shortfall is shown. Pay stops before the PIN locally, because the biller lookup needs Monnify; **owed on staging**.
+- Provider names: customer wallet history and billers errors no longer show providers (#4233; owner, 11-13).
+
+### Still owed (not runnable locally)
+- On staging, once PiggyVest resumes outbound transfers: airtime/data/bills and IMEI pay to the PIN and settlement, and the money steps end to end.
+- Owner actions: the `allow-silent-revert` label on #4224; marking #4223 ready.
 

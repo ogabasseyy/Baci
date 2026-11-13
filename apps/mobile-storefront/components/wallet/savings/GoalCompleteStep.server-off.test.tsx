@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { SavingsSheetLockContext } from '../SavingsSheetLockContext';
 import { GoalCompleteStep } from './GoalCompleteStep';
 import { goalCompleteBreakdown } from './goal-complete-breakdown';
 import type { GoalLifecycleStep } from './use-goal-lifecycle';
@@ -123,6 +124,23 @@ describe('Complete goal inside the savings sheet, server off', () => {
     expect(screen.queryByText(/fully saved/)).toBeNull();
   });
 
+  it('does not call a plan fully saved when only interest reaches the target', () => {
+    render(
+      <GoalCompleteStep
+        colors={Colors.light}
+        flow={makeFlow()}
+        goal={{ ...goal, current_amount: 790000, principal_amount: 770000 }}
+        onDone={jest.fn()}
+        onNotNow={jest.fn()}
+        onSignIn={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByRole('header', { name: 'Your plan is ready' })
+    ).toBeTruthy();
+    expect(screen.queryByText(/fully saved/)).toBeNull();
+  });
+
   it('starts the PIN-protected complete, or steps back with Not now', () => {
     const flow = makeFlow();
     const handlers = {
@@ -149,9 +167,30 @@ describe('Complete goal inside the savings sheet, server off', () => {
   it('confirms the request and closes on Done', () => {
     const handlers = renderStep(makeFlow('done'));
     expect(screen.getByRole('header', { name: 'Request sent' })).toBeTruthy();
-    expect(screen.getByText(/₦789,360 is in your wallet/)).toBeOnTheScreen();
+    // Amount-neutral: the review's snapshot may differ from what moved.
+    expect(
+      screen.getByText(/Your savings are in your wallet/)
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/₦789,360 is in your wallet/)).toBeNull();
     fireEvent.press(screen.getByRole('button', { name: 'Done' }));
     expect(handlers.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the sheet open while the completion is being submitted', () => {
+    const setLocked = jest.fn();
+    render(
+      <SavingsSheetLockContext.Provider value={setLocked}>
+        <GoalCompleteStep
+          colors={Colors.light}
+          flow={makeFlow('submitting')}
+          goal={goal}
+          onDone={jest.fn()}
+          onNotNow={jest.fn()}
+          onSignIn={jest.fn()}
+        />
+      </SavingsSheetLockContext.Provider>
+    );
+    expect(setLocked).toHaveBeenLastCalledWith(true);
   });
 
   it('hides the buttons while it is completing', () => {

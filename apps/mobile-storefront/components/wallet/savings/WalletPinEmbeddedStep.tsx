@@ -1,10 +1,8 @@
 import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import {
-  SavingsSheetPinCancelContext,
-  SavingsSheetPinHeightContext,
-} from '../SavingsSheetPinCancelContext';
+import { SavingsSheetPinCancelContext } from '../SavingsSheetPinCancelContext';
+import { SavingsSheetPinHeightContext } from '../SavingsSheetPinHeightContext';
 
 type WalletColors = (typeof Colors)['light'];
 

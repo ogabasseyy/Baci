@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { useAuthStore } from '@/stores/auth-store';
 
 export type SavingsNoticeTone = 'success' | 'info' | 'warning';
 
@@ -9,12 +8,6 @@ export type SavingsNotice = {
   tone: SavingsNoticeTone;
   /** The signed-in customer and store it was shown for. */
   scope?: string;
-};
-
-/** The customer and store signed in now, as a notice scope key. */
-export const currentSavingsNoticeScope = () => {
-  const { user, merchantId } = useAuthStore.getState();
-  return `${user?.id ?? ''}:${merchantId ?? ''}`;
 };
 
 /**

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import Colors from '@/constants/Colors';
-import { SavingsSheetPinHeightContext } from '../SavingsSheetPinCancelContext';
+import { SavingsSheetPinHeightContext } from '../SavingsSheetPinHeightContext';
 import { EmbeddedPinStep } from './WalletPinEmbeddedStep';
 
 const mockSnapToPosition = jest.fn();

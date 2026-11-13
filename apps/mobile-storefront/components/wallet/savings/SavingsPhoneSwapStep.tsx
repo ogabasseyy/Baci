@@ -4,6 +4,7 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { useAuthStore } from '@/stores/auth-store';
 import type { Product } from '@/types/product';
+import { useSavingsSheetLock } from '../SavingsSheetLock';
 import type { useSavingsDeviceSwap } from '../use-savings-device-swap';
 import { SavingsPhonePickList } from './SavingsPhonePickList';
 import { SavingsPhoneSwapConfirm } from './SavingsPhoneSwapConfirm';
@@ -39,6 +40,8 @@ export function SavingsPhoneSwapStep({
   const products = swap.savingsDeviceProducts;
   const resolveProduct = swap.resolveProduct;
   const isPending = swap.isChangingSavingsDevice;
+  // The swap is saved once: the sheet stays open until it settles.
+  useSavingsSheetLock(isPending);
   // A pick or loaded preview only counts for the account, store and goal it
   // was made for: switching any of them never carries it over.
   const userId = useAuthStore((state) => state.user?.id ?? '');

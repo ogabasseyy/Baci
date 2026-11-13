@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { useSavingsSheetLock } from '../SavingsSheetLock';
 import { GoalCancelRow } from './GoalCancelRow';
 import { GoalCancelButton } from './GoalCancelStepParts';
 import { goalCancelBreakdown } from './goal-cancel-breakdown';
@@ -43,6 +44,8 @@ export function GoalCancelStep({
 }) {
   const { known, saved, forfeited, refund } = goalCancelBreakdown(goal);
   const empty = saved <= 0 && forfeited <= 0;
+  // A PIN retry can come mid-submit: the sheet stays open until it settles.
+  useSavingsSheetLock(flow.step === 'submitting');
   const done = flow.step === 'done';
   const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
     flow.step

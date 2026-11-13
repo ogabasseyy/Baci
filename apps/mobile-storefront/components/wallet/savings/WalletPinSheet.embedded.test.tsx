@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { fetchWalletPinStatus } from '@/lib/wallet-pin-api';
 import { SavingsSheetContext } from '../SavingsSheetContext';
-import { SavingsSheetPinHeightContext } from '../SavingsSheetPinCancelContext';
+import { SavingsSheetPinHeightContext } from '../SavingsSheetPinHeightContext';
 import { WalletPinSheet } from './WalletPinSheet';
 
 jest.mock('@/lib/wallet-pin-api');

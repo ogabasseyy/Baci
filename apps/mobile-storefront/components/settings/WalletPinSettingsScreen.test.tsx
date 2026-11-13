@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
 import { WalletPinSettingsScreen } from './WalletPinSettingsScreen';
@@ -84,6 +85,15 @@ describe('WalletPinSettingsScreen', () => {
     render(<WalletPinSettingsScreen />);
     expect(screen.getByLabelText('Checking your wallet PIN')).toBeTruthy();
     expect(screen.queryByText('redirect:/settings')).toBeNull();
+  });
+
+  it('never holds the screen while redirecting to sign-in', () => {
+    mockAuth = { isLoading: false, redirectTo: '/auth/login' };
+    jest.mocked(usePreventRemove).mockClear();
+    render(<WalletPinSettingsScreen />);
+    for (const [enabled] of jest.mocked(usePreventRemove).mock.calls) {
+      expect(enabled).toBe(false);
+    }
   });
 
   it('redirects to settings when auth is initialized and the gate is off', () => {

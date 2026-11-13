@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import WalletGoalActionsRoute from '@/app/wallet/savings/goal-actions';
 
 const mockParams = jest.fn();
 const mockAuth = jest.fn();
+const mockWallet = jest.fn();
+jest.mock('@/hooks/use-wallet', () => ({ useWallet: () => mockWallet() }));
 jest.mock('@/hooks/use-auth-guard', () => ({
   useRequireAuth: () => mockAuth(),
 }));
@@ -21,6 +23,10 @@ const GOAL = '0b7d3c52-6f0e-4d1a-9c2b-3e4f5a6b7c8d';
 describe('old goal-actions links', () => {
   beforeEach(() => {
     mockAuth.mockReturnValue({ isLoading: false, redirectTo: null });
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: { wallet: { savings_goals: [{ id: GOAL }] } },
+    });
   });
 
   it('send a signed-out customer to sign in and back to the same goal', () => {
@@ -29,7 +35,7 @@ describe('old goal-actions links', () => {
     render(<WalletGoalActionsRoute />);
     expect(
       screen.getByText(
-        `Redirect:/auth/login?returnTo=${encodeURIComponent(`/wallet?action=savings&savingsGoalId=${GOAL}`)}`
+        `Redirect:/auth/login?returnTo=${encodeURIComponent(`/wallet/savings/goal-actions?goalId=${GOAL}`)}`
       )
     ).toBeOnTheScreen();
   });
@@ -47,6 +53,49 @@ describe('old goal-actions links', () => {
     expect(
       screen.getByText(`Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`)
     ).toBeOnTheScreen();
+  });
+
+  it("open the plain wallet when the goal is no longer the customer's", () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: { wallet: { savings_goals: [{ id: 'another-goal' }] } },
+    });
+    mockParams.mockReturnValue({ goalId: GOAL, kind: 'cancel' });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
+  });
+
+  it('wait for the wallet before deciding', () => {
+    mockWallet.mockReturnValue({ isLoading: true, data: undefined });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+  });
+
+  it('keep the link and offer a retry when the wallet fails to load', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      isError: true,
+      data: undefined,
+      refetch,
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('wait while the wallet read is held after an account switch', () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: undefined,
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
   });
 
   it('open the plain wallet for a malformed goal id', () => {

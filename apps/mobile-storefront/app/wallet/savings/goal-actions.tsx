@@ -10,12 +10,27 @@ import { goalIdParamSchema } from '@/schemas/goal-link';
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
-/** What the link shows before it redirects: a spinner or a retry notice. */
+/** How long the link waits on a silent read before offering a retry. */
+const SLOW_MS = 15_000;
+
+/**
+ * What the link shows before it redirects: a spinner, or a retry notice when
+ * a read failed or has said nothing for SLOW_MS (Try again waits once more;
+ * the wallet read keeps going on its own meanwhile).
+ */
 function GoalLinkShell({ onRetry }: { onRetry?: () => void }) {
+  const [slow, setSlow] = useState(false);
+  // Each quiet spell gets its own timer; Try again starts a new one.
+  useEffect(() => {
+    if (onRetry || slow) return;
+    const timer = setTimeout(() => setSlow(true), SLOW_MS);
+    return () => clearTimeout(timer);
+  }, [onRetry, slow]);
+  const retry = onRetry ?? (slow ? () => setSlow(false) : undefined);
   return (
     <StorefrontScreenShell themeBackground>
-      {onRetry ? (
-        <GoalLinkLoadError onRetry={onRetry} />
+      {retry ? (
+        <GoalLinkLoadError onRetry={retry} />
       ) : (
         <ActivityIndicator
           accessibilityLabel="Opening your savings"

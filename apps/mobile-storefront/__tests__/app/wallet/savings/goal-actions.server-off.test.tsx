@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -156,6 +157,30 @@ describe('old goal-actions links', () => {
     mockParams.mockReturnValue({ goalId: GOAL });
     render(<WalletGoalActionsRoute />);
     expect(screen.queryByText(/Redirect:/)).toBeNull();
+  });
+
+  it('offer a retry when the wallet read stays silent too long', () => {
+    jest.useFakeTimers();
+    try {
+      mockWallet.mockReturnValue({
+        isLoading: false,
+        isError: false,
+        data: undefined,
+      });
+      mockParams.mockReturnValue({ goalId: GOAL });
+      render(<WalletGoalActionsRoute />);
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+      act(() => {
+        jest.advanceTimersByTime(15_000);
+      });
+      expect(
+        screen.getByRole('button', { name: 'Try again' })
+      ).toBeOnTheScreen();
+      fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('open the plain wallet for a malformed goal id', () => {

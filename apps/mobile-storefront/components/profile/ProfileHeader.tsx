@@ -78,7 +78,14 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
           ]}
           onPressIn={() => setIsEditPressed(true)}
           onPressOut={() => setIsEditPressed(false)}
-          onPress={() => router.push('/profile/edit' as Href)}
+          onPress={() => {
+            // Pressability already calls onPressOut on release, cancel and
+            // slide-off; clearing here too means the pill can never come back
+            // dimmed when this screen stays mounted under the pushed route.
+            setIsEditPressed(false);
+            router.push('/profile/edit' as Href);
+          }}
+          onBlur={() => setIsEditPressed(false)}
           accessibilityRole="button"
           accessibilityLabel="Edit profile"
         >
@@ -138,7 +145,11 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
             style={[styles.redeemBtn, isRedeemPressed && { opacity: 0.8 }]}
             onPressIn={() => setIsRedeemPressed(true)}
             onPressOut={() => setIsRedeemPressed(false)}
-            onPress={() => router.push('/wallet' as Href)}
+            onPress={() => {
+              setIsRedeemPressed(false);
+              router.push('/wallet' as Href);
+            }}
+            onBlur={() => setIsRedeemPressed(false)}
             accessibilityRole="button"
             accessibilityLabel="View wallet and redeem points"
           >

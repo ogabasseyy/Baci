@@ -195,7 +195,17 @@ export function CheckoutReviewStep({
             </Pressable>
           ) : null}
         </View>
-        <Text style={[styles.reviewText, { color: colors.textSecondary }]}>
+        {/* Both card gateways read "Pay with Card" (customers never see
+            provider names), so the testID keeps the gateway for screenshots,
+            E2E and support triage without showing or speaking it. */}
+        <Text
+          style={[styles.reviewText, { color: colors.textSecondary }]}
+          testID={
+            selectedPayment && !prizeSimulation
+              ? `review-payment-method-${selectedPayment}`
+              : undefined
+          }
+        >
           {prizeSimulation
             ? 'Quiz prize · no payment required'
             : selectedPayment

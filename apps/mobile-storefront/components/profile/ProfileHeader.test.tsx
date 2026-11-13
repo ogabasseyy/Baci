@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Pressable } from 'react-native';
 import { palette } from '@/constants/Colors';
 import type { Customer } from '@/stores/auth-store';
@@ -96,5 +96,40 @@ describe('ProfileHeader', () => {
       backgroundColor: palette.amber[400],
       flexDirection: 'row',
     });
+  });
+
+  it.each([
+    ['the press ends', 'pressOut'],
+    ['focus leaves the button', 'blur'],
+  ])('clears the pressed look when %s', (_case, endEvent) => {
+    render(<ProfileHeader customer={customer} loyaltyPoints={0} />);
+    const redeem = screen.getByRole('button', {
+      name: 'View wallet and redeem points',
+    });
+    const edit = screen.getByRole('button', { name: 'Edit profile' });
+
+    fireEvent(redeem, 'pressIn');
+    fireEvent(edit, 'pressIn');
+    expect(redeem).toHaveStyle({ opacity: 0.8 });
+    expect(edit).toHaveStyle({ backgroundColor: 'rgba(255,255,255,0.25)' });
+
+    fireEvent(redeem, endEvent);
+    fireEvent(edit, endEvent);
+    expect(redeem).not.toHaveStyle({ opacity: 0.8 });
+    expect(edit).not.toHaveStyle({
+      backgroundColor: 'rgba(255,255,255,0.25)',
+    });
+  });
+
+  it('clears the pressed look when a tap navigates away', () => {
+    render(<ProfileHeader customer={customer} loyaltyPoints={0} />);
+    const redeem = screen.getByRole('button', {
+      name: 'View wallet and redeem points',
+    });
+
+    fireEvent(redeem, 'pressIn');
+    fireEvent.press(redeem);
+
+    expect(redeem).not.toHaveStyle({ opacity: 0.8 });
   });
 });

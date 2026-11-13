@@ -63,6 +63,15 @@ describe('CheckoutReviewStep', () => {
     ).toBeTruthy();
   });
 
+  it('keeps the card gateway in the testID but not in visible or spoken text', () => {
+    render(<CheckoutReviewStep {...commonProps} selectedPayment="korapay" />);
+
+    const payment = screen.getByTestId('review-payment-method-korapay');
+    expect(payment).toHaveTextContent('Pay with Card');
+    expect(payment.props.accessibilityLabel).toBeUndefined();
+    expect(screen.queryByText(/korapay|paystack/i)).toBeNull();
+  });
+
   it('shows the full door-delivery address with an Edit action', () => {
     const onEditAddress = jest.fn();
     render(

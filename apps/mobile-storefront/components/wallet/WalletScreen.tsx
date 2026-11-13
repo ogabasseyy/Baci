@@ -1,5 +1,4 @@
 import { Redirect, router } from 'expo-router';
-import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useWalletBalanceContractWarning } from '@/components/wallet/use-wallet-balance-contract-warning';
 import { useWalletFundingAccountController } from '@/components/wallet/use-wallet-funding-account-controller';
@@ -20,7 +19,6 @@ import { useAuthStore } from '@/stores/auth-store';
 import { createOpenSavingsShortfallFunding } from './open-savings-shortfall-funding';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import { WalletPinSheet } from './savings/WalletPinSheet';
-import { usePinnedSavingsGoal } from './use-pinned-savings-goal';
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
@@ -28,6 +26,7 @@ import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { useWalletSavingsRefs } from './use-wallet-savings-refs';
+import { useWalletSavingsSheetState } from './use-wallet-savings-sheet-state';
 import {
   deriveWalletDisplayData,
   getWalletLoadingMessage,
@@ -100,15 +99,13 @@ export function WalletScreen({
   });
   const [savingsContributionAmount, setSavingsContributionAmount] =
     useWalletSavingsAmount(routeAction, savingsAmount);
-  const [showSavingsProgressModal, setShowSavingsProgressModal] = useState(
-    routeAction === 'savings'
-  );
-  const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
-    useState(false);
-  const goalPin = usePinnedSavingsGoal(
-    showSavingsProgressModal || isAddingSavingsContribution,
-    savingsGoalId
-  );
+  const {
+    goalPin,
+    isAddingSavingsContribution,
+    setIsAddingSavingsContribution,
+    setShowSavingsProgressModal,
+    showSavingsProgressModal,
+  } = useWalletSavingsSheetState(routeAction, savingsGoalId);
   const savingsRefs = useWalletSavingsRefs();
   const hasSavedCards = useWalletSavedCards(customer?.id, activeMerchantId);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;

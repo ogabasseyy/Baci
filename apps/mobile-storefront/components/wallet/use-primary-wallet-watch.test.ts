@@ -12,6 +12,11 @@ import { PRIMARY_CREDIT_POLL_INTERVAL_MS } from './use-primary-wallet-credit-pol
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
+// The unknown-answer retry has its own tests; isolate the credit poll here.
+const mockUnknownRetry = jest.fn();
+jest.mock('./use-primary-wallet-unknown-retry', () => ({
+  usePrimaryWalletUnknownRetry: (input: unknown) => mockUnknownRetry(input),
+}));
 
 const base: WalletData = { balance: 900, loyalty_points: 0 };
 type Props = {
@@ -50,12 +55,40 @@ describe('usePrimaryWalletWatch', () => {
     const { result, rerender, refetch } = setup({ wallet: ready });
     rerender({ wallet: unavailable });
     expect(result.current?.primary_balance_kobo).toBe(500000);
+    // Kept, not fresh: marked so nothing treats it as current.
+    expect(result.current?.primary_stale).toBe(true);
     for (let i = 0; i < 2; i += 1) {
       await act(async () => {
         jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS);
       });
     }
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('never marks a fresh balance as kept', () => {
+    const { result } = setup({ wallet: ready });
+    expect(result.current?.primary_stale).toBeUndefined();
+  });
+
+  it('re-checks on its own only while the PiggyVest answer is unknown', () => {
+    const { rerender } = setup({ wallet: ready });
+    expect(mockUnknownRetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown: false, scopeKey: 'user-a:m1' })
+    );
+    rerender({ wallet: unavailable });
+    expect(mockUnknownRetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown: true, scopeKey: 'user-a:m1' })
+    );
+  });
+
+  it('keeps re-checking while it shows a recalled balance', () => {
+    const { result } = setup({ wallet: { ...ready, primary_stale: true } });
+    expect(result.current?.primary_balance_kobo).toBe(
+      ready.primary_balance_kobo
+    );
+    expect(mockUnknownRetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown: true })
+    );
   });
 
   it('keeps the balance while the wallet has no data at all', () => {

@@ -73,7 +73,8 @@ describe('WalletSavingsProgressModal funding guidance', () => {
       />
     );
 
-    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
+    // Nothing saved yet: no progress card, just the device and funding.
+    expect(screen.queryByText('YOUR PROGRESS')).toBeNull();
     const condition = screen.getByLabelText('Device condition: New');
     expect(StyleSheet.flatten(condition.props.style)).toEqual(
       expect.objectContaining({

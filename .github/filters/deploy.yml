@@ -26,6 +26,8 @@ web:
   - '.github/scripts/sync-cloudflare-vercel-production-env.sh'
   - '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs'
   - '.github/scripts/storefront-release-coherence.mjs'
+  - '.github/scripts/storefront-release-coherence-canary-urls.mjs'
+  - '.github/scripts/storefront-release-coherence-escalation.mjs'
   - '.github/scripts/storefront-release-config.mjs'
   - '.github/scripts/storefront-release-marker.mjs'
   - '.github/scripts/storefront-sitemap-purge.mjs'

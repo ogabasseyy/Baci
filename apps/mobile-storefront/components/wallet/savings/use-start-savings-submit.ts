@@ -3,12 +3,25 @@ import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
+import { useAuthStore } from '@/stores/auth-store';
+import {
+  handOffToWallet,
+  PLAN_ALREADY_CREATED_MESSAGE,
+  SIGN_IN_TO_START_SAVINGS_MESSAGE,
+} from './hand-off-to-wallet';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
+import {
+  PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_SHORT_MESSAGE,
+  primaryHeadStartRefusal,
+  readFreshPrimaryBalanceKobo,
+  wholeNairaHeadStart,
+} from './start-savings-wallet-balance';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 import { validateSavingsInput } from './validate-savings-input';
 
@@ -17,6 +30,18 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  // The signed-in account: none blocks a submit, a mid-submit switch cancels.
+  const authUserId = useAuthStore((state) => state.user?.id);
+  const authUserIdRef = useRef(authUserId);
+  useEffect(() => {
+    authUserIdRef.current = authUserId;
+  }, [authUserId]);
+  // A created plan whose wallet hand-off could not finish, for its account.
+  const pendingHandOffRef = useRef<{
+    goalId: string;
+    userId?: string;
+    contextKey: string;
+  } | null>(null);
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
   const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
@@ -50,6 +75,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
 
   const submitSavingsGoal = async (options?: {
     deferInitialContribution?: boolean;
+    continueInWallet?: boolean;
+    /** Confirm a fresh PiggyVest balance covers the head start first. */
+    confirmPrimaryBalance?: boolean;
   }) => {
     if (submitInFlightRef.current) {
       return;
@@ -61,21 +89,120 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       return;
     }
 
+    if (!authUserIdRef.current) {
+      input.setFormError(SIGN_IN_TO_START_SAVINGS_MESSAGE);
+      return;
+    }
     submitInFlightRef.current = true;
     setIsSubmitting(true);
+    const release = () => {
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
+    };
     const context = contextRef.current;
+    const submittingUserId = authUserIdRef.current;
+    const stillCurrent = () =>
+      context.active && authUserIdRef.current === submittingUserId;
+    // A plan already exists for this account but its head start never moved:
+    // only the unchanged wallet hand-off may continue it. Any edit, a dropped
+    // head start or another funding choice must not create a second plan or
+    // fund that plan with different details.
+    const pending =
+      pendingHandOffRef.current?.userId === submittingUserId
+        ? pendingHandOffRef.current
+        : null;
+    if (
+      pending &&
+      !(options?.continueInWallet && pending.contextKey === context.key)
+    ) {
+      input.setFormError(PLAN_ALREADY_CREATED_MESSAGE);
+      release();
+      return;
+    }
+    if (options?.confirmPrimaryBalance) {
+      const headStartRefusal = primaryHeadStartRefusal(
+        input.effectiveInitialContribution,
+        input.targetValue
+      );
+      if (headStartRefusal) {
+        input.setFormError(headStartRefusal);
+        release();
+        return;
+      }
+      // Inside the guarded lifecycle: no second submit can start, and an
+      // edit to the plan while the balance is read cancels this one.
+      // A thrown read counts as unconfirmed, so the lock is always released.
+      let balanceKobo: number | null = null;
+      try {
+        balanceKobo = await readFreshPrimaryBalanceKobo(input.activeMerchantId);
+      } catch {
+        balanceKobo = null;
+      }
+      // The wallet's Add to savings sheet moves whole naira, rounding the
+      // prefilled amount up: check the amount that will actually move.
+      const headStartKobo =
+        wholeNairaHeadStart(input.effectiveInitialContribution) * 100;
+      const refusal =
+        balanceKobo === null
+          ? PRIMARY_BALANCE_CHECK_FAILED_MESSAGE
+          : balanceKobo < headStartKobo
+            ? PRIMARY_HEAD_START_SHORT_MESSAGE
+            : null;
+      // An edit or a different account during the read drops this one.
+      const current = stillCurrent();
+      if (refusal || !current) {
+        if (refusal && current) input.setFormError(refusal);
+        release();
+        return;
+      }
+    }
+    // The head start moves through PiggyVest from the wallet's Add to
+    // savings sheet, prefilled with the amount the customer chose.
+    const continueInWallet = (goalId: string, amount: number) => {
+      pendingHandOffRef.current = null;
+      router.replace({
+        pathname: '/wallet',
+        params: {
+          action: 'savings',
+          savingsGoalId: goalId,
+          savingsAmount: String(wholeNairaHeadStart(amount)),
+        },
+      });
+    };
+    const onHandOffPending = (goalId: string) => {
+      pendingHandOffRef.current = {
+        goalId,
+        userId: submittingUserId,
+        contextKey: context.key,
+      };
+    };
+    if (pending) {
+      // The plan already exists: retry its hand-off, never create another.
+      await handOffToWallet(
+        {
+          ...input,
+          onContinueInWallet: continueInWallet,
+          onHandOffPending,
+        },
+        pending.goalId,
+        stillCurrent
+      ).finally(release);
+      return;
+    }
     await runSavingsGoalSubmission(
       {
         ...input,
         deferInitialContribution:
           options?.deferInitialContribution ?? input.deferInitialContribution,
+        onContinueInWallet: options?.continueInWallet
+          ? continueInWallet
+          : undefined,
+        onHandOffPending,
+        submittingUserId,
       },
       validation,
-      () => context.active
-    ).finally(() => {
-      submitInFlightRef.current = false;
-      if (mountedRef.current) setIsSubmitting(false);
-    });
+      stillCurrent
+    ).finally(release);
   };
 
   const submitBankTransferContribution = async () => {

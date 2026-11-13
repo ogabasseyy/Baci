@@ -25,16 +25,23 @@ describe('SavingsGoalSummary', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  it('replaces the flat zero state with encouragement and a weekly pace', () => {
+  it('hides the progress card until something is saved, keeping the weekly pace', () => {
     render(<SavingsGoalSummary colors={Colors.dark} goal={goal} />);
-    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
-    expect(screen.getByText('Start with any amount.')).toBeOnTheScreen();
-    expect(screen.getByText('₦0 saved')).toBeOnTheScreen();
-    expect(screen.getByText('₦250,000 target')).toBeOnTheScreen();
+    expect(screen.queryByText('YOUR PROGRESS')).toBeNull();
+    expect(screen.queryByText('₦0 saved')).toBeNull();
+    expect(screen.queryByText('Every naira counts')).toBeNull();
     expect(screen.queryByText(/no image/i)).toBeNull();
+    // Saved-of-target and the weekly pace side by side, read as one.
     expect(
-      screen.getByText(/^Save about ₦62,500 a week to reach this by /)
+      screen.getByLabelText(
+        /^₦0 of ₦250,000 saved\. ₦62,500 a week to finish by /
+      )
     ).toBeOnTheScreen();
+    expect(
+      screen.getByText('₦62,500 a week · until 3 Dec 2026')
+    ).toBeOnTheScreen();
+    expect(screen.getByText('₦0 of ₦250,000')).toBeOnTheScreen();
+    expect(screen.queryByText('SAVING TOWARDS')).toBeNull();
   });
 
   it('uses the compact condition, capacity and colour arrangement', () => {
@@ -56,10 +63,27 @@ describe('SavingsGoalSummary', () => {
     expect(screen.queryByText(/Condition:|Storage:|Color:/)).toBeNull();
   });
 
+  it('shows the progress card once something is saved', () => {
+    render(
+      <SavingsGoalSummary
+        colors={Colors.dark}
+        goal={{ ...goal, current_amount: 400 }}
+      />
+    );
+    expect(screen.getByText('YOUR PROGRESS')).toBeOnTheScreen();
+    expect(screen.getByText('₦400 saved')).toBeOnTheScreen();
+    expect(screen.getByText('₦250,000 target')).toBeOnTheScreen();
+  });
+
   it('lets the saved and target labels shrink inside their row', () => {
-    render(<SavingsGoalSummary colors={Colors.light} goal={goal} />);
+    render(
+      <SavingsGoalSummary
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 400 }}
+      />
+    );
     expect(
-      StyleSheet.flatten(screen.getByText('₦0 saved').props.style)
+      StyleSheet.flatten(screen.getByText('₦400 saved').props.style)
     ).toMatchObject({ flexShrink: 1 });
     expect(
       StyleSheet.flatten(screen.getByText('₦250,000 target').props.style)
@@ -73,7 +97,10 @@ describe('SavingsGoalSummary', () => {
         goal={{ ...goal, maturity_date: '' }}
       />
     );
-    expect(screen.queryByText(/a week to reach this by/)).toBeNull();
+    expect(screen.queryByText(/a week to finish by/)).toBeNull();
+    // No blank gap: with no pace, the zero-saved status shows alone.
+    expect(screen.getByLabelText('₦0 of ₦250,000 saved')).toBeOnTheScreen();
+    expect(screen.queryByText(/\/week|due by/)).toBeNull();
   });
 
   it.each([
@@ -117,6 +144,6 @@ describe('SavingsGoalSummary', () => {
       />
     );
     expect(screen.getByText('Goal reached!')).toBeOnTheScreen();
-    expect(screen.queryByText(/a week to reach this by/)).toBeNull();
+    expect(screen.queryByText(/a week to finish by/)).toBeNull();
   });
 });

@@ -45,7 +45,7 @@ describe('WalletSavingsContributionFlow', () => {
     const props = createProps();
     render(<WalletSavingsContributionFlow {...props} />);
 
-    expect(screen.getByText('Available in wallet: ₦0')).toBeOnTheScreen();
+    expect(screen.getByText('₦0 available in wallet')).toBeOnTheScreen();
     expect(
       screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
@@ -201,7 +201,9 @@ describe('WalletSavingsContributionFlow', () => {
     const props = { ...createProps(), addAmount: '500', walletBalance: 500 };
     render(<WalletSavingsContributionFlow {...props} />);
 
-    expect(screen.getByText(/Move ₦500 from your wallet/i)).toBeOnTheScreen();
+    // The button names the amount; no separate "Move ₦500" sentence.
+    expect(screen.getByText('Add ₦500')).toBeOnTheScreen();
+    expect(screen.queryByText(/Move ₦500 from your wallet/i)).toBeNull();
     expect(
       screen.queryByRole('button', {
         name: 'Continue to payment',

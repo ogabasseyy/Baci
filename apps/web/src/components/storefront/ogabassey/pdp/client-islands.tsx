@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Product } from '@/components/storefront/ogabassey/types';
 import { OgabasseyPdpDeferredDetailIsland } from './deferred-detail-island';
+import { OgabasseyPdpProductViewTracker } from './product-view-tracker.client';
 
 interface OgabasseyPdpBelowFoldIslandProps {
   product: Product;
@@ -16,11 +17,23 @@ export function OgabasseyPdpBelowFoldIsland({
   storeSlug,
 }: OgabasseyPdpBelowFoldIslandProps) {
   return (
-    <OgabasseyPdpDeferredDetailIsland
-      product={product}
-      semanticSections={semanticSections}
-      serverPrimaryDetails={serverPrimaryDetails}
-      storeSlug={storeSlug}
-    />
+    <>
+      {/* A missing numeric price would report a zero-value view; skip it. */}
+      {typeof product.rawPrice === 'number' &&
+      Number.isFinite(product.rawPrice) ? (
+        <OgabasseyPdpProductViewTracker
+          productId={String(product.id)}
+          name={product.name}
+          price={product.rawPrice}
+          category={product.categories?.name || product.category || undefined}
+        />
+      ) : null}
+      <OgabasseyPdpDeferredDetailIsland
+        product={product}
+        semanticSections={semanticSections}
+        serverPrimaryDetails={serverPrimaryDetails}
+        storeSlug={storeSlug}
+      />
+    </>
   );
 }

@@ -11,6 +11,8 @@ import { OxygenProductSummary } from './OxygenProductSummary';
 import { OxygenProviderStages } from './OxygenProviderStages';
 import { OxygenSignIn } from './OxygenSignIn';
 import { OxygenWorkflowError } from './OxygenWorkflowError';
+import { shouldReviewOxygenBooking } from './oxygen-booking-review';
+import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 import type { OxygenProviderFlowProps } from './oxygen-provider-flow-types';
 import { awaitingOxygenConfirmation } from './oxygen-read-recovery';
 import { submitOxygenVerificationForm } from './submit-oxygen-verification-form';
@@ -24,29 +26,8 @@ import { useOxygenResidentialSubmission } from './use-oxygen-residential-submiss
 import { useOxygenSavedUpdates } from './use-oxygen-saved-updates';
 import { useOxygenSelfieHandoff } from './use-oxygen-selfie-handoff';
 
-export function OxygenProviderFlow({
-  orderId,
-  merchantSlug,
-  productAmount,
-  products,
-  currency,
-  prefill,
-  active = true,
-  onProgress,
-}: OxygenProviderFlowProps) {
-  return (
-    <OxygenProviderSession
-      key={orderId}
-      orderId={orderId}
-      merchantSlug={merchantSlug}
-      prefill={prefill}
-      productAmount={productAmount}
-      products={products}
-      currency={currency}
-      active={active}
-      onProgress={onProgress}
-    />
-  );
+export function OxygenProviderFlow(props: OxygenProviderFlowProps) {
+  return <OxygenProviderSession key={props.orderId} {...props} />;
 }
 function OxygenProviderSession({
   orderId,
@@ -85,13 +66,9 @@ function OxygenProviderSession({
   const s = snapshot?.state;
   const [acceptedPlanReference, setAcceptedPlanReference] = useState<string>();
   const acceptance = useOxygenPlanAcceptance();
-  const reviewBookedPlan = Boolean(
-    (snapshot?.stage === 'booked' ||
-      (snapshot?.stage === 'approval_required' &&
-        !snapshot.approvalOtpReady)) &&
-      s?.booking?.status === 'BOOKED' &&
-      s.bookingReference &&
-      acceptedPlanReference !== s.bookingReference
+  const reviewBookedPlan = shouldReviewOxygenBooking(
+    snapshot,
+    acceptedPlanReference
   );
   const [replacingAddress, setReplacingAddress] = useState(false);
   const [comparingPlans, setComparingPlans] = useState(false);
@@ -216,6 +193,12 @@ function OxygenProviderSession({
           workflowId={snapshot.workflowId}
           state={s}
           busy={disabled || acceptance.busy}
+          cancelUnavailablePlan={() => submit({ action: 'cancel_booking' })}
+          refreshOffers={
+            canRefreshSavedOxygenOffers(snapshot)
+              ? () => submit({ action: 'refresh_eligibility' })
+              : undefined
+          }
           onAccept={(reference) => {
             void acceptance
               .accept(snapshot.workflowId, reference, readSaved)

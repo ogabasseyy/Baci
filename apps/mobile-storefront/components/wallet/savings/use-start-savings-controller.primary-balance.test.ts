@@ -39,11 +39,12 @@ jest.mock('./use-savings-plan-funding', () => ({
   useSavingsPlanFunding: () => ({}),
 }));
 
-// The goal-creation request debits the legacy wallet for the initial
-// contribution, so the flow must advertise only the legacy balance.
+// A PiggyVest customer's head start is moved through PiggyVest after the
+// plan exists (the creation call itself can only debit the legacy wallet), so
+// the flow advertises the PiggyVest balance the money will really come from.
 describe('start-savings balance with the PiggyVest wallet ready', () => {
-  it('shows the legacy balance, not the primary one', () => {
+  it('shows the PiggyVest balance, not the empty legacy one', () => {
     const { result } = renderHook(() => useStartSavingsController());
-    expect(result.current.safeWalletBalance).toBe(0);
+    expect(result.current.safeWalletBalance).toBe(5000);
   });
 });

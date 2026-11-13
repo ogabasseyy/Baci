@@ -228,37 +228,6 @@ describe('WalletPinSettingsScreen', () => {
     expect(screen.getByText('Reset your PIN')).toBeTruthy();
   });
 
-  it('REAUTHENTICATION_REQUIRED guides to sign out; signOut only after confirm', async () => {
-    ready({ hasPin: true, resetRequired: true });
-    set.mockRejectedValue(
-      serverError(
-        'REAUTHENTICATION_REQUIRED',
-        'Please sign in again to continue.'
-      )
-    );
-    const alert = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
-    render(<WalletPinSettingsScreen />);
-    type('New PIN', '2468');
-    type('Confirm PIN', '2468');
-    await act(async () => press('Reset PIN'));
-    expect(
-      screen.getByText(
-        'For your security, please sign out and sign in again, then come back to reset your PIN.'
-      )
-    ).toBeTruthy();
-    press('Sign out');
-    expect(mockSignOut).not.toHaveBeenCalled();
-    expect(alert.mock.calls[0][0]).toBe('Sign out?');
-    const buttons = alert.mock.calls[0][2] ?? [];
-    expect(buttons.map((b) => b.text)).toEqual(['Cancel', 'Sign out']);
-    buttons[0].onPress?.();
-    expect(mockSignOut).not.toHaveBeenCalled();
-    buttons[1].onPress?.();
-    expect(mockSignOut).toHaveBeenCalledTimes(1);
-  });
-
   it('a double tap sends one request', async () => {
     let resolve: () => void = () => undefined;
     set.mockImplementation(

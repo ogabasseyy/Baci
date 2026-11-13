@@ -312,3 +312,25 @@ Walk 5/6 lows:
 | Airtime phone field over 11 digits; IMEI arrow back button | #4227 / #4225 | Queued (waits on the owner's "Finish and push" in that session) |
 | #4216 vs #4223 head-start rail conflict | #4216 session | Sent (reconcile so either can merge first) |
 | Change phone replaces a custom goal title with the phone name | owner | Decision |
+
+## Walks 7 and 8 (2026-11-13, mock PiggyVest)
+
+Walk 8 ran on every open head except #4229 and the pay-from-wallet stack's latest round, and included #4216 for the first time. All seven walked items pass:
+- Change phone pace wraps and shows the full amount.
+- BVN border: neutral at rest, ink when focused.
+- The savings sheet opens, stays open, closes on leaving, and reopens on the first step.
+- The cancel PIN line names the goal.
+- A settled plan shows "Purchase requested".
+- A new Start Savings plan is created once and reaches enrolled, with no duplicate.
+- Wallet hero and activity show no provider names.
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| Change phone pace line clipped | #4224 | **Fixed** b85799ac78; walk 8 pass |
+| BVN focus border looked like an error | #4230 | **Fixed** d1abc10183; walk 8 pass |
+| Reopened savings sheet kept the picked amount | #4224 | **Fixed** 99d9243e72 |
+| "About 9 months" next to "10 monthly contributions" | #4223 | Sent |
+| Sign-in placeholder letter-spacing | #4229 | Fixed 32ddbb724c; not yet walked |
+| Airtime >11 digits, IMEI arrow | pay-from-wallet stack | Waits on the owner's "Finish and push" |
+
+Still owed: the live staging transfer test in both directions (business → customer, customer → business). Staging accepts a ₦1 transfer (202) but does not settle it.

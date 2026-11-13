@@ -51,6 +51,21 @@ function HookHarness({
 }
 
 describe('ChatwootInlineCartBridge', () => {
+  it('posts context authorization only to the configured widget origin', async () => {
+    const { target, postMessage } = installFrame();
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
+
+    await act(async () => {
+      await establishWidgetContext(target, postMessage);
+    });
+
+    const authorizationPosts = postMessage.mock.calls.filter(([payload]) =>
+      String(payload).startsWith('baci-commerce-context-authorized:')
+    );
+    expect(authorizationPosts).toHaveLength(1);
+    expect(authorizationPosts[0]?.[1]).toBe(origin);
+  });
+
   it.each([
     ['empty challenge token', true],
     ['empty session token', false],

@@ -105,13 +105,20 @@ export function getSavingsPace({
     const payments = Math.ceil(remaining / contributionAmount);
     const fits = paymentsThatFit(frequency as Frequency, maturityDate, now);
     const reachable = weekly !== null && payments <= fits;
-    if (!weekly || !reachable)
-      return { short: `${amount} ${per}`, label: `${amount} ${per}` };
+    // Labelled, so the line reads on its own under the cheer.
+    const pace = `Your plan: ${amount} ${per}`;
+    if (!weekly) return { short: pace, label: pace };
+    // Behind: this pace cannot reach the end date, so say so calmly
+    // instead of showing a date it cannot meet.
+    if (!reachable) {
+      const behind = `${pace} · add a little more to finish on time`;
+      return { short: behind, label: behind.replace(' · ', ', ') };
+    }
     return {
-      short: `${amount} ${per} · until ${weekly.endsOn}`,
+      short: `${pace} · until ${weekly.endsOn}`,
       // The plan's own pace and end date, not a promise: a plan that is
       // behind needs more. One formatted date for line and spoken label.
-      label: `${amount} ${per} until ${weekly.endsOn}`,
+      label: `${pace} until ${weekly.endsOn}`,
     };
   }
   const weekly = getWeeklySavingsNudge({ maturityDate, now, remaining });

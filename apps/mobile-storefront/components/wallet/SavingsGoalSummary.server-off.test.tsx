@@ -39,11 +39,11 @@ describe('SavingsGoalSummary', () => {
     // Saved-of-target and the plan's own pace side by side, read as one.
     expect(
       screen.getByLabelText(
-        '₦0 of ₦250,000 saved. ₦62,500 a week until 3 Dec 2026'
+        '₦0 of ₦250,000 saved. Your plan: ₦62,500 a week until 3 Dec 2026'
       )
     ).toBeOnTheScreen();
     expect(
-      screen.getByText('₦62,500 a week · until 3 Dec 2026')
+      screen.getByText('Your plan: ₦62,500 a week · until 3 Dec 2026')
     ).toBeOnTheScreen();
     expect(screen.getByText('₦0 of ₦250,000')).toBeOnTheScreen();
     expect(screen.queryByText('SAVING TOWARDS')).toBeNull();
@@ -104,7 +104,7 @@ describe('SavingsGoalSummary', () => {
     );
     expect(screen.queryByText(/until|to finish by/)).toBeNull();
     expect(
-      screen.getByLabelText('₦0 of ₦250,000 saved. ₦500 a week')
+      screen.getByLabelText('₦0 of ₦250,000 saved. Your plan: ₦500 a week')
     ).toBeOnTheScreen();
     expect(screen.queryByText(/\/week|due by/)).toBeNull();
   });
@@ -134,7 +134,7 @@ describe('SavingsGoalSummary', () => {
         />
       );
       expect(
-        screen.getByText('₦2,000 a day · until 10 Mar 2027')
+        screen.getByText('Your plan: ₦2,000 a day · until 10 Mar 2027')
       ).toBeOnTheScreen();
       expect(screen.queryByText(/a week/)).toBeNull();
     });

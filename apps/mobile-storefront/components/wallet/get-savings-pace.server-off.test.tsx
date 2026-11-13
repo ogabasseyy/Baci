@@ -13,9 +13,9 @@ describe('getSavingsPace', () => {
         remaining: 250000,
       })
     ).toEqual({
-      short: '₦2,000 a day · until 17 Mar 2027',
+      short: 'Your plan: ₦2,000 a day · until 17 Mar 2027',
       // The plan's pace and end date, never a promise to finish by then.
-      label: '₦2,000 a day until 17 Mar 2027',
+      label: 'Your plan: ₦2,000 a day until 17 Mar 2027',
     });
   });
 
@@ -31,7 +31,10 @@ describe('getSavingsPace', () => {
         now,
         remaining: 250000,
       })
-    ).toEqual({ short: `₦5,000 ${words}`, label: `₦5,000 ${words}` });
+    ).toEqual({
+      short: `Your plan: ₦5,000 ${words}`,
+      label: `Your plan: ₦5,000 ${words}`,
+    });
   });
 
   it('keeps the plan pace even when less is left (the last payment is smaller)', () => {
@@ -43,7 +46,7 @@ describe('getSavingsPace', () => {
         now,
         remaining: 1500,
       })?.short
-    ).toBe('₦10,000 a week');
+    ).toBe('Your plan: ₦10,000 a week');
   });
 
   it('falls back to the weekly pace from the end date without a plan pace', () => {
@@ -80,7 +83,7 @@ describe('getSavingsPace', () => {
   });
 
   describe('bugfix: the wallet kept an end date the pace could not meet', () => {
-    it('shows the pace alone when the plan is behind schedule', () => {
+    it('says calmly that a behind plan needs a little more, without the date', () => {
       expect(
         getSavingsPace({
           contributionAmount: 2000,
@@ -89,7 +92,10 @@ describe('getSavingsPace', () => {
           now,
           remaining: 250000,
         })
-      ).toEqual({ short: '₦2,000 a day', label: '₦2,000 a day' });
+      ).toEqual({
+        short: 'Your plan: ₦2,000 a day · add a little more to finish on time',
+        label: 'Your plan: ₦2,000 a day, add a little more to finish on time',
+      });
     });
   });
 
@@ -104,7 +110,7 @@ describe('getSavingsPace', () => {
           now,
           remaining: 8000,
         })?.short
-      ).toBe('₦1,000 a day · until 19 Nov 2026');
+      ).toBe('Your plan: ₦1,000 a day · until 19 Nov 2026');
     });
 
     it('drops the date when one more payment is needed than fits', () => {
@@ -116,7 +122,7 @@ describe('getSavingsPace', () => {
           now,
           remaining: 9000,
         })?.short
-      ).toBe('₦1,000 a day');
+      ).toBe('Your plan: ₦1,000 a day · add a little more to finish on time');
     });
   });
 

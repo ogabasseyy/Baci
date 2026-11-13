@@ -171,6 +171,9 @@ export function createImeiWalletPayAdapter(input: {
       // created: keep the key (a start never moves money) and try again.
       const refused = refusal(reply);
       if (refused) return refused;
+      // Another live payment holds this purchase (e.g. the PiggyVest account
+      // changed): it may still settle, so the key stays (Codex P1).
+      if (codeOf(reply) === 'PAYMENT_CONFLICT') return outcome('review');
       return reply.httpStatus >= 500
         ? outcome('not_started')
         : outcome('failed');

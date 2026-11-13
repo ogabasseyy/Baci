@@ -1,14 +1,6 @@
 import 'server-only';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import {
-  getImeiDisabledTierKeys,
-  getImeiHashSalt,
-  getImeiIdentifierEncryptionKey,
-  getPetrockConfig,
-  getPetrockEnabledTierKeys,
-  getSickwApiKey,
-  isPetrockEnabled,
-} from '@/env';
+import { getImeiHashSalt } from '@/env';
 import { createImeiAccessClient } from '@/lib/imei-access';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import {
@@ -21,19 +13,11 @@ import {
   refundWalletPayment,
   walletPayDelivery,
 } from '@/lib/piggyvest/wallet-pay-service';
+import { imeiProviderConfiguration } from '../imei-provider-configuration';
 import { prepareImeiProvider } from '../prepare-imei-provider';
 import type { ImeiLookupRow } from '../route-helpers';
 import { deliverPaidImeiLookup } from './deliver-paid-imei-lookup';
 import type { PayImeiWalletPaymentDeps } from './pay-imei-wallet-payment';
-
-const providerConfiguration = {
-  getImeiDisabledTierKeys,
-  getImeiIdentifierEncryptionKey,
-  getPetrockConfig,
-  getPetrockEnabledTierKeys,
-  getSickwApiKey,
-  isPetrockEnabled,
-};
 
 /** Live wiring for the IMEI wallet-pay route (tests inject their own). */
 export function createPayImeiWalletPaymentDeps(auth: {
@@ -89,7 +73,7 @@ export function createPayImeiWalletPaymentDeps(auth: {
           prepare: (row) =>
             prepareImeiProvider({
               access: supabaseAdmin,
-              configuration: providerConfiguration,
+              configuration: imeiProviderConfiguration,
               clientSupportsAsync: false,
               deviceCategory: row.device_category ?? undefined,
               requestedTier: row.tier,

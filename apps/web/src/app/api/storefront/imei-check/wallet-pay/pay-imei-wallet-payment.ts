@@ -134,17 +134,23 @@ export async function payImeiWalletPayment(
       'PAYMENT_OPERATION_INVALID',
       409
     );
-  const result = await deps.pay({
-    runtime,
-    scope,
-    operationId: body.operationId,
-    pinProof: body.pinProof,
-  });
-  if (result.status !== 'confirmed')
-    return payResponse(result, body.operationId);
   // A finished lookup answers with its own saved result (no new delivery
   // needs the IMEI), even if the IMEI hash salt rotated since (Codex P1).
   const finished = lookup.status !== 'pending';
+  // ...and never takes a new payment: a replacement issued while an older
+  // attempt's refund was being cached is not charged once the lookup has
+  // finished; its saved outcome answers instead (Codex P1).
+  // An empty-proof re-check still reconciles (it never sends money).
+  if (!finished || body.pinProof === '') {
+    const result = await deps.pay({
+      runtime,
+      scope,
+      operationId: body.operationId,
+      pinProof: body.pinProof,
+    });
+    if (result.status !== 'confirmed')
+      return payResponse(result, body.operationId);
+  }
   if (!finished && (!matches || normalizedImei === null)) return mismatch();
   try {
     return await deps.deliver({

@@ -12,7 +12,7 @@ const FAILED_REASONS: Record<WalletPayFailedReason, string> = {
   check_details:
     "We couldn't start this purchase. Check the number and amount, then try again. Nothing was taken from your PiggyVest wallet.",
   price_changed:
-    'The price of this check has changed. Please update the app to see the new price. Nothing was taken from your PiggyVest wallet.',
+    'The price of this check has changed. Close this and start the check again to see the new price. Nothing was taken from your PiggyVest wallet.',
 };
 
 export type WalletPayNoticeTone = 'success' | 'info' | 'warning';

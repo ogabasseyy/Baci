@@ -82,7 +82,11 @@ export async function claimDegradedPage(
   // Held while asking, so a second call in this copy cannot page too.
   lastPagedAt.set(reason, { at: nowMs, viaFallback: false });
   const sharedResult = await shared(reason);
-  const allowed = sharedResult ?? isTopOfHourRun(nowMs);
+  // Without a shared answer, never page within the full claim span of this
+  // copy's last page for the reason, however that page went out.
+  const withinSpan =
+    last !== undefined && nowMs - last.at < SHARED_CLAIM_TTL_MS;
+  const allowed = sharedResult ?? (isTopOfHourRun(nowMs) && !withinSpan);
   // Keep the mark only when this copy paged (noting whether Redis took
   // part). When it did not (another copy holds the claim, or Redis could
   // not be asked outside the window), put back the earlier mark, so the next

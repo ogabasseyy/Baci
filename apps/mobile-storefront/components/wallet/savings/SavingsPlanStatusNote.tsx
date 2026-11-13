@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { usePiggyvestSlowdown } from '@/hooks/use-piggyvest-slowdown';
@@ -99,6 +100,8 @@ function StatusNoteView({
     merchantId,
     onSettled: () => void funding.fetchExistingPlanFunding(),
   });
+  // The customer tapped Try again (not an automatic retry).
+  const [manualRetried, setManualRetried] = useState(false);
   const phase = funding.planFundingPhase;
   const slowdown = usePiggyvestSlowdown();
   const autoRetry = useAutoRetrySetup({
@@ -121,6 +124,7 @@ function StatusNoteView({
     goalId,
     phase,
     failed: setup.error !== null,
+    attempted: setup.attempted,
     setChoice: setup.setChoice,
     submit: setup.submit,
   });
@@ -129,10 +133,14 @@ function StatusNoteView({
   if (!primary || (bvnGate && funding.planFundingRequiresBvn)) return null;
   const rereadingAfterSetup = phase === 'loading' && setup.attempted;
   // A stalled setup is picked up again automatically; the customer sees the
-  // calm "getting ready" card until those tries are used up.
+  // calm "getting ready" card until those tries are used up and the last
+  // one (with its status re-read) has come back still stalled. After the
+  // customer's own Try again, the prompt stays (disabled) while it re-reads.
   if (
-    (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried)) &&
-    autoRetry.exhausted
+    autoRetry.exhausted &&
+    !autoRetry.inFlight &&
+    (phase === 'setup_retryable' ||
+      (rereadingAfterSetup && setup.retried && manualRetried))
   )
     return (
       <SavingsGoalRetryPrompt
@@ -140,7 +148,10 @@ function StatusNoteView({
         goalId={goalId}
         submitting={setup.submitting || phase === 'loading'}
         error={setup.error}
-        onRetry={() => void setup.retry()}
+        onRetry={() => {
+          setManualRetried(true);
+          void setup.retry();
+        }}
       />
     );
   if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))

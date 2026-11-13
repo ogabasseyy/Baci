@@ -78,6 +78,20 @@ describe('claimDegradedPage', () => {
     });
   });
 
+  describe('bugfix: Redis dropping after a shared page paged again early', () => {
+    it('holds the full span when a shared page is followed by a Redis failure', async () => {
+      const ok = vi.fn(async () => true);
+      expect(await claimDegradedPage('transfers', ok, HOUR + 2 * MIN)).toBe(
+        true
+      );
+      // 57 minutes later Redis is down at a top-of-hour run: still held.
+      expect(await claimDegradedPage('transfers', none, 2 * HOUR - MIN)).toBe(
+        false
+      );
+      expect(await claimDegradedPage('transfers', none, 3 * HOUR)).toBe(true);
+    });
+  });
+
   describe('bugfix: two pages minutes apart across an hour boundary', () => {
     it('never pages twice within the hour, whatever the clock hour', async () => {
       const shared = vi.fn(async () => true);

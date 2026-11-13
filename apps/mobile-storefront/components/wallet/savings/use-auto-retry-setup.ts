@@ -49,6 +49,8 @@ export function useAutoRetrySetup({
   }));
   const count = tries.scopeKey === scopeKey ? tries.count : triesFor(scopeKey);
   const exhausted = blocked || count >= AUTO_SETUP_RETRIES;
+  // An automatic retry is running (the last one may still succeed).
+  const [inFlight, setInFlight] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry is a fresh closure each render; the scope and state identify the attempt.
   useEffect(() => {
@@ -66,12 +68,14 @@ export function useAutoRetrySetup({
     };
     // A deduped call (false) or one that threw before sending gives the try
     // back; a real send that failed still counts (its status is re-read).
+    setInFlight(true);
     void retry()
       .then((sent) => {
         if (!sent) giveBack();
       })
-      .catch(giveBack);
+      .catch(giveBack)
+      .finally(() => setInFlight(false));
   }, [active, submitting, exhausted, scopeKey]);
 
-  return { exhausted };
+  return { exhausted, inFlight };
 }

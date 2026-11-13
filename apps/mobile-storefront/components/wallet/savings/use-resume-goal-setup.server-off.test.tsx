@@ -7,7 +7,11 @@ import {
 import { useResumeGoalSetup } from './use-resume-goal-setup';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
-type Props = { phase: SavingsPlanFundingPhase; failed?: boolean };
+type Props = {
+  phase: SavingsPlanFundingPhase;
+  failed?: boolean;
+  attempted?: boolean;
+};
 
 function setup(initial: Props, active = true) {
   const submit = jest.fn(async () => undefined);
@@ -19,6 +23,7 @@ function setup(initial: Props, active = true) {
         goalId: 'goal-1',
         phase: props.phase,
         failed: props.failed ?? false,
+        attempted: props.attempted ?? false,
         setChoice,
         submit,
       }),
@@ -90,6 +95,21 @@ describe('useResumeGoalSetup with PiggyVest off', () => {
       await act(async () => {});
       resetPlanInterestAnswers();
       expect(await loadPlanInterestAnswer('goal-1')).toBeNull();
+    });
+  });
+
+  describe('bugfix: a saved answer loading late raced the customer’s own answer', () => {
+    it('never sends the saved answer once the customer has submitted theirs', async () => {
+      await rememberPlanInterestAnswer('goal-1', true);
+      resetPlanInterestAnswers(); // the app restarted: the answer is on the device
+      const { submit, result } = setup({
+        phase: 'not_started',
+        attempted: true,
+      });
+      await act(async () => {});
+      await act(async () => {});
+      expect(submit).not.toHaveBeenCalled();
+      expect(result.current.resuming).toBe(false);
     });
   });
 });

@@ -52,13 +52,15 @@ const noteElement = () => (
 );
 const renderNote = () => render(noteElement());
 /** Renders a retryable goal and lets both automatic tries finish. */
-const renderExhausted = (change: Record<string, unknown> = {}) => {
+const renderExhausted = async (change: Record<string, unknown> = {}) => {
   const view = renderNote();
   for (let attempt = 0; attempt < 2; attempt += 1) {
     mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     view.rerender(noteElement());
     mockSetupHook.mockReturnValue(setupState(change));
     view.rerender(noteElement());
+    // The automatic try settles.
+    await act(async () => {});
   }
   return view;
 };
@@ -180,16 +182,18 @@ describe('retry of an expired claim', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
-  it('auto-retries twice through the setup hook, never sends a choice, then offers Try again and support', () => {
+  it('auto-retries twice through the setup hook, never sends a choice, then offers Try again and support', async () => {
     status('setup_retryable');
     const view = renderNote();
     expect(retry).toHaveBeenCalledTimes(1);
+    await act(async () => {});
     // A running try ends (submitting flips back), so the second one starts.
     mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     view.rerender(noteElement());
     mockSetupHook.mockReturnValue(setupState());
     view.rerender(noteElement());
     expect(retry).toHaveBeenCalledTimes(2);
+    await act(async () => {});
     mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     view.rerender(noteElement());
     mockSetupHook.mockReturnValue(setupState());
@@ -206,9 +210,10 @@ describe('retry of an expired claim', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
-  it('keeps the action disabled, not hidden, while status is re-read after a retry', () => {
+  it('keeps the action disabled, not hidden, while status is re-read after Try again', async () => {
     status('setup_retryable');
-    const view = renderExhausted();
+    const view = await renderExhausted();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     status('loading');
     mockSetupHook.mockReturnValue(
       setupState({ attempted: true, retried: true })
@@ -217,9 +222,9 @@ describe('retry of an expired claim', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
   });
 
-  it('shows a safe error after the automatic tries are used up', () => {
+  it('shows a safe error after the automatic tries are used up', async () => {
     status('setup_retryable');
-    renderExhausted({ error: "We couldn't confirm this goal's setup." });
+    await renderExhausted({ error: "We couldn't confirm this goal's setup." });
     expect(screen.getByText(/couldn't confirm/)).toBeTruthy();
   });
 
@@ -296,9 +301,9 @@ describe('bugfix: auto-retry ran behind the BVN field', () => {
 });
 
 describe('bugfix: the automatic-retry budget was shared across accounts', () => {
-  it('gives another account on the same goal id its own tries', () => {
+  it('gives another account on the same goal id its own tries', async () => {
     status('setup_retryable');
-    renderExhausted({ retry });
+    await renderExhausted({ retry });
     const calls = retry.mock.calls.length;
     render(
       <SavingsPlanStatusNote
@@ -349,5 +354,40 @@ describe('bugfix: a plan whose first setup start never landed asked the interest
     renderNote();
     await act(async () => {});
     expect(screen.queryByText('Getting your plan ready')).toBeNull();
+  });
+});
+
+describe('bugfix: the final automatic retry showed "couldn’t finish" while still running', () => {
+  it('keeps the calm card while the last automatic retry is in flight', async () => {
+    let finishLast: (sent: boolean) => void = () => undefined;
+    const tries = jest
+      .fn<Promise<boolean>, []>()
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            finishLast = resolve;
+          })
+      );
+    mockSetupHook.mockReturnValue(setupState({ retry: tries }));
+    status('setup_retryable');
+    const view = renderNote();
+    await act(async () => {});
+    // The first try ends, so the second (last) one starts and stays running.
+    mockSetupHook.mockReturnValue(
+      setupState({ retry: tries, submitting: true })
+    );
+    view.rerender(noteElement());
+    mockSetupHook.mockReturnValue(setupState({ retry: tries }));
+    view.rerender(noteElement());
+    await act(async () => {});
+    expect(tries).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/couldn’t finish setting up/)).toBeNull();
+    expect(screen.getByText('Getting your plan ready')).toBeOnTheScreen();
+    // Once it comes back and status still reads stalled, the prompt shows.
+    await act(async () => finishLast(true));
+    expect(
+      screen.getByText('We couldn’t finish setting up your plan')
+    ).toBeOnTheScreen();
   });
 });

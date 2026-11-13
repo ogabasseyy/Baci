@@ -1814,6 +1814,15 @@ BEGIN
      AND (forfeit.state = 'reserved' OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL))
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');
+  -- The reversed interest is no longer forfeited: the cancel's forfeited
+  -- total (shown as interest not refunded, and deducted from Earnings, which
+  -- already net the reversal out of the payout) drops by it, never below
+  -- zero, so neither figure counts the reversed amount.
+  UPDATE piggyvest_primary.goal_cancel_operations AS cancel
+     SET forfeited_interest_kobo = GREATEST(0, cancel.forfeited_interest_kobo - NEW.amount_kobo)
+   WHERE cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
+     AND cancel.state IN ('dispatched', 'confirmed')
+     AND cancel.forfeited_interest_kobo IS NOT NULL;
   RETURN NEW;
 END;
 $$;

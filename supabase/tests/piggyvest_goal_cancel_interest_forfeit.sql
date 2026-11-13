@@ -575,6 +575,7 @@ CREATE FUNCTION pg_temp.gf_receipt(p_payout text, p_net bigint,
 $$;
 DO $late$
 DECLARE
+  v_text text;
   c_goal constant text := 'f3860000-0000-4000-8000-000000000005';
   c_integration constant uuid := 'f3860000-0000-4000-8000-000000000006';
   v_scope jsonb := pg_temp.gc_scope();
@@ -681,9 +682,17 @@ BEGIN
   -- merged plan, so the unsent plan goes to review instead of being shrunk
   -- or released for interest that may still be there.
   BEGIN
+    v_text := (SELECT forfeited_interest_kobo::text FROM piggyvest_primary.goal_cancel_operations
+                WHERE id = v_op::uuid);
     INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
       amount_kobo, provider_evidence_sha256, evidence_reference)
     VALUES (c_integration, 'gf-reversal-1', 'gf-after', 100, repeat('c', 64), 'synthetic-reversal');
+    -- Regression: the reversed amount leaves the cancel's forfeited total
+    -- (it was still shown as forfeited, and Earnings were short by it).
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
+        = v_text::bigint - 100,
+      'a reversed late payout stayed in the forfeited total: was ' || v_text);
     PERFORM pg_temp.gc_assert(
       (SELECT state FROM piggyvest_primary.goal_cancel_interest_forfeits
         WHERE cancel_operation_id = v_op::uuid AND amount_kobo = 300) = 'needs_review'

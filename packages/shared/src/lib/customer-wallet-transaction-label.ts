@@ -8,6 +8,7 @@ import { stripProviderNames } from './strip-provider-names';
  * other description has provider names, "via <provider>" and ids removed.
  */
 const LABEL_BY_SOURCE: Readonly<Record<string, string>> = {
+  wallet_topup: 'Wallet top-up',
   imei_wallet_payment: 'IMEI check',
   imei_wallet_refund: 'IMEI check refund',
   // Stored as "PiggyVest bank transfer" / "PiggyVest card funding".

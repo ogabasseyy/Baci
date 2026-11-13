@@ -13,6 +13,15 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('IMEI check');
   });
 
+  it('labels a wallet top-up even with no description', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: null,
+        sourceType: 'wallet_topup',
+      })
+    ).toBe('Wallet top-up');
+  });
+
   it('labels an IMEI refund without the provider', () => {
     expect(
       customerWalletTransactionLabel({

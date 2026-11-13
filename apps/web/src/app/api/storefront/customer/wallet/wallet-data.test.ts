@@ -64,7 +64,7 @@ describe('fetchCustomerWallet', () => {
       totalRedeemed: 0,
       transactions: [
         {
-          description: 'Transaction',
+          description: 'Wallet top-up',
           id: 'txn-1',
           source_type: 'wallet_topup',
           type: 'credit',

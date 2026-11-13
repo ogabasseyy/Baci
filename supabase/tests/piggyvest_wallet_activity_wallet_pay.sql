@@ -31,10 +31,11 @@ BEGIN
   PERFORM pg_temp.wp_settle(pg_temp.wp_pay_proof(v_imei, 'txn-activity-imei'));
   INSERT INTO piggyvest_primary.wallet_payment_refunds (
     payment_id, integration_id, attempt, state, reference, amount_kobo,
-    source_wallet_id, destination_wallet_id, dispatched_at)
+    source_wallet_id, destination_wallet_id, created_at, dispatched_at)
   VALUES (v_imei::uuid, 'f9a10000-0000-4000-8000-000000000006', 0, 'dispatched',
     'pvb-refund-' || v_imei, 100000, 'synthetic-walletpay-collection',
-    'synthetic-walletpay-main', pg_catalog.clock_timestamp());
+    'synthetic-walletpay-main', pg_catalog.clock_timestamp() - interval '1 hour',
+    pg_catalog.clock_timestamp());
   -- Airtime paid from the wallet: PIN reserved, not yet confirmed.
   INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider,
     phone_number, request_reference, source, metadata, amount, status)
@@ -101,6 +102,11 @@ BEGIN
               WHERE item ->> 'label' <> 'Short Bet · …');
   PERFORM pg_temp.wp_assert(pg_catalog.jsonb_array_length(v_rows) = 3,
     'expected two spends and one refund: ' || COALESCE(v_rows::text, 'none'));
+  -- REGRESSION (Muse): a refund is dated when it was sent, not opened.
+  PERFORM pg_temp.wp_assert((SELECT row.occurred_at = refund.dispatched_at
+      FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      JOIN piggyvest_primary.wallet_payment_refunds AS refund ON refund.id = row.id
+     WHERE row.kind = 'wallet_refund'), 'the refund is not dated when it was sent');
   PERFORM pg_temp.wp_assert(v_rows -> 0 ->> 'kind' = 'wallet_refund'
       AND v_rows -> 0 ->> 'direction' = 'in'
       AND v_rows -> 0 ->> 'label' = 'Refund: IMEI check'

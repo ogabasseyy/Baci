@@ -17,7 +17,7 @@
 -- read from the caller's own vtu_transactions row (same customer and store).
 --
 -- Every row keeps one fixed date, so keyset pages stay stable as rows
--- settle: spends when the PIN reserved the money, refunds when opened, and
+-- settle: spends when the PIN reserved the money, refunds when sent, and
 -- goal returns when dispatched (no longer when settled). Goal titles are
 -- read only from the caller's own goals in this store. A phone or meter
 -- number of four characters or fewer is shown as a bare mask.
@@ -197,7 +197,9 @@ BEGIN
            refund.amount_kobo,
            'Refund: ' || paid.label,
            CASE WHEN refund.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
-           refund.created_at
+           -- Dated when sent (when it first shows), fixed from then on: an
+           -- owed refund sent later never lands behind a page already read.
+           COALESCE(refund.dispatched_at, refund.created_at)
       FROM piggyvest_primary.wallet_payment_refunds AS refund
       JOIN paid ON paid.id = refund.payment_id
      WHERE refund.state IN ('dispatched', 'confirmed', 'needs_review')

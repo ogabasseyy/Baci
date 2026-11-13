@@ -180,6 +180,8 @@ CREATE TABLE piggyvest_primary.goal_cancel_late_interest_contributions (
 );
 CREATE INDEX goal_cancel_late_interest_contributions_cancel_idx
   ON piggyvest_primary.goal_cancel_late_interest_contributions (cancel_operation_id);
+CREATE INDEX goal_cancel_late_interest_contributions_forfeit_idx
+  ON piggyvest_primary.goal_cancel_late_interest_contributions (forfeit_id);
 ALTER TABLE piggyvest_primary.goal_cancel_late_interest_contributions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY goal_cancel_late_interest_contributions_deny
   ON piggyvest_primary.goal_cancel_late_interest_contributions
@@ -716,17 +718,26 @@ BEGIN
      -- Only forfeits that were sent count (a rejection), never one that was
      -- merged away before sending.
      AND prior.dispatched_at IS NOT NULL;
-  IF v_released >= 2 THEN
-    -- The caller of this transition pages; not stamped, so a lost page is
-    -- repeated (a claim or the daily sweep pages until one is acknowledged).
+  -- The third rejection, or a forfeit whose interest was reversed after it
+  -- was marked posting (review_on_settle): no replacement is planned, it
+  -- goes to review. The caller of this transition pages; not stamped, so a
+  -- lost page is repeated (a claim or the daily sweep pages until one is
+  -- acknowledged).
+  IF v_released >= 2 OR v_forfeit.review_on_settle THEN
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits
        SET state = 'needs_review', alerted_at = NULL
      WHERE id = v_forfeit.id;
     RETURN 'needs_review';
   END IF;
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'released' WHERE id = v_forfeit.id;
+  -- The configured wallet, never one aliasing the goal wallet or the
+  -- customer's main wallet; otherwise the last validated destination.
   SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
-   WHERE wallet.integration_id = v_forfeit.integration_id AND wallet.enabled;
+   WHERE wallet.integration_id = v_forfeit.integration_id AND wallet.enabled
+     AND wallet.provider_wallet_id <> v_forfeit.source_wallet_id
+     AND wallet.provider_wallet_id <> (SELECT cancel.destination_wallet_id
+                                         FROM piggyvest_primary.goal_cancel_operations AS cancel
+                                        WHERE cancel.id = v_forfeit.cancel_operation_id);
   SELECT other.* INTO v_other FROM piggyvest_primary.goal_cancel_interest_forfeits AS other
    WHERE other.cancel_operation_id = v_forfeit.cancel_operation_id AND other.state = 'reserved'
      FOR UPDATE;
@@ -1921,14 +1932,25 @@ BEGIN
     -- Whether this payout's own interest is still unsent: the forfeit it was
     -- planned into, unless that plan was since released and replaced (then
     -- any unsent plan of the cancel may carry it).
-    SELECT forfeit.state, forfeit.posted_at IS NULL INTO v_planned_state, v_unsent
+    -- Unsent: planned or claimed but not posted, or in review with no
+    -- provider-proven transfer (for example after every POST was refused).
+    -- Sent: confirmed, provider-proven, or posted and still in flight.
+    SELECT forfeit.state,
+           (forfeit.state = 'reserved'
+            OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL)
+            OR (forfeit.state = 'needs_review' AND forfeit.provider_transaction_id IS NULL))
+      INTO v_planned_state, v_unsent
       FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
      WHERE forfeit.id = v_planned_into;
-    IF (v_planned_state IN ('reserved', 'dispatched', 'needs_review') AND v_unsent)
+    IF (v_planned_state IS DISTINCT FROM 'released' AND v_unsent)
        OR ((v_planned_state IS NULL OR v_planned_state = 'released')
            AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS unsent
-                        WHERE unsent.cancel_operation_id = v_cancel_id AND unsent.posted_at IS NULL
-                          AND unsent.state IN ('reserved', 'dispatched', 'needs_review'))) THEN
+                        WHERE unsent.cancel_operation_id = v_cancel_id
+                          AND (unsent.state = 'reserved'
+                               OR (unsent.state = 'dispatched' AND unsent.posted_at IS NULL)
+                               OR (unsent.state = 'needs_review' AND unsent.provider_transaction_id IS NULL
+                                   AND unsent.destination_wallet_id NOT IN
+                                       ('reversed-after-forfeit', 'interest-wallet-not-configured'))))) THEN
       -- The interest is still (planned to be) in the goal wallet: the
       -- forfeited total drops by the reversal, and the plan in review is
       -- sized by a person.

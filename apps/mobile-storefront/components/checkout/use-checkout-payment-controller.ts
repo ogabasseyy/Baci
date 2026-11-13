@@ -14,6 +14,7 @@ import {
   useMerchantPaymentSettings,
 } from '@/hooks/useMerchantPaymentSettings';
 import { calculateCommerce } from '@/lib/commerce-brain';
+import { isPiggyvestPossibleNow } from '@/lib/is-piggyvest-possible-now';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   getKlumpDisabledReason,
@@ -266,9 +267,13 @@ export function useCheckoutPaymentController({
     total,
     walletBalance,
     walletFundedBankTransferOptionEnabled,
-    // Live re-check at submit: a refresh may land as PiggyVest mid-submit.
+    // Live re-check at submit: a refresh may land as PiggyVest mid-submit,
+    // and the capability is read now, not at render (Codex).
     isWalletFundedBankTransferHeld: () =>
-      isLiveWalletTransferHeld(walletQuery, piggyvestPossible),
+      isLiveWalletTransferHeld(
+        walletQuery,
+        piggyvestPossible || isPiggyvestPossibleNow(merchantId)
+      ),
     walletIsStoreCredit,
     walletSelection,
   };

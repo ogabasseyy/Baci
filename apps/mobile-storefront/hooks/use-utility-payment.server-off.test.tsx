@@ -1,6 +1,10 @@
 import { renderHook } from '@testing-library/react-native';
 import { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { clearPendingVtuKeys } from '@/lib/pending-vtu-idempotency';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 
 const mockUseMerchantPaymentSettings = jest.fn();
 let mockWalletQuery: {
@@ -191,5 +195,46 @@ describe('bugfix: utility bank transfers offered before the wallet owner resolve
     mockCapability = null;
 
     expect(result.current.walletPrimaryUnknown).toBeUndefined();
+  });
+});
+
+describe('bugfix: stale render-time capability at utility submit', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('holds an unresolved owner once the cached ruling-out has expired', () => {
+    // Arrange: rendered as ruled out; by submit no verdict is current.
+    mockCapability = false;
+    const getWalletVerdict = jest.fn(() => ({ walletPrimaryUnknown: true }));
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, owner_unresolved: true } },
+      getWalletVerdict,
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    // Act
+    result.current.getWalletVerdict?.();
+
+    // Assert
+    expect(getWalletVerdict).toHaveBeenCalledWith({ holdUnsettled: true });
+  });
+
+  it("keeps today's funding while the ruling-out is current", () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    const getWalletVerdict = jest.fn(() => ({ walletPrimaryUnknown: false }));
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, owner_unresolved: true } },
+      getWalletVerdict,
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    result.current.getWalletVerdict?.();
+
+    expect(getWalletVerdict).toHaveBeenCalledWith({ holdUnsettled: false });
   });
 });

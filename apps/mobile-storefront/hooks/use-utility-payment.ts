@@ -1,6 +1,7 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { CONFIG } from '@/lib/config';
+import { isPiggyvestPossibleNow } from '@/lib/is-piggyvest-possible-now';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   buildVtuPurchaseDescriptor,
@@ -61,9 +62,8 @@ export function useUtilityPayment() {
   // Rotated only after a definitive HTTP response (success or 4xx).
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
-  const piggyvestPossible = usePiggyvestPossible(
-    useAuthStore((state) => state.merchantId)
-  );
+  const authMerchantId = useAuthStore((state) => state.merchantId);
+  const piggyvestPossible = usePiggyvestPossible(authMerchantId);
   const queryClient = useQueryClient();
   // The bank-transfer funding nudge deep-links into DVA territory, so offer
   // it to any signed-in customer of a merchant with wallet DVAs enabled. No
@@ -83,7 +83,10 @@ export function useUtilityPayment() {
   } = readLiveVerdict
     ? {
         getWalletVerdict: () =>
-          readLiveVerdict({ holdUnsettled: piggyvestPossible }),
+          readLiveVerdict({
+            holdUnsettled:
+              piggyvestPossible || isPiggyvestPossibleNow(authMerchantId),
+          }),
       }
     : {};
   return {

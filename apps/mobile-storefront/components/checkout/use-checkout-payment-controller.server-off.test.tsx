@@ -1,5 +1,16 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 import type { CartItem } from '@/stores/cart-store';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
 
@@ -7,6 +18,7 @@ let mockWallet: Record<string, unknown> | undefined;
 let mockIsRefetching = false;
 let mockIsError = false;
 let mockCapability: boolean | null = null;
+let mockFetchingNow = false;
 let mockLiveVerdict = {
   walletIsStoreCredit: false,
   walletPrimaryUnknown: false,
@@ -30,7 +42,7 @@ jest.mock('@/hooks/use-wallet', () => ({
     getWalletError: () => null,
     getWalletVerdict: () => mockLiveVerdict,
     isError: mockIsError,
-    isFetchingNow: () => false,
+    isFetchingNow: () => mockFetchingNow,
     isRefetching: mockIsRefetching,
   }),
 }));
@@ -235,5 +247,42 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
     const { result } = renderController();
 
     expect(result.current.walletBalance).toBe(2_000);
+  });
+});
+
+describe('bugfix: stale render-time capability at checkout submit', () => {
+  beforeEach(() => {
+    mockWallet = { balance: 0 };
+    mockCapability = false;
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockFetchingNow = false;
+  });
+
+  it('holds the transfer when the ruling-out expired and the wallet is refetching', () => {
+    // Arrange: rendered as ruled out; by submit the cached negative has
+    // expired (no current verdict) and the wallet recheck is in flight.
+    const { result } = renderController();
+    mockFetchingNow = true;
+
+    // Act
+    const held = result.current.isWalletFundedBankTransferHeld();
+
+    // Assert
+    expect(held).toBe(true);
+  });
+
+  it('keeps the transfer while the server ruling-out is still current', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    const { result } = renderController();
+    mockFetchingNow = true;
+
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
   });
 });

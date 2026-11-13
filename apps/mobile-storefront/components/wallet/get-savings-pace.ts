@@ -56,7 +56,8 @@ export function paymentsThatFit(
   const [ty, tm, td] = localDay(now).split('-').map(Number);
   // A schedule day past the end of a shorter month rolls to its last day
   // (31 Jan -> 28 Feb), so an end date on the last day still counts.
-  const lastDayOfEndMonth = new Date(ey, em, 0).getDate();
+  // Calendar arithmetic only, in UTC like daysUntil: no timezone or DST.
+  const lastDayOfEndMonth = new Date(Date.UTC(ey, em, 0)).getUTCDate();
   const shortOfDay = ed < td && ed !== lastDayOfEndMonth;
   const months = (ey - ty) * 12 + (em - tm) - (shortOfDay ? 1 : 0);
   return Math.max(0, months) + 1;

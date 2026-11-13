@@ -157,6 +157,10 @@ export function useImeiWalletPay({
             purchase,
             Crypto.randomUUID
           );
+          // The account may have changed during the awaits above: never send
+          // the new account's token with the old account's key.
+          if (useAuthStore.getState().user?.id !== user.id)
+            return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
           inner = createImeiWalletPayAdapter({
             // The live token on every call: a refresh while the sheet is
             // open must not leave PIN checks and re-checks on an old one.

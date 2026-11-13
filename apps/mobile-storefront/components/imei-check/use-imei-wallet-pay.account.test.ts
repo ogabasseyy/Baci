@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({
@@ -105,6 +106,28 @@ describe('bugfix: signed-out starts shared one saved key (Muse)', () => {
     });
     expect(hook.result.current.sheet.outcome).toEqual({ kind: 'sign_in' });
     expect(imeiWalletPayApi.start).not.toHaveBeenCalled();
+    mockState.user = { id: 'user-a' };
+  });
+});
+
+describe('bugfix: an account switch during the key setup sent a cross-account start (Codex P2)', () => {
+  it('asks to sign in instead of starting when the account changed mid-setup', async () => {
+    const { imeiWalletPayApi } = jest.requireMock(
+      '@/lib/wallet-pay/imei-wallet-pay-api'
+    ) as { imeiWalletPayApi: { start: jest.Mock } };
+    imeiWalletPayApi.start.mockClear();
+    const keyFor = jest
+      .spyOn(walletPayPurchaseKeys, 'keyFor')
+      .mockImplementation(async () => {
+        mockState.user = { id: 'user-b' };
+        return 'key-1';
+      });
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.open('basic', '356938035643809');
+    });
+    expect(imeiWalletPayApi.start).not.toHaveBeenCalled();
+    keyFor.mockRestore();
     mockState.user = { id: 'user-a' };
   });
 });

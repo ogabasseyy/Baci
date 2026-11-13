@@ -27,6 +27,8 @@ export interface InitializeGatewayAndRouteParams {
   selectedPayment: PaymentMethodType;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
+  /** Shows the bank-transfer page's "wallet transfer unavailable" notice. */
+  walletTransferFallback?: boolean;
 }
 
 // Initializes the provider (card gateways and legacy DVA bank transfer)
@@ -42,6 +44,7 @@ export async function initializeGatewayAndRoute({
   selectedPayment,
   setIsProcessing,
   trackingToken,
+  walletTransferFallback = false,
 }: InitializeGatewayAndRouteParams): Promise<void> {
   const isBankTransfer = selectedPayment === 'bank_transfer';
   const gateway = isBankTransfer ? 'paystack' : selectedPayment;
@@ -172,6 +175,7 @@ export async function initializeGatewayAndRoute({
         accountNumber,
         accountName,
         ...(trackingToken && { trackingToken }),
+        ...(walletTransferFallback && { walletTransferFallback: '1' }),
       },
     });
     return;

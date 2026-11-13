@@ -9,6 +9,7 @@ import {
   getDisplayStatusCopy,
   type WalletFundingStatus,
 } from './bank-transfer-view.helpers';
+import { WalletTransferFallbackNotice } from './WalletTransferFallbackNotice';
 
 interface BankTransferViewProps {
   accountName?: string;
@@ -29,6 +30,8 @@ interface BankTransferViewProps {
   orderNumber?: string;
   pollingTimedOut?: boolean;
   remainingAmount?: number;
+  /** The final check switched "Bank transfer to wallet" to this transfer. */
+  walletTransferFallback?: boolean;
   walletFundingStatus?: WalletFundingStatus;
 }
 
@@ -85,6 +88,7 @@ export function BankTransferView({
   orderNumber,
   pollingTimedOut = false,
   remainingAmount,
+  walletTransferFallback = false,
   walletFundingStatus,
 }: BankTransferViewProps) {
   const isWalletFunded = mode === 'wallet_funded';
@@ -130,6 +134,9 @@ export function BankTransferView({
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <View style={styles.content}>
+        {walletTransferFallback ? (
+          <WalletTransferFallbackNotice colors={colors} />
+        ) : null}
         <View
           style={[styles.amountCard, { backgroundColor: BRAND.primaryAlpha06 }]}
         >

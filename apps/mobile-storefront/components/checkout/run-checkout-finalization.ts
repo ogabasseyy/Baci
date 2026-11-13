@@ -127,6 +127,13 @@ export async function runCheckoutFinalization({
   // the server confirms terminal artifact delivery (see
   // useInvoiceGeneratedCapture) — never optimistically here, where the
   // after() generation may still fail.
+  // Read now, not at render (Codex): the wallet may have turned out to be
+  // PiggyVest while the order was being created.
+  const walletTransferChosen =
+    walletFundedBankTransferOptionEnabled &&
+    selectedPayment === 'bank_transfer';
+  const walletTransferHeld =
+    walletTransferChosen && (isWalletFundedBankTransferHeld?.() ?? false);
   // Completion attribution for the fallback emission lanes: if the
   // creation purchase above fails, the fully-paid / wallet-funded paths
   // emit the conversion instead and need identity, breakdown, and
@@ -167,10 +174,8 @@ export async function runCheckoutFinalization({
     setPendingOrder,
     setShowCryptoSelection,
     shouldCreateWalletFundedBankTransferOrder:
-      walletFundedBankTransferOptionEnabled &&
-      selectedPayment === 'bank_transfer' &&
-      // Read now, not at render (Codex): the wallet may have turned out to
-      // be PiggyVest while the order was being created.
-      !(isWalletFundedBankTransferHeld?.() ?? false),
+      walletTransferChosen && !walletTransferHeld,
+    // Tell the customer the order switched to a one-time transfer (Muse).
+    walletTransferFallback: walletTransferHeld,
   });
 }

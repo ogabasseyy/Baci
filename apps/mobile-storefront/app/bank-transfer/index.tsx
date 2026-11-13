@@ -269,6 +269,7 @@ export default function BankTransferScreen() {
           walletFundingPolling.intent
         )}
         walletFundingStatus={walletFundingPolling.intent?.status}
+        walletTransferFallback={params.walletTransferFallback === '1'}
       />
     </>
   );

@@ -30,6 +30,8 @@ interface FinalizeCheckoutPaymentParams {
   setPendingOrder: (value: PendingCryptoOrder | null) => void;
   setShowCryptoSelection: (value: boolean) => void;
   shouldCreateWalletFundedBankTransferOrder: boolean;
+  /** Bank transfer to wallet was chosen but held at Place Order. */
+  walletTransferFallback?: boolean;
 }
 
 export async function finalizeCheckoutPayment({
@@ -48,6 +50,7 @@ export async function finalizeCheckoutPayment({
   setPendingOrder,
   setShowCryptoSelection,
   shouldCreateWalletFundedBankTransferOrder,
+  walletTransferFallback = false,
 }: FinalizeCheckoutPaymentParams) {
   if (selectedPayment === 'uba_redvault')
     throw new OrderError(
@@ -164,6 +167,7 @@ export async function finalizeCheckoutPayment({
       selectedPayment,
       setIsProcessing,
       trackingToken: order.tracking_token,
+      walletTransferFallback,
     });
     isOrderInFlight.current = false;
     runPostOrderSideEffects();

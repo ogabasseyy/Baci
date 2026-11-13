@@ -87,6 +87,13 @@ describe('PIN steps with the server off', () => {
     expect(view.result.current.steps.canGoBack).toBe(false);
   });
 
+  it('does not move on past six digits', () => {
+    const { view, enter } = setup('set');
+    enter('1234567');
+    expect(view.result.current.steps.stage).toBe('new');
+    expect(view.result.current.steps.ready).toBe(false);
+  });
+
   it('does not move on before four digits', () => {
     const { view, enter } = setup('set');
     enter('123');

@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { palette } from '@/constants/Colors';
 import type {
   WalletActiveSavingsGoal,
   WalletSavingsVariantResolutionOption,
@@ -97,7 +96,7 @@ export function SavingsVariantPickStep({
                 styles.row,
                 { borderTopColor: colors.border },
                 selected && {
-                  backgroundColor: palette.red[50],
+                  backgroundColor: colors.primaryLowOpacity,
                   borderRadius: 12,
                   paddingHorizontal: 8,
                 },

@@ -24,6 +24,7 @@ type PinSettings = Pick<
 >;
 
 const MIN_DIGITS = 4;
+const MAX_DIGITS = 6;
 
 const firstStage = (mode: WalletPinMode): WalletPinStage =>
   mode === 'change' ? 'current' : 'new';
@@ -57,7 +58,8 @@ export function useWalletPinSteps(pin: PinSettings) {
       : stage === 'new'
         ? pin.setNewPin
         : pin.setConfirmPin;
-  const ready = value.length >= MIN_DIGITS && !pin.busy;
+  const ready =
+    value.length >= MIN_DIGITS && value.length <= MAX_DIGITS && !pin.busy;
 
   const advance = () => {
     if (!ready) return;

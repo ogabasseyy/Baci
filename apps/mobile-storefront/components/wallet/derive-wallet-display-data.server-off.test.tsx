@@ -40,3 +40,62 @@ describe('wallet display data with the server off', () => {
     expect(data.activeSavingsGoal).toBeNull();
   });
 });
+
+describe('bugfix: unsettled PiggyVest check not passed to the Add money sheet', () => {
+  it('flags a wallet whose PiggyVest check failed or has no owner yet', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 0, primary_unavailable: true })
+        .walletPrimaryUnsettled
+    ).toBe(true);
+    expect(
+      deriveWalletDisplayData({ balance: 0, owner_unresolved: true })
+        .walletPrimaryUnsettled
+    ).toBe(true);
+  });
+
+  it('leaves a plain legacy wallet unflagged', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 0 }).walletPrimaryUnsettled
+    ).toBeUndefined();
+  });
+});
+
+describe('bugfix: pending PiggyVest balance offered to savings contributions', () => {
+  it('gives the savings sheet nothing to spend while the PiggyVest balance is pending', () => {
+    // Arrange: PiggyVest account confirmed, balance not ready; ₦1,200 legacy.
+    const display = deriveWalletDisplayData({
+      balance: 1200,
+      primary_pending: true,
+    });
+
+    // Assert: no contribution from store credit; it stays store credit.
+    expect(display.walletBalance).toBe(0);
+    expect(display.legacyBalance).toBe(1200);
+    expect(display.primaryReady).toBeUndefined();
+    // Savings flows still treat it as PiggyVest: funding opens the PiggyVest
+    // transfer, never a card top-up into store credit.
+    expect(display.savingsPrimary).toBe(true);
+  });
+});
+
+describe('server keeps PiggyVest off: savings rail', () => {
+  it('never marks a legacy wallet as a PiggyVest savings wallet', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 1200 }).savingsPrimary
+    ).toBeUndefined();
+  });
+});
+
+describe('bugfix: account-less pending PiggyVest wallet shown as legacy', () => {
+  it('marks a pending wallet with no funding account as a PiggyVest savings wallet', () => {
+    const display = deriveWalletDisplayData({
+      balance: 1200,
+      funding_account: null,
+      primary_pending: true,
+    });
+
+    expect(display.fundingAccount).toBeNull();
+    expect(display.savingsPrimary).toBe(true);
+    expect(display.legacyBalance).toBe(1200);
+  });
+});

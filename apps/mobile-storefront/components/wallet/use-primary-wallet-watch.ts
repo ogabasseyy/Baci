@@ -1,7 +1,12 @@
 import { useState } from 'react';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import type { WalletData } from '@/hooks/wallet-query';
+import { CONFIG } from '@/lib/config';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
+import { useAuthStore } from '@/stores/auth-store';
 import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
 import { usePrimaryWalletUnknownRetry } from './use-primary-wallet-unknown-retry';
+import { withoutRuledOutPrimary } from './without-ruled-out-primary';
 
 interface PrimaryWalletWatchInput {
   wallet: WalletData | undefined;
@@ -56,11 +61,31 @@ export function usePrimaryWalletWatch({
     scopeKey,
     refetch,
   });
+  // Also poll a PiggyVest account whose balance is still pending (Codex):
+  // its Add money sheet shows the account but has no other credit check,
+  // so a transfer that makes the balance available must refetch.
+  const pendingAccount =
+    wallet?.primary_pending === true &&
+    wallet.funding_account?.provider === 'piggyvest';
   usePrimaryWalletCreditPoll({
     balanceKobo: kobo,
-    enabled: showFundPanel && kobo !== null,
+    enabled: showFundPanel && (kobo !== null || pendingAccount),
     scopeKey,
     refetch,
   });
-  return effective;
+  // Same merchant resolution as the wallet reads.
+  const verdict = usePiggyvestCapabilityNow(
+    pickMerchantId(
+      useAuthStore((state) => state.merchantId),
+      CONFIG.MERCHANT_ID
+    )
+  );
+  // Once ruled out, PiggyVest stays suppressed until a positive verdict
+  // re-confirms it (Codex): the ruling-out expiring to "unknown", or a
+  // failed re-probe, must not bring a stale savings balance back.
+  const [suppressed, setSuppressed] = useState(false);
+  const nextSuppressed =
+    verdict === false ? true : verdict === true ? false : suppressed;
+  if (nextSuppressed !== suppressed) setSuppressed(nextSuppressed);
+  return withoutRuledOutPrimary(effective, nextSuppressed ? false : verdict);
 }

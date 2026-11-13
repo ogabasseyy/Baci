@@ -1,6 +1,7 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { CONFIG } from '@/lib/config';
+import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   buildVtuPurchaseDescriptor,
@@ -11,10 +12,13 @@ import {
   getPendingVtuKey,
   recallPendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
 import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-shortfall';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
+import { usePiggyvestCapabilityNow } from './use-piggyvest-capability-now';
 import { usePiggyvestPossible } from './use-piggyvest-possible';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
@@ -61,9 +65,14 @@ export function useUtilityPayment() {
   // Rotated only after a definitive HTTP response (success or 4xx).
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
-  const piggyvestPossible = usePiggyvestPossible(
-    useAuthStore((state) => state.merchantId)
+  // Resolved once, like the wallet reads (Codex): every verdict hook and
+  // live read follows the same merchant, including the CONFIG fallback.
+  const authMerchantId = pickMerchantId(
+    useAuthStore((state) => state.merchantId),
+    CONFIG.MERCHANT_ID
   );
+  const piggyvestPossible = usePiggyvestPossible(authMerchantId);
+  const verdictNow = usePiggyvestCapabilityNow(authMerchantId);
   const queryClient = useQueryClient();
   // The bank-transfer funding nudge deep-links into DVA territory, so offer
   // it to any signed-in customer of a merchant with wallet DVAs enabled. No
@@ -82,8 +91,25 @@ export function useUtilityPayment() {
     getWalletVerdict?: () => PiggyvestShortfallVerdict;
   } = readLiveVerdict
     ? {
-        getWalletVerdict: () =>
-          readLiveVerdict({ holdUnsettled: piggyvestPossible }),
+        getWalletVerdict: () => {
+          const capabilityNow = readPiggyvestCapabilityNow(authMerchantId);
+          const verdict = readLiveVerdict({
+            holdUnsettled: capabilityNow !== false,
+          });
+          // No authoritative verdict, or PiggyVest confirmed before the
+          // wallet is reclassified (Codex): the wallet kind is unknown.
+          // Ruled out: a stale PiggyVest cache isn't store credit (Codex).
+          if (capabilityNow === false)
+            return {
+              ...verdict,
+              walletIsStoreCredit: false,
+              walletPrimaryUnknown: false,
+            };
+          return capabilityNow === null ||
+            (capabilityNow === true && !verdict.walletIsStoreCredit)
+            ? { ...verdict, walletPrimaryUnknown: true }
+            : verdict;
+        },
       }
     : {};
   return {
@@ -160,14 +186,18 @@ export function useUtilityPayment() {
     walletIsLoading: wallet.isLoading,
     // PiggyVest customers spend store credit (the older wallet balance).
     // Spread so the key stays optional: absent means today's wallet wording.
-    ...(isWalletStoreCredit(wallet.data?.wallet)
+    ...(verdictNow !== false && isStoreCreditPurchaseCopy(wallet.data?.wallet)
       ? { walletIsStoreCredit: true as const }
       : {}),
     // PiggyVest check failed, or a refresh may change the verdict (Codex):
     // hold bank-transfer top-ups until the wallet settles.
-    ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
-    (piggyvestPossible &&
-      (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
+    // A live ruling-out clears every hold, even an unavailable-shaped wallet.
+    ...(verdictNow !== false &&
+    (isWalletPrimaryUnknown(wallet.data?.wallet) ||
+      verdictNow === null ||
+      (verdictNow === true && !isWalletStoreCredit(wallet.data?.wallet)) ||
+      (piggyvestPossible &&
+        (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true)))
       ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

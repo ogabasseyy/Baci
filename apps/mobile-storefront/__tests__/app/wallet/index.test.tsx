@@ -567,7 +567,7 @@ describe('WalletScreen', () => {
     const shellProps = mockStorefrontScreenShell.mock.calls[0]?.[0];
     const walletContentProps = mockWalletContent.mock.calls[0]?.[0];
 
-    expect(shellProps?.edges).toEqual(['bottom']);
+    expect(shellProps?.edges).toEqual(['top', 'bottom']);
     expect(mockGetScrollContentStyle).toHaveBeenCalledWith({
       includeBottomInset: false,
       paddingBottom: SPACING.xl,

@@ -1,3 +1,4 @@
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { CONFIG } from '@/lib/config';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
@@ -22,11 +23,16 @@ export function useCardOnlyPurchaseTopUp(
   // Same merchant resolution as the wallet screen the top-up opens.
   const activeMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
   const capability = usePiggyvestPrimaryCapability(activeMerchantId);
+  const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   return (
-    isWalletStoreCredit(wallet) ||
-    isWalletPrimaryUnknown(wallet) ||
+    // A live ruling-out overrides a stale cached PiggyVest wallet (Codex).
+    (verdictNow !== false &&
+      (isWalletStoreCredit(wallet) || isWalletPrimaryUnknown(wallet))) ||
     // No customer row yet: unclassified where PiggyVest is possible (Codex).
-    (wallet?.owner_unresolved === true && capability !== false) ||
-    isPiggyvestCardOnlyMerchant(activeMerchantId, capability)
+    (wallet?.owner_unresolved === true && verdictNow !== false) ||
+    // Live verdict, not the hook's: a rollback to false lifts the clamp (Codex).
+    isPiggyvestCardOnlyMerchant(activeMerchantId, verdictNow) ||
+    // No verdict yet: same rule as the Add money sheet (Codex).
+    (capability === null && verdictNow === null)
   );
 }

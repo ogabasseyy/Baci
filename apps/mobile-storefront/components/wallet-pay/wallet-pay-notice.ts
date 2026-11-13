@@ -9,6 +9,8 @@ import type {
 const FAILED_REASONS: Record<WalletPayFailedReason, string> = {
   imei_mismatch:
     'This IMEI does not match the check you started. Nothing more was taken.',
+  check_details:
+    "We couldn't start this purchase. Check the number and amount, then try again. Nothing was taken from your PiggyVest wallet.",
 };
 
 export type WalletPayNoticeTone = 'success' | 'info' | 'warning';
@@ -101,7 +103,7 @@ export function walletPayNotice(
       action: 'try_again',
     },
     failed: {
-      title: 'Something went wrong',
+      title: "Payment didn't go through",
       message: 'Nothing was taken from your PiggyVest wallet.',
       tone: 'warning',
       action: null,

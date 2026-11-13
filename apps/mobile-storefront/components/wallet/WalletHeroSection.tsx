@@ -2,11 +2,13 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useLegacyFundingUnconfirmed } from '@/hooks/use-legacy-funding-unconfirmed';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hasSpendableBalance } from '@/lib/has-spendable-balance';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
+import { WalletHeroAddMoneyButton } from './WalletHeroAddMoneyButton';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
 import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
 import { WalletHeroLoyaltyPill } from './WalletHeroLoyaltyPill';
@@ -37,6 +39,8 @@ type WalletHeroSectionProps = {
   savingsBalance: number;
   /** PiggyVest only: the PiggyVest main wallet balance (naira). */
   savingsWalletBalance?: number;
+  /** PiggyVest balance ready (vs pending); defaults to the context. */
+  primaryBalanceReady?: boolean;
   /** PiggyVest only: the legacy balance purchases can spend. */
   storeCreditBalance?: number;
   totalBalance: number;
@@ -66,6 +70,7 @@ export function WalletHeroSection({
   onOpenFundPanel,
   onOpenRedeemPanel,
   onStartSavings,
+  primaryBalanceReady,
   savingsBalance,
   savingsWalletBalance,
   storeCreditBalance,
@@ -75,11 +80,30 @@ export function WalletHeroSection({
   // PiggyVest money (main wallet plus goals) funds savings only: never call
   // it spendable.
   const primaryReady = useWalletPrimaryReady();
+  // The context says "savings wallet" also while the PiggyVest balance is
+  // pending; readiness of the balance itself is separate (Codex), so an
+  // unknown balance shows "—", never an authoritative ₦0.
+  const balanceReady = primaryBalanceReady ?? primaryReady;
+  // A PiggyVest account whose balance isn't ready yet is still a savings
+  // wallet (Codex): its older balance is store credit, not the total.
+  const pendingPiggyvest =
+    (primaryReady && !balanceReady) ||
+    (!primaryReady && fundingAccount?.provider === 'piggyvest');
+  const savingsView = primaryReady || pendingPiggyvest;
+  const storeCredit = storeCreditBalance;
+  // A legacy account number from a wallet cached before the merchant's
+  // PiggyVest status is known stays hidden until it is (Codex).
+  const legacyUnconfirmed = useLegacyFundingUnconfirmed(
+    fundingAccount?.provider
+  );
   // Utility shortcuts appear only when there is money to pay with; legacy
   // wallets always show them, as before.
   const showUtilities =
-    !primaryReady ||
-    hasSpendableBalance({ savingsWalletBalance, storeCreditBalance });
+    !savingsView ||
+    hasSpendableBalance({
+      savingsWalletBalance: pendingPiggyvest ? 0 : savingsWalletBalance,
+      storeCreditBalance: storeCredit,
+    });
   const isDark = useColorScheme() === 'dark';
   return (
     <Animated.View
@@ -97,7 +121,7 @@ export function WalletHeroSection({
       <View style={styles.balanceAndAccountRow}>
         <View style={styles.balanceBlock}>
           <Text style={styles.balanceLabel}>
-            {primaryReady ? 'Total savings · NGN' : 'Total Balance · NGN'}
+            {savingsView ? 'Savings wallet · NGN' : 'Total Balance · NGN'}
           </Text>
           <Text
             style={styles.balanceAmount}
@@ -105,14 +129,26 @@ export function WalletHeroSection({
             adjustsFontSizeToFit
             minimumFontScale={0.55}
           >
-            {formatNgnCurrency(totalBalance)}
+            {pendingPiggyvest
+              ? '—'
+              : formatNgnCurrency(
+                  // One name for the PiggyVest main wallet: the hero shows
+                  // the savings wallet alone; goals are the "In goals" tile.
+                  primaryReady ? (savingsWalletBalance ?? 0) : totalBalance
+                )}
           </Text>
-          {primaryReady ? (
-            <WalletHeroStoreCredit balance={storeCreditBalance} />
-          ) : null}
+          {savingsView ? <WalletHeroStoreCredit balance={storeCredit} /> : null}
         </View>
-        {fundingAccount ? (
-          <WalletHeroFundingAccount account={fundingAccount} />
+        {fundingAccount && legacyUnconfirmed ? (
+          <Text style={styles.accountUnavailableMessage}>
+            Checking your account…
+          </Text>
+        ) : fundingAccount ? (
+          <WalletHeroFundingAccount
+            account={fundingAccount}
+            emphasizeCopied={savingsView}
+            purpose={savingsView ? 'savings' : 'wallet'}
+          />
         ) : (
           <WalletHeroCreateAccount
             canCreate={canCreateFundingAccount}
@@ -123,6 +159,9 @@ export function WalletHeroSection({
           />
         )}
       </View>
+      {savingsView && fundingAccount ? (
+        <WalletHeroAddMoneyButton onPress={onOpenFundPanel} />
+      ) : null}
       {!fundingAccount && createFundingAccountUnavailableMessage ? (
         <Text style={styles.accountUnavailableMessage}>
           {createFundingAccountUnavailableMessage}
@@ -150,7 +189,9 @@ export function WalletHeroSection({
         <View style={styles.balanceSummaryCell}>
           <View style={styles.loyaltyActionRow}>
             <Ionicons name="wallet-outline" size={16} color="#7CA7FF" />
-            <Text style={styles.balanceSummaryLabel}>Savings</Text>
+            <Text style={styles.balanceSummaryLabel}>
+              {savingsView ? 'In goals' : 'Savings'}
+            </Text>
           </View>
           <Text
             style={styles.balanceSummaryValue}
@@ -165,7 +206,12 @@ export function WalletHeroSection({
       {showUtilities ? (
         <WalletQuickUtilities accentColor={utilityAccentColor} />
       ) : null}
-      {fundingAccount && creditWatch ? (
+      {/* The checker reads the store-credit ledger, where PiggyVest
+          transfers never appear: hidden on the PiggyVest path (Codex). */}
+      {fundingAccount &&
+      creditWatch &&
+      !primaryReady &&
+      fundingAccount.provider !== 'piggyvest' ? (
         <WalletCreditCheckPanel
           accentColor="#F8B84C"
           textColor="#FFFFFF"

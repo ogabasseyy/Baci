@@ -109,21 +109,22 @@ export function useWallet(options: UseWalletOptions = {}) {
     staleTime: cachePolicy.staleTime,
     gcTime: cachePolicy.gcTime,
   });
-  useWalletRecheckOnPiggyvest(queryClient, activeMerchantId, walletQueryKey);
-
-  // Real-time sync
-  // 2026 Critical Fix: Prevent channel race condition on rapid mount/unmount
+  useWalletRecheckOnPiggyvest(
+    queryClient,
+    activeMerchantId,
+    walletQueryKey,
+    data?.wallet
+  );
+  // Real-time sync; prevents the channel race on rapid mount/unmount.
   useEffect(() => {
     // Equivalent to the old both-absent guard (the helper returns null
     // exactly then), and narrows the nullable owner for the key below.
     if (!walletOwnerId) return;
-
     // Cleanup any existing channel first (prevent duplicates)
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
-
     let isMounted = true;
     const channelName = `wallet-hook-${customer?.id ?? user?.id}-${Date.now()}`;
     const activeWalletQueryKey = walletKeys.data({

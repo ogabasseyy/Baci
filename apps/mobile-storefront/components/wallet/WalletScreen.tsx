@@ -27,6 +27,7 @@ import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { useWalletSavingsRefs } from './use-wallet-savings-refs';
+import { walletPurchaseProps } from './wallet-purchase-props';
 import {
   deriveWalletDisplayData,
   getWalletLoadingMessage,
@@ -178,7 +179,7 @@ export function WalletScreen({
       setShowFundPanel,
       setShowSavingsProgressModal,
     }),
-    primaryReady: display?.primaryReady ?? false,
+    primaryReady: display?.savingsPrimary ?? false,
     refetchWallet: refetch,
     savingsContributionAmount,
     legacyBalance: display?.legacyBalance,
@@ -194,18 +195,18 @@ export function WalletScreen({
   if (redirectTo) {
     return <Redirect href={redirectTo} />;
   }
-  const loadingMessage = getWalletLoadingMessage({
-    hasMerchantContext,
-    hasWalletData: Boolean(data),
-    isError,
-    isLoading,
-    user,
-  });
   if (!user || !hasMerchantContext || isLoading || !data) {
     return (
       <WalletScreenView
         colors={colors}
-        loadingMessage={loadingMessage}
+        loadingMessage={getWalletLoadingMessage({
+          hasMerchantContext,
+          hasWalletData: Boolean(data),
+          isError,
+          isLoading,
+          user,
+        })}
+        onRetry={refetch}
         presentation={presentation}
       />
     );
@@ -248,7 +249,7 @@ export function WalletScreen({
           loyaltyPoints: data.wallet.loyalty_points,
           needsPhone,
           primaryReady: display?.primaryReady ?? false,
-          storeCreditBalance: display?.legacyBalance,
+          ...walletPurchaseProps(display),
           onAddSavingsContribution: handleAddSavingsContribution,
           ...createSavingsGoalContentHandlers({
             activeMerchantId,

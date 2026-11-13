@@ -102,6 +102,17 @@ describe('usePrimaryWalletCreditPoll', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('bugfix: announces the first balance on a pending account opened with none', () => {
+    // Arrange: the sheet opened on a pending PiggyVest account (no balance).
+    const { rerender } = setup({ ...open, balanceKobo: null });
+
+    // Act: a transfer makes the balance available.
+    rerender({ ...open, balanceKobo: 5000 });
+
+    // Assert
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('does not alert when the balance falls or stays the same', () => {
     const { rerender } = setup(open);
     rerender({ ...open, balanceKobo: 5000 });

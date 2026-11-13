@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 
 export const imeiCheckScreenActions = {
@@ -13,11 +14,20 @@ export const imeiCheckScreenActions = {
           : 'Please enter a valid IMEI or serial number.'
     );
   },
-  fundWallet(amount: number, storeCredit = false) {
+  fundWallet(
+    amount: number,
+    storeCredit = false,
+    merchantId: string | null | undefined = undefined
+  ) {
     // A store credit top-up is card-only, so a real shortfall is never
     // prefilled below the card minimum (the form would refuse it); an
     // unknown one (0) stays unfilled. Other customers keep today's prefill.
-    const requiredAmount = storeCredit
+    // Re-read at navigation (Codex): the PiggyVest verdict may have turned
+    // positive (or unknown) while the check request was in flight, and the
+    // wallet sheet classifies this return by the verdict it sees now.
+    const storeCreditNow =
+      storeCredit || readPiggyvestCapabilityNow(merchantId) !== false;
+    const requiredAmount = storeCreditNow
       ? amount > 0
         ? Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(amount))
         : 0

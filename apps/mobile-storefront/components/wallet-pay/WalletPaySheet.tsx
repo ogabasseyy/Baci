@@ -166,7 +166,7 @@ export function WalletPaySheet<Result>({
               colors={colors}
               label={amount ? `Pay ${amount}` : 'Pay'}
               busy={sheet.busy}
-              ready={sheet.pin.length >= 4}
+              ready={/^[0-9]{4,6}$/.test(sheet.pin)}
               onPress={() => void sheet.submit()}
             />
             <View style={styles.footer}>

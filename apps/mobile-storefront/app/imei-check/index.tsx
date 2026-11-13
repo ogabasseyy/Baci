@@ -8,6 +8,8 @@ import { router } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { Keyboard, View } from 'react-native';
+import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
+import { chooseImeiPaymentRail } from '@/components/imei-check/choose-imei-payment-rail';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
 import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
 import HeroCard from '@/components/imei-check/imei-check-hero-card';
@@ -28,6 +30,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { WalletPaySheet } from '@/components/wallet-pay/WalletPaySheet';
 import Colors, { SPACING } from '@/constants/Colors';
 import { useCardOnlyPurchaseTopUp } from '@/hooks/use-card-only-purchase-top-up';
+import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
 import { createLogger } from '@/lib/logger';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
@@ -36,7 +39,6 @@ import {
   type ImeiResult,
   parseApiResponse,
 } from '@/lib/validation';
-import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 
 const log = createLogger('ImeiChecker');
@@ -91,15 +93,13 @@ export default function ImeiCheckerScreen() {
   });
 
   // Checks spend the older balance: store credit for PiggyVest customers.
-  const walletBalance = walletQuery.data?.wallet.balance ?? 0;
-  const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
+  const wallet = walletQuery.data?.wallet;
+  const walletBalance = wallet?.balance ?? 0;
+  const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, wallet);
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
-  const cardOnlyTopUp = useCardOnlyPurchaseTopUp(
-    merchantId,
-    walletQuery.data?.wallet
-  );
+  const cardOnlyTopUp = useCardOnlyPurchaseTopUp(merchantId, wallet);
   const fundWallet = (amount: number) =>
-    imeiCheckScreenActions.fundWallet(amount, cardOnlyTopUp);
+    imeiCheckScreenActions.fundWallet(amount, cardOnlyTopUp, merchantId);
 
   const clearIdempotencyKey = () => requestIdentity.clear();
 
@@ -139,11 +139,15 @@ export default function ImeiCheckerScreen() {
       setError(walletCopy.unavailable);
       return;
     }
-    if (walletPay.covers(tier)) return void walletPay.open(tier, imei);
-    if (walletBalance < serviceTier.price) {
-      fundWallet(serviceTier.price - walletBalance);
-      return;
-    }
+    const rail = chooseImeiPaymentRail({
+      retainedStoreCredit: requestIdentity.retains(tier, imei),
+      piggyvestCovers: walletPay.covers(tier),
+      walletBalance,
+      price: serviceTier.price,
+    });
+    if (rail === 'piggyvest') return void walletPay.open(tier, imei);
+    if (rail === 'top_up')
+      return void fundWallet(serviceTier.price - walletBalance);
 
     setIsLoading(true);
     setError(null);
@@ -171,23 +175,13 @@ export default function ImeiCheckerScreen() {
           walletBalance,
         });
 
-        if (outcome.shouldClearIdempotencyKey) {
-          clearIdempotencyKey();
-        }
-        if (outcome.shouldRedirectToLogin) {
-          router.push('/auth/login?returnTo=/imei-check');
-          return;
-        }
-        if (outcome.topUpAmount !== null) {
-          fundWallet(outcome.topUpAmount);
-          return;
-        }
-        if (outcome.shouldRefetchWallet) {
-          await walletQuery.refetch?.();
-        }
-        if (outcome.errorMessage) {
-          setError(outcome.errorMessage);
-        }
+        await applyImeiCheckFailure(outcome, {
+          clearKey: clearIdempotencyKey,
+          signIn: () => router.push('/auth/login?returnTo=/imei-check'),
+          topUp: fundWallet,
+          refetchWallet: () => walletQuery.refetch?.(),
+          showError: setError,
+        });
         return;
       }
 

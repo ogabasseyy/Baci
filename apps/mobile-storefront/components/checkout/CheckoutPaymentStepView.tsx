@@ -16,6 +16,9 @@ import { RedvaultPaymentChoice } from '@/components/checkout/redvault/RedvaultPa
 import type Colors from '@/constants/Colors';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
 
+export const WALLET_TRANSFER_CHECKING_COPY =
+  'Checking whether bank transfer to wallet is available…';
+
 type ColorsScheme = (typeof Colors)['light'];
 
 interface CheckoutPaymentStepViewProps {
@@ -41,6 +44,8 @@ interface CheckoutPaymentStepViewProps {
   total: number;
   walletBalance: number;
   walletFundedBankTransferOptionEnabled: boolean;
+  /** Ogabassey pilot, verdict unknown: say it's being checked. */
+  walletFundedBankTransferChecking?: boolean;
   walletIsStoreCredit?: boolean;
   walletSelection: PaymentMethodSelectorProps['walletSelection'];
 }
@@ -68,6 +73,7 @@ export function CheckoutPaymentStepView({
   total,
   walletBalance,
   walletFundedBankTransferOptionEnabled,
+  walletFundedBankTransferChecking = false,
   walletIsStoreCredit,
   walletSelection,
 }: CheckoutPaymentStepViewProps) {
@@ -150,7 +156,9 @@ export function CheckoutPaymentStepView({
                 bank_transfer:
                   'A permanent account number will be created for you which you can use for future purchases. We apply it to this order automatically.',
               }
-            : undefined
+            : walletFundedBankTransferChecking
+              ? { bank_transfer: WALLET_TRANSFER_CHECKING_COPY }
+              : undefined
         }
         paymentScrollRef={scrollRef}
         paymentScrollOffsetRef={scrollOffsetRef}

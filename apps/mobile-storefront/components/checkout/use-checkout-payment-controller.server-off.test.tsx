@@ -1,12 +1,36 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { renderHook } from '@testing-library/react-native';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
+import { act, renderHook } from '@testing-library/react-native';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 import type { CartItem } from '@/stores/cart-store';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
+
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
 
 let mockWallet: Record<string, unknown> | undefined;
 let mockIsRefetching = false;
 let mockIsError = false;
 let mockCapability: boolean | null = null;
+let mockFetchingNow = false;
 let mockLiveVerdict = {
   walletIsStoreCredit: false,
   walletPrimaryUnknown: false,
@@ -30,7 +54,7 @@ jest.mock('@/hooks/use-wallet', () => ({
     getWalletError: () => null,
     getWalletVerdict: () => mockLiveVerdict,
     isError: mockIsError,
-    isFetchingNow: () => false,
+    isFetchingNow: () => mockFetchingNow,
     isRefetching: mockIsRefetching,
   }),
 }));
@@ -67,7 +91,7 @@ const items: CartItem[] = [
   },
 ];
 
-function renderController() {
+function renderController(merchantId = 'merchant-1') {
   return renderHook(() =>
     useCheckoutPaymentController({
       assuranceFee: 0,
@@ -76,7 +100,7 @@ function renderController() {
       deliveryFee: 0,
       isAuthenticated: true,
       items,
-      merchantId: 'merchant-1',
+      merchantId,
       merchantSlug: 'ogabassey',
       step: 'payment',
       subtotal: 500_000,
@@ -87,6 +111,12 @@ function renderController() {
 describe('checkout wallet with the server keeping PiggyVest off', () => {
   beforeEach(() => {
     mockWallet = undefined;
+    mockCapability = false;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
   });
 
   it('keeps the wallet wording and bank transfer to wallet as today', () => {
@@ -106,6 +136,11 @@ describe('checkout wallet with the server keeping PiggyVest off', () => {
 describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
   beforeEach(() => {
     mockWallet = undefined;
+    // PiggyVest confirmed for the merchant: the wallet decides the rest.
+    observePiggyvestPrimaryCapability('merchant-1', true);
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
   });
 
   it('shows ₦0 store credit and the direct bank transfer for ₦5,000 PiggyVest, ₦0 legacy', () => {
@@ -153,6 +188,7 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
   it('keeps bank transfer to wallet through a refresh where the server rules PiggyVest out', () => {
     // Arrange: non-PiggyVest merchant, cached legacy wallet, failing refresh.
     mockCapability = false;
+    observePiggyvestPrimaryCapability('merchant-1', false);
     mockWallet = { balance: 0 };
     mockIsRefetching = true;
     mockIsError = true;
@@ -185,7 +221,9 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
 
     const { result } = renderController();
 
-    expect(result.current.walletIsStoreCredit).toBe(false);
+    // Confirmed PiggyVest, balance pending: labelled store credit (Codex),
+    // and bank transfer to wallet stays held.
+    expect(result.current.walletIsStoreCredit).toBe(true);
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
   });
 
@@ -199,14 +237,17 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
 
   it('exposes a live re-check that holds once the wallet turns PiggyVest', () => {
     // Arrange: legacy at render; the cache now reads PiggyVest store credit.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
     mockWallet = { balance: 0 };
     mockLiveVerdict = {
       walletIsStoreCredit: true,
       walletPrimaryUnknown: false,
     };
 
-    // Act
+    // Act: PiggyVest turns on before Place Order.
     const { result } = renderController();
+    observePiggyvestPrimaryCapability('merchant-1', true);
     const held = result.current.isWalletFundedBankTransferHeld();
     mockLiveVerdict = {
       walletIsStoreCredit: false,
@@ -235,5 +276,249 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
     const { result } = renderController();
 
     expect(result.current.walletBalance).toBe(2_000);
+  });
+});
+
+describe('bugfix: stale render-time capability at checkout submit', () => {
+  beforeEach(() => {
+    mockWallet = { balance: 0 };
+    mockCapability = false;
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockFetchingNow = false;
+  });
+
+  it('holds the transfer when the ruling-out expired and the wallet is refetching', () => {
+    // Arrange: rendered as ruled out; by submit the cached negative has
+    // expired (no current verdict) and the wallet recheck is in flight.
+    const { result } = renderController();
+    mockFetchingNow = true;
+
+    // Act
+    const held = result.current.isWalletFundedBankTransferHeld();
+
+    // Assert
+    expect(held).toBe(true);
+  });
+
+  it('keeps the transfer while the server ruling-out is still current', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    const { result } = renderController();
+    mockFetchingNow = true;
+
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
+  });
+
+  it('bugfix: holds at finalize when PiggyVest turns on mid-submit after a ruled-out render', () => {
+    // Arrange: rendered while ruled out; the submit's callback is captured.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    const { result } = renderController();
+    const heldAtFinalize = result.current.isWalletFundedBankTransferHeld;
+
+    // Act: PiggyVest turns on while order creation is pending (no re-render).
+    observePiggyvestPrimaryCapability('merchant-1', true);
+
+    // Assert: the captured callback reads the live verdict, not the render's.
+    expect(heldAtFinalize()).toBe(true);
+  });
+
+  it('bugfix: holds when the ruling-out expired before the wallet refetch starts', () => {
+    // Arrange: rendered as ruled out; the cached negative has expired, but
+    // nothing has refetched yet and the cached wallet is still legacy.
+    const { result } = renderController();
+    mockFetchingNow = false;
+
+    // Act + Assert
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: restored legacy wallet trusted before the PiggyVest verdict', () => {
+  beforeEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+  });
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('holds bank transfer to wallet until the merchant verdict is known', () => {
+    // Arrange: cold start; a fresh legacy wallet is restored from the
+    // persisted cache and the capability probe has not answered yet.
+    mockCapability = null;
+    mockWallet = { balance: 0 };
+
+    // Act
+    const { result } = renderController();
+
+    // Assert
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: positive verdict before the wallet is reclassified', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('holds at submit when PiggyVest turned on but the wallet is still legacy', () => {
+    // Arrange: rendered as ruled out with a legacy wallet.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+    const { result } = renderController();
+
+    // Act: the verdict turns positive before the recheck starts.
+    observePiggyvestPrimaryCapability('merchant-1', true);
+
+    // Assert
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: chosen wallet transfer dropped without the fallback notice', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('keeps the choice and holds at Place Order once it stops being eligible', () => {
+    // Arrange: merchant ruled out, legacy wallet: wallet transfer eligible.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+    const { result, rerender } = renderController();
+    act(() => {
+      result.current.setSelectedPayment('bank_transfer');
+    });
+
+    // Act: PiggyVest turns on and the wallet reloads as PiggyVest.
+    act(() => {
+      observePiggyvestPrimaryCapability('merchant-1', true);
+    });
+    mockWallet = { balance: 0, primary_balance_kobo: 0 };
+    rerender({});
+
+    // Assert: still the chosen option; the submit hold falls back (notice).
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: stale PiggyVest wallet hides bank transfer to wallet after a rollback', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('offers bank transfer to wallet again once PiggyVest is rolled back', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0, primary_balance_kobo: 500_000 };
+
+    const { result } = renderController();
+
+    expect(result.current.walletIsStoreCredit).toBe(false);
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+  });
+});
+
+describe('bugfix: rollback plus failed reload kept bank transfer to wallet hidden', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockIsError = false;
+    mockWallet = undefined;
+  });
+
+  it('offers it again once ruled out, even while the reload errored', () => {
+    // Arrange: the hook still says "possible"; the live verdict is a
+    // ruling-out; the rollback reload failed over a legacy cache.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockWallet = { balance: 0 };
+    mockIsError = true;
+
+    const { result } = renderController();
+
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+  });
+});
+
+describe('bugfix: tab switch kept a stale captured transfer mode', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('drops the captured mode when switching tabs clears the selection', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    const { result } = renderController();
+    act(() => {
+      result.current.setSelectedPayment('bank_transfer');
+    });
+
+    // Act: switch away (clears the selection), then come back.
+    act(() => {
+      result.current.handleSelectPaymentTab('installments' as never);
+    });
+
+    // Assert: no captured choice survives the switch.
+    expect(result.current.selectedPayment).toBeNull();
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+  });
+});
+
+describe('owner decision 2026-11-13: PiggyVest holds apply only to the Ogabassey pilot', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('keeps bank transfer to wallet for any other merchant while the verdict is unknown', () => {
+    // Arrange: a non-pilot merchant, no verdict yet, legacy wallet.
+    mockCapability = null;
+    mockWallet = { balance: 0 };
+
+    // Act
+    const { result } = renderController('merchant-2');
+
+    // Assert: today's behaviour, no hold, no "Checking…".
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+    expect(result.current.walletFundedBankTransferChecking).toBe(false);
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
+  });
+
+  it('holds and says "Checking…" for the pilot while its verdict is unknown', () => {
+    mockCapability = null;
+    mockWallet = { balance: 0 };
+
+    const { result } = renderController('merchant-1');
+
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+    expect(result.current.walletFundedBankTransferChecking).toBe(true);
   });
 });

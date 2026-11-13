@@ -6,6 +6,7 @@ import type {
   PaymentTab,
 } from '@/components/checkout/PaymentMethodSelector';
 import { useCheckoutSavings } from '@/hooks/use-checkout-savings';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { usePiggyvestPossible } from '@/hooks/use-piggyvest-possible';
 import { useWallet } from '@/hooks/use-wallet';
 import {
@@ -14,19 +15,20 @@ import {
   useMerchantPaymentSettings,
 } from '@/hooks/useMerchantPaymentSettings';
 import { calculateCommerce } from '@/lib/commerce-brain';
+import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   getKlumpDisabledReason,
   shouldHideKlumpPaymentMethod,
 } from '@/lib/klump-checkout';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
-import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
-import { isLiveWalletTransferHeld } from './is-live-wallet-transfer-held';
 import { useRedvaultAvailability } from './use-redvault-availability';
+import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
 
@@ -105,30 +107,33 @@ export function useCheckoutPaymentController({
   const walletQuery = useWallet();
   // Orders spend the older balance: store credit for PiggyVest customers.
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
-  const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
   const piggyvestPossible = usePiggyvestPossible(merchantId);
+  const verdictNow = usePiggyvestCapabilityNow(merchantId);
+  // A live ruling-out overrides a stale cached PiggyVest wallet (Codex).
+  const walletIsStoreCredit =
+    verdictNow !== false && isStoreCreditPurchaseCopy(walletQuery.data?.wallet);
 
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);
     if (selectedPayment && getPaymentTabForMethod(selectedPayment) !== tab) {
-      setSelectedPaymentState(null);
+      transferMode.clearSelection();
     }
   };
 
+  const transferMode = useTransferModeAtSelection(setSelectedPaymentState);
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
+    transferMode.capture(method, walletFundedBankTransferOptionEnabled);
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));
   };
 
   const resetPaymentSelection = () => {
-    setSelectedPaymentState(null);
+    transferMode.clearSelection();
     setPaymentTab(null);
   };
 
-  // Render-phase adjustment (react.dev "adjusting state when a prop
-  // changes"): every branch converges, so React settles on a valid
-  // payment selection before commit instead of flashing a stale frame
-  // through an effect.
+  // Render-phase adjustment (react.dev): every branch converges, so React
+  // settles on a valid payment selection before commit.
   const currentTabMethods = availablePaymentMethods.filter(
     (method) => paymentTab && getPaymentTabForMethod(method) === paymentTab
   );
@@ -137,9 +142,9 @@ export function useCheckoutPaymentController({
     selectedPayment !== 'uba_redvault' &&
     !availablePaymentMethods.includes(selectedPayment)
   ) {
-    setSelectedPaymentState(null);
+    transferMode.clearSelection();
   } else if (selectedPayment === 'uba_redvault' && !redvaultAvailable) {
-    setSelectedPaymentState(null);
+    transferMode.clearSelection();
   } else if (
     selectedPayment &&
     paymentTab !== getPaymentTabForMethod(selectedPayment)
@@ -189,13 +194,14 @@ export function useCheckoutPaymentController({
       walletBalance,
       walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
-      // Where PiggyVest is possible, not loaded, refreshing or a failed
-      // refresh (stale data) counts as unknown (Codex): a PiggyVest customer
-      // must never pick this before the wallet says which kind it is.
-      // Merchants the server rules out keep today's behaviour (Muse).
+      // Unknown/positive verdict or unsettled wallet holds; ruled out = today.
       walletPrimaryUnknown:
-        isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
-        (piggyvestPossible &&
+        (verdictNow !== false &&
+          isWalletPrimaryUnknown(walletQuery.data?.wallet)) ||
+        verdictNow === null ||
+        (verdictNow === true && !walletIsStoreCredit) ||
+        (verdictNow !== false &&
+          piggyvestPossible &&
           (!walletQuery.data?.wallet ||
             walletQuery.data.wallet.owner_unresolved === true ||
             walletQuery.isRefetching ||
@@ -265,10 +271,19 @@ export function useCheckoutPaymentController({
     setWalletSelection,
     total,
     walletBalance,
-    walletFundedBankTransferOptionEnabled,
-    // Live re-check at submit: a refresh may land as PiggyVest mid-submit.
-    isWalletFundedBankTransferHeld: () =>
-      isLiveWalletTransferHeld(walletQuery, piggyvestPossible),
+    walletFundedBankTransferOptionEnabled: transferMode.effective(
+      walletFundedBankTransferOptionEnabled
+    ),
+    // Unknown verdict (Ogabassey pilot only): show "Checking…", not a gap.
+    walletFundedBankTransferChecking: verdictNow === null,
+    // Live re-check at submit: verdict and wallet read now, not at render.
+    isWalletFundedBankTransferHeld: () => {
+      // Chosen earlier but no longer eligible: fall back with the notice.
+      if (!walletFundedBankTransferOptionEnabled) return true;
+      // The live verdict alone decides (Muse): unknown or PiggyVest holds,
+      // never a wallet-funded transfer; a loading or failed refresh doesn't.
+      return readPiggyvestCapabilityNow(merchantId) !== false;
+    },
     walletIsStoreCredit,
     walletSelection,
   };

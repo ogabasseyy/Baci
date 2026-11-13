@@ -71,10 +71,11 @@ beforeEach(() => {
 
 describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
   it('sends a forfeit nobody polled for and settles it', async () => {
-    db([{ operationId: opA, state: 'reserved', alert: false }], {
-      status: 'claimed',
-      forfeit,
-    });
+    db(
+      [{ operationId: opA, state: 'reserved', alert: false }],
+      { status: 'claimed', forfeit },
+      'posting'
+    );
     expect(await sweepPendingGoalCancelForfeits(input(true))).toEqual({
       listed: 1,
       confirmed: 1,
@@ -179,7 +180,8 @@ it('starts no new forfeit once the deadline has passed', async () => {
       { operationId: opA, state: 'reserved', alert: false },
       { operationId: opB, state: 'reserved', alert: false },
     ],
-    { status: 'claimed', forfeit }
+    { status: 'claimed', forfeit },
+    'posting'
   );
   let clock = 1000;
   const result = await sweepPendingGoalCancelForfeits({

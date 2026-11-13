@@ -37,6 +37,7 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim, 3],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerPosting, 3],
   [GOAL_COMPLETE_STATEMENTS.issue, 2],
   [GOAL_COMPLETE_STATEMENTS.reserve, 3],
   [GOAL_COMPLETE_STATEMENTS.manage, 4],
@@ -49,6 +50,7 @@ const workerStatements = new Set<string>([
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerPosting,
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication

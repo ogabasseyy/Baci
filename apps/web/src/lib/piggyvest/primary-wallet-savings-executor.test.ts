@@ -222,6 +222,7 @@ it('binds the forfeit worker statements to this integration and environment, wit
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerPosting,
   ]) {
     mocks.query.mockResolvedValueOnce({
       rows: [

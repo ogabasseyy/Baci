@@ -19,6 +19,7 @@ export function forfeitDriverPorts(input: {
   claim: Ports['claim'];
   release: Ports['release'];
   unclaim: Ports['unclaim'];
+  markPosting: Ports['markPosting'];
   provider: { token: string; baseUrl: string };
   evidence: unknown | null;
   operationId: string;
@@ -91,6 +92,7 @@ export function forfeitDriverPorts(input: {
         token: provider.token,
         baseUrl: provider.baseUrl,
       }),
+    markPosting: input.markPosting,
     unclaim: async (id) => {
       const unclaimed = await input.unclaim(id);
       // The database stamps the first hand-back of a forfeit, so a lasting

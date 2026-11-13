@@ -42,6 +42,9 @@ interface Ports {
   unclaim: (
     forfeitId: string
   ) => Promise<'unclaimed_first' | 'unclaimed' | 'not_released'>;
+  // Stamps the forfeit right before its single POST. Until it is stamped the
+  // forfeit is known unsent, so an abandoned claim is recovered later.
+  markPosting: (forfeitId: string) => Promise<'posting' | 'not_released'>;
   // Evidence-side status read of a dispatched forfeit (settle or release
   // from a verified provider record). Absent: the outcome stays pending.
   reconcile?: (forfeitId: string) => Promise<{ status: string }>;
@@ -73,6 +76,12 @@ export async function driveGoalCancelForfeit(
     await ports.unclaim(forfeit.operationId);
     return 'unavailable';
   }
+  // Nothing is sent unless the database recorded that it is about to be: if
+  // this write fails the claim stays unposted and is recovered later.
+  const posting = await ports
+    .markPosting(forfeit.operationId)
+    .catch(() => 'not_released' as const);
+  if (posting !== 'posting') return 'pending';
   try {
     const response = await ports.transfer(forfeit);
     if (response.accepted !== true) throw new Error('Invalid acceptance');

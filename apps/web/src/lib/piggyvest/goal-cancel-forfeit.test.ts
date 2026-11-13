@@ -19,6 +19,7 @@ function ports() {
     claim: vi.fn().mockResolvedValue({ status: 'claimed', forfeit }),
     verifyDestination: vi.fn().mockResolvedValue(true),
     unclaim: vi.fn().mockResolvedValue('unclaimed'),
+    markPosting: vi.fn().mockResolvedValue('posting'),
     transfer: vi.fn().mockResolvedValue({ accepted: true }),
     lookupTransfer: vi.fn().mockResolvedValue('not_found'),
     release: vi.fn().mockResolvedValue('released'),
@@ -152,4 +153,24 @@ it.each([
   expect(await driveGoalCancelForfeit(operationId, p)).toBe('released');
   expect(p.lookupTransfer).not.toHaveBeenCalled();
   expect(p.release).toHaveBeenCalledWith(forfeit.operationId);
+});
+
+it('sends nothing unless the database recorded that the forfeit is about to be posted', async () => {
+  for (const failure of [
+    () => Promise.resolve('not_released' as const),
+    () => Promise.reject(new Error('db down')),
+  ]) {
+    const p = ports();
+    p.markPosting.mockImplementation(failure);
+    expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+    expect(p.transfer).not.toHaveBeenCalled();
+  }
+});
+
+it('marks the forfeit as posting before its single POST', async () => {
+  const p = ports();
+  await driveGoalCancelForfeit(operationId, p);
+  expect(p.markPosting.mock.invocationCallOrder[0]).toBeLessThan(
+    p.transfer.mock.invocationCallOrder[0]
+  );
 });

@@ -100,6 +100,9 @@ export const piggyvestGoalCancelForfeitSchemas = {
       })
     )
     .length(1),
+  postingRows: z
+    .array(z.strictObject({ result: z.enum(['posting', 'not_released']) }))
+    .length(1),
   releaseRows: z
     .array(
       z.strictObject({

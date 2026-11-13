@@ -145,3 +145,13 @@ it('hands a claimed forfeit back unsent through the fixed statement', async () =
     'unclaim',
   ]);
 });
+
+it('marks a claimed forfeit as posting through the fixed statement', async () => {
+  const { execute, store: s } = store([{ result: 'posting' }]);
+  expect(await s.markForfeitPosting(forfeitId)).toBe('posting');
+  expect(execute).toHaveBeenCalledWith(forfeitSql.manage, [
+    scopeText,
+    forfeitId,
+    'posting',
+  ]);
+});

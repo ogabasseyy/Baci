@@ -16,6 +16,8 @@ export const GOAL_CANCEL_FORFEIT_STATEMENTS = {
     'SELECT piggyvest_primary.release_goal_cancel_forfeit_worker($1::uuid,$2::text,$3::uuid) AS result',
   workerUnclaim:
     'SELECT piggyvest_primary.unclaim_goal_cancel_forfeit_worker($1::uuid,$2::text,$3::uuid) AS result',
+  workerPosting:
+    'SELECT piggyvest_primary.mark_goal_cancel_forfeit_posting_worker($1::uuid,$2::text,$3::uuid) AS result',
   // Evidence login: the same four shapes the goal cancel evidence store uses.
   readDispatched:
     'SELECT piggyvest_primary.read_dispatched_goal_cancel_forfeit($1::uuid,$2::text,$3::uuid) AS result',

@@ -618,6 +618,40 @@ BEGIN
     piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') = 'unclaimed'
     AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') = 'not_released',
     'an unsent forfeit was handed back twice');
+  -- Once marked as posting it was (or may have been) sent: never handed back.
+  PERFORM piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid);
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting') = 'posting'
+    AND piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(c_integration, 'staging', v_forfeit::uuid) = 'not_released'
+    AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') = 'not_released',
+    'a posted forfeit could be handed back');
+  -- A claim abandoned before posting (no posted_at) for over ten minutes is
+  -- recovered by the next claim instead of waiting on a transfer that does
+  -- not exist.
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+     SET posted_at = NULL, dispatched_at = pg_catalog.clock_timestamp() - interval '11 minutes'
+   WHERE id = v_forfeit::uuid;
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'claimed'
+    AND pg_temp.gf_forfeit(v_op, 'reference') = v_ref,
+    'an abandoned unposted claim was not recovered');
+  -- A fresh unposted claim is left alone (it may be mid-send).
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'pending',
+    'a fresh claim was taken back');
+  -- A merge that would pass the per-transfer ceiling goes to review, never
+  -- truncated.
+  BEGIN
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'reserved', dispatched_at = NULL,
+           amount_kobo = 9999999990
+     WHERE id = v_forfeit::uuid;
+    PERFORM pg_temp.gf_receipt('gf-overflow', 20);
+    PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 9999999990,
+      'an overflowing merge was truncated instead of going to review');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
 END
 $unclaim$;
 
@@ -652,7 +686,9 @@ BEGIN
     'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid,text,uuid)',
-    'piggyvest_primary.unclaim_goal_cancel_forfeit_row(uuid)',
+    'piggyvest_primary.unclaim_goal_cancel_forfeit_row(uuid,boolean)',
+    'piggyvest_primary.mark_goal_cancel_forfeit_posting_row(uuid)',
+    'piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid,text,uuid)',
     'piggyvest_primary.manage_goal_cancel_forfeit(jsonb,uuid,text)',
     'piggyvest_primary.assert_goal_cancel_evidence(uuid,text)',
     'piggyvest_primary.read_dispatched_goal_cancel_forfeit(uuid,text,uuid)',

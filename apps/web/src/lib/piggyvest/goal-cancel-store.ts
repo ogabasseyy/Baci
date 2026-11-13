@@ -113,6 +113,14 @@ export function createGoalCancelStore(input: {
       ]);
       return forfeitSchemas.unclaimRows.parse(result.rows)[0].result;
     },
+    async markForfeitPosting(forfeitId: string) {
+      const result = await input.execute(forfeitSql.manage, [
+        scope,
+        schemas.operationId.parse(forfeitId),
+        'posting',
+      ]);
+      return forfeitSchemas.postingRows.parse(result.rows)[0].result;
+    },
     async releaseForfeit(forfeitId: string) {
       const result = await input.execute(forfeitSql.manage, [
         scope,

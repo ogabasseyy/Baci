@@ -99,6 +99,7 @@ describe('bugfix: an early cancel refunded the interest to the customer', () => 
       { status: 'claimed', reservation },
       SPLIT,
       { status: 'claimed', forfeit },
+      'posting',
       amounts
     );
     mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
@@ -142,6 +143,7 @@ it('keeps the confirmed answer when the interest leg fails', async () => {
     { status: 'claimed', reservation },
     SPLIT,
     { status: 'claimed', forfeit },
+    'posting',
     amounts
   );
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
@@ -185,7 +187,7 @@ it('pages and sends nothing when PiggyVest holds less than the saved principal',
 });
 
 it('a status check of a confirmed cancel retries an unsent forfeit and returns the amounts', async () => {
-  dbAnswers('confirmed', { status: 'claimed', forfeit }, amounts);
+  dbAnswers('confirmed', { status: 'claimed', forfeit }, 'posting', amounts);
   expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
     status: 'confirmed',
     amounts,

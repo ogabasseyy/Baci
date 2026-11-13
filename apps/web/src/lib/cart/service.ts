@@ -46,12 +46,18 @@ function shapeResult(
     };
   }
   const priced = buildCartSnapshot(result.state);
+  const currentVersion = result.currentVersion;
   return {
     cart: priced.snapshot,
     ...(result.grantId ? { grantId: result.grantId } : null),
     ok: true,
     operationId,
     replayed: result.replayed || result.state.replayed,
+    ...(typeof currentVersion === 'number' &&
+    Number.isSafeInteger(currentVersion) &&
+    currentVersion >= priced.snapshot.version
+      ? { currentVersion }
+      : {}),
     warnings: priced.warnings,
   };
 }

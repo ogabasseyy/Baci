@@ -186,6 +186,7 @@ describe('Chatwoot shared-cart quantity route', () => {
       ok: true,
       operationId: staleBody.requestId,
       replayed: true,
+      currentVersion: 13,
       cart: { expiresAt: cart.expiresAt, version: 13 },
     });
     const response = await POST(request());
@@ -203,6 +204,25 @@ describe('Chatwoot shared-cart quantity route', () => {
       cartVersion: 13,
       replayed: true,
     });
+  });
+
+  it('does not renew a replay from an older snapshot without a live version', async () => {
+    arrange({ ...body, cartVersion: 11 }, { ...cart, version: 15, lines: [] });
+    mocks.mutateCart.mockResolvedValue({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      cart: { expiresAt: cart.expiresAt, version: 13 },
+    });
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(payload).toMatchObject({ accepted: true, replayed: true });
+    expect(payload).not.toHaveProperty('cartVersion');
+    expect(payload).not.toHaveProperty('sessionToken');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
   });
 
   it('maps idempotency payload mismatch and new stale requests to refresh-required', async () => {

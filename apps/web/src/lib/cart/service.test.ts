@@ -202,6 +202,7 @@ describe('mutateCart', () => {
   it('surfaces replayed outcomes without re-pricing from stale input', async () => {
     const client = clientReturning({
       code: null,
+      currentVersion: 5,
       ok: true,
       replayed: true,
       state: rawState(),
@@ -220,6 +221,7 @@ describe('mutateCart', () => {
     if (result.ok) {
       expect(result.replayed).toBe(true);
       expect(result.cart.version).toBe(2);
+      expect(result.currentVersion).toBe(5);
     }
   });
 

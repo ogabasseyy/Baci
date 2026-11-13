@@ -16,6 +16,7 @@ import {
 } from '@/lib/cart/session-proof';
 import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
 import {
+  ChatwootCommerceContextError,
   hashCartSessionProof,
   renewChatwootSessionCapability,
   verifyChatwootSessionCapability,
@@ -56,8 +57,15 @@ export async function POST(request: NextRequest) {
       sessionToken: parsed.data.sessionToken,
       state: cartContext.state,
     });
-  } catch {
-    return unavailable(403, 'invalid_context');
+  } catch (error) {
+    if (error instanceof ChatwootCommerceContextError) {
+      const status = error.code === 'invalid_config' ? 503 : 403;
+      return unavailable(
+        status,
+        status === 503 ? 'temporarily_unavailable' : 'invalid_context'
+      );
+    }
+    return unavailable(503, 'temporarily_unavailable');
   }
   if (capability.conversationId !== parsed.data.conversationId) {
     return unavailable(403, 'invalid_context');
@@ -152,29 +160,41 @@ export async function POST(request: NextRequest) {
       ? liveGrant.grantExpiresAt
       : result.cart.expiresAt
     : principal.expiresAt;
+  const reportedCartVersion = result.currentVersion;
+  const liveCartVersion =
+    typeof reportedCartVersion === 'number' &&
+    Number.isSafeInteger(reportedCartVersion) &&
+    reportedCartVersion >= result.cart.version &&
+    reportedCartVersion >= cartContext.state.cartVersion
+      ? reportedCartVersion
+      : !result.replayed && result.cart.version >= cartContext.state.cartVersion
+        ? result.cart.version
+        : null;
   let proof: string | null = null;
-  try {
-    proof = issueCartSessionProof(
-      {
-        allowedOperations:
-          liveGrant?.allowedOperations ?? principal.allowedOperations,
-        cartId: principal.cartId,
-        grantId: principal.grantId,
-        grantExpiresAt: proofGrantExpiry,
-        merchantId: cartContext.state.merchantId,
-        principalId: principal.principalId,
-        scope: 'session',
-      },
-      { environment: getCartProofEnvironment() }
-    );
-  } catch (error) {
-    console.error('Chatwoot cart proof reissue failed after commit', {
-      message: error instanceof Error ? error.message : 'unknown',
-    });
+  if (liveCartVersion !== null) {
+    try {
+      proof = issueCartSessionProof(
+        {
+          allowedOperations:
+            liveGrant?.allowedOperations ?? principal.allowedOperations,
+          cartId: principal.cartId,
+          grantId: principal.grantId,
+          grantExpiresAt: proofGrantExpiry,
+          merchantId: cartContext.state.merchantId,
+          principalId: principal.principalId,
+          scope: 'session',
+        },
+        { environment: getCartProofEnvironment() }
+      );
+    } catch (error) {
+      console.error('Chatwoot cart proof reissue failed after commit', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+    }
   }
   const maxAge = cartSessionCookieMaxAge(proofGrantExpiry);
   let sessionToken: string | null = null;
-  if (proof && maxAge > 0) {
+  if (proof && maxAge > 0 && liveCartVersion !== null) {
     try {
       sessionToken = await renewChatwootSessionCapability({
         binding: cartContext.binding,
@@ -183,7 +203,7 @@ export async function POST(request: NextRequest) {
         nextState: {
           ...cartContext.state,
           cartSessionSha256: hashCartSessionProof(proof),
-          cartVersion: result.cart.version,
+          cartVersion: liveCartVersion,
         },
       });
     } catch (error) {
@@ -195,7 +215,7 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json(
     {
       accepted: true,
-      cartVersion: result.cart.version,
+      ...(liveCartVersion !== null ? { cartVersion: liveCartVersion } : {}),
       operationId: result.operationId,
       replayed: result.replayed,
       ...(sessionToken ? { sessionToken } : {}),

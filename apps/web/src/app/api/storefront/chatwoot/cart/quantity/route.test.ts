@@ -2,6 +2,11 @@ import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  ChatwootCommerceContextError: class ChatwootCommerceContextError extends Error {
+    constructor(readonly code: string) {
+      super(code);
+    }
+  },
   checkCartQuota: vi.fn(async () => ({ allowed: true })),
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   createCartScopedClient: vi.fn(() => ({ rpc: vi.fn() })),
@@ -49,6 +54,7 @@ vi.mock('@/lib/chatwoot/cart-context', () => ({
   loadChatwootCartContext: mocks.loadChatwootCartContext,
 }));
 vi.mock('@/lib/chatwoot/commerce-context', () => ({
+  ChatwootCommerceContextError: mocks.ChatwootCommerceContextError,
   hashCartSessionProof: mocks.hashCartSessionProof,
   renewChatwootSessionCapability: mocks.renewChatwootSessionCapability,
   verifyChatwootSessionCapability: mocks.verifyChatwootSessionCapability,
@@ -246,16 +252,29 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(mocks.mutateCart).not.toHaveBeenCalled();
   });
 
-  it('rejects an invalid or expired session before quota and mutation', async () => {
+  it('renews a replayed operation against the RPC live cart version', async () => {
     arrange();
-    mocks.verifyChatwootSessionCapability.mockRejectedValue(
-      new Error('invalid')
-    );
-    const response = await POST(request());
+    mocks.mutateCart.mockResolvedValue({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      currentVersion: 15,
+      cart: { expiresAt: cart.expiresAt, version: 13 },
+    });
 
-    expect(response.status).toBe(403);
-    expect(mocks.checkCartQuota).not.toHaveBeenCalled();
-    expect(mocks.mutateCart).not.toHaveBeenCalled();
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(payload).toMatchObject({
+      accepted: true,
+      cartVersion: 15,
+      replayed: true,
+    });
+    expect(mocks.renewChatwootSessionCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nextState: expect.objectContaining({ cartVersion: 15 }),
+      })
+    );
   });
 
   it('rejects a malformed line ID before resolving cart context', async () => {

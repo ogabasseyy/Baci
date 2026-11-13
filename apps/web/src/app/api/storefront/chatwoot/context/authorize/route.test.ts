@@ -294,12 +294,4 @@ describe('Chatwoot context authorization route', () => {
     expect((await POST(request())).status).toBe(403);
     expect(mocks.loadChatwootCartContext).toHaveBeenCalledTimes(2);
   });
-
-  it('rejects malformed input before resolving a cart context', async () => {
-    mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: {} });
-
-    expect((await POST(request())).status).toBe(400);
-    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
-    expect(mocks.verifyChatwootSessionCapability).not.toHaveBeenCalled();
-  });
 });

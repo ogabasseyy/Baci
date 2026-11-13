@@ -104,7 +104,9 @@ export async function handleChatwootInlineCartQuantity(input: {
               ? mutation.code
               : 'temporarily_unavailable',
         }),
-    ...(typeof mutation?.cartVersion === 'number'
+    ...(typeof mutation?.cartVersion === 'number' &&
+    Number.isSafeInteger(mutation.cartVersion) &&
+    mutation.cartVersion > 0
       ? { cartVersion: mutation.cartVersion }
       : {}),
   });

@@ -73,8 +73,9 @@ describe('Cancel goal step inside the savings sheet', () => {
   it('never implies a full refund when the savings/interest split is unknown', () => {
     renderStep({ ...baseGoal, current_amount: 50000 });
     expect(screen.queryByText('Back to your wallet')).toBeNull();
-    // It still shows a figure: what's saved so far, not a promised refund.
-    expect(screen.getByText('Saved so far')).toBeOnTheScreen();
+    // It still shows a figure: the goal's balance, never as a promised refund.
+    expect(screen.getByText('In this goal')).toBeOnTheScreen();
+    expect(screen.queryByText('Saved so far')).toBeNull();
     expect(screen.getByText('₦50,000')).toBeOnTheScreen();
     expect(
       screen.getByText(/Any interest on this goal is not refunded/)

@@ -136,7 +136,8 @@ export function GoalCancelStep({
   }
 
   const showBreakdown = known && !empty && !done;
-  // Without the split, still show what's saved: a figure, not just a sentence.
+  // Without the split, still show the goal's balance: a figure, not just a
+  // sentence, and never presented as the refund.
   const showSaved = !known && !empty && !done;
   return (
     <View style={styles.root} testID="goal-cancel-step">
@@ -171,7 +172,7 @@ export function GoalCancelStep({
         <View style={[styles.card, { borderColor: colors.border }]}>
           <GoalCancelRow
             colors={colors}
-            label={COPY.savedSoFar}
+            label={COPY.inThisGoal}
             value={goal.current_amount}
             total
           />

@@ -18,6 +18,9 @@ export const PIGGYVEST_FEATURE_FLAGS = {
   prefunded_card_contributions: 'PREFUNDED_CARD_PUBLIC_ENABLED',
   // Pay for IMEI checks and VTU from the PiggyVest main wallet (new outflow).
   wallet_pay: 'PIGGYVEST_WALLET_PAY_ENABLED',
+  // Airtime, data and bills paid from it too (on top of wallet_pay), so
+  // switching on IMEI never switches these on (Codex P2).
+  wallet_pay_utilities: 'PIGGYVEST_WALLET_PAY_UTILITIES_ENABLED',
   // Read-only daily stuck-transfer reconciliation report.
   daily_reconciliation: 'PIGGYVEST_RECONCILIATION_ENABLED',
 } as const;

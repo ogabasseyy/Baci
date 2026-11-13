@@ -24,6 +24,22 @@ describe('vtuWalletOnlyChargeSchema', () => {
     expectedUserId: '11111111-2222-4333-8444-555555555555',
   };
 
+  it('bugfix: refuses a bare cancel that names no payment (Muse)', () => {
+    const cancel = {
+      ...baseAirtime,
+      walletAmount: 1000,
+      paymentMethod: 'piggyvest_wallet' as const,
+      walletPayCancel: true as const,
+    };
+    expect(vtuWalletOnlyChargeSchema.safeParse(cancel).success).toBe(false);
+    expect(
+      vtuWalletOnlyChargeSchema.safeParse({
+        ...cancel,
+        walletPayOperationId: '11111111-1111-4111-8111-111111111111',
+      }).success
+    ).toBe(true);
+  });
+
   it('accepts walletAmount === amount (the full-coverage happy path)', () => {
     const result = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,

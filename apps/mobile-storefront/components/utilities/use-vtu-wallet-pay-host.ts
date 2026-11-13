@@ -95,10 +95,11 @@ export function useVtuWalletPayHost({
       !refreshing && piggyvestWalletCovers({ canPay, wallet, price: amount });
     useVtuWalletPayStore.setState({
       covers,
-      // A kept PiggyVest key (an answer that was lost) replays there.
+      // A kept PiggyVest key (an answer that was lost) replays there, even
+      // with the switch off, so a rollback never re-buys it (Codex P1).
       retains: async (request) => {
         const userId = useAuthStore.getState().user?.id;
-        if (!canPay || !userId) return false;
+        if (!userId) return false;
         return await walletPayPurchaseKeys.has(
           await vtuWalletPayPurchase(userId, request)
         );
@@ -122,6 +123,12 @@ export function useVtuWalletPayHost({
   );
 
   const start = useEffectEvent((next: VtuWalletPayPending) => {
+    // Handed over by another account than the one signed in now: never
+    // shown to this one (Codex P1).
+    if (next.userId !== (useAuthStore.getState().user?.id ?? null)) {
+      clearVtuWalletPay();
+      return;
+    }
     deliverTo.current = next.onDelivered;
     opened.current = true;
     const user = useAuthStore.getState().user;
@@ -151,6 +158,10 @@ export function useVtuWalletPayHost({
         // The account may have changed during the awaits above.
         if (useAuthStore.getState().user?.id !== user.id)
           return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
+        // The issuing account's own token, captured before the start goes
+        // out: a cancellation that runs during an account switch reaches the
+        // server for this account, never with another's token (Codex P2).
+        const issuedToken = useAuthStore.getState().session?.access_token;
         const connection = {
           apiBaseUrl: EXPO_PUBLIC_API_URL,
           accessToken: () => useAuthStore.getState().session?.access_token,
@@ -167,10 +178,6 @@ export function useVtuWalletPayHost({
         );
         const issuedKey = purchase;
         if (answer.kind === 'pin') {
-          // The issuing account's own token, captured now: a cancellation
-          // that runs during an account switch still reaches the server for
-          // that account, never with the new one's token (Codex P2).
-          const issuedToken = useAuthStore.getState().session?.access_token;
           const cancel = async () => {
             if (!issuedToken) return;
             const ownConnection = {

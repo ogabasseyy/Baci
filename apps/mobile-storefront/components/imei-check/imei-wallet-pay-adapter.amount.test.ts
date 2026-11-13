@@ -45,3 +45,16 @@ describe('bugfix: an issued amount above the shown price was asked for (Muse)', 
     }
   });
 });
+
+describe('bugfix: a payment conflict forgot the purchase key (Codex P1)', () => {
+  it('answers under review (the key stays) instead of failed', async () => {
+    start.mockResolvedValue({
+      httpStatus: 409,
+      body: { code: 'PAYMENT_CONFLICT', error: 'x' },
+    });
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'review' },
+    });
+  });
+});

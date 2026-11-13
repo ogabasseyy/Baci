@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { createVtuWalletPayStepDeps } from './vtu-wallet-pay-step-deps';
 
 vi.mock('server-only', () => ({}));
@@ -38,5 +39,17 @@ describe('createVtuWalletPayStepDeps.readPurchase', () => {
         vi.fn(async () => ({ data: null, error: { message: 'x' } }))
       ).readPurchase('txn-1')
     ).rejects.toThrow();
+  });
+});
+
+describe('bugfix: switching on IMEI wallet pay also switched on airtime/data/bills (Codex P2)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('starts no new utilities payment without its own switch', () => {
+    vi.mocked(readWalletPayRuntime).mockReturnValue({ tag: 'live' } as never);
+    vi.stubEnv('PIGGYVEST_WALLET_PAY_UTILITIES_ENABLED', '');
+    expect(deps(vi.fn()).readRuntime()).toBeNull();
+    vi.stubEnv('PIGGYVEST_WALLET_PAY_UTILITIES_ENABLED', 'true');
+    expect(deps(vi.fn()).readRuntime()).toEqual({ tag: 'live' });
   });
 });

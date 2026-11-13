@@ -56,7 +56,17 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     walletPayCancel: z.literal(true).optional(),
   })
   .omit({ orderId: true, customerId: true })
-  .superRefine(applyPurchaseRequirements);
+  .superRefine(applyPurchaseRequirements)
+  // A cancel names the payment it releases: a bare cancel would otherwise
+  // run as a start and issue a payment nobody asked for (Muse).
+  .refine(
+    (input) =>
+      !input.walletPayCancel || input.walletPayOperationId !== undefined,
+    {
+      message: 'walletPayCancel needs walletPayOperationId',
+      path: ['walletPayCancel'],
+    }
+  );
 
 export type VtuWalletOnlyChargeInput = z.infer<
   typeof vtuWalletOnlyChargeSchema

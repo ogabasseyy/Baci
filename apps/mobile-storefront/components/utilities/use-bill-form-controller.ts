@@ -16,7 +16,7 @@ import {
 import { parseUtilityAmount } from './bill-form.helpers';
 import type { BillFormProps } from './bill-form.types';
 import type { BillFormController } from './bill-form-controller.types';
-import { billRetainsStoreCredit } from './bill-retains-store-credit';
+import { billPurchaseRequest } from './bill-retains-store-credit';
 import { buildBillFormWalletReturnTo } from './build-bill-form-wallet-return-to';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
 import { createBillFormVerifyHandler } from './create-bill-form-verify-handler';
@@ -271,7 +271,7 @@ export function useBillFormController({
     verifiedCustomerName,
     payment,
     resetVerification,
-    retainedStoreCredit: billRetainsStoreCredit(purchaseInput),
+    purchaseRequest: billPurchaseRequest(purchaseInput),
     scheduleNextStepScroll,
     scrollViewRef,
     selectedBiller,

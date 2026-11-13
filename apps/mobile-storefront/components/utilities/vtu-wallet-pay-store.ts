@@ -5,11 +5,14 @@ import {
 } from '@/lib/utility-checkout-inflight';
 import { creditedVtuCashback } from '@/lib/vtu-checkout-helpers';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
+import { useAuthStore } from '@/stores/auth-store';
 import type { VtuWalletPayResult } from './vtu-wallet-pay-adapter';
 
 export type VtuWalletPayPending = {
   request: VtuWalletPayRequest;
   onDelivered: (result: VtuWalletPayResult) => void;
+  /** The account that handed it over (null = signed out). */
+  userId: string | null;
 };
 
 type State = {
@@ -55,7 +58,13 @@ export function openVtuWalletPay(
   if (state.pending || !(replay || state.covers(request.amount))) return false;
   // Another checkout is running: refused with its alert (true = handled).
   if (!acquireUtilityCheckoutOrAlert()) return true;
-  useVtuWalletPayStore.setState({ pending: { request, onDelivered } });
+  useVtuWalletPayStore.setState({
+    pending: {
+      request,
+      onDelivered,
+      userId: useAuthStore.getState().user?.id ?? null,
+    },
+  });
   return true;
 }
 

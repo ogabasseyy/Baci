@@ -36,7 +36,7 @@ describe('walletPayNotice', () => {
         null,
         'IMEI check'
       ).message
-    ).toContain('Please update the app');
+    ).toContain('The price of this check has changed');
     expect(
       walletPayNotice(
         { kind: 'refunded', failedReason: 'imei_mismatch' },

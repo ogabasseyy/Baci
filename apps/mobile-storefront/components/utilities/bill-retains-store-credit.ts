@@ -26,13 +26,24 @@ type Input = Pick<
  * the savings wallet. A peek: it never mints a key.
  */
 export function billRetainsStoreCredit(input: Input): boolean {
-  if (!input.selectedBiller || !(input.numericAmount > 0)) return false;
+  const request = billPurchaseRequest(input);
+  return (
+    request !== null && input.payment.hasRetainedVtuAttempt?.(request) === true
+  );
+}
+
+/**
+ * The exact request the submit builds for this bill (its retry identity),
+ * or null before a provider and an amount are chosen.
+ */
+export function billPurchaseRequest(input: Omit<Input, 'payment'>) {
+  if (!input.selectedBiller || !(input.numericAmount > 0)) return null;
   const { customerName, customerAddress } = resolveBillCustomerOfRecord({
     customer: input.customer,
     verifiedCustomerName: input.verifiedCustomerName,
     verifiedCustomerAddress: input.verifiedCustomerAddress,
   });
-  const request = buildBillPurchaseRequest({
+  return buildBillPurchaseRequest({
     amount: input.numericAmount,
     billItem: input.selectedBillItem,
     biller: input.selectedBiller,
@@ -46,5 +57,4 @@ export function billRetainsStoreCredit(input: Input): boolean {
     type: input.billType,
     validationReference: input.validationReference,
   });
-  return input.payment.hasRetainedVtuAttempt?.(request) === true;
 }

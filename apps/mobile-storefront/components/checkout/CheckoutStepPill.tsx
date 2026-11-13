@@ -109,7 +109,7 @@ export function CheckoutStepPill({
   if (isCompleted && onPress) {
     return (
       <Pressable
-        accessibilityLabel={`Go to ${label} step`}
+        accessibilityLabel={`Go to ${label} step, completed`}
         accessibilityRole="button"
         onPress={onPress}
         style={pillStyle}

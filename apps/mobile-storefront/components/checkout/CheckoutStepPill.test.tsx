@@ -18,7 +18,9 @@ describe('CheckoutStepPill', () => {
       <CheckoutStepPill {...baseProps} onPress={onPress} status="completed" />
     );
 
-    fireEvent.press(screen.getByRole('button', { name: 'Go to Address step' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Go to Address step, completed' })
+    );
 
     expect(onPress).toHaveBeenCalledTimes(1);
   });

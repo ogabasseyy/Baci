@@ -23,6 +23,7 @@ import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 import { ImeiCheckServiceSelector } from './imei-check-service-selector';
+import { ImeiWalletBadge } from './imei-wallet-badge';
 import { getImeiWalletCopy } from './imei-wallet-copy';
 
 interface ImeiCheckFormViewProps {
@@ -47,7 +48,8 @@ interface ImeiCheckFormViewProps {
   /** PiggyVest customer: the balance is store credit. */
   walletIsStoreCredit?: boolean;
   /** True when the PiggyVest wallet pays this check (store credit can't). */
-  walletPayCovers?: (tier: ImeiServiceTierKey) => boolean;
+  /** Paying from the PiggyVest wallet (dark until switched on). */
+  walletPay?: ImeiWalletPayView;
   onBrandSelect: (brand: ImeiBrandFilter) => void;
   onChangeImei: (value: string) => void;
   onCheck: () => void;
@@ -57,6 +59,11 @@ interface ImeiCheckFormViewProps {
   onToggleServices: () => void;
 }
 
+export type ImeiWalletPayView = {
+  covers: (tier: ImeiServiceTierKey) => boolean;
+  /** The PiggyVest balance that may pay, or null (off, stale, none). */
+  savingsKobo: number | null;
+};
 export function ImeiCheckFormView({
   availabilityFailed = false,
   availabilityLoading = false,
@@ -77,7 +84,7 @@ export function ImeiCheckFormView({
   showAllServices,
   walletBalance,
   walletIsStoreCredit = false,
-  walletPayCovers,
+  walletPay,
   onBrandSelect,
   onChangeImei,
   onCheck,
@@ -92,11 +99,14 @@ export function ImeiCheckFormView({
   const { isKeyboardVisible } = useKeyboard();
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const isWalletReady = !(isWalletLoading || isWalletError);
+  // With paying from PiggyVest on, the badge shows the savings wallet it
+  // pays from, never a store credit ₦0 that reads as empty.
+  const savingsKobo = walletPay?.savingsKobo ?? null;
   const paysFromPiggyvest =
     selectedTier !== null &&
     isWalletReady &&
     walletBalance < currentTier.price &&
-    walletPayCovers?.(selectedTier) === true;
+    walletPay?.covers(selectedTier) === true;
   const hasEnoughBalance =
     isWalletReady && (walletBalance >= currentTier.price || paysFromPiggyvest);
   const needsTopUp =
@@ -219,33 +229,15 @@ export function ImeiCheckFormView({
             </Text>
           )}
           <View style={styles.footerRow}>
-            <View
-              accessibilityLabel={
-                isWalletReady
-                  ? walletCopy.balanceLabel(walletBalance)
-                  : (walletStatusText ?? undefined)
-              }
-              style={styles.walletBadge}
-            >
-              <Ionicons
-                name="wallet-outline"
-                size={20}
-                color={needsTopUp ? colors.error : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.walletBadgeAmount,
-                  { color: needsTopUp ? colors.error : colors.text },
-                ]}
-              >
-                {/* Unknown until loaded: never a ₦0 that reads as empty. */}
-                {!isWalletReady
-                  ? '…'
-                  : walletCopy.badgePrefix
-                    ? `${walletCopy.badgePrefix} ${formatServicePrice(walletBalance)}`
-                    : formatServicePrice(walletBalance)}
-              </Text>
-            </View>
+            <ImeiWalletBadge
+              colors={colors}
+              isWalletReady={isWalletReady}
+              needsTopUp={needsTopUp}
+              savingsKobo={savingsKobo}
+              statusText={walletStatusText}
+              walletBalance={walletBalance}
+              walletCopy={walletCopy}
+            />
             <Pressable
               style={[
                 styles.verifyButton,

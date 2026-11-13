@@ -11,6 +11,7 @@ import {
 } from '@baci/shared/imei';
 import { useEffect, useState } from 'react';
 import type { ImeiCheckerColors } from './imei-check.types';
+import type { ImeiWalletPayView } from './imei-check-form-view';
 import { ImeiCheckFormView } from './imei-check-form-view';
 import {
   getPublicVisibleImeiServiceTierKeys,
@@ -27,7 +28,7 @@ interface ImeiCheckDevicePageProps {
   isWalletLoading: boolean;
   walletBalance: number;
   walletIsStoreCredit?: boolean;
-  walletPayCovers?: (tier: ImeiServiceTierKey) => boolean;
+  walletPay?: ImeiWalletPayView;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
 }
@@ -46,7 +47,7 @@ export function ImeiCheckDevicePage({
   isWalletLoading,
   walletBalance,
   walletIsStoreCredit,
-  walletPayCovers,
+  walletPay,
   onVerify,
   onTopUpWallet,
 }: ImeiCheckDevicePageProps) {
@@ -165,7 +166,7 @@ export function ImeiCheckDevicePage({
       showAllServices={expandedViewEnabled}
       walletBalance={walletBalance}
       walletIsStoreCredit={walletIsStoreCredit}
-      walletPayCovers={walletPayCovers}
+      walletPay={walletPay}
       onBrandSelect={handleBrandSelect}
       onChangeImei={(text) =>
         setImei(normalizeDeviceIdentifier(text, identifier))

@@ -99,7 +99,7 @@ describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
         {...baseProps}
         onTopUpWallet={onTopUpWallet}
         walletIsStoreCredit
-        walletPayCovers={() => false}
+        walletPay={{ covers: () => false, savingsKobo: null }}
       />
     );
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
@@ -116,7 +116,7 @@ describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
         onCheck={onCheck}
         onTopUpWallet={onTopUpWallet}
         walletIsStoreCredit
-        walletPayCovers={(tier) => tier === 'full'}
+        walletPay={{ covers: (tier) => tier === 'full', savingsKobo: null }}
       />
     );
     const price = IMEI_SERVICE_TIERS.full.price.toLocaleString('en-NG');
@@ -155,5 +155,30 @@ describe('bugfix: the wallet badge read ₦0 before the wallet loaded (Fable wal
     rerender(<ImeiCheckFormView {...baseProps} isWalletError />);
     expect(screen.queryByText('₦0')).toBeNull();
     expect(screen.getByText('…')).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: the badge read store credit ₦0 for a funded savings wallet (Fable walk)', () => {
+  it('shows the savings wallet balance when paying from PiggyVest is on', () => {
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        walletIsStoreCredit
+        walletPay={{ covers: () => true, savingsKobo: 54_970_000 }}
+      />
+    );
+    expect(screen.getByText('Savings ₦549,700')).toBeOnTheScreen();
+    expect(screen.queryByText(/₦0$/)).toBeNull();
+  });
+
+  it('keeps the store credit badge when paying from PiggyVest is off', () => {
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        walletIsStoreCredit
+        walletPay={{ covers: () => false, savingsKobo: null }}
+      />
+    );
+    expect(screen.queryByText(/^Savings/)).toBeNull();
   });
 });

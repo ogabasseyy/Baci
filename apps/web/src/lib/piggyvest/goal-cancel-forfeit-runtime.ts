@@ -50,12 +50,14 @@ export async function sweepGoalCancelForfeit(input: {
 /**
  * What the customer gets back and what is NOT refunded to them, from the
  * server, for a dispatched (or later) attempt. forfeitedInterestKobo is the
- * customer-facing "interest (not refunded)" figure, fixed at dispatch: it is
- * true for the customer as soon as the principal is confirmed, whether or not
- * Ogabassey's interest-wallet transfer (an internal leg, tracked and paged
- * separately) has settled yet. Absent before dispatch, for attempts made
- * before the split existed, or when the read fails: the app then shows the
- * status alone.
+ * customer-facing "interest (not refunded)" figure: set at dispatch and raised
+ * by interest PiggyVest pays into the goal after it. On a 'pending' answer
+ * both figures are the plan the principal transfer in flight carries, and the
+ * app presents them as expected, not as money already back; on 'confirmed'
+ * they are final for the customer, whether or not Ogabassey's interest-wallet
+ * transfer (an internal leg, tracked and paged separately) has settled yet.
+ * Absent before dispatch, for attempts made before the split existed, or when
+ * the read fails: the app then shows the status alone.
  */
 export async function withGoalCancelAmounts<T extends { status: string }>(
   store: Store,

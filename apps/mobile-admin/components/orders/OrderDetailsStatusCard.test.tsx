@@ -73,7 +73,7 @@ describe('OrderDetailsStatusCard', () => {
     const { container } = render(
       <OrderDetailsStatusCard
         colors={colors}
-        createdAtLabel="Apr 20, 2026"
+        placedOnLabel="14 Mar 2023, 00:00"
         shippingColor="#2563eb"
         shippingConfig={SHIPPING_STATUS_CONFIG.shipped}
         shippingStatus="shipped"
@@ -89,6 +89,10 @@ describe('OrderDetailsStatusCard', () => {
 
     expect(screen.getByText('Unfulfilled')).toBeInTheDocument();
     expect(screen.getByText('Processing')).toBeInTheDocument();
+    expect(
+      screen.getByText('Placed on 14 Mar 2023, 00:00')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Latest update: Apr 21, 2026')).toBeInTheDocument();
     expect(screen.getAllByText('Shipped')).toHaveLength(2);
     expect(screen.getByText('Delivered')).toBeInTheDocument();
 
@@ -135,7 +139,7 @@ describe('OrderDetailsStatusCard', () => {
     const { container } = render(
       <OrderDetailsStatusCard
         colors={colors}
-        createdAtLabel="Apr 20, 2026"
+        placedOnLabel="Apr 20, 2026"
         shippingColor={colors.returned}
         shippingConfig={SHIPPING_STATUS_CONFIG.returned}
         shippingStatus="returned"
@@ -195,7 +199,7 @@ describe('OrderDetailsStatusCard', () => {
     const { container } = render(
       <OrderDetailsStatusCard
         colors={colors}
-        createdAtLabel="Apr 20, 2026"
+        placedOnLabel="Apr 20, 2026"
         shippingColor={colors.delivered}
         shippingConfig={SHIPPING_STATUS_CONFIG.delivered}
         shippingStatus="fulfilled"

@@ -18,8 +18,16 @@ vi.mock('react-native', async () => {
 });
 
 vi.mock('./OrderDetailsStatusCard', () => ({
-  OrderDetailsStatusCard: ({ shippingStatus }: { shippingStatus: string }) => (
-    <section aria-label="status-card" data-shipping-status={shippingStatus} />
+  OrderDetailsStatusCard: ({
+    shippingStatus,
+    placedOnLabel,
+  }: {
+    shippingStatus: string;
+    placedOnLabel: string;
+  }) => (
+    <section aria-label="status-card" data-shipping-status={shippingStatus}>
+      Placed on {placedOnLabel}
+    </section>
   ),
 }));
 
@@ -56,7 +64,7 @@ describe('OrderDetailsOverviewSection', () => {
     colors: colors as unknown as React.ComponentProps<
       typeof OrderDetailsOverviewSection
     >['colors'],
-    createdAtLabel: 'Apr 21, 2026',
+    placedOnLabel: 'Apr 21, 2026',
     customerEmail: 'jane@example.com',
     customerName: 'Jane Doe',
     customerPhone: '+2348012345678',
@@ -107,6 +115,18 @@ describe('OrderDetailsOverviewSection', () => {
       'data-has-rider-change',
       'true'
     );
+  });
+
+  it('passes the historical placed-on label through to the status card', () => {
+    render(
+      <OrderDetailsOverviewSection
+        {...baseProps}
+        placedOnLabel="14 Mar 2023, 00:00"
+      />
+    );
+    expect(
+      screen.getByText('Placed on 14 Mar 2023, 00:00')
+    ).toBeInTheDocument();
   });
 
   it('passes the shipping status through to the status card', () => {

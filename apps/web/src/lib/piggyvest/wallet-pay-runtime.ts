@@ -14,11 +14,30 @@ function readCollectionWalletId(env: PiggyvestSwitchEnv): string {
   return piggyvestProviderIdSchema.parse(env.PIGGYVEST_COLLECTION_WALLET_ID);
 }
 
+/**
+ * Collection wallets used before a rotation, still allowed as the SOURCE of a
+ * refund already owed from them (Codex P2): a rotation never strands a
+ * customer's refund. Comma-separated PIGGYVEST_COLLECTION_WALLET_PREVIOUS_IDS;
+ * empty by default. New payments only ever go to the current wallet.
+ */
+function readPreviousCollectionWalletIds(env: PiggyvestSwitchEnv): string[] {
+  const raw = env.PIGGYVEST_COLLECTION_WALLET_PREVIOUS_IDS ?? '';
+  return raw
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '')
+    .map((id) => piggyvestProviderIdSchema.parse(id));
+}
+
 function build(env: PiggyvestSwitchEnv) {
   const primary = readPrimaryWalletSavingsRecoveryRuntime(
     env as NodeJS.ProcessEnv
   );
-  return { ...primary, collectionWalletId: readCollectionWalletId(env) };
+  return {
+    ...primary,
+    collectionWalletId: readCollectionWalletId(env),
+    previousCollectionWalletIds: readPreviousCollectionWalletIds(env),
+  };
 }
 
 /**

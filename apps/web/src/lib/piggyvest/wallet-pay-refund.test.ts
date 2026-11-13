@@ -119,6 +119,25 @@ describe('driveWalletRefund', () => {
     expect(p.transfer).not.toHaveBeenCalled();
   });
 
+  it('bugfix: refunds from a collection wallet allowlisted from before a rotation (Codex P2)', async () => {
+    const rotated = ports({
+      collectionWalletId: 'new-collection',
+      previousCollectionWalletIds: ['collection-wallet'],
+    });
+    await expect(driveWalletRefund({ paymentId: OP }, rotated)).resolves.toBe(
+      'pending'
+    );
+    expect(rotated.transfer).toHaveBeenCalledTimes(1);
+    // Not allowlisted: still refused.
+    const other = ports({
+      collectionWalletId: 'new-collection',
+      previousCollectionWalletIds: ['some-other-wallet'],
+    });
+    await expect(driveWalletRefund({ paymentId: OP }, other)).resolves.toBe(
+      'unavailable'
+    );
+  });
+
   it('holds an ambiguous failure pending and releases only a proven rejection', async () => {
     const timeout = ports({
       transfer: vi.fn(async () =>

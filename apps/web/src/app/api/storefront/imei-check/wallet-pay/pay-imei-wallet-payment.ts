@@ -32,6 +32,8 @@ export interface PayImeiWalletPaymentDeps {
     purpose: string;
     purchaseRef: string;
     amountKobo: number;
+    /** The delivery state: refund_owed / refunded once it was refunded. */
+    fulfilment?: string;
   } | null>;
   pay: (input: {
     runtime: WalletPayRuntime;
@@ -195,7 +197,13 @@ export async function payImeiWalletPayment(
     if (result.status !== 'confirmed')
       return payResponse(result, body.operationId);
   }
-  if (!finished && (!matches || normalizedImei === null)) return mismatch();
+  // A payment already refunded (e.g. by the drain after the IMEI salt or the
+  // tier changed) ends without the IMEI: delivery caches its refunded
+  // outcome, so the lookup never stays pending (Codex P2).
+  const refunded =
+    payment.fulfilment === 'refund_owed' || payment.fulfilment === 'refunded';
+  if (!finished && !refunded && (!matches || normalizedImei === null))
+    return mismatch();
   try {
     return await deps.deliver({
       runtime,

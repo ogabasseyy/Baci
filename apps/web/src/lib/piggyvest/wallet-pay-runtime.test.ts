@@ -53,6 +53,7 @@ describe('readWalletPayRuntime (new payments)', () => {
     expect(readWalletPayRuntime(on)).toEqual({
       ...base,
       collectionWalletId: 'collection-wallet',
+      previousCollectionWalletIds: [],
     });
   });
 
@@ -70,7 +71,21 @@ describe('readWalletPayRecoveryRuntime (status, settlement, delivery, refunds)',
         PIGGYVEST_KILL_SWITCH: 'true',
         PIGGYVEST_COLLECTION_WALLET_ID: 'collection-wallet',
       })
-    ).toEqual({ ...base, collectionWalletId: 'collection-wallet' });
+    ).toEqual({
+      ...base,
+      collectionWalletId: 'collection-wallet',
+      previousCollectionWalletIds: [],
+    });
+  });
+
+  it('bugfix: carries the collection wallets allowlisted from before a rotation (Codex P2)', () => {
+    expect(
+      readWalletPayRecoveryRuntime({
+        PIGGYVEST_COLLECTION_WALLET_ID: 'collection-wallet',
+        PIGGYVEST_COLLECTION_WALLET_PREVIOUS_IDS:
+          ' old-wallet-1 , old-wallet-2 ,',
+      })?.previousCollectionWalletIds
+    ).toEqual(['old-wallet-1', 'old-wallet-2']);
   });
 
   it('fails loudly when PiggyVest is misconfigured, so a refund drain pages instead of skipping', () => {

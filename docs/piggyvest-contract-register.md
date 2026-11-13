@@ -386,7 +386,10 @@ Design: `docs/superpowers/plans/2026-11-12-piggyvest-pay-from-wallet.md`.
 Migration `20261112161500_piggyvest_wallet_pay`, flag
 `PIGGYVEST_WALLET_PAY_ENABLED` (default off; also stopped by
 `PIGGYVEST_KILL_SWITCH`), collection wallet `PIGGYVEST_COLLECTION_WALLET_ID`
-(must equal the `piggyvest_primary.collection_wallets` row). Nothing has been
+(must equal the `piggyvest_primary.collection_wallets` row). After a rotation,
+`PIGGYVEST_COLLECTION_WALLET_PREVIOUS_IDS` (comma-separated, default empty)
+lets refunds already owed from an old collection wallet still be sent; new
+payments only ever go to the current one. Nothing has been
 run against PiggyVest for this flow.
 
 | Contract point | Status | Source / what the code does |

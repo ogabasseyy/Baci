@@ -102,6 +102,15 @@ describe('POST /imei-check/[lookupId]/wallet-pin', () => {
     );
   });
 
+  it('bugfix: charges the wallet pay PIN budget, never the savings goal one (Codex P2)', async () => {
+    await call({ operationId: OP, pin: '1234' });
+    expect(mocks.limit).toHaveBeenCalledWith(
+      'wallet-pay-verify',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('refuses a client-sent amount', async () => {
     const response = await call({
       operationId: OP,

@@ -59,6 +59,7 @@ export const codeOf = (error: unknown) =>
 const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
   'GOAL_NEEDS_REVIEW',
   'GOAL_NOT_FOUND',
+  'GOAL_NOT_SET_UP',
   'NOTHING_TO_REFUND',
   'NOTHING_TO_MOVE',
   'AMOUNT_TOO_LARGE',

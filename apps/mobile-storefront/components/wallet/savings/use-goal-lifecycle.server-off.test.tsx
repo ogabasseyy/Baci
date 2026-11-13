@@ -55,6 +55,7 @@ describe('server keeps PiggyVest off', () => {
       await result.current.begin();
     });
     expect(result.current.step).toBe('failed');
+    expect(result.current.message).toBe('not ready');
     expect(result.current.canStartAgain).toBe(false);
   });
 });

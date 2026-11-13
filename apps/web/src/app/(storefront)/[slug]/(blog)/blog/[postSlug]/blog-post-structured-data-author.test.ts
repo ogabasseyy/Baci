@@ -10,7 +10,8 @@ describe('buildBlogPostStructuredData author classification', () => {
       },
       baseUrl: 'https://ogabassey.com',
       blogIndexUrl: 'https://ogabassey.com/blog',
-      content: '<p>Editorial guide.</p>',
+      content:
+        '<p>Editorial guide. https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>',
       merchant: {
         business_name: 'Ogabassey',
         logo_url: null,
@@ -23,6 +24,7 @@ describe('buildBlogPostStructuredData author classification', () => {
         category: 'Buying Guides',
         published_at: '2026-11-09T13:00:00.000Z',
         title: 'Editorial Phone Guide',
+        video_upload_date: '2026-11-09T12:00:00.000Z',
       },
       postUrl: 'https://ogabassey.com/blog/editorial-phone-guide',
     });
@@ -32,6 +34,10 @@ describe('buildBlogPostStructuredData author classification', () => {
       '@id': 'https://ogabassey.com#organization',
       name: 'Ogabassey',
       url: 'https://ogabassey.com',
+    });
+    expect(data.videoMetadata?.schema?.author).toEqual({
+      '@type': 'Organization',
+      name: 'Ogabassey',
     });
   });
 
@@ -45,7 +51,8 @@ describe('buildBlogPostStructuredData author classification', () => {
       },
       baseUrl: 'https://ogabassey.com',
       blogIndexUrl: 'https://ogabassey.com/blog',
-      content: '<p>Founder column.</p>',
+      content:
+        '<p>Founder column. https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>',
       merchant: {
         business_name: 'Ogabassey',
         logo_url: null,
@@ -58,6 +65,7 @@ describe('buildBlogPostStructuredData author classification', () => {
         category: 'News',
         published_at: '2026-11-09T13:00:00.000Z',
         title: 'Founder Column',
+        video_upload_date: '2026-11-09T12:00:00.000Z',
       },
       postUrl: 'https://ogabassey.com/blog/founder-column',
     });
@@ -68,6 +76,10 @@ describe('buildBlogPostStructuredData author classification', () => {
       jobTitle: 'Founder',
       name: 'Ogabassey',
       url: 'https://ogabassey.com/blog/author/ogabassey',
+    });
+    expect(data.videoMetadata?.schema?.author).toEqual({
+      '@type': 'Person',
+      name: 'Ogabassey',
     });
   });
 });

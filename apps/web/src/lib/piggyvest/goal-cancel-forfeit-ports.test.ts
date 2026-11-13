@@ -419,3 +419,22 @@ it('bugfix: pages a goal-wallet problem as a review, not as a wrong interest wal
     { reason: 'goal_wallet_short', operationId }
   );
 });
+
+it('bugfix: a malformed wallet reply is a failed check (retried), not a mismatch', async () => {
+  mocks.retrieve.mockImplementation(
+    wallets({ ...goalWallet, balance: '12000' } as never)
+  );
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn(),
+    unclaim: vi.fn(),
+    markPosting: vi.fn(),
+    ackAlert: vi.fn(),
+    provider,
+    evidence: null,
+    operationId,
+    expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
+  });
+  await expect(ports.verifyDestination(forfeit)).rejects.toThrow();
+});

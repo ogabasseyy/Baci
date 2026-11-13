@@ -96,3 +96,21 @@ describe('bugfix: IMEI request settles after PiggyVest was switched off', () => 
     );
   });
 });
+
+describe('IMEI top-up while the Ogabassey verdict is still unknown', () => {
+  it('prefills the card minimum, matching the card-only store credit sheet it opens', () => {
+    // Arrange: no verdict yet at the pilot. The Add money sheet treats this
+    // purchase return as card-only store credit (never a bank transfer that
+    // could land in PiggyVest savings), so the amount must meet its minimum.
+    mockCapabilityNow = null;
+
+    // Act
+    imeiCheckScreenActions.fundWallet(50);
+    mockCapabilityNow = false;
+
+    // Assert
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=100&returnTo=%2Fimei-check'
+    );
+  });
+});

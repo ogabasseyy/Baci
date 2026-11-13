@@ -120,6 +120,7 @@ export function WalletHeroSection({
           <WalletHeroFundingAccount
             account={fundingAccount}
             emphasizeCopied={primaryReady}
+            purpose={primaryReady ? 'savings' : 'wallet'}
           />
         ) : (
           <WalletHeroCreateAccount
@@ -178,7 +179,9 @@ export function WalletHeroSection({
       {showUtilities ? (
         <WalletQuickUtilities accentColor={utilityAccentColor} />
       ) : null}
-      {fundingAccount && creditWatch ? (
+      {/* The checker reads the store-credit ledger, where PiggyVest
+          transfers never appear: hidden on the PiggyVest path (Codex). */}
+      {fundingAccount && creditWatch && !primaryReady ? (
         <WalletCreditCheckPanel
           accentColor="#F8B84C"
           textColor="#FFFFFF"

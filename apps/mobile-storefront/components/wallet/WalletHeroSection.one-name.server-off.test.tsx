@@ -25,12 +25,21 @@ const account = {
   provider: 'piggyvest',
 };
 
+const creditWatch = {
+  armCheck: jest.fn(),
+  creditedAmount: null,
+  reset: jest.fn(),
+  returnCtaHref: undefined,
+  status: 'idle' as const,
+};
+
 function renderHero(primaryReady: boolean, onOpenFundPanel = jest.fn()) {
   render(
     <WalletPrimaryContext.Provider value={primaryReady}>
       <WalletHeroSection
         earningsAvailable={false}
         earningsBalance={null}
+        creditWatch={creditWatch}
         fundingAccount={account}
         loyaltyPoints={0}
         onOpenFundPanel={onOpenFundPanel}
@@ -73,7 +82,7 @@ describe('bugfix: no Add money entry and no copy feedback on the wallet card', (
 
     await act(async () => {
       fireEvent.press(
-        screen.getByRole('button', { name: 'Copy funding account number' })
+        screen.getByRole('button', { name: 'Copy savings account number' })
       );
     });
 
@@ -85,7 +94,7 @@ describe('bugfix: no Add money entry and no copy feedback on the wallet card', (
 
     await act(async () => {
       fireEvent.press(
-        screen.getByRole('button', { name: 'Copy funding account number' })
+        screen.getByRole('button', { name: 'Copy savings account number' })
       );
     });
 
@@ -110,6 +119,25 @@ describe('server keeps PiggyVest off', () => {
     expect(screen.queryByRole('button', { name: 'Add money' })).toBeNull();
     expect(
       screen.getByText('Account number copied to clipboard.')
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: PiggyVest transfers checked in the store-credit ledger', () => {
+  it('hides the transfer checker and labels the account as savings', () => {
+    renderHero(true);
+
+    expect(screen.queryByText("I've transferred — check for it")).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Copy savings account number' })
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the plain funding account label where PiggyVest is off', () => {
+    renderHero(false);
+
+    expect(
+      screen.getByRole('button', { name: 'Copy funding account number' })
     ).toBeOnTheScreen();
   });
 });

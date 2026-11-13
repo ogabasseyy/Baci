@@ -10,10 +10,18 @@ jest.mock('@/lib/piggyvest-primary-capability', () => ({
 
 const KEY = ['wallet', 'data', 'merchant-1', 'owner-1'] as const;
 
-function setup(initial: boolean | null) {
+function setup(
+  initial: boolean | null,
+  cachedWallet: Record<string, unknown> | undefined = undefined
+) {
   mockCapability = initial;
   const invalidateQueries = jest.fn(async () => undefined);
-  const queryClient = { invalidateQueries } as unknown as QueryClient;
+  const getQueryData = () =>
+    cachedWallet ? { transactions: [], wallet: cachedWallet } : undefined;
+  const queryClient = {
+    getQueryData,
+    invalidateQueries,
+  } as unknown as QueryClient;
   const hook = renderHook(() =>
     useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY)
   );
@@ -51,9 +59,37 @@ describe('wallet recheck with the server keeping PiggyVest off', () => {
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
-  it('does not refetch on a probe that confirms an already-possible merchant', () => {
-    const { hook, invalidateQueries } = setup(null);
+  it('does not refetch on a probe that confirms an already-PiggyVest wallet', () => {
+    const { hook, invalidateQueries } = setup(null, {
+      balance: 0,
+      primary_balance_kobo: 0,
+    });
     mockCapability = true;
+    hook.rerender({});
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: legacy wallet restored after a cold restart stays authoritative', () => {
+  it('refetches on the first positive verdict when the cached wallet is legacy', () => {
+    // Arrange: cold start; the persisted cache restores a wallet saved while
+    // PiggyVest was ruled out, and the capability starts unknown.
+    const { hook, invalidateQueries } = setup(null, { balance: 0 });
+
+    // Act: the first probe answers that PiggyVest is enabled.
+    mockCapability = true;
+    hook.rerender({});
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: KEY,
+      exact: true,
+    });
+  });
+
+  it('does not refetch when the first verdict rules PiggyVest out', () => {
+    const { hook, invalidateQueries } = setup(null, { balance: 0 });
+    mockCapability = false;
     hook.rerender({});
     expect(invalidateQueries).not.toHaveBeenCalled();
   });

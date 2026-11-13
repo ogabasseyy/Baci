@@ -142,7 +142,7 @@ export function WalletFundModal({
               createFundingAccountUnavailableMessage={
                 createFundingAccountUnavailableMessage
               }
-              creditWatch={creditWatch}
+              creditWatch={primaryReady ? undefined : creditWatch}
               fundAmount={fundAmount}
               fundingAccount={fundingAccount}
               hideCardFunding={hideCardFunding}

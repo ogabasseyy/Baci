@@ -36,7 +36,8 @@ interface WalletFundPanelProps {
   canCreateFundingAccount: boolean;
   colors: WalletColors;
   createFundingAccountUnavailableMessage?: string;
-  creditWatch: WalletCreditWatch;
+  /** Omitted on the PiggyVest path: its ledger never shows those credits. */
+  creditWatch?: WalletCreditWatch;
   fundAmount: string;
   fundingAccount: WalletDisplayFundingAccount | null;
   /** A card top-up credits the legacy wallet: hidden for primary-funded flows. */
@@ -211,11 +212,13 @@ export function WalletFundPanel({
               {copyFeedback}
             </Text>
           ) : null}
-          <WalletCreditCheckPanel
-            accentColor={colors.primary}
-            textColor={colors.text}
-            watch={creditWatch}
-          />
+          {creditWatch ? (
+            <WalletCreditCheckPanel
+              accentColor={colors.primary}
+              textColor={colors.text}
+              watch={creditWatch}
+            />
+          ) : null}
         </>
       ) : needsPhone ? (
         // No account yet and the only blocker is a missing phone — collect it

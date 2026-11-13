@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test';
+import { isChatwootBridgeFixtureRequest } from './chatwoot-bridge-request-allowlist';
 import { isFixtureAssetRequest } from './request-allowlist';
 import { order } from './setup';
 
@@ -23,6 +24,7 @@ export const test = base.extend<{
       let manualApi403ConsoleCount = 0;
       let manualApi404ConsoleCount = 0;
       let manualCheckoutFlowVisited = false;
+      let chatwootBridgeFixtureVisited = false;
       let manualCheckoutProviderErrorCount = 0;
       let manualCheckout503ConsoleCount = 0;
       let redvaultSharedPickupVisited = false;
@@ -31,8 +33,22 @@ export const test = base.extend<{
       let redvaultLostCheckoutErrors = 0;
       let redvaultLostNetworkErrors = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
-      page.on('framenavigated', () => {
-        const qaScenario = new URL(page.url()).searchParams.get('qa');
+      const configuredHarnessPort = Number(
+        process.env.CHECKOUT_BROWSER_PORT?.trim() || 3217
+      );
+      const harnessPort =
+        Number.isInteger(configuredHarnessPort) &&
+        configuredHarnessPort >= 1 &&
+        configuredHarnessPort <= 65535
+          ? configuredHarnessPort
+          : 3217;
+      const harnessOrigin = new URL(`http://127.0.0.1:${harnessPort}`).origin;
+      page.on('framenavigated', (frame) => {
+        if (frame !== page.mainFrame()) return;
+        const navigatedUrl = new URL(frame.url());
+        chatwootBridgeFixtureVisited =
+          navigatedUrl.pathname === '/chatwoot-bridge';
+        const qaScenario = navigatedUrl.searchParams.get('qa');
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
         if (
           qaScenario === 'manual-api-integration' ||
@@ -158,6 +174,15 @@ export const test = base.extend<{
         const isFixtureResumeOrderRead =
           request.method() === 'GET' &&
           url.pathname === `/api/storefront/orders/${order.id}`;
+        if (
+          isChatwootBridgeFixtureRequest({
+            url: request.url(),
+            method: request.method(),
+            harnessOrigin,
+            fixtureVisited: chatwootBridgeFixtureVisited,
+          })
+        )
+          return route.continue();
         if (
           manualApiScenario() &&
           url.origin === new URL(page.url()).origin &&

@@ -1178,6 +1178,11 @@ BEGIN
     RETURN CASE WHEN v_refund.provider_transaction_id = proof ->> 'providerTransactionId'
                 THEN 'duplicate' ELSE 'conflict' END;
   END IF;
+  -- A late success already recorded on its released attempt (below).
+  IF v_refund.state = 'released' AND v_refund.provider_transaction_id IS NOT NULL THEN
+    RETURN CASE WHEN v_refund.provider_transaction_id = proof ->> 'providerTransactionId'
+                THEN 'duplicate' ELSE 'conflict' END;
+  END IF;
   IF NOT (v_refund.state = 'dispatched'
           OR (v_refund.state = 'released' AND v_refund.dispatched_at IS NOT NULL)) THEN
     RETURN 'conflict';
@@ -1200,11 +1205,24 @@ BEGIN
     -- under the row lock, so one the worker dispatched meanwhile is kept).
     DELETE FROM piggyvest_primary.wallet_payment_refunds
      WHERE payment_id = v_refund.payment_id AND id <> v_refund.id AND state = 'owed';
-    -- Anything still live could refund too: a person decides.
+    -- Anything still live could refund too: a person decides. The proven
+    -- success is still recorded (Codex P2): the customer was credited, so
+    -- this attempt keeps its provider record and the payment is refunded;
+    -- only the possible duplicate is left for review. A replay of the same
+    -- evidence then answers 'duplicate' (checked above).
     IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payment_refunds AS live
                 WHERE live.payment_id = v_refund.payment_id AND live.id <> v_refund.id
                   AND live.state IN ('owed', 'dispatched', 'confirmed', 'needs_review')) THEN
-      UPDATE piggyvest_primary.wallet_payments SET review_reason = 'late_refund_success'
+      -- It stays 'released' (one live attempt per payment) but carries its
+      -- provider record and settlement time.
+      UPDATE piggyvest_primary.wallet_payment_refunds
+         SET review_reason = 'late_refund_success',
+             provider_transaction_id = proof ->> 'providerTransactionId',
+             settled_at = pg_catalog.clock_timestamp()
+       WHERE id = v_refund.id;
+      UPDATE piggyvest_primary.wallet_payments
+         SET review_reason = 'late_refund_success',
+             fulfilment = CASE WHEN fulfilment = 'refund_owed' THEN 'refunded' ELSE fulfilment END
        WHERE id = v_refund.payment_id;
       RETURN 'needs_review';
     END IF;

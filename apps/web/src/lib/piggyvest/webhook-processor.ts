@@ -6,6 +6,7 @@ import type { PiggyvestClientConfig } from './client';
 import { recordQuarantineEvent } from './event-quarantine';
 import { InflowLedgerError, recordInflowCredit } from './inflow-ledger';
 import { InterestLedgerError, recordInterestPayout } from './interest-ledger';
+import { withEnvelopeReference } from './outflow-envelope-reference';
 import {
   applyRestrictionCreated,
   applyRestrictionLifted,
@@ -144,6 +145,10 @@ async function applyEvent(
     event.eventData as Record<string, unknown>
   );
   if (references.length === 0) {
+    // Our own wallet transfer reference may travel only in the envelope
+    // (pvb_third_party_reference): attribute it there (Codex P2).
+    if (withEnvelopeReference([], event).length > 0)
+      await reconcileSavingsOutflowReferences([], deps, event);
     return;
   }
   await applyOutflowTerminal(supabase, {

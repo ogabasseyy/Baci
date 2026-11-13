@@ -206,6 +206,26 @@ describe('processPiggyvestEvent', () => {
     expect(mockApplyOutflow).not.toHaveBeenCalled();
   });
 
+  it('bugfix: attributes a wallet transfer by its envelope reference when eventData has none (Codex P2)', async () => {
+    const event = {
+      eventId: 'outflow-004',
+      eventType: 'wallet-transfer.outflow.success',
+      eventData: {},
+      pvb_third_party_reference: 'pvb-save-envelope-1',
+    };
+    await expect(
+      processPiggyvestEvent(supabase, event as never, {
+        savingsRuntime: {
+          reconciliationConfiguration: {},
+          providerToken: 'token',
+        },
+      })
+    ).resolves.toBe('processed');
+    expect(mockSavingsOutflow).toHaveBeenCalledWith(
+      expect.objectContaining({ references: ['pvb-save-envelope-1'] })
+    );
+  });
+
   it.each([
     'confirmed',
     'cancelled',

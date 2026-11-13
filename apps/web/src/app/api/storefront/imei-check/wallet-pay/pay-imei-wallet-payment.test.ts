@@ -139,7 +139,7 @@ describe('payImeiWalletPayment', () => {
     expect(d.deliver).toHaveBeenCalledTimes(1);
   });
 
-  it('answers a wrong-purchase claim with a definite 409', async () => {
+  it('bugfix: a wrong-purchase claim after payment is under review, never "nothing taken" (Muse)', async () => {
     const d = deps({
       deliver: vi.fn(async () =>
         Promise.reject(new WalletPaymentMismatchError())
@@ -149,9 +149,9 @@ describe('payImeiWalletPayment', () => {
       { lookupId: LOOKUP, body, auth: {} as never },
       d
     );
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toMatchObject({
-      code: 'PAYMENT_OPERATION_INVALID',
+      status: 'payment_review',
     });
   });
 

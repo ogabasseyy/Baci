@@ -1,13 +1,32 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { CONFIG } from '@/lib/config';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
-import { pickMerchantId } from '@/lib/pick-merchant-id';
-import { useAuthStore } from '@/stores/auth-store';
 import { shownGoalSetupPhase } from './shown-goal-setup-phase';
+import { useGoalSetupScope } from './use-goal-setup-scope';
 import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
+import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
-export type GoalCardSetupState = 'getting_ready' | 'needs_setup' | null;
+export type GoalCardSetupState =
+  | 'checking'
+  | 'getting_ready'
+  | 'needs_setup'
+  | 'needs_help'
+  | null;
+
+/**
+ * What the plan card says for a setup status. Only a confirmed-ready plan
+ * gets the "Add to savings" invitation (null); while the status is unknown
+ * (loading, or the read failed) the card stays neutral.
+ */
+export function goalCardSetupStateFor(
+  phase: SavingsPlanFundingPhase
+): GoalCardSetupState {
+  if (phase === 'ready') return null;
+  if (phase === 'pending' || phase === 'setup_retryable')
+    return 'getting_ready';
+  if (phase === 'not_started') return 'needs_setup';
+  if (phase === 'unavailable') return 'needs_help';
+  return 'checking';
+}
 
 /**
  * Whether the wallet's plan card should show the plan's setup instead of
@@ -20,16 +39,8 @@ export function useGoalCardSetupState(
   /** The savings sheet is open and checks this goal itself: don't double up. */
   pausePolling = false
 ): GoalCardSetupState {
-  const userId = useAuthStore((state) => state.user?.id) ?? '';
-  const storeMerchantId = useAuthStore((state) => state.merchantId);
-  const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID) ?? '';
-  const checked =
-    userId !== '' &&
-    isPiggyvestPrimaryMerchant(merchantId) &&
-    goal.source_mode === 'manual' &&
-    goal.status === 'active';
   // The same key the savings sheet uses, so both read one shared memory.
-  const scopeKey = JSON.stringify([userId, merchantId, goal.id]);
+  const { checked, merchantId, scopeKey, userId } = useGoalSetupScope(goal);
   const funding = useSavingsPlanFunding({
     activeMerchantId: merchantId,
     goalId: checked ? goal.id : null,
@@ -52,9 +63,5 @@ export function useGoalCardSetupState(
     reread: funding.fetchExistingPlanFunding,
     pendingSince: goal.created_at ? Date.parse(goal.created_at) : null,
   });
-  if (!checked) return null;
-  if (phase === 'pending' || phase === 'setup_retryable')
-    return 'getting_ready';
-  if (phase === 'not_started') return 'needs_setup';
-  return null;
+  return checked ? goalCardSetupStateFor(phase) : null;
 }

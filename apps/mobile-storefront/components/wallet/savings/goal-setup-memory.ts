@@ -20,6 +20,13 @@ type Entry = {
  * It never holds money or personal data, only a status word and a time.
  */
 const entries = new Map<string, Entry>();
+const listeners = new Set<() => void>();
+
+/** Calls `listener` whenever a goal's remembered status changes. */
+export function subscribeGoalSetupMemory(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 /** Goals remembered at once; the oldest is forgotten first. */
 const MAX_REMEMBERED_GOALS = 64;
 
@@ -39,6 +46,7 @@ export function rememberGoalSetupPhase(
   if (!SETTLED.includes(phase)) return;
   const entry = entries.get(scopeKey);
   const waiting = phase === 'pending' || phase === 'setup_retryable';
+  const changed = entry?.lastPhase !== phase;
   boundedMapSet(
     entries,
     scopeKey,
@@ -48,6 +56,7 @@ export function rememberGoalSetupPhase(
     },
     MAX_REMEMBERED_GOALS
   );
+  if (changed) for (const listener of listeners) listener();
 }
 
 export function lastGoalSetupPhase(
@@ -63,4 +72,5 @@ export function goalSetupFirstWaitingAt(scopeKey: string): number | null {
 /** Tests only: forget everything. */
 export function resetGoalSetupMemory(): void {
   entries.clear();
+  for (const listener of listeners) listener();
 }

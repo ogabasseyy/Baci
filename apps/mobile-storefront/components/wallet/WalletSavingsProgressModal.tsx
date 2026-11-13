@@ -10,6 +10,7 @@ import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
+import { usePlanStillSettingUp } from './savings/use-plan-still-setting-up';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -64,6 +65,8 @@ export function WalletSavingsProgressModal({
     primaryForeground: BRAND.onPrimary,
     primaryLowOpacity: BRAND.primaryAlpha12,
   };
+  // Matches the wallet card: "View plan" there means not "Add to savings" here.
+  const settingUp = usePlanStillSettingUp(goal);
   if (!goal) {
     return null;
   }
@@ -73,6 +76,7 @@ export function WalletSavingsProgressModal({
   const canAddToSavings =
     (goal.source_mode === 'manual' || usesPlanFunding) &&
     goal.status !== 'completed';
+  const addTitle = canAddToSavings && !settingUp;
   const canChangeDevice =
     canAddToSavings ||
     (goal.selection_unresolved &&
@@ -104,7 +108,7 @@ export function WalletSavingsProgressModal({
                 ]}
               >
                 <Ionicons
-                  name={canAddToSavings ? 'wallet-outline' : 'flag-outline'}
+                  name={addTitle ? 'wallet-outline' : 'flag-outline'}
                   size={16}
                   color={colors.primary}
                 />
@@ -113,7 +117,7 @@ export function WalletSavingsProgressModal({
                 accessibilityRole="header"
                 style={[styles.title, { color: colors.primary }]}
               >
-                {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
+                {addTitle ? 'Add to savings' : 'Your savings plan'}
               </Text>
             </View>
             <Pressable

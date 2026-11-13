@@ -98,11 +98,25 @@ describe('useGoalCardSetupState', () => {
     expect(run()).toBe('needs_setup');
   });
 
-  it('shows nothing special once ready, or while the first read is in flight', () => {
+  it('invites a first contribution only once the plan is ready', () => {
     mockPhase = 'ready';
     expect(run()).toBeNull();
-    mockPhase = 'loading';
-    expect(run()).toBeNull();
+  });
+
+  describe('bugfix: a cold open flashed the ready card before the status was known', () => {
+    it.each([
+      'idle',
+      'loading',
+      'error',
+    ] as const)('stays neutral while the status is unknown (%s)', (phase) => {
+      mockPhase = phase;
+      expect(run()).toBe('checking');
+    });
+  });
+
+  it('says setup needs a hand when the server cannot finish it', () => {
+    mockPhase = 'unavailable';
+    expect(run()).toBe('needs_help');
   });
 
   it('uses what the savings sheet last learned while re-reading', () => {

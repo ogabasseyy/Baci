@@ -11,6 +11,7 @@ import { getSavingsProgress } from './get-savings-progress';
 import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
 import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
+import { planCardFooterLine } from './savings/plan-card-footer-line';
 import type { GoalCardSetupState } from './savings/use-goal-card-setup-state';
 
 type WalletSavingsPlanCardProps = {
@@ -47,7 +48,7 @@ export function WalletSavingsPlanCard({
   const { colour, details, storage } = getSavingsVariantPresentation(
     goal.product_variant_label
   );
-  const hasStarted = goal.current_amount > 0;
+  const footerLine = planCardFooterLine(setupState, goal.current_amount > 0);
   const actionLabel = goal.selection_unresolved
     ? 'Choose exact variant'
     : awaitingSettlement
@@ -152,13 +153,9 @@ export function WalletSavingsPlanCard({
         ) : null}
       </View>
       <View style={styles.footer}>
-        {setupState || !hasStarted ? (
+        {footerLine ? (
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            {setupState === 'getting_ready'
-              ? 'Getting your plan ready'
-              : setupState === 'needs_setup'
-                ? 'Finish setting up your plan'
-                : 'Start with your first contribution'}
+            {footerLine}
           </Text>
         ) : null}
         {goal.maturity_date ? (

@@ -43,13 +43,16 @@ describe('BVN field with the server keeping PiggyVest off', () => {
 });
 
 describe('bugfix: the BVN field looked like an error before any error', () => {
-  const border = () => {
-    const style = screen.getByTestId('bvn-input-wrap').props.style;
-    return Object.assign({}, ...[style].flat(Number.POSITIVE_INFINITY))
-      .borderColor;
-  };
+  const flat = () =>
+    Object.assign(
+      {},
+      ...[screen.getByTestId('bvn-input-wrap').props.style].flat(
+        Number.POSITIVE_INFINITY
+      )
+    );
+  const border = () => flat().borderColor;
 
-  it('is neutral at rest, brand-coloured while typing, red only on an error', () => {
+  it('is neutral at rest, ink while typing (never red), red only on an error', () => {
     const { rerender } = render(
       <BvnField
         colors={Colors.light}
@@ -62,7 +65,11 @@ describe('bugfix: the BVN field looked like an error before any error', () => {
     expect(border()).toBe(Colors.light.border);
 
     fireEvent(screen.getByLabelText('BVN'), 'focus');
-    expect(border()).toBe(BRAND.primary);
+    // Ogabassey's brand colour is red: focus must not look like an error.
+    expect(border()).toBe(Colors.light.text);
+    expect(border()).not.toBe(BRAND.primary);
+    expect(border()).not.toBe(Colors.light.error);
+    expect(flat().borderWidth).toBe(2);
     fireEvent(screen.getByLabelText('BVN'), 'blur');
     expect(border()).toBe(Colors.light.border);
 

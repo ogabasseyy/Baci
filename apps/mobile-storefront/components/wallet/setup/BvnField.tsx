@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { BRAND } from '@/constants/Colors';
 import { setupStyles } from '../piggyvest-wallet-setup.styles';
 
 /**
@@ -24,11 +23,12 @@ export function BvnField({
 }) {
   const [visible, setVisible] = useState(false);
   const [focused, setFocused] = useState(false);
-  // Neutral at rest, brand colour while typing, red only for a real error.
+  // Neutral at rest, ink (2pt) while typing, red only for a real error.
+  // The brand colour is red too, so it is never the focus colour here.
   const borderColor = error
     ? colors.error
     : focused
-      ? BRAND.primary
+      ? colors.text
       : colors.border;
   return (
     <View style={setupStyles.field}>
@@ -42,6 +42,7 @@ export function BvnField({
           {
             backgroundColor: colors.muted,
             borderColor,
+            borderWidth: focused || error ? 2 : 1.5,
           },
         ]}
       >

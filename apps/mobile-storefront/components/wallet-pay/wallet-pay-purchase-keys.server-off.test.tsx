@@ -193,3 +193,38 @@ describe('bugfix: a settled key came back after a failed save (Codex P2)', () =>
     );
   });
 });
+
+describe('bugfix: a mid-pay account switch dropped a delivered result (Muse)', () => {
+  it('keeps the key when the account changed while the call was out', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    let owner = true;
+    const opts = { onSettled: jest.fn(), stillOwner: () => owner };
+    const switching = {
+      start: jest.fn(),
+      verifyPin: jest.fn(),
+      pay: jest.fn(async () => {
+        owner = false;
+        return { kind: 'delivered', result: {} } as never;
+      }),
+    };
+    await trackWalletPayPurchase(switching, 'p', opts).pay(OP, 'proof');
+    expect(opts.onSettled).not.toHaveBeenCalled();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'a'
+    );
+  });
+
+  it('still forgets the key when the same account gets the answer', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    const opts = options();
+    await trackWalletPayPurchase(
+      adapter({ kind: 'delivered', result: {} }),
+      'p',
+      opts
+    ).pay(OP, 'proof');
+    expect(opts.onSettled).toHaveBeenCalled();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'b'
+    );
+  });
+});

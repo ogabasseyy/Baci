@@ -1,3 +1,4 @@
+import { readConflictAnswer } from './goal-cancel-conflict-answer';
 import 'server-only';
 import { piggyvestGoalCancelSchemas as schemas } from '@/schemas/piggyvest-goal-cancel';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
@@ -87,9 +88,9 @@ export function createGoalCancelEvidenceStore(input: {
   async function flagConflict(
     reason: string,
     proof: object,
-    // The row the page is about when it is not the proof's own (a forfeit
-    // replacement that went to review as its own row).
-    reviewedId?: string
+    // Other rows this one page covers (a forfeit replacement that went to
+    // review as its own row, or replacements a late success froze).
+    reviewedIds: readonly string[] = []
   ) {
     conflicted = true;
     const { operationId } = proof as { operationId?: unknown };
@@ -98,9 +99,13 @@ export function createGoalCancelEvidenceStore(input: {
       ...(typeof operationId === 'string' ? { operationId } : {}),
     });
     // Acknowledged only after the page; a failure just means it repeats.
-    const acknowledged = reviewedId ?? operationId;
-    if (statements.ack && typeof acknowledged === 'string')
-      await run(statements.ack, acknowledged).catch(() => undefined);
+    const acknowledged = [
+      ...(typeof operationId === 'string' ? [operationId] : []),
+      ...reviewedIds,
+    ];
+    if (statements.ack)
+      for (const id of acknowledged)
+        await run(statements.ack, id).catch(() => undefined);
   }
   // Reads the goal wallet balance left after a verified transfer. A transient
   // failure (network, provider jitter) is NOT a settlement conflict: it is
@@ -145,18 +150,10 @@ export function createGoalCancelEvidenceStore(input: {
       if (residual > 0) body = { ...receipt, residualKobo: residual };
     }
     let result: unknown;
-    let reviewedId: string | undefined;
+    let reviewedIds: readonly string[] = [];
     try {
       result = await run(statement, JSON.stringify(body));
-      // 'conflict:<forfeit id>': a conflict whose review is on another row.
-      const named =
-        typeof result === 'string'
-          ? /^conflict:([0-9a-f-]{36})$/.exec(result)
-          : null;
-      if (named) {
-        reviewedId = named[1];
-        result = 'conflict';
-      }
+      ({ result, reviewedIds } = readConflictAnswer(result));
       if (!allowed.includes(result as T))
         throw new Error('Goal cancel settlement unavailable');
     } catch (error) {
@@ -164,7 +161,7 @@ export function createGoalCancelEvidenceStore(input: {
       throw error;
     }
     if (result === 'conflict')
-      await flagConflict(`${kind}_conflict`, receipt, reviewedId);
+      await flagConflict(`${kind}_conflict`, receipt, reviewedIds);
     return result as T;
   }
   return {

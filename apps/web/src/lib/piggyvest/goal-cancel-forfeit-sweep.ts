@@ -3,6 +3,7 @@ import { piggyvestGoalCancelForfeitSchemas as schemas } from '@/schemas/piggyves
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { pageGoalCancelAlerts } from './goal-cancel-alert-pages';
 import { driveGoalCancelForfeit } from './goal-cancel-forfeit';
 import { forfeitDriverPorts } from './goal-cancel-forfeit-ports';
 import { GOAL_CANCEL_FORFEIT_STATEMENTS as sql } from './goal-cancel-forfeit-statements';
@@ -95,32 +96,55 @@ export async function sweepPendingGoalCancelForfeits(input: {
     deferred: 0,
   };
   const now = input.now ?? Date.now;
-  // Every alert is paged now, before the deadline can defer its item. Pages
-  // are cheap; acknowledgements are database round trips, so they stop at the
-  // deadline (an unacknowledged page simply repeats next run, never lost),
-  // leaving the budget for settling sent forfeits. A failed acknowledgement
-  // fails the run.
-  const alerts = work.filter((item) => item.alert);
-  for (const item of alerts)
-    emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
-      // A plan that went to review with nobody paged (an over-ceiling
-      // late-interest merge), or a sent forfeit still in flight a day on.
-      reason:
-        item.state === 'needs_review'
-          ? 'forfeit_needs_review'
-          : 'forfeit_overdue',
-      operationId: item.operationId,
-    });
-  for (const item of alerts) {
-    if (input.deadlineAt !== undefined && now() >= input.deadlineAt) break;
-    try {
+  // Alerts are paged (then acknowledged) before any transfer is driven, all
+  // within the deadline; one left over is paged again next run.
+  const forfeitPages = await pageGoalCancelAlerts({
+    items: work.filter((item) => item.alert),
+    emit: (item) =>
+      emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
+        // A plan that went to review with nobody paged, or a sent forfeit
+        // still in flight a day on.
+        reason:
+          item.state === 'needs_review'
+            ? 'forfeit_needs_review'
+            : 'forfeit_overdue',
+        operationId: item.operationId,
+      }),
+    acknowledge: async (item) =>
       schemas.ackRows.parse(
         (await execute(sql.workerAck, bound(item.forfeitId))).rows
-      );
-    } catch {
-      result.failed += 1;
-    }
-  }
+      ),
+    deadlineAt: input.deadlineAt,
+    now,
+  });
+  result.failed += forfeitPages.failed;
+  // Cancels held before anything was sent (an operator must act): paged
+  // until acknowledged a day apart, so a hold is never silent even when the
+  // submit path's own page was lost.
+  const holds = schemas.holdRows.parse(
+    (
+      await execute(sql.workerHolds, [
+        configuration.integrationId,
+        configuration.environment,
+      ])
+    ).rows
+  )[0].result;
+  const holdPages = await pageGoalCancelAlerts({
+    items: holds,
+    emit: (hold) =>
+      emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+        reason: hold.reason,
+        operationId: hold.operationId,
+      }),
+    acknowledge: async (hold) =>
+      schemas.ackRows.parse(
+        (await execute(sql.workerHoldAck, bound(hold.operationId))).rows
+      ),
+    deadlineAt: input.deadlineAt,
+    now,
+  });
+  result.attention += holdPages.paged;
+  result.failed += holdPages.failed;
   for (const [index, item] of work.entries()) {
     if (input.deadlineAt !== undefined && now() >= input.deadlineAt) {
       result.deferred = work.length - index;

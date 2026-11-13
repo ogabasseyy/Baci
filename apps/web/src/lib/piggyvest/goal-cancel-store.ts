@@ -113,6 +113,14 @@ export function createGoalCancelStore(input: {
       ]);
       return forfeitSchemas.unclaimRows.parse(result.rows)[0].result;
     },
+    // Records a page about this attempt's hold as emitted (after paging).
+    async ackHoldAlert(operationId: string) {
+      const result = await input.execute(forfeitSql.holdAck, [
+        scope,
+        schemas.operationId.parse(operationId),
+      ]);
+      return forfeitSchemas.ackRows.parse(result.rows)[0].result;
+    },
     // Records a page about this forfeit as emitted (call only after paging).
     async ackForfeitAlert(forfeitId: string) {
       const result = await input.execute(forfeitSql.manage, [

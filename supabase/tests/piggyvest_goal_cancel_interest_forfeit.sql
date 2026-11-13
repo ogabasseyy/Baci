@@ -503,15 +503,21 @@ BEGIN
   BEGIN
     PERFORM piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid);
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'dispatched', 'replacement not sent');
+    -- Regression: the frozen replacement is named, so the caller
+    -- acknowledges it with the one page for this incident.
     PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
-        pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict', 'late success settled');
+        pg_temp.gf_forfeit_proof(v_forfeit))
+        = 'conflict:' || (SELECT id::text FROM piggyvest_primary.goal_cancel_interest_forfeits
+                           WHERE cancel_operation_id = v_op::uuid AND id <> v_forfeit::uuid
+                             AND state = 'dispatched'),
+      'late success settled, or the frozen replacement was not named');
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review',
       'a sent replacement stayed live after the old reference succeeded late');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
   PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
-      pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict',
+      pg_temp.gf_forfeit_proof(v_forfeit)) LIKE 'conflict%',
     'a late success of a released forfeit settled automatically');
   -- Regression: a redelivery of the same late success is a duplicate (no
   -- second page), and the old reference is no longer matched.
@@ -1057,6 +1063,50 @@ BEGIN
       WHERE proc.oid = 'piggyvest_primary.customer_paid_interest(uuid,uuid)'::regprocedure)
       ~ 'goal_cancel_operations cancel[\s\S]*cancel_integration\.environment=''production''[\s\S]*cancel_integration\.merchant_id=p_merchant',
     'a sandbox cancel can reduce the customer''s real Earnings');
+  -- Regression: a reversal recorded while a forfeit is claimed but not yet
+  -- posted freezes it, so the posting mark refuses and nothing is sent.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('reversal-unposted');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'reversal split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'reversal principal');
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    PERFORM pg_temp.gf_receipt('gf-reversed', 400, pg_catalog.clock_timestamp() - interval '2 days');
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-unposted', 'gf-reversed', 100,
+      repeat('d', 64), 'synthetic-reversal-2');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'posting') = 'not_released',
+      'a reversal left a claimed, unposted forfeit sendable');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a delayed record of interest paid before the cancel (already
+  -- forfeited by the split) does not tell the customer interest was added.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('delayed-notice');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'notice split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'notice principal');
+    INSERT INTO savings_notifications.events (merchant_id, customer_id, goal_id, event_key, type, title, body)
+    VALUES ('f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003', c_goal,
+      'primary-interest:f3860000-0000-4000-8000-000000000006:gf-delayed', 'interest_credited', 'Interest', 'Interest')
+    ON CONFLICT DO NOTHING;
+    PERFORM pg_temp.gf_receipt('gf-delayed', 500, pg_catalog.clock_timestamp() - interval '3 days');
+    PERFORM pg_temp.gc_assert(
+      (SELECT voided_at IS NOT NULL FROM savings_notifications.events
+        WHERE event_key = 'primary-interest:f3860000-0000-4000-8000-000000000006:gf-delayed'),
+      'a delayed pre-cancel interest record told the customer interest was added to a cancelled goal');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
     UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL
@@ -1068,6 +1118,27 @@ BEGIN
       AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
                        WHERE cancel_operation_id = v_op::uuid),
       'a principal above the ceiling was not released: ' || v_result::text);
+    -- Regression: held (a retry can never succeed) and paged by the sweep
+    -- until acknowledged, instead of the customer looping silently.
+    PERFORM pg_temp.gc_assert(
+      (SELECT held_reason FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
+        = 'principal_above_transfer_limit'
+      AND pg_temp.gc_issue_op() = '{"status":"needs_review"}'::jsonb
+      AND piggyvest_primary.list_goal_cancel_holds_worker('f3860000-0000-4000-8000-000000000006', 'staging')
+        @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+             'operationId', v_op, 'reason', 'principal_above_transfer_limit'))
+      AND piggyvest_primary.ack_goal_cancel_hold(pg_temp.gc_scope(), v_op::uuid)
+      AND NOT piggyvest_primary.list_goal_cancel_holds_worker('f3860000-0000-4000-8000-000000000006', 'staging')
+        @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('operationId', v_op))
+      AND NOT piggyvest_primary.ack_goal_cancel_hold_worker('f3860000-0000-4000-8000-000000000006', 'staging', v_op::uuid),
+      'a hold for a principal above the ceiling was not held and paged until acknowledged');
+    UPDATE piggyvest_primary.goal_cancel_operations
+       SET held_alerted_at = pg_catalog.clock_timestamp() - interval '2 days' WHERE id = v_op::uuid;
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.list_goal_cancel_holds_worker('f3860000-0000-4000-8000-000000000006', 'staging')
+        @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('operationId', v_op))
+      AND piggyvest_primary.ack_goal_cancel_hold_worker('f3860000-0000-4000-8000-000000000006', 'staging', v_op::uuid),
+      'a hold still open a day after its page was not paged again');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -1139,6 +1210,10 @@ BEGIN
     'piggyvest_primary.assert_goal_cancel_worker(uuid,text)',
     'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer,boolean)',
     'piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(uuid,text,uuid)',
+    'piggyvest_primary.list_goal_cancel_holds_worker(uuid,text)',
+    'piggyvest_primary.ack_goal_cancel_hold_row(uuid)',
+    'piggyvest_primary.ack_goal_cancel_hold_worker(uuid,text,uuid)',
+    'piggyvest_primary.ack_goal_cancel_hold(jsonb,uuid)',
     'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid,text,uuid)',

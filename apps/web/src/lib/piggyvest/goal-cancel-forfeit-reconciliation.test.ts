@@ -221,3 +221,28 @@ it('bugfix: acknowledges the replacement row a failed-record release sent to rev
     [integrationId, 'staging', reviewId],
   ]);
 });
+
+it('bugfix: acknowledges the proof row and every replacement a late success froze', async () => {
+  const frozenA = '88888888-8888-4888-8888-888888888888';
+  const frozenB = '99999999-9999-4999-8999-999999999999';
+  retrieveWallet.mockResolvedValue(goalWallet(0));
+  evidenceExecute.mockReset();
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({
+      rows: [{ result: `conflict:${frozenA},${frozenB}` }],
+    })
+    .mockResolvedValue({ rows: [{ result: true }] });
+  await runGoalCancelForfeitReconciliation({
+    configuration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: fetchRecord('successful'),
+  });
+  expect(alert).toHaveBeenCalledOnce();
+  expect(
+    evidenceExecute.mock.calls
+      .filter((call) => call[0] === sql.ack)
+      .map((call) => call[1][2])
+  ).toEqual([operationId, frozenA, frozenB]);
+});

@@ -4,6 +4,11 @@ import { WalletContent } from './WalletContent';
 import { WalletHeroSection } from './WalletHeroSection';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
 jest.mock('@/lib/customer-savings', () => ({
   fetchExistingSavingsPlanFunding: jest.fn(),
   fetchSavingsPlanFunding: jest.fn(),

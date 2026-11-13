@@ -4,10 +4,12 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import type Colors from '@/constants/Colors';
+import { useUserPullRefresh } from '@/hooks/use-user-pull-refresh';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { isPrimaryWallet } from './is-primary-wallet';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -58,6 +60,8 @@ export interface WalletContentProps {
   loyaltyTier?: string | null;
   needsPhone: boolean;
   primaryReady?: boolean;
+  walletPrimaryUnsettled?: boolean;
+  savingsPrimary?: boolean;
   onCreateFundingAccount: () => void;
   onChangeFundAmount: (value: string) => void;
   onChangeRedeemPoints: (value: string) => void;
@@ -119,7 +123,6 @@ export function WalletContent(props: WalletContentProps) {
     isCreatingFundingAccount,
     isFundPending,
     isRedeemPending,
-    isRefetching,
     loyaltyPoints,
     loyaltyTier,
     needsPhone,
@@ -169,10 +172,10 @@ export function WalletContent(props: WalletContentProps) {
     showSavingsDeviceSwap,
     handleSelectSavingsDevice,
   } = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const pullRefresh = useUserPullRefresh(onRefresh);
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
-
   return (
-    <WalletPrimaryContext.Provider value={props.primaryReady === true}>
+    <WalletPrimaryContext.Provider value={isPrimaryWallet(props)}>
       <AppKeyboardAwareScrollView
         testID="wallet-scroll"
         contentContainerStyle={contentContainerStyle}
@@ -180,11 +183,7 @@ export function WalletContent(props: WalletContentProps) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl {...pullRefresh} tintColor={colors.primary} />
         }
       >
         <WalletHeroSection
@@ -204,6 +203,7 @@ export function WalletContent(props: WalletContentProps) {
           onOpenFundPanel={onOpenFundPanel}
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
+          primaryBalanceReady={props.primaryReady === true}
           savingsBalance={savingsBalance}
           savingsWalletBalance={walletBalance}
           storeCreditBalance={props.storeCreditBalance}

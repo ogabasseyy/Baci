@@ -41,9 +41,9 @@ function renderHero(
 
 describe('bugfix: PiggyVest balance shown as a spendable total', () => {
   it('labels ₦5,000 PiggyVest money a savings wallet with no store credit line at ₦0', () => {
-    renderHero(true, 0);
+    renderHero(true, 0, 5000);
 
-    expect(screen.getByText('Total savings · NGN')).toBeOnTheScreen();
+    expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
     expect(screen.getByText('₦5,000')).toBeOnTheScreen();
     expect(screen.queryByText('Total Balance · NGN')).toBeNull();
     expect(screen.queryByText('Store credit')).toBeNull();
@@ -62,7 +62,11 @@ describe('merchants without PiggyVest', () => {
     renderHero(false, 1200);
 
     expect(screen.getByText('Total Balance · NGN')).toBeOnTheScreen();
-    expect(screen.queryByText('Total savings · NGN')).toBeNull();
+    expect(screen.queryByText('Savings wallet · NGN')).toBeNull();
+    expect(screen.getByText('Savings')).toBeOnTheScreen();
+    expect(screen.queryByText('In goals')).toBeNull();
+    expect(screen.getByText('₦5,000')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Add money' })).toBeNull();
     expect(screen.queryByText('Store credit')).toBeNull();
   });
 });

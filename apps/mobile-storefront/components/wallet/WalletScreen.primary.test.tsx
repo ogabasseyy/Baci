@@ -38,16 +38,18 @@ const mockUseWallet = jest.fn(() => ({
 }));
 const mockUseAuthStore = jest.fn(() => mockAuthState);
 const mockSetSavingsAmount = jest.fn();
-const mockDeriveWalletDisplayData = jest.fn(() => ({
-  activeSavingsGoal: mockGoal,
-  earningsAvailable: false,
-  earningsBalance: 0,
-  fundingAccount: null,
-  savingsBalance: 0,
-  showQuickSave: false,
-  walletBalance: 0,
-  totalBalance: 0,
-}));
+const mockDeriveWalletDisplayData = jest.fn<() => Record<string, unknown>>(
+  () => ({
+    activeSavingsGoal: mockGoal,
+    earningsAvailable: false,
+    earningsBalance: 0,
+    fundingAccount: null,
+    savingsBalance: 0,
+    showQuickSave: false,
+    walletBalance: 0,
+    totalBalance: 0,
+  })
+);
 
 jest.mock('expo-router', () => ({
   Redirect: () => null,
@@ -141,6 +143,7 @@ describe('WalletScreen PiggyVest main wallet', () => {
     earningsBalance: 0,
     fundingAccount: null,
     primaryReady: true,
+    savingsPrimary: true,
     savingsBalance: 0,
     showQuickSave: false,
     walletBalance: 1234.56,
@@ -162,7 +165,12 @@ describe('WalletScreen PiggyVest main wallet', () => {
     mockDeriveWalletDisplayData.mockReturnValue(
       primaryReady
         ? primaryDisplay()
-        : { ...primaryDisplay(), primaryReady: false, walletBalance: 5000 }
+        : {
+            ...primaryDisplay(),
+            primaryReady: false,
+            savingsPrimary: undefined,
+            walletBalance: 5000,
+          }
     );
     render(<WalletScreen />);
     const controller = () =>

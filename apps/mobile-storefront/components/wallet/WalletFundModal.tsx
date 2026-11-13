@@ -1,7 +1,10 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useLegacyFundingUnconfirmed } from '@/hooks/use-legacy-funding-unconfirmed';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
@@ -31,6 +34,7 @@ type WalletFundModalProps = Pick<
   | 'onResetFund'
   | 'onSubmitPhone'
   | 'showFundPanel'
+  | 'walletPrimaryUnsettled'
 > & { creditWatch: WalletCreditWatch };
 
 export function WalletFundModal({
@@ -52,28 +56,61 @@ export function WalletFundModal({
   onResetFund,
   onSubmitPhone,
   showFundPanel,
+  walletPrimaryUnsettled = false,
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  const verdictNow = usePiggyvestCapabilityNow(merchantId);
   const isDark = useColorScheme() === 'dark';
+  // An old account number isn't offered until PiggyVest is ruled in or out.
+  const legacyUnconfirmed = useLegacyFundingUnconfirmed(
+    fundingAccount?.provider
+  );
   // Card top-ups credit the legacy wallet, so only primary-funded flows (a
   // savings shortfall or a plain top-up) lose the card option; any other
   // return flow (e.g. IMEI check) still spends the legacy balance.
   const primaryReady = useWalletPrimaryReady();
   // PiggyVest merchant whose primary wallet the server hasn't ruled out.
+  // The live verdict follows a rollback written while this sheet is open
+  // (Codex); the hook's own answer is the fallback before any verdict.
   const piggyvestMerchant = isPiggyvestCardOnlyMerchant(
     merchantId,
-    primaryCapability
+    verdictNow ?? primaryCapability
   );
   // A purchase return (IMEI check, utilities) spends store credit, which
   // only a card top-up adds: the PiggyVest account would fund savings.
   // Also when the PiggyVest read is unknown (timed out) or not set up yet,
   // so the purchase never detours into PiggyVest setup.
+  // Same rule as the purchase screens (useCardOnlyPurchaseTopUp): an
+  // unsettled wallet at a merchant not ruled out is a store credit top-up.
   const storeCreditTopUp =
     isWalletPurchaseReturnHref(fundReturnTo) &&
-    (primaryReady || piggyvestMerchant);
+    (primaryReady ||
+      piggyvestMerchant ||
+      // The live verdict wins over this hook's own (Codex).
+      (walletPrimaryUnsettled && (verdictNow ?? primaryCapability) !== false) ||
+      // No verdict yet: a restored legacy wallet isn't trusted (Codex).
+      (primaryCapability === null && verdictNow === null));
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
-  const hideCardFunding = primaryReady && !storeCreditTopUp;
+  // A PiggyVest account with its balance still pending is primary too
+  // (Codex): a card top-up there would add store credit, not savings.
+  // Also until PiggyVest is ruled out (Codex): a card top-up started before
+  // the verdict could settle on the legacy rail as store credit.
+  const hideCardFunding =
+    (primaryReady ||
+      fundingAccount?.provider === 'piggyvest' ||
+      verdictNow !== false) &&
+    !storeCreditTopUp;
+  // A store credit top-up opened from a purchase pushes the wallet page;
+  // dismissing the sheet returns straight to that purchase instead of
+  // leaving the customer on the pushed page (walk-through M8).
+  const dismissFund = () => {
+    onResetFund();
+    if (!storeCreditTopUp || !fundReturnTo) return;
+    // A deep link has no history underneath: open the purchase instead.
+    if (router.canGoBack()) router.back();
+    else router.replace(fundReturnTo);
+  };
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
@@ -105,8 +142,8 @@ export function WalletFundModal({
       keyboardAutomaticOffset
       keyboardSurfaceColor={colors.card}
       visible={showFundPanel}
-      onRequestClose={onResetFund}
-      onBackdropPress={onResetFund}
+      onRequestClose={dismissFund}
+      onBackdropPress={dismissFund}
       onClosed={() => setRetainContent(false)}
     >
       {showFundPanel || retainContent ? (
@@ -115,7 +152,15 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {showPrimarySetup ? (
+          {/* PiggyVest setup outranks the hold: it never shows the old account. */}
+          {legacyUnconfirmed && !storeCreditTopUp && !showPrimarySetup ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ color: colors.textSecondary, padding: 24 }}
+            >
+              Checking your account…
+            </Text>
+          ) : showPrimarySetup ? (
             <PiggyvestWalletSetupPanel
               colors={colors}
               merchantId={merchantId}
@@ -131,7 +176,13 @@ export function WalletFundModal({
               createFundingAccountUnavailableMessage={
                 createFundingAccountUnavailableMessage
               }
-              creditWatch={creditWatch}
+              creditWatch={
+                // PiggyVest transfers never reach the store-credit ledger,
+                // also while the PiggyVest balance is still pending (Codex).
+                primaryReady || fundingAccount?.provider === 'piggyvest'
+                  ? undefined
+                  : creditWatch
+              }
               fundAmount={fundAmount}
               fundingAccount={fundingAccount}
               hideCardFunding={hideCardFunding}
@@ -141,7 +192,7 @@ export function WalletFundModal({
               onChangeFundAmount={onChangeFundAmount}
               onConfirmFund={onConfirmFund}
               onCreateFundingAccount={onCreateFundingAccount}
-              onResetFund={onResetFund}
+              onResetFund={dismissFund}
               onSubmitPhone={onSubmitPhone}
               returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
               storeCreditTopUp={storeCreditTopUp}

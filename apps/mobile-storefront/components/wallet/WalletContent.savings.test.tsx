@@ -11,6 +11,11 @@ import { WalletContent } from './WalletContent';
 import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
 let restoreCustomer: () => void;
 beforeEach(() => {
   restoreCustomer = setWalletTestCustomer();

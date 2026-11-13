@@ -314,6 +314,30 @@ describe('initializeGatewayAndRoute', () => {
     });
   });
 
+  it('carries the wallet-transfer fallback notice flag to the bank-transfer page', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-dva-1',
+      dva: {
+        bank_name: 'Test Bank',
+        account_number: '0123456789',
+        account_name: 'Ada Buyer',
+      },
+    });
+
+    await initializeGatewayAndRoute(
+      createParams({
+        selectedPayment: 'bank_transfer',
+        walletTransferFallback: 'piggyvest',
+      })
+    );
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/bank-transfer',
+      params: expect.objectContaining({ walletTransferFallback: 'piggyvest' }),
+    });
+  });
+
   it('accepts the legacy virtual_account envelope for bank transfer', async () => {
     mockInitResponse({
       success: true,

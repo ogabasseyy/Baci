@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
@@ -162,15 +163,20 @@ export function createWalletSavingsActions({
         setPending: setIsAddingSavingsContribution,
       });
     }
-    // The server confirmed PiggyVest but the wallet shown is still the old
-    // one (Codex): the rail would debit an unseen PiggyVest balance against
-    // an amount checked on the legacy wallet. Hold a new contribution and
-    // reload. (A pilot with no verdict keeps its server-side fallback.)
+    // PiggyVest confirmed but not yet reclassified, or unknown after a
+    // ruling-out expired while the balance stays suppressed (Codex): the rail
+    // would debit an unseen PiggyVest balance against an amount checked on
+    // legacy funds. Hold a new contribution and reload. (A pilot with no
+    // verdict yet keeps its server-side fallback.)
+    const verdictNow = readPiggyvestCapabilityNow(activeMerchantId);
     if (
       plan.kind === 'submit' &&
       idempotencyKeyRef.current === null &&
       !primaryReady &&
-      readPiggyvestCapabilityNow(activeMerchantId) === true
+      (verdictNow === true ||
+        (plan.rail === 'primary' &&
+          !!activeMerchantId &&
+          wasPiggyvestLastRuledOut(activeMerchantId)))
     ) {
       Alert.alert('Still checking', WALLET_RECLASSIFYING_MESSAGE);
       void refetchWallet?.();

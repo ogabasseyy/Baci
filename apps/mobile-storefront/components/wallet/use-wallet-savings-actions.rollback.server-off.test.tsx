@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import {
   clearObservedPiggyvestPrimaryCapability,
+  NEGATIVE_CAPABILITY_TTL_MS,
   observePiggyvestPrimaryCapability,
 } from '@/lib/piggyvest-primary-capability-cache';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
@@ -77,5 +79,53 @@ describe('bugfix: rolled-back pilot contribution still sent to PiggyVest', () =>
     // Assert
     expect(addPiggyvestPrimarySavingsContribution).not.toHaveBeenCalled();
     expect(addSavingsContribution).toHaveBeenCalledTimes(1);
+  });
+});
+
+function contribute(primaryReady: boolean) {
+  const refetchWallet = jest.fn(async () => undefined);
+  createWalletSavingsActions({
+    activeMerchantId: PILOT,
+    goal,
+    idempotencyKeyRef: { current: null },
+    operationRailRef: { current: null },
+    primaryReady,
+    refetchWallet,
+    savingsContributionAmount: '2500',
+    walletBalance: 5000,
+    startWalletTopUp: jest.fn(),
+    setIsAddingSavingsContribution: jest.fn(),
+    setShowSavingsProgressModal: jest.fn(),
+    setSavingsContributionAmount: jest.fn(),
+  }).handleAddSavingsContribution();
+  return refetchWallet;
+}
+
+describe('bugfix: contribution sent to PiggyVest after a ruling-out expired', () => {
+  it('holds a new contribution while the expired ruling-out still suppresses PiggyVest', () => {
+    // Arrange: ruled out, then the 60 s ruling-out expires (verdict unknown)
+    // while the wallet still shows legacy funds.
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    observePiggyvestPrimaryCapability(PILOT, false);
+    clock.mockReturnValue(now + NEGATIVE_CAPABILITY_TTL_MS + 1);
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    // Act
+    const refetchWallet = contribute(false);
+
+    // Assert: held and reloaded, never sent on either rail.
+    expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Still checking', expect.any(String));
+    expect(refetchWallet).toHaveBeenCalled();
+    alertSpy.mockRestore();
+    clock.mockRestore();
+  });
+
+  it('keeps the server-side fallback for a pilot with no verdict yet', () => {
+    // Cold start: nothing observed, so nothing was ruled out.
+    contribute(false);
+
+    expect(addSavingsContributionToGoal).toHaveBeenCalledTimes(1);
   });
 });

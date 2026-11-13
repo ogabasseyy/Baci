@@ -5,6 +5,7 @@ import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capabilit
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
 import { discardUnreadablePrimaryCardFunding } from './discard-unreadable-primary-card-funding';
 import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
+import { isSameSignedInUser } from './is-same-signed-in-user';
 
 /**
  * Resolves which rail a wallet funding must use. Known verdicts (and the
@@ -48,11 +49,22 @@ export async function resolveFundWalletRail(
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Continue anyway',
-            onPress: () =>
+            onPress: () => {
+              // The alert can outlive an account switch (Codex): the retry
+              // carries the previous account's funding, so continue only
+              // for the account that started it.
+              if (!isSameSignedInUser(options?.userId)) {
+                Alert.alert(
+                  'Signed-in account changed',
+                  'You switched accounts. Start the top-up again from this account.'
+                );
+                return;
+              }
               void discardUnreadablePrimaryCardFunding(
                 activeMerchantId,
                 options?.userId
-              ).then(() => onRetry?.()),
+              ).then(() => onRetry?.());
+            },
           },
         ]
       );

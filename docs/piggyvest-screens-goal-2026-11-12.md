@@ -131,3 +131,23 @@ Confirmed fixed:
 Still owed: money steps (Add to savings with PIN, Complete goal, funded
 cancel breakdown, checkout and wallet payments) once PiggyVest staging
 outbound transfers resume and a plan finishes setup.
+
+## Third walk-through (2026-11-13)
+
+Confirmed fixed on the simulator:
+- "Copied" feedback on the account number (#4216).
+- Stacked wallet back button and matching header (#4216).
+- "Check now" and "taking longer than usual" on the first open (#4223).
+- Slowdown banner aligned and shown once (#4223).
+- Change phone search stays lowercase (#4224).
+- Quiet hours in 24-hour times (#4224).
+- Back from "Forgot your PIN?" returns to "Enter your current PIN" (#4224).
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| Cold open briefly shows the ready "Add to savings" card before the pending state | #4223 session | Sent (medium) |
+| Slowdown banner arrives 10–30 s after the sheet opens | #4223 session | Sent |
+| Sheet titled "Add to savings" while the card says "View plan" | #4223 session | Sent |
+| "Copied" label nudges the wallet card down ~4pt for 2 s | #4216 session | Sent |
+| Backing out of Forgot PIN could later submit an abandoned reset PIN (Codex P1) | #4224 | **Fixed** (b9985072ce) |
+| Sheet grows as "Cancel goal" and the banner arrive; App Settings' Security row appears after first paint | — | Noted (loading order, low) |

@@ -34,7 +34,7 @@ export async function sweepGoalCancelForfeit(input: {
         claim: (id) => store.claimForfeit(id),
         release: (id) => store.releaseForfeit(id),
         unclaim: (id) => store.unclaimForfeit(id),
-        markPosting: (id) => store.markForfeitPosting(id),
+        markPosting: (id, token) => store.markForfeitPosting(id, token),
         ackAlert: (id) => store.ackForfeitAlert(id),
         provider,
         evidence,

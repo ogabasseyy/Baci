@@ -1,4 +1,5 @@
 import 'server-only';
+import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import { piggyvestGoalCancelForfeitSchemas as schemas } from '@/schemas/piggyvest-goal-cancel-forfeit';
 import { PiggyvestApiError } from './client';
@@ -54,7 +55,11 @@ interface Ports {
   ) => Promise<'unclaimed_first' | 'unclaimed' | 'not_released'>;
   // Stamps the forfeit right before its single POST. Until it is stamped the
   // forfeit is known unsent, so an abandoned claim is recovered later.
-  markPosting: (forfeitId: string) => Promise<'posting' | 'not_released'>;
+  // token: this claimer's own, so a repeat after a lost answer is recognised.
+  markPosting: (
+    forfeitId: string,
+    token: string
+  ) => Promise<'posting' | 'not_released'>;
   // Evidence-side status read of a dispatched forfeit (settle or release
   // from a verified provider record). Absent: the outcome stays pending.
   reconcile?: (forfeitId: string) => Promise<{ status: string }>;
@@ -96,10 +101,15 @@ export async function driveGoalCancelForfeit(
     await ports.unclaim(forfeit.operationId, verified);
     return 'unavailable';
   }
-  // Nothing is sent unless the database recorded that it is about to be: if
-  // this write fails the claim stays unposted and is recovered later.
-  const posting = await ports
-    .markPosting(forfeit.operationId)
+  // Nothing is sent unless the database recorded that it is about to be. The
+  // mark carries this claim's own token: if its answer is lost (the write may
+  // have committed), one repeat with the same token is told whether this
+  // claim may still post, so a committed mark never strands the forfeit.
+  // If both fail, nothing is sent and the claim is recovered later.
+  const token = randomUUID();
+  const mark = () => ports.markPosting(forfeit.operationId, token);
+  const posting = await mark()
+    .catch(() => mark())
     .catch(() => 'not_released' as const);
   if (posting !== 'posting') return 'pending';
   try {

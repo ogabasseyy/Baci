@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { resolveChatwootCartProofExpiry } from '@/lib/cart/chatwoot-proof-expiry';
 import {
   loadLiveGrantOperations,
   upgradeLegacySessionPrincipal,
@@ -155,11 +156,11 @@ export async function POST(request: NextRequest) {
   } catch {
     // Retain the incoming proof's expiry when live grant refresh is unavailable.
   }
-  const proofGrantExpiry = liveGrant
-    ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)
-      ? liveGrant.grantExpiresAt
-      : result.cart.expiresAt
-    : principal.expiresAt;
+  const proofGrantExpiry = resolveChatwootCartProofExpiry({
+    cartExpiresAt: result.cart.expiresAt,
+    existingProofExpiresAt: principal.expiresAt,
+    liveGrantExpiresAt: liveGrant?.grantExpiresAt,
+  });
   const reportedCartVersion = result.currentVersion;
   const liveCartVersion =
     typeof reportedCartVersion === 'number' &&
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
         ? result.cart.version
         : null;
   let proof: string | null = null;
-  if (liveCartVersion !== null) {
+  if (liveCartVersion !== null && proofGrantExpiry !== null) {
     try {
       proof = issueCartSessionProof(
         {
@@ -192,9 +193,16 @@ export async function POST(request: NextRequest) {
       });
     }
   }
-  const maxAge = cartSessionCookieMaxAge(proofGrantExpiry);
+  const maxAge = proofGrantExpiry
+    ? cartSessionCookieMaxAge(proofGrantExpiry)
+    : 0;
   let sessionToken: string | null = null;
-  if (proof && maxAge > 0 && liveCartVersion !== null) {
+  if (
+    proof &&
+    maxAge > 0 &&
+    liveCartVersion !== null &&
+    proofGrantExpiry !== null
+  ) {
     try {
       sessionToken = await renewChatwootSessionCapability({
         binding: cartContext.binding,
@@ -224,7 +232,7 @@ export async function POST(request: NextRequest) {
   );
   // Keep the old proof in place if capability rebinding failed after commit;
   // the old session remains usable and an idempotent retry can recover.
-  if (proof && sessionToken && maxAge > 0) {
+  if (proof && sessionToken && maxAge > 0 && proofGrantExpiry !== null) {
     setCartSessionCookie(response, cartContext.state.merchantId, proof, maxAge);
   }
   return response;

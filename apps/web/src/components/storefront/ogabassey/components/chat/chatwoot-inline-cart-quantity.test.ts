@@ -97,19 +97,21 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
-  it('does not echo an invalid cart version from a mutation response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => response({ accepted: true, cartVersion: 1.5 }))
-    );
-    const value = input();
+  it('does not echo unsafe or regressing cart versions from a mutation response', async () => {
+    for (const cartVersion of [1.5, Number.MAX_SAFE_INTEGER + 1, 7]) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => response({ accepted: true, cartVersion }))
+      );
+      const value = input();
 
-    await handleChatwootInlineCartQuantity(value);
+      await handleChatwootInlineCartQuantity(value);
 
-    expect(value.post).toHaveBeenCalledWith({
-      requestId: 'quantity-0001',
-      accepted: true,
-    });
+      expect(value.post).toHaveBeenCalledWith({
+        requestId: 'quantity-0001',
+        accepted: true,
+      });
+    }
   });
 
   it('refreshes the current snapshot on an unknown or stale local line reference', async () => {

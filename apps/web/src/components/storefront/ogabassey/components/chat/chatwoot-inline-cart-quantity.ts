@@ -106,7 +106,7 @@ export async function handleChatwootInlineCartQuantity(input: {
         }),
     ...(typeof mutation?.cartVersion === 'number' &&
     Number.isSafeInteger(mutation.cartVersion) &&
-    mutation.cartVersion > 0
+    mutation.cartVersion >= input.snapshot.cartVersion
       ? { cartVersion: mutation.cartVersion }
       : {}),
   });

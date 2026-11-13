@@ -52,7 +52,13 @@ export async function POST(request: NextRequest) {
         sessionToken: parsed.data.sessionToken,
         state: cartContext.state,
       });
-    } catch {
+    } catch (error) {
+      if (
+        !(error instanceof ChatwootCommerceContextError) ||
+        error.code !== 'invalid_context'
+      ) {
+        throw error;
+      }
       const rebound = await rebindChatwootSessionCapability({
         binding: cartContext.binding,
         sessionToken: parsed.data.sessionToken,

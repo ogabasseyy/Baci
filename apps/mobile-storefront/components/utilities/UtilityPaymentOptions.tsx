@@ -39,6 +39,8 @@ interface UtilityPaymentOptionsProps {
    * wallet is never shown as the payment method meanwhile.
    */
   retainedStoreCredit?: boolean;
+  /** An earlier PiggyVest attempt is kept: the submit replays it there. */
+  retainedPiggyvest?: boolean;
 }
 
 /**
@@ -58,6 +60,7 @@ export function UtilityPaymentOptions({
   walletIsStoreCredit = false,
   walletPrimaryUnknown,
   retainedStoreCredit = false,
+  retainedPiggyvest = false,
 }: UtilityPaymentOptionsProps) {
   const copy = getUtilityWalletCopy(walletIsStoreCredit);
   const payLabel = copy.pay;
@@ -79,9 +82,11 @@ export function UtilityPaymentOptions({
   // no store credit shortfall. Never for customers without one.
   const storedSavingsKobo = useVtuWalletPayStore((state) => state.balanceKobo);
   const savingsKobo = retainedStoreCredit ? null : storedSavingsKobo;
-  const savingsPays = useVtuWalletPayStore(
+  const covered = useVtuWalletPayStore(
     (state) => amount > 0 && state.covers(amount)
   );
+  // A kept PiggyVest attempt replays there, so it is the method shown.
+  const savingsPays = covered || (amount > 0 && retainedPiggyvest);
   // Before an amount is chosen (or when it pays) the savings wallet is the
   // only row: no store credit ₦0 for a PiggyVest customer.
   if (savingsKobo !== null && (savingsPays || amount <= 0))

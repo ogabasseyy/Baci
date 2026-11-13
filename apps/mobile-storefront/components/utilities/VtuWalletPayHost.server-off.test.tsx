@@ -11,6 +11,10 @@ jest.mock('@/hooks/use-wallet', () => ({
   }),
 }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+const mockPreventRemove = jest.fn();
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: (...args: unknown[]) => mockPreventRemove(...args),
+}));
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://api.test' }));
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -38,6 +42,11 @@ describe('VtuWalletPayHost with the server keeping PiggyVest off', () => {
   it('shows no sheet and covers nothing', () => {
     render(<VtuWalletPayHost colors={Colors.light} />);
     expect(screen.queryByText('Pay from PiggyVest')).toBeNull();
+    // Closed: leaving the screen is never held back.
+    expect(mockPreventRemove).toHaveBeenLastCalledWith(
+      false,
+      expect.any(Function)
+    );
     expect(useVtuWalletPayStore.getState().covers(500)).toBe(false);
   });
 });

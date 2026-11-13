@@ -1,6 +1,7 @@
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
+import { useRetainsPiggyvest } from './use-retains-piggyvest';
 
 /**
  * The data form's payment section: the shared utility options plus whether
@@ -23,16 +24,19 @@ export function DataPaymentOptions({
   phoneNumber: string;
   returnToHref: WalletReturnHref;
 }) {
+  const request = {
+    amount: planAmount,
+    dataPlanCode: selectedPlan ?? undefined,
+    networkProvider: selectedProvider ?? undefined,
+    phoneNumber,
+    type: 'data' as const,
+    walletAmount: planAmount,
+  };
   const retainedStoreCredit =
-    planAmount > 0 &&
-    payment.hasRetainedVtuAttempt?.({
-      amount: planAmount,
-      dataPlanCode: selectedPlan,
-      networkProvider: selectedProvider,
-      phoneNumber,
-      type: 'data',
-      walletAmount: planAmount,
-    }) === true;
+    planAmount > 0 && payment.hasRetainedVtuAttempt?.(request) === true;
+  const retainedPiggyvest = useRetainsPiggyvest(
+    planAmount > 0 ? request : null
+  );
   return (
     <UtilityPaymentOptions
       amount={planAmount}
@@ -45,6 +49,7 @@ export function DataPaymentOptions({
       walletIsStoreCredit={payment.walletIsStoreCredit}
       walletPrimaryUnknown={payment.walletPrimaryUnknown}
       retainedStoreCredit={retainedStoreCredit}
+      retainedPiggyvest={retainedPiggyvest}
     />
   );
 }

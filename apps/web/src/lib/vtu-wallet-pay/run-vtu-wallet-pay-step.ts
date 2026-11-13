@@ -22,6 +22,7 @@ import {
   refuseBeforeIssue,
 } from './vtu-wallet-pay-close';
 import type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
+import { answerWhileSwitchedOff } from './vtu-wallet-pay-switched-off';
 
 export type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
 
@@ -99,7 +100,18 @@ export async function runVtuWalletPayStep(
   const start = { transactionId, isStart: operationId === undefined };
   const refuse = (response: Response) =>
     refuseBeforeIssue(deps.closeUnissued, start, response);
-  if (!live && !recheck) return await refuse(unavailable());
+  if (!live && !recheck)
+    return await answerWhileSwitchedOff(
+      deps,
+      {
+        transactionId,
+        merchantId: input.merchantId,
+        customerId: input.customerId,
+        operationId,
+        amountKobo: Math.round(purchase.amount * 100),
+      },
+      () => refuse(unavailable())
+    );
   const runtime = live ?? deps.readRecoveryRuntime();
   if (runtime.merchantId !== input.merchantId)
     return await refuse(
@@ -222,8 +234,20 @@ export async function runVtuWalletPayStep(
           operationId,
           pinProof: input.pinProof ?? '',
         });
-  if (ENDED_UNPAID.has(result.status))
-    await closeUnpaidQuietly(deps.closeUnpaid, purchaseRef);
+  // Ended unpaid: the purchase must be closed before that definitive
+  // answer frees the app's key. A close that failed (a transient error)
+  // answers pending instead, so the key stays and the re-check retries the
+  // close (Codex P1). A purchase already closed answers false, not a throw.
+  if (ENDED_UNPAID.has(result.status)) {
+    const closed = await Promise.resolve()
+      .then(() => deps.closeUnpaid(purchaseRef))
+      .then(
+        () => true,
+        () => false
+      );
+    if (!closed)
+      return walletPayAccepted('payment_pending', operationId, extra);
+  }
   if (result.status !== 'confirmed')
     return walletPayResponse(result, operationId, 'purchase');
   try {

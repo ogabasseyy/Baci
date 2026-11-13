@@ -99,6 +99,16 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     });
   };
 
+  const purchaseRequest =
+    numericAmount > 0
+      ? {
+          amount: numericAmount,
+          networkProvider: selectedProvider ?? undefined,
+          phoneNumber,
+          type: 'airtime' as const,
+          walletAmount: numericAmount,
+        }
+      : null;
   return {
     amount,
     footerBottomOffset: getUtilityFooterOffset({
@@ -124,15 +134,10 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     payment,
     phoneNumber,
     // The same purchase the submit handler peeks at (its retry identity).
+    purchaseRequest,
     retainedStoreCredit:
-      numericAmount > 0 &&
-      payment.hasRetainedVtuAttempt?.({
-        amount: numericAmount,
-        networkProvider: selectedProvider ?? undefined,
-        phoneNumber,
-        type: 'airtime',
-        walletAmount: numericAmount,
-      }) === true,
+      purchaseRequest !== null &&
+      payment.hasRetainedVtuAttempt?.(purchaseRequest) === true,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,

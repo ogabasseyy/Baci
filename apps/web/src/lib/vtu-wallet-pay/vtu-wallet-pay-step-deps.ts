@@ -1,5 +1,6 @@
 import 'server-only';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { isPiggyvestFeatureOn } from '@/lib/piggyvest/piggyvest-feature-on';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import {
   readWalletPayRecoveryRuntime,
@@ -51,7 +52,12 @@ export function createVtuWalletPayStepDeps(auth: {
           }
         : null;
     },
-    readRuntime: readWalletPayRuntime,
+    // New airtime/data/bills payments need their own switch on top of
+    // wallet pay; re-checks and delivery use the recovery runtime.
+    readRuntime: () =>
+      isPiggyvestFeatureOn('wallet_pay_utilities')
+        ? readWalletPayRuntime()
+        : null,
     readRecoveryRuntime: readWalletPayRecoveryRuntime,
     resolveIdentity: (runtime) =>
       resolvePrimaryWalletIdentity({

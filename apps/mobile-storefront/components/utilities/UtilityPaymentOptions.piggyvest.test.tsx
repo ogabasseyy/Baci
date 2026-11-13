@@ -103,3 +103,21 @@ describe('bugfix: the savings wallet showed while a store credit replay was pend
     expect(screen.queryByText('Savings wallet · NGN')).toBeNull();
   });
 });
+
+describe('bugfix: a kept PiggyVest attempt showed store credit as the method (Codex P2)', () => {
+  it('shows PiggyVest as the method even when it no longer covers the amount', () => {
+    useVtuWalletPayStore.setState({ covers: () => false, balanceKobo: 10_000 });
+    render(
+      <UtilityPaymentOptions
+        amount={500}
+        returnToHref={RETURN_TO}
+        walletBalance={1_000}
+        walletIsLoading={false}
+        walletIsSettled
+        walletIsStoreCredit
+        retainedPiggyvest
+      />
+    );
+    expect(screen.getByText('Savings wallet · NGN')).toBeTruthy();
+  });
+});

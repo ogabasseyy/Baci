@@ -15,6 +15,7 @@ import { ProviderGrid } from './ProviderGrid';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useAirtimeFormController } from './use-airtime-form-controller';
+import { useRetainsPiggyvest } from './use-retains-piggyvest';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
 
@@ -40,6 +41,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
     numericAmount,
     payment,
     phoneNumber,
+    purchaseRequest,
     retainedStoreCredit,
     scrollViewRef,
     selectedProvider,
@@ -49,6 +51,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
     setIsNetworkPickerExpanded,
     walletReturnToHref,
   } = useAirtimeFormController(props);
+  const retainedPiggyvest = useRetainsPiggyvest(purchaseRequest);
 
   const matchingRecipients = recentRecipients.filter((recipient) => {
     if (!phoneNumber) return true;
@@ -252,6 +255,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletIsStoreCredit={payment.walletIsStoreCredit}
             walletPrimaryUnknown={payment.walletPrimaryUnknown}
             retainedStoreCredit={retainedStoreCredit}
+            retainedPiggyvest={retainedPiggyvest}
           />
         </View>
       </ScrollView>

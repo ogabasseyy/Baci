@@ -77,14 +77,24 @@ describe('bugfix: an unpaid PiggyVest purchase blocked a store credit retry (Cod
     expect(deps.closeUnpaid).not.toHaveBeenCalled();
   });
 
-  it('still answers when the close fails', async () => {
+  it('bugfix: answers pending (the key stays) when the close fails, never the definitive unpaid answer (Codex P1)', async () => {
     deps.pay.mockResolvedValue({ status: 'insufficient' });
     deps.closeUnpaid.mockRejectedValueOnce(new Error('db down'));
     const response = await runVtuWalletPayStep(
       { ...base, operationId: OP, pinProof: 'a'.repeat(64) },
       deps as never
     );
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'payment_pending',
+    });
+    // Once the close goes through, the re-check answers the unpaid outcome.
+    deps.closeUnpaid.mockResolvedValueOnce(true);
+    const again = await runVtuWalletPayStep(
+      { ...base, operationId: OP, pinProof: 'a'.repeat(64) },
+      deps as never
+    );
+    expect(again.status).toBe(409);
   });
 
   it('never issues a payment for a purchase that is no longer pending', async () => {

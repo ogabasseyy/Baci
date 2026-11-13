@@ -144,3 +144,16 @@ describe('bugfix: "Retry available checks" looked like plain text (walk-through 
     expect(onRetryAvailability).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('bugfix: the wallet badge read ₦0 before the wallet loaded (Fable walk)', () => {
+  it('shows an unknown balance while loading and when the read failed', () => {
+    const { rerender } = render(
+      <ImeiCheckFormView {...baseProps} isWalletLoading />
+    );
+    expect(screen.queryByText('₦0')).toBeNull();
+    expect(screen.getByText('…')).toBeOnTheScreen();
+    rerender(<ImeiCheckFormView {...baseProps} isWalletError />);
+    expect(screen.queryByText('₦0')).toBeNull();
+    expect(screen.getByText('…')).toBeOnTheScreen();
+  });
+});

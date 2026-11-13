@@ -70,6 +70,10 @@ function Button({
   );
 }
 
+// While money may be moving the sheet stays open: the Android back press
+// is explicitly ignored (same gate as back()); no close button is shown.
+const ignoreClose = () => undefined;
+
 /**
  * Pay for one purchase from the PiggyVest wallet: the same in-sheet PIN pad
  * and dots as savings, sized to its content, then a calm outcome card instead
@@ -109,7 +113,7 @@ export function WalletPaySheet<Result>({
       visible={sheet.step !== 'closed'}
       animationType="slide"
       backdropStyle={styles.backdrop}
-      onRequestClose={closable ? sheet.close : undefined}
+      onRequestClose={closable ? sheet.close : ignoreClose}
     >
       <View style={[styles.sheet, { backgroundColor: colors.background }]}>
         <WalletPinSheetHeader

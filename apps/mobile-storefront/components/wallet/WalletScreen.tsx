@@ -195,18 +195,18 @@ export function WalletScreen({
   if (redirectTo) {
     return <Redirect href={redirectTo} />;
   }
-  const loadingMessage = getWalletLoadingMessage({
-    hasMerchantContext,
-    hasWalletData: Boolean(data),
-    isError,
-    isLoading,
-    user,
-  });
   if (!user || !hasMerchantContext || isLoading || !data) {
     return (
       <WalletScreenView
         colors={colors}
-        loadingMessage={loadingMessage}
+        loadingMessage={getWalletLoadingMessage({
+          hasMerchantContext,
+          hasWalletData: Boolean(data),
+          isError,
+          isLoading,
+          user,
+        })}
+        onRetry={refetch}
         presentation={presentation}
       />
     );

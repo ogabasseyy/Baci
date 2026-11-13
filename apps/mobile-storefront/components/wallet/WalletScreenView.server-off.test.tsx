@@ -143,7 +143,7 @@ describe('WalletScreenView', () => {
     expect(screen.getByLabelText('Preparing wallet')).toBeOnTheScreen();
     expect(screen.getByText('Preparing your wallet...')).toBeOnTheScreen();
     expect(mockStackScreen).toHaveBeenCalledWith({
-      options: { headerShown: false, title: 'Wallet' },
+      options: { headerShown: false, title: 'Wallet & Loyalty' },
     });
     expect(mockScreenShell).toHaveBeenCalledWith(
       expect.objectContaining({ edges: ['top', 'bottom'] })

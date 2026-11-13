@@ -76,3 +76,47 @@ describe('bugfix: Add money outcomes were iOS alerts', () => {
     expect(iosAlert).not.toHaveBeenCalled();
   });
 });
+
+describe('Add money title is scoped to the PiggyVest account', () => {
+  const watch = {
+    armCheck: jest.fn(),
+    creditedAmount: null,
+    reset: jest.fn(),
+    returnCtaHref: undefined,
+    status: 'idle' as const,
+  };
+
+  it('keeps "Add Money" for another store’s account', () => {
+    render(
+      <WalletFundModal
+        {...createWalletContentProps()}
+        creditWatch={watch}
+        fundingAccount={{
+          accountName: 'OGB / JOHN DOE',
+          accountNumber: '9814644749',
+          bankName: 'Wema Bank',
+          provider: 'paystack',
+        }}
+        showFundPanel
+      />
+    );
+    expect(screen.getByText('Add Money')).toBeOnTheScreen();
+  });
+
+  it('uses sentence case "Add money" for the PiggyVest account', () => {
+    render(
+      <WalletFundModal
+        {...createWalletContentProps()}
+        creditWatch={watch}
+        fundingAccount={{
+          accountName: 'Default Wallet',
+          accountNumber: '9000002044',
+          bankName: 'FAAS (SANDBOX)',
+          provider: 'piggyvest',
+        }}
+        showFundPanel
+      />
+    );
+    expect(screen.getByText('Add money')).toBeOnTheScreen();
+  });
+});

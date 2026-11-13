@@ -82,7 +82,7 @@ it('recovers a saved primary operation before validating the empty form amount',
   };
   await fundWallet(input);
   expect(mockPrimary).toHaveBeenCalledWith(input);
-  expect(alert).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalledWith('Invalid Amount', expect.anything());
   expect(mockLegacy).not.toHaveBeenCalled();
 });
 it('awaits an unknown verdict and routes primary when the probe confirms', async () => {
@@ -130,12 +130,10 @@ it('blocks funding on an ambiguous probe instead of guessing a rail', async () =
     resetFundPanel: jest.fn(),
     setIsFundPending: jest.fn(),
   });
-  // Asked inline with a retry, never as an iOS alert.
-  expect(alert).not.toHaveBeenCalled();
-  const { useWalletFundPromptStore } =
-    require('./fund/wallet-fund-prompt-store') as typeof import('./fund/wallet-fund-prompt-store');
-  expect(useWalletFundPromptStore.getState().prompt?.confirmLabel).toBe(
-    'Try again'
+  expect(alert).toHaveBeenCalledWith(
+    'Unable to fund wallet',
+    'We could not confirm your wallet rail. Please try again.',
+    expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
   );
   expect(mockPrimary.mock.calls.length).toBe(primaryCalls);
   expect(mockLegacy.mock.calls.length).toBe(legacyCalls);

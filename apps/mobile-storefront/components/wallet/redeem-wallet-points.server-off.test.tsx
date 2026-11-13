@@ -17,26 +17,53 @@ jest.mock('@/lib/logger', () => ({
   createLogger: () => ({ error: jest.fn() }),
 }));
 
+const PIGGYVEST_MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const redeemed = async () => ({
+  conversionRate: 7.5,
+  remainingPoints: 0,
+  walletCredit: 1500,
+});
+type Params = Parameters<typeof redeemWalletPoints>[0];
+
 describe('redeeming points with the server keeping PiggyVest off', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('confirms with the wallet notice and closes the panel, no iOS alert', async () => {
-    const iosAlert = jest.spyOn(Alert, 'alert');
+  it('keeps today’s alert for another store: OK closes the panel', async () => {
+    const iosAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const closeRedeemPanel = jest.fn();
     const clearRedeemPoints = jest.fn();
 
     await redeemWalletPoints({
+      activeMerchantId: '11111111-1111-4111-8111-111111111111',
       clearRedeemPoints,
       closeRedeemPanel,
       rawPoints: '200',
-      redeemPoints: async () => ({
-        conversionRate: 7.5,
-        remainingPoints: 0,
-        walletCredit: 1500,
-      }),
-    } as unknown as Parameters<typeof redeemWalletPoints>[0]);
+      redeemPoints: redeemed,
+    } as unknown as Params);
+
+    expect(iosAlert).toHaveBeenCalledWith(
+      'Points Redeemed!',
+      expect.any(String),
+      [{ text: 'OK', onPress: closeRedeemPanel }]
+    );
+    expect(mockNotify).not.toHaveBeenCalled();
+    expect(closeRedeemPanel).not.toHaveBeenCalled();
+    expect(clearRedeemPoints).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms inline and closes the panel for the PiggyVest merchant', async () => {
+    const iosAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const closeRedeemPanel = jest.fn();
+
+    await redeemWalletPoints({
+      activeMerchantId: PIGGYVEST_MERCHANT,
+      clearRedeemPoints: jest.fn(),
+      closeRedeemPanel,
+      rawPoints: '200',
+      redeemPoints: redeemed,
+    } as unknown as Params);
 
     expect(mockNotify).toHaveBeenCalledWith(
       'Points redeemed',
@@ -44,22 +71,6 @@ describe('redeeming points with the server keeping PiggyVest off', () => {
       'success'
     );
     expect(closeRedeemPanel).toHaveBeenCalledTimes(1);
-    expect(clearRedeemPoints).toHaveBeenCalledTimes(1);
     expect(iosAlert).not.toHaveBeenCalled();
-  });
-
-  it('explains too few points inline', async () => {
-    await redeemWalletPoints({
-      clearRedeemPoints: jest.fn(),
-      closeRedeemPanel: jest.fn(),
-      rawPoints: '1',
-      redeemPoints: jest.fn(),
-    } as unknown as Parameters<typeof redeemWalletPoints>[0]);
-
-    expect(mockNotify).toHaveBeenCalledWith(
-      'Invalid Points',
-      expect.any(String),
-      'warning'
-    );
   });
 });

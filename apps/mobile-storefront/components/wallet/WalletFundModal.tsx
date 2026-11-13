@@ -127,14 +127,21 @@ export function WalletFundModal({
   // Keep the panel rendered while the card slides down on close, so the
   // exit animation shows the sheet instead of an empty card; it unmounts
   // (clearing any retained BVN state) once the slide has finished.
+  const piggyvestSheet =
+    !storeCreditTopUp &&
+    (showPrimarySetup || fundingAccount?.provider === 'piggyvest');
   const [retainContent, setRetainContent] = useState(showFundPanel);
   if (showFundPanel && !retainContent) setRetainContent(true);
   return (
     <ModalSheet
       presentation="fade-backdrop"
       backdropStyle={{
-        // Soft blue-white wash in light mode; plain dim in dark mode.
-        backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(226,232,240,0.72)',
+        // PiggyVest: the savings sheet's dark scrim, so the black wallet card
+        // stays dark behind it. Other stores keep today's soft wash.
+        backgroundColor:
+          piggyvestSheet || isDark
+            ? 'rgba(0,0,0,0.55)'
+            : 'rgba(226,232,240,0.72)',
       }}
       cardStyle={{
         backgroundColor: colors.card,
@@ -152,6 +159,10 @@ export function WalletFundModal({
     >
       {showFundPanel || retainContent ? (
         <ScrollView
+          // PiggyVest sheet: no rubber-band, so its header never scrolls away
+          // when the content already fits.
+          alwaysBounceVertical={!piggyvestSheet}
+          bounces={!piggyvestSheet}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

@@ -102,7 +102,7 @@ describe('usePrimaryWalletCreditPoll', () => {
     expect(alertSpy).toHaveBeenCalledTimes(1);
     expect(alertSpy).toHaveBeenCalledWith(
       'Money received',
-      'Your PiggyVest wallet balance has been updated.'
+      'Your savings wallet balance has been updated.'
     );
     expect(useSavingsNoticeStore.getState().notice?.tone).toBe('success');
     expect(iosAlert).not.toHaveBeenCalled();

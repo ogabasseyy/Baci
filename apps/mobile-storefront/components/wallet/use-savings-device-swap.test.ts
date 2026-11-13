@@ -32,11 +32,8 @@ describe('useSavingsDeviceSwap', () => {
     expect(result.current.showSavingsDeviceSwap).toBe(false);
     expect(result.current.savingsDeviceSearch).toBe('');
     expect(result.current.isChangingSavingsDevice).toBe(false);
-    expect(notifySavings).toHaveBeenCalledWith(
-      'Phone changed',
-      'Your savings now go towards iPhone 16.',
-      'success'
-    );
+    // The handler owns the outcome notice (it knows whether the refresh worked).
+    expect(notifySavings).not.toHaveBeenCalled();
   });
 
   it('shows a warning notice and stays open when the change throws', async () => {

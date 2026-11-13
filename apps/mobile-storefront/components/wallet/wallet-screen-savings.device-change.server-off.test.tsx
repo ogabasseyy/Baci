@@ -63,7 +63,30 @@ describe('changing the savings device with the server off', () => {
     await act(async () => {
       expect(await change()).toBe(true);
     });
-    expect(result.current.notice).toBeNull();
+    expect(result.current.notice?.title).toBe('Phone changed');
+    expect(result.current.notice?.message).toBe(
+      'Your savings now go towards iPhone 14.'
+    );
+  });
+
+  it('keeps the pull-to-refresh notice when the wallet refresh fails', async () => {
+    jest
+      .mocked(swapSavingsGoalDevice)
+      .mockResolvedValueOnce(undefined as never);
+    const { result } = renderHook(() => useSavingsNotice());
+    await act(async () => {
+      expect(
+        await changeSavingsGoalDevice({
+          activeMerchantId: 'm-1',
+          goal,
+          product,
+          refetchWallet: async () => {
+            throw new Error('offline');
+          },
+        })
+      ).toBe(true);
+    });
+    expect(result.current.notice?.title).toBe('Device updated');
   });
 
   it('drops the outcome when the account changes before the swap settles', async () => {

@@ -1,5 +1,7 @@
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { ActivityIndicator } from 'react-native';
+import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useWallet } from '@/hooks/use-wallet';
@@ -7,6 +9,22 @@ import { goalIdParamSchema } from '@/schemas/goal-link';
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
+
+/** What the link shows before it redirects: a spinner or a retry notice. */
+function GoalLinkShell({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <StorefrontScreenShell themeBackground>
+      {onRetry ? (
+        <GoalLinkLoadError onRetry={onRetry} />
+      ) : (
+        <ActivityIndicator
+          accessibilityLabel="Opening your savings"
+          style={{ flex: 1 }}
+        />
+      )}
+    </StorefrontScreenShell>
+  );
+}
 
 /**
  * Cancel and Complete now happen inside the savings sheet on the wallet. Old
@@ -55,22 +73,22 @@ export default function WalletGoalActionsRoute() {
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`
     : '/wallet';
   const login = `/auth/login?returnTo=${encodeURIComponent(back)}` as Href;
-  if (auth.isLoading) return null;
+  if (auth.isLoading) return <GoalLinkShell />;
   if (auth.redirectTo) return <Redirect href={login} />;
   if (!goalId) return <Redirect href="/wallet" />;
   // No data and no error means the wallet read has not settled yet (still
   // loading, or held while the signed-in identities catch up after an
   // account switch): wait rather than drop a valid goal link.
-  if (!wallet.data && !wallet.isError) return null;
+  if (!wallet.data && !wallet.isError) return <GoalLinkShell />;
   // A failed wallet read keeps the link: the customer can retry instead of
   // landing on the plain wallet without the goal they opened.
   if (wallet.isError && !wallet.data) {
-    return <GoalLinkLoadError onRetry={() => void wallet.refetch()} />;
+    return <GoalLinkShell onRetry={() => void wallet.refetch()} />;
   }
-  if (missing && !recheckedThis) return null;
+  if (missing && !recheckedThis) return <GoalLinkShell />;
   // The fresh read failed: the goal may still be theirs, so keep the link.
   if (missing && recheck?.failed) {
-    return <GoalLinkLoadError onRetry={() => setRecheck(null)} />;
+    return <GoalLinkShell onRetry={() => setRecheck(null)} />;
   }
   // A goal that is no longer the customer's (settled, cancelled, someone
   // else's) opens the plain wallet: the sheet would otherwise fall back to a

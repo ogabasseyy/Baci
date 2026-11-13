@@ -215,7 +215,12 @@ export async function changeSavingsGoalDevice({
       );
       return true;
     }
-    // The savings sheet shows the new phone; no alert on top of it.
+    // A calm inline confirmation; a failed refresh keeps its own notice above.
+    notify(
+      'Phone changed',
+      `Your savings now go towards ${product.name}.`,
+      'success'
+    );
     return true;
   } catch (error) {
     notify(

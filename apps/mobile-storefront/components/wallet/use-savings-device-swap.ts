@@ -48,11 +48,6 @@ export function useSavingsDeviceSwap(
       if (didChange && scope.current === started) {
         setShowSavingsDeviceSwap(false);
         setSavingsDeviceSearch('');
-        notify(
-          'Phone changed',
-          `Your savings now go towards ${product.name}.`,
-          'success'
-        );
       }
     } catch {
       notify(

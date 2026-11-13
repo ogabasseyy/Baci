@@ -17,4 +17,19 @@ describe('PIN saved state with the server off', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Done' }));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it('leaves only once on a quick double tap', () => {
+    const onDone = jest.fn();
+    render(
+      <WalletPinSavedView
+        colors={Colors.light}
+        title="PIN set"
+        onDone={onDone}
+      />
+    );
+    const done = screen.getByRole('button', { name: 'Done' });
+    fireEvent.press(done);
+    fireEvent.press(done);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
 });

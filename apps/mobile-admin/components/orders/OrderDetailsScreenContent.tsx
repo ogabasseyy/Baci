@@ -76,7 +76,7 @@ export function OrderDetailsScreenContent({
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
           <OrderDetailsOverviewSection
             colors={controller.colors}
-            createdAtLabel={formatOrderPlacedDate(order, merchant?.country)}
+            placedOnLabel={formatOrderPlacedDate(order, merchant?.country)}
             customerEmail={order.customer_email}
             customerName={order.customer_name}
             customerPhone={order.customer_phone}

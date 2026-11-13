@@ -74,14 +74,14 @@ vi.mock('./OrderDetailsItemsAndPaymentSection', () => ({
 }));
 vi.mock('./OrderDetailsOverviewSection', () => ({
   OrderDetailsOverviewSection: ({
-    createdAtLabel,
+    placedOnLabel,
     updatedAtLabel,
   }: {
-    createdAtLabel: string;
+    placedOnLabel: string;
     updatedAtLabel: string;
   }) => (
     <div>
-      <span>Placed on {createdAtLabel}</span>
+      <span>Placed on {placedOnLabel}</span>
       <span>Latest update: {updatedAtLabel}</span>
     </div>
   ),

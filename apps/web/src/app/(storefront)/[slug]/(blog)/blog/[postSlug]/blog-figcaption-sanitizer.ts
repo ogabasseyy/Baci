@@ -1,50 +1,12 @@
 import { escapeHtmlText } from '@/lib/sanitize';
 import {
-  buildHtmlPromptPrefixRegex,
-  PROMPT_PREFIX_REGEX,
-  sanitizeBlogImageCaptionText,
-} from './blog-image-caption-sanitizer';
-import { unescapeHtmlText } from './unescape-html-text';
-
-const HTML_PROMPT_PREFIX_REGEX =
-  buildHtmlPromptPrefixRegex(PROMPT_PREFIX_REGEX);
-
-const MAX_CAPTION_SANITIZE_LENGTH = 1000;
-
-const GUARDRAIL_ITEMS = [
-  'readable\\s+(?:text|interface(?:\\s+elements|\\s+chrome)?)',
-  'interface\\s+elements',
-  'interface\\s+chrome',
-  'text',
-  'logos',
-  'watermarks',
-  'brand\\s+marks',
-  'gameplay\\s+screenshots',
-  'test[\\s-]results?(?:\\s+claims)?',
-  'invented\\s+product\\s+details',
-  '(?:implied|simulated)\\s+hands-on\\s+testing',
-  'fake\\s+packaging',
-].join('|');
-
-const GUARDRAIL_ITEM_CHAIN = `(?:${GUARDRAIL_ITEMS})(?:(?:,\\s*|\\s+(?:and|or)\\s+)(?:no\\s+)?(?:${GUARDRAIL_ITEMS}))*`;
-
-const SPECIFIC_GUARDRAIL_PATTERNS = [
-  'use\\s+(?:anatomically\\s+accurate|accurate\\s+official|approved\\s+hardware)[^.;<]*',
-  `no\\s+${GUARDRAIL_ITEM_CHAIN}`,
-  `omit\\s+${GUARDRAIL_ITEM_CHAIN}`,
-  'keep\\s+screens\\s+free\\s+of\\s+readable\\s+text(?:\\s+and\\s+omit\\s+logos)?',
-  `match\\s+official\\s+product\\s+references(?:\\s+and\\s+omit\\s+${GUARDRAIL_ITEM_CHAIN})?`,
-  `avoid\\s+${GUARDRAIL_ITEM_CHAIN}`,
-  `do\\s+not\\s+(?:include|render|show)\\s+${GUARDRAIL_ITEM_CHAIN}`,
-  "components\\s+are\\s+conceptual(?:,\\s*not\\s+a\\s+depiction\\s+of\\s+this\\s+unit['’]s\\s+internal\\s+layout)?",
-  'paperwork\\s+contains\\s+no\\s+readable\\s+text',
-].join('|');
-
-const CONTEXTUAL_PATTERNS = [
+  CONTEXTUAL_PATTERNS,
+  HTML_PROMPT_PREFIX_REGEX,
+  MAX_CAPTION_SANITIZE_LENGTH,
   SPECIFIC_GUARDRAIL_PATTERNS,
-  'illustration\\s+without\\s+text(?:,\\s*logos|\\s+or\\s+logos|\\s+or\\s+fake\\s+packaging)*',
-  'conceptual\\s+illustration(?:,\\s*not\\s+a\\s+(?:tested\\s+accessory\\s+setup|measured\\s+runtime\\s+test))?',
-].join('|');
+} from './blog-caption-guardrail-patterns';
+import { sanitizeBlogImageCaptionText } from './blog-image-caption-sanitizer';
+import { unescapeHtmlText } from './unescape-html-text';
 
 const HTML_GUARDRAIL_REGEX = new RegExp(
   `(?:([.;])?\\s*<([a-z0-9]+)[^>]*>\\s*(?:${CONTEXTUAL_PATTERNS})\\.?\\s*<\\/\\2>\\.?\\s*$|` +

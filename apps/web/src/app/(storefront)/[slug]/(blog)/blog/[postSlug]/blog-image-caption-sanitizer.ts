@@ -69,7 +69,7 @@ export function sanitizeBlogImageCaptionText(rawCaption: string): string {
   if (!text) return '';
 
   if (text.length > MAX_CAPTION_SANITIZE_LENGTH) {
-    return text;
+    text = text.slice(0, MAX_CAPTION_SANITIZE_LENGTH).trim();
   }
 
   const withoutPrefix = text.replace(PROMPT_PREFIX_REGEX, '').trim();

@@ -32,8 +32,11 @@ describe('sanitizeFigcaptionHtml', () => {
     ).toBe('Compare models.');
   });
 
-  it('returns over-length inputs unchanged', () => {
-    const longHtml = `<p>${'a'.repeat(1005)}</p>`;
-    expect(sanitizeFigcaptionHtml(longHtml)).toBe(longHtml);
+  it('bounds over-length inputs and still strips leaked prompt prefixes', () => {
+    const longHtml = `<p>Editorial illustration: ${'a'.repeat(1005)}</p>`;
+    const result = sanitizeFigcaptionHtml(longHtml);
+    expect(result.length).toBeLessThanOrEqual(1000);
+    expect(result).not.toContain('Editorial illustration:');
+    expect(result.startsWith('A')).toBe(true);
   });
 });

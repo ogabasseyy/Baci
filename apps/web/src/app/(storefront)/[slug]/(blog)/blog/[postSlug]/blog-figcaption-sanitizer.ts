@@ -49,7 +49,21 @@ const HTML_GUARDRAIL_REGEX = new RegExp(
 function hasBalancedTags(html: string): boolean {
   const tagRegex = /<\/?([a-z0-9]+)(?:\s+[^>]*)?(\/?)>/gi;
   const stack: string[] = [];
-  const voidTags = new Set(['br', 'img', 'hr', 'input']);
+  const voidTags = new Set([
+    'area',
+    'base',
+    'br',
+    'col',
+    'embed',
+    'hr',
+    'img',
+    'input',
+    'link',
+    'meta',
+    'source',
+    'track',
+    'wbr',
+  ]);
   let match = tagRegex.exec(html);
   while (match !== null) {
     const fullTag = match[0];
@@ -93,12 +107,17 @@ function stripTrailingGuardrailsFromHtml(input: string): string {
  * while preserving valid inline markup when balanced.
  */
 export function sanitizeFigcaptionHtml(innerHtml: string): string {
-  if (innerHtml.length > MAX_CAPTION_SANITIZE_LENGTH * 4) {
-    return innerHtml;
-  }
-  const textContent = innerHtml.replace(/<[^>]*>/g, '');
-  if (textContent.length > MAX_CAPTION_SANITIZE_LENGTH) {
-    return innerHtml;
+  const textContent = innerHtml
+    .slice(0, MAX_CAPTION_SANITIZE_LENGTH * 4)
+    .replace(/<[^>]*>/g, '');
+  if (
+    innerHtml.length > MAX_CAPTION_SANITIZE_LENGTH * 4 ||
+    textContent.length > MAX_CAPTION_SANITIZE_LENGTH
+  ) {
+    const boundedSanitized = sanitizeBlogImageCaptionText(
+      unescapeHtmlText(textContent)
+    );
+    return boundedSanitized ? escapeHtmlText(boundedSanitized) : '';
   }
 
   const cleanedText = sanitizeBlogImageCaptionText(

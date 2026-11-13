@@ -39,8 +39,11 @@ describe('sanitizeBlogImageCaptionText', () => {
     );
   });
 
-  it('returns over-length captions unchanged to bound regex evaluation', () => {
+  it('bounds over-length captions and still strips leaked prompt prefixes', () => {
     const overLength = `Editorial illustration: ${'a'.repeat(1005)}`;
-    expect(sanitizeBlogImageCaptionText(overLength)).toBe(overLength);
+    const result = sanitizeBlogImageCaptionText(overLength);
+    expect(result.length).toBeLessThanOrEqual(1000);
+    expect(result.startsWith('A')).toBe(true);
+    expect(result).not.toContain('Editorial illustration:');
   });
 });

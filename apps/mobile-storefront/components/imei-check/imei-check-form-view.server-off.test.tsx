@@ -1,7 +1,7 @@
 import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { ImeiCheckFormView } from './imei-check-form-view';
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -123,5 +123,24 @@ describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
     fireEvent.press(screen.getByText(`Pay ₦${price} from PiggyVest`));
     expect(onCheck).toHaveBeenCalledTimes(1);
     expect(onTopUpWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: "Retry available checks" looked like plain text (walk-through L10)', () => {
+  it('draws the retry as an outlined button that retries', () => {
+    const onRetryAvailability = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        availabilityFailed
+        onRetryAvailability={onRetryAvailability}
+      />
+    );
+    const retry = screen.getByRole('button', {
+      name: 'Retry available checks',
+    });
+    expect(retry).toHaveStyle({ borderWidth: 1, borderColor: BRAND.primary });
+    fireEvent.press(retry);
+    expect(onRetryAvailability).toHaveBeenCalledTimes(1);
   });
 });

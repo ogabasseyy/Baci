@@ -236,4 +236,22 @@ export const formStyles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 13,
   },
+  // An outlined brand button, so the retry reads as tappable (not text).
+  retryButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: BRAND.primary,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    minHeight: 44,
+    paddingHorizontal: SPACING.md,
+  },
+  retryButtonText: {
+    color: BRAND.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+  },
 });

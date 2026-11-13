@@ -150,9 +150,10 @@ export function ImeiCheckFormView({
                   accessibilityRole="button"
                   accessibilityLabel="Retry available checks"
                   onPress={onRetryAvailability}
-                  style={{ minHeight: 44, justifyContent: 'center' }}
+                  style={styles.retryButton}
                 >
-                  <Text style={{ color: colors.text }}>
+                  <Ionicons name="refresh" size={16} color={BRAND.primary} />
+                  <Text style={styles.retryButtonText}>
                     Retry available checks
                   </Text>
                 </Pressable>

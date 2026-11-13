@@ -15,9 +15,10 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
   const workflow = repository.readFile('.github/workflows/ios-storefront-release.yml');
   const job = readJob(workflow, 'build-and-submit');
   const submission = readStep(job, 'Submit to App Store for review');
-  assert.match(
-    submission.text,
-    /if:.*!cancelled\(\).*steps\.fastlane_release\.outcome == 'success'.*\&\& !\(github\.event_name == 'workflow_dispatch' && inputs\.testflight_only\)/s
+  assert.ok(
+    submission.text.includes(
+      "if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.testflight_only) }}"
+    )
   );
   const releaseModeStep = readStep(job, 'Record release mode');
   const mode = releaseModeStep.text;
@@ -30,16 +31,16 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
   assert.match(mode, /TESTFLIGHT_ONLY/);
   assert.match(mode, /SUBMISSION_RESULT/);
   assert.match(mode, /SUBMISSION_OUTCOME/);
-  const runSummary = (outcome) => {
+  const runSummary = ({ outcome, testflightOnly = false, result = '' }) => {
     const directory = mkdtempSync(join(tmpdir(), 'ios-release-summary-'));
     const summaryPath = join(directory, 'summary.md');
     try {
       execFileSync('bash', ['-c', releaseModeStep.run], {
         env: {
           ...process.env,
-          TESTFLIGHT_ONLY: 'false',
+          TESTFLIGHT_ONLY: String(testflightOnly),
           SUBMISSION_OUTCOME: outcome,
-          SUBMISSION_RESULT: '',
+          SUBMISSION_RESULT: result,
           GITHUB_STEP_SUMMARY: summaryPath,
         },
       });
@@ -48,8 +49,20 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
       rmSync(directory, { force: true, recursive: true });
     }
   };
-  assert.match(runSummary('failure'), /App Store submission failed/);
-  assert.match(runSummary('cancelled'), /App Store submission was cancelled/);
+  assert.match(runSummary({ outcome: 'failure' }), /App Store submission failed/);
+  assert.match(runSummary({ outcome: 'cancelled' }), /App Store submission was cancelled/);
+  assert.match(
+    runSummary({ outcome: 'success', testflightOnly: true }),
+    /TestFlight build only\. App Store submission was intentionally skipped/
+  );
+  assert.match(
+    runSummary({ outcome: 'success', result: 'submitted' }),
+    /uploaded the iOS build and submitted it for App Store review/
+  );
+  assert.match(
+    runSummary({ outcome: 'success', result: 'skipped' }),
+    /version slot is occupied/
+  );
   assert.match(mode, /intentionally skipped/);
   assert.match(mode, /submitted it for App Store review/);
   assert.match(mode, /version slot is occupied/);

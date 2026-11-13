@@ -59,7 +59,9 @@ Start from the Actions tab on `main`, or push a tag on a commit that is on
 
 For an iOS device test, run "iOS Storefront Production Release" on `main`
 with `testflight_only` enabled. This manual option uploads the signed build to
-TestFlight without submitting it for App Review; tag pushes always submit.
+TestFlight without submitting it for App Review. Tag pushes always attempt
+App Review submission, but the submit lane can skip when the App Store version
+slot is occupied.
 The automatic build number uses the workflow run number plus the configured
 base, so a TestFlight-only build consumes a number and gaps are expected. A
 tag build number must exceed every previously uploaded build, including these
@@ -73,13 +75,15 @@ since the upload makes the build unavailable, rebuild and retest. Use a newer
 version if the tested version has already gone live.
 [Apple's build selection rules](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit/).
 
-Check the submit step's
-result even when the workflow succeeds. In the separate "iOS Storefront Submit
-for Review" workflow, submission is skipped if another build occupies the App
-Review slot unless the owner explicitly selects `cancel_review_for_resubmit`
-to withdraw the existing review. The production workflow summary distinguishes
-TestFlight-only runs, actual App Review submissions, and uploads skipped
-because the App Store version slot is occupied.
+The production workflow summary identifies a TestFlight-only upload, a
+completed App Review submission, a failed/cancelled submission, or a submission
+skipped because the App Store version slot is occupied. A skipped submit step
+is expected for TestFlight-only runs; the summary states that submission was
+intentionally skipped. In the separate "iOS Storefront Submit for Review"
+workflow, submission is skipped if another build occupies the App Review slot
+unless the owner explicitly selects `cancel_review_for_resubmit` to withdraw
+the existing review. That cancellation option is only available in the manual
+submit workflow; the production release never withdraws an active review.
 
 To resubmit a build that is already on TestFlight, run "iOS Storefront Submit
 for Review".

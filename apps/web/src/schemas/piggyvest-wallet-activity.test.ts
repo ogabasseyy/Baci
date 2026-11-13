@@ -68,3 +68,23 @@ describe('piggyvestWalletActivityRowSchema', () => {
       );
   });
 });
+
+describe('wallet-pay activity rows', () => {
+  it('accepts a spend paid from the wallet and its refund', () => {
+    for (const [kind, direction, label] of [
+      ['wallet_spend', 'out', 'Airtime · MTN · 0803…4567'],
+      ['wallet_refund', 'in', 'Refund: IMEI check'],
+    ] as const)
+      expect(
+        piggyvestWalletActivityRowSchema.safeParse({
+          id: '11111111-1111-4111-8111-111111111111',
+          kind,
+          direction,
+          amount_kobo: 50000,
+          label,
+          status: 'pending',
+          occurred_at: '2026-11-13T10:00:00Z',
+        }).success
+      ).toBe(true);
+  });
+});

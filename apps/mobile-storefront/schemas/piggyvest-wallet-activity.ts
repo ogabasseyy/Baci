@@ -8,6 +8,9 @@ const item = z.strictObject({
     'savings_contribution',
     'goal_refund',
     'goal_completed',
+    // Paid from the wallet (IMEI checks, airtime/data/bills) and refunds.
+    'wallet_spend',
+    'wallet_refund',
   ]),
   direction: z.enum(['in', 'out']),
   amountKobo: z.number().int().positive(),

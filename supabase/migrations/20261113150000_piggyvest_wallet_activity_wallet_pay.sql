@@ -1,0 +1,204 @@
+-- PiggyVest wallet activity: also list what the customer paid from the main
+-- wallet (IMEI checks, airtime/data/bills) and the refunds of those
+-- payments, so every spend and refund leaves a customer-readable record.
+-- Replaces public.list_piggyvest_wallet_activity from
+-- 20261113140000_piggyvest_wallet_activity_read with the same signature,
+-- columns, keyset paging and grants, adding two branches:
+--
+--   wallet_spend    piggyvest_primary.wallet_payments         money out
+--   wallet_refund   piggyvest_primary.wallet_payment_refunds  money in
+--
+-- A spend is listed once its PIN has reserved money (reserved, dispatched,
+-- confirmed or under review); an issued, released or expired attempt never
+-- moved money and is not activity. A refund is listed once it is sent
+-- (dispatched, confirmed or under review). The label names the purchase:
+-- "IMEI check", or for airtime/data/bills the type, network or biller and
+-- the phone or meter number masked to its first and last four characters,
+-- read from the caller's own vtu_transactions row (same customer and store).
+--
+-- Never returned: provider ids, references, wallet ids, purchase ids, the
+-- full phone or meter number. Read-only and STABLE. No table policy changes.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.list_piggyvest_wallet_activity(
+  p_merchant_id uuid,
+  p_before_at timestamptz DEFAULT NULL,
+  p_before_id uuid DEFAULT NULL,
+  p_limit integer DEFAULT 20
+)
+RETURNS TABLE (
+  id uuid,
+  kind text,
+  direction text,
+  amount_kobo bigint,
+  label text,
+  status text,
+  occurred_at timestamptz
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_user uuid := auth.uid();
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'sign in required' USING ERRCODE = '42501';
+  END IF;
+  IF p_merchant_id IS NULL
+    OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 50
+    OR (p_before_at IS NULL) <> (p_before_id IS NULL) THEN
+    RAISE EXCEPTION 'invalid activity request' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  WITH mine AS (
+    SELECT intent.id AS intent_id, intent.customer_id, intent.merchant_id
+      FROM piggyvest_primary.onboarding_intents AS intent
+      JOIN public.customers AS customer
+        ON customer.id = intent.customer_id
+       AND customer.merchant_id = intent.merchant_id
+       AND customer.user_id = intent.user_id
+     WHERE intent.user_id = v_user
+       AND intent.merchant_id = p_merchant_id
+       AND intent.state IN ('accepted', 'verified')
+  ),
+  -- What each wallet payment bought, in customer words (masked numbers).
+  paid AS (
+    SELECT payment.id, payment.intent_id, payment.amount_kobo, payment.state,
+           COALESCE(payment.settled_at, payment.dispatched_at, payment.reserved_at,
+                    payment.issued_at) AS occurred_at,
+           CASE
+             WHEN payment.purpose = 'imei_check' THEN 'IMEI check'
+             WHEN purchase.id IS NULL THEN 'Airtime, data or bill'
+             ELSE CASE purchase.type
+                    WHEN 'airtime' THEN 'Airtime'
+                    WHEN 'data' THEN 'Data'
+                    ELSE COALESCE(NULLIF(pg_catalog.btrim(purchase.biller_name), ''),
+                                  pg_catalog.initcap(purchase.type))
+                  END
+                  || CASE WHEN purchase.type IN ('airtime', 'data')
+                            AND NULLIF(pg_catalog.btrim(purchase.network_provider), '') IS NOT NULL
+                          THEN ' · ' || pg_catalog.upper(purchase.network_provider) ELSE '' END
+                  || COALESCE(' · ' || CASE
+                       WHEN pg_catalog.char_length(target.number) > 8
+                         THEN pg_catalog.left(target.number, 4) || '…' || pg_catalog.right(target.number, 4)
+                       WHEN pg_catalog.char_length(target.number) > 0
+                         THEN '…' || pg_catalog.right(target.number, 4)
+                     END, '')
+           END AS label
+      FROM piggyvest_primary.wallet_payments AS payment
+      JOIN mine ON mine.intent_id = payment.intent_id
+      LEFT JOIN public.vtu_transactions AS purchase
+        ON payment.purpose = 'vtu'
+       AND purchase.id::text = payment.purchase_ref
+       AND purchase.customer_id = mine.customer_id
+       AND purchase.merchant_id = mine.merchant_id
+      LEFT JOIN LATERAL (
+        SELECT pg_catalog.regexp_replace(
+                 COALESCE(NULLIF(purchase.customer_identifier, ''), purchase.phone_number, ''),
+                 '[^A-Za-z0-9]', '', 'g') AS number
+      ) AS target ON true
+  ),
+  movements AS (
+    -- Deposits: bank transfers (and older card fundings) into the wallet.
+    SELECT receipt.id,
+           CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
+                THEN 'card_funding' ELSE 'bank_transfer' END AS kind,
+           'in'::text AS direction,
+           (receipt.financial_identity ->> 'amountKobo')::bigint AS amount_kobo,
+           CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
+                THEN 'Card top-up' ELSE 'Money added' END AS label,
+           'completed'::text AS status,
+           receipt.created_at AS occurred_at
+      FROM piggyvest_primary.inflow_receipts AS receipt
+      JOIN mine ON mine.intent_id = receipt.intent_id
+     WHERE receipt.financial_identity ->> 'amountKobo' ~ '^[1-9][0-9]{0,11}$'
+    UNION ALL
+    -- Contributions: wallet to savings goal. A cancelled reservation never
+    -- moved money, so it is not activity.
+    SELECT operation.id,
+           'savings_contribution',
+           'out',
+           operation.amount_kobo,
+           'Saved to ' || COALESCE(goal.title, 'a savings goal'),
+           CASE WHEN operation.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
+           operation.created_at
+      FROM piggyvest_primary.savings_operations AS operation
+      JOIN mine ON mine.intent_id = operation.intent_id
+      LEFT JOIN public.customer_savings_goals AS goal ON goal.id = operation.goal_id
+     WHERE operation.state IN ('reserved', 'dispatched', 'confirmed')
+    UNION ALL
+    -- Goal cancelled early: its balance returns to the wallet.
+    SELECT cancel.id,
+           'goal_refund',
+           'in',
+           cancel.amount_kobo,
+           'Returned from ' || COALESCE(goal.title, 'a savings goal'),
+           CASE WHEN cancel.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
+           COALESCE(cancel.settled_at, cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
+      FROM piggyvest_primary.goal_cancel_operations AS cancel
+      JOIN mine ON mine.intent_id = cancel.intent_id
+      LEFT JOIN public.customer_savings_goals AS goal ON goal.id = cancel.goal_id
+     WHERE cancel.state IN ('dispatched', 'confirmed', 'needs_review', 'reviewed')
+       AND cancel.amount_kobo IS NOT NULL
+    UNION ALL
+    -- Goal completed: its full balance, interest included, returns to the wallet.
+    SELECT complete.id,
+           'goal_completed',
+           'in',
+           complete.amount_kobo,
+           'Goal completed: ' || COALESCE(goal.title, 'savings goal'),
+           CASE WHEN complete.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
+           COALESCE(complete.settled_at, complete.dispatched_at, complete.reserved_at, complete.issued_at)
+      FROM piggyvest_primary.goal_complete_operations AS complete
+      JOIN mine ON mine.intent_id = complete.intent_id
+      LEFT JOIN public.customer_savings_goals AS goal ON goal.id = complete.goal_id
+     WHERE complete.state IN ('dispatched', 'confirmed', 'needs_review', 'reviewed')
+       AND complete.amount_kobo IS NOT NULL
+    UNION ALL
+    -- Paid from the wallet: once the PIN reserved the money.
+    SELECT paid.id,
+           'wallet_spend',
+           'out',
+           paid.amount_kobo,
+           paid.label,
+           CASE WHEN paid.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
+           paid.occurred_at
+      FROM paid
+     WHERE paid.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')
+    UNION ALL
+    -- Refunded to the wallet: once the refund is sent.
+    SELECT refund.id,
+           'wallet_refund',
+           'in',
+           refund.amount_kobo,
+           'Refund: ' || paid.label,
+           CASE WHEN refund.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
+           COALESCE(refund.settled_at, refund.dispatched_at, refund.created_at)
+      FROM piggyvest_primary.wallet_payment_refunds AS refund
+      JOIN paid ON paid.id = refund.payment_id
+     WHERE refund.state IN ('dispatched', 'confirmed', 'needs_review')
+  )
+  SELECT movement.id, movement.kind, movement.direction, movement.amount_kobo,
+         movement.label, movement.status, movement.occurred_at
+    FROM movements AS movement
+   WHERE p_before_at IS NULL
+      OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id)
+   ORDER BY movement.occurred_at DESC, movement.id DESC
+   LIMIT p_limit;
+END;
+$$;
+
+COMMENT ON FUNCTION public.list_piggyvest_wallet_activity(uuid, timestamptz, uuid, integer) IS
+  'The signed-in customer''s own PiggyVest main-wallet movements for one store, newest first (keyset by occurred_at, id), including purchases paid from the wallet and their refunds. Customer-facing fields only. Read-only.';
+
+REVOKE ALL ON FUNCTION public.list_piggyvest_wallet_activity(uuid, timestamptz, uuid, integer)
+FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.list_piggyvest_wallet_activity(uuid, timestamptz, uuid, integer)
+TO authenticated;
+
+COMMIT;

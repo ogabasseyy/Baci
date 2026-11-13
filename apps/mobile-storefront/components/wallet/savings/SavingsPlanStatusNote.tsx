@@ -211,7 +211,8 @@ function StatusNoteView({
     return (
       <View style={styles.section}>
         <Text style={[styles.body, { color: colors.textSecondary }]}>
-          We can’t finish setting up this plan right now. No money has moved.
+          We can’t finish setting up this plan right now. This didn’t move any
+          money.
         </Text>
         <Pressable
           accessibilityRole="link"

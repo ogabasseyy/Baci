@@ -130,7 +130,7 @@ describe('SavingsPlanStatusNote', () => {
     renderNote();
     expect(
       screen.getByText(
-        'We can’t finish setting up this plan right now. No money has moved.'
+        'We can’t finish setting up this plan right now. This didn’t move any money.'
       )
     ).toBeTruthy();
     expect(screen.queryByText('Getting your plan ready')).toBeNull();

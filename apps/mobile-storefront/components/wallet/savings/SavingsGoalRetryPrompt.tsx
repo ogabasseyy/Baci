@@ -31,7 +31,8 @@ export function SavingsGoalRetryPrompt({
         We couldn’t finish setting up your plan
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        No money has moved. Try again, or message us and we’ll sort it out.
+        This didn’t move any money. Try again, or message us and we’ll sort it
+        out.
       </Text>
       {error ? (
         <Text style={[styles.body, { color: colors.error }]}>{error}</Text>

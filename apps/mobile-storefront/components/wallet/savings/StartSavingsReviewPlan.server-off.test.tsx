@@ -113,4 +113,26 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       expect(screen.queryByText(later)).toBeNull();
     });
   });
+
+  describe('bugfix: a bank-transfer head start said "Yours today" before any money moved', () => {
+    it('does not count a head start that is still to be paid by transfer', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            initialContributionEnabled: true,
+            initialContributionAmount: '250000',
+            effectiveInitialContribution: 250_000,
+            selectedFundingOption: 'bank_transfer',
+            startDate: '2026-11-12',
+            maturityDate: '2027-03-16',
+          })}
+        />
+      );
+      expect(screen.queryByText('Yours today')).toBeNull();
+      expect(
+        screen.getByText(formatDateTimeDisplay('2027-03-16', 'date'))
+      ).toBeOnTheScreen();
+    });
+  });
 });

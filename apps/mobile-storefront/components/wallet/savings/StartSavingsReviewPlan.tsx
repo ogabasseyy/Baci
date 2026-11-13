@@ -115,8 +115,11 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
 function headStartShare(
   controller: StartSavingsController
 ): 'none' | 'part' | 'all' {
+  // A head start paid by bank transfer moves later, after the plan exists:
+  // until then it covers none of the target (never "Yours today").
   const headStart =
-    controller.sourceMode === 'auto_debit'
+    controller.sourceMode === 'auto_debit' ||
+    controller.selectedFundingOption === 'bank_transfer'
       ? 0
       : controller.effectiveInitialContribution;
   if (!(headStart > 0)) return 'none';

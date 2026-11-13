@@ -23,25 +23,30 @@ export function useWalletRecheckOnPiggyvest(
   walletQueryKey: QueryKey
 ): void {
   const capability = usePiggyvestPrimaryCapability(merchantId);
-  const previous = useRef(capability);
-  // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): only a capability change retriggers; the key is read at that moment.
+  // The wallet's scope (user, owner, merchant): a new account can restore
+  // its own legacy wallet cached before PiggyVest was enabled (Codex).
+  const scope = JSON.stringify(walletQueryKey);
+  const previous = useRef({ capability, scope });
+  // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): `scope` is its serialised form; the key is read at that moment.
   useEffect(() => {
     const was = previous.current;
-    previous.current = capability;
-    const turnedOn = was === false && capability !== false;
+    previous.current = { capability, scope };
     const cached =
       queryClient.getQueryData<WalletQueryData>(walletQueryKey)?.wallet;
-    const firstVerdictOnLegacyCache =
-      was === null &&
-      capability === true &&
+    const cachedLegacy =
       cached !== undefined &&
       !isWalletStoreCredit(cached) &&
       !isWalletPrimaryUnknown(cached);
-    if (turnedOn || firstVerdictOnLegacyCache) {
+    const turnedOn = was.capability === false && capability !== false;
+    const firstVerdictOnLegacyCache =
+      was.capability === null && capability === true && cachedLegacy;
+    const newScopeOnLegacyCache =
+      was.scope !== scope && capability === true && cachedLegacy;
+    if (turnedOn || firstVerdictOnLegacyCache || newScopeOnLegacyCache) {
       void queryClient.invalidateQueries({
         queryKey: walletQueryKey,
         exact: true,
       });
     }
-  }, [capability, queryClient]);
+  }, [capability, queryClient, scope]);
 }

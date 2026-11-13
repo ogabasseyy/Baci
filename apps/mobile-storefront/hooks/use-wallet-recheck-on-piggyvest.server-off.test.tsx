@@ -94,3 +94,52 @@ describe('bugfix: legacy wallet restored after a cold restart stays authoritativ
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: account switch restores a legacy wallet while PiggyVest is on', () => {
+  it('refetches when the wallet scope changes onto a cached legacy wallet', () => {
+    // Arrange: PiggyVest already confirmed; the next account's wallet is
+    // still cached in the plain legacy shape.
+    mockCapability = true;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = {
+      getQueryData: () => ({ transactions: [], wallet: { balance: 0 } }),
+      invalidateQueries,
+    } as unknown as QueryClient;
+    const OTHER = ['wallet', 'data', 'merchant-1', 'owner-2'] as const;
+    const hook = renderHook(
+      ({ key }: { key: readonly string[] }) =>
+        useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', key),
+      { initialProps: { key: KEY as readonly string[] } }
+    );
+
+    // Act: another account signs in.
+    hook.rerender({ key: OTHER });
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: OTHER,
+      exact: true,
+    });
+  });
+
+  it('does not refetch a new scope that already reads as PiggyVest', () => {
+    mockCapability = true;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = {
+      getQueryData: () => ({
+        transactions: [],
+        wallet: { balance: 0, primary_balance_kobo: 0 },
+      }),
+      invalidateQueries,
+    } as unknown as QueryClient;
+    const hook = renderHook(
+      ({ key }: { key: readonly string[] }) =>
+        useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', key),
+      { initialProps: { key: KEY as readonly string[] } }
+    );
+
+    hook.rerender({ key: ['wallet', 'data', 'merchant-1', 'owner-2'] });
+
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+});

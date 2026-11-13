@@ -8,6 +8,7 @@ import { confirmPrimaryHeadStartBalance } from './confirm-primary-head-start-bal
 import {
   handOffToWallet,
   PLAN_ALREADY_CREATED_MESSAGE,
+  PLAN_CREATED_OPEN_WALLET_MESSAGE,
   SIGN_IN_TO_START_SAVINGS_MESSAGE,
 } from './hand-off-to-wallet';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
@@ -110,12 +111,18 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     // fund that plan with different details.
     const accountKey = submittingUserId ?? '';
     const pending = pendingPlansRef.current.get(accountKey) ?? null;
-    const sameDraft = pending?.contextKey === context.key;
-    if (
-      pending &&
-      (pending.handOff ? !(options?.continueInWallet && sameDraft) : sameDraft)
-    ) {
-      input.setFormError(PLAN_ALREADY_CREATED_MESSAGE);
+    // A plan created here whose flow was cut short blocks every further
+    // submit from this account, edited or not, until the screen is left.
+    const handOffRetry =
+      pending?.handOff &&
+      options?.continueInWallet &&
+      pending.contextKey === context.key;
+    if (pending && !handOffRetry) {
+      input.setFormError(
+        pending.handOff
+          ? PLAN_ALREADY_CREATED_MESSAGE
+          : PLAN_CREATED_OPEN_WALLET_MESSAGE
+      );
       release();
       return;
     }

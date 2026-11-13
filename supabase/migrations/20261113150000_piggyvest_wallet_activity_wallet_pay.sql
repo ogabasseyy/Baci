@@ -16,8 +16,11 @@
 -- the phone or meter number masked to its first and last four characters,
 -- read from the caller's own vtu_transactions row (same customer and store).
 --
--- Spends are dated when the PIN reserved the money and refunds when they
--- were opened (both fixed), so keyset pages stay stable as they settle.
+-- Every row keeps one fixed date, so keyset pages stay stable as rows
+-- settle: spends when the PIN reserved the money, refunds when opened, and
+-- goal returns when dispatched (no longer when settled). Goal titles are
+-- read only from the caller's own goals in this store. A phone or meter
+-- number of four characters or fewer is shown as a bare mask.
 -- Labels are capped at 120 characters.
 --
 -- Never returned: provider ids, references, wallet ids, purchase ids, the
@@ -91,8 +94,10 @@ BEGIN
                   || COALESCE(' · ' || CASE
                        WHEN pg_catalog.char_length(target.number) > 8
                          THEN pg_catalog.left(target.number, 4) || '…' || pg_catalog.right(target.number, 4)
-                       WHEN pg_catalog.char_length(target.number) > 0
+                       WHEN pg_catalog.char_length(target.number) > 4
                          THEN '…' || pg_catalog.right(target.number, 4)
+                     -- Too short to show any of it.
+                     WHEN pg_catalog.char_length(target.number) > 0 THEN '…'
                      END, '')
            END AS label
       FROM piggyvest_primary.wallet_payments AS payment
@@ -134,7 +139,10 @@ BEGIN
            operation.created_at
       FROM piggyvest_primary.savings_operations AS operation
       JOIN mine ON mine.intent_id = operation.intent_id
-      LEFT JOIN public.customer_savings_goals AS goal ON goal.id = operation.goal_id
+      LEFT JOIN public.customer_savings_goals AS goal
+        ON goal.id = operation.goal_id
+       AND goal.customer_id = mine.customer_id
+       AND goal.merchant_id = mine.merchant_id
      WHERE operation.state IN ('reserved', 'dispatched', 'confirmed')
     UNION ALL
     -- Goal cancelled early: its balance returns to the wallet.
@@ -144,10 +152,13 @@ BEGIN
            cancel.amount_kobo,
            'Returned from ' || COALESCE(goal.title, 'a savings goal'),
            CASE WHEN cancel.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
-           COALESCE(cancel.settled_at, cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
+           COALESCE(cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
       FROM piggyvest_primary.goal_cancel_operations AS cancel
       JOIN mine ON mine.intent_id = cancel.intent_id
-      LEFT JOIN public.customer_savings_goals AS goal ON goal.id = cancel.goal_id
+      LEFT JOIN public.customer_savings_goals AS goal
+        ON goal.id = cancel.goal_id
+       AND goal.customer_id = mine.customer_id
+       AND goal.merchant_id = mine.merchant_id
      WHERE cancel.state IN ('dispatched', 'confirmed', 'needs_review', 'reviewed')
        AND cancel.amount_kobo IS NOT NULL
     UNION ALL
@@ -158,10 +169,13 @@ BEGIN
            complete.amount_kobo,
            'Goal completed: ' || COALESCE(goal.title, 'savings goal'),
            CASE WHEN complete.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
-           COALESCE(complete.settled_at, complete.dispatched_at, complete.reserved_at, complete.issued_at)
+           COALESCE(complete.dispatched_at, complete.reserved_at, complete.issued_at)
       FROM piggyvest_primary.goal_complete_operations AS complete
       JOIN mine ON mine.intent_id = complete.intent_id
-      LEFT JOIN public.customer_savings_goals AS goal ON goal.id = complete.goal_id
+      LEFT JOIN public.customer_savings_goals AS goal
+        ON goal.id = complete.goal_id
+       AND goal.customer_id = mine.customer_id
+       AND goal.merchant_id = mine.merchant_id
      WHERE complete.state IN ('dispatched', 'confirmed', 'needs_review', 'reviewed')
        AND complete.amount_kobo IS NOT NULL
     UNION ALL

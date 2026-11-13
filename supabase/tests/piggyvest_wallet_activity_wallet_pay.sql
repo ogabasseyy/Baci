@@ -16,6 +16,11 @@ DECLARE
   c_lookup constant text := 'f9a10000-0000-4000-8000-0000000000a9';
   c_airtime constant uuid := 'f9a10000-0000-4000-8000-0000000000b9';
   c_issued constant text := 'f9a10000-0000-4000-8000-0000000000c9';
+  c_neighbour_user constant uuid := 'f9a10000-0000-4000-8000-0000000000f1';
+  c_neighbour constant uuid := 'f9a10000-0000-4000-8000-0000000000f3';
+  c_goal constant uuid := 'f9a10000-0000-4000-8000-0000000000f5';
+  c_cancel constant uuid := 'f9a10000-0000-4000-8000-0000000000f7';
+  c_dispatched constant timestamptz := now() - interval '2 hours';
   v_imei text;
   v_vtu text;
   v_rows jsonb;
@@ -41,6 +46,40 @@ BEGIN
   -- Issued only (no PIN): moved no money, never listed.
   PERFORM pg_temp.wp_issue(c_issued, 70000);
 
+  -- REGRESSION (Muse): a meter number of four characters or fewer is
+  -- never shown, not even its last four.
+  INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider,
+    phone_number, request_reference, source, metadata, amount, status, biller_name, customer_identifier)
+  VALUES ('f9a10000-0000-4000-8000-0000000000e9', c_customer, c_merchant, 'betting', '',
+    '', 'vtu-activity-short', 'checkout', '{"paymentSource":"piggyvest_wallet"}', 300, 'pending',
+    'Short Bet', '1234');
+  v_vtu := pg_temp.wp_issue('f9a10000-0000-4000-8000-0000000000e9', 30000, 'vtu') ->> 'operationId';
+  PERFORM pg_temp.wp_assert(pg_temp.wp_reserve(v_vtu, pg_temp.wp_proof('activity-short', 'wallet_pay',
+    30000, pg_temp.wp_key(v_vtu, 'f9a10000-0000-4000-8000-0000000000e9', 'vtu'))) ->> 'status' = 'claimed',
+    'short reserve');
+  -- REGRESSION (Codex P2 + Muse): a goal return settled after dispatch keeps
+  -- its dispatch date, and names only the caller's own goal (this one is a
+  -- neighbour's).
+  INSERT INTO auth.users (id, email) VALUES (c_neighbour_user, 'walletpay-neighbour@example.test');
+  INSERT INTO public.customers (id, merchant_id, user_id, email)
+  VALUES (c_neighbour, c_merchant, c_neighbour_user, 'walletpay-neighbour@example.test');
+  INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity)
+  VALUES ('f9a10000-0000-4000-8000-0000000000a4', c_merchant, 'Synthetic goal product', 10000, 'active', 1);
+  INSERT INTO public.customer_savings_goals (
+    id, merchant_id, customer_id, product_id, title, target_amount, current_amount,
+    contribution_amount, contribution_frequency, start_date, maturity_date, source_mode,
+    terms_accepted_at, non_withdrawable_accepted_at)
+  VALUES (c_goal, c_merchant, c_neighbour, 'f9a10000-0000-4000-8000-0000000000a4', 'Neighbour secret',
+    10000, 0, 1000, 'daily', current_date, current_date + 30, 'manual', now(), now());
+  INSERT INTO piggyvest_primary.goal_cancel_operations (
+    id, integration_id, intent_id, goal_id, state, reference, source_wallet_id,
+    destination_wallet_id, amount_kobo, provider_transaction_id, issued_at, expires_at,
+    reserved_at, dispatched_at, settled_at)
+  VALUES (c_cancel, 'f9a10000-0000-4000-8000-000000000006', 'f9a10000-0000-4000-8000-000000000007',
+    c_goal, 'confirmed', 'pvb-cancel-' || c_goal::text, 'synthetic-walletpay-goal',
+    'synthetic-walletpay-main', 40000, 'synthetic-cancel-tx', c_dispatched - interval '5 minutes',
+    c_dispatched + interval '1 hour', c_dispatched - interval '5 minutes', c_dispatched, now());
+
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', c_user, true);
   PERFORM pg_catalog.set_config('request.jwt.claims',
     pg_catalog.jsonb_build_object('sub', c_user, 'role', 'authenticated')::text, true);
@@ -49,6 +88,17 @@ BEGIN
     FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
    WHERE row.kind IN ('wallet_spend', 'wallet_refund');
 
+  PERFORM pg_temp.wp_assert(EXISTS (
+      SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+       WHERE row.kind = 'wallet_spend' AND row.label = 'Short Bet · …'),
+    'a short meter number was shown');
+  PERFORM pg_temp.wp_assert(EXISTS (
+      SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+       WHERE row.id = c_cancel AND row.occurred_at = c_dispatched
+         AND row.label = 'Returned from a savings goal'),
+    'the goal return moved to its settle date or named another customer''s goal');
+  v_rows := (SELECT pg_catalog.jsonb_agg(item) FROM pg_catalog.jsonb_array_elements(v_rows) AS item
+              WHERE item ->> 'label' <> 'Short Bet · …');
   PERFORM pg_temp.wp_assert(pg_catalog.jsonb_array_length(v_rows) = 3,
     'expected two spends and one refund: ' || COALESCE(v_rows::text, 'none'));
   PERFORM pg_temp.wp_assert(v_rows -> 0 ->> 'kind' = 'wallet_refund'

@@ -34,7 +34,9 @@ function isTopOfHourRun(nowMs: number): boolean {
   );
 }
 
-const lastPagedAt = new Map<string, number>();
+/** This copy's last page per reason, and whether it went out without Redis. */
+const lastPagedAt = new Map<string, { at: number; viaFallback: boolean }>();
+const SHARED_CLAIM_TTL_MS = SHARED_CLAIM_TTL_SECONDS * 1000;
 
 /** Claims a page across server copies; null when no shared store answers. */
 export type SharedPageClaim = (reason: string) => Promise<boolean | null>;
@@ -71,19 +73,27 @@ export async function claimDegradedPage(
   nowMs: number = Date.now()
 ): Promise<boolean> {
   const last = lastPagedAt.get(reason);
-  if (last !== undefined && nowMs - last < LOCAL_MIN_GAP_MS) return false;
+  if (last !== undefined && nowMs - last.at < LOCAL_MIN_GAP_MS) return false;
+  // A page sent without Redis left no shared claim. For the rest of that
+  // claim's span, Redis (even if back) must not page this reason again;
+  // only the next top-of-hour run may, as the fallback would anyway.
+  if (last?.viaFallback && nowMs - last.at < SHARED_CLAIM_TTL_MS) {
+    if (!isTopOfHourRun(nowMs)) return false;
+    lastPagedAt.set(reason, { at: nowMs, viaFallback: true });
+    return true;
+  }
   // Held while asking, so a second call in this copy cannot page too.
-  lastPagedAt.set(reason, nowMs);
+  lastPagedAt.set(reason, { at: nowMs, viaFallback: false });
   const sharedResult = await shared(reason);
   const allowed = sharedResult ?? isTopOfHourRun(nowMs);
-  // Keep the mark only when this copy paged. When it did not (another copy
-  // holds the claim, or Redis could not be asked outside the window), put
-  // back the earlier mark, so the next page is not pushed past the shared
-  // claim's own expiry.
-  if (!allowed) {
-    if (last === undefined) lastPagedAt.delete(reason);
-    else lastPagedAt.set(reason, last);
-  }
+  // Keep the mark only when this copy paged (noting whether Redis took
+  // part). When it did not (another copy holds the claim, or Redis could
+  // not be asked outside the window), put back the earlier mark, so the next
+  // page is not pushed past the shared claim's own expiry.
+  if (allowed) {
+    lastPagedAt.set(reason, { at: nowMs, viaFallback: sharedResult === null });
+  } else if (last === undefined) lastPagedAt.delete(reason);
+  else lastPagedAt.set(reason, last);
   return allowed;
 }
 

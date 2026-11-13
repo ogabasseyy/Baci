@@ -50,6 +50,31 @@ describe('claimDegradedPage', () => {
     });
   });
 
+  describe('bugfix: Redis recovering soon after a fallback page paged again early', () => {
+    it('keeps the reason quiet for the shared span after a page sent without Redis', async () => {
+      const recovered = vi.fn(async () => true);
+      expect(await claimDegradedPage('transfers', none, HOUR + MIN)).toBe(true);
+      // Redis is back 52 minutes later: no second page inside the span.
+      expect(
+        await claimDegradedPage('transfers', recovered, HOUR + 52 * MIN)
+      ).toBe(false);
+      expect(recovered).not.toHaveBeenCalled();
+      // After the span, Redis decides again.
+      expect(
+        await claimDegradedPage('transfers', recovered, HOUR + 61 * MIN)
+      ).toBe(true);
+    });
+
+    it('still lets the next top-of-hour run page inside the span', async () => {
+      expect(await claimDegradedPage('transfers', none, HOUR + 2 * MIN)).toBe(
+        true
+      );
+      expect(await claimDegradedPage('transfers', none, 2 * HOUR - MIN)).toBe(
+        true
+      );
+    });
+  });
+
   describe('bugfix: two pages minutes apart across an hour boundary', () => {
     it('never pages twice within the hour, whatever the clock hour', async () => {
       const shared = vi.fn(async () => true);

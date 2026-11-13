@@ -160,8 +160,11 @@ export function SavingsNotificationList({
             style={[
               styles.notification,
               { backgroundColor: colors.card, borderColor: colors.border },
-              item.readAt === null && {
-                borderLeftColor: BRAND.primary,
+              // Every card keeps the same left edge; only unread ones colour
+              // it, so read and unread content line up.
+              {
+                borderLeftColor:
+                  item.readAt === null ? BRAND.primary : colors.border,
                 borderLeftWidth: 3,
               },
             ]}
@@ -181,7 +184,6 @@ export function SavingsNotificationList({
                 {item.title}
               </Text>
               <Text
-                numberOfLines={3}
                 style={[
                   styles.notificationBody,
                   { color: colors.textSecondary },
@@ -206,6 +208,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: SPACING.sm,
     padding: SPACING.md,
+    // Room under the last card for the floating AI button.
+    paddingBottom: 96,
   },
   notification: {
     alignItems: 'center',

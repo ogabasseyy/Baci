@@ -8,6 +8,7 @@ import { getWeeklySavingsNudge } from '../get-weekly-savings-nudge';
 import { SavingsPhoneThumb } from './SavingsPhoneThumb';
 import type { SavingsPhoneRow } from './savings-phone-rows';
 import { styles } from './savings-phone-swap.styles';
+import { savingsSwapPace } from './savings-swap-pace';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -72,6 +73,12 @@ export function SavingsPhoneSwapConfirm({
     maturityDate: goal.maturity_date,
     remaining: row.price - saved,
   });
+  // The ongoing pace is quoted in the plan's own frequency.
+  const perPeriod = savingsSwapPace({
+    frequency: goal.contribution_frequency,
+    maturityDate: goal.maturity_date,
+    remaining: row.price - saved,
+  });
   return (
     <View style={styles.root}>
       <Text
@@ -120,7 +127,9 @@ export function SavingsPhoneSwapConfirm({
             value={
               pace.due
                 ? formatNgnCurrency(pace.amountPerWeek)
-                : `${formatNgnCurrency(pace.amountPerWeek)} a week`
+                : perPeriod
+                  ? `${formatNgnCurrency(perPeriod.amount)} ${perPeriod.unit}`
+                  : `${formatNgnCurrency(pace.amountPerWeek)} a week`
             }
             total
           />

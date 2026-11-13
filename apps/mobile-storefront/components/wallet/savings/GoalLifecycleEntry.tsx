@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
+import { isFundedUnsettledGoal } from './goal-settlement';
 import { GOAL_LIFECYCLE_COPY } from './use-goal-lifecycle';
 import { usePrimaryGoalGate } from './use-primary-goal-gate';
 
@@ -26,7 +27,9 @@ function utcToday() {
 // Only an eligible-looking goal gets the button; the server and database make
 // the final call and their message is shown if they disagree.
 function looksCompletable(goal: WalletActiveSavingsGoal) {
-  if (goal.status === 'completed') return true;
+  // A completed goal is only completable while it still holds money: once
+  // settled (purchase requested) there is nothing left to move.
+  if (goal.status === 'completed') return isFundedUnsettledGoal(goal);
   // The database checks saved principal, not principal plus credited
   // interest, so interest alone never makes a goal look complete.
   if ((goal.principal_amount ?? goal.current_amount) >= goal.target_amount)

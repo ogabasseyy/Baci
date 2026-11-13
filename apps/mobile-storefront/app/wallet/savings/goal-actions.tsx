@@ -1,4 +1,5 @@
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useWallet } from '@/hooks/use-wallet';
@@ -21,6 +22,23 @@ export default function WalletGoalActionsRoute() {
   // Only a well-formed goal id is passed on; anything else opens the wallet.
   const parsed = goalIdParamSchema.safeParse(first(params.goalId));
   const goalId = parsed.success ? parsed.data : undefined;
+  const goals = wallet.data?.wallet?.savings_goals ?? [];
+  const owned = goals.some((goal) => goal.id === goalId);
+  // A goal missing from the cached wallet (created or changed elsewhere since
+  // the last read) gets one fresh read before the link gives up on it.
+  const missing = Boolean(goalId && wallet.data && !owned);
+  const [rechecked, setRechecked] = useState(false);
+  const { refetch } = wallet;
+  useEffect(() => {
+    if (!missing || rechecked) return;
+    let live = true;
+    void refetch().finally(() => {
+      if (live) setRechecked(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [missing, rechecked, refetch]);
   // After sign-in the customer comes back here, so the ownership check runs.
   const back = goalId
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`
@@ -38,11 +56,10 @@ export default function WalletGoalActionsRoute() {
   if (wallet.isError && !wallet.data) {
     return <GoalLinkLoadError onRetry={() => void wallet.refetch()} />;
   }
+  if (missing && !rechecked) return null;
   // A goal that is no longer the customer's (settled, cancelled, someone
   // else's) opens the plain wallet: the sheet would otherwise fall back to a
   // different goal and offer to cancel or complete that one.
-  const goals = wallet.data?.wallet?.savings_goals ?? [];
-  const owned = goals.some((goal) => goal.id === goalId);
   return (
     <Redirect
       href={

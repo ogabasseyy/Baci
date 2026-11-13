@@ -47,7 +47,7 @@ export function WalletSavingsPlanCard({
   const actionLabel = goal.selection_unresolved
     ? 'Choose exact variant'
     : awaitingSettlement
-      ? 'Move your savings'
+      ? 'Complete goal'
       : goal.status === 'completed'
         ? 'Start another plan'
         : goal.status === 'paused' || goal.source_mode !== 'manual'

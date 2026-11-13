@@ -58,6 +58,12 @@ describe('GoalLifecycleEntry', () => {
     expect(complete()).toBeNull();
   });
 
+  it('offers nothing for a completed goal that is already settled', () => {
+    renderEntry(makeGoal({ status: 'completed', current_amount: 0 }));
+    expect(complete()).toBeNull();
+    expect(cancel()).toBeNull();
+  });
+
   it('offers Complete (only) for a completed goal', () => {
     renderEntry(makeGoal({ status: 'completed' }));
     expect(complete()).toBeOnTheScreen();

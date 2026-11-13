@@ -27,7 +27,12 @@ interface Ports {
   // Checked before the POST: the destination must be Ogabassey's own wallet
   // in this business (a mistyped configured wallet would send interest to
   // someone else, irreversibly). False or a failed check sends nothing.
-  verifyDestination: (forfeit: GoalCancelForfeit) => Promise<boolean>;
+  // True when both wallets check out; false when the destination is not
+  // Ogabassey's interest wallet; 'source_unavailable' when the goal wallet is
+  // not this customer's, not active, or holds less than the interest.
+  verifyDestination: (
+    forfeit: GoalCancelForfeit
+  ) => Promise<boolean | 'source_unavailable'>;
   transfer: (forfeit: GoalCancelForfeit) => Promise<{ accepted: true }>;
   lookupTransfer: (
     forfeit: GoalCancelForfeit
@@ -45,7 +50,7 @@ interface Ports {
     forfeitId: string,
     // Why it is handed back: the wallet answered and is not ours, or the
     // check itself could not run (a PiggyVest or network outage).
-    reason: 'mismatch' | 'check_failed'
+    reason: 'mismatch' | 'check_failed' | 'source_unavailable'
   ) => Promise<'unclaimed_first' | 'unclaimed' | 'not_released'>;
   // Stamps the forfeit right before its single POST. Until it is stamped the
   // forfeit is known unsent, so an abandoned claim is recovered later.
@@ -79,7 +84,13 @@ export async function driveGoalCancelForfeit(
   // configuration or PiggyVest is fixed, and never counted as a rejection.
   const verified = await ports
     .verifyDestination(forfeit)
-    .then((ours) => (ours ? 'ours' : 'mismatch'))
+    .then((ours) =>
+      ours === true
+        ? ('ours' as const)
+        : ours === 'source_unavailable'
+          ? ours
+          : ('mismatch' as const)
+    )
     .catch(() => 'check_failed' as const);
   if (verified !== 'ours') {
     await ports.unclaim(forfeit.operationId, verified);

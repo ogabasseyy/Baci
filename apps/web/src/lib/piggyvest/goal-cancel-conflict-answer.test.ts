@@ -18,10 +18,17 @@ it('names both rows a late success froze', () => {
   });
 });
 
+it('bugfix: names three or more rows too', () => {
+  expect(readConflictAnswer(`conflict:${a},${b},${a}`)).toEqual({
+    result: 'conflict',
+    reviewedIds: [a, b, a],
+  });
+});
+
 it.each([
   'confirmed',
   'conflict',
-  `conflict:${a},${b},${a}`,
+  `conflict:${Array(11).fill(a).join(',')}`,
   'conflict:not-an-id',
   null,
 ])('passes %j through unchanged', (answer) => {

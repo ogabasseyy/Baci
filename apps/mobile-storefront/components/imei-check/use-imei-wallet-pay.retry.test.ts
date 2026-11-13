@@ -105,7 +105,10 @@ describe('bugfix: closing a pending payment let the next tap pay again (Codex P1
   });
 
   it('uses a new key once the purchase settled, and for another check', async () => {
-    start.mockResolvedValue({ httpStatus: 503, body: {} });
+    start.mockResolvedValue({
+      httpStatus: 409,
+      body: { code: 'IDEMPOTENCY_CONFLICT' },
+    });
     const hook = setup();
     await openAndClose(hook);
     await openAndClose(hook);

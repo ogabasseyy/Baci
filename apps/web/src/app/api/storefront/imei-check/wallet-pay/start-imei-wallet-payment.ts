@@ -44,6 +44,19 @@ const defaultDeps: StartImeiWalletPaymentDeps = {
   wasAttempted: walletPaymentAttemptedForPurchase,
 };
 
+const CLEANUP_ATTEMPTS = 3;
+
+/** Removes the pending lookup; true once the database confirms it. */
+async function removePending(admin: ImeiAccessClient, lookupId: string) {
+  for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
+    const result = await (async () => admin.deletePending(lookupId))().catch(
+      () => null
+    );
+    if (result && !result.error) return true;
+  }
+  return false;
+}
+
 function refuse(code: string, error: string, status: number) {
   return NextResponse.json(errorBody({ code, error }), { status });
 }
@@ -189,9 +202,14 @@ export async function startImeiWalletPayment(
     // No payment exists for the lookup this request just created: remove it
     // (best effort; the database refuses once a payment exists) so a retry
     // with the same key can issue instead of answering a conflict forever.
-    if (created)
-      await (async () => input.supabaseAdmin.deletePending(lookupId))().catch(
-        () => null
+    // If the lookup can not be removed, a retry with this key would find a
+    // lookup with no wallet attempt and wait forever: the client is told to
+    // start again with a new key instead (nothing was charged).
+    if (created && !(await removePending(input.supabaseAdmin, lookupId)))
+      return refuse(
+        'PAYMENT_NOT_COMPLETED',
+        'This payment did not go through. Please start again.',
+        409
       );
     return refuse(
       'PIGGYVEST_PAY_UNAVAILABLE',

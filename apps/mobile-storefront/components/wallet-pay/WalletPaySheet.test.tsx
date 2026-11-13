@@ -29,6 +29,7 @@ function sheetState(
     amountKobo: 30_000,
     busy: false,
     open: jest.fn(),
+    nextSession: jest.fn(() => () => true),
     submit: jest.fn(async () => undefined),
     recheck: jest.fn(async () => undefined),
     close: jest.fn(),

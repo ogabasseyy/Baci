@@ -159,10 +159,17 @@ describe('startImeiWalletPayment', () => {
     });
   });
 
-  // (Its supabaseAdmin has no deletePending: a failed clean-up still answers 503.)
   it('answers 503 when the collection wallet is not configured', async () => {
     const response = await startImeiWalletPayment(
-      input(),
+      input({
+        supabaseAdmin: {
+          insertPending: vi.fn(async () => ({
+            data: { id: LOOKUP },
+            error: null,
+          })),
+          deletePending: vi.fn(async () => ({ data: null, error: null })),
+        },
+      }),
       deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
     );
     expect(response.status).toBe(503);
@@ -196,6 +203,51 @@ describe('startImeiWalletPayment', () => {
       );
       expect(response.status).toBe(503);
       expect(deletePending).toHaveBeenCalledWith(LOOKUP);
+    });
+
+    it('bugfix: a clean-up the database refuses asks to start again with a new key (Codex P2)', async () => {
+      const deletePending = vi.fn(async () => ({
+        data: null,
+        error: { message: 'busy' },
+      }));
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+      );
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PAYMENT_NOT_COMPLETED',
+      });
+      expect(deletePending).toHaveBeenCalledTimes(3);
+    });
+
+    it('retries a clean-up that throws once, then answers 503', async () => {
+      const deletePending = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('network'))
+        .mockResolvedValueOnce({ data: null, error: null });
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+      );
+      expect(response.status).toBe(503);
+      expect(deletePending).toHaveBeenCalledTimes(2);
     });
   });
 

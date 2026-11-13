@@ -39,15 +39,10 @@ async function load(): Promise<OpenPurchases> {
   if (cache) return cache;
   // A failed read throws (fail closed): an open key we can't see must never
   // be replaced by a new one, which could pay twice. Nothing is cached, so
-  // the next attempt reads again. Only data that can't be parsed (it can
-  // never be read back) counts as empty.
+  // the next attempt reads again.
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  let parsed: unknown = null;
-  try {
-    parsed = raw ? JSON.parse(raw) : null;
-  } catch {
-    parsed = null;
-  }
+  const parsed = raw ? parseSaved(raw) : null;
+  if (parsed === UNREADABLE) await quarantine();
   const now = Date.now();
   cache = {};
   if (parsed && typeof parsed === 'object')
@@ -61,6 +56,37 @@ async function load(): Promise<OpenPurchases> {
         cache[purchase] = { key, at };
     }
   return cache;
+}
+
+const UNREADABLE = Symbol('unreadable');
+const CORRUPT_KEY = `${STORAGE_KEY}.corruptSince`;
+
+function parseSaved(raw: string): unknown {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : UNREADABLE;
+  } catch {
+    return UNREADABLE;
+  }
+}
+
+/**
+ * Saved data that can't be parsed may hide an open key, so it is never read
+ * as empty: wallet pay stays refused (throws) for as long as any key in it
+ * could still be open, then the data is cleared. A customer is never locked
+ * out for good, and no open key is replaced while it might still pay.
+ */
+async function quarantine(): Promise<never | undefined> {
+  const since = Number(await AsyncStorage.getItem(CORRUPT_KEY));
+  const now = Date.now();
+  if (!since) {
+    await AsyncStorage.setItem(CORRUPT_KEY, String(now));
+    throw new Error('Saved wallet payments are unreadable');
+  }
+  if (now - since < MAX_AGE_MS)
+    throw new Error('Saved wallet payments are unreadable');
+  await AsyncStorage.removeItem(STORAGE_KEY);
+  await AsyncStorage.removeItem(CORRUPT_KEY);
 }
 
 const FORGET_ATTEMPTS = 3;
@@ -133,13 +159,22 @@ export function trackWalletPayPurchase<Result>(
   adapter: WalletPayAdapter<Result>,
   /** The purchase (or a getter, null until the adapter knows it). */
   purchase: string | (() => string | null),
-  options: { onSettled: () => void; stillOwner: () => boolean }
+  options: {
+    onSettled: () => void;
+    stillOwner: () => boolean;
+    /** False once the sheet dropped this purchase (closed or reopened). */
+    stillWanted?: () => boolean;
+  }
 ): WalletPayAdapter<Result> {
   const settle = async () => {
     // The account changed while the call was out: the sheet drops this
     // answer, so the key stays. The old account's next try replays the same
     // request and gets the settled answer, never a second payment.
     if (!options.stillOwner()) return;
+    // The sheet was closed while the call was out and drops its answer
+    // (e.g. a replayed delivered start): keep the key so the next try
+    // replays it instead of paying again.
+    if (options.stillWanted && !options.stillWanted()) return;
     const id = typeof purchase === 'string' ? purchase : purchase();
     if (id) await walletPayPurchaseKeys.forget(id);
     options.onSettled();

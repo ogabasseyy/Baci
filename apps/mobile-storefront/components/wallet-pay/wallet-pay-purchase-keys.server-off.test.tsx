@@ -228,3 +228,48 @@ describe('bugfix: a mid-pay account switch dropped a delivered result (Muse)', (
     );
   });
 });
+
+describe('bugfix: unparseable saved keys were read as empty (Codex P1)', () => {
+  const STORAGE_KEY = 'baci.walletPay.openPurchases.v1';
+  afterEach(() => jest.restoreAllMocks());
+
+  it('refuses to mint a new key while the saved data is unreadable', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, '{"p":{"key":"a","at":');
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).rejects.toThrow(
+      'unreadable'
+    );
+    walletPayPurchaseKeys.resetMemory();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).rejects.toThrow(
+      'unreadable'
+    );
+  });
+
+  it('clears the unreadable data once every key in it has expired', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, 'not json');
+    await expect(
+      walletPayPurchaseKeys.keyFor('p', () => 'b')
+    ).rejects.toThrow();
+    const later = Date.now() + 8 * 24 * 60 * 60 * 1000;
+    jest.spyOn(Date, 'now').mockReturnValue(later);
+    walletPayPurchaseKeys.resetMemory();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'b'
+    );
+  });
+});
+
+describe('bugfix: a start closed mid-replay forgot its delivered key (Codex P1)', () => {
+  it('keeps the key when the sheet no longer wants the answer', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    const opts = { ...options(), stillWanted: () => false };
+    await trackWalletPayPurchase(
+      adapter(null, { kind: 'delivered', result: {} }),
+      'p',
+      opts
+    ).start();
+    expect(opts.onSettled).not.toHaveBeenCalled();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'a'
+    );
+  });
+});

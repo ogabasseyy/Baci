@@ -157,7 +157,13 @@ export function createImeiWalletPayAdapter(input: {
       if (reply.body.refund === 'piggyvest_wallet') return outcome('refunded');
       if (codeOf(reply) === 'IDEMPOTENT_REQUEST_IN_FLIGHT')
         return outcome('pending');
-      return refusal(reply) ?? outcome('failed');
+      // A server error may come after the lookup and its payment were
+      // created: keep the key (a start never moves money) and try again.
+      const refused = refusal(reply);
+      if (refused) return refused;
+      return reply.httpStatus >= 500
+        ? outcome('not_started')
+        : outcome('failed');
     },
     async verifyPin(operationId, pin) {
       if (!lookupId) return outcome('failed');

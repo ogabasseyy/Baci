@@ -31,6 +31,7 @@ describe('WalletPaySheet with the server keeping PiggyVest off', () => {
           amountKobo: null,
           busy: false,
           open: jest.fn(),
+          nextSession: jest.fn(() => () => true),
           submit: jest.fn(),
           recheck: jest.fn(),
           close: jest.fn(),

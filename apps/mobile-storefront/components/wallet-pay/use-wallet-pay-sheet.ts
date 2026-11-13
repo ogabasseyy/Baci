@@ -204,6 +204,14 @@ export function useWalletPaySheet<Result>({
     amountKobo,
     busy,
     open,
+    /**
+     * For the next open(): true while that sheet is still the one on screen,
+     * i.e. while it will take an answer. A key is only forgotten then.
+     */
+    nextSession: () => {
+      const mine = generation.current + 1;
+      return () => current(mine);
+    },
     submit,
     recheck,
     /** Runs the same start again (same purchase key) after it never answered. */

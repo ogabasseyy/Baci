@@ -1,5 +1,5 @@
+import { currentSavingsNoticeScope } from './current-savings-notice-scope';
 import {
-  currentSavingsNoticeScope,
   type SavingsNoticeTone,
   useSavingsNoticeStore,
 } from './savings-notice-store';

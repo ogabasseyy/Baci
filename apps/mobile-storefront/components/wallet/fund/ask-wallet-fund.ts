@@ -1,4 +1,4 @@
-import { currentSavingsNoticeScope } from '../savings/savings-notice-store';
+import { currentSavingsNoticeScope } from '../savings/current-savings-notice-scope';
 import { useWalletFundPromptStore } from './wallet-fund-prompt-store';
 
 /**

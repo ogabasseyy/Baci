@@ -1,10 +1,10 @@
 import { GOAL_COMPLETE_STEP_COPY as COPY } from './goal-complete-step-copy';
 
 describe('complete step copy', () => {
-  it('names the goal and the amount in the done message', () => {
+  it('names the goal in the done message, never a stale amount', () => {
     expect(COPY.subtitle('iPhone 15')).toBe('Your iPhone 15 is fully saved.');
-    expect(COPY.doneBody('₦10', 'iPhone 15')).toBe(
-      '₦10 is in your wallet. Our team will contact you soon to finish your iPhone 15 order.'
+    expect(COPY.doneBodyUnknown('iPhone 15')).toBe(
+      'Your savings are in your wallet. Our team will contact you soon to finish your iPhone 15 order.'
     );
   });
 

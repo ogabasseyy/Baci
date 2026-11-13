@@ -25,8 +25,6 @@ export const GOAL_COMPLETE_STEP_COPY = {
   working: 'Completing your goal…',
   pending: GOAL_LIFECYCLE_COPY.pending,
   doneTitle: 'Request sent',
-  doneBody: (amount: string, goalTitle: string) =>
-    `${amount} is in your wallet. Our team will contact you soon to finish your ${goalTitle} order.`,
   unknownSplit:
     'Everything in this goal, including any interest earned, moves to your wallet.',
   doneBodyUnknown: (goalTitle: string) =>

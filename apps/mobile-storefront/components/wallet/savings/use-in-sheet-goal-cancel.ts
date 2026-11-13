@@ -53,7 +53,12 @@ export function useInSheetGoalCancel(
   // the sheet is still open.
   // Exactly once per attempt: the refresh callback is a new function on
   // every wallet render, so it must not drive the effect.
-  const settled = flow.step === 'done' || flow.step === 'timed_out';
+  // needs_review counts too: reconciliation may already have seen the money
+  // move, and refreshing after an issue-time review is harmless.
+  const settled =
+    flow.step === 'done' ||
+    flow.step === 'timed_out' ||
+    flow.step === 'needs_review';
   const refreshRef = useRef(refreshWallet);
   refreshRef.current = refreshWallet;
   // Keyed by outcome too: a timed-out attempt that later confirms after

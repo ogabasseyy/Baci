@@ -131,6 +131,19 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshes the wallet when an action needs review', () => {
+    const refresh = jest.fn();
+    const { result, rerender } = renderHook(() =>
+      useInSheetGoalCancel(goal, refresh)
+    );
+    act(() => result.current.start());
+    mockStep.current = 'submitting';
+    rerender({});
+    mockStep.current = 'needs_review';
+    rerender({});
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('releases a goal closed mid-save once its action settles', () => {
     const { result, rerender } = renderHook(() => useInSheetGoalCancel(goal));
     act(() => result.current.start());

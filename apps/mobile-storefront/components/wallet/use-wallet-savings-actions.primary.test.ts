@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { checkPendingPrimarySavings } from './check-pending-primary-savings';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
@@ -125,6 +126,60 @@ describe('createWalletSavingsActions with PiggyVest', () => {
 
       expect(input.startWalletTopUp).toHaveBeenCalledTimes(1);
       expect(input.onAddMoney).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a late status check', () => {
+    type CheckInput = Parameters<typeof checkPendingPrimarySavings>[0];
+    function startCheck() {
+      const input = {
+        ...createInput(),
+        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      };
+      input.idempotencyKeyRef.current = 'op-1';
+      input.operationRailRef.current = 'primary';
+      void createWalletSavingsActions(input).handleAddSavingsContribution();
+      const check = jest.mocked(checkPendingPrimarySavings).mock
+        .calls[0]?.[0] as CheckInput;
+      return { check, input };
+    }
+
+    it('leaves a newer operation alone once the stored id has changed', () => {
+      const { check, input } = startCheck();
+      input.idempotencyKeyRef.current = 'op-2';
+      check.clearOperation();
+      check.clearAmount();
+      check.setPending(false);
+      expect(input.idempotencyKeyRef.current).toBe('op-2');
+      expect(input.setSavingsContributionAmount).not.toHaveBeenCalled();
+      expect(input.setIsAddingSavingsContribution).not.toHaveBeenCalled();
+    });
+
+    it('still clears the busy flag it set before the scope changed', () => {
+      const { check, input } = startCheck();
+      check.setPending(true);
+      input.idempotencyKeyRef.current = 'op-2';
+      check.clearOperation();
+      check.setPending(false);
+      expect(input.idempotencyKeyRef.current).toBe('op-2');
+      expect(input.setIsAddingSavingsContribution.mock.calls).toEqual([
+        [true],
+        [false],
+      ]);
+    });
+
+    it('settles its own operation, amount and busy flag', () => {
+      const { check, input } = startCheck();
+      check.setPending(true);
+      check.clearOperation();
+      check.clearAmount();
+      check.setPending(false);
+      expect(input.idempotencyKeyRef.current).toBeNull();
+      expect(input.operationRailRef.current).toBeNull();
+      expect(input.setSavingsContributionAmount).toHaveBeenCalledWith('');
+      expect(input.setIsAddingSavingsContribution).toHaveBeenLastCalledWith(
+        false
+      );
     });
   });
 });

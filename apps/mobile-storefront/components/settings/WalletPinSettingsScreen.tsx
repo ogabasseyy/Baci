@@ -25,7 +25,11 @@ export function WalletPinSettingsScreen() {
   const pin = useWalletPinSettings();
   const steps = useWalletPinSteps(pin);
   // Back from "Choose a new PIN" or "Confirm" returns to the previous step.
-  usePreventRemove(steps.canGoBack && !pin.savedTitle, steps.back);
+  // Never while signing out: the guard would also block the auth redirect.
+  usePreventRemove(
+    steps.canGoBack && !pin.savedTitle && !auth.redirectTo,
+    steps.back
+  );
 
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
 

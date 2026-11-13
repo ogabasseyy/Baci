@@ -136,6 +136,10 @@ export function trackWalletPayPurchase<Result>(
   options: { onSettled: () => void; stillOwner: () => boolean }
 ): WalletPayAdapter<Result> {
   const settle = async () => {
+    // The account changed while the call was out: the sheet drops this
+    // answer, so the key stays. The old account's next try replays the same
+    // request and gets the settled answer, never a second payment.
+    if (!options.stillOwner()) return;
     const id = typeof purchase === 'string' ? purchase : purchase();
     if (id) await walletPayPurchaseKeys.forget(id);
     options.onSettled();

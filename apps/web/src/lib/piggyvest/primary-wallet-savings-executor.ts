@@ -54,6 +54,7 @@ const parameterCounts = new Map<string, number>([
   [walletPay.manage, 3],
   [walletPay.status, 2],
   [walletPay.forPurchase, 2],
+  [walletPay.attempted, 2],
   // Wallet pay worker statements (integration id, environment, values).
   [walletPayWorker.claim, 3],
   [walletPayWorker.finish, 5],

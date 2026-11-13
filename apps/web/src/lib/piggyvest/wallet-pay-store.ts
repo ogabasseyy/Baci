@@ -72,6 +72,18 @@ export function createWalletPayCustomerStore(input: {
       ]);
       return schemas.forPurchaseRows.parse(result.rows)[0].result;
     },
+    // Whether this customer's wallet flow ever issued a payment for one
+    // purchase, expired or released attempts included.
+    async wasAttempted(purpose: 'imei_check' | 'vtu', purchaseRef: string) {
+      const result = await input.execute(customerSql.attempted, [
+        scope,
+        JSON.stringify({
+          purpose: schemas.purpose.parse(purpose),
+          purchaseRef: schemas.purchaseRef.parse(purchaseRef),
+        }),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
     async readStatus(operationId: string) {
       const result = await input.execute(customerSql.status, [
         scope,

@@ -69,6 +69,10 @@ BEGIN
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'released'
     AND (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) IS NULL,
     'a short provider balance left a dispatched attempt');
+  -- The shortfall is held: no new cancel starts until an operator clears it.
+  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"needs_review"}'::jsonb,
+    'a new cancel started over an uncleared shortfall');
+  UPDATE piggyvest_primary.goal_cancel_operations SET held_reason = NULL WHERE id = v_op::uuid;
 
   -- Invalid balances are refused outright.
   v_op := pg_temp.gc_reserved('bad-balance');
@@ -650,7 +654,7 @@ BEGIN
   -- truncated.
   BEGIN
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'reserved', dispatched_at = NULL,
-           amount_kobo = 9999999990
+           amount_kobo = 9999999990, alerted_at = pg_catalog.clock_timestamp()
      WHERE id = v_forfeit::uuid;
     PERFORM pg_temp.gf_receipt('gf-overflow', 20);
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'

@@ -82,6 +82,12 @@ REVOKE ALL ON piggyvest_primary.goal_interest_forfeit_wallets
 
 -- 2. What each attempt forfeited (NULL for attempts dispatched before this
 -- migration, which moved the whole balance), and the forfeit leg ledger.
+-- held_reason: set when an attempt is released because PiggyVest held less
+-- than the saved principal; while any such hold is uncleared no new cancel of
+-- the goal starts (an operator clears it, see the runbook).
+ALTER TABLE piggyvest_primary.goal_cancel_operations
+  ADD COLUMN held_reason text
+    CHECK (held_reason IS NULL OR held_reason = 'provider_balance_below_principal');
 ALTER TABLE piggyvest_primary.goal_cancel_operations
   ADD COLUMN forfeited_interest_kobo bigint
     CHECK (forfeited_interest_kobo IS NULL OR forfeited_interest_kobo BETWEEN 0 AND 9999999999);
@@ -225,7 +231,9 @@ BEGIN
   -- Nothing has been sent for a reserved attempt, so refusing here releases it.
   IF v_current IS NULL OR v_current * 100 <> pg_catalog.trunc(v_current * 100)
     OR v_current * 100 < 1 OR v_current * 100 > provider_balance_kobo THEN
-    UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released' WHERE id = v_operation.id;
+    UPDATE piggyvest_primary.goal_cancel_operations
+       SET state = 'released', held_reason = 'provider_balance_below_principal'
+     WHERE id = v_operation.id;
     RETURN pg_catalog.jsonb_build_object('status', 'needs_review');
   END IF;
   v_principal := (v_current * 100)::bigint;
@@ -365,7 +373,8 @@ BEGIN
   -- An attempt waiting for an operator blocks a new cancel until it is cleared.
   IF piggyvest_primary.goal_cancel_needs_review(v_goal.id) IS NOT FALSE
     OR EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS review
-                WHERE review.goal_id = v_goal.id AND review.state = 'needs_review') THEN
+                WHERE review.goal_id = v_goal.id
+                  AND (review.state = 'needs_review' OR review.held_reason IS NOT NULL)) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'needs_review');
   END IF;
   IF EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations AS funding
@@ -1279,7 +1288,10 @@ BEGIN
   IF v_forfeit.id IS NULL THEN RETURN 'conflict'; END IF;
   IF v_forfeit.state = 'released' THEN RETURN 'duplicate'; END IF;
   IF v_forfeit.state <> 'dispatched' THEN RETURN 'conflict'; END IF;
-  IF piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id) = 'needs_review' THEN
+  -- Either review outcome (the third rejection, or a replacement that could
+  -- not merge under the ceiling) answers conflict, which pages.
+  IF piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id)
+       IN ('needs_review', 'released_needs_review') THEN
     RETURN 'conflict';
   END IF;
   RETURN 'released';
@@ -1374,7 +1386,12 @@ BEGIN
       ELSE piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo END,
     state = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
-      THEN 'reserved' ELSE 'needs_review' END;
+      THEN 'reserved' ELSE 'needs_review' END,
+    -- A review entered here pages afresh (the daily sweep pages unstamped
+    -- reviews), whatever an earlier wallet-check page left behind.
+    alerted_at = CASE
+      WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
+      THEN piggyvest_primary.goal_cancel_interest_forfeits.alerted_at ELSE NULL END;
   EXCEPTION WHEN unique_violation OR check_violation THEN
     -- Never refuse the payout over the forfeit plan.
     NULL;

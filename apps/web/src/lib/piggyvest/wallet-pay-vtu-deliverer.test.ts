@@ -53,10 +53,16 @@ describe('settleVtuWalletPayment (drain, VTU)', () => {
     expect(refund).not.toHaveBeenCalled();
   });
 
-  it('raises a payment that is not this purchase, changing nothing', async () => {
+  it('bugfix: refunds a confirmed payment that matches no purchase instead of retrying forever (Muse)', async () => {
     delivery.vtuDeliveryState.mockResolvedValue('mismatch');
-    await expect(settleVtuWalletPayment(input)).rejects.toThrow();
-    expect(delivery.finish).not.toHaveBeenCalled();
+    delivery.finish.mockResolvedValue('refund_owed');
+    await settleVtuWalletPayment(input);
+    expect(delivery.finish).toHaveBeenCalledWith(
+      expect.any(String),
+      'failed',
+      expect.any(String)
+    );
+    expect(refund).toHaveBeenCalledTimes(1);
   });
 
   it('raises when the outcome could not be recorded', async () => {

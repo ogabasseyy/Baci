@@ -10,7 +10,8 @@ import { refundWalletPayment, walletPayDelivery } from './wallet-pay-service';
  * failed (or never sent, which the database closes as failed) = failed under
  * this claim, which opens exactly one refund, and the refund is sent. A vend
  * that may still be in flight is left to the VTU requery; the drain asks
- * again once the claim lapses.
+ * again once the claim lapses. A payment that matches no purchase is
+ * refunded.
  */
 export const settleVtuWalletPayment: WalletPayDeliverer = async ({
   runtime,
@@ -20,8 +21,9 @@ export const settleVtuWalletPayment: WalletPayDeliverer = async ({
   const delivery = walletPayDelivery(runtime);
   const state = await delivery.vtuDeliveryState(operationId);
   if (state === 'processing') return;
-  if (state === 'mismatch')
-    throw new Error('Wallet payment does not belong to its VTU purchase');
+  // A confirmed payment with no matching purchase (mismatch) can never be
+  // delivered: it is failed under this claim, so its one refund is sent,
+  // instead of being retried forever (Muse).
   const outcome = state === 'success' ? 'fulfilled' : 'failed';
   const answer = await delivery.finish(operationId, outcome, claimToken);
   const expected = outcome === 'fulfilled' ? 'fulfilled' : 'refund_owed';

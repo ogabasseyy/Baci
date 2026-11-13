@@ -262,15 +262,15 @@ Pass:
 | --- | --- | --- |
 | F1 dead Complete button on a settled plan | #4224 | **Fixed** 15f79481ac |
 | F2 cancelled-plan notification opened another plan | #4224 | **Fixed** 15f79481ac (taps go through the goal link route) |
-| F3 activity rows gross, balance net (deposit fee hidden) | #4232 session | Sent |
+| F3 activity rows gross, balance net (deposit fee hidden) | #4232 | **Fixed** 3dfaa869bb (net amount + fee line; Add money mentions the fee) |
 | F4 Change phone quoted weekly on a monthly plan | #4224 | **Fixed** 15f79481ac |
 | F5 savings sheet stayed over another screen | #4224 | **Fixed** 15f79481ac (closes on blur) |
-| F6 goal link trusted a stale wallet | #4224 | **Fixed** 15f79481ac (one fresh read on a miss) |
-| F7 airtime 500 blamed PiggyVest / connection | #4227 session | Sent |
+| F6 goal link trusted a stale wallet | #4224 | **Fixed** 15f79481ac, 6193b93895 (one fresh read per goal; a failed read keeps the link) |
+| F7 airtime 500 blamed PiggyVest / connection | #4225 | **Fixed** da1f56cec0 (neutral copy, savings wallet, title once) |
 | Notification card offset, 3-line cut, AI button overlap, raw time zone | #4224 | **Fixed** 15f79481ac (time zone gets a hint, picker deferred) |
 | "Move your savings" vs "Complete goal" | #4224 | **Fixed** 15f79481ac |
-| Start Savings lows (debit time, terms error, amount focus, search caps, picker tint) | #4223 session | Sent |
-| Onboarding lows (consent error, disabled button, BVN show/hide, naming) and older store credit / Money received placement | #4230 session | Sent |
+| Start Savings lows (debit time, terms error, amount focus, search caps, picker tint) | #4223 | **Fixed** 54f8a88a46 |
+| Onboarding lows (consent error, disabled button, BVN show/hide, naming) and older store credit / Money received placement | #4230 | **Fixed** 6f611b14c8 |
 | PIN context rows lack goal name; no "phone changed" confirmation | #4224 | **Fixed** d9058f62ce |
 | Sheet style differences (grey vs red handles, arrow vs chevron back) | design | Open (low): needs one shared sheet/back-button decision across PRs |
 

@@ -63,7 +63,16 @@ const CORRUPT_KEY = `${STORAGE_KEY}.corruptSince`;
 function parseSaved(raw: string): unknown {
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : UNREADABLE;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return UNREADABLE;
+    // One malformed entry may be an open key: the whole store is unreadable
+    // (quarantined), never rebuilt without it (Codex P2).
+    for (const entry of Object.values(parsed)) {
+      const { key, at } = (entry ?? {}) as { key?: unknown; at?: unknown };
+      if (typeof key !== 'string' || key === '' || typeof at !== 'number')
+        return UNREADABLE;
+    }
+    return parsed;
   } catch {
     return UNREADABLE;
   }

@@ -1,11 +1,16 @@
 import 'server-only';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import type { ImeiAccessClient } from '@/lib/imei-access';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readWalletPayRecoveryRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import { findWalletPaymentForPurchase } from '@/lib/piggyvest/wallet-pay-service';
-import type { ImeiLookupRow, mapExistingLookup } from '../route-helpers';
+import {
+  findLookupByIdempotencyKey,
+  type ImeiLookupRow,
+  type mapExistingLookup,
+} from '../route-helpers';
 
 /** The replay context the IMEI route already builds for this request. */
 type ReplayContext = Parameters<typeof mapExistingLookup>[1];
@@ -96,4 +101,33 @@ export async function resumePaidImeiWalletPayment(
     },
     { status: 202, headers: { 'Cache-Control': 'no-store' } }
   );
+}
+
+/**
+ * A PiggyVest IMEI start while wallet pay is switched off: if it replays a
+ * start (same Idempotency-Key) whose payment already moved money, resume it
+ * on the recovery runtime so the check is delivered (Codex P2). Never issues
+ * a payment; null = nothing to resume (the caller answers unavailable).
+ */
+export async function resumeWhileSwitchedOff(
+  input: {
+    idempotencyKey: string;
+    replayContext: ReplayContext;
+    supabase: SupabaseClient;
+    supabaseAdmin: ImeiAccessClient;
+    user: User;
+  },
+  resume: typeof resumePaidImeiWalletPayment = resumePaidImeiWalletPayment
+): Promise<Response | null> {
+  const existing = await findLookupByIdempotencyKey(
+    input.supabaseAdmin,
+    input.idempotencyKey
+  ).catch(() => null);
+  if (!existing) return null;
+  return await resume({
+    ...input.replayContext,
+    existing,
+    supabase: input.supabase,
+    user: input.user,
+  }).catch(() => null);
 }

@@ -186,3 +186,26 @@ describe('bugfix: two typings of one IMEI minted two keys (Muse)', () => {
     expect(keyOfCall(1)).toBe(keyOfCall(0));
   });
 });
+
+describe('bugfix: a kept IMEI PiggyVest attempt was not offered for replay (Codex P1)', () => {
+  it('reports the kept key of a check whose answer was lost, and none for another check', async () => {
+    uuid.mockReturnValue('key-kept');
+    start.mockResolvedValue({
+      httpStatus: 202,
+      body: {
+        status: 'payment_pending',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 30_000,
+      },
+    });
+    const hook = setup();
+    await openAndClose(hook);
+    await expect(hook.result.current.retains?.('basic', IMEI)).resolves.toBe(
+      true
+    );
+    await expect(
+      hook.result.current.retains?.('basic', 'C39XK0ABCDE1')
+    ).resolves.toBe(false);
+  });
+});

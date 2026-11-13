@@ -34,3 +34,29 @@ describe('chooseImeiPaymentRail', () => {
     ).toBe('store_credit');
   });
 });
+
+describe('bugfix: a kept PiggyVest attempt fell through to store credit (Codex P1)', () => {
+  it('replays a kept PiggyVest attempt even when PiggyVest no longer covers it', () => {
+    expect(
+      chooseImeiPaymentRail({
+        retainedStoreCredit: false,
+        retainedPiggyvest: true,
+        piggyvestCovers: false,
+        walletBalance: 10_000,
+        price: 500,
+      })
+    ).toBe('piggyvest');
+  });
+
+  it('still replays a kept store credit attempt first', () => {
+    expect(
+      chooseImeiPaymentRail({
+        retainedStoreCredit: true,
+        retainedPiggyvest: true,
+        piggyvestCovers: true,
+        walletBalance: 10_000,
+        price: 500,
+      })
+    ).toBe('store_credit');
+  });
+});

@@ -94,14 +94,16 @@ jest.mock('@/hooks/use-wallet', () => ({
   }),
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      customer: { id: 'customer-1' },
-      merchantId: 'merchant-1',
-      session: { access_token: 'token-123' },
-    }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const state = {
+    customer: { id: 'customer-1' },
+    merchantId: 'merchant-1',
+    session: { access_token: 'token-123' },
+  };
+  const useAuthStore = (selector: (s: unknown) => unknown) => selector(state);
+  useAuthStore.getState = () => state;
+  return { useAuthStore };
+});
 
 import ImeiCheckerScreen from '@/app/imei-check';
 

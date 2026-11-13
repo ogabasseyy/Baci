@@ -1,6 +1,7 @@
 import type { NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { deferGoalCancelForfeit } from '@/lib/piggyvest/defer-goal-cancel-forfeit';
 import { goalCancelAmountFields } from '@/lib/piggyvest/goal-cancel-amount-fields';
 import { goalCancelForfeitTransfersAllowed } from '@/lib/piggyvest/goal-cancel-forfeit-cron';
 import {
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       operationId: input.operationId,
       pinProof: input.pinProof,
       allowForfeitTransfers: goalCancelForfeitTransfersAllowed(),
+      deferForfeit: deferGoalCancelForfeit,
     });
     return goalCancelSubmitResponse(result, input.operationId);
   } catch {
@@ -198,6 +200,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       scope,
       operationId: body.data.operationId,
       allowForfeitTransfers: goalCancelForfeitTransfersAllowed(),
+      deferForfeit: deferGoalCancelForfeit,
     });
     if (result.status === 'not_found')
       return refuse('Cancellation not found.', 'CANCEL_NOT_FOUND', 404);

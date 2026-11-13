@@ -69,6 +69,9 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
   'PROFILE_VERIFICATION_REQUIRED',
   'UNAUTHORIZED',
   'CSRF_FAILED',
+  // The server refuses a cancel from an app that never showed the interest
+  // forfeit: "Please update the app to cancel this goal."
+  'APP_UPDATE_REQUIRED',
   ...['CANCEL', 'COMPLETE'].flatMap((K) =>
     [
       'REJECTED',
@@ -103,4 +106,6 @@ export const NOT_STARTABLE_CODES: readonly string[] = [
   'PROFILE_VERIFICATION_REQUIRED',
   'SAVINGS_UNAVAILABLE',
   'UNAUTHORIZED',
+  // Only an app update fixes it, never starting again.
+  'APP_UPDATE_REQUIRED',
 ];

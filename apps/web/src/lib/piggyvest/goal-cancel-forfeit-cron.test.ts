@@ -94,10 +94,24 @@ it('reports a configured-but-broken installation as a failed sweep, never inert'
   const sweep = vi.fn();
   expect(
     await runScheduledGoalCancelForfeitSweep(
-      { PIGGYVEST_PRIMARY_INTEGRATION_ID: 'x' } as unknown as NodeJS.ProcessEnv,
+      {
+        PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD: 'x',
+      } as unknown as NodeJS.ProcessEnv,
       sweep
     )
   ).toEqual({ status: 'failed' });
   expect(sweep).not.toHaveBeenCalled();
   warn.mockRestore();
+});
+
+it('stays inert where only another PiggyVest subsystem is configured', async () => {
+  mocks.recovery.mockImplementation(() => {
+    throw new Error('Primary savings configuration unavailable');
+  });
+  expect(
+    await runScheduledGoalCancelForfeitSweep(
+      { PIGGYVEST_PRIMARY_CARD_KEY: 'x' } as unknown as NodeJS.ProcessEnv,
+      vi.fn()
+    )
+  ).toBeNull();
 });

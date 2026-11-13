@@ -50,8 +50,8 @@ describe('deploy crontab schedules', () => {
       lines[0],
       // The early-cancel interest forfeit sweep runs right after the report,
       // as its own route with its own time budget (deploy.sh is at its line
-      // limit, so it shares this entry).
-      /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation; \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
+      // limit, so it shares this entry); either one failing fails the line.
+      /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation; s=\$\?; \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep \|\| exit 1; exit \$s' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
     );
   });
 

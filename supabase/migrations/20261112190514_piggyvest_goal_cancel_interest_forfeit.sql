@@ -83,11 +83,13 @@ REVOKE ALL ON piggyvest_primary.goal_interest_forfeit_wallets
 -- 2. What each attempt forfeited (NULL for attempts dispatched before this
 -- migration, which moved the whole balance), and the forfeit leg ledger.
 -- held_reason: set when an attempt is released because PiggyVest held less
--- than the saved principal; while any such hold is uncleared no new cancel of
--- the goal starts (an operator clears it, see the runbook).
+-- than the saved principal, or because interest is owed with no interest
+-- wallet set up; while any such hold is uncleared no new cancel of the goal
+-- starts (an operator clears it, see the runbook).
 ALTER TABLE piggyvest_primary.goal_cancel_operations
   ADD COLUMN held_reason text
-    CHECK (held_reason IS NULL OR held_reason = 'provider_balance_below_principal');
+    CHECK (held_reason IS NULL
+           OR held_reason IN ('provider_balance_below_principal', 'interest_wallet_missing'));
 ALTER TABLE piggyvest_primary.goal_cancel_operations
   ADD COLUMN forfeited_interest_kobo bigint
     CHECK (forfeited_interest_kobo IS NULL OR forfeited_interest_kobo BETWEEN 0 AND 9999999999);
@@ -246,7 +248,12 @@ BEGIN
        AND forfeit.provider_wallet_id <> v_operation.destination_wallet_id
        FOR SHARE;
     IF NOT FOUND THEN
-      UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released' WHERE id = v_operation.id;
+      -- Held like a shortfall: a retry can not succeed until an operator sets
+      -- up the interest wallet, so the customer is told it is under review
+      -- rather than to try again (runbook: configure, then clear the hold).
+      UPDATE piggyvest_primary.goal_cancel_operations
+         SET state = 'released', held_reason = 'interest_wallet_missing'
+       WHERE id = v_operation.id;
       RETURN pg_catalog.jsonb_build_object('status', 'forfeit_unavailable');
     END IF;
   END IF;

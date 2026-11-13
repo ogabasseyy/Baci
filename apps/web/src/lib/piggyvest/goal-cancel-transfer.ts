@@ -229,8 +229,10 @@ async function claimTransferAmount(
   const split = await ports.splitDispatch(operationId, balanceKobo);
   if (split.status !== 'dispatched') {
     if (split.status === 'needs_review') return { status: 'needs_review' };
+    // No interest wallet set up: held for an operator (a retry can not
+    // succeed), so the customer is told it is under review.
     if (split.status === 'forfeit_unavailable')
-      return { status: 'unavailable' };
+      return { status: 'needs_review' };
     return { status: 'pending' };
   }
   if (

@@ -74,7 +74,7 @@ it('looks up a rejected principal transfer under the principal amount', async ()
 it.each([
   ['not_claimed', 'pending'],
   ['needs_review', 'needs_review'],
-  ['forfeit_unavailable', 'unavailable'],
+  ['forfeit_unavailable', 'needs_review'],
 ] as const)('a %s split sends nothing and answers %s', async (status, expected) => {
   const p = ports();
   p.splitDispatch.mockResolvedValue({ status });

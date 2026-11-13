@@ -57,6 +57,11 @@ BEGIN
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'released'
     AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits),
     'the unavailable interest wallet left the attempt live or wrote a forfeit');
+  -- Held: a retry can not succeed until the wallet is set up, so no new
+  -- cancel starts until an operator clears it.
+  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"needs_review"}'::jsonb,
+    'a new cancel started while the interest wallet is still missing');
+  UPDATE piggyvest_primary.goal_cancel_operations SET held_reason = NULL WHERE id = v_op::uuid;
 
   PERFORM pg_temp.gf_configure_wallet();
 

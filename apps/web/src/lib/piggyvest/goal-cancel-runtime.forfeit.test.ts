@@ -162,8 +162,9 @@ it('pages and sends nothing when interest is owed but no interest wallet is conf
     { status: 'claimed', reservation },
     { status: 'forfeit_unavailable' }
   );
+  // Held for an operator: the customer is told it is under review.
   expect(await submitPrimaryWalletGoalCancel(submitInput)).toEqual({
-    status: 'unavailable',
+    status: 'needs_review',
   });
   expect(mocks.transfer).not.toHaveBeenCalled();
   expect(mocks.alert).toHaveBeenCalledWith(

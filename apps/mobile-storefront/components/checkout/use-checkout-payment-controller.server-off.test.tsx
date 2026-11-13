@@ -315,6 +315,19 @@ describe('bugfix: stale render-time capability at checkout submit', () => {
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
   });
 
+  it('bugfix: holds at finalize when PiggyVest turns on mid-submit after a ruled-out render', () => {
+    // Arrange: rendered while ruled out; the submit's callback is captured.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    const { result } = renderController();
+    const heldAtFinalize = result.current.isWalletFundedBankTransferHeld;
+
+    // Act: PiggyVest turns on while order creation is pending (no re-render).
+    observePiggyvestPrimaryCapability('merchant-1', true);
+
+    // Assert: the captured callback reads the live verdict, not the render's.
+    expect(heldAtFinalize()).toBe(true);
+  });
+
   it('bugfix: holds when the ruling-out expired before the wallet refetch starts', () => {
     // Arrange: rendered as ruled out; the cached negative has expired, but
     // nothing has refetched yet and the cached wallet is still legacy.

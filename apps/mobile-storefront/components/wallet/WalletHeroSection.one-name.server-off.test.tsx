@@ -3,6 +3,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { WalletHeroSection } from './WalletHeroSection';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
     'react-native'
@@ -40,7 +45,9 @@ function renderHero(primaryReady: boolean, onOpenFundPanel = jest.fn()) {
         earningsAvailable={false}
         earningsBalance={null}
         creditWatch={creditWatch}
-        fundingAccount={account}
+        fundingAccount={
+          primaryReady ? account : { ...account, provider: 'paystack' }
+        }
         loyaltyPoints={0}
         onOpenFundPanel={onOpenFundPanel}
         onOpenRedeemPanel={jest.fn()}
@@ -139,5 +146,36 @@ describe('bugfix: PiggyVest transfers checked in the store-credit ledger', () =>
     expect(
       screen.getByRole('button', { name: 'Copy funding account number' })
     ).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: pending PiggyVest account shown as a spendable total', () => {
+  it('labels it the savings wallet with the older balance as store credit', () => {
+    // Arrange: PiggyVest account number, balance not ready (primaryReady
+    // false); the older ₦1,200 is the legacy balance.
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletHeroSection
+          earningsAvailable={false}
+          earningsBalance={null}
+          fundingAccount={account}
+          loyaltyPoints={0}
+          onOpenFundPanel={jest.fn()}
+          onOpenRedeemPanel={jest.fn()}
+          savingsBalance={0}
+          savingsWalletBalance={1200}
+          totalBalance={1200}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+
+    // Assert
+    expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    // ₦1,200 appears once: the store credit line, never the big balance.
+    expect(screen.getAllByText('₦1,200')).toHaveLength(1);
+    expect(screen.getByText('Store credit')).toBeOnTheScreen();
+    expect(screen.getByText('In goals')).toBeOnTheScreen();
+    expect(screen.queryByText('Total Balance · NGN')).toBeNull();
   });
 });

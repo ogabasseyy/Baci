@@ -85,7 +85,7 @@ export function useUtilityPayment() {
         getWalletVerdict: () => {
           const capabilityNow = readPiggyvestCapabilityNow(authMerchantId);
           const verdict = readLiveVerdict({
-            holdUnsettled: piggyvestPossible || capabilityNow !== false,
+            holdUnsettled: capabilityNow !== false,
           });
           // No authoritative verdict (Codex): the wallet kind is unknown.
           return capabilityNow === null

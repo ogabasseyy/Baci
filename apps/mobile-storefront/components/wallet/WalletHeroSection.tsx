@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useLegacyFundingUnconfirmed } from '@/hooks/use-legacy-funding-unconfirmed';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hasSpendableBalance } from '@/lib/has-spendable-balance';
@@ -76,11 +77,27 @@ export function WalletHeroSection({
   // PiggyVest money (main wallet plus goals) funds savings only: never call
   // it spendable.
   const primaryReady = useWalletPrimaryReady();
+  // A PiggyVest account whose balance isn't ready yet is still a savings
+  // wallet (Codex): its older balance is store credit, not the total.
+  const pendingPiggyvest =
+    !primaryReady && fundingAccount?.provider === 'piggyvest';
+  const savingsView = primaryReady || pendingPiggyvest;
+  const storeCredit = pendingPiggyvest
+    ? savingsWalletBalance
+    : storeCreditBalance;
+  // A legacy account number from a wallet cached before the merchant's
+  // PiggyVest status is known stays hidden until it is (Codex).
+  const legacyUnconfirmed = useLegacyFundingUnconfirmed(
+    fundingAccount?.provider
+  );
   // Utility shortcuts appear only when there is money to pay with; legacy
   // wallets always show them, as before.
   const showUtilities =
-    !primaryReady ||
-    hasSpendableBalance({ savingsWalletBalance, storeCreditBalance });
+    !savingsView ||
+    hasSpendableBalance({
+      savingsWalletBalance: pendingPiggyvest ? 0 : savingsWalletBalance,
+      storeCreditBalance: storeCredit,
+    });
   const isDark = useColorScheme() === 'dark';
   return (
     <Animated.View
@@ -98,7 +115,7 @@ export function WalletHeroSection({
       <View style={styles.balanceAndAccountRow}>
         <View style={styles.balanceBlock}>
           <Text style={styles.balanceLabel}>
-            {primaryReady ? 'Savings wallet · NGN' : 'Total Balance · NGN'}
+            {savingsView ? 'Savings wallet · NGN' : 'Total Balance · NGN'}
           </Text>
           <Text
             style={styles.balanceAmount}
@@ -106,21 +123,25 @@ export function WalletHeroSection({
             adjustsFontSizeToFit
             minimumFontScale={0.55}
           >
-            {formatNgnCurrency(
-              // One name for the PiggyVest main wallet: the hero shows the
-              // savings wallet alone; goal money is the "In goals" tile.
-              primaryReady ? (savingsWalletBalance ?? 0) : totalBalance
-            )}
+            {pendingPiggyvest
+              ? '—'
+              : formatNgnCurrency(
+                  // One name for the PiggyVest main wallet: the hero shows
+                  // the savings wallet alone; goals are the "In goals" tile.
+                  primaryReady ? (savingsWalletBalance ?? 0) : totalBalance
+                )}
           </Text>
-          {primaryReady ? (
-            <WalletHeroStoreCredit balance={storeCreditBalance} />
-          ) : null}
+          {savingsView ? <WalletHeroStoreCredit balance={storeCredit} /> : null}
         </View>
-        {fundingAccount ? (
+        {fundingAccount && legacyUnconfirmed ? (
+          <Text style={styles.accountUnavailableMessage}>
+            Checking your account…
+          </Text>
+        ) : fundingAccount ? (
           <WalletHeroFundingAccount
             account={fundingAccount}
-            emphasizeCopied={primaryReady}
-            purpose={primaryReady ? 'savings' : 'wallet'}
+            emphasizeCopied={savingsView}
+            purpose={savingsView ? 'savings' : 'wallet'}
           />
         ) : (
           <WalletHeroCreateAccount
@@ -132,7 +153,7 @@ export function WalletHeroSection({
           />
         )}
       </View>
-      {primaryReady && fundingAccount ? (
+      {savingsView && fundingAccount ? (
         <WalletHeroAddMoneyButton onPress={onOpenFundPanel} />
       ) : null}
       {!fundingAccount && createFundingAccountUnavailableMessage ? (
@@ -163,7 +184,7 @@ export function WalletHeroSection({
           <View style={styles.loyaltyActionRow}>
             <Ionicons name="wallet-outline" size={16} color="#7CA7FF" />
             <Text style={styles.balanceSummaryLabel}>
-              {primaryReady ? 'In goals' : 'Savings'}
+              {savingsView ? 'In goals' : 'Savings'}
             </Text>
           </View>
           <Text

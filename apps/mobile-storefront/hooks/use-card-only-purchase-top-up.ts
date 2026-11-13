@@ -3,6 +3,7 @@ import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-mercha
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
   isWalletStoreCredit,
   type WalletPrimaryLike,
@@ -27,6 +28,9 @@ export function useCardOnlyPurchaseTopUp(
     isWalletPrimaryUnknown(wallet) ||
     // No customer row yet: unclassified where PiggyVest is possible (Codex).
     (wallet?.owner_unresolved === true && capability !== false) ||
-    isPiggyvestCardOnlyMerchant(activeMerchantId, capability)
+    isPiggyvestCardOnlyMerchant(activeMerchantId, capability) ||
+    // No verdict yet: same rule as the Add money sheet (Codex).
+    (capability === null &&
+      readPiggyvestCapabilityNow(activeMerchantId) === null)
   );
 }

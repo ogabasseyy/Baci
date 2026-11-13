@@ -5,6 +5,11 @@ import { deriveWalletDisplayData } from './derive-wallet-display-data';
 import { WalletContent } from './WalletContent';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
     'react-native'

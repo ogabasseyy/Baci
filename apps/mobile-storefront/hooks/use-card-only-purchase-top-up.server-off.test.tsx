@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 import { useCardOnlyPurchaseTopUp } from './use-card-only-purchase-top-up';
 
 const PILOT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -63,11 +67,27 @@ describe('bugfix: unobserved rollout merchant with a timed-out PiggyVest read', 
     expect(result.current).toBe(true);
   });
 
-  it("keeps today's exact prefill for an unobserved merchant's legacy wallet", () => {
+  it('bugfix: is card-only for a restored legacy wallet before any verdict', () => {
+    // Arrange: no PiggyVest verdict yet (hook and cache unknown), so the
+    // Add money sheet will treat this as a card-only store credit top-up.
     mockCapability = null;
+
+    // Act
     const { result } = renderHook(() =>
       useCardOnlyPurchaseTopUp(ROLLOUT, LEGACY_WALLET)
     );
+
+    // Assert
+    expect(result.current).toBe(true);
+  });
+
+  it("keeps today's exact prefill once the server rules PiggyVest out", () => {
+    mockCapability = false;
+    observePiggyvestPrimaryCapability(ROLLOUT, false);
+    const { result } = renderHook(() =>
+      useCardOnlyPurchaseTopUp(ROLLOUT, LEGACY_WALLET)
+    );
+    clearObservedPiggyvestPrimaryCapability();
     expect(result.current).toBe(false);
   });
 });

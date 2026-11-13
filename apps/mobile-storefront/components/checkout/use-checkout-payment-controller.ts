@@ -277,10 +277,8 @@ export function useCheckoutPaymentController({
     isWalletFundedBankTransferHeld: () => {
       const capabilityNow = readPiggyvestCapabilityNow(merchantId);
       if (capabilityNow === null) return true;
-      return isLiveWalletTransferHeld(
-        walletQuery,
-        piggyvestPossible || capabilityNow
-      );
+      // The live verdict alone decides at submit (Muse).
+      return isLiveWalletTransferHeld(walletQuery, capabilityNow);
     },
     walletIsStoreCredit,
     walletSelection,

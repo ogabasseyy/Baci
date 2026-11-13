@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useLegacyFundingUnconfirmed } from '@/hooks/use-legacy-funding-unconfirmed';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
@@ -59,6 +60,10 @@ export function WalletFundModal({
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
   const isDark = useColorScheme() === 'dark';
+  // An old account number isn't offered until PiggyVest is ruled in or out.
+  const legacyUnconfirmed = useLegacyFundingUnconfirmed(
+    fundingAccount?.provider
+  );
   // Card top-ups credit the legacy wallet, so only primary-funded flows (a
   // savings shortfall or a plain top-up) lose the card option; any other
   // return flow (e.g. IMEI check) still spends the legacy balance.
@@ -136,7 +141,14 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {showPrimarySetup ? (
+          {legacyUnconfirmed && !storeCreditTopUp ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ color: colors.textSecondary, padding: 24 }}
+            >
+              Checking your account…
+            </Text>
+          ) : showPrimarySetup ? (
             <PiggyvestWalletSetupPanel
               colors={colors}
               merchantId={merchantId}

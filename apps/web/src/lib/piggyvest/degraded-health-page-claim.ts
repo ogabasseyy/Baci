@@ -5,6 +5,15 @@ const CLAIM_CAPACITY = 64;
 /** A little over an hour, so the claim outlives its UTC-hour bucket. */
 const SHARED_CLAIM_TTL_SECONDS = 3_700;
 
+const MS_PER_HOUR = 3_600_000;
+/**
+ * Without a shared store, only a run in the first five minutes of the UTC
+ * hour may page. The check runs every 5 minutes, so exactly one run lands in
+ * that window: at most one page per reason per hour even when every run
+ * lands on a fresh server copy (Vercel cold starts), with no shared state.
+ */
+const FALLBACK_PAGE_WINDOW_MS = 5 * 60_000;
+
 const claimedPages = new Set<string>();
 
 /** Claims a page across server copies; null when no shared store answers. */
@@ -14,7 +23,7 @@ export type SharedPageClaim = (key: string) => Promise<boolean | null>;
  * Upstash Redis SET NX with expiry: the first server copy to claim a
  * reason+hour pages, every other copy (cold starts, scale-out) sees it taken.
  * Null when Redis is not configured or fails, so the caller falls back to the
- * in-process claim and still pages rather than going silent.
+ * hour's first-run window and still pages rather than going silent.
  */
 export const claimSharedPage: SharedPageClaim = async (key) => {
   const redis = getRedis();
@@ -32,12 +41,14 @@ export const claimSharedPage: SharedPageClaim = async (key) => {
 
 /**
  * One page per reason per UTC hour: first within this server copy, then
- * across copies through the shared claim when one is available.
+ * across copies through the shared claim when one is available, else only
+ * from the hour's first-run window.
  */
 export async function claimDegradedPage(
   reason: string,
   hour: number,
-  shared: SharedPageClaim = claimSharedPage
+  shared: SharedPageClaim = claimSharedPage,
+  nowMs: number = Date.now()
 ): Promise<boolean> {
   const key = `${reason}:${hour}`;
   if (claimedPages.has(key)) return false;
@@ -47,7 +58,8 @@ export async function claimDegradedPage(
     if (oldest !== undefined) claimedPages.delete(oldest);
   }
   const sharedResult = await shared(key);
-  return sharedResult !== false;
+  if (sharedResult !== null) return sharedResult;
+  return nowMs % MS_PER_HOUR < FALLBACK_PAGE_WINDOW_MS;
 }
 
 /** Test-only: forget which pages were already sent in this copy. */

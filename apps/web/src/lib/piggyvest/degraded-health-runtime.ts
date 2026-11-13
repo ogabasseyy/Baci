@@ -133,10 +133,11 @@ export async function runPiggyvestDegradedHealth(
     indeterminateTransfers,
     stalledGoalWallets,
   });
-  const hour = Math.floor(deps.nowMs() / MS_PER_HOUR);
+  const now = deps.nowMs();
+  const hour = Math.floor(now / MS_PER_HOUR);
   let paged = 0;
   for (const alert of alerts) {
-    if (!(await claimDegradedPage(alert.reason, hour, deps.claimShared)))
+    if (!(await claimDegradedPage(alert.reason, hour, deps.claimShared, now)))
       continue;
     paged += 1;
     deps.emitAlert('PIGGYVEST_DEGRADED', {
@@ -149,7 +150,7 @@ export async function runPiggyvestDegradedHealth(
   // hourly throttle), so an outage of the read itself is seen.
   if (
     readFailed &&
-    (await claimDegradedPage('health_read_failed', hour, deps.claimShared))
+    (await claimDegradedPage('health_read_failed', hour, deps.claimShared, now))
   ) {
     paged += 1;
     deps.emitAlert('PIGGYVEST_DEGRADED', {

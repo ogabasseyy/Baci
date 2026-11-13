@@ -27,10 +27,35 @@ describe('claimDegradedPage', () => {
     });
   });
 
-  it('still pages when no shared store answers (falls back to this copy)', async () => {
-    expect(await claimDegradedPage('transfers', 1, async () => null)).toBe(
-      true
-    );
+  describe('bugfix: without Redis a fresh server copy paged every 5-minute run', () => {
+    const HOUR = 3_600_000;
+    const none = async () => null;
+
+    it('pages from the first run of the hour when no shared store answers', async () => {
+      expect(
+        await claimDegradedPage('transfers', 1, none, HOUR + 2 * 60_000)
+      ).toBe(true);
+    });
+
+    it('does not page from later runs in the hour, even on a fresh copy', async () => {
+      for (const minute of [5, 10, 30, 55]) {
+        resetDegradedPageClaims();
+        expect(
+          await claimDegradedPage('transfers', 1, none, HOUR + minute * 60_000)
+        ).toBe(false);
+      }
+    });
+
+    it('still trusts the shared store when it answers', async () => {
+      expect(
+        await claimDegradedPage(
+          'transfers',
+          1,
+          async () => true,
+          HOUR + 30 * 60_000
+        )
+      ).toBe(true);
+    });
   });
 
   it('reports no shared store when Redis is not configured', async () => {

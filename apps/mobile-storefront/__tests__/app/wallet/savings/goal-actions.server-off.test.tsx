@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import WalletGoalActionsRoute from '@/app/wallet/savings/goal-actions';
+import { useSavingsNoticeStore } from '@/components/wallet/savings/savings-notice-store';
 
 const mockParams = jest.fn();
 const mockAuth = jest.fn();
@@ -72,6 +73,10 @@ describe('old goal-actions links', () => {
     render(<WalletGoalActionsRoute />);
     expect(await screen.findByText('Redirect:/wallet')).toBeOnTheScreen();
     expect(refetch).toHaveBeenCalledTimes(1);
+    // A short note explains why the old link opened the plain wallet.
+    expect(useSavingsNoticeStore.getState().notice?.title).toBe(
+      'That savings plan has closed'
+    );
   });
 
   it('keep the link with a retry when the fresh read fails', async () => {

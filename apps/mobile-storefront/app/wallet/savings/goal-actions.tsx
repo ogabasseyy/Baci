@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
+import { notifySavings } from '@/components/wallet/savings/savings-notice';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useWallet } from '@/hooks/use-wallet';
 import { goalIdParamSchema } from '@/schemas/goal-link';
@@ -83,6 +84,17 @@ export default function WalletGoalActionsRoute() {
       live = false;
     };
   }, [missing, recheckedThis, goalId, refetch]);
+  // A goal confirmed gone (settled, cancelled or not on this account) opens
+  // the plain wallet with a short note, so an old link does not look broken.
+  const gone = missing && recheckedThis && recheck?.failed === false;
+  useEffect(() => {
+    if (!gone) return;
+    notifySavings(
+      'That savings plan has closed',
+      "It's finished or isn't on this account, so here's your wallet.",
+      'info'
+    );
+  }, [gone]);
   // After sign-in the customer comes back here, so the ownership check runs.
   const back = goalId
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`

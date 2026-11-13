@@ -7,14 +7,23 @@ const SHARED_CLAIM_TTL_SECONDS = 3_700;
 
 const MS_PER_HOUR = 3_600_000;
 /**
- * Without a shared store, only a run in the first five minutes of the UTC
- * hour may page. The single scheduled caller (the VPS crontab) runs the check
- * every 5 minutes, so exactly one run lands in that window: at most one page
- * per reason per hour even when every run lands on a fresh server copy
- * (Vercel cold starts), with no shared state. A second caller would add
- * pages; that is what the shared Redis claim is for.
+ * Without a shared store, only the run scheduled for the top of the UTC hour
+ * may page: one landing within 2.5 minutes either side of it. The single
+ * scheduled caller (the VPS crontab) runs the check every 5 minutes, so
+ * exactly one run is that close even when it fires a little early or late:
+ * at most one page per reason per hour even when every run lands on a fresh
+ * server copy (Vercel cold starts), with no shared state. A second caller
+ * would add pages; that is what the shared Redis claim is for.
  */
-const FALLBACK_PAGE_WINDOW_MS = 5 * 60_000;
+const FALLBACK_HALF_WINDOW_MS = 150_000;
+
+function isTopOfHourRun(nowMs: number): boolean {
+  const offset = ((nowMs % MS_PER_HOUR) + MS_PER_HOUR) % MS_PER_HOUR;
+  return (
+    offset < FALLBACK_HALF_WINDOW_MS ||
+    offset >= MS_PER_HOUR - FALLBACK_HALF_WINDOW_MS
+  );
+}
 
 const claimedPages = new Set<string>();
 
@@ -60,7 +69,7 @@ export async function claimDegradedPage(
     if (oldest !== undefined) claimedPages.delete(oldest);
   }
   const sharedResult = await shared(key);
-  const allowed = sharedResult ?? nowMs % MS_PER_HOUR < FALLBACK_PAGE_WINDOW_MS;
+  const allowed = sharedResult ?? isTopOfHourRun(nowMs);
   // Keep this copy's claim only when it paged or another copy did; a run
   // that could not ask Redis and was outside the window tries again next run.
   if (!allowed && sharedResult === null) claimedPages.delete(key);

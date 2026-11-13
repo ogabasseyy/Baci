@@ -46,6 +46,18 @@ describe('claimDegradedPage', () => {
       }
     });
 
+    it('still pages from the top-of-hour run when the cron fires a little early or late', async () => {
+      expect(await claimDegradedPage('early', 1, none, 2 * HOUR - 60_000)).toBe(
+        true
+      );
+      expect(await claimDegradedPage('late', 1, none, HOUR + 140_000)).toBe(
+        true
+      );
+      expect(await claimDegradedPage('next', 1, none, HOUR + 3 * 60_000)).toBe(
+        false
+      );
+    });
+
     it('asks Redis again next run after a transient outage outside the window', async () => {
       expect(
         await claimDegradedPage('transfers', 1, none, HOUR + 20 * 60_000)

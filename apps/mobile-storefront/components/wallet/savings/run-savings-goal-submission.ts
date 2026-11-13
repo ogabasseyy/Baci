@@ -97,6 +97,10 @@ export const GOAL_WALLET_SETUP_WAIT_MS = 8000;
  * Kicks off the savings wallet setup and waits a short while for it, so a
  * quick provider answer lands before the customer sees the plan. A slow or
  * failed start never blocks the plan: the wallet keeps checking afterwards.
+ * A start still running after the wait is left to finish, never cancelled:
+ * the server holds one setup per goal under a claim, and the automatic retry
+ * only runs once that claim has expired (setup_retryable), so the two never
+ * overlap.
  */
 async function startSetupBriefly(
   start: (goalId: string) => Promise<unknown>,

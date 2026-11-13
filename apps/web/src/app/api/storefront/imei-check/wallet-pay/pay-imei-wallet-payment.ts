@@ -198,11 +198,12 @@ export async function payImeiWalletPayment(
       normalizedImei: normalizedImei ?? '',
     });
   } catch (error) {
+    // Found only after the payment was confirmed: money moved, so never
+    // "nothing was taken" (Muse). Under review; the drain refunds it.
     if (error instanceof WalletPaymentMismatchError)
-      return refuse(
-        'This payment is not for this IMEI check.',
-        'PAYMENT_OPERATION_INVALID',
-        409
+      return NextResponse.json(
+        { status: 'payment_review', operationId: body.operationId },
+        { status: 202, headers: NO_STORE }
       );
     throw error;
   }

@@ -39,8 +39,8 @@ type WalletFundModalProps = Pick<
   | 'walletPrimaryUnsettled'
 > & { creditWatch: WalletCreditWatch };
 
-// Same side inset as the sheet's panels; the panels keep their own top.
-const INLINE_INSET = { marginHorizontal: 24, marginTop: 20 };
+// Inside a panel: the panel's own side padding applies.
+const INLINE_GAP = { marginTop: 4 };
 
 export function WalletFundModal({
   canCreateFundingAccount,
@@ -131,6 +131,14 @@ export function WalletFundModal({
   const piggyvestSheet =
     !storeCreditTopUp &&
     (showPrimarySetup || fundingAccount?.provider === 'piggyvest');
+  // Funding outcomes and questions stay inside the sheet, under its header
+  // (never above the drag handle, never an iOS alert).
+  const notices = (
+    <>
+      <SavingsNoticeCard colors={colors} style={INLINE_GAP} />
+      <WalletFundPromptCard colors={colors} style={INLINE_GAP} />
+    </>
+  );
   const [retainContent, setRetainContent] = useState(showFundPanel);
   if (showFundPanel && !retainContent) setRetainContent(true);
   return (
@@ -168,9 +176,6 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Funding outcomes and questions stay in the sheet: no iOS alerts. */}
-          <SavingsNoticeCard colors={colors} style={INLINE_INSET} />
-          <WalletFundPromptCard colors={colors} style={INLINE_INSET} />
           {/* PiggyVest setup outranks the hold: it never shows the old account. */}
           {legacyUnconfirmed && !storeCreditTopUp && !showPrimarySetup ? (
             <Text
@@ -187,6 +192,7 @@ export function WalletFundModal({
               onSubmitPhone={onSubmitPhone}
               onRefresh={onRefresh}
               onClose={onResetFund}
+              notices={notices}
             />
           ) : (
             <WalletFundPanel
@@ -213,6 +219,7 @@ export function WalletFundModal({
               onCreateFundingAccount={onCreateFundingAccount}
               onResetFund={dismissFund}
               onSubmitPhone={onSubmitPhone}
+              notices={notices}
               returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
               storeCreditTopUp={storeCreditTopUp}
             />

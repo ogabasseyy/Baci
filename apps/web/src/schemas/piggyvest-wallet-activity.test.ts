@@ -48,6 +48,7 @@ describe('piggyvestWalletActivityRowSchema', () => {
     kind: 'bank_transfer',
     direction: 'in',
     amount_kobo: 5000000,
+    fee_kobo: 0,
     label: 'Money added',
     status: 'completed',
     occurred_at: '2026-11-13T10:00:00+00:00',
@@ -62,6 +63,7 @@ describe('piggyvestWalletActivityRowSchema', () => {
       { ...row, reference: 'pvb-save-1' },
       { ...row, kind: 'withdrawal' },
       { ...row, amount_kobo: 0 },
+      { ...row, fee_kobo: -1 },
     ])
       expect(piggyvestWalletActivityRowSchema.safeParse(bad).success).toBe(
         false

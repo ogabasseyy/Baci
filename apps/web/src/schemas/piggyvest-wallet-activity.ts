@@ -25,7 +25,10 @@ export const piggyvestWalletActivityRowSchema = z.strictObject({
     'wallet_refund',
   ]),
   direction: z.enum(['in', 'out']),
+  /** What reached the wallet: deposits are net of PiggyVest's fee. */
   amount_kobo: z.number().int().positive(),
+  /** PiggyVest's deposit fee; 0 for every other movement. */
+  fee_kobo: z.number().int().nonnegative(),
   label: z.string().min(1).max(600),
   status: z.enum(['completed', 'pending']),
   occurred_at: z.string().min(1),

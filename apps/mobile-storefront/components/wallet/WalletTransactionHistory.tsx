@@ -40,6 +40,8 @@ export interface WalletTransaction {
 
 interface WalletTransactionHistoryProps {
   colors: WalletColors;
+  /** Older store credit balance; undefined when unknown. */
+  storeCreditBalance?: number;
   transactions: WalletTransaction[];
 }
 
@@ -69,11 +71,16 @@ function formatWalletDate(dateString: string) {
 
 export function WalletTransactionHistory({
   colors,
+  storeCreditBalance,
   transactions,
 }: WalletTransactionHistoryProps) {
   // PiggyVest customers: this list is store credit only. Savings wallet
   // credits are not in it yet, so never imply it is the whole history.
   const primaryReady = useWalletPrimaryReady();
+  // A PiggyVest customer with no older store credit (none left, none ever)
+  // has nothing to see here (Fable walk). Unknown balance keeps the list.
+  if (primaryReady && transactions.length === 0 && storeCreditBalance === 0)
+    return null;
   return (
     <Animated.View
       entering={FadeIn.duration(400).delay(200)}

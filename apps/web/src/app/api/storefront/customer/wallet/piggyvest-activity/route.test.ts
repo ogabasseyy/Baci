@@ -36,6 +36,7 @@ const row = (n: number) => ({
   kind: 'savings_contribution',
   direction: 'out',
   amount_kobo: 1000000,
+  fee_kobo: 0,
   label: 'Saved to iPhone fund',
   status: 'completed',
   occurred_at: `2026-11-1${n}T10:00:00+00:00`,
@@ -108,6 +109,7 @@ describe('GET piggyvest wallet activity', () => {
       kind: 'savings_contribution',
       direction: 'out',
       amountKobo: 1000000,
+      feeKobo: 0,
       label: 'Saved to iPhone fund',
       status: 'completed',
       occurredAt: row(2).occurred_at,
@@ -154,5 +156,26 @@ describe('GET piggyvest wallet activity', () => {
     });
     const response = await GET(request(`merchantId=${merchantId}`));
     expect(response.status).toBe(500);
+  });
+});
+
+describe('bugfix: deposits showed the gross transfer, not what was credited', () => {
+  it('passes the credited amount and the fee through separately', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...row(1),
+          kind: 'bank_transfer',
+          direction: 'in',
+          amount_kobo: 55000,
+          fee_kobo: 5000,
+          label: 'Money added',
+        },
+      ],
+      error: null,
+    });
+    const response = await GET(request(`merchantId=${merchantId}`));
+    const body = await response.json();
+    expect(body.items[0]).toMatchObject({ amountKobo: 55000, feeKobo: 5000 });
   });
 });

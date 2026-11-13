@@ -26,3 +26,24 @@ describe('PiggyVest activity row with the server keeping PiggyVest off', () => {
     expect(screen.getByText('−₦123.45')).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: deposits showed the gross transfer, not what was credited', () => {
+  it('shows the credited amount and names the fee so rows add up', () => {
+    render(
+      <PiggyvestActivityRow
+        colors={Colors.light}
+        item={activityItem({ amountKobo: 55000, feeKobo: 5000 })}
+      />
+    );
+
+    expect(screen.getByText('+₦550')).toBeOnTheScreen();
+    expect(screen.getByText(/₦50 fee deducted/)).toBeOnTheScreen();
+  });
+
+  it('adds no fee line when there was none', () => {
+    render(
+      <PiggyvestActivityRow colors={Colors.light} item={activityItem()} />
+    );
+    expect(screen.queryByText(/fee deducted/)).toBeNull();
+  });
+});

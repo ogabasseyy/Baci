@@ -13,7 +13,10 @@ const item = z.strictObject({
     'wallet_refund',
   ]),
   direction: z.enum(['in', 'out']),
+  /** What reached the wallet: deposits are net of PiggyVest's fee. */
   amountKobo: z.number().int().positive(),
+  /** PiggyVest's deposit fee (0 for other movements). */
+  feeKobo: z.number().int().nonnegative(),
   label: z.string().min(1).max(600),
   status: z.enum(['completed', 'pending']),
   occurredAt: z.string().min(1),

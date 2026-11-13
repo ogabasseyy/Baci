@@ -1855,9 +1855,11 @@ BEGIN
      SET state = 'needs_review', alerted_at = NULL
     FROM piggyvest_primary.goal_cancel_operations AS cancel
    WHERE forfeit.cancel_operation_id = cancel.id
-     -- Including one claimed but not yet posted: its posting mark then finds
-     -- it in review and nothing is sent (the row lock orders the two).
-     AND (forfeit.state = 'reserved' OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL))
+     -- Including any claimed one not yet settled: an unposted one is then
+     -- refused its posting mark and never sent; one marked posting (sent, or
+     -- about to be) settles into review instead of confirming, so a person
+     -- checks it against the reversal rather than it settling unreduced.
+     AND forfeit.state IN ('reserved', 'dispatched')
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');
   -- A reversed payout lowers the cancel's forfeited total (shown as interest

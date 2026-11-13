@@ -29,6 +29,7 @@ it.each([
   'confirmed',
   'conflict',
   `conflict:${a},`,
+  `conflict:${'-'.repeat(36)}`,
   'conflict:not-an-id',
   null,
 ])('passes %j through unchanged', (answer) => {

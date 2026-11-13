@@ -1144,6 +1144,33 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: a reversal arriving after the posting mark (sent, or about to
+  -- be) sends the forfeit to review, so its success settles into review for a
+  -- person instead of confirming the unreduced amount.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('reversal-posted');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'posted split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'posted principal');
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid,
+      'posting:33333333-3333-4333-8333-333333333333') = 'posting', 'posted mark');
+    PERFORM pg_temp.gf_receipt('gf-reversed-posted', 400, pg_catalog.clock_timestamp() - interval '2 days');
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-posted', 'gf-reversed-posted', 100,
+      repeat('7', 64), 'synthetic-reversal-5');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND piggyvest_primary.settle_goal_cancel_forfeit('f3860000-0000-4000-8000-000000000006', 'staging',
+            pg_temp.gf_forfeit_proof(v_forfeit)) LIKE 'conflict%',
+      'a reversal after the posting mark let the unreduced forfeit confirm');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- Regression: a delayed record of interest paid before the cancel (already
   -- forfeited by the split) does not tell the customer interest was added.
   BEGIN

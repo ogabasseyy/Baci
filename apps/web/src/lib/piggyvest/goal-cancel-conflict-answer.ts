@@ -11,7 +11,9 @@ export function readConflictAnswer(result: unknown): {
 } {
   const named =
     typeof result === 'string'
-      ? /^conflict:([0-9a-f-]{36}(?:,[0-9a-f-]{36})*)$/.exec(result)
+      ? /^conflict:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*)$/.exec(
+          result
+        )
       : null;
   if (!named) return { result, reviewedIds: [] };
   return { result: 'conflict', reviewedIds: named[1].split(',') };

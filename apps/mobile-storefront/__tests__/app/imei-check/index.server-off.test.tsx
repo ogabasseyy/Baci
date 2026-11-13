@@ -106,6 +106,18 @@ jest.mock('@/stores/auth-store', () => ({
 
 import ImeiCheckerScreen from '@/app/imei-check';
 
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
+
 describe('IMEI screen with the server keeping PiggyVest off', () => {
   it('shows the wallet balance and wallet top-up as today', () => {
     render(<ImeiCheckerScreen />);
@@ -136,6 +148,8 @@ describe('bugfix: ₦5,000 PiggyVest customer told they can pay for a check', ()
 
     // Act: the top-up returns here, so the wallet opens "Add store credit".
     fireEvent.press(screen.getByText('Add store credit'));
+    // Paying from the PiggyVest wallet stays switched off: no pay sheet.
+    expect(screen.queryByText('Pay from PiggyVest')).toBeNull();
     expect(router.push).toHaveBeenCalledWith(
       expect.stringMatching(
         /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=\/imei-check$/

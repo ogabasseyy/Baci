@@ -8,6 +8,18 @@ import { WalletFundModal } from './WalletFundModal';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
+
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 let mockCanGoBack = true;
@@ -211,5 +223,42 @@ describe('bugfix: pilot sheet keeps PiggyVest after a rollback to not ready', ()
     // Assert: no PiggyVest store-credit sheet for a ruled-out merchant.
     expect(screen.queryByText('Add store credit')).toBeNull();
     clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+describe('bugfix: unsettled wallet kept card-only after a rollback to not ready', () => {
+  it('drops the store-credit sheet for an unsettled wallet once rolled back', () => {
+    // Arrange: the hook still holds "on", the live verdict says "not
+    // ready", and the cached wallet's PiggyVest read is unavailable.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+
+    // Act
+    renderModal(false, '/imei-check', true);
+
+    // Assert
+    expect(screen.queryByText('Add store credit')).toBeNull();
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+describe('owner decision 2026-11-13: card funding held only for the Ogabassey pilot', () => {
+  it('offers card funding to any other merchant while the verdict is unknown', () => {
+    mockCapability = null;
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletFundModal
+          {...createWalletContentProps()}
+          canCreateFundingAccount={false}
+          creditWatch={creditWatch}
+          fundingAccount={null}
+          merchantId="merchant-2"
+          onResetFund={jest.fn()}
+          showFundPanel
+        />
+      </WalletPrimaryContext.Provider>
+    );
+
+    expect(screen.getAllByText(/card/i).length).toBeGreaterThan(0);
   });
 });

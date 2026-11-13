@@ -31,6 +31,7 @@ import {
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 interface UseAirtimePurchaseHandlerProps {
   amount: string;
@@ -249,10 +250,11 @@ export function useAirtimePurchaseHandler({
       isSubmittingRef.current = false;
       return;
     }
-    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
-    // signs with — a charged-but-unanswered retry must bypass the
-    // balance gate instead of stranding behind top-up.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+    if (payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay)) {
+      isSubmittingRef.current = false;
+      return;
+    }
     if (
       !ensureUtilityWalletReady({
         amount: numericAmount,

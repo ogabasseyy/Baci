@@ -27,12 +27,15 @@ export function WalletLoadingState({
 }: WalletLoadingStateProps) {
   const [attempt, setAttempt] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies(attempt): a retry restarts the timer.
+  // The deadline covers the wallet load itself (Codex): it restarts when
+  // the screen moves from auth hydration (no retry) to the wallet query.
+  const retryable = Boolean(onRetry);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt (a retry) and retryable (the wallet load starting) are intentional retriggers.
   useEffect(() => {
     setTimedOut(false);
     const timer = setTimeout(() => setTimedOut(true), WALLET_LOAD_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [attempt]);
+  }, [attempt, retryable]);
   const failed = onRetry && (timedOut || message === LOAD_ERROR_MESSAGE);
   if (failed) {
     return (

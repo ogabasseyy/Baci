@@ -8,9 +8,6 @@ let mockCapabilityNow: boolean | null = false;
 jest.mock('@/lib/read-piggyvest-capability-now', () => ({
   readPiggyvestCapabilityNow: () => mockCapabilityNow,
 }));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: { getState: () => ({ merchantId: 'merchant-1' }) },
-}));
 
 describe('imeiCheckScreenActions', () => {
   it('rounds a wallet shortfall up and preserves the return route', () => {

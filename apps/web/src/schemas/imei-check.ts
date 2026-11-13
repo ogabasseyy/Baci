@@ -20,6 +20,12 @@ export const imeiCheckSchema = z
       .string()
       .regex(/^[A-Za-z0-9]{8,15}$/, 'Enter a valid IMEI or serial number'),
     merchantSlug: RouteIdentifierSchema.optional(),
+    // 'piggyvest_wallet' starts a PIN-protected PiggyVest wallet payment
+    // instead of debiting store credit (dark; see wallet pay).
+    paymentMethod: z
+      .enum(['store_credit', 'piggyvest_wallet'])
+      .optional()
+      .default('store_credit'),
     tier: z
       .string()
       .default('full')

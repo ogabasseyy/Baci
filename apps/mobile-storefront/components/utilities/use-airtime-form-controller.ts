@@ -123,6 +123,16 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     numericAmount,
     payment,
     phoneNumber,
+    // The same purchase the submit handler peeks at (its retry identity).
+    retainedStoreCredit:
+      numericAmount > 0 &&
+      payment.hasRetainedVtuAttempt?.({
+        amount: numericAmount,
+        networkProvider: selectedProvider ?? undefined,
+        phoneNumber,
+        type: 'airtime',
+        walletAmount: numericAmount,
+      }) === true,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,

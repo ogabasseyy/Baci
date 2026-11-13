@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import type Colors from '@/constants/Colors';
@@ -134,7 +134,10 @@ export function BankTransferView({
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
         {walletTransferFallback ? (
           <WalletTransferFallbackNotice
             colors={colors}
@@ -245,7 +248,7 @@ export function BankTransferView({
             </View>
           </View>
         ) : null}
-      </View>
+      </ScrollView>
 
       <View style={styles.actions}>
         <Pressable

@@ -6,12 +6,25 @@ import {
   observePiggyvestPrimaryCapability,
 } from '@/lib/piggyvest-primary-capability-cache';
 
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
+
 const mockUseMerchantPaymentSettings = jest.fn();
 let mockWalletQuery: {
   data?: {
     wallet: {
       balance: number;
       owner_unresolved?: boolean;
+      primary_unavailable?: boolean;
       primary_balance_kobo?: number;
     };
   };
@@ -147,6 +160,23 @@ describe('useUtilityPayment store credit', () => {
     const { result } = renderHook(() => useUtilityPayment());
     mockCapability = null;
 
+    expect(result.current.walletPrimaryUnknown).toBeUndefined();
+  });
+
+  it('bugfix: clears the render-time unknown hold for an unavailable wallet after a live rollback', () => {
+    // Arrange: the PiggyVest read timed out; the live verdict rolled back.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_unavailable: true } },
+    };
+
+    // Act
+    const { result } = renderHook(() => useUtilityPayment());
+    mockCapability = null;
+
+    // Assert: the legacy bank-transfer nudge comes back.
     expect(result.current.walletPrimaryUnknown).toBeUndefined();
   });
 });
@@ -345,5 +375,35 @@ describe('bugfix: stale PiggyVest wallet treated as store credit after a rollbac
 
     // Assert
     expect(result.current.walletIsStoreCredit).toBeUndefined();
+  });
+});
+
+describe('bugfix: utility submit treats a stale PiggyVest cache as store credit after rollback', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('clears the live store-credit classification while PiggyVest is ruled out', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: true },
+    });
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_balance_kobo: 500_000 } },
+      getWalletVerdict: () => ({
+        walletIsStoreCredit: true,
+        walletPrimaryUnknown: false,
+      }),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    const verdict = result.current.getWalletVerdict?.() as {
+      walletIsStoreCredit?: boolean;
+    };
+
+    expect(verdict.walletIsStoreCredit).toBe(false);
   });
 });

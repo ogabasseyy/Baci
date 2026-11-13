@@ -118,7 +118,10 @@ BEGIN
   PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'conflict', 'a reviewed attempt was reusable: ' || v_result::text);
 
   -- 5. After the clearance the customer cancels again: a NEW numbered
-  -- reference, and the second refund sweeps the residual.
+  -- reference, and the second refund sweeps the residual. Since
+  -- 20261112190514 only the recorded principal is refunded, so the operator
+  -- records the residual as the goal's principal when clearing it.
+  UPDATE public.customer_savings_goals SET current_amount = 2500 WHERE id = c_goal::uuid;
   v_op2 := pg_temp.gc_dispatched('rev2');
   PERFORM pg_temp.gc_assert((SELECT reference FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op2::uuid)
     = 'pvb-cancel-' || c_goal || '-1', 'the re-cancel did not take the next suffix');

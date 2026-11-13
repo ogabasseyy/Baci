@@ -1,7 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
+import { WALLET_PAY_EVIDENCE_STATEMENTS } from './wallet-pay-statements';
 
 const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
@@ -171,6 +173,10 @@ it('admits the goal cancel read, settlement and release statements only', async 
     [GOAL_CANCEL_STATEMENTS.findByReference, 'pvb-cancel-reference'],
     [GOAL_CANCEL_STATEMENTS.settle, JSON.stringify({ operationId })],
     [GOAL_CANCEL_STATEMENTS.release, JSON.stringify({ operationId })],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched, operationId],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.findByReference, 'pvb-forfeit-reference'],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.settle, JSON.stringify({ operationId })],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.release, JSON.stringify({ operationId })],
   ] as const) {
     mocks.query
       .mockResolvedValueOnce(verify)
@@ -187,7 +193,22 @@ it('admits the goal cancel read, settlement and release statements only', async 
       'not-a-uuid',
     ])
   ).rejects.toThrow();
+  await expect(
+    execute(GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched, [
+      config.integrationId,
+      'staging',
+      'not-a-uuid',
+    ])
+  ).rejects.toThrow();
   // The authorizer-side statements are not evidence statements.
+  for (const text of [
+    GOAL_CANCEL_FORFEIT_STATEMENTS.claim,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.manage,
+    GOAL_CANCEL_STATEMENTS.splitDispatch,
+  ])
+    await expect(
+      execute(text, [config.integrationId, 'staging', operationId])
+    ).rejects.toThrow();
   await expect(
     execute(GOAL_CANCEL_STATEMENTS.checkIssued, [
       config.integrationId,
@@ -252,4 +273,33 @@ it('admits the goal complete evidence and purchase alert statements only', async
     await expect(
       execute(text, [config.integrationId, 'staging', operationId])
     ).rejects.toThrow();
+});
+
+it('admits the wallet pay evidence statements with validated third parameters', async () => {
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  await execute(WALLET_PAY_EVIDENCE_STATEMENTS.settlePayment, [
+    config.integrationId,
+    'staging',
+    '{}',
+  ]);
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    WALLET_PAY_EVIDENCE_STATEMENTS.settlePayment,
+    [config.integrationId, 'staging', '{}']
+  );
+  vi.clearAllMocks();
+  await expect(
+    execute(WALLET_PAY_EVIDENCE_STATEMENTS.readDispatchedRefund, [
+      config.integrationId,
+      'staging',
+      'not-a-uuid',
+    ])
+  ).rejects.toThrow();
+  await expect(
+    execute(WALLET_PAY_EVIDENCE_STATEMENTS.settleRefund, [
+      config.integrationId,
+      'staging',
+      'not json',
+    ])
+  ).rejects.toThrow();
+  expect(mocks.connect).not.toHaveBeenCalled();
 });

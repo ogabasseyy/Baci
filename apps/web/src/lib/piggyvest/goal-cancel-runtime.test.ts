@@ -110,8 +110,14 @@ it('refuses a scope bound to another integration', async () => {
   ).rejects.toThrow('Goal cancel binding unavailable');
 });
 
-it('sends the provider balance once under the per-goal reference', async () => {
-  dbAnswers({ status: 'claimed', reservation }, true);
+const SPLIT = {
+  status: 'dispatched',
+  principalKobo: 900000,
+  forfeitedInterestKobo: 87654,
+};
+
+it('sends only the saved principal once under the per-goal reference', async () => {
+  dbAnswers({ status: 'claimed', reservation }, SPLIT);
   mocks.reconcile.mockResolvedValue({ status: 'pending' });
   const result = await submitPrimaryWalletGoalCancel({
     configuration,
@@ -125,7 +131,7 @@ it('sends the provider balance once under the per-goal reference', async () => {
   expect(result).toEqual({ status: 'pending' });
   expect(mocks.transfer).toHaveBeenCalledOnce();
   expect(mocks.transfer.mock.calls[0][1]).toEqual({
-    amountKobo: 987654,
+    amountKobo: 900000,
     sourceWalletId: 'goal-wallet',
     destinationWalletId: 'main-wallet',
     reference: `pvb-cancel-${goalId}`,
@@ -133,11 +139,12 @@ it('sends the provider balance once under the per-goal reference', async () => {
   });
   // The PIN proof travels in the reservation statement, nowhere else.
   expect(mocks.execute.mock.calls[0][1][2]).toBe(pinProof);
-  expect(mocks.execute.mock.calls[1][1][3]).toBe('987654');
+  // The database is given the provider balance and sizes both legs itself.
+  expect(mocks.execute.mock.calls[1][1][2]).toBe('987654');
 });
 
 it('reports confirmed when the immediate status check settles', async () => {
-  dbAnswers({ status: 'claimed', reservation }, true);
+  dbAnswers({ status: 'claimed', reservation }, SPLIT);
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
   expect(
     await submitPrimaryWalletGoalCancel({
@@ -153,7 +160,7 @@ it('reports confirmed when the immediate status check settles', async () => {
 });
 
 it('keeps the submit result when the immediate status check throws', async () => {
-  dbAnswers({ status: 'claimed', reservation }, true);
+  dbAnswers({ status: 'claimed', reservation }, SPLIT);
   mocks.reconcile.mockRejectedValue(new Error('down'));
   expect(
     await submitPrimaryWalletGoalCancel({
@@ -202,7 +209,7 @@ it('does not resend on a replay: pending goes to a status check', async () => {
   expect(mocks.transfer).not.toHaveBeenCalled();
 });
 
-it('releases the reservation and sends nothing when the balance is above the ceiling', async () => {
+it('sends nothing when the principal alone is above the transfer ceiling', async () => {
   mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
     id,
     api_customer_id: 'customer',
@@ -211,7 +218,8 @@ it('releases the reservation and sends nothing when the balance is above the cei
     status: 'active',
     balance: id === 'goal-wallet' ? 10_000_000_000 : 10,
   }));
-  dbAnswers({ status: 'claimed', reservation }, true);
+  // The database checks each leg against the ceiling and released it.
+  dbAnswers({ status: 'claimed', reservation }, { status: 'too_large' });
   expect(
     await submitPrimaryWalletGoalCancel({
       configuration,
@@ -223,8 +231,8 @@ it('releases the reservation and sends nothing when the balance is above the cei
     })
   ).toEqual({ status: 'too_large' });
   expect(mocks.transfer).not.toHaveBeenCalled();
-  // The second statement is the 'cancel' transition, not a dispatch.
-  expect(mocks.execute.mock.calls[1][1][2]).toBe('cancel');
+  // The whole balance goes to the split, which applies the ceiling per leg.
+  expect(mocks.execute.mock.calls[1][1].at(-1)).toBe('10000000000');
 });
 
 it('asks whether an operation id is live for the goal', async () => {

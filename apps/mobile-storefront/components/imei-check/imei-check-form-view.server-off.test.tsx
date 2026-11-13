@@ -1,7 +1,7 @@
 import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { ImeiCheckFormView } from './imei-check-form-view';
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -88,5 +88,110 @@ describe('bugfix: IMEI check offered PiggyVest money it cannot spend', () => {
     // Act: the button opens the store credit top-up for the shortfall.
     fireEvent.press(screen.getByText('Add store credit'));
     expect(onTopUpWallet).toHaveBeenCalledWith(1000);
+  });
+});
+
+describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
+  it('keeps the store credit top-up when wallet pay does not cover the check', () => {
+    const onTopUpWallet = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        onTopUpWallet={onTopUpWallet}
+        walletIsStoreCredit
+        walletPay={{ covers: () => false, savingsKobo: null }}
+      />
+    );
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+    expect(screen.queryByText(/from PiggyVest/)).toBeNull();
+  });
+
+  it('offers to pay from PiggyVest once switched on and covered', () => {
+    const onCheck = jest.fn();
+    const onTopUpWallet = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        imei="356938035643809"
+        onCheck={onCheck}
+        onTopUpWallet={onTopUpWallet}
+        walletIsStoreCredit
+        walletPay={{ covers: (tier) => tier === 'full', savingsKobo: null }}
+      />
+    );
+    const price = IMEI_SERVICE_TIERS.full.price.toLocaleString('en-NG');
+    fireEvent.press(screen.getByText(`Pay ₦${price} from PiggyVest`));
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    expect(onTopUpWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: "Retry available checks" looked like plain text (walk-through L10)', () => {
+  it('draws the retry as an outlined button that retries', () => {
+    const onRetryAvailability = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        availabilityFailed
+        onRetryAvailability={onRetryAvailability}
+      />
+    );
+    const retry = screen.getByRole('button', {
+      name: 'Retry available checks',
+    });
+    expect(retry).toHaveStyle({ borderWidth: 1, borderColor: BRAND.primary });
+    fireEvent.press(retry);
+    expect(onRetryAvailability).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: the wallet badge read ₦0 before the wallet loaded (Fable walk)', () => {
+  it('shows an unknown balance while loading and when the read failed', () => {
+    const { rerender } = render(
+      <ImeiCheckFormView {...baseProps} isWalletLoading />
+    );
+    expect(screen.queryByText('₦0')).toBeNull();
+    expect(screen.getByText('…')).toBeOnTheScreen();
+    rerender(<ImeiCheckFormView {...baseProps} isWalletError />);
+    expect(screen.queryByText('₦0')).toBeNull();
+    expect(screen.getByText('…')).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: the badge read store credit ₦0 for a funded savings wallet (Fable walk)', () => {
+  it('shows the savings wallet balance when paying from PiggyVest is on', () => {
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        walletIsStoreCredit
+        walletPay={{ covers: () => true, savingsKobo: 54_970_000 }}
+      />
+    );
+    expect(screen.getByText('Savings ₦549,700')).toBeOnTheScreen();
+    expect(screen.queryByText(/₦0$/)).toBeNull();
+  });
+
+  it('keeps the store credit badge when paying from PiggyVest is off', () => {
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        walletIsStoreCredit
+        walletPay={{ covers: () => false, savingsKobo: null }}
+      />
+    );
+    expect(screen.queryByText(/^Savings/)).toBeNull();
+  });
+});
+
+describe('bugfix: the savings badge showed beside a store credit top-up (Codex P2)', () => {
+  it('shows store credit when the chosen check is not paid from the savings wallet', () => {
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        walletIsStoreCredit
+        walletPay={{ covers: () => false, savingsKobo: 1_000_000 }}
+      />
+    );
+    expect(screen.queryByText(/^Savings/)).toBeNull();
   });
 });

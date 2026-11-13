@@ -23,6 +23,7 @@ import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 import { ImeiCheckServiceSelector } from './imei-check-service-selector';
+import { ImeiWalletBadge } from './imei-wallet-badge';
 import { getImeiWalletCopy } from './imei-wallet-copy';
 
 interface ImeiCheckFormViewProps {
@@ -46,6 +47,9 @@ interface ImeiCheckFormViewProps {
   walletBalance: number;
   /** PiggyVest customer: the balance is store credit. */
   walletIsStoreCredit?: boolean;
+  /** True when the PiggyVest wallet pays this check (store credit can't). */
+  /** Paying from the PiggyVest wallet (dark until switched on). */
+  walletPay?: ImeiWalletPayView;
   onBrandSelect: (brand: ImeiBrandFilter) => void;
   onChangeImei: (value: string) => void;
   onCheck: () => void;
@@ -55,6 +59,11 @@ interface ImeiCheckFormViewProps {
   onToggleServices: () => void;
 }
 
+export type ImeiWalletPayView = {
+  covers: (tier: ImeiServiceTierKey) => boolean;
+  /** The PiggyVest balance that may pay, or null (off, stale, none). */
+  savingsKobo: number | null;
+};
 export function ImeiCheckFormView({
   availabilityFailed = false,
   availabilityLoading = false,
@@ -75,6 +84,7 @@ export function ImeiCheckFormView({
   showAllServices,
   walletBalance,
   walletIsStoreCredit = false,
+  walletPay,
   onBrandSelect,
   onChangeImei,
   onCheck,
@@ -89,7 +99,20 @@ export function ImeiCheckFormView({
   const { isKeyboardVisible } = useKeyboard();
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const isWalletReady = !(isWalletLoading || isWalletError);
-  const hasEnoughBalance = isWalletReady && walletBalance >= currentTier.price;
+  const paysFromPiggyvest =
+    selectedTier !== null &&
+    isWalletReady &&
+    walletBalance < currentTier.price &&
+    walletPay?.covers(selectedTier) === true;
+  // With paying from PiggyVest on, the badge shows the savings wallet while
+  // it is what pays (or before a check is chosen), never a store credit ₦0
+  // that reads as empty; otherwise the store credit the check spends.
+  const savingsKobo =
+    selectedTier === null || paysFromPiggyvest
+      ? (walletPay?.savingsKobo ?? null)
+      : null;
+  const hasEnoughBalance =
+    isWalletReady && (walletBalance >= currentTier.price || paysFromPiggyvest);
   const needsTopUp =
     selectedTier !== null && isWalletReady && !hasEnoughBalance;
   const shortfall = Math.max(0, currentTier.price - walletBalance);
@@ -141,9 +164,10 @@ export function ImeiCheckFormView({
                   accessibilityRole="button"
                   accessibilityLabel="Retry available checks"
                   onPress={onRetryAvailability}
-                  style={{ minHeight: 44, justifyContent: 'center' }}
+                  style={styles.retryButton}
                 >
-                  <Text style={{ color: colors.text }}>
+                  <Ionicons name="refresh" size={16} color={BRAND.primary} />
+                  <Text style={styles.retryButtonText}>
                     Retry available checks
                   </Text>
                 </Pressable>
@@ -209,26 +233,15 @@ export function ImeiCheckFormView({
             </Text>
           )}
           <View style={styles.footerRow}>
-            <View
-              accessibilityLabel={walletCopy.balanceLabel(walletBalance)}
-              style={styles.walletBadge}
-            >
-              <Ionicons
-                name="wallet-outline"
-                size={20}
-                color={needsTopUp ? colors.error : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.walletBadgeAmount,
-                  { color: needsTopUp ? colors.error : colors.text },
-                ]}
-              >
-                {walletCopy.badgePrefix
-                  ? `${walletCopy.badgePrefix} ${formatServicePrice(walletBalance)}`
-                  : formatServicePrice(walletBalance)}
-              </Text>
-            </View>
+            <ImeiWalletBadge
+              colors={colors}
+              isWalletReady={isWalletReady}
+              needsTopUp={needsTopUp}
+              savingsKobo={savingsKobo}
+              statusText={walletStatusText}
+              walletBalance={walletBalance}
+              walletCopy={walletCopy}
+            />
             <Pressable
               style={[
                 styles.verifyButton,
@@ -252,7 +265,9 @@ export function ImeiCheckFormView({
                           ? walletCopy.unavailableButton
                           : needsTopUp
                             ? walletCopy.topUpButton
-                            : `Verify Now - ${formatServicePrice(currentTier.price)}`}
+                            : paysFromPiggyvest
+                              ? `Pay ${formatServicePrice(currentTier.price)} from PiggyVest`
+                              : `Verify Now - ${formatServicePrice(currentTier.price)}`}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />
                 </>

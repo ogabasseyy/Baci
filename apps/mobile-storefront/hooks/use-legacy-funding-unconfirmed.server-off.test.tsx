@@ -6,15 +6,28 @@ import {
 } from '@/lib/piggyvest-primary-capability-cache';
 import { useLegacyFundingUnconfirmed } from './use-legacy-funding-unconfirmed';
 
+// merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
+// PiggyVest (and its unknown-verdict holds) is only for that merchant.
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/is-piggyvest-primary-merchant')
+  >('@/lib/is-piggyvest-primary-merchant');
+  return {
+    isPiggyvestPrimaryMerchant: (id?: string | null) =>
+      id === 'merchant-1' || actual.isPiggyvestPrimaryMerchant(id),
+  };
+});
+
 let mockCapability: boolean | null = null;
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
   getPiggyvestPrimaryCapability: async () => false,
   usePiggyvestPrimaryCapability: () => mockCapability,
 }));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: '' } }));
+let mockAuthMerchant = 'merchant-1';
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (select: (state: { merchantId: string }) => unknown) =>
-    select({ merchantId: 'merchant-1' }),
+    select({ merchantId: mockAuthMerchant }),
 }));
 
 afterEach(() => {
@@ -124,6 +137,20 @@ describe('bugfix: PiggyVest account shown after a rollback to not ready', () => 
     const { result } = renderHook(() =>
       useLegacyFundingUnconfirmed('piggyvest')
     );
+    expect(result.current).toBe(false);
+  });
+});
+
+describe('owner decision 2026-11-13: account numbers held only for the Ogabassey pilot', () => {
+  it('shows a legacy account to any other merchant while the verdict is unknown', () => {
+    mockAuthMerchant = 'merchant-2';
+    mockCapability = null;
+
+    const { result } = renderHook(() =>
+      useLegacyFundingUnconfirmed('paystack')
+    );
+    mockAuthMerchant = 'merchant-1';
+
     expect(result.current).toBe(false);
   });
 });

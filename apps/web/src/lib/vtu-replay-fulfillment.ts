@@ -29,12 +29,15 @@ export async function fulfillReplayVtuTransaction({
   keyRow,
   supabase,
   user,
+  fulfillTransaction,
 }: {
   authSupabase: SupabaseClient;
   input: VtuWalletOnlyChargeInput;
   keyRow: ExistingIdempotencyRow;
   supabase: SupabaseClient;
   user: ReplayAuthUser;
+  /** Replaces the plain fulfil (pay from the PiggyVest wallet, dark). */
+  fulfillTransaction?: (transactionId: string) => Promise<Response>;
 }) {
   // Owner presence FIRST (Muse R128 medium, Codex R129 P1, Codex
   // P1 PR #3741): legacy/manual key rows can reference an unlinked
@@ -103,6 +106,8 @@ export async function fulfillReplayVtuTransaction({
     customerPhone: input.customerPhone,
     validationReference: input.validationReference,
   });
+  if (fulfillTransaction)
+    return await fulfillTransaction(keyRow.vtu_transaction_id);
   const replayedFulfillment = await fulfillPendingVtuTransaction({
     supabase,
     transactionId: keyRow.vtu_transaction_id,

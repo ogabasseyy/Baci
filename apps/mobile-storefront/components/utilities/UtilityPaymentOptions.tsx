@@ -3,8 +3,10 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SPACING } from '@/constants/Colors';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { UtilityPiggyvestPayRow } from './UtilityPiggyvestPayRow';
 import { UtilityWalletTransferNudge } from './UtilityWalletTransferNudge';
 import { getUtilityWalletCopy } from './utility-wallet-copy';
+import { useVtuWalletPayStore } from './vtu-wallet-pay-store';
 
 interface UtilityPaymentOptionsProps {
   amount: number;
@@ -31,6 +33,12 @@ interface UtilityPaymentOptionsProps {
    * as checking — never as a ₦0 balance (Codex R130 P2).
    */
   walletIsSettled?: boolean;
+  /**
+   * A store credit attempt for this exact purchase is retained (its answer
+   * was lost): the next submit replays it on store credit, so the savings
+   * wallet is never shown as the payment method meanwhile.
+   */
+  retainedStoreCredit?: boolean;
 }
 
 /**
@@ -49,6 +57,7 @@ export function UtilityPaymentOptions({
   walletIsSettled,
   walletIsStoreCredit = false,
   walletPrimaryUnknown,
+  retainedStoreCredit = false,
 }: UtilityPaymentOptionsProps) {
   const copy = getUtilityWalletCopy(walletIsStoreCredit);
   const payLabel = copy.pay;
@@ -65,12 +74,48 @@ export function UtilityPaymentOptions({
   const balance = walletBalance ?? 0;
   const coversBill = amount > 0 && balance >= amount;
   const shortfall = amount > 0 ? Math.max(amount - balance, 0) : 0;
+  // The PiggyVest savings wallet pays this (switched on, and it covers the
+  // amount while store credit doesn't): it is the payment method shown, with
+  // no store credit shortfall. Never for customers without one.
+  const storedSavingsKobo = useVtuWalletPayStore((state) => state.balanceKobo);
+  const savingsKobo = retainedStoreCredit ? null : storedSavingsKobo;
+  const savingsPays = useVtuWalletPayStore(
+    (state) => amount > 0 && state.covers(amount)
+  );
+  // Before an amount is chosen (or when it pays) the savings wallet is the
+  // only row: no store credit ₦0 for a PiggyVest customer.
+  if (savingsKobo !== null && (savingsPays || amount <= 0))
+    return (
+      <View style={styles.container}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          Payment Method
+        </Text>
+        <UtilityPiggyvestPayRow
+          balanceKobo={savingsKobo}
+          colors={colors}
+          mode={savingsPays ? 'pays' : 'available'}
+        />
+      </View>
+    );
+  // More than the savings wallet holds (and store credit is short too): say
+  // its real balance and shortfall above the store credit options.
+  const savingsShort =
+    savingsKobo !== null && balance < amount && savingsKobo < amount * 100;
 
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
         Payment Method
       </Text>
+
+      {savingsShort ? (
+        <UtilityPiggyvestPayRow
+          balanceKobo={savingsKobo}
+          colors={colors}
+          mode="short"
+          amount={amount}
+        />
+      ) : null}
 
       <UtilityWalletTransferNudge
         amount={amount}

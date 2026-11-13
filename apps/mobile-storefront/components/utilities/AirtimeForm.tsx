@@ -40,6 +40,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
     numericAmount,
     payment,
     phoneNumber,
+    retainedStoreCredit,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,
@@ -250,6 +251,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletIsSettled={payment.isWalletSettled()}
             walletIsStoreCredit={payment.walletIsStoreCredit}
             walletPrimaryUnknown={payment.walletPrimaryUnknown}
+            retainedStoreCredit={retainedStoreCredit}
           />
         </View>
       </ScrollView>

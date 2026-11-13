@@ -4,6 +4,7 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
   type PinProofRequester,
   runWithPinProof,
@@ -18,6 +19,9 @@ import {
   planWalletSavingsRail,
 } from './wallet-savings-rail';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
+
+const WALLET_RECLASSIFYING_MESSAGE =
+  'Your wallet is updating. Try again in a moment.';
 
 export function createWalletSavingsActions({
   activeMerchantId,
@@ -157,6 +161,24 @@ export function createWalletSavingsActions({
         refetchWallet,
         setPending: setIsAddingSavingsContribution,
       });
+    }
+    // The server confirmed PiggyVest but the wallet shown is still the old
+    // one (Codex): the rail would debit an unseen PiggyVest balance against
+    // an amount checked on the legacy wallet. Hold a new contribution and
+    // reload. (A pilot with no verdict keeps its server-side fallback.)
+    if (
+      plan.kind === 'submit' &&
+      idempotencyKeyRef.current === null &&
+      !primaryReady &&
+      readPiggyvestCapabilityNow(activeMerchantId) === true
+    ) {
+      savingsNotifier()(
+        'Still checking',
+        WALLET_RECLASSIFYING_MESSAGE,
+        'warning'
+      );
+      void refetchWallet?.();
+      return;
     }
     const rail: ContributionRail =
       plan.kind === 'submit' ? plan.rail : 'primary';

@@ -21,10 +21,18 @@ describe('usePiggyvestPossible', () => {
     expect(result.current).toBe(false);
   });
 
-  it('stays possible while the server verdict is unknown', () => {
+  it('stays possible while the verdict is unknown for the Ogabassey pilot', () => {
+    mockCapability = null;
+    const { result } = renderHook(() =>
+      usePiggyvestPossible('6b5cb8a4-5575-456c-b936-8cdfae30db74')
+    );
+    expect(result.current).toBe(true);
+  });
+
+  it('owner decision: is not possible for any other merchant while unknown', () => {
     mockCapability = null;
     const { result } = renderHook(() => usePiggyvestPossible('merchant-1'));
-    expect(result.current).toBe(true);
+    expect(result.current).toBe(false);
   });
 
   it('falls back to the configured merchant like the wallet reads', () => {

@@ -220,7 +220,11 @@ export function ImeiCheckFormView({
           )}
           <View style={styles.footerRow}>
             <View
-              accessibilityLabel={walletCopy.balanceLabel(walletBalance)}
+              accessibilityLabel={
+                isWalletReady
+                  ? walletCopy.balanceLabel(walletBalance)
+                  : (walletStatusText ?? undefined)
+              }
               style={styles.walletBadge}
             >
               <Ionicons
@@ -234,9 +238,12 @@ export function ImeiCheckFormView({
                   { color: needsTopUp ? colors.error : colors.text },
                 ]}
               >
-                {walletCopy.badgePrefix
-                  ? `${walletCopy.badgePrefix} ${formatServicePrice(walletBalance)}`
-                  : formatServicePrice(walletBalance)}
+                {/* Unknown until loaded: never a ₦0 that reads as empty. */}
+                {!isWalletReady
+                  ? '…'
+                  : walletCopy.badgePrefix
+                    ? `${walletCopy.badgePrefix} ${formatServicePrice(walletBalance)}`
+                    : formatServicePrice(walletBalance)}
               </Text>
             </View>
             <Pressable

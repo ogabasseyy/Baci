@@ -7,6 +7,7 @@ import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
+import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
 import {
   trackWalletPayPurchase,
   walletPayPurchaseKeys,
@@ -92,8 +93,10 @@ export function useImeiWalletPay({
   const wallet = walletQuery.data?.wallet;
   // A sheet opened for one account never stays open for another.
   const userId = useAuthStore((state) => state.user?.id ?? null);
+  // Even mid-payment: closing drops this sheet's answers (the request
+  // itself settles on the server and the key stays with account A).
   const closeForSwitch = useEffectEvent(() => {
-    if (sheet.step !== 'closed' && sheet.step !== 'paying') sheet.close();
+    if (sheet.step !== 'closed') sheet.close();
   });
   const seenUser = useRef(userId);
   useEffect(() => {
@@ -126,35 +129,50 @@ export function useImeiWalletPay({
     covers: (tier: ImeiServiceTierKey) =>
       imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
     open: async (tier: ImeiServiceTierKey, imei: string) => {
-      // One key per purchase (per account) until it settles, kept across
-      // restarts: a lost, pending or under-review payment is resumed by the
-      // next tap, never paid again.
-      // The IMEI is hashed: the saved purchase never holds it in plain text.
       const { user, merchantId } = useAuthStore.getState();
-      const imeiHash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        imei
-      );
-      const purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imeiHash}`;
-      const idempotencyKey = await walletPayPurchaseKeys.keyFor(
-        purchase,
-        Crypto.randomUUID
-      );
-      const adapter = createImeiWalletPayAdapter({
-        connection: { apiBaseUrl, accessToken },
-        device,
-        tier,
-        imei,
-        idempotencyKey,
-        onTierRefused: () =>
-          setRefusedTiers((tiers) =>
-            tiers.includes(tier) ? tiers : [...tiers, tier]
-          ),
-      });
+      let purchase: string | null = null;
+      let inner: WalletPayAdapter<ImeiWalletPayResult> | null = null;
+      // The key is read inside the start, so a phone that can't read its
+      // saved keys shows "Try again" instead of paying with a new key.
+      const lazy: WalletPayAdapter<ImeiWalletPayResult> = {
+        async start() {
+          // One key per purchase (per account) until it settles, kept across
+          // restarts. The IMEI is hashed: the saved purchase never holds it.
+          const imeiHash = await Crypto.digestStringAsync(
+            Crypto.CryptoDigestAlgorithm.SHA256,
+            imei
+          );
+          purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imeiHash}`;
+          const idempotencyKey = await walletPayPurchaseKeys.keyFor(
+            purchase,
+            Crypto.randomUUID
+          );
+          inner = createImeiWalletPayAdapter({
+            connection: { apiBaseUrl, accessToken },
+            device,
+            tier,
+            imei,
+            idempotencyKey,
+            onTierRefused: () =>
+              setRefusedTiers((tiers) =>
+                tiers.includes(tier) ? tiers : [...tiers, tier]
+              ),
+          });
+          return await inner.start();
+        },
+        verifyPin: async (operationId, pin) => {
+          if (!inner) throw new Error('Wallet payment not started');
+          return await inner.verifyPin(operationId, pin);
+        },
+        pay: async (operationId, proof) => {
+          if (!inner) throw new Error('Wallet payment not started');
+          return await inner.pay(operationId, proof);
+        },
+      };
       // Settled purchases may have moved money: show the new balance. The
       // whole payment is bound to the account that opened it.
       await sheet.open(
-        trackWalletPayPurchase(adapter, purchase, {
+        trackWalletPayPurchase(lazy, () => purchase, {
           onSettled: () => void walletQuery.refetch?.(),
           stillOwner: () => useAuthStore.getState().user?.id === user?.id,
         })

@@ -29,8 +29,11 @@ jest.mock('@/lib/wallet-pay/imei-wallet-pay-api', () => ({
         amountKobo: 30_000,
       },
     })),
-    verifyPin: jest.fn(),
-    pay: jest.fn(),
+    verifyPin: jest.fn(async () => ({
+      httpStatus: 200,
+      body: { proof: 'a'.repeat(64) },
+    })),
+    pay: jest.fn(() => new Promise(() => undefined)),
   },
 }));
 
@@ -67,5 +70,24 @@ describe('bugfix: a stale balance during a wallet refresh chose PiggyVest (Codex
   it('waits for the refresh when paying from PiggyVest is on', () => {
     expect(setup(true).result.current.waitsForWallet).toBe(true);
     expect(setup(false).result.current.waitsForWallet).toBe(false);
+  });
+});
+
+describe('bugfix: a payment in flight kept its sheet after an account switch (Codex P1)', () => {
+  it('closes the paying sheet so its answer never shows on the new account', async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.open('basic', '356938035643809');
+    });
+    act(() => hook.result.current.sheet.setPin('1234'));
+    act(() => {
+      void hook.result.current.sheet.submit();
+    });
+    await act(async () => undefined);
+    expect(hook.result.current.sheet.step).toBe('paying');
+    mockState.user = { id: 'user-b' };
+    hook.rerender({});
+    expect(hook.result.current.sheet.step).toBe('closed');
+    mockState.user = { id: 'user-a' };
   });
 });

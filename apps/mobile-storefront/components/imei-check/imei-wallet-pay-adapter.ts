@@ -55,7 +55,7 @@ function refusal(reply: WalletPayReply) {
 function delivered(
   reply: WalletPayReply,
   tier: ImeiServiceTierKey
-): WalletPayPayAnswer<ImeiWalletPayResult> | null {
+): { kind: 'delivered'; result: ImeiWalletPayResult } | null {
   const parsed = ImeiCheckApiResponseSchema.safeParse(reply.body);
   if (reply.httpStatus !== 200 || !parsed.success) return null;
   if (!parsed.data.success || !parsed.data.data) return null;
@@ -119,6 +119,14 @@ export function createImeiWalletPayAdapter(input: {
         if (payment.data.status === 'payment_review') return outcome('review');
         return { kind: 'recheck', operationId, amountKobo };
       }
+      // A replayed start: the purchase already finished (its result or its
+      // refund), or its delivery is still running. None of these is a
+      // failure before payment.
+      const replayed = delivered(reply, tier);
+      if (replayed) return replayed;
+      if (reply.body.refund === 'piggyvest_wallet') return outcome('refunded');
+      if (codeOf(reply) === 'IDEMPOTENT_REQUEST_IN_FLIGHT')
+        return outcome('pending');
       return refusal(reply) ?? outcome('failed');
     },
     async verifyPin(operationId, pin) {

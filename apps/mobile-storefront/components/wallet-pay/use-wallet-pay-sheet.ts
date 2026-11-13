@@ -100,6 +100,12 @@ export function useWalletPaySheet<Result>({
     setAmountKobo(null);
     setRechecks(0);
     setBusy(false);
+    await begin(next, mine);
+  };
+
+  // Runs (or re-runs) the start for the open sheet.
+  const begin = async (next: WalletPayAdapter<Result>, mine: number) => {
+    inFlight.current = true;
     setStep('starting');
     const started = await next.start().catch(() => ({
       kind: 'outcome' as const,
@@ -107,6 +113,7 @@ export function useWalletPaySheet<Result>({
     }));
     if (!current(mine)) return;
     inFlight.current = false;
+    if (started.kind === 'delivered') return finish(started);
     if (started.kind === 'outcome') {
       setOutcome(started.outcome);
       setStep('outcome');
@@ -153,6 +160,11 @@ export function useWalletPaySheet<Result>({
   const recheck = async () => {
     if (inFlight.current) return;
     setRechecks((count) => count + 1);
+    // No payment id yet (the start itself is still settling): ask again.
+    if (!operationId.current) {
+      if (adapter.current) await begin(adapter.current, generation.current);
+      return;
+    }
     await pay('');
   };
 

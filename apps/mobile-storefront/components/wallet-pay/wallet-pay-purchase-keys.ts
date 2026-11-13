@@ -37,10 +37,13 @@ let cache: OpenPurchases | null = null;
 
 async function load(): Promise<OpenPurchases> {
   if (cache) return cache;
-  // Unreadable storage counts as empty: never block a payment on it.
+  // A failed read throws (fail closed): an open key we can't see must never
+  // be replaced by a new one, which could pay twice. Nothing is cached, so
+  // the next attempt reads again. Only data that can't be parsed (it can
+  // never be read back) counts as empty.
+  const raw = await AsyncStorage.getItem(STORAGE_KEY);
   let parsed: unknown = null;
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
     parsed = raw ? JSON.parse(raw) : null;
   } catch {
     parsed = null;
@@ -114,11 +117,13 @@ export const walletPayPurchaseKeys = {
  */
 export function trackWalletPayPurchase<Result>(
   adapter: WalletPayAdapter<Result>,
-  purchase: string,
+  /** The purchase (or a getter, null until the adapter knows it). */
+  purchase: string | (() => string | null),
   options: { onSettled: () => void; stillOwner: () => boolean }
 ): WalletPayAdapter<Result> {
   const settle = async () => {
-    await walletPayPurchaseKeys.forget(purchase);
+    const id = typeof purchase === 'string' ? purchase : purchase();
+    if (id) await walletPayPurchaseKeys.forget(id);
     options.onSettled();
   };
   const switched = {
@@ -129,7 +134,10 @@ export function trackWalletPayPurchase<Result>(
     async start() {
       if (!options.stillOwner()) return switched;
       const answer = await adapter.start();
-      if (answer.kind === 'outcome' && !KEEP_OUTCOMES.has(answer.outcome.kind))
+      if (
+        answer.kind === 'delivered' ||
+        (answer.kind === 'outcome' && !KEEP_OUTCOMES.has(answer.outcome.kind))
+      )
         await settle();
       return answer;
     },

@@ -134,3 +134,31 @@ describe('trackWalletPayPurchase', () => {
     );
   });
 });
+
+describe('bugfix: unreadable saved keys minted a second key (Codex P1)', () => {
+  it('refuses to hand out a key until the saved keys can be read', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    walletPayPurchaseKeys.resetMemory();
+    const getItem = jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('disk busy'));
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).rejects.toThrow(
+      'disk busy'
+    );
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'a'
+    );
+    getItem.mockRestore();
+  });
+
+  it('settles a purchase whose replayed start was already delivered', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    const opts = options();
+    await trackWalletPayPurchase(
+      adapter(null, { kind: 'delivered', result: 'ok' }),
+      () => 'p',
+      opts
+    ).start();
+    expect(opts.onSettled).toHaveBeenCalledTimes(1);
+  });
+});

@@ -23,8 +23,10 @@ export type WalletPayOutcome = {
   message?: string;
 };
 
-export type WalletPayStart =
+export type WalletPayStart<Result> =
   | { kind: 'pin'; operationId: string; amountKobo: number }
+  // The purchase was already paid and delivered (a replayed start).
+  | { kind: 'delivered'; result: Result }
   // A payment already sent for this purchase: check on it, never re-pay.
   | { kind: 'recheck'; operationId: string; amountKobo: number }
   | { kind: 'outcome'; outcome: WalletPayOutcome };
@@ -43,7 +45,7 @@ export type WalletPayPayAnswer<Result> =
 
 /** One product's way to start, approve and pay (IMEI today, VTU next). */
 export interface WalletPayAdapter<Result> {
-  start(): Promise<WalletPayStart>;
+  start(): Promise<WalletPayStart<Result>>;
   verifyPin(operationId: string, pin: string): Promise<WalletPayPinAnswer>;
   /** proof '' only checks on a payment already sent. */
   pay(operationId: string, proof: string): Promise<WalletPayPayAnswer<Result>>;

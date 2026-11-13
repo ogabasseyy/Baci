@@ -173,4 +173,38 @@ describe('bugfix: overlapping wallet pay calls (Muse review)', () => {
     expect(start).toHaveBeenCalledTimes(2);
     expect(hook.result.current.step).toBe('enter');
   });
+
+  it('shows a replayed result straight away', async () => {
+    const onDelivered = jest.fn();
+    const hook = renderHook(() => useWalletPaySheet<string>({ onDelivered }));
+    const adapter = makeAdapter({
+      start: jest.fn(async () => ({
+        kind: 'delivered' as const,
+        result: 'clean',
+      })),
+    });
+    await act(async () => {
+      await hook.result.current.open(adapter);
+    });
+    expect(onDelivered).toHaveBeenCalledWith('clean');
+    expect(adapter.pay).not.toHaveBeenCalled();
+  });
+
+  it('asks the start again when it was still settling, without a PIN', async () => {
+    const hook = setup();
+    const start = jest
+      .fn()
+      .mockResolvedValueOnce({ kind: 'outcome', outcome: { kind: 'pending' } })
+      .mockResolvedValueOnce({ kind: 'delivered', result: 'clean' });
+    const adapter = makeAdapter({ start });
+    await act(async () => {
+      await hook.result.current.open(adapter);
+    });
+    await act(async () => {
+      await hook.result.current.recheck();
+    });
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(adapter.pay).not.toHaveBeenCalled();
+    expect(hook.result.current.step).toBe('closed');
+  });
 });

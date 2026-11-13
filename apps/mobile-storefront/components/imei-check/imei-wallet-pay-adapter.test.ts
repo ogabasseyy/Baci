@@ -220,3 +220,44 @@ describe('bugfix: an unreadable PIN check answer showed a failure (Muse)', () =>
     expect(api.pay).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: a replayed start was treated as failed and forgotten (Codex P1)', () => {
+  it('shows the result of a purchase that already finished', async () => {
+    api.start.mockResolvedValue(
+      reply(200, {
+        success: true,
+        status: 'complete',
+        lookupId: LOOKUP,
+        data: RESULT,
+      })
+    );
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'delivered',
+      result: { result: RESULT, lookupId: LOOKUP, tier: 'basic' },
+    });
+  });
+
+  it('reports a refund that already happened', async () => {
+    api.start.mockResolvedValue(
+      reply(502, {
+        code: 'LOOKUP_NOT_COMPLETED',
+        refund: 'piggyvest_wallet',
+        lookupId: LOOKUP,
+      })
+    );
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'refunded' },
+    });
+  });
+
+  it('keeps confirming while the delivery is still running', async () => {
+    api.start.mockResolvedValue(
+      reply(409, { code: 'IDEMPOTENT_REQUEST_IN_FLIGHT' })
+    );
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'pending' },
+    });
+  });
+});

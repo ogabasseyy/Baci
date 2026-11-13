@@ -1,11 +1,8 @@
+import { chatwootContextRequestSchemas } from '../../../../../../schemas/chatwoot-context';
 import { hasValidFixtureCsrf } from '../../../../fixture-csrf';
 import { json } from '../../../../fixture-response';
 
 const sessionToken = 'synthetic-session-capability';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function validatedJson(body: unknown) {
   const response = json(body);
@@ -28,26 +25,29 @@ export async function POST(
   if (!hasValidFixtureCsrf(request))
     return json({ error: 'Fixture CSRF validation failed' }, 403);
 
-  const parsedBody = await request.json().catch(() => null);
-  if (!isRecord(parsedBody))
-    return json({ error: 'Invalid fixture context request' }, 400);
+  const body = await request.json().catch(() => null);
 
-  if (endpoint === 'challenge')
+  if (endpoint === 'challenge') {
+    const parsed = chatwootContextRequestSchemas.challenge.safeParse(body);
+    if (!parsed.success)
+      return json({ error: 'Invalid fixture challenge request' }, 400);
     return validatedJson({
-      requestId: parsedBody.requestId,
+      requestId: parsed.data.requestId,
       widgetOrigin: 'https://support.example.test',
       challengeToken: 'synthetic-challenge-token',
       expiresAt: Math.floor(Date.now() / 1000) + 60,
     });
+  }
 
-  if (
-    endpoint === 'verify' &&
-    (parsedBody.challengeToken !== 'synthetic-challenge-token' ||
-      parsedBody.contextToken !== 'synthetic-context-token')
-  )
-    return json({ error: 'Fixture context token did not match' }, 403);
-
-  if (endpoint === 'verify')
+  if (endpoint === 'verify') {
+    const parsed = chatwootContextRequestSchemas.verify.safeParse(body);
+    if (!parsed.success)
+      return json({ error: 'Invalid fixture verify request' }, 400);
+    if (
+      parsed.data.challengeToken !== 'synthetic-challenge-token' ||
+      parsed.data.contextToken !== 'synthetic-context-token'
+    )
+      return json({ error: 'Fixture context token did not match' }, 403);
     return validatedJson({
       authorized: true,
       requestId: 'fixture_context_123456',
@@ -55,11 +55,12 @@ export async function POST(
       sessionToken,
       sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
     });
+  }
 
-  if (
-    parsedBody.sessionToken !== sessionToken ||
-    parsedBody.includeCartSnapshot !== true
-  )
+  const parsed = chatwootContextRequestSchemas.authorize.safeParse(body);
+  if (!parsed.success)
+    return json({ error: 'Invalid fixture authorize request' }, 400);
+  if (parsed.data.sessionToken !== sessionToken)
     return json({ error: 'Fixture session token did not match' }, 403);
 
   return validatedJson({

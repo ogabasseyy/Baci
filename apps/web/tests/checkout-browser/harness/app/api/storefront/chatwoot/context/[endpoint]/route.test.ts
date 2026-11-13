@@ -25,7 +25,7 @@ function post(
 }
 
 describe('fixture Chatwoot context route', () => {
-  it('rejects missing CSRF cookies and malformed JSON', async () => {
+  it('rejects missing CSRF cookies, malformed JSON, and invalid request bodies', async () => {
     const missingCookie = await post(
       'challenge',
       {},
@@ -34,14 +34,23 @@ describe('fixture Chatwoot context route', () => {
       }
     );
     const malformedJson = await post('challenge', '{', headers);
+    const invalidBody = await post(
+      'challenge',
+      { requestId: 'fixture_context_123456' },
+      headers
+    );
 
     expect(missingCookie.status).toBe(403);
     expect(malformedJson.status).toBe(400);
+    expect(invalidBody.status).toBe(400);
   });
 
   it('returns a challenge only for the exact fixture merchant query', async () => {
     const challenge = await post('challenge', {
+      conversationId: 905,
       requestId: 'fixture_context_123456',
+      visitorTokenSha256: 'b'.repeat(64),
+      websiteToken: 'synthetic-widget-token-123456',
     });
     const response = await challenge.json();
 

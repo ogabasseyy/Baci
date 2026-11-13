@@ -1,11 +1,12 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type {
   WalletActiveSavingsGoal,
   WalletSavingsVariantResolutionOption,
 } from '@/hooks/wallet-query';
+import { useAuthStore } from '@/stores/auth-store';
 import { useSavingsSheetLock } from '../SavingsSheetLock';
 import { styles } from './savings-phone-swap.styles';
 
@@ -16,20 +17,25 @@ type WalletColors = (typeof Colors)['light'];
  * inside the savings sheet, before the store team can fulfil the order.
  * Problems show inline; nothing is saved until "Confirm this option".
  */
-export function SavingsVariantPickStep({
-  colors,
-  goal,
-  onBack,
-  onResolve,
-  options,
-}: {
+type PickProps = {
   colors: WalletColors;
   goal: WalletActiveSavingsGoal;
   onBack: () => void;
   /** True when saved, or a message to show when it was not. */
   onResolve: (variantId: string) => Promise<true | string>;
   options: WalletSavingsVariantResolutionOption[];
-}) {
+};
+
+/** A fresh picker for each account, store and goal: no choice carries over. */
+export function SavingsVariantPickStep(props: PickProps) {
+  const userId = useAuthStore((state) => state.user?.id);
+  const merchantId = useAuthStore((state) => state.merchantId ?? undefined);
+  return (
+    <VariantPick key={`${userId}:${merchantId}:${props.goal.id}`} {...props} />
+  );
+}
+
+function VariantPick({ colors, goal, onBack, onResolve, options }: PickProps) {
   const [chosen, setChosen] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // The choice is a one-time assignment: the sheet stays open while it saves.
@@ -38,6 +44,15 @@ export function SavingsVariantPickStep({
 
   // Blocks a second tap before React re-renders with `pending` set.
   const inFlight = useRef(false);
+  // A reply that lands after this picker is gone (another goal, account or
+  // store) never navigates or shows an error on whatever replaced it.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const confirm = async () => {
     if (!chosen || inFlight.current) return;
@@ -46,13 +61,15 @@ export function SavingsVariantPickStep({
     setError(null);
     try {
       const result = await onResolve(chosen);
+      if (!mounted.current) return;
       if (result === true) onBack();
       else setError(result);
     } catch {
-      setError("We couldn't save your choice. Please try again.");
+      if (mounted.current)
+        setError("We couldn't save your choice. Please try again.");
     } finally {
       inFlight.current = false;
-      setPending(false);
+      if (mounted.current) setPending(false);
     }
   };
 

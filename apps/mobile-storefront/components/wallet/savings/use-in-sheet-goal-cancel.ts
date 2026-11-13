@@ -35,6 +35,15 @@ export function useInSheetGoalCancel(
   const kind: GoalActionKind = held?.kind ?? 'cancel';
   // Each time the step opens it starts fresh, never on a stale outcome.
   const [attempt, setAttempt] = useState(0);
+  // A held action belongs to the account and store it was opened in: when
+  // either changes it is dropped, never hidden to come back on a switch back.
+  const scopeChanged =
+    held !== null && (held.userId !== userId || held.merchantId !== merchantId);
+  useEffect(() => {
+    if (!scopeChanged) return;
+    setHeld(null);
+    setAttempt((value) => value + 1);
+  }, [scopeChanged]);
   const flow = useGoalLifecycle({
     kind,
     goalId: active?.id ?? goal?.id ?? '',

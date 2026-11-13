@@ -73,4 +73,20 @@ describe('server keeps PiggyVest off', () => {
     expect(result.current.message).toBe('not ready');
     expect(result.current.canStartAgain).toBe(false);
   });
+
+  it('a tap after the session lapsed offers sign-in instead of doing nothing', async () => {
+    act(() => {
+      useAuthStore.setState({ user: null, merchantId: null });
+    });
+    const { result } = renderHook(() =>
+      useGoalLifecycle({ kind: 'cancel', goalId: SERVER_OFF_GOAL_ID })
+    );
+    await act(async () => {
+      await result.current.begin();
+    });
+    expect(issueGoalAction).not.toHaveBeenCalled();
+    expect(result.current.step).toBe('failed');
+    expect(result.current.message).toBe('Please sign in again to continue.');
+    expect(result.current.needsSignIn).toBe(true);
+  });
 });

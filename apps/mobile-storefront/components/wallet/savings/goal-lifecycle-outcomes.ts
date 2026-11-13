@@ -29,6 +29,7 @@ export const GOAL_LIFECYCLE_COPY = {
   generic: 'Something went wrong. Please try again.',
   walletLoadFailed: "We couldn't load your wallet. Please try again.",
   signIn: 'Sign in',
+  signedOut: 'Please sign in again to continue.',
   checking: 'Checking…',
   tryAgain: 'Try again',
   startAgain: 'Start again',

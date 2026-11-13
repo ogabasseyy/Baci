@@ -211,4 +211,16 @@ describe('in-sheet goal cancel with the server off', () => {
     });
     expect(result.current.goal).toBeNull();
   });
+
+  it('drops a held goal when the store changes, so switching back never revives it', () => {
+    const { result } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start());
+    act(() => {
+      useAuthStore.setState({ merchantId: 'm-2' });
+    });
+    act(() => {
+      useAuthStore.setState({ merchantId: 'm-1' });
+    });
+    expect(result.current.goal).toBeNull();
+  });
 });

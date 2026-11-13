@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { useAuthStore } from '@/stores/auth-store';
 import { SavingsBottomSheet } from '../SavingsBottomSheet';
 import { SavingsVariantPickStep } from './SavingsVariantPickStep';
 
@@ -138,5 +139,38 @@ describe('Choose your exact phone, server off', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       "We couldn't save your choice. Please try again."
     );
+  });
+
+  it("starts fresh for another store and ignores the old store's late reply", async () => {
+    let finish: (value: true | string) => void = () => undefined;
+    const onResolve = jest.fn(
+      () =>
+        new Promise<true | string>((resolve) => {
+          finish = resolve;
+        })
+    );
+    act(() => {
+      useAuthStore.setState({
+        user: { id: 'user-a' } as never,
+        merchantId: 'm-1',
+      });
+    });
+    const onBack = renderStep(onResolve);
+    fireEvent.press(screen.getByRole('radio', { name: '128GB Black' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Confirm this option' })
+    );
+    act(() => {
+      useAuthStore.setState({ merchantId: 'm-2' });
+    });
+    expect(
+      screen.getByRole('radio', { name: '128GB Black' }).props
+        .accessibilityState.checked
+    ).toBe(false);
+    await act(async () => {
+      finish('Old store says no');
+    });
+    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.queryByText('Old store says no')).toBeNull();
   });
 });

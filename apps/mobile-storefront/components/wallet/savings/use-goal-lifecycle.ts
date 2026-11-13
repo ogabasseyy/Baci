@@ -234,7 +234,12 @@ export function useGoalLifecycle({
   };
 
   const guarded = async (work: (isCurrent: () => boolean) => Promise<void>) => {
-    if (busy.current || !merchantId || !userId) return;
+    if (busy.current) return;
+    // A lapsed session offers sign-in; after a submit the outcome is unknown.
+    if (!merchantId || !userId)
+      return submitted.current
+        ? show('timed_out', null, false, true)
+        : show('failed', GOAL_LIFECYCLE_COPY.signedOut, false, true);
     const started = generation.current;
     const isCurrent = () => generation.current === started;
     busy.current = true;

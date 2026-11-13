@@ -1229,6 +1229,9 @@ BEGIN
        SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
            provider_transaction_id = 'synthetic-sent-' || id::text
      WHERE cancel_operation_id = v_op::uuid;
+    -- Regression: a later payout left unsent does not make the earlier, sent
+    -- payout's reversal look unsent.
+    PERFORM pg_temp.gf_receipt('gf-late-unsent', 250);
     v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
     INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
       amount_kobo, provider_evidence_sha256, evidence_reference)
@@ -1236,9 +1239,9 @@ BEGIN
       repeat('8', 64), 'synthetic-reversal-6');
     PERFORM pg_temp.gc_assert(
       (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
-      AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
-      AND pg_temp.gf_forfeit(v_op, 'destination_wallet_id') = 'reversed-after-forfeit'
-      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 150,
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
       'a reversal after the interest was sent lowered the total silently');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;

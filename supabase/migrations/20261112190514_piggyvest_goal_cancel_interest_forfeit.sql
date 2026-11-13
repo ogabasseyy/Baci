@@ -173,6 +173,9 @@ CREATE TABLE piggyvest_primary.goal_cancel_late_interest_contributions (
   payout_id text NOT NULL,
   cancel_operation_id uuid NOT NULL REFERENCES piggyvest_primary.goal_cancel_operations(id),
   amount_kobo bigint NOT NULL CHECK (amount_kobo >= 0),
+  -- The forfeit row the payout was planned into (or merged into), so a
+  -- reversal can tell whether this payout's own interest was already sent.
+  forfeit_id uuid REFERENCES piggyvest_primary.goal_cancel_interest_forfeits(id) ON DELETE SET NULL,
   PRIMARY KEY (integration_id, payout_id)
 );
 CREATE INDEX goal_cancel_late_interest_contributions_cancel_idx
@@ -1733,6 +1736,7 @@ AS $$
 DECLARE
   v_planned bigint;
   v_added bigint;
+  v_planned_into uuid;
   v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
   v_wallet text;
   v_paid_at timestamptz;
@@ -1792,7 +1796,8 @@ BEGIN
     VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
       'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
       v_operation.source_wallet_id, 'interest-wallet-not-configured',
-      LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp());
+      LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp())
+    RETURNING id INTO v_planned_into;
   ELSE
   SELECT forfeit.amount_kobo INTO v_planned FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.cancel_operation_id = v_operation.id AND forfeit.state = 'reserved'
@@ -1808,18 +1813,21 @@ BEGIN
       source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
     VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
       'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
-      v_operation.source_wallet_id, v_wallet, LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp());
+      v_operation.source_wallet_id, v_wallet, LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp())
+    RETURNING id INTO v_planned_into;
   ELSIF v_planned IS NOT NULL THEN
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits
        SET amount_kobo = amount_kobo + NEW.net_kobo
-     WHERE cancel_operation_id = v_operation.id AND state = 'reserved';
+     WHERE cancel_operation_id = v_operation.id AND state = 'reserved'
+    RETURNING id INTO v_planned_into;
   ELSE
     INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
       cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
       source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
     VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
       'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
-      v_operation.source_wallet_id, v_wallet, NEW.net_kobo, pg_catalog.clock_timestamp());
+      v_operation.source_wallet_id, v_wallet, NEW.net_kobo, pg_catalog.clock_timestamp())
+    RETURNING id INTO v_planned_into;
   END IF;
   END IF;
   -- The cancel's forfeited total (what the app shows as interest not
@@ -1833,8 +1841,9 @@ BEGIN
   -- Exactly what this payout added (a capped total adds less), recorded in
   -- the same step so a failed plan records nothing.
   INSERT INTO piggyvest_primary.goal_cancel_late_interest_contributions (
-    integration_id, payout_id, cancel_operation_id, amount_kobo)
-  VALUES (NEW.integration_id, NEW.payout_id, v_operation.id, GREATEST(0, COALESCE(v_added, 0)));
+    integration_id, payout_id, cancel_operation_id, amount_kobo, forfeit_id)
+  VALUES (NEW.integration_id, NEW.payout_id, v_operation.id, GREATEST(0, COALESCE(v_added, 0)),
+    v_planned_into);
   EXCEPTION WHEN unique_violation OR check_violation THEN
     -- Never refuse the payout over the forfeit plan.
     NULL;
@@ -1862,6 +1871,9 @@ DECLARE
   v_goal_id uuid;
   v_cancel_id uuid;
   v_removed bigint;
+  v_planned_into uuid;
+  v_planned_state text;
+  v_unsent boolean;
 BEGIN
   SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
    WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
@@ -1897,8 +1909,8 @@ BEGIN
   -- already exclude the reversal, nor one whose plan failed or was capped
   -- beyond what it added). The contribution is consumed, so repeated partial
   -- reversals never subtract more than was added.
-  SELECT added.cancel_operation_id, LEAST(added.amount_kobo, NEW.amount_kobo)
-    INTO v_cancel_id, v_removed
+  SELECT added.cancel_operation_id, LEAST(added.amount_kobo, NEW.amount_kobo), added.forfeit_id
+    INTO v_cancel_id, v_removed, v_planned_into
     FROM piggyvest_primary.goal_cancel_late_interest_contributions AS added
    WHERE added.integration_id = NEW.integration_id AND added.payout_id = NEW.payout_id
      FOR UPDATE;
@@ -1906,9 +1918,17 @@ BEGIN
     UPDATE piggyvest_primary.goal_cancel_late_interest_contributions
        SET amount_kobo = amount_kobo - v_removed
      WHERE integration_id = NEW.integration_id AND payout_id = NEW.payout_id;
-    IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS unsent
-                WHERE unsent.cancel_operation_id = v_cancel_id AND unsent.posted_at IS NULL
-                  AND unsent.state IN ('reserved', 'dispatched', 'needs_review')) THEN
+    -- Whether this payout's own interest is still unsent: the forfeit it was
+    -- planned into, unless that plan was since released and replaced (then
+    -- any unsent plan of the cancel may carry it).
+    SELECT forfeit.state, forfeit.posted_at IS NULL INTO v_planned_state, v_unsent
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+     WHERE forfeit.id = v_planned_into;
+    IF (v_planned_state IN ('reserved', 'dispatched', 'needs_review') AND v_unsent)
+       OR ((v_planned_state IS NULL OR v_planned_state = 'released')
+           AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS unsent
+                        WHERE unsent.cancel_operation_id = v_cancel_id AND unsent.posted_at IS NULL
+                          AND unsent.state IN ('reserved', 'dispatched', 'needs_review'))) THEN
       -- The interest is still (planned to be) in the goal wallet: the
       -- forfeited total drops by the reversal, and the plan in review is
       -- sized by a person.

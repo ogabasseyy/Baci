@@ -1,9 +1,11 @@
 /**
- * Pages each alert, then records it as paged (acknowledges it), in order,
- * until the deadline: an alert left unpaged or unacknowledged at the deadline
- * is simply listed and paged again on the next run, never lost, and the rest
- * of the time budget is left for settling transfers. Returns how many
- * acknowledgements failed (each fails the run; its page repeats).
+ * Pages every alert first (cheap, no I/O), stopping only at the deadline,
+ * then acknowledges the paged ones in order while time remains. An alert
+ * left unpaged or unacknowledged at the deadline is simply listed and paged
+ * again on the next run, never lost, and a slow database can not spend the
+ * budget before later alerts are paged or transfers are settled. Returns how
+ * many were paged and how many acknowledgements failed (each fails the run;
+ * its page repeats).
  */
 export async function pageGoalCancelAlerts<T>(input: {
   items: readonly T[];
@@ -12,18 +14,22 @@ export async function pageGoalCancelAlerts<T>(input: {
   deadlineAt?: number;
   now: () => number;
 }): Promise<{ paged: number; failed: number }> {
-  let paged = 0;
-  let failed = 0;
+  const pastDeadline = () =>
+    input.deadlineAt !== undefined && input.now() >= input.deadlineAt;
+  const paged: T[] = [];
   for (const item of input.items) {
-    if (input.deadlineAt !== undefined && input.now() >= input.deadlineAt)
-      break;
+    if (pastDeadline()) break;
     input.emit(item);
-    paged += 1;
+    paged.push(item);
+  }
+  let failed = 0;
+  for (const item of paged) {
+    if (pastDeadline()) break;
     try {
       await input.acknowledge(item);
     } catch {
       failed += 1;
     }
   }
-  return { paged, failed };
+  return { paged: paged.length, failed };
 }

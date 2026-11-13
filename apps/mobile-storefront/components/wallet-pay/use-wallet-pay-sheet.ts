@@ -191,7 +191,13 @@ export function useWalletPaySheet<Result>({
       if (lastAdapter.current) await open(lastAdapter.current);
     },
     close,
-    /** Back while the sheet is open: close it, or stay while a payment is sent. */
+    /**
+     * Back while the sheet is open (the screen routes its back gesture here):
+     * close it, except while a payment is being sent. That no-op is on
+     * purpose: the sheet shows "Paying from your PiggyVest wallet..." and
+     * hiding it mid-send would leave the customer without the outcome.
+     * Closing while starting is safe: no money moves before the PIN.
+     */
     back: () => {
       if (step !== 'paying') close();
     },

@@ -19,9 +19,13 @@
 -- a row to 'processing' before every vend, and a transient vend error restores
 -- 'pending' only when nothing was vended). Such a row is closed as failed here
 -- in the same transaction, so no later request can vend it after the refund.
--- It counts only for purpose 'vtu', purchase_ref = the VTU transaction id, the
--- same customer and merchant (through the onboarding intent), a checkout row
--- marked paymentSource = 'piggyvest_wallet', and exactly its amount in kobo.
+-- The drain step counts only for purpose 'vtu', purchase_ref = the VTU
+-- transaction id, the same customer and merchant (through the onboarding
+-- intent), a checkout row marked paymentSource = 'piggyvest_wallet', and
+-- exactly its amount in kobo.
+--
+-- It also adds get_vtu_wallet_pay_purchase (below), the checkout's
+-- owner-scoped read of whether a purchase was prepared as PiggyVest-paid.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
@@ -78,5 +82,34 @@ REVOKE ALL ON FUNCTION piggyvest_primary.vtu_wallet_payment_delivery_state(uuid,
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_evidence;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.vtu_wallet_payment_delivery_state(uuid, text, uuid)
   TO piggyvest_primary_authorizer;
+
+-- The checkout's own read of how one of the caller's purchases is paid:
+-- whether the row was prepared as paid from the PiggyVest wallet, and its
+-- amount. Owner-scoped like get_vtu_replay_binding (no buyer SELECT policy
+-- exists on vtu_transactions by design). A replayed or joined purchase is
+-- paid from PiggyVest only when it was prepared that way, so a store credit
+-- purchase can never also be charged to the PiggyVest wallet.
+CREATE FUNCTION public.get_vtu_wallet_pay_purchase(p_transaction_id uuid)
+RETURNS TABLE (id uuid, piggyvest_paid boolean, amount numeric, status text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT t.id,
+         COALESCE(t.source = 'checkout' AND t.metadata ->> 'paymentSource' = 'piggyvest_wallet', false),
+         t.amount, t.status
+    FROM public.vtu_transactions AS t
+   WHERE t.id = p_transaction_id
+     AND EXISTS (
+       SELECT 1 FROM public.customers AS c
+        WHERE c.id = t.customer_id
+          AND c.user_id = (SELECT auth.uid())
+     );
+$$;
+
+REVOKE ALL ON FUNCTION public.get_vtu_wallet_pay_purchase(uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_vtu_wallet_pay_purchase(uuid) TO authenticated;
 
 COMMIT;

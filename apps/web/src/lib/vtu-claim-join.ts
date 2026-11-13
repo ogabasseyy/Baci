@@ -35,6 +35,7 @@ export async function fulfillJoinedVtuClaim({
   claim,
   requestFingerprint,
   userId,
+  fulfillTransaction,
 }: {
   authSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
@@ -49,6 +50,8 @@ export async function fulfillJoinedVtuClaim({
   claim: JoinedVtuClaimMapping;
   requestFingerprint: string;
   userId: string;
+  /** Replaces the plain fulfil (pay from the PiggyVest wallet, dark). */
+  fulfillTransaction?: (transactionId: string) => Promise<Response>;
 }) {
   await discardOrphanedClaimTransaction({
     context: 'join',
@@ -78,6 +81,7 @@ export async function fulfillJoinedVtuClaim({
     },
     supabase: fulfillSupabase,
     user,
+    fulfillTransaction,
   });
   // Winner-key wire: the loser key maps to the winner
   // server-side (loser-key retries replay), and clients adopt

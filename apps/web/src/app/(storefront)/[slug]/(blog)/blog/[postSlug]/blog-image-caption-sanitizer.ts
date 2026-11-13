@@ -88,7 +88,10 @@ export function sanitizeBlogImageCaptionText(rawCaption: string): string {
   // Capitalize the first letter only when a prompt prefix was stripped and it
   // does not start a camelCase brand name like "iPhone", "iPad", or "macOS".
   if (prefixRemoved) {
-    text = text.replace(/^[a-z](?![A-Z])/, (char) => char.toUpperCase());
+    text = text.replace(
+      /^(?!macOS\b|watchOS\b|tvOS\b|visionOS\b)[a-z](?![A-Z])/,
+      (char) => char.toUpperCase()
+    );
   }
   return text.trim();
 }

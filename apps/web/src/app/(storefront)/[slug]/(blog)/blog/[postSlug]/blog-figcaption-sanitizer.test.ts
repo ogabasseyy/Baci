@@ -38,6 +38,17 @@ describe('sanitizeFigcaptionHtml', () => {
         'Editorial illustration: <em>iPhone 17 Pro</em> and <em>macOS</em>.'
       )
     ).toBe('<em>iPhone 17 Pro</em> and <em>macOS</em>.');
+    expect(
+      sanitizeFigcaptionHtml('Editorial illustration: <em>macOS</em> setup.')
+    ).toBe('<em>macOS</em> setup.');
+  });
+
+  it('preserves literal comparison text when extracting caption text', () => {
+    expect(
+      sanitizeFigcaptionHtml(
+        'Editorial illustration: battery < 10 hours and price > $500.'
+      )
+    ).toBe('Battery &lt; 10 hours and price &gt; $500.');
   });
 
   it('bounds over-length inputs and still strips leaked prompt prefixes', () => {

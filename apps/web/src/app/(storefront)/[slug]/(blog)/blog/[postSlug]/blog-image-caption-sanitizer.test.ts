@@ -42,6 +42,9 @@ describe('sanitizeBlogImageCaptionText', () => {
         'Editorial illustration: iPhone 17 Pro camera plateau.'
       )
     ).toBe('iPhone 17 Pro camera plateau.');
+    expect(sanitizeBlogImageCaptionText('Illustration: macOS setup.')).toBe(
+      'macOS setup.'
+    );
   });
 
   it('bounds over-length captions and still strips leaked prompt prefixes', () => {

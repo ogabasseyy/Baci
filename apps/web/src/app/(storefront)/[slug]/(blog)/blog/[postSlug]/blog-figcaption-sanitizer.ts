@@ -116,7 +116,7 @@ function stripTrailingGuardrailsFromHtml(input: string): string {
 export function sanitizeFigcaptionHtml(innerHtml: string): string {
   const textContent = innerHtml
     .slice(0, MAX_CAPTION_SANITIZE_LENGTH * 4)
-    .replace(/<[^>]*>/g, '');
+    .replace(/<\/?[a-z][^>]*>/gi, '');
   if (
     innerHtml.length > MAX_CAPTION_SANITIZE_LENGTH * 4 ||
     textContent.length > MAX_CAPTION_SANITIZE_LENGTH
@@ -149,12 +149,14 @@ export function sanitizeFigcaptionHtml(innerHtml: string): string {
 
   if (prefixRemoved) {
     result = result.replace(
-      /^((?:<[a-z0-9]+[^>]*>\s*)*)([a-z])(?![A-Z])/,
+      /^((?:<[a-z0-9]+[^>]*>\s*)*)(?!macOS\b|watchOS\b|tvOS\b|visionOS\b)([a-z])(?![A-Z])/,
       (_match, tags, char) => `${tags}${char.toUpperCase()}`
     );
   }
 
-  const resultingText = unescapeHtmlText(result.replace(/<[^>]*>/g, '')).trim();
+  const resultingText = unescapeHtmlText(
+    result.replace(/<\/?[a-z][^>]*>/gi, '')
+  ).trim();
 
   // If tags are balanced and text content matches sanitized text, keep inline markup;
   // otherwise fallback to safely escaped text to prevent malformed or unbalanced HTML.

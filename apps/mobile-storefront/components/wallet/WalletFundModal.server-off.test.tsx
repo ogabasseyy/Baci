@@ -120,3 +120,40 @@ describe('Add money title is scoped to the PiggyVest account', () => {
     expect(screen.getByText('Add money')).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: the notice sat above the Add money sheet’s drag handle', () => {
+  it('shows it inside the sheet, under the header', () => {
+    render(
+      <WalletFundModal
+        {...createWalletContentProps()}
+        creditWatch={{
+          armCheck: jest.fn(),
+          creditedAmount: null,
+          reset: jest.fn(),
+          returnCtaHref: undefined,
+          status: 'idle',
+        }}
+        fundingAccount={{
+          accountName: 'Default Wallet',
+          accountNumber: '9000002044',
+          bankName: 'FAAS (SANDBOX)',
+          provider: 'piggyvest',
+        }}
+        showFundPanel
+      />
+    );
+    act(() => {
+      useSavingsNoticeStore.setState({
+        notice: { title: 'Money received', tone: 'success', scope: ':' },
+      });
+    });
+
+    const tree = JSON.stringify(screen.toJSON());
+    const header = tree.indexOf('Add money');
+    const notice = tree.indexOf('Money received');
+    const account = tree.indexOf('9000002044');
+    expect(header).toBeGreaterThan(-1);
+    expect(notice).toBeGreaterThan(header);
+    expect(account).toBeGreaterThan(notice);
+  });
+});

@@ -18,11 +18,16 @@ it('requires BVN and explicit consent before submitting', () => {
       onSubmit={onSubmit}
     />
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Create account number' })
-  );
+  const create = screen.getByRole('button', { name: 'Create account number' });
+  // Disabled until an 11-digit BVN and consent are both given.
+  expect(create).toBeDisabled();
+  fireEvent.press(create);
   expect(onSubmit).not.toHaveBeenCalled();
-  expect(screen.getByText('Enter a valid 11-digit BVN.')).toBeOnTheScreen();
+
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  expect(create).toBeDisabled();
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(create).toBeEnabled();
 });
 
 it('exposes the visible button label as its accessible name', () => {

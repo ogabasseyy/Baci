@@ -13,11 +13,16 @@ import { WalletTransactionHistory } from './WalletTransactionHistory';
 export function WalletActivitySection({
   colors,
   merchantId,
+  storeCreditBalance,
   transactions,
   walletUpdatedAt,
 }: Pick<
   WalletContentProps,
-  'colors' | 'merchantId' | 'transactions' | 'walletUpdatedAt'
+  | 'colors'
+  | 'merchantId'
+  | 'storeCreditBalance'
+  | 'transactions'
+  | 'walletUpdatedAt'
 >) {
   const primaryReady = useWalletPrimaryReady();
   const showActivity = primaryReady && isPiggyvestPrimaryMerchant(merchantId);
@@ -30,7 +35,11 @@ export function WalletActivitySection({
           refreshKey={walletUpdatedAt}
         />
       ) : null}
-      <WalletTransactionHistory colors={colors} transactions={transactions} />
+      <WalletTransactionHistory
+        colors={colors}
+        storeCreditBalance={storeCreditBalance}
+        transactions={transactions}
+      />
     </>
   );
 }

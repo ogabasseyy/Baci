@@ -69,3 +69,45 @@ describe('bugfix: store credit heading indented past the wallet cards', () => {
     expect(STORE_CREDIT_SCOPE_COPY).toMatch(/PiggyVest savings wallet/);
   });
 });
+
+describe('bugfix: empty "Older store credit" shown to a brand-new customer', () => {
+  it('hides it for a PiggyVest customer with no balance and no history', () => {
+    render(
+      <WalletPrimaryContext.Provider value>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          storeCreditBalance={0}
+          transactions={[]}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.queryByText('Older store credit')).toBeNull();
+  });
+
+  it('keeps it while there is a balance or an unknown balance', () => {
+    render(
+      <WalletPrimaryContext.Provider value>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          storeCreditBalance={1500}
+          transactions={[]}
+        />
+        <WalletTransactionHistory colors={Colors.light} transactions={[]} />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.getAllByText('Older store credit')).toHaveLength(2);
+  });
+
+  it('never hides today’s Recent Transactions with PiggyVest off', () => {
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          storeCreditBalance={0}
+          transactions={[]}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.getByText('Recent Transactions')).toBeOnTheScreen();
+  });
+});

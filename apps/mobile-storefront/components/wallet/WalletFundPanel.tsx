@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +29,7 @@ const SETUP_FAILED =
 const CARD_TOGGLE_LABEL = 'Fund with card instead';
 // PiggyVest account: transfers fund savings only (Codex), never store credit.
 const PIGGYVEST_TRANSFER_SUBTITLE =
-  "Transfer to your account number below to add to your savings wallet. It doesn't add store credit for purchases.";
+  "Transfer to your account number below to add to your savings wallet. It doesn't add store credit for purchases. PiggyVest may take a small deposit fee; your wallet shows the amount after it.";
 const STORE_CREDIT_TITLE = 'Add store credit';
 const STORE_CREDIT_SUBTITLE =
   "Your savings wallet can't pay for this yet. Pay by card to add store credit, then finish your purchase.";
@@ -56,6 +56,8 @@ interface WalletFundPanelProps {
   onCreateFundingAccount: () => unknown;
   onResetFund: () => void;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
+  /** Inline notices shown under the header, inside the sheet. */
+  notices?: ReactNode;
   returnToSavings?: boolean;
   /**
    * PiggyVest customer topping up for a purchase (e.g. an IMEI check):
@@ -82,6 +84,7 @@ export function WalletFundPanel({
   onCreateFundingAccount,
   onResetFund,
   onSubmitPhone,
+  notices,
   returnToSavings = false,
   storeCreditTopUp = false,
 }: WalletFundPanelProps) {
@@ -153,6 +156,7 @@ export function WalletFundPanel({
           <Ionicons name="close" size={22} color={colors.text} />
         </Pressable>
       </View>
+      {notices}
 
       {returnToSavings ? (
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>

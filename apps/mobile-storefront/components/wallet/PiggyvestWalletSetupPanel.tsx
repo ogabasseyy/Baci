@@ -1,6 +1,12 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 // useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import {
@@ -29,6 +35,8 @@ interface Props {
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
   onRefresh: () => void;
   onClose: () => void;
+  /** Inline notices shown under the close button, inside the sheet. */
+  notices?: ReactNode;
 }
 
 export function PiggyvestWalletSetupPanel({
@@ -38,6 +46,7 @@ export function PiggyvestWalletSetupPanel({
   onSubmitPhone,
   onRefresh,
   onClose,
+  notices,
 }: Props) {
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -182,6 +191,7 @@ export function PiggyvestWalletSetupPanel({
       >
         <Ionicons name="close" size={18} color={colors.text} />
       </Pressable>
+      {notices}
       {reviewRequired ? (
         <PrimaryWalletSetupReview colors={colors} />
       ) : needsPhone ? (

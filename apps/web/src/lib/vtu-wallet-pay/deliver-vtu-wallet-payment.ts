@@ -90,14 +90,24 @@ export async function deliverVtuWalletPayment(
   if (claim.status === 'reclaimed') {
     const state = await deps.deliveryState(operationId);
     if (state === 'mismatch') throw new VtuWalletPaymentMismatchError();
-    if (state !== 'processing')
+    if (state !== 'processing') {
       await record(
         deps,
         operationId,
         claim.claimToken,
         state === 'success' ? 'fulfilled' : 'failed'
       );
-    return { kind: 'result', result: await deps.fulfil(false) };
+      return { kind: 'result', result: await deps.fulfil(false) };
+    }
+    // Still processing: reconcile from the provider (never a new vend) and
+    // record a final answer it reaches now, rather than waiting for another
+    // claim lapse (Codex P2).
+    const reconciled = await deps.fulfil(false);
+    if (reconciled.status === 'successful')
+      await record(deps, operationId, claim.claimToken, 'fulfilled');
+    else if (reconciled.status === 'failed')
+      await record(deps, operationId, claim.claimToken, 'failed');
+    return { kind: 'result', result: reconciled };
   }
 
   const result = await deps.fulfil(true);

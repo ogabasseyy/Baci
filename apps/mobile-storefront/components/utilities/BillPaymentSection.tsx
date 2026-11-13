@@ -17,6 +17,8 @@ interface BillPaymentSectionProps {
   payment: PaymentState;
   /** Prefilled bill deep-link the wallet returns to after a bank transfer. */
   returnToHref: WalletReturnHref;
+  /** A retained store credit replay: never shown as paid from savings. */
+  retainedStoreCredit?: boolean;
   setAmount: (value: string) => void;
 }
 
@@ -28,6 +30,7 @@ export function BillPaymentSection({
   numericAmount,
   payment,
   returnToHref,
+  retainedStoreCredit = false,
   setAmount,
 }: BillPaymentSectionProps) {
   return (
@@ -71,6 +74,7 @@ export function BillPaymentSection({
         walletIsSettled={payment.isWalletSettled()}
         walletIsStoreCredit={payment.walletIsStoreCredit}
         walletPrimaryUnknown={payment.walletPrimaryUnknown}
+        retainedStoreCredit={retainedStoreCredit}
       />
     </View>
   );

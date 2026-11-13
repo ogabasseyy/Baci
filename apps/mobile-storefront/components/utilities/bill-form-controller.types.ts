@@ -41,6 +41,8 @@ export interface BillFormController {
   verifiedCustomerName: string | null;
   payment: ReturnType<typeof useUtilityPayment>;
   resetVerification: () => void;
+  /** This exact purchase replays a retained store credit attempt. */
+  retainedStoreCredit: boolean;
   scheduleNextStepScroll: (nextStepY: number) => void;
   scrollViewRef: RefObject<ScrollViewInstance | null>;
   selectedBiller: Biller | null;

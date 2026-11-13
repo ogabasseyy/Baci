@@ -40,10 +40,8 @@ import {
   throwVtuPersistenceError,
   VtuPersistenceError,
 } from '@/lib/vtu-persistence-error';
-import {
-  isPiggyvestWalletPaid,
-  piggyvestWalletPaidHold,
-} from '@/lib/vtu-piggyvest-wallet-paid';
+import { piggyvestFulfilmentGate } from '@/lib/vtu-piggyvest-fulfilment-gate';
+import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 
 export { VtuPersistenceError };
 
@@ -2082,30 +2080,16 @@ export async function fulfillPendingVtuTransaction({
   }
 
   const row = existing as VtuTransactionRow;
-  // A PiggyVest-paid row is never re-vended after a failure: its refund goes
-  // to the PiggyVest wallet (vtu-piggyvest-wallet-paid).
-  const piggyvestPaid = isPiggyvestWalletPaid(row.metadata);
-  const retryFailed = retryFailedRequested && !piggyvestPaid;
+  // PiggyVest-paid rows: the delivery-claim hold (vtu-piggyvest-fulfilment-gate).
+  const { retryFailed, hold } = piggyvestFulfilmentGate(row, {
+    walletPayClaimed,
+    retryFailedRequested,
+  });
   if (row.status === 'successful') {
     return resolveSuccessfulVtuTransaction({ row, supabase });
   }
 
-  // A PiggyVest-paid row moves no store credit and is vended (or failed and
-  // refunded) only by the request holding its payment's delivery claim;
-  // every other caller (cron, history, replays) waits, before any refund
-  // bookkeeping below (Muse).
-  // A processing row (provider-status reconciliation, never a new vend) and
-  // a pending row marked by an interrupted or transient vend (idempotent
-  // re-drive of a payment already confirmed) continue below: both were
-  // reached only under the delivery claim and debit no store credit
-  // (Codex P1).
-  const piggyvestRecovery =
-    row.status === 'processing' ||
-    (row.status === 'pending' &&
-      (row.metadata?.monnifyTransientVendError !== undefined ||
-        row.metadata?.preVendInterruptedAt !== undefined));
-  if (piggyvestPaid && !walletPayClaimed && !piggyvestRecovery)
-    return piggyvestWalletPaidHold(row);
+  if (hold) return hold;
 
   if (row.status === 'failed' && !retryFailed) {
     // Existing failed row — issue (or confirm) the wallet refund so the

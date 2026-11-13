@@ -16,7 +16,7 @@ import { EXPO_PUBLIC_API_URL } from '@/env';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
-import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
+import { SAVINGS_WALLET_CAN_PAY_UTILITIES } from '@/lib/savings-wallet-can-pay-utilities';
 import { vtuWalletPayApi } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { useAuthStore } from '@/stores/auth-store';
 import {
@@ -29,13 +29,26 @@ import {
   type VtuWalletPayPending,
 } from './vtu-wallet-pay-store';
 
+/** Runs a cancellation, recording it as out until it settles. */
+function runCancel(
+  cancelling: { current: Promise<void> | null },
+  cancel: () => Promise<void>
+) {
+  const settled = cancel().catch(() => undefined);
+  cancelling.current = settled;
+  void settled.then(() => {
+    if (cancelling.current === settled) cancelling.current = null;
+  });
+}
+
 /**
  * The utilities screen's one PiggyVest pay sheet (dark until
- * SAVINGS_WALLET_CAN_PAY). It tells the forms which amounts the PiggyVest
+ * SAVINGS_WALLET_CAN_PAY_UTILITIES, the airtime/data/bills switch, apart from
+ * the IMEI one). It tells the forms which amounts the PiggyVest
  * wallet covers and runs the sheet for the purchase a form hands over.
  */
 export function useVtuWalletPayHost({
-  canPay = SAVINGS_WALLET_CAN_PAY,
+  canPay = SAVINGS_WALLET_CAN_PAY_UTILITIES,
 }: {
   /** Tests pass true to preview the switch-on. */
   canPay?: boolean;
@@ -49,6 +62,9 @@ export function useVtuWalletPayHost({
   const ownerId = useRef<string | null>(null);
   // Set while a payment is issued and no pay request was sent yet.
   const cancelUnpaid = useRef<(() => Promise<void>) | null>(null);
+  // A cancellation still out: a retry waits for it, so it never adopts the
+  // operation being cancelled (Codex P2).
+  const cancelling = useRef<Promise<void> | null>(null);
   const sheet = useWalletPaySheet<VtuWalletPayResult>({
     // An answer that lands after the account changed (before the switch
     // closes the sheet) never reaches the new account's screen.
@@ -92,6 +108,7 @@ export function useVtuWalletPayHost({
         // Signed out: nothing to resume, so no shared key is ever saved.
         if (!user?.id)
           return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
+        await cancelling.current;
         // One key per purchase (per account) until it settles, kept across
         // restarts. Hashed: the saved key never holds the phone or meter.
         const descriptor = await Crypto.digestStringAsync(
@@ -140,7 +157,7 @@ export function useVtuWalletPayHost({
           };
           // Closed while the start was out: cancel now (Codex P2).
           if (wanted()) cancelUnpaid.current = cancel;
-          else void cancel().catch(() => undefined);
+          else runCancel(cancelling, cancel);
         }
         return answer;
       },
@@ -176,7 +193,7 @@ export function useVtuWalletPayHost({
       // purchase never blocks a later store credit attempt (Codex P2).
       const cancel = cancelUnpaid.current;
       cancelUnpaid.current = null;
-      if (cancel) void cancel().catch(() => undefined);
+      if (cancel) runCancel(cancelling, cancel);
     }
   }, [sheet.step]);
 

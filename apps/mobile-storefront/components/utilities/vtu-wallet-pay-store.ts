@@ -1,4 +1,8 @@
 import { create } from 'zustand';
+import {
+  acquireUtilityCheckoutOrAlert,
+  releaseUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import type { VtuWalletPayResult } from './vtu-wallet-pay-adapter';
 
@@ -26,6 +30,8 @@ export const useVtuWalletPayStore = create<State>(() => ({
 /**
  * Opens the PiggyVest pay sheet for this purchase when the PiggyVest wallet
  * covers it (and no other is open). False = carry on with store credit.
+ * It holds the screen-wide utility checkout slot until the sheet closes, so
+ * no sibling tab starts another purchase meanwhile (and none is running).
  */
 export function openVtuWalletPay(
   request: VtuWalletPayRequest,
@@ -33,11 +39,14 @@ export function openVtuWalletPay(
 ): boolean {
   const state = useVtuWalletPayStore.getState();
   if (state.pending || !state.covers(request.amount)) return false;
+  // Another checkout is running: refused with its alert (true = handled).
+  if (!acquireUtilityCheckoutOrAlert()) return true;
   useVtuWalletPayStore.setState({ pending: { request, onDelivered } });
   return true;
 }
 
 export function clearVtuWalletPay() {
+  if (useVtuWalletPayStore.getState().pending) releaseUtilityCheckout();
   useVtuWalletPayStore.setState({ pending: null });
 }
 
@@ -68,6 +77,8 @@ export function payFromPiggyvest(
   if (isRetainedReplay) return false;
   return openVtuWalletPay(request, (result) =>
     onSuccess({
+      // The server's amount; a replay without one bought this same request
+      // (the amount is part of its fingerprint).
       amount: result.amount ?? request.amount,
       customerIdentifier,
       reference: result.reference,

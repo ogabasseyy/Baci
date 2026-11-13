@@ -169,3 +169,26 @@ describe('bugfix: a PIN check without a started payment said failed (Muse)', () 
     expect(api.verifyPin).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: an ambiguous 5xx start forgot its key (Codex P1, as IMEI)', () => {
+  it('answers not started (key kept) for a server error with no known code', async () => {
+    api.start.mockResolvedValue(reply(500, { code: 'INTERNAL_ERROR' }));
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'not_started' },
+    });
+  });
+});
+
+describe('bugfix: success reported the request amount (Muse low)', () => {
+  it('reports the issued payment amount when the answer carries none', async () => {
+    const a = await started();
+    api.pay.mockResolvedValue(
+      reply(200, { status: 'successful', reference: 'REF' })
+    );
+    await expect(a.pay(OP, PROOF)).resolves.toMatchObject({
+      kind: 'delivered',
+      result: { amount: 500, reference: 'REF' },
+    });
+  });
+});

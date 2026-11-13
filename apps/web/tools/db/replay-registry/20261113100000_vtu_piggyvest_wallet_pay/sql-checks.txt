@@ -1,2 +1,3 @@
 supabase/tests/piggyvest_vtu_wallet_pay_delivery.sql
 supabase/tests/piggyvest_vtu_wallet_pay_purchase.sql
+supabase/tests/piggyvest_vtu_wallet_pay_close.sql

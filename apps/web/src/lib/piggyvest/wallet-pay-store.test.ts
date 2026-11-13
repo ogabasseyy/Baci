@@ -252,6 +252,20 @@ describe('createWalletPayWorkerStore', () => {
       JSON.stringify({ purpose: 'imei_check', purchaseRef: 'lookup-1' }),
     ]);
   });
+  it('closes an unpaid VTU purchase by its transaction id', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(true)
+    );
+    const store = createWalletPayCustomerStore({ scope, execute });
+    await expect(
+      store.closeUnpaidVtu('33333333-3333-4333-8333-333333333333')
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledWith(customerSql.closeUnpaidVtu, [
+      JSON.stringify(scope),
+      JSON.stringify({ transactionId: '33333333-3333-4333-8333-333333333333' }),
+    ]);
+    await expect(store.closeUnpaidVtu('not-a-uuid')).rejects.toThrow();
+  });
   it('refuses an attempted answer that is not a boolean', async () => {
     const store = createWalletPayCustomerStore({
       scope,

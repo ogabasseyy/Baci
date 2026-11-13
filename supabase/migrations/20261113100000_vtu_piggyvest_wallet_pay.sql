@@ -112,4 +112,65 @@ REVOKE ALL ON FUNCTION public.get_vtu_wallet_pay_purchase(uuid)
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_vtu_wallet_pay_purchase(uuid) TO authenticated;
 
+-- Closes a purchase prepared as PiggyVest-paid whose payment ended unpaid
+-- (short of money, released or expired), so a later store credit purchase of
+-- the same thing starts a new row instead of joining one that can never be
+-- vended. Only this customer's own pending row, and only while no payment for
+-- it is live or paid (an issued one still open, reserved, dispatched,
+-- confirmed or under review). A payment issued after the close is refused by
+-- the checkout (the row is no longer pending); one sent anyway is refunded by
+-- the drain (its delivery state reads 'failed').
+CREATE FUNCTION piggyvest_primary.close_unpaid_vtu_wallet_purchase(scope jsonb, request jsonb)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_intent_id uuid;
+  v_customer uuid;
+  v_merchant uuid;
+  v_id uuid;
+BEGIN
+  IF request IS NULL OR pg_catalog.jsonb_typeof(request) <> 'object'
+    OR (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(request)) <> 1
+    OR COALESCE(request ->> 'transactionId', '')
+       !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RAISE EXCEPTION 'invalid wallet payment request' USING ERRCODE = '22023';
+  END IF;
+  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
+  SELECT intent.customer_id, intent.merchant_id INTO v_customer, v_merchant
+    FROM piggyvest_primary.onboarding_intents AS intent
+   WHERE intent.id = v_intent_id;
+  SELECT row.id INTO v_id FROM public.vtu_transactions AS row
+   WHERE row.id = (request ->> 'transactionId')::uuid
+     AND row.customer_id = v_customer
+     AND row.merchant_id = v_merchant
+     AND row.source = 'checkout'
+     AND row.metadata ->> 'paymentSource' = 'piggyvest_wallet'
+     AND row.status = 'pending'
+     FOR UPDATE;
+  IF NOT FOUND THEN RETURN false; END IF;
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
+     WHERE payment.integration_id = (scope ->> 'integrationId')::uuid
+       AND payment.purpose = 'vtu'
+       AND payment.purchase_ref = v_id::text
+       AND NOT (payment.state = 'released'
+                OR (payment.state = 'issued' AND payment.expires_at <= pg_catalog.clock_timestamp()))) THEN
+    RETURN false;
+  END IF;
+  UPDATE public.vtu_transactions AS row
+     SET status = 'failed',
+         error_message = 'This purchase was not paid. Nothing was taken from your PiggyVest wallet.'
+   WHERE row.id = v_id;
+  RETURN true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION piggyvest_primary.close_unpaid_vtu_wallet_purchase(jsonb, jsonb)
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_evidence;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.close_unpaid_vtu_wallet_purchase(jsonb, jsonb)
+  TO piggyvest_primary_authorizer;
+
 COMMIT;

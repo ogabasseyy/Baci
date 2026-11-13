@@ -17,11 +17,14 @@ jest.mock('expo-crypto', () => ({
   digestStringAsync: async () => 'hash',
 }));
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://api.test' }));
+const mockAuth: {
+  user: { id: string } | null;
+  session: { access_token: string };
+} = { user: { id: 'user-1' }, session: { access_token: 't' } };
 jest.mock('@/stores/auth-store', () => {
-  const state = { user: { id: 'user-1' }, session: { access_token: 't' } };
-  const useAuthStore = (selector: (s: typeof state) => unknown) =>
-    selector(state);
-  useAuthStore.getState = () => state;
+  const useAuthStore = (selector: (s: typeof mockAuth) => unknown) =>
+    selector(mockAuth);
+  useAuthStore.getState = () => mockAuth;
   return { useAuthStore };
 });
 jest.mock('@/lib/wallet-pay/vtu-wallet-pay-api', () => ({
@@ -71,5 +74,44 @@ describe('useVtuWalletPayHost (switched on)', () => {
     expect(hook.result.current.sheet.outcome).toEqual({ kind: 'unavailable' });
     act(() => hook.result.current.sheet.close());
     expect(useVtuWalletPayStore.getState().pending).toBeNull();
+  });
+});
+
+describe('bugfix: a balance not yet known could pay from PiggyVest (Fable walk)', () => {
+  it('covers nothing while the wallet is loading, or beyond its balance', () => {
+    const loaded = mockWallet.data;
+    mockWallet.data = undefined;
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    expect(useVtuWalletPayStore.getState().covers(100)).toBe(false);
+    expect(openVtuWalletPay(request, jest.fn())).toBe(false);
+    mockWallet.data = loaded;
+    hook.rerender({});
+    expect(useVtuWalletPayStore.getState().covers(10_000)).toBe(true);
+    expect(useVtuWalletPayStore.getState().covers(1_000_000)).toBe(false);
+    hook.unmount();
+  });
+});
+
+describe('bugfix: an answer after an account switch reached the new account (Codex P2)', () => {
+  it('drops a delivered purchase when the account changed while it was out', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    start.mockImplementation(
+      () => new Promise((resolve) => (answer = resolve))
+    );
+    const onDelivered = jest.fn();
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, onDelivered);
+    });
+    mockAuth.user = { id: 'user-2' };
+    await act(async () => {
+      answer({
+        httpStatus: 200,
+        body: { status: 'successful', reference: 'REF', amount: 500 },
+      });
+    });
+    expect(onDelivered).not.toHaveBeenCalled();
+    mockAuth.user = { id: 'user-1' };
+    hook.unmount();
   });
 });

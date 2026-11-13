@@ -41,8 +41,14 @@ export function useVtuWalletPayHost({
   const pending = useVtuWalletPayStore((state) => state.pending);
   const deliverTo = useRef<VtuWalletPayPending['onDelivered'] | null>(null);
   const opened = useRef(false);
+  const ownerId = useRef<string | null>(null);
   const sheet = useWalletPaySheet<VtuWalletPayResult>({
-    onDelivered: (result) => deliverTo.current?.(result),
+    // An answer that lands after the account changed (before the switch
+    // closes the sheet) never reaches the new account's screen.
+    onDelivered: (result) => {
+      if (useAuthStore.getState().user?.id === ownerId.current)
+        deliverTo.current?.(result);
+    },
   });
 
   // A stale balance during a refresh never chooses PiggyVest over store credit.
@@ -53,8 +59,10 @@ export function useVtuWalletPayHost({
     });
   }, [canPay, wallet, refreshing]);
   useEffect(
-    () => () =>
-      useVtuWalletPayStore.setState({ covers: () => false, pending: null }),
+    () => () => {
+      clearVtuWalletPay();
+      useVtuWalletPayStore.setState({ covers: () => false });
+    },
     []
   );
 
@@ -62,10 +70,14 @@ export function useVtuWalletPayHost({
     deliverTo.current = next.onDelivered;
     opened.current = true;
     const user = useAuthStore.getState().user;
+    ownerId.current = user?.id ?? null;
     let purchase: string | null = null;
     let inner: WalletPayAdapter<VtuWalletPayResult> | null = null;
     const lazy: WalletPayAdapter<VtuWalletPayResult> = {
       async start() {
+        // Signed out: nothing to resume, so no shared key is ever saved.
+        if (!user?.id)
+          return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
         // One key per purchase (per account) until it settles, kept across
         // restarts. Hashed: the saved key never holds the phone or meter.
         const descriptor = await Crypto.digestStringAsync(
@@ -101,6 +113,7 @@ export function useVtuWalletPayHost({
       trackWalletPayPurchase(lazy, () => purchase, {
         onSettled: () => void walletQuery.refetch?.(),
         stillOwner: () => useAuthStore.getState().user?.id === user?.id,
+        stillWanted: sheet.nextSession(),
       })
     );
   });

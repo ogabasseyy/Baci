@@ -7,6 +7,7 @@ import {
 } from '@/lib/piggyvest/wallet-pay-runtime';
 import {
   checkWalletPayment,
+  closeUnpaidVtuWalletPurchase,
   findWalletPaymentForPurchase,
   issueWalletPayment,
   payFromWallet,
@@ -35,12 +36,14 @@ export function createVtuWalletPayStepDeps(auth: {
         data as Array<{
           piggyvest_paid: boolean;
           amount: number | string;
+          status: string;
         }> | null
       )?.[0];
       return row
         ? {
             piggyvestPaid: row.piggyvest_paid === true,
             amount: Number(row.amount),
+            status: row.status,
           }
         : null;
     },
@@ -57,6 +60,7 @@ export function createVtuWalletPayStepDeps(auth: {
     issue: (input) => issueWalletPayment(input) as never,
     check: (input) => checkWalletPayment(input),
     pay: (input) => payFromWallet(input),
+    closeUnpaid: (input) => closeUnpaidVtuWalletPurchase(input),
     delivery: (runtime) => {
       const delivery = walletPayDelivery(runtime);
       return {

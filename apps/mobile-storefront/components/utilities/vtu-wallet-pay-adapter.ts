@@ -51,20 +51,25 @@ function refusal(reply: WalletPayReply, maybePaid = false) {
 }
 
 function delivered(
-  reply: WalletPayReply
+  reply: WalletPayReply,
+  /** The issued payment's amount, when the answer carries none. */
+  paidKobo: number | null = null
 ): { kind: 'delivered'; result: VtuWalletPayResult } | null {
   const parsed = WalletOnlyVtuResponseSchema.safeParse(reply.body);
   if (reply.httpStatus !== 200 || !parsed.success) return null;
   if (parsed.data.status !== 'successful') return null;
-  const { amount, reference, voucherPin } = parsed.data;
+  const { reference, voucherPin } = parsed.data;
+  const amount =
+    parsed.data.amount ?? (paidKobo === null ? undefined : paidKobo / 100);
   return { kind: 'delivered', result: { amount, reference, voucherPin } };
 }
 
 /** Maps a pay (or re-check) answer. Money may have moved: unknown = pending. */
 export function vtuPayAnswer(
-  reply: WalletPayReply
+  reply: WalletPayReply,
+  paidKobo: number | null = null
 ): WalletPayPayAnswer<VtuWalletPayResult> {
-  const result = delivered(reply);
+  const result = delivered(reply, paidKobo);
   if (result) return result;
   if (reply.body.refund === 'piggyvest_wallet') return outcome('refunded');
   if (reply.httpStatus === 202) {
@@ -90,6 +95,7 @@ export function createVtuWalletPayAdapter(input: {
   expectedUserId?: string;
 }): WalletPayAdapter<VtuWalletPayResult> {
   let transactionId: string | null = null;
+  let paidKobo: number | null = null;
   const { connection } = input;
   const purchase = {
     request: input.request,
@@ -103,6 +109,7 @@ export function createVtuWalletPayAdapter(input: {
       if (reply.httpStatus === 202 && payment.success) {
         transactionId = payment.data.transactionId;
         const { operationId, amountKobo } = payment.data;
+        paidKobo = amountKobo;
         if (payment.data.status === 'payment_required')
           return { kind: 'pin', operationId, amountKobo };
         return { kind: 'recheck', operationId, amountKobo };
@@ -112,7 +119,13 @@ export function createVtuWalletPayAdapter(input: {
       const replayed = delivered(reply);
       if (replayed) return replayed;
       if (reply.body.refund === 'piggyvest_wallet') return outcome('refunded');
-      return refusal(reply) ?? outcome('failed');
+      // A server error may come after the purchase and its payment were
+      // created: keep the key (a start never moves money) and try again.
+      const refused = refusal(reply);
+      if (refused) return refused;
+      return reply.httpStatus >= 500
+        ? outcome('not_started')
+        : outcome('failed');
     },
     async verifyPin(operationId, pin) {
       // No payment was started (the sheet never shows the PIN then): ask to
@@ -160,7 +173,7 @@ export function createVtuWalletPayAdapter(input: {
         operationId,
         pinProof: proof,
       });
-      return vtuPayAnswer(reply);
+      return vtuPayAnswer(reply, paidKobo);
     },
   };
 }

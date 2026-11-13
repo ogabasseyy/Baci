@@ -1,0 +1,102 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runVtuWalletPayStep } from './run-vtu-wallet-pay-step';
+
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/piggyvest/wallet-pay-scope', () => ({
+  walletPayScope: () => ({ scope: true }),
+}));
+
+const TXN = '33333333-3333-4333-8333-333333333333';
+const OP = '11111111-1111-4111-8111-111111111111';
+const runtime = {
+  merchantId: 'merchant-1',
+  integrationId: 'integration-1',
+  environment: 'staging',
+};
+const deps = {
+  readPurchase: vi.fn(),
+  readRuntime: vi.fn(() => runtime as never),
+  readRecoveryRuntime: vi.fn(() => runtime as never),
+  resolveIdentity: vi.fn(async () => ({
+    merchantId: 'merchant-1',
+    customerId: 'customer-1',
+    userId: 'user-1',
+  })),
+  findForPurchase: vi.fn(async () => null),
+  issue: vi.fn(),
+  check: vi.fn(async () => ({
+    state: 'issued',
+    purpose: 'vtu',
+    purchaseRef: TXN,
+    amountKobo: 100000,
+  })),
+  pay: vi.fn(),
+  closeUnpaid: vi.fn(async () => true),
+  delivery: vi.fn(),
+};
+const base = {
+  transactionId: TXN,
+  merchantId: 'merchant-1',
+  customerId: 'customer-1',
+  fulfil: vi.fn(),
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  deps.readPurchase.mockResolvedValue({
+    piggyvestPaid: true,
+    amount: 1000,
+    status: 'pending',
+  });
+});
+
+describe('bugfix: an unpaid PiggyVest purchase blocked a store credit retry (Codex P2)', () => {
+  it.each([
+    'insufficient',
+    'released',
+    'expired',
+  ])('closes the purchase when the payment ends %s', async (status) => {
+    deps.pay.mockResolvedValue({ status });
+    const response = await runVtuWalletPayStep(
+      { ...base, operationId: OP, pinProof: 'a'.repeat(64) },
+      deps as never
+    );
+    expect(response.status).toBe(409);
+    expect(deps.closeUnpaid).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: TXN })
+    );
+  });
+
+  it('keeps the purchase while the payment may still complete', async () => {
+    deps.pay.mockResolvedValue({ status: 'pending' });
+    await runVtuWalletPayStep(
+      { ...base, operationId: OP, pinProof: 'a'.repeat(64) },
+      deps as never
+    );
+    expect(deps.closeUnpaid).not.toHaveBeenCalled();
+  });
+
+  it('still answers when the close fails', async () => {
+    deps.pay.mockResolvedValue({ status: 'insufficient' });
+    deps.closeUnpaid.mockRejectedValueOnce(new Error('db down'));
+    const response = await runVtuWalletPayStep(
+      { ...base, operationId: OP, pinProof: 'a'.repeat(64) },
+      deps as never
+    );
+    expect(response.status).toBe(409);
+  });
+
+  it('never issues a payment for a purchase that is no longer pending', async () => {
+    deps.readPurchase.mockResolvedValue({
+      piggyvestPaid: true,
+      amount: 1000,
+      status: 'failed',
+    });
+    const response = await runVtuWalletPayStep(base, deps as never);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_NOT_COMPLETED',
+    });
+    expect(deps.issue).not.toHaveBeenCalled();
+  });
+});

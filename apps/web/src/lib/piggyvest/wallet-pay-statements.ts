@@ -17,6 +17,8 @@ export const WALLET_PAY_CUSTOMER_STATEMENTS = {
     'SELECT piggyvest_primary.read_wallet_payment_for_purchase($1::jsonb,$2::jsonb) AS result',
   attempted:
     'SELECT piggyvest_primary.wallet_payment_attempted($1::jsonb,$2::jsonb) AS result',
+  closeUnpaidVtu:
+    'SELECT piggyvest_primary.close_unpaid_vtu_wallet_purchase($1::jsonb,$2::jsonb) AS result',
 } as const;
 
 /** Authorizer login, first parameters = integration id and environment. */

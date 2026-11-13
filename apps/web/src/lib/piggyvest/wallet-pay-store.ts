@@ -84,6 +84,15 @@ export function createWalletPayCustomerStore(input: {
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },
+    // Closes this customer's PiggyVest-paid VTU purchase whose payment ended
+    // unpaid (no payment for it live or paid). True when it was closed.
+    async closeUnpaidVtu(transactionId: string) {
+      const result = await input.execute(customerSql.closeUnpaidVtu, [
+        scope,
+        JSON.stringify({ transactionId: z.uuid().parse(transactionId) }),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
     async readStatus(operationId: string) {
       const result = await input.execute(customerSql.status, [
         scope,

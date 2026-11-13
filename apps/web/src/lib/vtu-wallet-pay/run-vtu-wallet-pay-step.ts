@@ -34,9 +34,12 @@ type Issued =
 
 export interface VtuWalletPayStepDeps {
   /** The caller's own purchase: PiggyVest-paid or not, and its amount. */
-  readPurchase: (
-    transactionId: string
-  ) => Promise<{ piggyvestPaid: boolean; amount: number } | null>;
+  readPurchase: (transactionId: string) => Promise<{
+    piggyvestPaid: boolean;
+    amount: number;
+    /** The row's status; only a pending row may get a new payment. */
+    status?: string;
+  } | null>;
   readRuntime: () => WalletPayRuntime | null;
   readRecoveryRuntime: () => WalletPayRuntime;
   resolveIdentity: (runtime: WalletPayRuntime) => Promise<Identity | null>;
@@ -70,7 +73,17 @@ export interface VtuWalletPayStepDeps {
   delivery: (
     runtime: WalletPayRuntime
   ) => Omit<DeliverVtuWalletPaymentDeps, 'fulfil'>;
+  /** Closes the purchase once its payment ended unpaid (best effort). */
+  closeUnpaid: (input: {
+    runtime: WalletPayRuntime;
+    scope: Scope;
+    transactionId: string;
+  }) => Promise<boolean>;
 }
+
+// Payment answers that end it unpaid: the purchase is closed so a later
+// store credit purchase of the same thing never joins it (Codex P2).
+const ENDED_UNPAID = new Set(['insufficient', 'released', 'expired']);
 
 /** A re-check answers from the stored state alone (it never sends). */
 function recheckStatus(state: string) {
@@ -178,6 +191,13 @@ export async function runVtuWalletPayStep(
         existing.operationId,
         extra
       );
+    // A purchase closed unpaid (or otherwise finished) never gets a payment.
+    if (purchase.status !== undefined && purchase.status !== 'pending')
+      return walletPayRefuse(
+        'This payment did not go through. Please start again.',
+        'PAYMENT_NOT_COMPLETED',
+        409
+      );
     const issued = await deps.issue({
       runtime,
       scope,
@@ -226,6 +246,10 @@ export async function runVtuWalletPayStep(
         operationId,
         pinProof: input.pinProof ?? '',
       });
+  if (ENDED_UNPAID.has(result.status))
+    await Promise.resolve()
+      .then(() => deps.closeUnpaid({ runtime, scope, transactionId }))
+      .catch(() => false);
   if (result.status !== 'confirmed')
     return walletPayResponse(result, operationId, 'purchase');
   try {

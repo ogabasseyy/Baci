@@ -103,7 +103,7 @@ export async function addSavingsContributionToGoal({
       await refetchWallet().catch(() => undefined);
       notify(
         'Contribution pending',
-        'Your savings will update after PiggyVest confirms the transfer. Check its status before starting another contribution.',
+        'Your savings will update once PiggyVest confirms the transfer.',
         'info'
       );
       return;

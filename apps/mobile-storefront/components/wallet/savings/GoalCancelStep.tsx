@@ -174,7 +174,6 @@ export function GoalCancelStep({
             colors={colors}
             label={COPY.inThisGoal}
             value={goal.current_amount}
-            total
           />
         </View>
       ) : null}

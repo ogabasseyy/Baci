@@ -155,7 +155,7 @@ export function GoalCompleteStep({
           {/* Everything in the goal moves, so the total is known even when
               the interest split isn't. */}
           <View style={[styles.card, { borderColor: colors.border }]}>
-            <Row colors={colors} label={COPY.toWallet} value={total} total />
+            <Row colors={colors} label={COPY.toWallet} value={total} />
           </View>
           <Text style={[styles.note, { color: colors.textSecondary }]}>
             {COPY.unknownSplit}

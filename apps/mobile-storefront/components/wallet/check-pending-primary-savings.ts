@@ -58,7 +58,7 @@ export async function checkPendingPrimarySavings(input: {
     } else
       notify(
         'Contribution pending',
-        'Your savings will update after PiggyVest confirms the transfer. No new payment has been started.',
+        'Still waiting for PiggyVest to confirm. No new payment has been started.',
         'info'
       );
   } catch (error) {

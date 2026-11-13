@@ -199,7 +199,10 @@ export function WalletContent(props: WalletContentProps) {
         />
         {savingsSheetOpen ? null : (
           // Same side inset as the wallet's cards.
-          <SavingsNoticeCard colors={colors} style={{ marginHorizontal: 16 }} />
+          <SavingsNoticeCard
+            colors={colors}
+            style={{ marginHorizontal: 16, marginTop: 12 }}
+          />
         )}
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard

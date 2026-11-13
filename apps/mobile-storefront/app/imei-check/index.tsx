@@ -288,7 +288,7 @@ export default function ImeiCheckerScreen() {
             visitedDevices={visitedDevices}
             walletBalance={walletBalance}
             walletIsStoreCredit={walletIsStoreCredit}
-            walletPayCovers={walletPay.covers}
+            walletPay={walletPay.view}
             onPageSelected={handlePageSelected}
             onVerify={handleVerify}
             onTopUpWallet={fundWallet}

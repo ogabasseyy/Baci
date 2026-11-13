@@ -6,6 +6,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { piggyvestPayingBalanceKobo } from '@/components/wallet-pay/piggyvest-wallet-covers';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
 import {
@@ -129,6 +130,15 @@ export function useImeiWalletPay({
     },
     covers: (tier: ImeiServiceTierKey) =>
       imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
+    /** What the form shows and asks about paying from PiggyVest. */
+    view: {
+      covers: (tier: ImeiServiceTierKey) =>
+        imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
+      savingsKobo:
+        walletQuery.isRefetching === true
+          ? null
+          : piggyvestPayingBalanceKobo({ canPay, wallet }),
+    },
     open: async (tier: ImeiServiceTierKey, imei: string) => {
       // The build's merchant, never the hydrated one: that can still be
       // null at startup, and the key must match after a restart.

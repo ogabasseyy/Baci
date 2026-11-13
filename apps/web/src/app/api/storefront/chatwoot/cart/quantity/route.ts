@@ -171,8 +171,11 @@ export async function POST(request: NextRequest) {
       : !result.replayed && result.cart.version >= cartContext.state.cartVersion
         ? result.cart.version
         : null;
+  if (liveCartVersion === null) {
+    return unavailable(409, 'refresh_required');
+  }
   let proof: string | null = null;
-  if (liveCartVersion !== null && proofGrantExpiry !== null) {
+  if (proofGrantExpiry !== null) {
     try {
       proof = issueCartSessionProof(
         {
@@ -197,12 +200,7 @@ export async function POST(request: NextRequest) {
     ? cartSessionCookieMaxAge(proofGrantExpiry)
     : 0;
   let sessionToken: string | null = null;
-  if (
-    proof &&
-    maxAge > 0 &&
-    liveCartVersion !== null &&
-    proofGrantExpiry !== null
-  ) {
+  if (proof && maxAge > 0 && proofGrantExpiry !== null) {
     try {
       sessionToken = await renewChatwootSessionCapability({
         binding: cartContext.binding,
@@ -223,7 +221,7 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json(
     {
       accepted: true,
-      ...(liveCartVersion !== null ? { cartVersion: liveCartVersion } : {}),
+      cartVersion: liveCartVersion,
       operationId: result.operationId,
       replayed: result.replayed,
       ...(sessionToken ? { sessionToken } : {}),

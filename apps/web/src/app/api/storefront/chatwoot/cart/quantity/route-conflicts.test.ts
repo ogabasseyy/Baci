@@ -206,7 +206,7 @@ describe('Chatwoot shared-cart quantity route', () => {
     });
   });
 
-  it('does not renew a replay from an older snapshot without a live version', async () => {
+  it('requires refresh for a replay that has no trustworthy live version', async () => {
     arrange({ ...body, cartVersion: 11 }, { ...cart, version: 15, lines: [] });
     mocks.mutateCart.mockResolvedValue({
       ok: true,
@@ -218,7 +218,8 @@ describe('Chatwoot shared-cart quantity route', () => {
     const response = await POST(request());
     const payload = await response.json();
 
-    expect(payload).toMatchObject({ accepted: true, replayed: true });
+    expect(response.status).toBe(409);
+    expect(payload).toEqual({ accepted: false, code: 'refresh_required' });
     expect(payload).not.toHaveProperty('cartVersion');
     expect(payload).not.toHaveProperty('sessionToken');
     expect(response.headers.get('set-cookie')).toBeNull();

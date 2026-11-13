@@ -1,34 +1,21 @@
 /**
- * Every sentence the goal cancel / complete flow shows that is not a server
- * message. All of it awaits the owner's written approval.
+ * The goal cancel / complete strings shared by the in-sheet steps (their own
+ * wording lives in goal-cancel-step-copy.ts and goal-complete-step-copy.ts).
+ * The old full-page review text, which promised interest back on an early
+ * cancel, went with that screen.
  */
 export const GOAL_LIFECYCLE_COPY = {
   cancel: {
-    screenTitle: 'Cancel goal',
     entryButton: 'Cancel goal',
     entryLabel: 'Cancel savings goal',
-    reviewTitle: 'Cancel this goal?',
-    reviewBody:
-      'Your whole goal balance, including interest already paid into it, goes back to your main wallet. This goal will be closed.',
-    primary: 'Continue',
-    secondary: 'Keep goal',
     successTitle: 'Goal cancelled',
-    successBody: 'Your money is back in your main wallet.',
     rejected:
       'This cancellation was not completed. Your savings are still in your goal.',
   },
   complete: {
-    screenTitle: 'Complete goal',
     entryButton: 'Complete goal',
     entryLabel: 'Complete savings goal',
-    reviewTitle: 'Complete this goal',
-    reviewBody:
-      'Your whole goal balance, including interest already paid into it, moves to your main wallet and we send your purchase request to the store team. They will contact you to finish your purchase. Nothing is spent or paid out automatically.',
-    primary: 'Continue',
-    secondary: 'Not now',
     successTitle: 'Goal completed',
-    successBody:
-      'Your money is in your main wallet and your purchase request has been sent.',
     rejected:
       'This goal was not completed. Your savings are still in your goal.',
   },

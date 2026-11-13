@@ -32,6 +32,13 @@ export function daysUntil(
 ): number | null {
   const end = /^\d{4}-\d{2}-\d{2}/.exec(maturityDate ?? '')?.[0];
   if (!end) return null;
+  // Only a real calendar day: Date.parse would roll 2027-02-30 into March.
+  const endMs = Date.parse(`${end}T00:00:00Z`);
+  if (
+    !Number.isFinite(endMs) ||
+    new Date(endMs).toISOString().slice(0, 10) !== end
+  )
+    return null;
   const days =
     (Date.parse(`${end}T00:00:00Z`) -
       Date.parse(`${localDay(now)}T00:00:00Z`)) /

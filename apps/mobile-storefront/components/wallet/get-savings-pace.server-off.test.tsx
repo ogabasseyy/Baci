@@ -1,4 +1,4 @@
-import { getSavingsPace, paymentsThatFit } from './get-savings-pace';
+import { daysUntil, getSavingsPace, paymentsThatFit } from './get-savings-pace';
 
 const now = new Date('2026-11-12T10:00:00Z');
 
@@ -137,6 +137,15 @@ describe('getSavingsPace', () => {
     it('uses the phone’s own day, not the UTC day', () => {
       const lateLocal = new Date(2026, 10, 12, 23, 30);
       expect(paymentsThatFit('daily', '2026-11-13', lateLocal)).toBe(2);
+    });
+  });
+
+  describe('bugfix: an impossible stored date rolled into the next month', () => {
+    it('treats a date that is not a real calendar day as unusable', () => {
+      const now = new Date(2027, 0, 10);
+      expect(daysUntil('2027-02-30', now)).toBeNull();
+      expect(paymentsThatFit('daily', '2027-02-30', now)).toBe(0);
+      expect(daysUntil('2027-02-28', now)).toBe(49);
     });
   });
 });

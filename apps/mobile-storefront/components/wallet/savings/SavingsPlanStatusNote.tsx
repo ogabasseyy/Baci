@@ -102,9 +102,11 @@ function StatusNoteView({
   const slowdown = usePiggyvestSlowdown();
   const autoRetry = useAutoRetrySetup({
     active: primary && phase === 'setup_retryable',
-    // Behind the BVN field (the note's own status read) never retry by
-    // itself. A parent that supplies the status shows no BVN field, and
-    // goal setup does not need one, so retrying there is safe.
+    // Only the note's own status read sits beside a BVN field (the staging
+    // plan-funding path), so only there does a BVN flag stop the automatic
+    // retry. A parent that supplies the status (the wallet sheet) shows no
+    // BVN field, and PiggyVest goal setup never needs a BVN, so a stale
+    // flag there must not block a retry.
     blocked: bvnGate && funding.planFundingRequiresBvn === true,
     // Same account + merchant + goal key as the poll and setup memory.
     scopeKey: JSON.stringify([identityKey, merchantId, goalId]),
@@ -124,6 +126,7 @@ function StatusNoteView({
     return (
       <SavingsGoalRetryPrompt
         colors={colors}
+        goalId={goalId}
         submitting={setup.submitting || phase === 'loading'}
         error={setup.error}
         onRetry={() => void setup.retry()}
@@ -198,7 +201,7 @@ function StatusNoteView({
         <Pressable
           accessibilityRole="link"
           accessibilityLabel="Message support"
-          onPress={() => void openSavingsSupport()}
+          onPress={() => void openSavingsSupport(goalId)}
           style={styles.retry}
         >
           <Text style={[styles.action, { color: colors.primary }]}>

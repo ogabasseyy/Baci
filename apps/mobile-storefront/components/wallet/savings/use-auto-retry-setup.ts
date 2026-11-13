@@ -35,7 +35,7 @@ export function useAutoRetrySetup({
   retry,
 }: {
   active: boolean;
-  /** Never retry by itself (e.g. a BVN is required): hand over at once. */
+  /** Never retry by itself; hand over at once (the caller decides when). */
   blocked?: boolean;
   scopeKey: string;
   submitting: boolean;

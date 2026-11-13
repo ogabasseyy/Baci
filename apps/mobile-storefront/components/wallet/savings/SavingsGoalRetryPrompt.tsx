@@ -5,6 +5,8 @@ import { openSavingsSupport } from './open-savings-support';
 
 type Props = {
   colors: (typeof Colors)['light'];
+  /** The plan, so the support message carries its reference. */
+  goalId?: string;
   submitting: boolean;
   error: string | null;
   onRetry: () => void;
@@ -18,6 +20,7 @@ type Props = {
  */
 export function SavingsGoalRetryPrompt({
   colors,
+  goalId,
   submitting,
   error,
   onRetry,
@@ -52,7 +55,7 @@ export function SavingsGoalRetryPrompt({
       <Pressable
         accessibilityRole="link"
         accessibilityLabel="Message support"
-        onPress={() => void openSavingsSupport()}
+        onPress={() => void openSavingsSupport(goalId)}
         style={styles.support}
       >
         <Text style={[styles.supportText, { color: colors.primary }]}>

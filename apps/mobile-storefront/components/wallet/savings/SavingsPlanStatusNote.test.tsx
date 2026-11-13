@@ -257,3 +257,23 @@ describe('bugfix: a stalled setup said "about a minute" for 25 minutes with no C
     expect(onCheckAgain).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('bugfix: paused copy pointed at a Check now that was not there', () => {
+  it('offers Check now on a paused card even without a parent check', () => {
+    const fetchExistingPlanFunding = jest.fn();
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture({ fetchExistingPlanFunding })}
+        slow
+        paused
+      />
+    );
+    expect(screen.getByText(/Tap Check now/)).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
+    expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
+  });
+});

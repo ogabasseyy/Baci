@@ -212,7 +212,10 @@ function StatusNoteView({
       colors={colors}
       slow={slow}
       paused={paused}
-      onCheckNow={onCheckAgain}
+      // Always reachable: the paused copy points at this button.
+      onCheckNow={
+        onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
+      }
     />
   );
 }

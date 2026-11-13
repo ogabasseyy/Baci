@@ -9,6 +9,13 @@ const validate = (overrides = {}) =>
   );
 
 describe('validateSavingsInput', () => {
+  it('bugfix: a missing terms answer is not acceptance', () => {
+    expect(validate({ acceptsNonWithdrawableTerms: undefined })).toEqual({
+      error: 'You must accept the non-withdrawable savings terms.',
+      ok: false,
+    });
+  });
+
   it('bugfix: refuses a negative head start instead of sending it on', () => {
     expect(validate({ effectiveInitialContribution: -5000 })).toEqual({
       error: 'Enter a valid savings amount.',

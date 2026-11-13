@@ -64,7 +64,8 @@ export function validateSavingsInput(
 
   // The form gates these before review; submit checks them again so a
   // direct submit can never skip the terms or the interest answer.
-  if (input.acceptsNonWithdrawableTerms === false) {
+  // Only an explicit yes counts: a missing answer is not acceptance.
+  if (input.acceptsNonWithdrawableTerms !== true) {
     return {
       error: 'You must accept the non-withdrawable savings terms.',
       ok: false,

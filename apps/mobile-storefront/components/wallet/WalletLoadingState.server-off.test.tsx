@@ -65,3 +65,29 @@ describe('server keeps PiggyVest off', () => {
     expect(screen.queryByText(WALLET_LOAD_FAILED_COPY)).toBeNull();
   });
 });
+
+describe('bugfix: auth hydration time eats the wallet load deadline', () => {
+  it('restarts the deadline when the wallet load begins', () => {
+    // Arrange: 15 s of auth hydration (no retry yet).
+    jest.useFakeTimers();
+    const { rerender } = render(<WalletLoadingState colors={Colors.light} />);
+    act(() => {
+      jest.advanceTimersByTime(15_000);
+    });
+
+    // Act: the wallet query starts (retry available); 10 s more pass.
+    rerender(
+      <WalletLoadingState
+        colors={Colors.light}
+        message="Preparing your wallet..."
+        onRetry={jest.fn()}
+      />
+    );
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+
+    // Assert: still loading: the wallet gets its own full 20 s.
+    expect(screen.queryByText(WALLET_LOAD_FAILED_COPY)).toBeNull();
+  });
+});

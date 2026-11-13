@@ -1,6 +1,8 @@
 import 'server-only';
 import { piggyvestGoalCancelSchemas as schemas } from '@/schemas/piggyvest-goal-cancel';
+import { piggyvestGoalCancelForfeitSchemas as forfeitSchemas } from '@/schemas/piggyvest-goal-cancel-forfeit';
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS as forfeitSql } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS as sql } from './goal-cancel-statements';
 
 type Execute = (
@@ -78,6 +80,63 @@ export function createGoalCancelStore(input: {
     },
     async claimDispatch(operationId: string, amountKobo: number) {
       return await manage(operationId, 'dispatch', amountKobo);
+    },
+    // The cancel dispatch: the database splits the provider balance into the
+    // principal (customer leg) and the forfeited interest (its own leg).
+    async splitDispatch(operationId: string, balanceKobo: number) {
+      const result = await input.execute(sql.splitDispatch, [
+        scope,
+        schemas.operationId.parse(operationId),
+        String(forfeitSchemas.splitBalanceKobo.parse(balanceKobo)),
+      ]);
+      return forfeitSchemas.splitRows.parse(result.rows)[0].result;
+    },
+    async readAmounts(operationId: string) {
+      const result = await input.execute(sql.amounts, [
+        scope,
+        schemas.operationId.parse(operationId),
+      ]);
+      return forfeitSchemas.amountsRows.parse(result.rows)[0].result;
+    },
+    async claimForfeit(operationId: string) {
+      const result = await input.execute(forfeitSql.claim, [
+        scope,
+        schemas.operationId.parse(operationId),
+      ]);
+      return forfeitSchemas.claimRows.parse(result.rows)[0].result;
+    },
+    async unclaimForfeit(forfeitId: string) {
+      const result = await input.execute(forfeitSql.manage, [
+        scope,
+        schemas.operationId.parse(forfeitId),
+        'unclaim',
+      ]);
+      return forfeitSchemas.unclaimRows.parse(result.rows)[0].result;
+    },
+    // Records a page about this forfeit as emitted (call only after paging).
+    async ackForfeitAlert(forfeitId: string) {
+      const result = await input.execute(forfeitSql.manage, [
+        scope,
+        schemas.operationId.parse(forfeitId),
+        'ack',
+      ]);
+      return forfeitSchemas.manageAckRows.parse(result.rows)[0].result;
+    },
+    async markForfeitPosting(forfeitId: string) {
+      const result = await input.execute(forfeitSql.manage, [
+        scope,
+        schemas.operationId.parse(forfeitId),
+        'posting',
+      ]);
+      return forfeitSchemas.postingRows.parse(result.rows)[0].result;
+    },
+    async releaseForfeit(forfeitId: string) {
+      const result = await input.execute(forfeitSql.manage, [
+        scope,
+        schemas.operationId.parse(forfeitId),
+        'release',
+      ]);
+      return forfeitSchemas.releaseRows.parse(result.rows)[0].result;
     },
     async cancelBeforeDispatch(operationId: string) {
       return await manage(operationId, 'cancel', null);

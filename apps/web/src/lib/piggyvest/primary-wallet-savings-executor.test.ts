@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
@@ -126,7 +127,7 @@ it('permits the fixed scope-bound pending adoption statement', async () => {
     ])
   ).rejects.toThrow('Savings statement unavailable');
 });
-it('permits the five goal cancel statements with their exact parameter counts', async () => {
+it('permits the goal cancel statements (split and interest forfeit included) with their exact parameter counts', async () => {
   const execute = createPrimaryWalletSavingsExecutor(config);
   const id = '55555555-5555-4555-8555-555555555555';
   const cases = [
@@ -138,6 +139,13 @@ it('permits the five goal cancel statements with their exact parameter counts', 
     ],
     [GOAL_CANCEL_STATEMENTS.status, [JSON.stringify(scope), id]],
     [GOAL_CANCEL_STATEMENTS.checkIssued, [JSON.stringify(scope), id, id]],
+    [GOAL_CANCEL_STATEMENTS.splitDispatch, [JSON.stringify(scope), id, '5']],
+    [GOAL_CANCEL_STATEMENTS.amounts, [JSON.stringify(scope), id]],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, [JSON.stringify(scope), id]],
+    [
+      GOAL_CANCEL_FORFEIT_STATEMENTS.manage,
+      [JSON.stringify(scope), id, 'release'],
+    ],
   ] as const;
   for (const [text, parameters] of cases) {
     mocks.query.mockResolvedValueOnce({
@@ -254,4 +262,48 @@ it('admits wallet pay worker statements only for the configured integration', as
     ])
   ).rejects.toThrow();
   expect(mocks.connect).not.toHaveBeenCalled();
+});
+it('binds the forfeit worker statements to this integration and environment, with no customer scope', async () => {
+  const execute = createPrimaryWalletSavingsExecutor(config);
+  const id = '55555555-5555-4555-8555-555555555555';
+  for (const text of [
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerPosting,
+  ]) {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    });
+    mocks.query.mockResolvedValueOnce({ rows: [{ result: null }] });
+    const parameters =
+      text === GOAL_CANCEL_FORFEIT_STATEMENTS.workerList
+        ? [config.integrationId, config.environment, '50', 'true']
+        : [config.integrationId, config.environment, id];
+    await execute(text, parameters);
+    expect(mocks.query).toHaveBeenLastCalledWith(text, parameters);
+    await expect(
+      execute(text, [
+        '99999999-9999-4999-8999-999999999999',
+        ...parameters.slice(1),
+      ])
+    ).rejects.toThrow('Savings binding unavailable');
+    await expect(
+      execute(text, [
+        config.integrationId,
+        'production',
+        ...parameters.slice(2),
+      ])
+    ).rejects.toThrow('Savings binding unavailable');
+  }
 });

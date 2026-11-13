@@ -4,7 +4,12 @@ import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
+import {
+  sweepGoalCancelForfeit,
+  withGoalCancelAmounts,
+} from './goal-cancel-forfeit-runtime';
 import { runGoalCancelReconciliation } from './goal-cancel-reconciliation';
+import { publicStatus, readGoalCancelStatus } from './goal-cancel-status';
 import { createGoalCancelStore } from './goal-cancel-store';
 import { submitGoalCancel } from './goal-cancel-transfer';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
@@ -97,7 +102,12 @@ export async function isPrimaryWalletGoalCancelIssued(input: {
   );
 }
 
-/** Step 2: spend the PIN proof, reserve, and move the full balance once. */
+/**
+ * Step 2: spend the PIN proof, reserve, and move the saved principal once.
+ * An early cancel refunds the principal only; the goal's interest is
+ * forfeited to Ogabassey's interest wallet by its own leg, sent only after
+ * the principal is confirmed (owner decision 2026-11-12).
+ */
 export async function submitPrimaryWalletGoalCancel(input: {
   configuration: unknown;
   reconciliationConfiguration?: unknown;
@@ -106,6 +116,10 @@ export async function submitPrimaryWalletGoalCancel(input: {
   goalId: unknown;
   operationId: unknown;
   pinProof: unknown;
+  // True only while PiggyVest savings are switched on: the cancel itself
+  // ignores the flags (nobody is trapped in a goal), Ogabassey's interest
+  // leg does not, so a rollback stops new interest transfers.
+  allowForfeitTransfers?: boolean;
 }) {
   const { configuration, scope, store, token } = bind(input);
   if (token === null) throw new Error('Goal cancel provider unavailable');
@@ -141,6 +155,34 @@ export async function submitPrimaryWalletGoalCancel(input: {
       await retrievePiggyvestWallet(provider, walletId),
     claimDispatch: (operationId, amountKobo) =>
       store.claimDispatch(operationId, amountKobo),
+    splitDispatch: async (operationId, balanceKobo) => {
+      const split = await store.splitDispatch(operationId, balanceKobo);
+      // The database never answers an inconsistent split; if it ever did,
+      // the attempt is dispatched with nothing sent, so a person is paged
+      // and nothing moves.
+      if (
+        split.status === 'dispatched' &&
+        (split.principalKobo > balanceKobo ||
+          split.principalKobo + split.forfeitedInterestKobo !== balanceKobo)
+      ) {
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+          reason: 'split_inconsistent',
+          operationId,
+        });
+        return { status: 'needs_review' as const };
+      }
+      if (split.status === 'needs_review')
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+          reason: 'provider_balance_below_principal',
+          operationId,
+        });
+      if (split.status === 'forfeit_unavailable')
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
+          reason: 'interest_wallet_missing',
+          operationId,
+        });
+      return split;
+    },
     cancelBeforeDispatch: (operationId) =>
       store.cancelBeforeDispatch(operationId),
     releaseAfterRejection: (operationId) =>
@@ -163,32 +205,49 @@ export async function submitPrimaryWalletGoalCancel(input: {
         narration: 'Savings goal cancelled',
       }),
   });
-  if (result.status !== 'pending' || !evidence) return result;
-  try {
-    return publicStatus(
-      await runGoalCancelReconciliation({
-        configuration: evidence,
-        providerToken: token,
-        operationId: request.operationId,
-      })
-    );
-  } catch {
-    return result;
+  let settled: Awaited<ReturnType<typeof submitGoalCancel>> = result;
+  if (result.status === 'pending' && evidence) {
+    try {
+      settled = publicStatus(
+        await runGoalCancelReconciliation({
+          configuration: evidence,
+          providerToken: token,
+          operationId: request.operationId,
+        })
+      );
+    } catch {
+      settled = result;
+    }
   }
+  return await finish(settled, {
+    store,
+    provider,
+    evidence,
+    operationId: request.operationId,
+    allowForfeitTransfers: input.allowForfeitTransfers === true,
+  });
 }
 
-// A settlement conflict is never shown as released or as a plain wait: the
-// provider moved the money, so the customer is told it is under review and an
-// operator has already been paged (see the evidence store).
-function publicStatus(outcome: {
-  status: 'confirmed' | 'cancelled' | 'pending';
-  needsReview?: boolean;
-}) {
-  if (outcome.needsReview === true && outcome.status === 'pending')
-    return { status: 'needs_review' } as const;
-  return outcome.status === 'cancelled'
-    ? ({ status: 'released' } as const)
-    : ({ status: outcome.status } as const);
+/**
+ * Once the customer's principal is confirmed the interest leg may go (best
+ * effort, never changes the customer's answer); every answer that has a
+ * dispatched attempt behind it carries the server's amounts.
+ */
+async function finish<T extends { status: string }>(
+  result: T,
+  input: {
+    store: ReturnType<typeof bind>['store'];
+    provider: { token: string; baseUrl: string };
+    evidence: unknown | null;
+    operationId: string;
+    allowForfeitTransfers: boolean;
+  }
+) {
+  // With savings switched off the daily worker sweep still settles in-flight
+  // forfeits; nothing new is sent from here.
+  if (result.status === 'confirmed' && input.allowForfeitTransfers)
+    await sweepGoalCancelForfeit(input);
+  return await withGoalCancelAmounts(input.store, input.operationId, result);
 }
 
 /**
@@ -201,6 +260,7 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
   scope: unknown;
   providerToken: unknown;
   operationId: unknown;
+  allowForfeitTransfers?: boolean;
 }) {
   const { configuration, store, token } = bind(input);
   if (token === null) throw new Error('Goal cancel provider unavailable');
@@ -210,46 +270,18 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
     configuration
   );
   if (!evidence) throw new Error('Goal cancel evidence unavailable');
-  let state = await store.readStatus(operationId);
-  if (state === 'reserved') {
-    // Nothing was sent for a reserved attempt; only a stale one is released
-    // (a live submission holds it for seconds between reserve and dispatch).
-    await store.cancelStaleReservation(operationId).catch(() => undefined);
-    state = await store.readStatus(operationId);
-  }
-  if (state === null) return { status: 'not_found' as const };
-  if (state === 'confirmed') return { status: 'confirmed' as const };
-  // Review is its own recorded state, whichever path (webhook or poll) settled
-  // it first: it is never reported as a completed cancellation. Once an
-  // operator has cleared it the refund itself is done, so it reads confirmed.
-  if (state === 'needs_review') return { status: 'needs_review' as const };
-  if (state === 'reviewed') return { status: 'confirmed' as const };
-  if (state === 'released') {
-    // A released attempt that WAS dispatched can still turn out to have
-    // succeeded at the provider (indexed late). Re-check it: a verified
-    // success settles it, anything else leaves it released.
-    try {
-      const outcome = await runGoalCancelReconciliation({
-        configuration: evidence,
-        providerToken: token,
-        operationId,
-      });
-      if (outcome.status === 'confirmed')
-        return { status: 'confirmed' as const };
-      if (outcome.needsReview === true)
-        return { status: 'needs_review' as const };
-    } catch {
-      // The status answer below is still the recorded state.
-    }
-    return { status: 'released' as const };
-  }
-  if (state === 'issued') return { status: 'not_started' as const };
-  if (state === 'reserved') return { status: 'pending' as const };
-  return publicStatus(
-    await runGoalCancelReconciliation({
-      configuration: evidence,
-      providerToken: token,
+  const provider = {
+    token,
+    baseUrl: getPrimaryWalletProviderOrigin(configuration.environment),
+  };
+  return await finish(
+    await readGoalCancelStatus(store, evidence, token, operationId),
+    {
+      store,
+      provider,
+      evidence,
       operationId,
-    })
+      allowForfeitTransfers: input.allowForfeitTransfers === true,
+    }
   );
 }

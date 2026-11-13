@@ -59,6 +59,7 @@ export const codeOf = (error: unknown) =>
 const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
   'GOAL_NEEDS_REVIEW',
   'GOAL_NOT_FOUND',
+  'GOAL_NOT_SET_UP',
   'NOTHING_TO_REFUND',
   'NOTHING_TO_MOVE',
   'AMOUNT_TOO_LARGE',
@@ -77,6 +78,8 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
       'BUSY',
       'UNAVAILABLE',
       'NOT_FOUND',
+      // The PIN step's "no longer valid, please start again" answer.
+      'OPERATION_INVALID',
     ].map((suffix) => `${K}_${suffix}`)
   ),
 ]);
@@ -94,6 +97,8 @@ export const messageOf = (error: unknown) => {
 /** Refused before anything moved: the customer cannot fix it by starting again. */
 export const NOT_STARTABLE_CODES: readonly string[] = [
   'GOAL_NOT_FOUND',
+  // The goal's PiggyVest setup never finished: nothing to cancel yet.
+  'GOAL_NOT_SET_UP',
   'SAVINGS_NOT_READY',
   'PROFILE_VERIFICATION_REQUIRED',
   'SAVINGS_UNAVAILABLE',

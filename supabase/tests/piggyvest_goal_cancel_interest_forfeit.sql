@@ -815,6 +815,35 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  BEGIN
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'dispatched', amount_kobo = 20, posted_at = pg_catalog.clock_timestamp(),
+           dispatched_at = pg_catalog.clock_timestamp(), alerted_at = NULL
+     WHERE id = v_forfeit::uuid;
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    SELECT forfeit.cancel_operation_id, forfeit.integration_id, forfeit.intent_id, forfeit.goal_id,
+      'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(forfeit.goal_id),
+      forfeit.source_wallet_id, forfeit.destination_wallet_id, 9999999990, pg_catalog.clock_timestamp()
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit WHERE forfeit.id = v_forfeit::uuid;
+    -- Regression: the evidence release names the replacement row in review too
+    -- ('conflict:<id>'), so its page is acknowledged on that row.
+    v_text := piggyvest_primary.release_failed_goal_cancel_forfeit(c_integration, 'staging',
+      pg_temp.gf_forfeit_proof(v_forfeit, 'failed'));
+    PERFORM pg_temp.gc_assert(
+      v_text = 'conflict:' || (SELECT id::text FROM piggyvest_primary.goal_cancel_interest_forfeits
+                                             WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review')
+      -- Regression: the replacement keeps its own amount in review and the
+      -- waiting plan stays sendable.
+      AND (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
+            WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review') = 20
+      AND (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
+            WHERE cancel_operation_id = v_op::uuid AND state = 'reserved') = 9999999990,
+      'an over-ceiling replacement went to review without the caller being told: ' || COALESCE(v_text, '-'));
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
 END
 $unclaim$;
 
@@ -1010,6 +1039,13 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: Earnings deduct production cancels only, bound to the
+  -- merchant, like the receipts they are deducted from.
+  PERFORM pg_temp.gc_assert(
+    (SELECT proc.prosrc FROM pg_catalog.pg_proc AS proc
+      WHERE proc.oid = 'piggyvest_primary.customer_paid_interest(uuid,uuid)'::regprocedure)
+      ~ 'goal_cancel_operations cancel[\s\S]*cancel_integration\.environment=''production''[\s\S]*cancel_integration\.merchant_id=p_merchant',
+    'a sandbox cancel can reduce the customer''s real Earnings');
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
     UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL

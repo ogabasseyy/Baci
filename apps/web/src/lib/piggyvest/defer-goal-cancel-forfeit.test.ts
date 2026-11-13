@@ -21,3 +21,10 @@ it('never lets a failing interest leg throw out of the deferred task', async () 
   deferGoalCancelForfeit(vi.fn().mockRejectedValue(new Error('provider down')));
   await expect(after.mock.calls[0][0]()).resolves.toBeUndefined();
 });
+
+it('bugfix: a scheduling failure never turns a confirmed cancel into an error', () => {
+  after.mockImplementationOnce(() => {
+    throw new Error('after() called outside a request scope');
+  });
+  expect(() => deferGoalCancelForfeit(vi.fn())).not.toThrow();
+});

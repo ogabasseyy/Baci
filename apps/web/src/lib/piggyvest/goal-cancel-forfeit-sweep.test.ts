@@ -61,13 +61,15 @@ beforeEach(() => {
   vi.stubEnv('PIGGYVEST_INTEREST_WALLET_OWNER_ID', 'ogabassey');
   mocks.transfer.mockResolvedValue({ accepted: true });
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
-  mocks.retrieve.mockResolvedValue({
-    id: 'interest-wallet',
+  // The interest destination, and the goal wallet the interest comes from.
+  mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
+    id,
     business_id: 'business',
-    api_customer_id: 'ogabassey',
+    api_customer_id: id === 'interest-wallet' ? 'ogabassey' : 'customer',
     currency: 'NGN',
     status: 'active',
-  });
+    balance: 12000,
+  }));
 });
 
 describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {

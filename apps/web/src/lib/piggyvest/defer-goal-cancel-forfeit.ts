@@ -8,11 +8,16 @@ import { after } from 'next/server';
  * task does not finish.
  */
 export function deferGoalCancelForfeit(task: () => Promise<unknown>): void {
-  after(async () => {
-    try {
-      await task();
-    } catch {
-      // Swept later; never surfaces to the customer.
-    }
-  });
+  try {
+    after(async () => {
+      try {
+        await task();
+      } catch {
+        // Swept later; never surfaces to the customer.
+      }
+    });
+  } catch {
+    // Could not be scheduled (no request scope): the customer's confirmed
+    // answer stands and the daily sweep sends the interest.
+  }
 }

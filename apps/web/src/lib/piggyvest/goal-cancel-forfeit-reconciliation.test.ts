@@ -198,3 +198,26 @@ it('bugfix: acknowledges a settle-conflict page after emitting it, so the sweep 
     evidenceExecute.mock.invocationCallOrder[ack]
   );
 });
+
+it('bugfix: acknowledges the replacement row a failed-record release sent to review, not the proof row', async () => {
+  const reviewId = '88888888-8888-4888-8888-888888888888';
+  evidenceExecute.mockReset();
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({ rows: [{ result: `conflict:${reviewId}` }] })
+    .mockResolvedValueOnce({ rows: [{ result: true }] });
+  await runGoalCancelForfeitReconciliation({
+    configuration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: fetchRecord('failed'),
+  });
+  expect(alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'release_conflict', operationId }
+  );
+  expect(evidenceExecute.mock.calls.at(-1)).toEqual([
+    sql.ack,
+    [integrationId, 'staging', reviewId],
+  ]);
+});

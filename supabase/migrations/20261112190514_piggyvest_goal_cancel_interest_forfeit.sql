@@ -1467,8 +1467,11 @@ BEGIN
   -- Either review outcome (the third rejection, or a replacement that could
   -- not merge under the ceiling) answers conflict, which pages.
   v_outcome := piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
-  IF v_outcome = 'needs_review' OR v_outcome LIKE 'released_needs_review:%' THEN
-    RETURN 'conflict';
+  IF v_outcome = 'needs_review' THEN RETURN 'conflict'; END IF;
+  -- A replacement that went to review as its own row: named, so the caller
+  -- acknowledges that row after paging ('conflict:<forfeit id>').
+  IF v_outcome LIKE 'released_needs_review:%' THEN
+    RETURN 'conflict:' || pg_catalog.substr(v_outcome, pg_catalog.char_length('released_needs_review:') + 1);
   END IF;
   RETURN 'released';
 END;
@@ -1518,6 +1521,12 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
          GREATEST(0, paid.amount - COALESCE((
            SELECT sum(cancel.forfeited_interest_kobo)::numeric
              FROM piggyvest_primary.goal_cancel_operations cancel
+             -- Production cancels only, bound to this merchant, like the
+             -- receipts below: a sandbox cancel never touches real Earnings.
+             JOIN piggyvest_primary.integrations cancel_integration
+               ON cancel_integration.id=cancel.integration_id
+              AND cancel_integration.environment='production'
+              AND cancel_integration.merchant_id=p_merchant
             WHERE cancel.goal_id=paid.goal_id AND cancel.state='confirmed'), 0))
   FROM (
     SELECT receipt.goal_id,sum(receipt.net_kobo-coalesce(reversal.amount,0))::numeric AS amount

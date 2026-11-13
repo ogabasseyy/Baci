@@ -242,13 +242,14 @@ export async function deliverPaidImeiLookup(
       tier: lookup.tier,
     });
     // Recorded only once the result is durably saved (the helper answers 200
-    // even when saving failed). Unsaved, the claim stays and a later reclaim
-    // refunds, so a paid result is never left unrecoverable.
+    // even when saving failed). Unsaved, the result is never shown: the claim
+    // stays, and a later reclaim either finds it saved or refunds, so the
+    // customer never keeps both the result and the refund (Muse high).
     const saved = await deps.readStatus(lookup.id).catch(() => null);
-    if (saved === 'completed')
-      await deps
-        .finish(operationId, 'fulfilled', claim.claimToken)
-        .catch(() => 'conflict');
+    if (saved !== 'completed') return pending('delivering');
+    await deps
+      .finish(operationId, 'fulfilled', claim.claimToken)
+      .catch(() => 'conflict');
     return response;
   }
   // Anything but a definite failure (an unexpected non-terminal answer)

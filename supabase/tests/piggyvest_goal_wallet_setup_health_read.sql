@@ -47,6 +47,12 @@ VALUES (pg_temp.goal(16), 'a4300000-0000-4000-8000-000000000002',
   'a4300000-0000-4000-8000-000000000003', 'a4300000-0000-4000-8000-000000000004',
   'Goal health 16', 'cancelled', 'manual', 100000, 0, 20000, 'daily',
   current_date, current_date + 30, now(), now());
+-- An earlier replay check may have left an integration bound to this login
+-- (executor_login is unique): retire it inside this rolled-back transaction.
+UPDATE piggyvest_primary.integrations SET executor_login = 'retired-' || id::text
+  WHERE executor_login = SESSION_USER;
+UPDATE piggyvest_primary.inflow_authorities SET executor_login = 'retired-' || integration_id::text
+  WHERE executor_login = SESSION_USER;
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a4300000-0000-4000-8000-000000000005', 'a4300000-0000-4000-8000-000000000002',
     'goal-health-business', 'staging', session_user, true);

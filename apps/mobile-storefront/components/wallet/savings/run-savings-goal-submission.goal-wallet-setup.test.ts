@@ -18,8 +18,9 @@ jest.mock('expo-crypto', () => ({ randomUUID: () => 'goal-key' }));
 jest.mock('@/lib/customer-savings', () => ({
   createSavingsGoal: (...args: unknown[]) => mockCreateSavingsGoal(...args),
 }));
+const mockScheduleReminder = jest.fn(async () => 'reminder');
 jest.mock('@/services/savings-reminder-notifications', () => ({
-  scheduleSavingsReminderNotification: jest.fn(async () => 'reminder'),
+  scheduleSavingsReminderNotification: () => mockScheduleReminder(),
   cancelSavingsReminderNotification: jest.fn(async () => true),
 }));
 jest.mock('@/components/ui/show-app-alert', () => ({
@@ -97,6 +98,25 @@ describe('bugfix: a new PiggyVest plan was left “still being set up”', () =>
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('bugfix: schedules the plan reminder before waiting on a slow setup', async () => {
+    let finish: () => void = () => undefined;
+    const input = createInput({
+      effectiveInitialContribution: 0,
+      startGoalWalletSetup: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    const run = runSavingsGoalSubmission(input, validation);
+    // The setup start has not answered, yet the reminder is already set.
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+    expect(mockScheduleReminder).toHaveBeenCalledTimes(1);
+    expect(input.setShowSuccessModal).not.toHaveBeenCalled();
+    finish();
+    await run;
+    expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
 
   it('starts no setup when the plan could not be created', async () => {

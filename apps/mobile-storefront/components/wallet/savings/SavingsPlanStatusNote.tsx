@@ -171,7 +171,9 @@ function StatusNoteView({
   if (phase === 'idle' || phase === 'loading' || phase === 'ready') return null;
   // While PiggyVest is slow, a failed check is not alarming news: keep the
   // calm card (the shared notice explains) and keep checking.
-  if (phase === 'error' && slowdown)
+  // The same while this note's own checks are still running past their
+  // first minute (its last quick read failed): they have not given up.
+  if (phase === 'error' && (slowdown || slow))
     return (
       <SavingsPlanGettingReady
         colors={colors}

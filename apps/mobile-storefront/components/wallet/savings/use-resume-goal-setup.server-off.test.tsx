@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 import {
+  loadPlanInterestAnswer,
   rememberPlanInterestAnswer,
   resetPlanInterestAnswers,
 } from './plan-interest-answers';
@@ -70,6 +71,25 @@ describe('useResumeGoalSetup with PiggyVest off', () => {
       const { submit } = setup({ phase: 'pending' });
       await act(async () => {});
       expect(submit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bugfix: after an app restart the question was asked again', () => {
+    it('finishes setup with the answer saved on the device', async () => {
+      await rememberPlanInterestAnswer('goal-1', true);
+      resetPlanInterestAnswers(); // the app restarted
+      const { submit } = setup({ phase: 'not_started' });
+      await act(async () => {});
+      await act(async () => {});
+      expect(submit).toHaveBeenCalledWith(true);
+    });
+
+    it('forgets the saved answer once the plan is ready', async () => {
+      await rememberPlanInterestAnswer('goal-1', true);
+      setup({ phase: 'ready' });
+      await act(async () => {});
+      resetPlanInterestAnswers();
+      expect(await loadPlanInterestAnswer('goal-1')).toBeNull();
     });
   });
 });

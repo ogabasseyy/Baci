@@ -182,18 +182,24 @@ export async function runSavingsGoalSubmission(
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.onHandOffPending?.(result.goalId);
     }
-    if (input.startGoalWalletSetup) {
-      // Kept so the sheet can finish setup if this start never lands.
-      if (typeof input.interestChoice === 'boolean')
-        rememberPlanInterestAnswer(result.goalId, input.interestChoice);
-      await startSetupBriefly(input.startGoalWalletSetup, result.goalId);
-    }
+    // Kept (also on the device) so the sheet can finish setup if this start
+    // never lands, even after a restart.
+    if (input.startGoalWalletSetup && typeof input.interestChoice === 'boolean')
+      await rememberPlanInterestAnswer(result.goalId, input.interestChoice);
+    // Started now but waited for only after the reminder is scheduled, so a
+    // slow start can never leave a created plan without its reminder.
+    const setupStart = input.startGoalWalletSetup
+      ? startSetupBriefly(input.startGoalWalletSetup, result.goalId)
+      : Promise.resolve();
     if (requestIdempotencyKey) {
       input.setInitialContributionIdempotencyKey((currentKey) =>
         currentKey === requestIdempotencyKey ? null : currentKey
       );
     }
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      await setupStart;
+      return;
+    }
     if (input.sourceMode === 'manual') {
       try {
         // A deferred transfer is unconfirmed: the goal is created with an
@@ -224,6 +230,7 @@ export async function runSavingsGoalSubmission(
         // Reminder scheduling is best effort and must not block goal creation.
       }
     }
+    await setupStart;
     if (!isCurrent()) return;
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.setShowFundingModal(false);

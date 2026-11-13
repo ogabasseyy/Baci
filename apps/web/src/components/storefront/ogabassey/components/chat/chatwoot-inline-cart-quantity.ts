@@ -82,7 +82,7 @@ export async function handleChatwootInlineCartQuantity(input: {
     input.onSessionTokenRenewed?.(mutation.sessionToken);
   }
   if (
-    (mutation?.accepted === true || refreshRequired) &&
+    (mutation?.accepted === true || refreshRequired || mutation === null) &&
     input.isCurrentCartContext()
   ) {
     try {

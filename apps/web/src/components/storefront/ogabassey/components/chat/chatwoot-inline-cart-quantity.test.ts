@@ -98,6 +98,29 @@ describe('handleChatwootInlineCartQuantity', () => {
     expect(value.post).not.toHaveBeenCalled();
   });
 
+  it('refreshes the same cart after a transport failure with an unknown commit outcome', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
+    const value = input();
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: false,
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('does not refresh after transport failure when the cart context changed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
+    const value = input({ isCurrentCartContext: () => false });
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).not.toHaveBeenCalled();
+  });
+
   it('surfaces refresh-required and refreshes the snapshot on conflict', async () => {
     vi.stubGlobal(
       'fetch',

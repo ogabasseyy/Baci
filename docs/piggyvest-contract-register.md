@@ -388,7 +388,10 @@ Migration `20261112161500_piggyvest_wallet_pay`, flag
 `PIGGYVEST_KILL_SWITCH`; airtime, data and bills also need
 `PIGGYVEST_WALLET_PAY_UTILITIES_ENABLED`, so switching on IMEI never switches
 them on), collection wallet `PIGGYVEST_COLLECTION_WALLET_ID`
-(must equal the `piggyvest_primary.collection_wallets` row). Nothing has been
+(must equal the `piggyvest_primary.collection_wallets` row). After a rotation,
+`PIGGYVEST_COLLECTION_WALLET_PREVIOUS_IDS` (comma-separated, default empty)
+lets refunds already owed from an old collection wallet still be sent; new
+payments only ever go to the current one. Nothing has been
 run against PiggyVest for this flow.
 
 | Contract point | Status | Source / what the code does |

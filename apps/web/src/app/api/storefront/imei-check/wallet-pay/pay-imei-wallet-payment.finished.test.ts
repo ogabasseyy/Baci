@@ -77,4 +77,22 @@ describe('payImeiWalletPayment on a finished lookup', () => {
     expect(d.deliver).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
   });
+
+  it('bugfix: a refunded payment reaches its refunded outcome even when the IMEI no longer matches (Codex P2)', async () => {
+    const d = deps({
+      readLookup: vi.fn(
+        async () => ({ ...lookup, imei_hash: 'f'.repeat(64) }) as never
+      ),
+      check: vi.fn(
+        async () =>
+          ({ ...payment('confirmed'), fulfilment: 'refunded' }) as never
+      ),
+    });
+    const response = await payImeiWalletPayment(
+      { lookupId: LOOKUP, body: { ...body, pinProof: '' }, auth: {} as never },
+      d
+    );
+    expect(d.deliver).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(200);
+  });
 });

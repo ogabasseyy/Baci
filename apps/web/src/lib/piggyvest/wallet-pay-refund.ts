@@ -10,8 +10,10 @@ import {
 } from './wallet-pay-send-once';
 
 export interface WalletRefundPorts {
-  // From server configuration only; must equal the refund's source.
+  // From server configuration only; the refund's source must be the current
+  // collection wallet or one allowlisted from before a rotation.
   collectionWalletId: string;
+  previousCollectionWalletIds?: readonly string[];
   readOwed: (paymentId: string) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   claimDispatch: (refundId: string) => Promise<boolean>;
@@ -26,9 +28,16 @@ export interface WalletRefundPorts {
 
 async function checkWallets(
   refund: WalletPayRefundReservation,
-  ports: Pick<WalletRefundPorts, 'retrieveWallet' | 'collectionWalletId'>
+  ports: Pick<
+    WalletRefundPorts,
+    'retrieveWallet' | 'collectionWalletId' | 'previousCollectionWalletIds'
+  >
 ): Promise<'ok' | 'unfunded' | 'unavailable'> {
-  if (refund.sourceWalletId !== ports.collectionWalletId) return 'unavailable';
+  const sources = [
+    ports.collectionWalletId,
+    ...(ports.previousCollectionWalletIds ?? []),
+  ];
+  if (!sources.includes(refund.sourceWalletId)) return 'unavailable';
   try {
     const collection = schemas.wallet.parse(
       await ports.retrieveWallet(refund.sourceWalletId)

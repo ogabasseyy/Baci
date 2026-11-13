@@ -99,14 +99,18 @@ export function ImeiCheckFormView({
   const { isKeyboardVisible } = useKeyboard();
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
   const isWalletReady = !(isWalletLoading || isWalletError);
-  // With paying from PiggyVest on, the badge shows the savings wallet it
-  // pays from, never a store credit ₦0 that reads as empty.
-  const savingsKobo = walletPay?.savingsKobo ?? null;
   const paysFromPiggyvest =
     selectedTier !== null &&
     isWalletReady &&
     walletBalance < currentTier.price &&
     walletPay?.covers(selectedTier) === true;
+  // With paying from PiggyVest on, the badge shows the savings wallet while
+  // it is what pays (or before a check is chosen), never a store credit ₦0
+  // that reads as empty; otherwise the store credit the check spends.
+  const savingsKobo =
+    selectedTier === null || paysFromPiggyvest
+      ? (walletPay?.savingsKobo ?? null)
+      : null;
   const hasEnoughBalance =
     isWalletReady && (walletBalance >= currentTier.price || paysFromPiggyvest);
   const needsTopUp =

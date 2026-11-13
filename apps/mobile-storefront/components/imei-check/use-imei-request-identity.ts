@@ -7,6 +7,11 @@ interface ImeiRequestIdentity {
   tier: ImeiServiceTierKey;
 }
 
+// One device, one identity, however it was typed (spaces, dashes, case):
+// the same rule the wallet pay purchase key uses.
+const normalize = (identifier: string) =>
+  identifier.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
 export function useImeiRequestIdentity(createKey: () => string) {
   const active = useRef<ImeiRequestIdentity | null>(null);
 
@@ -20,11 +25,12 @@ export function useImeiRequestIdentity(createKey: () => string) {
      */
     retains(tier: ImeiServiceTierKey, identifier: string) {
       return (
-        active.current?.identifier === identifier &&
+        active.current?.identifier === normalize(identifier) &&
         active.current.tier === tier
       );
     },
-    get(tier: ImeiServiceTierKey, identifier: string) {
+    get(tier: ImeiServiceTierKey, raw: string) {
+      const identifier = normalize(raw);
       if (
         active.current?.identifier === identifier &&
         active.current.tier === tier

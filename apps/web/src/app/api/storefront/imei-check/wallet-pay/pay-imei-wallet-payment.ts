@@ -137,14 +137,17 @@ export async function payImeiWalletPayment(
   });
   if (result.status !== 'confirmed')
     return payResponse(result, body.operationId);
-  if (!matches || normalizedImei === null) return mismatch();
+  // A finished lookup answers with its own saved result (no new delivery
+  // needs the IMEI), even if the IMEI hash salt rotated since (Codex P1).
+  const finished = lookup.status !== 'pending';
+  if (!finished && (!matches || normalizedImei === null)) return mismatch();
   try {
     return await deps.deliver({
       runtime,
       identity,
       lookup,
       operationId: body.operationId,
-      normalizedImei,
+      normalizedImei: normalizedImei ?? '',
     });
   } catch (error) {
     if (error instanceof WalletPaymentMismatchError)

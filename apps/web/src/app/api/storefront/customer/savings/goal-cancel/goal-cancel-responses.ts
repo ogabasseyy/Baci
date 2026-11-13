@@ -39,10 +39,12 @@ export const PUBLIC_STATUSES: ReadonlySet<string> = new Set([
 
 // One truthful answer for every released attempt: a provider rejection and a
 // cancel refused before anything moved (for example no interest wallet
-// configured) both leave the savings untouched, and the customer can retry.
+// configured) both leave the savings untouched. It does not invite a retry: a
+// held attempt can not be retried until our team clears it (the next start
+// then says it is under review).
 export const REJECTED = (): NextResponse =>
   refuse(
-    'This cancellation did not go through. Nothing was moved and your savings are unchanged. You can try again later.',
+    'This cancellation did not go through. Nothing was moved and your savings are unchanged.',
     'CANCEL_REJECTED',
     409
   );

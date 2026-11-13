@@ -130,9 +130,11 @@ describe('bugfix: a cancel refused for a missing interest wallet read as a Piggy
     const payload = await response.json();
     expect(payload.code).toBe('CANCEL_REJECTED');
     expect(payload.error).toBe(
-      'This cancellation did not go through. Nothing was moved and your savings are unchanged. You can try again later.'
+      'This cancellation did not go through. Nothing was moved and your savings are unchanged.'
     );
     expect(payload.error).not.toMatch(/PiggyVest/);
+    // Regression: never invites a retry the hold would refuse.
+    expect(payload.error).not.toMatch(/try again/i);
   });
 });
 

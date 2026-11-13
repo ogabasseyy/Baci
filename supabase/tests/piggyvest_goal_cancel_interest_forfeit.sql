@@ -194,8 +194,16 @@ BEGIN
       -- it until a page is acknowledged.
       AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NULL
       AND pg_temp.gf_work(10, true) @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
-            'operationId', v_op, 'state', 'needs_review', 'alert', true)),
-      'money left in the goal wallet after the forfeit was not reviewed, or its page could be lost');
+            'operationId', v_op, 'state', 'needs_review', 'alert', true))
+      -- Regression: once the evidence side has paged it and acknowledged,
+      -- the sweep does not page the same review again.
+      AND piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(c_integration, 'staging', v_forfeit::uuid)
+      AND NOT pg_catalog.jsonb_path_exists(pg_temp.gf_work(10, true), '$[*] ? (@.alert == true)')
+      AND has_function_privilege('piggyvest_primary_evidence',
+            'piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(uuid,text,uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('piggyvest_primary_authorizer',
+            'piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(uuid,text,uuid)', 'EXECUTE'),
+      'money left in the goal wallet after the forfeit was not reviewed, or its page could be lost or repeated');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -750,28 +758,30 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'pending',
     'a fresh claim was taken back');
-  -- A merge that would pass the per-transfer ceiling goes to review, never
-  -- truncated.
+  -- A merge that would pass the per-transfer ceiling goes to review as its
+  -- own row with its full amount; the unsent plan stays sendable.
   BEGIN
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'reserved', dispatched_at = NULL,
            amount_kobo = 9999999990, alerted_at = pg_catalog.clock_timestamp()
      WHERE id = v_forfeit::uuid;
     PERFORM pg_temp.gf_receipt('gf-overflow', 20);
+    -- Regression: the payout's amount is kept on the review row, never
+    -- dropped, and the waiting plan is not frozen with it.
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
-      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 9999999990,
-      'an overflowing merge was truncated instead of going to review');
+      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 20
+      AND (SELECT state || '/' || amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
+            WHERE id = v_forfeit::uuid) = 'reserved/9999999990',
+      'an overflowing merge was truncated, dropped, or froze the waiting plan');
     -- Nobody was paged by the payout: the sweep lists it with an alert until
     -- it acknowledges the page.
     PERFORM pg_temp.gc_assert(
-      pg_temp.gf_work(10, true)
-        = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      pg_temp.gf_work(10, true) @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
             'operationId', v_op, 'state', 'needs_review', 'alert', true))
-      AND pg_temp.gf_work(10, true)
-        = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      AND pg_temp.gf_work(10, true) @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
             'operationId', v_op, 'state', 'needs_review', 'alert', true))
       AND piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(c_integration, 'staging',
             pg_temp.gf_forfeit(v_op, 'id')::uuid)
-      AND pg_temp.gf_work(10, true) = '[]'::jsonb,
+      AND NOT pg_catalog.jsonb_path_exists(pg_temp.gf_work(10, true), '$[*] ? (@.alert == true)'),
       'a review nobody was paged about was not paged until acknowledged');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
@@ -794,7 +804,13 @@ BEGIN
     v_text := piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release');
     PERFORM pg_temp.gc_assert(
       v_text = 'released_needs_review:' || (SELECT id::text FROM piggyvest_primary.goal_cancel_interest_forfeits
-                                             WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'),
+                                             WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review')
+      -- Regression: the replacement keeps its own amount in review and the
+      -- waiting plan stays sendable.
+      AND (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
+            WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review') = 20
+      AND (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_interest_forfeits
+            WHERE cancel_operation_id = v_op::uuid AND state = 'reserved') = 9999999990,
       'an over-ceiling replacement went to review without the caller being told: ' || COALESCE(v_text, '-'));
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
@@ -822,6 +838,7 @@ DO $ceiling$
 DECLARE
   c_goal constant uuid := 'f3860000-0000-4000-8000-000000000005';
   v_op text;
+  v_before numeric;
   v_forfeit text;
   v_result jsonb;
 BEGIN
@@ -924,6 +941,51 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: interest forfeited by an early cancel leaves the customer's
+  -- Earnings (it was still counted there after the transfer went out).
+  BEGIN
+    UPDATE piggyvest_primary.integrations SET environment = 'production'
+     WHERE id = 'f3860000-0000-4000-8000-000000000006';
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    PERFORM pg_temp.gf_receipt('gf-earned', 12000, pg_catalog.clock_timestamp() - interval '1 day');
+    v_before := COALESCE((SELECT amount FROM piggyvest_primary.customer_paid_interest(
+      'f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003') WHERE goal_id = c_goal), 0);
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at, dispatched_at, settled_at,
+      provider_transaction_id)
+    SELECT forfeit.cancel_operation_id, forfeit.integration_id, forfeit.intent_id, forfeit.goal_id, 'confirmed',
+      piggyvest_primary.next_goal_cancel_forfeit_reference(forfeit.goal_id), forfeit.source_wallet_id,
+      forfeit.destination_wallet_id, 12000, pg_catalog.clock_timestamp(), pg_catalog.clock_timestamp(),
+      pg_catalog.clock_timestamp(), 'synthetic-gf-earned'
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit LIMIT 1;
+    PERFORM pg_temp.gc_assert(
+      COALESCE((SELECT amount FROM piggyvest_primary.customer_paid_interest(
+        'f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003') WHERE goal_id = c_goal), 0)
+        = v_before - 12000
+      AND v_before >= 12000,
+      'forfeited interest is still shown in the customer''s Earnings: ' || v_before::text);
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a forfeit claimed but never posted is released with its
+  -- cancel, not left dispatched behind a released attempt.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('claimed-unposted');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'unposted split');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'dispatched', dispatched_at = pg_catalog.clock_timestamp()
+     WHERE cancel_operation_id = v_op::uuid;
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0)
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'released',
+      'a claimed but unposted forfeit was stranded behind a released cancel');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
     UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL
@@ -1018,6 +1080,7 @@ BEGIN
     'piggyvest_primary.find_dispatched_goal_cancel_forfeit_by_reference(uuid,text,text)',
     'piggyvest_primary.lock_goal_cancel_forfeit_for_proof(piggyvest_primary.integrations,jsonb)',
     'piggyvest_primary.settle_goal_cancel_forfeit(uuid,text,jsonb)',
+    'piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(uuid,text,uuid)',
     'piggyvest_primary.release_failed_goal_cancel_forfeit(uuid,text,jsonb)',
     'piggyvest_primary.release_unsent_goal_cancel_forfeit()',
     'piggyvest_primary.block_in_flight_goal_cancel_forfeit_customer_deletion()',

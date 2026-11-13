@@ -19,6 +19,7 @@ it('calls only the forfeit functions of migration 20261112190514', () => {
     'find_dispatched_goal_cancel_forfeit_by_reference',
     'settle_goal_cancel_forfeit',
     'release_failed_goal_cancel_forfeit',
+    'ack_goal_cancel_forfeit_alert_evidence',
   ]);
 });
 

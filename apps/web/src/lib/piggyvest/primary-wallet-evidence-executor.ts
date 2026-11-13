@@ -21,6 +21,7 @@ const statements = new Set([
   GOAL_CANCEL_FORFEIT_STATEMENTS.findByReference,
   GOAL_CANCEL_FORFEIT_STATEMENTS.settle,
   GOAL_CANCEL_FORFEIT_STATEMENTS.release,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.ack,
   GOAL_COMPLETE_STATEMENTS.readDispatched,
   GOAL_COMPLETE_STATEMENTS.findByReference,
   GOAL_COMPLETE_STATEMENTS.settle,
@@ -34,6 +35,7 @@ const statements = new Set([
 const operationIdStatements = new Set<string>([
   GOAL_CANCEL_STATEMENTS.readDispatched,
   GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.ack,
   GOAL_COMPLETE_STATEMENTS.readDispatched,
   GOAL_COMPLETE_STATEMENTS.readPurchaseAlert,
   GOAL_COMPLETE_STATEMENTS.markPurchaseAlerted,

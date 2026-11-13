@@ -56,10 +56,31 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
   assert.match(fastfile, /record_github_app_store_submission\("skipped"\)/);
   assert.match(fastfile, /record_github_app_store_submission\("submitted"\)/);
   assert.match(manualSubmission.text, /id: submit/);
+  assert.match(manualSummary.text, /steps\.submit\.outcome != 'skipped'/);
   assert.match(manualSummary.text, /steps\.submit\.outputs\.app_store_submission/);
+  assert.match(manualSummary.text, /SUBMISSION_OUTCOME: \$\{\{ steps\.submit\.outcome \}\}/);
   assert.match(manualSummary.run, /submitted the iOS build for App Store review/);
   assert.match(manualSummary.run, /skipped App Store submission because the App Store version slot is occupied/);
   assert.match(manualSummary.run, /Fastlane completed without recording/);
+  const runManualSummary = (outcome) => {
+    const directory = mkdtempSync(join(tmpdir(), 'ios-submit-summary-'));
+    const summaryPath = join(directory, 'summary.md');
+    try {
+      execFileSync('bash', ['-c', manualSummary.run], {
+        env: {
+          ...process.env,
+          SUBMISSION_OUTCOME: outcome,
+          SUBMISSION_RESULT: '',
+          GITHUB_STEP_SUMMARY: summaryPath,
+        },
+      });
+      return readFileSync(summaryPath, 'utf8');
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  };
+  assert.match(runManualSummary('failure'), /App Store submission failed/);
+  assert.match(runManualSummary('cancelled'), /App Store submission was cancelled/);
   assert.match(manualWorkflow, /build_number:\n\s+description:.*\n\s+required: true/);
   assert.match(manualWorkflow, /app_version:\n\s+description:.*\n\s+required: true/);
 });

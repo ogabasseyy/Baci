@@ -131,11 +131,16 @@ jobs:
         run: bundle exec fastlane ios submit
 
       - name: Record submission mode
-        if: ${{ always() && steps.submit.outcome == 'success' }}
+        if: ${{ always() && steps.submit.outcome != 'skipped' }}
         env:
+          SUBMISSION_OUTCOME: ${{ steps.submit.outcome }}
           SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
         run: |
-          if [ "$SUBMISSION_RESULT" = "submitted" ]; then
+          if [ "$SUBMISSION_OUTCOME" = "failure" ]; then
+            echo 'App Store submission failed. Inspect the Fastlane submit logs.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_OUTCOME" = "cancelled" ]; then
+            echo 'App Store submission was cancelled. Inspect the workflow run before retrying.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_RESULT" = "submitted" ]; then
             echo 'This run submitted the iOS build for App Store review.' >> "$GITHUB_STEP_SUMMARY"
           elif [ "$SUBMISSION_RESULT" = "skipped" ]; then
             echo 'This run skipped App Store submission because the App Store version slot is occupied.' >> "$GITHUB_STEP_SUMMARY"

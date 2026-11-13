@@ -460,6 +460,14 @@ BEGIN
     AND NOT piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(c_integration, 'staging', v_forfeit::uuid)
     AND pg_temp.gf_work(10, true) -> 0 ->> 'alert' = 'false',
     'an acknowledged overdue forfeit paged again');
+  -- Regression: still stuck a day after that page, it is paged again.
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+     SET alerted_at = pg_catalog.clock_timestamp() - interval '2 days' WHERE id = v_forfeit::uuid;
+  PERFORM pg_temp.gc_assert(
+    pg_temp.gf_work(10, true) -> 0 ->> 'alert' = 'true'
+    AND piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(c_integration, 'staging', v_forfeit::uuid)
+    AND pg_temp.gf_work(10, true) -> 0 ->> 'alert' = 'false',
+    'a transfer still stuck a day after its page was never paged again');
   -- An already-paged stuck transfer never starves newer work: an unsent
   -- forfeit of another cancel comes first in a window of one.
   INSERT INTO piggyvest_primary.goal_cancel_operations (

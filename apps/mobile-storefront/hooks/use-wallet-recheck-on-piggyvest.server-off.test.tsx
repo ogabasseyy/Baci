@@ -1,6 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import type { QueryClient } from '@tanstack/react-query';
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 import { useWalletRecheckOnPiggyvest } from './use-wallet-recheck-on-piggyvest';
 
 let mockCapability: boolean | null = false;
@@ -195,5 +199,37 @@ describe('bugfix: persisted wallet restored after the positive verdict', () => {
       queryKey: KEY,
       exact: true,
     });
+  });
+});
+
+describe('bugfix: cached PiggyVest wallet kept after a rollback to not ready', () => {
+  it('refetches a PiggyVest-shaped wallet when the verdict rolls back', () => {
+    // Arrange: PiggyVest confirmed and a PiggyVest wallet cached.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    mockCapability = true;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = { invalidateQueries } as unknown as QueryClient;
+    const wallet = {
+      balance: 0,
+      loyalty_points: 0,
+      primary_balance_kobo: 500_000,
+    };
+    renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY, wallet)
+    );
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    // Act: a mounted funding call answers NOT_READY and rolls back.
+    act(() => {
+      observePiggyvestPrimaryCapability('merchant-1', false);
+    });
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: KEY,
+      exact: true,
+    });
+    clearObservedPiggyvestPrimaryCapability();
   });
 });

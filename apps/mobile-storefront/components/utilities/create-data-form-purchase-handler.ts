@@ -23,6 +23,7 @@ import {
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
+import { payFromPiggyvestIfCovered } from './vtu-wallet-pay-store';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -119,9 +120,9 @@ export function createDataFormPurchaseHandler({
       setIsSubmitting(false);
       return;
     }
-    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
-    // signs with — a charged-but-unanswered retry must bypass the
-    // balance gate instead of stranding behind top-up.
+    if (payFromPiggyvestIfCovered(request, onSuccess, phoneNumber))
+      return void setIsSubmitting(false);
+    // Retained-replay peek (R65): a charged retry bypasses the gate.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
     if (
       !ensureUtilityWalletReady({

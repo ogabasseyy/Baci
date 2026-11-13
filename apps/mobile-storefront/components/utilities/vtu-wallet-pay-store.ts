@@ -1,0 +1,73 @@
+import { create } from 'zustand';
+import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
+import type { VtuWalletPayResult } from './vtu-wallet-pay-adapter';
+
+export type VtuWalletPayPending = {
+  request: VtuWalletPayRequest;
+  onDelivered: (result: VtuWalletPayResult) => void;
+};
+
+type State = {
+  /** Set by the screen's host: whether the PiggyVest wallet pays this. */
+  covers: (amount: number) => boolean;
+  pending: VtuWalletPayPending | null;
+};
+
+/**
+ * Hands a purchase from the airtime, data or bill form to the one PiggyVest
+ * pay sheet on the utilities screen (VtuWalletPayHost). Until a host says
+ * otherwise nothing is covered, so the forms keep their store credit flow.
+ */
+export const useVtuWalletPayStore = create<State>(() => ({
+  covers: () => false,
+  pending: null,
+}));
+
+/**
+ * Opens the PiggyVest pay sheet for this purchase when the PiggyVest wallet
+ * covers it (and no other is open). False = carry on with store credit.
+ */
+export function openVtuWalletPay(
+  request: VtuWalletPayRequest,
+  onDelivered: (result: VtuWalletPayResult) => void
+): boolean {
+  const state = useVtuWalletPayStore.getState();
+  if (state.pending || !state.covers(request.amount)) return false;
+  useVtuWalletPayStore.setState({ pending: { request, onDelivered } });
+  return true;
+}
+
+export function clearVtuWalletPay() {
+  useVtuWalletPayStore.setState({ pending: null });
+}
+
+export type VtuPiggyvestSuccess = {
+  amount: number;
+  customerIdentifier: string;
+  reference: string;
+  status: 'successful';
+  voucherPin?: string;
+  address?: string;
+};
+
+/**
+ * A form's hand-over: pays this purchase from the PiggyVest wallet when it
+ * covers it, reporting success the way the form's store credit path does.
+ * False = carry on with store credit, exactly as before.
+ */
+export function payFromPiggyvestIfCovered(
+  request: VtuWalletPayRequest & { customerAddress?: string },
+  onSuccess: (result: VtuPiggyvestSuccess) => void,
+  customerIdentifier: string
+): boolean {
+  return openVtuWalletPay(request, (result) =>
+    onSuccess({
+      amount: result.amount ?? request.amount,
+      customerIdentifier,
+      reference: result.reference,
+      status: 'successful',
+      ...(result.voucherPin ? { voucherPin: result.voucherPin } : {}),
+      ...(request.customerAddress ? { address: request.customerAddress } : {}),
+    })
+  );
+}

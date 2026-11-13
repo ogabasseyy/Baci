@@ -28,6 +28,7 @@ import type {
   UtilityPurchaseResult,
   ValidUtilityType,
 } from '@/components/utilities/utility-purchase.types';
+import { VtuWalletPayHost } from '@/components/utilities/VtuWalletPayHost';
 import Colors from '@/constants/Colors';
 import {
   invalidateWalletBalanceQueries,
@@ -264,6 +265,7 @@ export default function UtilityPurchaseScreen() {
           visitedTypes={visitedTypes}
         />
       </AppKeyboardContainer>
+      <VtuWalletPayHost colors={colors} />
     </StorefrontScreenShell>
   );
 }

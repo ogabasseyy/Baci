@@ -7,6 +7,10 @@ import {
 import { usePlanStillSettingUp } from './use-plan-still-setting-up';
 
 let mockPrimary = true;
+const mockPrimaryReady = true;
+jest.mock('../WalletPrimaryContext', () => ({
+  useWalletPrimaryReady: () => mockPrimaryReady,
+}));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: 'merchant-1' } }));
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: () => mockPrimary,

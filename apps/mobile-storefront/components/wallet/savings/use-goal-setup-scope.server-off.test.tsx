@@ -3,6 +3,10 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useGoalSetupScope } from './use-goal-setup-scope';
 
 let mockPrimary = false;
+let mockPrimaryReady = true;
+jest.mock('../WalletPrimaryContext', () => ({
+  useWalletPrimaryReady: () => mockPrimaryReady,
+}));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: 'merchant-1' } }));
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: () => mockPrimary,
@@ -43,5 +47,12 @@ describe('useGoalSetupScope', () => {
     expect(scope(goal({ source_mode: 'auto_debit' })).checked).toBe(false);
     expect(scope(goal({ status: 'completed' })).checked).toBe(false);
     expect(scope(null).checked).toBe(false);
+  });
+
+  it('bugfix: checks nothing for a customer still on the legacy wallet', () => {
+    mockPrimary = true;
+    mockPrimaryReady = false;
+    expect(scope(goal()).checked).toBe(false);
+    mockPrimaryReady = true;
   });
 });

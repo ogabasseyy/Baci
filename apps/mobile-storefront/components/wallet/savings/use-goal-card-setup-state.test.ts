@@ -15,6 +15,10 @@ const mockPollInput = jest.fn();
 const mockPollSince = jest.fn();
 const mockPollPaused = jest.fn();
 
+let mockPrimaryReady = true;
+jest.mock('../WalletPrimaryContext', () => ({
+  useWalletPrimaryReady: () => mockPrimaryReady,
+}));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: 'merchant-1' } }));
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: () => mockPrimary,
@@ -61,6 +65,7 @@ beforeEach(() => {
   mockPhase = 'loading';
   mockPrimary = true;
   mockUserId = 'user-1';
+  mockPrimaryReady = true;
 });
 
 describe('useGoalCardSetupState', () => {
@@ -130,6 +135,15 @@ describe('useGoalCardSetupState', () => {
       'pending'
     );
     expect(run()).toBe('getting_ready');
+  });
+
+  it('bugfix: keeps the Add to savings card for a customer still on the legacy wallet', () => {
+    mockPhase = 'pending';
+    mockPrimaryReady = false;
+    expect(run()).toBeNull();
+    expect(mockFundingInput).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalId: null, loadExisting: false })
+    );
   });
 
   it('reads nothing for legacy merchants, auto-debit or finished plans, or signed-out customers', () => {

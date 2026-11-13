@@ -76,9 +76,11 @@ export async function claimDegradedPage(
   lastPagedAt.set(reason, nowMs);
   const sharedResult = await shared(reason);
   const allowed = sharedResult ?? isTopOfHourRun(nowMs);
-  // Keep the mark only when this copy paged or another copy did; a run that
-  // could not ask Redis and was outside the window tries again next run.
-  if (!allowed && sharedResult === null) {
+  // Keep the mark only when this copy paged. When it did not (another copy
+  // holds the claim, or Redis could not be asked outside the window), put
+  // back the earlier mark, so the next page is not pushed past the shared
+  // claim's own expiry.
+  if (!allowed) {
     if (last === undefined) lastPagedAt.delete(reason);
     else lastPagedAt.set(reason, last);
   }

@@ -115,6 +115,19 @@ describe('runPiggyvestDegradedHealth', () => {
     expect(d.emitAlert).toHaveBeenCalledTimes(2);
   });
 
+  it('bugfix: waits for the alert send before returning', async () => {
+    let finished = false;
+    const d = deps({ stuck: 3 });
+    d.value.emitAlert = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      finished = true;
+      return true;
+    });
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+    await runPiggyvestDegradedHealth({ env, deps: d.value });
+    expect(finished).toBe(true);
+  });
+
   it('pages stalled goal-wallet setups once per hour, counts only', async () => {
     const d = deps({ stalled: 3 });
     const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });

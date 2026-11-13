@@ -15,7 +15,12 @@ import {
 import { isPiggyvestFeatureFlagSet } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { readPrimaryWalletSavingsRecoveryRuntime } from './primary-wallet-savings-runtime';
-import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+import {
+  logPiggyvestWebhookAlert,
+  type PiggyvestWebhookAlertCode,
+  type PiggyvestWebhookAlertDetail,
+  sendPiggyvestWebhookAlertDelivered,
+} from './webhook-alerts';
 
 /**
  * Read-only degraded-health check. Off until PIGGYVEST_DEGRADED_ALERTS_ENABLED
@@ -39,7 +44,14 @@ const MS_PER_HOUR = 3_600_000;
 export interface DegradedHealthDeps {
   readRuntime: typeof readPrimaryWalletSavingsRecoveryRuntime;
   createExecutor: typeof createPrimaryWalletEvidenceExecutor;
-  emitAlert: typeof emitPiggyvestWebhookAlert;
+  /**
+   * Writes the alert's log line (the primary page) and waits, bounded, for
+   * the PostHog send, so a serverless invocation is never frozen mid-send.
+   */
+  emitAlert: (
+    code: PiggyvestWebhookAlertCode,
+    detail: PiggyvestWebhookAlertDetail
+  ) => Promise<unknown> | undefined;
   nowMs: () => number;
   /** Shared (cross-instance) page claim; null answers fall back locally. */
   claimShared: SharedPageClaim;
@@ -49,7 +61,10 @@ function defaultDeps(): DegradedHealthDeps {
   return {
     readRuntime: readPrimaryWalletSavingsRecoveryRuntime,
     createExecutor: createPrimaryWalletEvidenceExecutor,
-    emitAlert: emitPiggyvestWebhookAlert,
+    emitAlert: (code, detail) => {
+      logPiggyvestWebhookAlert(code, detail);
+      return sendPiggyvestWebhookAlertDelivered(code, detail);
+    },
     nowMs: () => Date.now(),
     claimShared: claimSharedPage,
   };
@@ -140,7 +155,7 @@ export async function runPiggyvestDegradedHealth(
     if (!(await claimDegradedPage(alert.reason, deps.claimShared, now)))
       continue;
     paged += 1;
-    deps.emitAlert('PIGGYVEST_DEGRADED', {
+    await deps.emitAlert('PIGGYVEST_DEGRADED', {
       reason: alert.reason,
       attempts: alert.attempts,
       operationId: `degraded-${alert.reason}-${hour}`,
@@ -153,7 +168,7 @@ export async function runPiggyvestDegradedHealth(
     (await claimDegradedPage('health_read_failed', deps.claimShared, now))
   ) {
     paged += 1;
-    deps.emitAlert('PIGGYVEST_DEGRADED', {
+    await deps.emitAlert('PIGGYVEST_DEGRADED', {
       reason: 'health_read_failed',
       operationId: `degraded-health_read_failed-${hour}`,
     });

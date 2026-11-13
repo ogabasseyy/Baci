@@ -34,6 +34,22 @@ describe('claimDegradedPage', () => {
     });
   });
 
+  describe('bugfix: a refused claim pushed the next page past the shared expiry', () => {
+    it('keeps the earlier mark when another copy still holds the claim', async () => {
+      const held = vi.fn(async () => false);
+      const ok = vi.fn(async () => true);
+      expect(await claimDegradedPage('transfers', ok, HOUR)).toBe(true);
+      // 50 minutes on: the local gap has passed but Redis still holds it.
+      expect(await claimDegradedPage('transfers', held, HOUR + 50 * MIN)).toBe(
+        false
+      );
+      // Once the shared claim has expired, the next run pages.
+      expect(await claimDegradedPage('transfers', ok, HOUR + 60 * MIN)).toBe(
+        true
+      );
+    });
+  });
+
   describe('bugfix: two pages minutes apart across an hour boundary', () => {
     it('never pages twice within the hour, whatever the clock hour', async () => {
       const shared = vi.fn(async () => true);

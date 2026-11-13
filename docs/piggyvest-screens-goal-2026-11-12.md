@@ -242,3 +242,40 @@ PiggyVest is enabled for the Ogabassey merchant only (owner, 11-13). Holds and P
 - On staging, once PiggyVest resumes outbound transfers: airtime/data/bills and IMEI pay to the PIN and settlement, and the money steps end to end.
 - Owner actions: the `allow-silent-revert` label on #4224; marking #4223 ready.
 
+
+## Walk 4: refreshed combined build (2026-11-13, 19:30–20:07, Fable, mock PiggyVest)
+
+Build: every open PiggyVest head merged locally (#4216, #4222, #4223, #4224, #4230, #4232, #4233, #4234 stack).
+
+Pass:
+- onboarding (BVN, consent, ready) with a fresh account;
+- Add money;
+- Start Savings / Check your plan;
+- Add to savings + PIN;
+- in-sheet Cancel and Complete;
+- Change phone;
+- Wallet PIN (no chat button);
+- old goal-actions link;
+- wallet activity (no provider names in any of 26 API rows or on screen).
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| F1 dead Complete button on a settled plan | #4224 | **Fixed** 15f79481ac |
+| F2 cancelled-plan notification opened another plan | #4224 | **Fixed** 15f79481ac (taps go through the goal link route) |
+| F3 activity rows gross, balance net (deposit fee hidden) | #4232 session | Sent |
+| F4 Change phone quoted weekly on a monthly plan | #4224 | **Fixed** 15f79481ac |
+| F5 savings sheet stayed over another screen | #4224 | **Fixed** 15f79481ac (closes on blur) |
+| F6 goal link trusted a stale wallet | #4224 | **Fixed** 15f79481ac (one fresh read on a miss) |
+| F7 airtime 500 blamed PiggyVest / connection | #4227 session | Sent |
+| Notification card offset, 3-line cut, AI button overlap, raw time zone | #4224 | **Fixed** 15f79481ac (time zone gets a hint, picker deferred) |
+| "Move your savings" vs "Complete goal" | #4224 | **Fixed** 15f79481ac |
+| Start Savings lows (debit time, terms error, amount focus, search caps, picker tint) | #4223 session | Sent |
+| Onboarding lows (consent error, disabled button, BVN show/hide, naming) and older store credit / Money received placement | #4230 session | Sent |
+| PIN context rows lack goal name; no "phone changed" confirmation; sheet style differences | #4224 | Open (low) |
+
+Not walkable locally:
+- onboarding pending (the mock answers ready at once);
+- the cancel forfeit line (needs an interest-payout webhook);
+- IMEI and airtime Pay → PIN.
+
+These, and the staging transfer test both ways (business → customer, customer → business), are owed on staging. A ₦1 probe at 17:49 UTC got 202 but never settled.

@@ -290,6 +290,23 @@ describe('bugfix: auto-retry ran behind the BVN field', () => {
   });
 });
 
+describe('bugfix: the automatic-retry budget was shared across accounts', () => {
+  it('gives another account on the same goal id its own tries', () => {
+    status('setup_retryable');
+    renderExhausted({ retry });
+    const calls = retry.mock.calls.length;
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-2"
+        merchantId="merchant-1"
+      />
+    );
+    expect(retry.mock.calls.length).toBe(calls + 1);
+  });
+});
+
 describe('auto-retry when a parent supplies the status', () => {
   it('still retries by itself: a stale BVN flag shows no BVN field there', () => {
     status('setup_retryable', true);

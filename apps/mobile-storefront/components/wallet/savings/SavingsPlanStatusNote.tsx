@@ -84,6 +84,7 @@ function OwnStatusNote(props: Props) {
 function StatusNoteView({
   colors,
   goalId,
+  identityKey,
   merchantId,
   funding,
   bvnGate = false,
@@ -105,7 +106,8 @@ function StatusNoteView({
     // itself. A parent that supplies the status shows no BVN field, and
     // goal setup does not need one, so retrying there is safe.
     blocked: bvnGate && funding.planFundingRequiresBvn === true,
-    scopeKey: `${merchantId}:${goalId}`,
+    // Same account + merchant + goal key as the poll and setup memory.
+    scopeKey: JSON.stringify([identityKey, merchantId, goalId]),
     submitting: setup.submitting,
     retry: setup.retry,
   });

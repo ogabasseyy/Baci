@@ -39,7 +39,8 @@ export function validateSavingsInput(
     input.contributionValue <= 0 ||
     !Number.isFinite(input.targetValue) ||
     input.targetValue <= 0 ||
-    !Number.isFinite(input.effectiveInitialContribution)
+    !Number.isFinite(input.effectiveInitialContribution) ||
+    input.effectiveInitialContribution < 0
   ) {
     return { error: 'Enter a valid savings amount.', ok: false };
   }

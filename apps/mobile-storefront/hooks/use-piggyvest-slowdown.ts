@@ -27,6 +27,9 @@ export function useReportPiggyvestSlow(
       () => markSlow(source),
       PIGGYVEST_SLOW_SIGNAL_TTL_MS / 2
     );
+    // Leaving the screen stops renewing but does not clear: PiggyVest is
+    // still slow, so the calm notice stays on other screens until the
+    // signal's short TTL runs out (or a screen sees it recover).
     return () => clearInterval(timer);
   }, [slow, source, markSlow, clearSlow]);
 }

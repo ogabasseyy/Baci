@@ -9,6 +9,13 @@ const validate = (overrides = {}) =>
   );
 
 describe('validateSavingsInput', () => {
+  it('bugfix: refuses a negative head start instead of sending it on', () => {
+    expect(validate({ effectiveInitialContribution: -5000 })).toEqual({
+      error: 'Enter a valid savings amount.',
+      ok: false,
+    });
+  });
+
   it('accepts a complete input and formats the start date', () => {
     const result = validate();
     expect(result.ok).toBe(true);

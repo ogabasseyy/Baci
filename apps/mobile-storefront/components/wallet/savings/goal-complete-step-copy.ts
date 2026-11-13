@@ -10,6 +10,9 @@ export const GOAL_COMPLETE_STEP_COPY = {
   saved: 'Saved',
   interest: 'Interest earned',
   toWallet: 'Moves to your wallet',
+  // The stored balance when interest is unknown: never presented as the
+  // exact amount moved (credited interest may add to it).
+  inThisGoal: 'In this goal',
   nextTitle: 'What happens next',
   next: [
     'Your money moves to your wallet',

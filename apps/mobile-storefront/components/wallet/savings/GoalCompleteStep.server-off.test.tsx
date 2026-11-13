@@ -75,7 +75,7 @@ describe('Complete goal inside the savings sheet, server off', () => {
     ).toBeOnTheScreen();
   });
 
-  it('shows only the total that moves when the interest split is unknown', () => {
+  it('shows only the stored balance when the interest split is unknown', () => {
     const { principal_amount: _p, ...noSplit } = goal;
     const handlers = {
       onDone: jest.fn(),
@@ -90,8 +90,9 @@ describe('Complete goal inside the savings sheet, server off', () => {
         {...handlers}
       />
     );
-    // Everything moves, so the total is safe to show; no saved/interest split.
-    expect(screen.getByText('Moves to your wallet')).toBeOnTheScreen();
+    // The stored balance is shown as such, never as the exact amount moved.
+    expect(screen.getByText('In this goal')).toBeOnTheScreen();
+    expect(screen.queryByText('Moves to your wallet')).toBeNull();
     expect(screen.queryByText('Saved')).toBeNull();
     expect(screen.queryByText('Interest earned')).toBeNull();
     expect(

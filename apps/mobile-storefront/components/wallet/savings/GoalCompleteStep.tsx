@@ -152,10 +152,10 @@ export function GoalCompleteStep({
       </Text>
       {done ? null : !known ? (
         <>
-          {/* Everything in the goal moves, so the total is known even when
-              the interest split isn't. */}
+          {/* The stored balance, labelled as such: with interest unknown the
+              amount that moves may be larger. */}
           <View style={[styles.card, { borderColor: colors.border }]}>
-            <Row colors={colors} label={COPY.toWallet} value={total} />
+            <Row colors={colors} label={COPY.inThisGoal} value={total} />
           </View>
           <Text style={[styles.note, { color: colors.textSecondary }]}>
             {COPY.unknownSplit}

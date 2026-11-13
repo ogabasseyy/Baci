@@ -7,9 +7,9 @@ import { hexToRgba } from '@/lib/hex-to-rgba';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { styles } from './wallet.styles';
 
-// Until a savings-wallet history exists, say what this list covers.
+// Says what this list covers: the PiggyVest wallet has its own list above.
 export const STORE_CREDIT_SCOPE_COPY =
-  'Only your older store credit balance, which you spend on purchases. Your PiggyVest savings wallet history isn’t shown in the app yet.';
+  'Only your older store credit balance, which you spend on purchases. Your PiggyVest savings wallet activity is listed above.';
 
 /** The list's heading for PiggyVest customers: the older balance only. */
 export const STORE_CREDIT_HISTORY_TITLE = 'Older store credit';

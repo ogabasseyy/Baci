@@ -16,6 +16,7 @@ import type { SavingsVariantResolveResult } from './resolve-completed-savings-go
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
+import { WalletActivitySection } from './WalletActivitySection';
 import { WalletFundModal } from './WalletFundModal';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
@@ -23,10 +24,7 @@ import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
-import {
-  type WalletTransaction,
-  WalletTransactionHistory,
-} from './WalletTransactionHistory';
+import type { WalletTransaction } from './WalletTransactionHistory';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 type WalletColors = (typeof Colors)['light'];
@@ -260,7 +258,7 @@ export function WalletContent(props: WalletContentProps) {
             redeemPoints={redeemPoints}
           />
         ) : null}
-        <WalletTransactionHistory colors={colors} transactions={transactions} />
+        <WalletActivitySection {...props} />
       </AppKeyboardAwareScrollView>
       <WalletSavingsProgressModal
         addAmount={savingsContributionAmount}

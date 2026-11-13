@@ -5,9 +5,9 @@ import {
 } from './deliver-paid-imei-lookup';
 
 vi.mock('server-only', () => ({}));
-const cache = vi.hoisted(() => ({ response: vi.fn() }));
+const cache = vi.hoisted(() => ({ response: vi.fn(), success: vi.fn() }));
 vi.mock('../route-cache-helpers', () => ({
-  cacheSuccessfulLookup: vi.fn(),
+  cacheSuccessfulLookup: cache.success,
   cacheLookupResponse: cache.response,
 }));
 
@@ -39,7 +39,9 @@ const deps = (savedStatus: string) => ({
     amountKobo: 50000,
     claimToken: 'tok-2',
   })),
-  finish: vi.fn(async () => 'fulfilled'),
+  finish: vi.fn(async (_op: string, outcome: string) =>
+    outcome === 'fulfilled' ? 'fulfilled' : 'refund_owed'
+  ),
   refund: vi.fn(async () => 'pending'),
   readStatus: vi.fn(async () => savedStatus),
   prepare: vi.fn(),
@@ -90,5 +92,62 @@ describe('bugfix: the refunded branch trusted the caller for the payment (Muse)'
         deliverPaidImeiLookup({ ...refunded, payment } as never, d)
       ).rejects.toBeInstanceOf(WalletPaymentMismatchError);
     expect(d.refund).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: a lost delivery claim still refunded or showed a result (Codex P2)', () => {
+  it('opens no refund and caches nothing when the failure was not recorded', async () => {
+    const d = { ...deps('pending'), finish: vi.fn(async () => 'conflict') };
+    const response = await deliverPaidImeiLookup(input, d);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ status: 'delivering' });
+    expect(d.refund).not.toHaveBeenCalled();
+    expect(cache.response).not.toHaveBeenCalled();
+  });
+
+  it('opens no refund when the database refuses it (a delivered check)', async () => {
+    const d = {
+      ...deps('pending'),
+      finish: vi.fn(async () => {
+        throw new Error('imei_wallet_payment_already_delivered');
+      }),
+    };
+    const response = await deliverPaidImeiLookup(input, d);
+    expect(response.status).toBe(202);
+    expect(d.refund).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: a result was shown after its delivery claim was lost (Codex P2)', () => {
+  it('answers delivering instead of the result when the delivery was not recorded', async () => {
+    cache.success.mockResolvedValue(
+      new Response('{"status":"complete"}', { status: 200 })
+    );
+    const submit = vi.fn(async () => ({
+      kind: 'complete',
+      body: {},
+      rawResponseText: 'x',
+      providerStatus: 's',
+      status: 200,
+    }));
+    const d = {
+      ...deps('completed'),
+      claim: vi.fn(async () => ({
+        status: 'claimed' as const,
+        purpose: 'imei_check' as const,
+        purchaseRef: LOOKUP,
+        amountKobo: 50000,
+        claimToken: 'tok-1',
+      })),
+      finish: vi.fn(async () => 'conflict'),
+      prepare: vi.fn(async () => ({
+        binding: { provider: 'sickw' },
+        provider: { submit },
+        serviceTier: { checksIncluded: [], name: 'SIM lock' },
+      })),
+    };
+    const response = await deliverPaidImeiLookup(input, d as never);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ status: 'delivering' });
   });
 });

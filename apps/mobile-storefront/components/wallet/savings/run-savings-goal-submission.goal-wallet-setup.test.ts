@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   planInterestAnswer,
   resetPlanInterestAnswers,
@@ -68,6 +69,22 @@ describe('bugfix: a new PiggyVest plan was left “still being set up”', () =>
     });
     await runSavingsGoalSubmission(input, validation);
     expect(planInterestAnswer('goal-1')).toBe(false);
+  });
+
+  it('bugfix: a device write that never finishes does not hold up setup or the success screen', async () => {
+    jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockImplementationOnce(() => new Promise<void>(() => undefined));
+    const start = jest.fn(async () => ({ status: 'pending' }));
+    const input = createInput({
+      effectiveInitialContribution: 0,
+      interestChoice: true,
+      startGoalWalletSetup: start,
+    });
+    await runSavingsGoalSubmission(input, validation);
+    expect(start).toHaveBeenCalledWith('goal-1');
+    expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
+    expect(planInterestAnswer('goal-1')).toBe(true);
   });
 
   it('still shows the plan when setup fails to start', async () => {

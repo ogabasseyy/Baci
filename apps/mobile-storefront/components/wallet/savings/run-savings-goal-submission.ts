@@ -185,9 +185,11 @@ export async function runSavingsGoalSubmission(
       input.onHandOffPending?.(result.goalId);
     }
     // Kept (also on the device) so the sheet can finish setup if this start
-    // never lands, even after a restart.
+    // never lands, even after a restart. The in-memory answer is set at once;
+    // the device write is never waited for, so a slow one cannot hold up
+    // setup, the reminder or the hand-off for a plan that already exists.
     if (input.startGoalWalletSetup && typeof input.interestChoice === 'boolean')
-      await rememberPlanInterestAnswer(result.goalId, input.interestChoice);
+      void rememberPlanInterestAnswer(result.goalId, input.interestChoice);
     // Started now but waited for only after the reminder is scheduled, so a
     // slow start can never leave a created plan without its reminder.
     const setupStart = input.startGoalWalletSetup

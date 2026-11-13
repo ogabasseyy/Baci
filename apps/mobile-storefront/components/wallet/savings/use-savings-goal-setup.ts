@@ -45,7 +45,7 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
   const run = async (
     send: () => Promise<unknown>,
     isRetry: boolean,
-    prepare?: () => Promise<void>
+    prepare?: () => void
   ): Promise<boolean> => {
     if (inFlight.current) return false;
     // Locked before anything is awaited, so a second tap while the answer
@@ -56,7 +56,7 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
     setRetried(isRetry);
     setError(null);
     try {
-      await prepare?.();
+      prepare?.();
       await send();
     } catch {
       if (mounted.current)
@@ -86,7 +86,11 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
       // The customer's latest explicit answer is the one any later resume
       // (even after a restart) must send, never an older saved one. Saved
       // only once this submit holds the lock, so a deduped tap saves nothing.
-      () => rememberPlanInterestAnswer(goalId, answer)
+      // The in-memory answer is set at once; a slow device write is not
+      // waited for, so it can never hold up the send.
+      () => {
+        void rememberPlanInterestAnswer(goalId, answer);
+      }
     );
   };
   const retry = () =>

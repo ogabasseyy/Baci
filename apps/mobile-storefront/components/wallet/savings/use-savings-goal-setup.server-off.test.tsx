@@ -108,3 +108,29 @@ describe('bugfix: a second submit while the answer was still saving sent a diffe
     expect(planInterestAnswer(SERVER_OFF_GOAL_ID)).toBe(true);
   });
 });
+
+describe('bugfix: a device write that never finished blocked the setup send', () => {
+  it('sends the answer without waiting for the device write', async () => {
+    jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockImplementationOnce(() => new Promise<void>(() => undefined));
+    jest.mocked(setupExistingSavingsGoal).mockClear();
+    jest
+      .mocked(setupExistingSavingsGoal)
+      .mockResolvedValue({ status: 'pending' });
+    const { result } = renderHook(() =>
+      useSavingsGoalSetup({
+        goalId: SERVER_OFF_GOAL_ID,
+        merchantId: SERVER_OFF_MERCHANT_ID,
+        onSettled: jest.fn(),
+      })
+    );
+    await act(async () => {
+      await result.current.submit(false);
+    });
+    expect(setupExistingSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ interestAccepted: false })
+    );
+    expect(planInterestAnswer(SERVER_OFF_GOAL_ID)).toBe(false);
+  });
+});

@@ -120,6 +120,24 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- REGRESSION (Codex P1): a delivered check is never refunded, even by a
+-- reclaim that read the lookup before the result was saved.
+DO $$
+DECLARE v_refused boolean := false;
+BEGIN
+  BEGIN
+    PERFORM pg_temp.wp_finish(current_setting('test.paid_op'), 'failed');
+  EXCEPTION WHEN OTHERS THEN
+    v_refused := SQLERRM = 'imei_wallet_payment_already_delivered';
+  END;
+  IF NOT v_refused THEN
+    RAISE EXCEPTION 'a delivered IMEI check was moved to refund_owed';
+  END IF;
+  IF pg_temp.wp_fulfilment(current_setting('test.paid_op')) <> 'claimed' THEN
+    RAISE EXCEPTION 'the delivered payment left its claim';
+  END IF;
+END $$;
+
 -- A failed delivery: refunded_error needs the owed PiggyVest refund.
 SELECT set_config('test.failed_op', pg_temp.wp_dispatched(current_setting('test.failed_lookup'), 50000), true);
 SELECT pg_temp.wp_settle(pg_temp.wp_pay_proof(current_setting('test.failed_op'), 'txn-imei-failed', 50000));

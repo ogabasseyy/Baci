@@ -23,10 +23,11 @@ export function useLegacyFundingUnconfirmed(
   if (!provider || !merchantId) {
     return false;
   }
-  // A PiggyVest account under a current ruling-out is obsolete (Codex):
-  // hidden until the reloaded wallet arrives, also if that reload fails.
+  // A PiggyVest account is shown only under a positive verdict (Codex):
+  // after a rollback it stays hidden through the verdict's expiry and the
+  // re-probe, also if the wallet reload fails.
   if (provider === 'piggyvest') {
-    return verdict === false;
+    return verdict !== true;
   }
   // Unknown, or PiggyVest confirmed before the wallet is reclassified
   // (Codex): only a ruling-out makes a legacy account safe to show.

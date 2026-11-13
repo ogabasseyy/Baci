@@ -30,11 +30,15 @@ describe('bugfix: legacy account number shown before the PiggyVest verdict', () 
     expect(result.current).toBe(true);
   });
 
-  it('does not hold a PiggyVest account while the verdict is unknown', () => {
+  it('bugfix: holds a rolled-back PiggyVest account while the verdict is unknown', () => {
+    // Arrange: rollback, failed wallet reload, ruling-out since expired:
+    // the verdict is unknown while the re-probe is pending.
     const { result } = renderHook(() =>
       useLegacyFundingUnconfirmed('piggyvest')
     );
-    expect(result.current).toBe(false);
+
+    // Assert: hidden until the verdict is positively true.
+    expect(result.current).toBe(true);
   });
 });
 

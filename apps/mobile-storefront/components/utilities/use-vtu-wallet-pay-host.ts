@@ -16,7 +16,7 @@ import { EXPO_PUBLIC_API_URL } from '@/env';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
-import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
+import { SAVINGS_WALLET_CAN_PAY_UTILITIES } from '@/lib/savings-wallet-can-pay-utilities';
 import { vtuWalletPayApi } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { useAuthStore } from '@/stores/auth-store';
 import {
@@ -31,11 +31,12 @@ import {
 
 /**
  * The utilities screen's one PiggyVest pay sheet (dark until
- * SAVINGS_WALLET_CAN_PAY). It tells the forms which amounts the PiggyVest
+ * SAVINGS_WALLET_CAN_PAY_UTILITIES, the airtime/data/bills switch, apart from
+ * the IMEI one). It tells the forms which amounts the PiggyVest
  * wallet covers and runs the sheet for the purchase a form hands over.
  */
 export function useVtuWalletPayHost({
-  canPay = SAVINGS_WALLET_CAN_PAY,
+  canPay = SAVINGS_WALLET_CAN_PAY_UTILITIES,
 }: {
   /** Tests pass true to preview the switch-on. */
   canPay?: boolean;

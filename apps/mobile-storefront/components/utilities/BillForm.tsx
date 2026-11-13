@@ -37,6 +37,7 @@ export function BillForm(props: BillFormProps) {
     isRepeatPaymentActive,
     numericAmount,
     payment,
+    retainedStoreCredit,
     scheduleNextStepScroll,
     scrollViewRef,
     selectedBiller,
@@ -145,6 +146,7 @@ export function BillForm(props: BillFormProps) {
             numericAmount={numericAmount}
             payment={payment}
             returnToHref={walletReturnToHref}
+            retainedStoreCredit={retainedStoreCredit}
             setAmount={updateAmount}
           />
         ) : null}

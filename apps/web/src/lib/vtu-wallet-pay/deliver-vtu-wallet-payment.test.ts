@@ -85,6 +85,24 @@ describe('deliverVtuWalletPayment', () => {
     expect(deps.finish).toHaveBeenCalledWith(OP, 'failed', TOKEN);
   });
 
+  it('bugfix: records a final result reconciled while reclaiming a processing vend (Codex P2)', async () => {
+    deps.claim.mockResolvedValue(claimed('reclaimed'));
+    deps.deliveryState.mockResolvedValue('processing');
+    deps.finish.mockResolvedValue('fulfilled');
+    deps.fulfil.mockResolvedValue(success);
+    await deliverVtuWalletPayment(input, deps);
+    expect(deps.fulfil).toHaveBeenCalledWith(false);
+    expect(deps.finish).toHaveBeenCalledWith(OP, 'fulfilled', TOKEN);
+  });
+
+  it('keeps the claim while a reclaimed vend is still processing', async () => {
+    deps.claim.mockResolvedValue(claimed('reclaimed'));
+    deps.deliveryState.mockResolvedValue('processing');
+    deps.fulfil.mockResolvedValue({ ...success, status: 'processing' });
+    await deliverVtuWalletPayment(input, deps);
+    expect(deps.finish).not.toHaveBeenCalled();
+  });
+
   it('waits for a payment not yet confirmed and for a delivery in progress', async () => {
     deps.claim.mockResolvedValue({ status: 'not_confirmed' });
     await expect(deliverVtuWalletPayment(input, deps)).resolves.toEqual({

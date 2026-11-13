@@ -41,6 +41,28 @@ BEGIN
     'an unpaid row was not failed');
   PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
     jsonb_build_object('transactionId', c_paid)), 'a closed row was closed twice');
+  PERFORM pg_temp.wp_assert((SELECT (metadata ->> 'refundSkipped')::boolean FROM public.vtu_transactions
+    WHERE id = c_paid), 'a closed unpaid row would be picked up for a refund');
+
+  -- REGRESSION (Codex P2): the sheet closed before any PIN releases the open
+  -- issued payment and closes the purchase; without the flag it stays.
+  UPDATE public.vtu_transactions SET status = 'pending' WHERE id = c_paid;
+  v_op := pg_temp.wp_issue(c_paid::text, 100000, 'vtu') ->> 'operationId';
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
+    jsonb_build_object('transactionId', c_paid)), 'an open issued payment was closed without cancelling');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
+    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true)), 'a cancelled purchase was not closed');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) = 'released', 'the issued payment was not released');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_reserve(v_op, pg_temp.wp_proof('vtu-cancel', 'wallet_pay', 100000,
+    pg_temp.wp_key(v_op, c_paid::text, 'vtu'))) ->> 'status' <> 'claimed', 'a released payment was reserved');
+  -- A reserved payment is never released by a cancel.
+  UPDATE public.vtu_transactions SET status = 'pending' WHERE id = c_paid;
+  v_op := pg_temp.wp_issue(c_paid::text, 100000, 'vtu') ->> 'operationId';
+  PERFORM pg_temp.wp_assert(pg_temp.wp_reserve(v_op, pg_temp.wp_proof('vtu-res-' || v_op, 'wallet_pay',
+    100000, pg_temp.wp_key(v_op, c_paid::text, 'vtu'))) ->> 'status' = 'claimed', 'vtu reserve');
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
+    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true)), 'a reserved payment was cancelled');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) <> 'released', 'a reserved payment was released');
   -- A store credit row, or another customer's row, is never touched.
   PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
     jsonb_build_object('transactionId', c_credit)), 'a store credit row was closed');

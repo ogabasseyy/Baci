@@ -16,6 +16,7 @@ import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
+import { vtuWalletPayApi } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { useAuthStore } from '@/stores/auth-store';
 import {
   createVtuWalletPayAdapter,
@@ -45,6 +46,8 @@ export function useVtuWalletPayHost({
   const deliverTo = useRef<VtuWalletPayPending['onDelivered'] | null>(null);
   const opened = useRef(false);
   const ownerId = useRef<string | null>(null);
+  // Set while a payment is issued and no pay request was sent yet.
+  const cancelUnpaid = useRef<(() => Promise<void>) | null>(null);
   const sheet = useWalletPaySheet<VtuWalletPayResult>({
     // An answer that lands after the account changed (before the switch
     // closes the sheet) never reaches the new account's screen.
@@ -97,16 +100,34 @@ export function useVtuWalletPayHost({
           purchase,
           Crypto.randomUUID
         );
+        // The account may have changed during the awaits above.
+        if (useAuthStore.getState().user?.id !== user.id)
+          return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
+        const connection = {
+          apiBaseUrl: EXPO_PUBLIC_API_URL,
+          accessToken: () => useAuthStore.getState().session?.access_token,
+        };
+        const owned = { request: next.request, idempotencyKey };
         inner = createVtuWalletPayAdapter({
-          connection: {
-            apiBaseUrl: EXPO_PUBLIC_API_URL,
-            accessToken: () => useAuthStore.getState().session?.access_token,
-          },
-          request: next.request,
-          idempotencyKey,
-          expectedUserId: user?.id,
+          connection,
+          ...owned,
+          expectedUserId: user.id,
         });
-        return await inner.start();
+        const answer = await inner.start();
+        const issuedKey = purchase;
+        if (answer.kind === 'pin')
+          cancelUnpaid.current = async () => {
+            if (useAuthStore.getState().user?.id !== user.id) return;
+            const reply = await vtuWalletPayApi.cancel(connection, {
+              ...owned,
+              expectedUserId: user.id,
+              operationId: answer.operationId,
+            });
+            // Released and closed: the next attempt starts afresh.
+            if (reply.httpStatus === 200 && reply.body.status === 'cancelled')
+              await walletPayPurchaseKeys.forget(issuedKey);
+          };
+        return answer;
       },
       verifyPin: async (operationId, pin) => {
         if (!inner) throw new Error('Wallet payment not started');
@@ -114,6 +135,8 @@ export function useVtuWalletPayHost({
       },
       pay: async (operationId, proof) => {
         if (!inner) throw new Error('Wallet payment not started');
+        // Money may move from here on: never cancel this payment.
+        cancelUnpaid.current = null;
         return await inner.pay(operationId, proof);
       },
     };
@@ -134,6 +157,11 @@ export function useVtuWalletPayHost({
     if (sheet.step === 'closed' && opened.current) {
       opened.current = false;
       clearVtuWalletPay();
+      // Closed before any PIN was paid: release the issued payment so the
+      // purchase never blocks a later store credit attempt (Codex P2).
+      const cancel = cancelUnpaid.current;
+      cancelUnpaid.current = null;
+      if (cancel) void cancel().catch(() => undefined);
     }
   }, [sheet.step]);
 

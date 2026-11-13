@@ -7472,6 +7472,53 @@ describe('PiggyVest-paid VTU rows (pay from the PiggyVest wallet, dark)', () => 
     );
   });
 
+  it('bugfix: the reconciler settles a processing PiggyVest-paid row without the claim (Codex P1)', async () => {
+    mockMonnifyCheckTransactionStatus.mockResolvedValue({
+      status: 'successful',
+      message: 'success',
+      pin: 'token-1234',
+    });
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        type: 'electricity',
+        transaction_id: 'monnify-bill-1',
+        status: 'processing',
+        metadata: {
+          ...PIGGYVEST_ROW.metadata,
+          provider: 'monnify',
+          billerCode: 'biller1',
+          productCode: 'product1',
+          monnifyVendReference: 'monnify-vend-1',
+        },
+        biller_name: 'EKEDC',
+        customer_identifier: '43901766923',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockMonnifyCheckTransactionStatus).toHaveBeenCalledWith(
+      'monnify-vend-1'
+    );
+    expect(result).toMatchObject({ status: 'successful' });
+  });
+
+  it('still holds a plain pending PiggyVest-paid row (never vended) without the claim', async () => {
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+    });
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+    expect(result).toMatchObject({ status: 'processing' });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
   it('bugfix: a failed PiggyVest-paid row without the claim writes no refund bookkeeping (Muse)', async () => {
     const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
     const updatePayloads: unknown[] = [];

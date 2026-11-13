@@ -68,9 +68,21 @@ BEGIN
   IF v_status = 'successful' THEN RETURN 'success'; END IF;
   IF v_status = 'failed' THEN RETURN 'failed'; END IF;
   IF v_status = 'pending' THEN
+    -- A pending row marked by an interrupted or transient vend may already
+    -- have been accepted by the provider: it is re-driven by the existing
+    -- idempotent recovery path, never failed and refunded here.
+    IF EXISTS (SELECT 1 FROM public.vtu_transactions AS row
+                WHERE row.id::text = v_payment.purchase_ref
+                  AND (row.metadata ? 'monnifyTransientVendError'
+                       OR row.metadata ? 'preVendInterruptedAt')) THEN
+      RETURN 'processing';
+    END IF;
     UPDATE public.vtu_transactions AS row
        SET status = 'failed',
-           error_message = 'We could not complete this purchase. Your payment is going back to your PiggyVest wallet.'
+           error_message = 'We could not complete this purchase. Your payment is going back to your PiggyVest wallet.',
+           metadata = COALESCE(row.metadata, '{}'::jsonb) || pg_catalog.jsonb_build_object(
+             'refundIssued', true, 'refundAmount', row.amount,
+             'refundDestination', 'piggyvest_wallet')
      WHERE row.id::text = v_payment.purchase_ref AND row.status = 'pending';
     RETURN 'failed';
   END IF;
@@ -134,7 +146,9 @@ DECLARE
   v_id uuid;
 BEGIN
   IF request IS NULL OR pg_catalog.jsonb_typeof(request) <> 'object'
-    OR (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(request)) <> 1
+    OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_object_keys(request) AS k
+                WHERE k NOT IN ('transactionId', 'cancelIssued'))
+    OR pg_catalog.jsonb_typeof(COALESCE(request -> 'cancelIssued', 'true'::jsonb)) <> 'boolean'
     OR COALESCE(request ->> 'transactionId', '')
        !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     RAISE EXCEPTION 'invalid wallet payment request' USING ERRCODE = '22023';
@@ -152,6 +166,21 @@ BEGIN
      AND row.status = 'pending'
      FOR UPDATE;
   IF NOT FOUND THEN RETURN false; END IF;
+  -- The customer closed the pay sheet before any PIN: an issued payment
+  -- (no proof spent, nothing reserved) is released under its row lock, which
+  -- the PIN reserve also takes, so a reserve either ran first (then the
+  -- payment is live and the purchase stays) or is refused afterwards.
+  IF (request ->> 'cancelIssued')::boolean IS TRUE THEN
+    UPDATE piggyvest_primary.wallet_payments AS payment SET state = 'released'
+     WHERE payment.id IN (
+       SELECT live.id FROM piggyvest_primary.wallet_payments AS live
+        WHERE live.integration_id = (scope ->> 'integrationId')::uuid
+          AND live.intent_id = v_intent_id
+          AND live.purpose = 'vtu'
+          AND live.purchase_ref = v_id::text
+          AND live.state = 'issued'
+        FOR UPDATE);
+  END IF;
   IF EXISTS (
     SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
      WHERE payment.integration_id = (scope ->> 'integrationId')::uuid
@@ -163,7 +192,10 @@ BEGIN
   END IF;
   UPDATE public.vtu_transactions AS row
      SET status = 'failed',
-         error_message = 'This purchase was not paid. Nothing was taken from your PiggyVest wallet.'
+         error_message = 'This purchase was not paid. Nothing was taken from your PiggyVest wallet.',
+         -- Nothing was collected: no refund is owed anywhere.
+         metadata = COALESCE(row.metadata, '{}'::jsonb) || pg_catalog.jsonb_build_object(
+           'refundSkipped', true, 'refundSkipReason', 'piggyvest_unpaid')
    WHERE row.id = v_id;
   RETURN true;
 END;

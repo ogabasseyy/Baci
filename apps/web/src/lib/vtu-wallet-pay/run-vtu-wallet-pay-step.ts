@@ -15,6 +15,12 @@ import {
   deliverVtuWalletPayment,
   VtuWalletPaymentMismatchError,
 } from './deliver-vtu-wallet-payment';
+import {
+  cancelVtuWalletPay,
+  closeUnpaidQuietly,
+  ENDED_UNPAID,
+  recheckStatus,
+} from './vtu-wallet-pay-close';
 
 type Identity = { merchantId: string; customerId: string; userId: string };
 type Scope = ReturnType<typeof walletPayScope>;
@@ -80,18 +86,8 @@ export interface VtuWalletPayStepDeps {
     runtime: WalletPayRuntime;
     scope: Scope;
     transactionId: string;
+    cancelIssued?: boolean;
   }) => Promise<boolean>;
-}
-
-// Payment answers that end it unpaid: the purchase is closed so a later
-// store credit purchase of the same thing never joins it (Codex P2).
-const ENDED_UNPAID = new Set(['insufficient', 'released', 'expired']);
-
-/** A re-check answers from the stored state alone (it never sends). */
-function recheckStatus(state: string) {
-  if (state === 'confirmed' || state === 'needs_review' || state === 'released')
-    return state;
-  return 'pending';
 }
 
 const unavailable = () =>
@@ -133,6 +129,8 @@ export async function runVtuWalletPayStep(
     customerId: string;
     operationId?: string;
     pinProof?: string;
+    /** The sheet closed before any PIN: release the issued payment. */
+    cancel?: boolean;
     fulfil: (walletPayClaimed: boolean) => Promise<FulfilledVtuResult>;
   },
   deps: VtuWalletPayStepDeps
@@ -179,6 +177,12 @@ export async function runVtuWalletPayStep(
       409
     );
   const scope = walletPayScope(runtime, identity);
+  // Closed before any PIN: release the issued payment (never a reserved
+  // one) and close the purchase, so a later store credit attempt starts a
+  // fresh row instead of joining this one (Codex P2).
+  const purchaseRef = { runtime, scope, transactionId };
+  if (input.cancel === true && operationId !== undefined)
+    return await cancelVtuWalletPay(deps.closeUnpaid, purchaseRef);
   // The amount fixed when the purchase was prepared, never the request's.
   const amountKobo = Math.round(purchase.amount * 100);
   const extra = { transactionId, amountKobo };
@@ -213,7 +217,12 @@ export async function runVtuWalletPayStep(
       request: { purpose: 'vtu', purchaseRef: transactionId, amountKobo },
     });
     if (!('operationId' in issued)) {
-      if (issued.status === 'unavailable') return unavailable();
+      if (issued.status === 'unavailable') {
+        // Nothing was issued (e.g. no collection wallet): close the row so
+        // a store credit retry never joins it (Codex P2).
+        await closeUnpaidQuietly(deps.closeUnpaid, purchaseRef);
+        return unavailable();
+      }
       return walletPayRefuse(
         'Please refresh and try again.',
         'PAYMENT_CONFLICT',
@@ -272,9 +281,7 @@ export async function runVtuWalletPayStep(
           pinProof: input.pinProof ?? '',
         });
   if (ENDED_UNPAID.has(result.status))
-    await Promise.resolve()
-      .then(() => deps.closeUnpaid({ runtime, scope, transactionId }))
-      .catch(() => false);
+    await closeUnpaidQuietly(deps.closeUnpaid, purchaseRef);
   if (result.status !== 'confirmed')
     return walletPayResponse(result, operationId, 'purchase');
   try {

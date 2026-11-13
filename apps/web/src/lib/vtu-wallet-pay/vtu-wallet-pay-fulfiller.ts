@@ -31,6 +31,7 @@ export function createVtuWalletPayFulfiller(input: {
         customerId,
         operationId: input.charge.walletPayOperationId,
         pinProof: input.charge.walletPayPinProof,
+        cancel: input.charge.walletPayCancel,
         fulfil: (walletPayClaimed) =>
           fulfillPendingVtuTransaction({
             supabase: input.fulfillSupabase,

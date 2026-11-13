@@ -52,6 +52,8 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     walletPayPinProof: z
       .union([z.literal(''), z.string().regex(/^[0-9a-f]{64}$/)])
       .optional(),
+    // The pay sheet closed before any PIN: release the issued payment.
+    walletPayCancel: z.literal(true).optional(),
   })
   .omit({ orderId: true, customerId: true })
   .superRefine(applyPurchaseRequirements);

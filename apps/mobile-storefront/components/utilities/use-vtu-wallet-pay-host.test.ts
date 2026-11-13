@@ -28,7 +28,12 @@ jest.mock('@/stores/auth-store', () => {
   return { useAuthStore };
 });
 jest.mock('@/lib/wallet-pay/vtu-wallet-pay-api', () => ({
-  vtuWalletPayApi: { start: jest.fn(), verifyPin: jest.fn(), pay: jest.fn() },
+  vtuWalletPayApi: {
+    start: jest.fn(),
+    verifyPin: jest.fn(),
+    pay: jest.fn(),
+    cancel: jest.fn(),
+  },
 }));
 
 const start = vtuWalletPayApi.start as jest.Mock;
@@ -137,5 +142,64 @@ describe('bugfix: a ready ₦549,700 PiggyVest wallet was not offered for ₦100
     expect(useVtuWalletPayStore.getState().balanceKobo).toBeNull();
     hook.unmount();
     mockWallet.data = loaded;
+  });
+});
+
+describe('bugfix: a sheet closed before the PIN left the purchase blocking store credit (Codex P2)', () => {
+  const issued = {
+    httpStatus: 202,
+    body: {
+      status: 'payment_required',
+      transactionId: '33333333-3333-4333-8333-333333333333',
+      operationId: '11111111-1111-4111-8111-111111111111',
+      amountKobo: 50_000,
+    },
+  };
+
+  it('cancels the issued payment when the sheet closes before any pay', async () => {
+    const cancel = vtuWalletPayApi.cancel as jest.Mock;
+    cancel.mockResolvedValue({
+      httpStatus: 200,
+      body: { status: 'cancelled' },
+    });
+    start.mockResolvedValue(issued);
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    expect(hook.result.current.sheet.step).toBe('enter');
+    await act(async () => hook.result.current.sheet.close());
+    expect(cancel).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        operationId: '11111111-1111-4111-8111-111111111111',
+        idempotencyKey: 'key-1',
+      })
+    );
+    hook.unmount();
+  });
+
+  it('never cancels once the pay request was sent', async () => {
+    const cancel = vtuWalletPayApi.cancel as jest.Mock;
+    start.mockResolvedValue(issued);
+    (vtuWalletPayApi.verifyPin as jest.Mock).mockResolvedValue({
+      httpStatus: 200,
+      body: { proof: 'a'.repeat(64) },
+    });
+    (vtuWalletPayApi.pay as jest.Mock).mockResolvedValue({
+      httpStatus: 202,
+      body: { status: 'payment_pending' },
+    });
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    act(() => hook.result.current.sheet.setPin('1234'));
+    await act(async () => {
+      await hook.result.current.sheet.submit();
+    });
+    await act(async () => hook.result.current.sheet.close());
+    expect(cancel).not.toHaveBeenCalled();
+    hook.unmount();
   });
 });

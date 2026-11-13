@@ -146,3 +146,28 @@ describe('bugfix: the purchase read did not bind merchant and customer (Muse)', 
     expect(deps.issue).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: an unavailable issue left the prepared purchase live (Codex P2)', () => {
+  it('closes the purchase when no payment could be issued', async () => {
+    deps.issue.mockResolvedValueOnce({ status: 'unavailable' });
+    const response = await runVtuWalletPayStep(base, deps as never);
+    expect(response.status).toBe(503);
+    expect(deps.closeUnpaid).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: TXN })
+    );
+  });
+
+  it('cancels an issued payment when the sheet closed before any PIN', async () => {
+    const response = await runVtuWalletPayStep(
+      { ...base, operationId: OP, cancel: true },
+      deps as never
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+    expect(deps.closeUnpaid).toHaveBeenCalledWith(
+      expect.objectContaining({ cancelIssued: true })
+    );
+    expect(deps.pay).not.toHaveBeenCalled();
+  });
+});

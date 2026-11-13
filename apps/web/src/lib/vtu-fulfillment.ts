@@ -2094,7 +2094,18 @@ export async function fulfillPendingVtuTransaction({
   // refunded) only by the request holding its payment's delivery claim;
   // every other caller (cron, history, replays) waits, before any refund
   // bookkeeping below (Muse).
-  if (piggyvestPaid && !walletPayClaimed) return piggyvestWalletPaidHold(row);
+  // A processing row (provider-status reconciliation, never a new vend) and
+  // a pending row marked by an interrupted or transient vend (idempotent
+  // re-drive of a payment already confirmed) continue below: both were
+  // reached only under the delivery claim and debit no store credit
+  // (Codex P1).
+  const piggyvestRecovery =
+    row.status === 'processing' ||
+    (row.status === 'pending' &&
+      (row.metadata?.monnifyTransientVendError !== undefined ||
+        row.metadata?.preVendInterruptedAt !== undefined));
+  if (piggyvestPaid && !walletPayClaimed && !piggyvestRecovery)
+    return piggyvestWalletPaidHold(row);
 
   if (row.status === 'failed' && !retryFailed) {
     // Existing failed row — issue (or confirm) the wallet refund so the

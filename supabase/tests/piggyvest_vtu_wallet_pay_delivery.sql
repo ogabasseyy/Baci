@@ -29,17 +29,32 @@ BEGIN
   PERFORM pg_temp.wp_assert(piggyvest_primary.vtu_wallet_payment_delivery_state(
     c_integration, 'staging', v_op::uuid) = 'mismatch', 'a payment with no purchase matched');
 
-  -- A pending purchase was never vended: closed as failed (refund owed).
+  -- REGRESSION (Codex P1): a pending purchase whose vend was interrupted or
+  -- transient may already be accepted: left for the re-drive, never failed.
   INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider, phone_number,
     request_reference, source, metadata, amount, status)
   VALUES (c_row, c_customer, c_merchant, 'airtime', 'mtn', '08000000000', 'vtu-walletpay-test-1',
-    'checkout', '{"paymentSource":"piggyvest_wallet"}', 1000, 'pending');
+    'checkout', '{"paymentSource":"piggyvest_wallet","monnifyTransientVendError":"timeout"}', 1000, 'pending');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.vtu_wallet_payment_delivery_state(
+    c_integration, 'staging', v_op::uuid) = 'processing', 'a transient vend was settled');
+  PERFORM pg_temp.wp_assert((SELECT status FROM public.vtu_transactions WHERE id = c_row) = 'pending',
+    'a transient vend was failed');
+  UPDATE public.vtu_transactions SET metadata = '{"paymentSource":"piggyvest_wallet","preVendInterruptedAt":"now"}'
+   WHERE id = c_row;
+  PERFORM pg_temp.wp_assert(piggyvest_primary.vtu_wallet_payment_delivery_state(
+    c_integration, 'staging', v_op::uuid) = 'processing', 'an interrupted vend was settled');
+
+  -- A pending purchase was never vended: closed as failed (refund owed).
+  UPDATE public.vtu_transactions SET metadata = '{"paymentSource":"piggyvest_wallet"}' WHERE id = c_row;
   PERFORM pg_temp.wp_assert(piggyvest_primary.vtu_wallet_payment_delivery_state(
     c_integration, 'staging', v_op::uuid) = 'failed', 'a pending purchase was not failed');
   SELECT error_message INTO v_message FROM public.vtu_transactions WHERE id = c_row;
   PERFORM pg_temp.wp_assert(
     (SELECT status FROM public.vtu_transactions WHERE id = c_row) = 'failed'
       AND v_message LIKE '%PiggyVest wallet%', 'the pending purchase was not closed as failed');
+  PERFORM pg_temp.wp_assert((SELECT metadata ->> 'refundDestination' = 'piggyvest_wallet'
+      AND (metadata ->> 'refundIssued')::boolean FROM public.vtu_transactions WHERE id = c_row),
+    'the closed purchase does not record its PiggyVest refund');
 
   -- A vend in flight is left alone; a vended or failed one is reported.
   UPDATE public.vtu_transactions SET status = 'processing' WHERE id = c_row;

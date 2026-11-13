@@ -86,10 +86,15 @@ export function createWalletPayCustomerStore(input: {
     },
     // Closes this customer's PiggyVest-paid VTU purchase whose payment ended
     // unpaid (no payment for it live or paid). True when it was closed.
-    async closeUnpaidVtu(transactionId: string) {
+    // cancelIssued: the sheet closed before any PIN, so an issued payment
+    // (nothing reserved) is released first.
+    async closeUnpaidVtu(transactionId: string, cancelIssued = false) {
       const result = await input.execute(customerSql.closeUnpaidVtu, [
         scope,
-        JSON.stringify({ transactionId: z.uuid().parse(transactionId) }),
+        JSON.stringify({
+          transactionId: z.uuid().parse(transactionId),
+          ...(cancelIssued ? { cancelIssued: true } : {}),
+        }),
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },

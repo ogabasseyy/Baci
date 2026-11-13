@@ -71,4 +71,32 @@ export const vtuWalletPayApi = {
       },
       input.idempotencyKey
     ),
+  /**
+   * The sheet closed before any PIN: releases the issued payment (never a
+   * reserved one) and closes the purchase. Best effort; nothing is paid.
+   */
+  cancel: (
+    connection: WalletPayConnection,
+    input: {
+      request: VtuWalletPayRequest;
+      idempotencyKey: string;
+      expectedUserId?: string;
+      operationId: string;
+    }
+  ) =>
+    postWalletPay(
+      connection,
+      CHECKOUT_PATH,
+      {
+        ...normalizeVtuCheckoutPayload(input.request),
+        merchantSlug: CONFIG.MERCHANT_SLUG,
+        paymentMethod: 'piggyvest_wallet',
+        ...(input.expectedUserId
+          ? { expectedUserId: input.expectedUserId }
+          : {}),
+        walletPayOperationId: input.operationId,
+        walletPayCancel: true,
+      },
+      input.idempotencyKey
+    ),
 };

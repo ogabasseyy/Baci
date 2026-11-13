@@ -44,11 +44,12 @@ diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionCo
 index 9ce48d6..3ef00be 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
-@@ -21,6 +21,7 @@ import com.margelo.nitro.splashmotion.players.LottieSplashPlayer
+@@ -21,6 +21,8 @@ import com.margelo.nitro.splashmotion.players.LottieSplashPlayer
   */
  internal object SplashMotionController {
    private const val TAG = "SplashMotion"
-+  private const val WATCHDOG_MS = 60_000L
++  // Bound a failed JS hide so the app's startup-recovery UI can be revealed.
++  private const val WATCHDOG_MS = 15_000L
    private val main = Handler(Looper.getMainLooper())
  
    @Volatile private var visible = false
@@ -381,11 +382,12 @@ diff --git a/ios/SplashMotionController.swift b/ios/SplashMotionController.swift
 index 9665941..0e87e05 100644
 --- a/ios/SplashMotionController.swift
 +++ b/ios/SplashMotionController.swift
-@@ -6,17 +6,32 @@ final class SplashMotionController {
+@@ -6,17 +6,33 @@ final class SplashMotionController {
    static let shared = SplashMotionController()
    /// Keep in sync with `MAX_SCREEN_FRACTION` (Android) and the CLI's launch storyboard.
    static let maxScreenFraction: CGFloat = 0.9
-+  private static let watchdogSeconds: TimeInterval = 60
++  // Bound a failed JS hide so the app's startup-recovery UI can be revealed.
++  private static let watchdogSeconds: TimeInterval = 15
  
    private let lock = NSLock()
    private var _visible = false

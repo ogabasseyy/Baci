@@ -19,6 +19,24 @@ type EventSubscription = {
   remove: () => void;
 };
 type NotificationResponse = import('expo-notifications').NotificationResponse;
+const MAX_QUEUED_NOTIFICATION_RESPONSES = 16;
+
+function getNotificationResponseKey(response: NotificationResponse): string {
+  return `${response.notification.request.identifier}:${response.notification.date}`;
+}
+
+function enqueueNotificationResponse(
+  queue: NotificationResponse[],
+  response: NotificationResponse
+): void {
+  const key = getNotificationResponseKey(response);
+  if (queue.some((pending) => getNotificationResponseKey(pending) === key)) {
+    return;
+  }
+
+  queue.push(response);
+  if (queue.length > MAX_QUEUED_NOTIFICATION_RESPONSES) queue.shift();
+}
 
 const STOREFRONT_MERCHANT_ID = pickMerchantId(CONFIG.MERCHANT_ID);
 const log = createLogger('PushNotifications');
@@ -56,7 +74,8 @@ export function usePushNotifications({
   );
   const notificationListener = useRef<EventSubscription | null>(null);
   const responseListener = useRef<EventSubscription | null>(null);
-  const pendingResponse = useRef<NotificationResponse | null>(null);
+  const pendingResponses = useRef<NotificationResponse[]>([]);
+  const coldStartResponseRequested = useRef(false);
   const navigationReadyRef = useRef(navigationReady);
   navigationReadyRef.current = navigationReady;
   const registration = useSavingsPushRegistration();
@@ -138,7 +157,7 @@ export function usePushNotifications({
         Notifications.addNotificationResponseReceivedListener((response) => {
           if (cancelledRef.current) return;
           if (!navigationReadyRef.current) {
-            pendingResponse.current = response;
+            enqueueNotificationResponse(pendingResponses.current, response);
             return;
           }
           handleNotificationResponse(response);
@@ -157,16 +176,21 @@ export function usePushNotifications({
 
     notificationsReady.then(() => {
       if (cancelledRef.current || !Notifications) return;
-      const queuedResponse = pendingResponse.current;
-      pendingResponse.current = null;
-      if (queuedResponse) handleNotificationResponse(queuedResponse);
+      const queuedResponses = pendingResponses.current.splice(0);
+      queuedResponses.forEach(handleNotificationResponse);
 
-      Notifications.getLastNotificationResponseAsync().then((response) => {
-        if (response && !cancelledRef.current) {
+      if (!coldStartResponseRequested.current) {
+        coldStartResponseRequested.current = true;
+        Notifications.getLastNotificationResponseAsync().then((response) => {
+          if (!response) return;
           log.info('App launched from notification');
-          handleNotificationResponse(response);
-        }
-      });
+          if (navigationReadyRef.current) {
+            handleNotificationResponse(response);
+          } else {
+            enqueueNotificationResponse(pendingResponses.current, response);
+          }
+        });
+      }
     });
 
     return () => {

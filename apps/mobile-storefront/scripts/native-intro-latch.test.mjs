@@ -60,3 +60,17 @@ test('the Android system splash releases when missing configuration terminates p
   assert.match(android, /if \(config == null\) \{[^}]*terminated = true[^}]*return/);
   assert.match(android, /setKeepOnScreenCondition \{ !terminated && !overlayReady \}/);
 });
+
+test('native splash watchdog releases the recovery screen within fifteen seconds', () => {
+  const packageRoot = new URL('../../../node_modules/react-native-splash-motion/', import.meta.url);
+  const android = readFileSync(
+    new URL('android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt', packageRoot),
+    'utf8'
+  );
+  const ios = readFileSync(new URL('ios/SplashMotionController.swift', packageRoot), 'utf8');
+  assert.match(android, /private const val WATCHDOG_MS = 15_000L/);
+  assert.match(
+    ios,
+    /private static let watchdogSeconds: TimeInterval = 15\s*$/m
+  );
+});

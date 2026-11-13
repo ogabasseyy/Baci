@@ -57,8 +57,11 @@ async function post(
           : {},
     };
   };
+  const sending = send();
+  // After a timeout the aborted request still rejects: observe it.
+  sending.catch(() => undefined);
   try {
-    return await Promise.race([send(), timedOut]);
+    return await Promise.race([sending, timedOut]);
   } finally {
     clearTimeout(timer);
   }

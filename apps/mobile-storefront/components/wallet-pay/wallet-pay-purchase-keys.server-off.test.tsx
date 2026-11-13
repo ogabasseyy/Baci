@@ -120,4 +120,17 @@ describe('trackWalletPayPurchase', () => {
     expect(inner.verifyPin).not.toHaveBeenCalled();
     expect(inner.pay).not.toHaveBeenCalled();
   });
+
+  it('bugfix: a refusal before the transfer frees the key (Muse)', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    const opts = options();
+    await trackWalletPayPurchase(adapter(outcome('failed')), 'p', opts).pay(
+      OP,
+      'proof'
+    );
+    expect(opts.onSettled).toHaveBeenCalledTimes(1);
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'b'
+    );
+  });
 });

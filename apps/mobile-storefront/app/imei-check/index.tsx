@@ -131,7 +131,7 @@ export default function ImeiCheckerScreen() {
       imeiCheckScreenActions.alertInvalidIdentifier(serviceTier.identifier);
       return;
     }
-    if (walletQuery.isLoading) {
+    if (walletQuery.isLoading || walletPay.waitsForWallet) {
       setError(`${walletCopy.loading} Please try again in a moment.`);
       return;
     }

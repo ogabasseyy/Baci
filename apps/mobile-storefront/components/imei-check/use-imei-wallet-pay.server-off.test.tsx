@@ -42,3 +42,18 @@ describe('useImeiWalletPay while paying from PiggyVest is switched off', () => {
     expect(hook.result.current.covers('basic')).toBe(false);
   });
 });
+
+describe('useImeiWalletPay wallet refresh while switched off', () => {
+  it('never holds the check for a refresh, exactly as today', () => {
+    const hook = renderHook(() =>
+      useImeiWalletPay({
+        accessToken: 'token',
+        apiBaseUrl: 'https://api.test',
+        device: 'smartphone',
+        walletQuery: { data: { wallet: { balance: 0 } }, isRefetching: true },
+        onDelivered: jest.fn(),
+      })
+    );
+    expect(hook.result.current.waitsForWallet).toBe(false);
+  });
+});

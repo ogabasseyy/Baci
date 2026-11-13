@@ -208,3 +208,15 @@ describe('bugfix: server error text reached the outcome card (Muse review)', () 
     expect(JSON.stringify(answer)).not.toContain('raw server text');
   });
 });
+
+describe('bugfix: an unreadable PIN check answer showed a failure (Muse)', () => {
+  it('lets the customer try the PIN again', async () => {
+    const pay = await started();
+    api.verifyPin.mockResolvedValue(reply(200, { proof: 'NOT-HEX' }));
+    await expect(pay.verifyPin(OP, '1234')).resolves.toEqual({
+      kind: 'retry',
+      message: 'Could not check your PIN. Please try again.',
+    });
+    expect(api.pay).not.toHaveBeenCalled();
+  });
+});

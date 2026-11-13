@@ -133,6 +133,12 @@ export function createImeiWalletPayAdapter(input: {
         .safeParse(reply.body);
       if (reply.httpStatus === 200 && proof.success)
         return { kind: 'proof', proof: proof.data.proof };
+      // A 200 we can't read moved nothing: let the customer try again.
+      if (reply.httpStatus === 200)
+        return {
+          kind: 'retry',
+          message: 'Could not check your PIN. Please try again.',
+        };
       const code = codeOf(reply);
       if (code === 'PIN_INCORRECT') {
         const left = reply.body.attemptsRemaining;

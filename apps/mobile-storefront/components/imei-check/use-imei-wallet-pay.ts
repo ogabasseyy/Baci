@@ -5,7 +5,7 @@ import {
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import {
   trackWalletPayPurchase,
@@ -82,6 +82,7 @@ export function useImeiWalletPay({
   walletQuery: {
     data?: { wallet?: PayingWallet | null };
     refetch?: () => unknown;
+    isRefetching?: boolean;
   };
   onDelivered: (result: ImeiWalletPayResult) => void;
   /** Tests pass true to preview the switch-on. */
@@ -91,11 +92,15 @@ export function useImeiWalletPay({
   const wallet = walletQuery.data?.wallet;
   // A sheet opened for one account never stays open for another.
   const userId = useAuthStore((state) => state.user?.id ?? null);
-  const [openedFor, setOpenedFor] = useState(userId);
-  if (openedFor !== userId) {
-    setOpenedFor(userId);
+  const closeForSwitch = useEffectEvent(() => {
     if (sheet.step !== 'closed' && sheet.step !== 'paying') sheet.close();
-  }
+  });
+  const seenUser = useRef(userId);
+  useEffect(() => {
+    if (seenUser.current === userId) return;
+    seenUser.current = userId;
+    closeForSwitch();
+  }, [userId]);
   const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();
@@ -105,6 +110,12 @@ export function useImeiWalletPay({
   const signIn = () => leaveTo('/auth/login?returnTo=/imei-check');
   return {
     sheet,
+    /**
+     * True while the wallet is being re-read with paying from PiggyVest on:
+     * the cached store credit may be out of date, and store credit must pay
+     * first whenever it covers the check. Always false while switched off.
+     */
+    waitsForWallet: canPay && walletQuery.isRefetching === true,
     /** Everything WalletPaySheet needs besides colors. */
     sheetProps: {
       purchase: 'IMEI check',

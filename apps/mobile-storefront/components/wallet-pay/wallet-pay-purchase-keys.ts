@@ -143,9 +143,14 @@ export function trackWalletPayPurchase<Result>(
     async pay(operationId, proof) {
       if (!options.stillOwner()) return switched;
       const answer = await adapter.pay(operationId, proof);
+      // With a proof, a refusal ('failed', e.g. an IMEI mismatch) comes
+      // before the transfer is sent, so it settles too; on an empty-proof
+      // re-check it may come after, so the key stays.
       if (
         answer.kind === 'delivered' ||
-        (answer.kind === 'outcome' && PAY_SETTLES.has(answer.outcome.kind))
+        (answer.kind === 'outcome' &&
+          (PAY_SETTLES.has(answer.outcome.kind) ||
+            (proof !== '' && answer.outcome.kind === 'failed')))
       )
         await settle();
       return answer;

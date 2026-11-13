@@ -271,7 +271,8 @@ Pass:
 | "Move your savings" vs "Complete goal" | #4224 | **Fixed** 15f79481ac |
 | Start Savings lows (debit time, terms error, amount focus, search caps, picker tint) | #4223 session | Sent |
 | Onboarding lows (consent error, disabled button, BVN show/hide, naming) and older store credit / Money received placement | #4230 session | Sent |
-| PIN context rows lack goal name; no "phone changed" confirmation; sheet style differences | #4224 | Open (low) |
+| PIN context rows lack goal name; no "phone changed" confirmation | #4224 | **Fixed** d9058f62ce |
+| Sheet style differences (grey vs red handles, arrow vs chevron back) | design | Open (low): needs one shared sheet/back-button decision across PRs |
 
 Not walkable locally:
 - onboarding pending (the mock answers ready at once);

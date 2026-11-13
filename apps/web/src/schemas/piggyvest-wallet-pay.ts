@@ -151,6 +151,9 @@ export const piggyvestWalletPaySchemas = {
   reserveRows: oneResultRow(reserveResult),
   issuedRows: oneResultRow(issuedBinding.nullable()),
   manageRows: oneResultRow(z.boolean()),
+  vtuDeliveryRows: oneResultRow(
+    z.enum(['success', 'failed', 'processing', 'mismatch'])
+  ),
   statusRows: oneResultRow(paymentStatus.nullable()),
   forPurchaseRows: oneResultRow(
     z

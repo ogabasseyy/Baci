@@ -197,6 +197,31 @@ describe('createWalletPayWorkerStore', () => {
       OP,
     ]);
   });
+  it('asks the database how a claimed VTU payment ended', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) =>
+        rows('processing')
+    );
+    const store = createWalletPayWorkerStore({
+      integrationId: INTEGRATION,
+      environment: 'staging',
+      execute,
+    });
+    await expect(store.vtuDeliveryState(OP)).resolves.toBe('processing');
+    expect(execute).toHaveBeenCalledWith(workerSql.vtuDeliveryState, [
+      INTEGRATION,
+      'staging',
+      OP,
+    ]);
+  });
+  it('rejects an unknown VTU delivery answer', async () => {
+    const store = createWalletPayWorkerStore({
+      integrationId: INTEGRATION,
+      environment: 'staging',
+      execute: vi.fn(async () => rows('vended')),
+    });
+    await expect(store.vtuDeliveryState(OP)).rejects.toThrow();
+  });
   it('reads this customer payment for one purchase', async () => {
     const execute = vi.fn(
       async (_statement: string, _parameters: readonly string[]) =>

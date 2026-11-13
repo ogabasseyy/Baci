@@ -146,6 +146,15 @@ export function createWalletPayWorkerStore(input: {
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },
+    // How a claimed VTU payment's purchase ended (a never-vended pending row
+    // is closed as failed in the same call).
+    async vtuDeliveryState(operationId: string) {
+      const result = await input.execute(workerSql.vtuDeliveryState, [
+        ...binding,
+        schemas.operationId.parse(operationId),
+      ]);
+      return schemas.vtuDeliveryRows.parse(result.rows)[0].result;
+    },
     async listWork(maxRows: number) {
       const result = await input.execute(workerSql.work, [
         ...binding,

@@ -206,5 +206,7 @@ export function walletPayDelivery(runtime: WalletPayRuntime) {
     ) => worker.finish(operationId, outcome, claimToken),
     isImeiDelivered: (operationId: string) =>
       worker.isImeiDelivered(operationId),
+    vtuDeliveryState: (operationId: string) =>
+      worker.vtuDeliveryState(operationId),
   };
 }

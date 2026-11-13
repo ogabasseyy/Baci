@@ -32,6 +32,8 @@ export const WALLET_PAY_WORKER_STATEMENTS = {
     'SELECT piggyvest_primary.release_stale_wallet_payment($1::uuid,$2::text,$3::uuid) AS result',
   imeiDelivered:
     'SELECT piggyvest_primary.imei_wallet_payment_delivered($1::uuid,$2::text,$3::uuid) AS result',
+  vtuDeliveryState:
+    'SELECT piggyvest_primary.vtu_wallet_payment_delivery_state($1::uuid,$2::text,$3::uuid) AS result',
 } as const;
 
 /** Evidence login, (integration id, environment, one value). */

@@ -54,6 +54,7 @@ const workerParameterCounts = new Map<string, number>([
   [walletPayWorker.work, 3],
   [walletPayWorker.releaseStale, 3],
   [walletPayWorker.imeiDelivered, 3],
+  [walletPayWorker.vtuDeliveryState, 3],
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication

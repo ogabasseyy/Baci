@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 import { useMerchant } from '@/hooks/useMerchant';
 import type { useOrderDetailsController } from '@/hooks/useOrderDetailsController';
+import { formatOrderPlacedDate } from '@/lib/format-order-placed-date';
 import { buildOrderPaymentBreakdown } from '@/lib/order-payment-breakdown';
 import { OrderAuditTrailCard } from './OrderAuditTrailCard';
 import { OrderDetailsFooterBar } from './OrderDetailsFooterBar';
@@ -75,7 +76,7 @@ export function OrderDetailsScreenContent({
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
           <OrderDetailsOverviewSection
             colors={controller.colors}
-            createdAtLabel={controller.formatDate(order.created_at)}
+            createdAtLabel={formatOrderPlacedDate(order, merchant?.country)}
             customerEmail={order.customer_email}
             customerName={order.customer_name}
             customerPhone={order.customer_phone}

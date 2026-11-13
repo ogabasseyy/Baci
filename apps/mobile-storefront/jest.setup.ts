@@ -66,6 +66,11 @@ mockKeyboardAvoidingView.displayName = 'MockKeyboardAvoidingView';
 jest.mock('react-native-keyboard-controller', () => ({
   KeyboardAwareScrollView: mockKeyboardAwareScrollView,
   KeyboardAvoidingView: mockKeyboardAvoidingView,
+  KeyboardController: {
+    dismiss: jest.fn(),
+    isVisible: jest.fn(() => false),
+    preload: jest.fn(),
+  },
   KeyboardProvider: mockKeyboardProvider,
   KeyboardStickyView: mockKeyboardAvoidingView,
 }));

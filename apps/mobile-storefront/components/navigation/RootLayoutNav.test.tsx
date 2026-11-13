@@ -106,6 +106,22 @@ jest.mock('@/components/ConnectivityBanner', () => ({
   ConnectivityBanner: () => <MockText>connectivity-banner</MockText>,
 }));
 
+jest.mock('@/components/ui/AppKeyboardProvider', () => ({
+  __esModule: true,
+  default: ({
+    children,
+    startupReady,
+  }: {
+    children?: React.ReactNode;
+    startupReady?: boolean;
+  }) => (
+    <MockView testID="app-keyboard-provider">
+      <MockText>keyboard-startup:{String(startupReady)}</MockText>
+      {children}
+    </MockView>
+  ),
+}));
+
 jest.mock('@/components/chat/ChatWidget', () => ({
   ChatWidget: ({ bottomOffset }: { bottomOffset: number }) => (
     <MockText>{`chat-widget:${bottomOffset}`}</MockText>
@@ -212,6 +228,15 @@ describe('RootLayoutNav', () => {
   it('passes persistence settings through to the query provider', () => {
     render(<RootLayoutNav persistenceEnabled={false} />);
 
+    expect(mockQueryProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ persistenceEnabled: false })
+    );
+  });
+
+  it('passes keyboard startup readiness independently of persistence', () => {
+    render(<RootLayoutNav persistenceEnabled={false} startupReady />);
+
+    expect(screen.getByText('keyboard-startup:true')).toBeTruthy();
     expect(mockQueryProvider).toHaveBeenCalledWith(
       expect.objectContaining({ persistenceEnabled: false })
     );

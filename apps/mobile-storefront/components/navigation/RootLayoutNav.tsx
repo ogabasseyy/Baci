@@ -59,12 +59,14 @@ interface RootLayoutNavProps {
   adTrackingReady?: boolean;
   persistenceEnabled?: boolean;
   shouldResumeNavigation?: boolean;
+  startupReady?: boolean;
 }
 
 export function RootLayoutNav({
   adTrackingReady = true,
   persistenceEnabled = true,
   shouldResumeNavigation = false,
+  startupReady = false,
 }: RootLayoutNavProps) {
   const { GestureHandlerRootView } = getOptionalGestureHandlerRuntime();
   const colorScheme = useColorScheme();
@@ -88,7 +90,7 @@ export function RootLayoutNav({
       >
         <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
           <SafeAreaProvider>
-            <AppKeyboardProvider>
+            <AppKeyboardProvider startupReady={startupReady}>
               <ThemeProvider
                 value={
                   colorScheme === 'dark'

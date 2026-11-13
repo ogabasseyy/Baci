@@ -107,6 +107,10 @@ async function renderBlogPostContent({
   const hasAuthorHub = Boolean(
     post.author_name && hasBlogAuthorPage(post.author_name, merchant.slug)
   );
+  const isOrganizationAuthor =
+    !post.author_name?.trim() ||
+    (!hasAuthorHub &&
+      authorName.toLowerCase() === merchant.business_name.trim().toLowerCase());
   const authorSlug =
     hasAuthorHub && post.author_name ? generateSlug(post.author_name) : null;
   const authorHref = authorSlug
@@ -119,6 +123,7 @@ async function renderBlogPostContent({
   const structuredData = buildBlogPostStructuredData({
     catalogPrices: { products: relatedProducts, currencySource: merchant },
     author: {
+      type: isOrganizationAuthor ? 'Organization' : 'Person',
       id: authorId,
       image: post.author_image_url ?? undefined,
       name: authorName,

@@ -1537,6 +1537,7 @@ interface BlogPostSchemaData {
   datePublished: string;
   dateModified?: string;
   author: {
+    type?: 'Person' | 'Organization';
     name: string;
     id?: string;
     url?: string;
@@ -1611,6 +1612,7 @@ export function generateBlogPostSchema(
   const authorImage = data.author.image
     ? sanitizeSchemaUrl(data.author.image.trim())
     : '';
+  const authorType = data.author.type ?? 'Person';
   const schema: JsonLdStructuredData = {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
@@ -1620,15 +1622,16 @@ export function generateBlogPostSchema(
     datePublished: data.datePublished,
     dateModified: data.dateModified || data.datePublished,
     author: {
-      '@type': 'Person',
+      '@type': authorType,
       ...(authorId && {
         '@id': escapeHtml(authorId),
       }),
       name: escapeHtml(data.author.name),
       ...(data.author.url && { url: escapeHtml(data.author.url) }),
-      ...(data.author.jobTitle && {
-        jobTitle: escapeHtml(data.author.jobTitle),
-      }),
+      ...(authorType === 'Person' &&
+        data.author.jobTitle && {
+          jobTitle: escapeHtml(data.author.jobTitle),
+        }),
       ...(data.author.description && {
         description: escapeHtml(data.author.description),
       }),

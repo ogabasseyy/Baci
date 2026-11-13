@@ -23,6 +23,7 @@ import { getBlogPostTextPreview } from './blog-post-content';
 type BlogPostStructuredDataInput = {
   catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1];
   author: {
+    type?: 'Person' | 'Organization';
     id?: string;
     image?: string;
     name: string;
@@ -106,6 +107,12 @@ export function buildBlogPostStructuredData({
     videoUploadDate: post.video_upload_date ?? post.videoUploadDate ?? null,
   });
 
+  const isOrganizationAuthor = author.type
+    ? author.type === 'Organization'
+    : !post.author_name?.trim() ||
+      author.name.trim().toLowerCase() ===
+        merchant.business_name.trim().toLowerCase();
+
   const blogSchema = generateBlogPostSchema({
     title,
     description: schemaDescription,
@@ -115,14 +122,18 @@ export function buildBlogPostStructuredData({
     datePublished: post.published_at,
     dateModified: post.updated_at ?? undefined,
     author: {
+      type: isOrganizationAuthor ? 'Organization' : 'Person',
       name: author.name,
-      id: author.id,
+      id: isOrganizationAuthor ? organizationId : author.id,
       url: author.url,
-      jobTitle: post.author_title ?? undefined,
+      jobTitle: isOrganizationAuthor
+        ? undefined
+        : (post.author_title ?? undefined),
       description: post.author_bio ?? undefined,
-      sameAs: post.author_name
-        ? getBlogAuthorSameAs(post.author_name, merchant.slug)
-        : [],
+      sameAs:
+        !isOrganizationAuthor && post.author_name
+          ? getBlogAuthorSameAs(post.author_name, merchant.slug)
+          : [],
       image: author.image,
     },
     publisher: {

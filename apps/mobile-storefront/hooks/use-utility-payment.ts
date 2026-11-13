@@ -98,6 +98,9 @@ export function useUtilityPayment() {
           });
           // No authoritative verdict, or PiggyVest confirmed before the
           // wallet is reclassified (Codex): the wallet kind is unknown.
+          // Ruled out: a stale PiggyVest cache isn't store credit (Codex).
+          if (capabilityNow === false)
+            return { ...verdict, walletIsStoreCredit: false };
           return capabilityNow === null ||
             (capabilityNow === true && !verdict.walletIsStoreCredit)
             ? { ...verdict, walletPrimaryUnknown: true }

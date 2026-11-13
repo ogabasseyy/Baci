@@ -117,6 +117,7 @@ export function useCheckoutPaymentController({
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);
     if (selectedPayment && getPaymentTabForMethod(selectedPayment) !== tab) {
+      transferMode.capture(null, false); // its captured mode too (Codex)
       setSelectedPaymentState(null);
     }
   };
@@ -198,14 +199,14 @@ export function useCheckoutPaymentController({
       walletBalance,
       walletIsStoreCredit,
       walletOrderAutoDebitEnabled,
-      // Unknown where PiggyVest is possible (not loaded, refreshing, failed
-      // refresh) or the verdict is unknown/positive (Codex); ruled out = today.
+      // Unknown/positive verdict or unsettled wallet holds; ruled out = today.
       walletPrimaryUnknown:
         (verdictNow !== false &&
           isWalletPrimaryUnknown(walletQuery.data?.wallet)) ||
         verdictNow === null ||
         (verdictNow === true && !walletIsStoreCredit) ||
-        (piggyvestPossible &&
+        (verdictNow !== false &&
+          piggyvestPossible &&
           (!walletQuery.data?.wallet ||
             walletQuery.data.wallet.owner_unresolved === true ||
             walletQuery.isRefetching ||

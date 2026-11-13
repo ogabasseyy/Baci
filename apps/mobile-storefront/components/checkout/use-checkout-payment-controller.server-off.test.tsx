@@ -416,3 +416,52 @@ describe('bugfix: stale PiggyVest wallet hides bank transfer to wallet after a r
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
   });
 });
+
+describe('bugfix: rollback plus failed reload kept bank transfer to wallet hidden', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockIsError = false;
+    mockWallet = undefined;
+  });
+
+  it('offers it again once ruled out, even while the reload errored', () => {
+    // Arrange: the hook still says "possible"; the live verdict is a
+    // ruling-out; the rollback reload failed over a legacy cache.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockWallet = { balance: 0 };
+    mockIsError = true;
+
+    const { result } = renderController();
+
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+  });
+});
+
+describe('bugfix: tab switch kept a stale captured transfer mode', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('drops the captured mode when switching tabs clears the selection', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    const { result } = renderController();
+    act(() => {
+      result.current.setSelectedPayment('bank_transfer');
+    });
+
+    // Act: switch away (clears the selection), then come back.
+    act(() => {
+      result.current.handleSelectPaymentTab('installments' as never);
+    });
+
+    // Assert: no captured choice survives the switch.
+    expect(result.current.selectedPayment).toBeNull();
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
+  });
+});

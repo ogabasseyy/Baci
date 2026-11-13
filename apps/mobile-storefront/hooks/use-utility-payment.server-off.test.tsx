@@ -347,3 +347,33 @@ describe('bugfix: stale PiggyVest wallet treated as store credit after a rollbac
     expect(result.current.walletIsStoreCredit).toBeUndefined();
   });
 });
+
+describe('bugfix: utility submit treats a stale PiggyVest cache as store credit after rollback', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('clears the live store-credit classification while PiggyVest is ruled out', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: true },
+    });
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_balance_kobo: 500_000 } },
+      getWalletVerdict: () => ({
+        walletIsStoreCredit: true,
+        walletPrimaryUnknown: false,
+      }),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    const verdict = result.current.getWalletVerdict?.() as {
+      walletIsStoreCredit?: boolean;
+    };
+
+    expect(verdict.walletIsStoreCredit).toBe(false);
+  });
+});

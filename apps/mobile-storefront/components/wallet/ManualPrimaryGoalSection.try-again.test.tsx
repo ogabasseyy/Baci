@@ -37,6 +37,27 @@ const goal: WalletActiveSavingsGoal = {
   title: 'Phone',
 };
 
+function renderSheet() {
+  render(
+    <ManualPrimaryGoalSection
+      addAmount="1000"
+      colors={Colors.light}
+      goal={goal}
+      isAdding={false}
+      isFundPending={false}
+      merchantId="merchant-a"
+      onAddAmountChange={jest.fn()}
+      onAddSavings={jest.fn()}
+      onFundWallet={jest.fn()}
+      remainingAmount={250000}
+      usesPlanFunding={false}
+      userId="customer-a"
+      visible
+      walletBalance={0}
+    />
+  );
+}
+
 beforeEach(() => {
   resetGoalSetupMemory();
   read.mockReset();
@@ -46,24 +67,7 @@ describe('bugfix: Try again after a failed plan status read did nothing', () => 
   it('reads the status again on every tap, then recovers once the read works', async () => {
     // Arrange: the first read fails (the web app was restarting).
     read.mockRejectedValue(new Error('Network request failed'));
-    render(
-      <ManualPrimaryGoalSection
-        addAmount="1000"
-        colors={Colors.light}
-        goal={goal}
-        isAdding={false}
-        isFundPending={false}
-        merchantId="merchant-a"
-        onAddAmountChange={jest.fn()}
-        onAddSavings={jest.fn()}
-        onFundWallet={jest.fn()}
-        remainingAmount={250000}
-        usesPlanFunding={false}
-        userId="customer-a"
-        visible
-        walletBalance={0}
-      />
-    );
+    renderSheet();
     await act(async () => {});
     expect(screen.getByText(ERROR_COPY)).toBeOnTheScreen();
     expect(read).toHaveBeenCalledTimes(1);
@@ -83,5 +87,28 @@ describe('bugfix: Try again after a failed plan status read did nothing', () => 
     expect(read).toHaveBeenCalledTimes(3);
     expect(screen.queryByText(ERROR_COPY)).toBeNull();
     expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
+  });
+
+  it('shows Checking… while the new read runs, and stays on the error if it fails again', async () => {
+    read.mockRejectedValue(new Error('Network request failed'));
+    renderSheet();
+    await act(async () => {});
+    let failAgain: (error: Error) => void = () => undefined;
+    read.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          failAgain = reject;
+        })
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    });
+    expect(screen.getByRole('button', { name: 'Checking' })).toBeDisabled();
+
+    await act(async () => failAgain(new Error('Network request failed')));
+    expect(screen.getByText(ERROR_COPY)).toBeOnTheScreen();
+    expect(screen.getByText(/^Last tried \d{2}:\d{2}$/)).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
   });
 });

@@ -6,6 +6,7 @@ import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant'
 import { openSavingsSupport } from './open-savings-support';
 import { SavingsGoalRetryPrompt } from './SavingsGoalRetryPrompt';
 import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
+import { SavingsPlanCheckFailed } from './SavingsPlanCheckFailed';
 import { SavingsPlanGettingReady } from './SavingsPlanGettingReady';
 import { useAutoRetrySetup } from './use-auto-retry-setup';
 import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
@@ -29,8 +30,8 @@ type Props = {
   slow?: boolean;
   /** Automatic checks have paused (about an hour on screen). */
   paused?: boolean;
-  /** Reads status now and restarts the quick checks. */
-  onCheckAgain?: () => void;
+  /** Reads status now and restarts the quick checks (settles with the read). */
+  onCheckAgain?: () => Promise<unknown>;
 };
 
 /**
@@ -201,29 +202,14 @@ function StatusNoteView({
         }
       />
     );
-  if (phase === 'error') {
+  if (phase === 'error')
     return (
-      <View style={styles.section}>
-        <Text style={[styles.body, { color: colors.textSecondary }]}>
-          We couldn’t check on your plan just now. Check your connection and try
-          again.
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Try again"
-          // Restart the full check cycle when the parent runs one.
-          onPress={
-            onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
-          }
-          style={styles.retry}
-        >
-          <Text style={[styles.action, { color: colors.primary }]}>
-            Try again
-          </Text>
-        </Pressable>
-      </View>
+      <SavingsPlanCheckFailed
+        colors={colors}
+        // Restart the full check cycle when the parent runs one.
+        onTryAgain={onCheckAgain ?? (() => funding.fetchExistingPlanFunding())}
+      />
     );
-  }
   if (phase === 'unavailable')
     return (
       <View style={styles.section}>

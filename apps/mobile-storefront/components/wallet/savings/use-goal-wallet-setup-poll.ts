@@ -174,10 +174,14 @@ export function useGoalWalletSetupPoll({
       ? null
       : pendingSlow
   );
-  // Reads once right away and starts the quick checks again.
-  const checkAgain = () => {
+  // Reads once right away and starts the quick checks again. Settles when
+  // that read does (never rejects), so a button can show it is checking.
+  const checkAgain = (): Promise<void> => {
     setAttempt({ scopeKey, count: 0 });
-    void Promise.resolve(reread({ silent: true })).catch(() => undefined);
+    return Promise.resolve(reread({ silent: true })).then(
+      () => undefined,
+      () => undefined
+    );
   };
   return { slow, paused, checkAgain };
 }

@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/Colors';
 
 export const styles = StyleSheet.create({
-  root: { gap: SPACING.sm, paddingBottom: SPACING.md },
+  root: { gap: SPACING.sm },
   header: { alignItems: 'center', flexDirection: 'row', gap: SPACING.sm },
   back: {
     alignItems: 'center',

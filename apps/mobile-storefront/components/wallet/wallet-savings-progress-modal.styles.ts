@@ -27,7 +27,9 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   scrollView: { flex: 1 },
   // No flexGrow: the measured content height must be the real height, so the
   // sheet can shrink to fit it.
-  scrollContent: { gap: SPACING.md, paddingBottom: SPACING.md },
+  // No extra bottom padding: the sheet already adds the home-indicator
+  // space, and more left an empty band under the last link.
+  scrollContent: { gap: SPACING.md },
   header: {
     alignItems: 'center',
     flexDirection: 'row',

@@ -11,6 +11,16 @@ import type { WalletData } from '@/hooks/wallet-query';
 import { PRIMARY_CREDIT_POLL_INTERVAL_MS } from './use-primary-wallet-credit-poll';
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 
+// The live verdict is unknown unless a test says otherwise.
+const mockVerdict: boolean | null = null;
+jest.mock('@/hooks/use-piggyvest-capability-now', () => ({
+  usePiggyvestCapabilityNow: () => mockVerdict,
+}));
+jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: '' } }));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: (select: (s: { merchantId: null }) => unknown) =>
+    select({ merchantId: null }),
+}));
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
 // The unknown-answer retry has its own tests; isolate the credit poll here.
 const mockUnknownRetry = jest.fn();

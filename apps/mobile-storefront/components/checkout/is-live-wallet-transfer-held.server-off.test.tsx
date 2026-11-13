@@ -65,3 +65,13 @@ describe('isLiveWalletTransferHeld', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: a ruled-out merchant held by a timed-out wallet read', () => {
+  it('does not hold on an unknown read where the server rules PiggyVest out', () => {
+    // Arrange: the primary read timed out (unknown), merchant ruled out.
+    const live = readers({ unknown: true });
+
+    // Act + Assert
+    expect(isLiveWalletTransferHeld(live, false)).toBe(false);
+  });
+});

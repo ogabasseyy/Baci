@@ -78,9 +78,10 @@ export function usePrimaryWalletCreditPoll({
     if (
       !enabled ||
       announcedRef.current ||
-      baseline === null ||
       typeof balanceKobo !== 'number' ||
-      balanceKobo <= baseline
+      // A pending account opened with no balance (Codex): its first
+      // positive balance is the money received.
+      balanceKobo <= (baseline ?? 0)
     ) {
       return;
     }

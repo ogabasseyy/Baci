@@ -1,7 +1,12 @@
 import { useState } from 'react';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import type { WalletData } from '@/hooks/wallet-query';
+import { CONFIG } from '@/lib/config';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
+import { useAuthStore } from '@/stores/auth-store';
 import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
 import { usePrimaryWalletUnknownRetry } from './use-primary-wallet-unknown-retry';
+import { withoutRuledOutPrimary } from './without-ruled-out-primary';
 
 interface PrimaryWalletWatchInput {
   wallet: WalletData | undefined;
@@ -68,5 +73,12 @@ export function usePrimaryWalletWatch({
     scopeKey,
     refetch,
   });
-  return effective;
+  // Same merchant resolution as the wallet reads.
+  const verdict = usePiggyvestCapabilityNow(
+    pickMerchantId(
+      useAuthStore((state) => state.merchantId),
+      CONFIG.MERCHANT_ID
+    )
+  );
+  return withoutRuledOutPrimary(effective, verdict);
 }

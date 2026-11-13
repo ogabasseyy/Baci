@@ -23,8 +23,10 @@ export function isLiveWalletTransferHeld(
   });
   return (
     verdict.walletIsStoreCredit === true ||
-    verdict.walletPrimaryUnknown === true ||
+    // A ruled-out merchant's timed-out read isn't PiggyVest (Muse).
     (piggyvestPossible &&
-      (readers.isFetchingNow() || readers.getWalletError() != null))
+      (verdict.walletPrimaryUnknown === true ||
+        readers.isFetchingNow() ||
+        readers.getWalletError() != null))
   );
 }

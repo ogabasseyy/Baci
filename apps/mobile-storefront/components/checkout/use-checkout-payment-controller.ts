@@ -201,7 +201,8 @@ export function useCheckoutPaymentController({
       // Unknown where PiggyVest is possible (not loaded, refreshing, failed
       // refresh) or the verdict is unknown/positive (Codex); ruled out = today.
       walletPrimaryUnknown:
-        isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
+        (verdictNow !== false &&
+          isWalletPrimaryUnknown(walletQuery.data?.wallet)) ||
         verdictNow === null ||
         (verdictNow === true && !walletIsStoreCredit) ||
         (piggyvestPossible &&

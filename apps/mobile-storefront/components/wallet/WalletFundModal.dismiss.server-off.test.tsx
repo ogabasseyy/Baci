@@ -197,3 +197,19 @@ describe('bugfix: card top-up offered before the PiggyVest verdict', () => {
     clearObservedPiggyvestPrimaryCapability();
   });
 });
+
+describe('bugfix: pilot sheet keeps PiggyVest after a rollback to not ready', () => {
+  it('stops treating a purchase return as PiggyVest card-only once rolled back', () => {
+    // Arrange: the hook still holds "PiggyVest on"; the live verdict has
+    // been rolled back to "not ready" while the sheet is open.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+
+    // Act
+    renderModal(false, '/imei-check');
+
+    // Assert: no PiggyVest store-credit sheet for a ruled-out merchant.
+    expect(screen.queryByText('Add store credit')).toBeNull();
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});

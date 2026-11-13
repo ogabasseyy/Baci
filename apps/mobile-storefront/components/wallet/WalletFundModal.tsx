@@ -70,9 +70,11 @@ export function WalletFundModal({
   // return flow (e.g. IMEI check) still spends the legacy balance.
   const primaryReady = useWalletPrimaryReady();
   // PiggyVest merchant whose primary wallet the server hasn't ruled out.
+  // The live verdict follows a rollback written while this sheet is open
+  // (Codex); the hook's own answer is the fallback before any verdict.
   const piggyvestMerchant = isPiggyvestCardOnlyMerchant(
     merchantId,
-    primaryCapability
+    verdictNow ?? primaryCapability
   );
   // A purchase return (IMEI check, utilities) spends store credit, which
   // only a card top-up adds: the PiggyVest account would fund savings.

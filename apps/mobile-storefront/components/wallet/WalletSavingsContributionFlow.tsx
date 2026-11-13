@@ -14,6 +14,11 @@ import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
+/** Width for the big amount: about one 38pt bold digit per character. */
+function amountFieldWidth(shown: string) {
+  return Math.max(60, shown.length * 24 + 8);
+}
+
 type WalletSavingsContributionFlowProps = {
   addAmount: string;
   colors: (typeof Colors)['light'];
@@ -91,6 +96,9 @@ export function WalletSavingsContributionFlow({
         ? null
         : 'Enter an amount to move from your wallet into this plan.';
 
+  const shownAmount = addAmount
+    .replace(/\D/g, '')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return (
     <View style={styles.addSection}>
       {/* The amount is the hero: big and centred, with what the wallet holds. */}
@@ -99,9 +107,7 @@ export function WalletSavingsContributionFlow({
           <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
           <SavingsSheetTextInput
             accessibilityLabel="Savings top-up amount"
-            value={addAmount
-              .replace(/\D/g, '')
-              .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            value={shownAmount}
             editable={!isBusy}
             onChangeText={(text) => {
               setHasSeededAmount(true);
@@ -110,7 +116,12 @@ export function WalletSavingsContributionFlow({
             keyboardType="number-pad"
             placeholder="0"
             placeholderTextColor={colors.placeholder}
-            style={[styles.amountInputField, { color: colors.text }]}
+            // iOS doesn't widen a text field when a chip sets its value, so
+            // the width follows the shown digits (never clipped as "₦5,0…").
+            style={[
+              styles.amountInputField,
+              { color: colors.text, minWidth: amountFieldWidth(shownAmount) },
+            ]}
           />
         </View>
         <Text style={[styles.walletHint, { color: colors.textSecondary }]}>

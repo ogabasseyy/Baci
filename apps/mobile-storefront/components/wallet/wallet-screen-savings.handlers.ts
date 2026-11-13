@@ -157,6 +157,7 @@ export async function addSavingsContributionToGoal({
         confirmed.goalCompleted ??
         (confirmed.savedAfter !== undefined &&
           confirmed.savedAfter >= goal.target_amount),
+      mayHaveCompleted: goalCompleted,
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });

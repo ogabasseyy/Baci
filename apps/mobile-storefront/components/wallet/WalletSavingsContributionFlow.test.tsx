@@ -41,6 +41,24 @@ describe('WalletSavingsContributionFlow', () => {
     expect(props.onAddAmountChange).toHaveBeenLastCalledWith('');
   });
 
+  it('widens the amount field with the digits, so a chip-set amount is never clipped', () => {
+    const props = {
+      ...createProps(),
+      addAmount: '1000',
+      remainingAmount: 900000,
+    };
+    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
+    const narrow = StyleSheet.flatten(
+      screen.getByLabelText('Savings top-up amount').props.style
+    ).minWidth as number;
+    rerender(<WalletSavingsContributionFlow {...props} addAmount="500000" />);
+    const wide = StyleSheet.flatten(
+      screen.getByLabelText('Savings top-up amount').props.style
+    ).minWidth as number;
+    expect(wide).toBeGreaterThan(narrow);
+    expect(wide).toBeGreaterThanOrEqual('500,000'.length * 24);
+  });
+
   it('does not open another funding screen before an amount is entered for a ₦0 wallet', () => {
     const props = createProps();
     render(<WalletSavingsContributionFlow {...props} />);

@@ -230,6 +230,17 @@ describe('useGoalWalletSetupPoll', () => {
       expect(result.current.slow).toBe(true);
     });
 
+    it('gives a second stall its own first minute after the plan was ready', async () => {
+      const view = setup({ phase: 'pending' });
+      await advance(61_000);
+      expect(view.result.current.slow).toBe(true);
+      view.rerender({ phase: 'ready' });
+      await advance(0);
+      view.rerender({ phase: 'pending' });
+      await advance(0);
+      expect(view.result.current.slow).toBe(false);
+    });
+
     it('is not slow once the plan is ready', async () => {
       const view = setup({ phase: 'pending' });
       await advance(61_000);

@@ -100,6 +100,13 @@ describe('bugfix: the amount entry flashed while the plan status loaded', () => 
   });
 });
 
+it('passes a stalled setup through as it is, so the note can restart it', () => {
+  rememberGoalSetupPhase(scopeKey, 'pending');
+  mockPhase = 'setup_retryable';
+  renderSection();
+  expect(mockStatusNote).toHaveBeenLastCalledWith('setup_retryable');
+});
+
 it('shows the amount entry at once for a plan last seen ready', () => {
   rememberGoalSetupPhase(scopeKey, 'ready');
   renderSection();

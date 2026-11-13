@@ -58,6 +58,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     input.startDate,
     input.maturityDate,
     input.preferredDebitTime,
+    // The interest answer is fixed once the plan exists: editing it after
+    // creation must not hand off the plan with its original answer.
+    input.interestChoice ?? null,
   ]);
   useEffect(() => {
     const context = { active: true, key: contextKey };

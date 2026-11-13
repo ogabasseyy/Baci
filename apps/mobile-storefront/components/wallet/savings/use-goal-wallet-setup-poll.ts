@@ -99,7 +99,12 @@ export function useGoalWalletSetupPoll({
   useEffect(() => {
     rememberGoalSetupPhase(scopeKey, phase);
     const firstAt = goalSetupFirstWaitingAt(scopeKey);
-    if (!waiting || firstAt === null) return;
+    // Ready (or no longer waiting): a later stall starts its own minute.
+    if (!waiting) {
+      if (overdueScope !== null) setOverdueScope(null);
+      return;
+    }
+    if (firstAt === null) return;
     const left = firstAt + GOAL_SETUP_FIRST_MINUTE_MS - Date.now();
     if (left <= 0) {
       setOverdueScope(scopeKey);
@@ -107,7 +112,7 @@ export function useGoalWalletSetupPoll({
     }
     const timer = setTimeout(() => setOverdueScope(scopeKey), left);
     return () => clearTimeout(timer);
-  }, [phase, scopeKey, waiting]);
+  }, [phase, scopeKey, waiting, overdueScope]);
   const overdue = waiting && overdueScope === scopeKey;
 
   const slow = (active && count >= FAST_ATTEMPTS) || overdue;

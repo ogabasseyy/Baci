@@ -7,7 +7,10 @@ import { SavingsTimelinePreview } from './SavingsTimelinePreview';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
-import { contributionAboveTargetMessage } from './start-savings-controller.utils';
+import {
+  contributionAboveTargetMessage,
+  HEAD_START_ABOVE_TARGET_MESSAGE,
+} from './start-savings-controller.utils';
 
 const HEAD_START_OPTIONS = [
   {
@@ -36,6 +39,13 @@ export function SavingsContributionSection({
     controller.contributionValue,
     controller.targetValue
   );
+  // Same rule the step's Continue uses: say why a head start blocks it.
+  const headStartTooBig =
+    controller.initialContributionEnabled &&
+    Number.isFinite(controller.effectiveInitialContribution) &&
+    Number.isFinite(controller.targetValue) &&
+    controller.targetValue > 0 &&
+    controller.effectiveInitialContribution > controller.targetValue;
   return (
     <View style={styles.section}>
       <SavingsScheduleFields colors={colors} controller={controller} />
@@ -87,6 +97,14 @@ export function SavingsContributionSection({
           value={controller.initialContributionAmount}
           onChangeText={controller.setInitialContributionAmount}
         />
+      ) : null}
+      {headStartTooBig ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.fieldWarning, { color: colors.error }]}
+        >
+          {HEAD_START_ABOVE_TARGET_MESSAGE}
+        </Text>
       ) : null}
     </View>
   );

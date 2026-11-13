@@ -39,4 +39,36 @@ describe('SavingsContributionSection with PiggyVest off', () => {
       expect(screen.queryByText('Your savings timeline')).toBeNull();
     });
   });
+
+  describe('bugfix: a head start above the price hid Continue with no reason given', () => {
+    it('says why when the head start is more than the phone’s price', () => {
+      render(
+        <SavingsContributionSection
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            initialContributionEnabled: true,
+            initialContributionAmount: '300000',
+            effectiveInitialContribution: 300_000,
+          })}
+        />
+      );
+      expect(
+        screen.getByText('Your head start cannot be more than the plan target.')
+      ).toBeOnTheScreen();
+    });
+
+    it('says nothing for a head start within the price', () => {
+      render(
+        <SavingsContributionSection
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            initialContributionEnabled: true,
+            initialContributionAmount: '50000',
+            effectiveInitialContribution: 50_000,
+          })}
+        />
+      );
+      expect(screen.queryByText(/head start cannot be more/)).toBeNull();
+    });
+  });
 });

@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { Href } from 'expo-router';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -37,6 +38,11 @@ function getTierInfo(tier?: string) {
 
 export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
   const tier = getTierInfo();
+  // NativeWind's css-interop drops Pressable style callbacks on device, which
+  // left Redeem as unstyled dark text on the red card. Track pressed state
+  // ourselves and pass a plain style array instead.
+  const [isEditPressed, setIsEditPressed] = useState(false);
+  const [isRedeemPressed, setIsRedeemPressed] = useState(false);
   const latestQuizBadge = useQuizBadgeStore((state) =>
     state.getMostRecentBadge(customer.user_id ?? customer.id)
   );
@@ -66,10 +72,12 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
         style={styles.editWrap}
       >
         <Pressable
-          style={({ pressed }) => [
+          style={[
             styles.editBtn,
-            pressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
+            isEditPressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
           ]}
+          onPressIn={() => setIsEditPressed(true)}
+          onPressOut={() => setIsEditPressed(false)}
           onPress={() => router.push('/profile/edit' as Href)}
           accessibilityRole="button"
           accessibilityLabel="Edit profile"
@@ -127,10 +135,9 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
             </View>
           </View>
           <Pressable
-            style={({ pressed }) => [
-              styles.redeemBtn,
-              pressed && { opacity: 0.8 },
-            ]}
+            style={[styles.redeemBtn, isRedeemPressed && { opacity: 0.8 }]}
+            onPressIn={() => setIsRedeemPressed(true)}
+            onPressOut={() => setIsRedeemPressed(false)}
             onPress={() => router.push('/wallet' as Href)}
             accessibilityRole="button"
             accessibilityLabel="View wallet and redeem points"

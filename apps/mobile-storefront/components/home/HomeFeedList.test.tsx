@@ -19,7 +19,7 @@ jest.mock('./use-home-product-feed', () => ({
 }));
 
 jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({ colors: { text: '#000000' } }),
+  useTheme: () => ({ colors: { card: '#FFFFFF', text: '#000000' } }),
 }));
 
 jest.mock('@/components/storefront/BlockRenderer', () =>
@@ -103,6 +103,19 @@ describe('HomeFeedList', () => {
     expect(screen.getByTestId('filter-bar')).toBeTruthy();
     expect(screen.getByText('Shop the collection')).toBeTruthy();
     expect(screen.getAllByTestId('product-card')).toHaveLength(2);
+  });
+
+  // Elite paints a fixed black backdrop behind the transparent list header;
+  // the dark heading must sit on the same card surface as the FilterBar.
+  it('renders the section title on the card surface, never the bare backdrop', () => {
+    renderList();
+
+    expect(screen.getByTestId('home-feed-section-title')).toHaveStyle({
+      backgroundColor: '#FFFFFF',
+    });
+    expect(
+      screen.getByRole('header', { name: 'Shop the collection' })
+    ).toHaveStyle({ color: '#000000' });
   });
 
   it('renders products for a single-column (list) variant', () => {

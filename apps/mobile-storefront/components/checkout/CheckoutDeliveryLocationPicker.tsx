@@ -5,6 +5,9 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { checkoutDeliveryCardStyles as styles } from './CheckoutDeliveryCard.styles';
 import type { CheckoutDeliveryCardColors } from './CheckoutDeliveryCard.types';
+import { getLocationPickerError } from './location-picker-error';
+
+const PICKER_ERROR_COLOR = '#EF4444';
 
 type CheckoutDeliveryLocationPickerProps = {
   colors: CheckoutDeliveryCardColors;
@@ -43,58 +46,66 @@ export function CheckoutDeliveryLocationPicker({
       <Controller
         control={control}
         name={valueName}
-        render={({ field: { value } }) => (
-          <>
-            <Pressable
-              accessibilityHint={isLoading ? 'Loading options' : undefined}
-              accessibilityLabel={pickerLabel}
-              accessibilityRole="button"
-              accessibilityState={{ busy: isLoading }}
-              onPress={onPress}
-              style={[
-                styles.input,
-                styles.selectInput,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(255, 255, 255, 0.05)'
-                    : '#F9FAFB',
-                  borderColor: error ? '#EF4444' : 'transparent',
-                },
-              ]}
-            >
-              <Text
+        render={({ field: { value } }) => {
+          const displayError = getLocationPickerError(valueName, value, error);
+          return (
+            <>
+              <Pressable
+                accessibilityHint={isLoading ? 'Loading options' : undefined}
+                accessibilityLabel={pickerLabel}
+                accessibilityRole="button"
+                accessibilityState={{ busy: isLoading }}
+                onPress={onPress}
                 style={[
-                  styles.selectInputText,
+                  styles.input,
+                  styles.selectInput,
                   {
-                    color: value ? colors.text : colors.textSecondary,
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : '#F9FAFB',
+                    borderColor: displayError
+                      ? PICKER_ERROR_COLOR
+                      : 'transparent',
                   },
                 ]}
               >
-                {value || placeholder}
-              </Text>
-              {isLoading ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colors.textSecondary}
-                  accessibilityLabel={loadingLabel}
-                  accessibilityRole="progressbar"
-                  testID={`checkout-delivery-${valueName}-loading`}
-                />
-              ) : (
-                <Ionicons
-                  name="chevron-down"
-                  size={18}
-                  color={colors.textSecondary}
-                />
-              )}
-            </Pressable>
-            {error ? (
-              <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
-                {error}
-              </Text>
-            ) : null}
-          </>
-        )}
+                <Text
+                  style={[
+                    styles.selectInputText,
+                    {
+                      color: value ? colors.text : colors.textSecondary,
+                    },
+                  ]}
+                >
+                  {value || placeholder}
+                </Text>
+                {isLoading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.textSecondary}
+                    accessibilityLabel={loadingLabel}
+                    accessibilityRole="progressbar"
+                    testID={`checkout-delivery-${valueName}-loading`}
+                  />
+                ) : (
+                  <Ionicons
+                    name="chevron-down"
+                    size={18}
+                    color={colors.textSecondary}
+                  />
+                )}
+              </Pressable>
+              {displayError ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[styles.fieldError, { color: PICKER_ERROR_COLOR }]}
+                >
+                  {displayError}
+                </Text>
+              ) : null}
+            </>
+          );
+        }}
       />
     </View>
   );

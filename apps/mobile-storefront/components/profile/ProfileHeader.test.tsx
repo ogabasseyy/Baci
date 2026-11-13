@@ -1,5 +1,8 @@
+import { resolve } from 'node:path';
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
+import { Pressable } from 'react-native';
+import { palette } from '@/constants/Colors';
 import type { Customer } from '@/stores/auth-store';
 import { ProfileHeader } from './ProfileHeader';
 
@@ -36,6 +39,16 @@ jest.mock('@/stores/quiz-badge-store', () => ({
     }),
 }));
 
+const { cssInterop } = jest.requireActual<
+  typeof import('react-native-css-interop')
+>(
+  resolve(
+    __dirname,
+    '../../../../node_modules/react-native-css-interop/dist/runtime/native/api.js'
+  )
+);
+const NativeWindPressable = cssInterop(Pressable, { className: 'style' });
+
 const customer: Customer = {
   email: 'player@example.test',
   id: 'customer-row-id',
@@ -49,5 +62,28 @@ describe('ProfileHeader', () => {
     expect(screen.getByText('SuperQuiz badge')).toBeTruthy();
     expect(screen.getByText('Today Quiz')).toBeTruthy();
     expect(mockGetMostRecentBadge).toHaveBeenCalledWith('auth-user');
+  });
+
+  // On device NativeWind's interop ignored the Pressable style callback, so
+  // Redeem lost its amber pill and showed dark text on dark red.
+  it('keeps the Redeem pill fill and row layout through native interop', () => {
+    render(<ProfileHeader customer={customer} loyaltyPoints={0} />);
+    let button = screen.getByRole('button', {
+      name: 'View wallet and redeem points',
+    });
+    while (
+      button.parent?.props.accessibilityLabel ===
+      'View wallet and redeem points'
+    )
+      button = button.parent;
+
+    const native = render(<NativeWindPressable {...button.props} />);
+
+    expect(
+      native.getByRole('button', { name: 'View wallet and redeem points' })
+    ).toHaveStyle({
+      backgroundColor: palette.amber[400],
+      flexDirection: 'row',
+    });
   });
 });

@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   type StyleProp,
-  Text,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -33,6 +32,7 @@ import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
+import { HomeFeedSectionTitle } from './HomeFeedSectionTitle';
 import { getHomeFeedSlices } from './home-feed-ad-owners';
 import { useHomeProductFeed } from './use-home-product-feed';
 
@@ -190,9 +190,7 @@ export function HomeFeedList({
       {hasPrimaryGrid ? (
         <>
           {blockTitle ? (
-            <Text style={[gridStyles.sectionTitle, { color: colors.text }]}>
-              {blockTitle}
-            </Text>
+            <HomeFeedSectionTitle colors={colors} title={blockTitle} />
           ) : null}
           <FilterBar {...filterBarProps} />
         </>

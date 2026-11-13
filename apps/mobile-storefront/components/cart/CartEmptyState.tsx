@@ -8,6 +8,7 @@ interface CartEmptyStateProps {
   colors: ThemeColors;
   onRetry: () => void;
   onStartShopping: () => void;
+  onBack?: () => void;
 }
 
 export function CartEmptyState({
@@ -15,6 +16,7 @@ export function CartEmptyState({
   colors,
   onRetry,
   onStartShopping,
+  onBack,
 }: CartEmptyStateProps) {
   return (
     <>
@@ -30,6 +32,7 @@ export function CartEmptyState({
         isRetrying={false}
         onRetry={onRetry}
         onStartShopping={onStartShopping}
+        onBack={onBack}
       />
     </>
   );

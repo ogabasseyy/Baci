@@ -1,7 +1,8 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND, palette, RADIUS, SPACING } from '@/constants/Colors';
+import { CheckoutStepPill } from './CheckoutStepPill';
 
 export type CheckoutStep = 'address' | 'payment' | 'review';
 
@@ -79,87 +80,22 @@ export function CheckoutStepper({
       </View>
       <View style={styles.stepPills}>
         {steps.map((s, index) => {
-          const isActive = s === step;
-          const isCompleted = index < currentIndex;
-          const isClickable = index <= currentIndex;
+          const status =
+            index < currentIndex
+              ? 'completed'
+              : index === currentIndex
+                ? 'current'
+                : 'upcoming';
           return (
-            <Pressable
+            <CheckoutStepPill
               key={s}
-              onPress={() => {
-                if (isClickable && s !== step) {
-                  setStep(s);
-                }
-              }}
-              disabled={!isClickable || s === step}
-              style={[
-                styles.stepPill,
-                {
-                  backgroundColor: isActive
-                    ? isDark
-                      ? 'rgba(217, 59, 48, 0.16)'
-                      : palette.red[50]
-                    : colors.card,
-                  borderColor:
-                    isActive || isCompleted
-                      ? BRAND.primary
-                      : isDark
-                        ? 'rgba(255, 255, 255, 0.08)'
-                        : colors.border,
-                  opacity: isClickable ? 1 : 0.72,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Go to ${STEP_PILL_LABELS[s]} step`}
-              accessibilityState={{ disabled: !isClickable || s === step }}
-            >
-              <View
-                style={[
-                  styles.stepPillDot,
-                  {
-                    backgroundColor:
-                      isActive || isCompleted
-                        ? BRAND.primary
-                        : isDark
-                          ? 'rgba(148, 163, 184, 0.22)'
-                          : palette.gray[200],
-                  },
-                ]}
-              >
-                {isCompleted ? (
-                  <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                ) : (
-                  <Text
-                    style={[
-                      styles.stepPillNumber,
-                      {
-                        color:
-                          isActive || isCompleted
-                            ? '#FFFFFF'
-                            : colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    {index + 1}
-                  </Text>
-                )}
-              </View>
-              <Text
-                style={[
-                  styles.stepPillText,
-                  {
-                    color: isActive
-                      ? isDark
-                        ? '#FDECEA'
-                        : BRAND.primary
-                      : isCompleted
-                        ? colors.text
-                        : colors.textSecondary,
-                  },
-                ]}
-              >
-                {STEP_PILL_LABELS[s]}
-              </Text>
-            </Pressable>
+              colors={colors}
+              isDark={isDark}
+              label={STEP_PILL_LABELS[s]}
+              number={index + 1}
+              onPress={status === 'completed' ? () => setStep(s) : undefined}
+              status={status}
+            />
           );
         })}
       </View>
@@ -215,31 +151,5 @@ const styles = StyleSheet.create({
   stepPills: {
     flexDirection: 'row',
     gap: 8,
-  },
-  stepPill: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: RADIUS.xl,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  stepPillDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepPillNumber: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  stepPillText: {
-    fontSize: 11,
-    fontWeight: '600',
   },
 });

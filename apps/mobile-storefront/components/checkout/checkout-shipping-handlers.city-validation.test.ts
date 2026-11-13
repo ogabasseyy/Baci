@@ -108,3 +108,27 @@ describe('Google state-name city validation', () => {
     expect(googleSuggestedCityRef.current).toBe('Kano');
   });
 });
+
+describe('state picker city reset', () => {
+  it('clears the city without validating it before the City picker is touched', () => {
+    const setValue = jest.fn() as jest.MockedFunction<
+      UseFormSetValue<ShippingAddressInput>
+    >;
+    const setShowStatePicker = jest.fn();
+
+    createCheckoutShippingHandlers(
+      createParams({ setShowStatePicker, setValue })
+    ).handleSelectState('Lagos');
+
+    expect(setValue).toHaveBeenCalledWith('state', 'Lagos', {
+      shouldValidate: true,
+    });
+    expect(setValue).toHaveBeenCalledWith('city', '', {
+      shouldValidate: false,
+    });
+    expect(setValue).not.toHaveBeenCalledWith('city', '', {
+      shouldValidate: true,
+    });
+    expect(setShowStatePicker).toHaveBeenCalledWith(false);
+  });
+});

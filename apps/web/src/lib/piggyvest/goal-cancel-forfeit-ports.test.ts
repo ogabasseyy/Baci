@@ -124,6 +124,19 @@ const ownWallet = {
   currency: 'NGN',
   status: 'active',
 };
+const goalWallet = {
+  id: 'goal-wallet',
+  business_id: 'business',
+  api_customer_id: 'customer',
+  currency: 'NGN',
+  status: 'active',
+  balance: 12000,
+};
+// Answers per wallet id: the interest destination, then the goal source.
+const wallets =
+  (source: Record<string, unknown> = goalWallet) =>
+  async (_provider: unknown, id: string) =>
+    id === 'goal-wallet' ? source : ownWallet;
 
 it("accepts only Ogabassey's own active wallet in this business as the interest destination", async () => {
   const ports = forfeitDriverPorts({
@@ -138,7 +151,7 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
     expectedDestinationWalletId: 'interest-wallet',
     expectedDestinationOwnerId: 'ogabassey',
   });
-  mocks.retrieve.mockResolvedValue(ownWallet);
+  mocks.retrieve.mockImplementation(wallets());
   expect(await ports.verifyDestination(forfeit)).toBe(true);
   for (const wrong of [
     { business_id: 'another-business' },
@@ -357,5 +370,32 @@ describe('bugfix: an alert was marked sent before it was emitted', () => {
     });
     expect(await ports.claim(operationId)).toEqual(claim);
     expect(mocks.alert).toHaveBeenCalledOnce();
+  });
+});
+
+describe('bugfix: the interest was sent without checking the goal wallet it comes from', () => {
+  it.each([
+    ['reassigned to another customer', { api_customer_id: 'someone-else' }],
+    ['in another business', { business_id: 'another-business' }],
+    ['no longer active', { status: 'frozen' }],
+    ['not NGN', { currency: 'USD' }],
+    ['holding less than the interest', { balance: 11999 }],
+    ['answering for another wallet', { id: 'other-wallet' }],
+  ])('refuses to send when the source wallet is %s', async (_why, wrong) => {
+    mocks.retrieve.mockImplementation(wallets({ ...goalWallet, ...wrong }));
+    const ports = forfeitDriverPorts({
+      claim: vi.fn(),
+      release: vi.fn(),
+      unclaim: vi.fn(),
+      markPosting: vi.fn(),
+      ackAlert: vi.fn(),
+      provider,
+      evidence: null,
+      operationId,
+      expectedDestinationWalletId: 'interest-wallet',
+      expectedDestinationOwnerId: 'ogabassey',
+    });
+    expect(await ports.verifyDestination(forfeit)).toBe(false);
+    expect(mocks.retrieve).toHaveBeenCalledWith(provider, 'goal-wallet');
   });
 });

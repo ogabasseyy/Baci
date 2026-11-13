@@ -37,6 +37,9 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_STATEMENTS.amounts, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.manage, 3],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.holdAck, 2],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerHolds, 2],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerHoldAck, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerList, 4],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim, 3],
@@ -71,6 +74,8 @@ const parameterCounts = new Map<string, number>([
 const workerStatements = new Set<string>([
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerHolds,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerHoldAck,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,

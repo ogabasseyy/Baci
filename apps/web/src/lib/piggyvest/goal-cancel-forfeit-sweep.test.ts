@@ -16,11 +16,18 @@ const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
   reconcile: vi.fn(),
   alert: vi.fn(),
+  holds: vi.fn(),
   retrieve: vi.fn(),
 }));
 vi.mock('./wallets', () => ({ retrievePiggyvestWallet: mocks.retrieve }));
 vi.mock('./primary-wallet-savings-executor', () => ({
-  createPrimaryWalletSavingsExecutor: () => mocks.execute,
+  // Holds are answered on their own (mocks.holds), so the per-forfeit
+  // answer sequences below are unaffected by the holds lookup.
+  createPrimaryWalletSavingsExecutor:
+    () => (statement: string, parameters: readonly string[]) =>
+      statement === sql.workerHolds
+        ? mocks.holds(statement, parameters)
+        : mocks.execute(statement, parameters),
 }));
 vi.mock('./transfers', () => ({ transferToWallet: mocks.transfer }));
 vi.mock('./primary-wallet-savings-transfer-lookup', () => ({
@@ -60,14 +67,17 @@ beforeEach(() => {
   vi.stubEnv('PIGGYVEST_INTEREST_WALLET_ID', 'interest-wallet');
   vi.stubEnv('PIGGYVEST_INTEREST_WALLET_OWNER_ID', 'ogabassey');
   mocks.transfer.mockResolvedValue({ accepted: true });
+  mocks.holds.mockResolvedValue({ rows: [{ result: [] }] });
   mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
-  mocks.retrieve.mockResolvedValue({
-    id: 'interest-wallet',
+  // The interest destination, and the goal wallet the interest comes from.
+  mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
+    id,
     business_id: 'business',
-    api_customer_id: 'ogabassey',
+    api_customer_id: id === 'interest-wallet' ? 'ogabassey' : 'customer',
     currency: 'NGN',
     status: 'active',
-  });
+    balance: 12000,
+  }));
 });
 
 describe('bugfix: a webhook-confirmed cancel never sent its interest', () => {
@@ -241,7 +251,7 @@ it('starts no new forfeit once the deadline has passed', async () => {
   expect(mocks.transfer).toHaveBeenCalledOnce();
 });
 
-it('pages an overdue forfeit even when the deadline defers its item', async () => {
+it('bugfix: pages nothing once the deadline has passed (the page repeats next run)', async () => {
   db([{ operationId: opB, forfeitId, state: 'dispatched', alert: true }], true);
   const result = await sweepPendingGoalCancelForfeits({
     ...input(true),
@@ -249,10 +259,35 @@ it('pages an overdue forfeit even when the deadline defers its item', async () =
     now: () => 1,
   });
   expect(result).toMatchObject({ listed: 1, deferred: 1 });
+  // Nothing paged or acknowledged past the budget: still unacknowledged, it
+  // is listed and paged on the next run.
+  expect(mocks.alert).not.toHaveBeenCalled();
+  expect(mocks.execute).toHaveBeenCalledOnce();
+});
+
+it('pages a cancel held before anything was sent, then acknowledges it', async () => {
+  db([], true);
+  mocks.holds.mockResolvedValue({
+    rows: [
+      {
+        result: [
+          { operationId: opA, reason: 'principal_above_transfer_limit' },
+        ],
+      },
+    ],
+  });
+  expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
+    attention: 1,
+    failed: 0,
+  });
   expect(mocks.alert).toHaveBeenCalledWith(
-    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
-    { reason: 'forfeit_overdue', operationId: opB }
+    'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    { reason: 'principal_above_transfer_limit', operationId: opA }
   );
+  expect(mocks.execute.mock.calls[1]).toEqual([
+    sql.workerHoldAck,
+    [integrationId, 'staging', opA],
+  ]);
 });
 
 it('lists only in-flight forfeits while new transfers are off', async () => {
@@ -302,7 +337,9 @@ it('bugfix: stops acknowledging pages at the deadline, still paging every alert'
       return current;
     },
   });
-  expect(mocks.alert).toHaveBeenCalledTimes(2);
+  // Paged and acknowledged one at a time within the budget; the other
+  // repeats next run.
+  expect(mocks.alert).toHaveBeenCalledOnce();
   // One acknowledgement fits the budget; the other repeats next run.
   expect(
     mocks.execute.mock.calls.filter((call) => call[0] === sql.workerAck)

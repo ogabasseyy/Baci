@@ -46,7 +46,12 @@ const merchantId = '11111111-1111-4111-8111-111111111111';
 const goalId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
 const pinProof = createHash('sha256').update('s6-route-proof').digest('hex');
-const issue = { step: 'issue', merchantId, goalId };
+const issue = {
+  step: 'issue',
+  merchantId,
+  goalId,
+  interestForfeitAcknowledged: true,
+};
 const submit = {
   step: 'submit',
   merchantId,
@@ -106,8 +111,16 @@ describe('bugfix: an app that never showed the interest forfeit could still canc
 
   it('accepts the acknowledgement on the issue step too', async () => {
     mocks.issue.mockResolvedValue({ status: 'issued', operationId });
-    expect(
-      (await post({ ...issue, interestForfeitAcknowledged: true })).status
-    ).toBe(200);
+    expect((await post(issue)).status).toBe(200);
+  });
+
+  it('refuses to start an attempt for an app that never showed the forfeit', async () => {
+    const response = await post({
+      ...issue,
+      interestForfeitAcknowledged: undefined,
+    });
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('APP_UPDATE_REQUIRED');
+    expect(mocks.issue).not.toHaveBeenCalled();
   });
 });

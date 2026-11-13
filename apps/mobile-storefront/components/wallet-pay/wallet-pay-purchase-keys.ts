@@ -25,7 +25,10 @@ const PAY_SETTLES = new Set<WalletPayOutcomeKind>([
 ]);
 
 const STORAGE_KEY = 'baci.walletPay.openPurchases.v1';
-// The server releases or refunds anything older long before this.
+// How long unreadable saved data refuses wallet pay before it is cleared.
+// Readable keys never age out: a payment under review can stay open for a
+// person to decide, and dropping its key would let a second payment start
+// (Codex P1). A key is removed only once its purchase settles.
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type OpenPurchases = Record<string, { key: string; at: number }>;
@@ -44,16 +47,11 @@ async function load(): Promise<OpenPurchases> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   const parsed = raw ? parseSaved(raw) : null;
   if (parsed === UNREADABLE) await quarantine();
-  const now = Date.now();
   cache = {};
   if (parsed && typeof parsed === 'object')
     for (const [purchase, entry] of Object.entries(parsed)) {
       const { key, at } = (entry ?? {}) as { key?: unknown; at?: unknown };
-      if (
-        typeof key === 'string' &&
-        typeof at === 'number' &&
-        now - at < MAX_AGE_MS
-      )
+      if (typeof key === 'string' && typeof at === 'number')
         cache[purchase] = { key, at };
     }
   return cache;
@@ -219,9 +217,17 @@ export function trackWalletPayPurchase<Result>(
     async start() {
       if (!options.stillOwner()) return switched;
       const answer = await adapter.start();
+      // A price refusal comes after the server issued its payment: keep the
+      // key, so a retry replays that one instead of issuing another (Codex).
+      const priceChanged =
+        answer.kind === 'outcome' &&
+        answer.outcome.kind === 'failed' &&
+        answer.outcome.failedReason === 'price_changed';
       if (
         answer.kind === 'delivered' ||
-        (answer.kind === 'outcome' && !KEEP_OUTCOMES.has(answer.outcome.kind))
+        (answer.kind === 'outcome' &&
+          !priceChanged &&
+          !KEEP_OUTCOMES.has(answer.outcome.kind))
       )
         await settle();
       return answer;

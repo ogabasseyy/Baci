@@ -50,6 +50,7 @@ export interface PayImeiWalletPaymentDeps {
     lookup: ImeiLookupRow;
     operationId: string;
     normalizedImei: string;
+    payment: { purpose: string; purchaseRef: string; amountKobo: number };
   }) => Promise<Response>;
 }
 
@@ -152,6 +153,7 @@ export async function payImeiWalletPayment(
       lookup,
       operationId: body.operationId,
       normalizedImei: normalizedImei ?? '',
+      payment,
     });
   } catch (error) {
     // Found only after the payment was confirmed: money moved, so never

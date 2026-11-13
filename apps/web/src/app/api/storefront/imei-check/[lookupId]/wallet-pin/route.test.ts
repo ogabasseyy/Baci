@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   limit: vi.fn(),
   verify: vi.fn(),
   readLookup: vi.fn(),
+  rate: vi.fn(),
+}));
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: mocks.rate,
+  createRateLimitResponse: () => new Response('{}', { status: 429 }),
 }));
 vi.mock('@/lib/imei-access', () => ({
   createImeiAccessClient: () => ({ readStatus: mocks.readLookup }),
@@ -77,6 +82,7 @@ beforeEach(() => {
     purchase: { purpose: 'imei_check', purchaseRef: LOOKUP },
   });
   mocks.limit.mockResolvedValue(null);
+  mocks.rate.mockResolvedValue({ allowed: true });
   mocks.readLookup.mockResolvedValue({
     data: { amount_ngn: 500 },
     error: null,
@@ -197,6 +203,19 @@ describe('POST /imei-check/[lookupId]/wallet-pin', () => {
       code: 'PAYMENT_OPERATION_INVALID',
     });
     expect(mocks.limit).not.toHaveBeenCalled();
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: throttles per IP like the pay route, before any PIN work (Muse)', async () => {
+    mocks.rate.mockResolvedValue({
+      allowed: false,
+      limit: 50,
+      remaining: 0,
+      resetTime: Date.now() + 60_000,
+    });
+    const response = await call({ operationId: OP, pin: '1234' });
+    expect(response.status).toBe(429);
+    expect(mocks.binding).not.toHaveBeenCalled();
     expect(mocks.verify).not.toHaveBeenCalled();
   });
 });

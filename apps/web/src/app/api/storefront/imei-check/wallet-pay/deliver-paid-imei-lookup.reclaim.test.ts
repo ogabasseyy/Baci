@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deliverPaidImeiLookup } from './deliver-paid-imei-lookup';
+import {
+  deliverPaidImeiLookup,
+  WalletPaymentMismatchError,
+} from './deliver-paid-imei-lookup';
 
 vi.mock('server-only', () => ({}));
 const cache = vi.hoisted(() => ({ response: vi.fn() }));
@@ -26,6 +29,7 @@ const input = {
   operationId: OP,
   normalizedImei: '356938035643809',
   supabaseAdmin: {} as never,
+  payment: { purpose: 'imei_check', purchaseRef: LOOKUP, amountKobo: 50000 },
 };
 const deps = (savedStatus: string) => ({
   claim: vi.fn(async () => ({
@@ -60,5 +64,31 @@ describe('bugfix: a reclaim refunded a result saved after it read the lookup (Co
     expect(d.finish).toHaveBeenCalledWith(OP, 'failed', 'tok-2');
     expect(d.refund).toHaveBeenCalledTimes(1);
     expect(d.prepare).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: the refunded branch trusted the caller for the payment (Muse)', () => {
+  const refunded = {
+    ...input,
+    lookup: { ...input.lookup, status: 'refunded_error' as const },
+  };
+
+  it("retries the refund of this lookup's own payment", async () => {
+    const d = deps('refunded_error');
+    await deliverPaidImeiLookup(refunded as never, d);
+    expect(d.refund).toHaveBeenCalledWith(OP);
+  });
+
+  it("refuses another purchase's payment, refunding nothing", async () => {
+    const d = deps('refunded_error');
+    for (const payment of [
+      { ...input.payment, purchaseRef: '99999999-9999-4999-8999-999999999999' },
+      { ...input.payment, amountKobo: 1 },
+      { ...input.payment, purpose: 'vtu' },
+    ])
+      await expect(
+        deliverPaidImeiLookup({ ...refunded, payment } as never, d)
+      ).rejects.toBeInstanceOf(WalletPaymentMismatchError);
+    expect(d.refund).not.toHaveBeenCalled();
   });
 });

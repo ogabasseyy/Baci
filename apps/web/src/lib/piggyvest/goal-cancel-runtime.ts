@@ -70,6 +70,31 @@ function bindEvidence(
 }
 
 /** Step 1: the server issues the per-attempt operation id the PIN is bound to. */
+const HOLD_PAGES: Partial<
+  Record<
+    string,
+    {
+      code:
+        | 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW'
+        | 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE';
+      reason: string;
+    }
+  >
+> = {
+  needs_review: {
+    code: 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    reason: 'provider_balance_below_principal',
+  },
+  forfeit_unavailable: {
+    code: 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
+    reason: 'interest_wallet_missing',
+  },
+  too_large: {
+    code: 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    reason: 'principal_above_transfer_limit',
+  },
+};
+
 export async function issuePrimaryWalletGoalCancel(input: {
   configuration: unknown;
   scope: unknown;
@@ -175,16 +200,16 @@ export async function submitPrimaryWalletGoalCancel(input: {
         });
         return { status: 'needs_review' as const };
       }
-      if (split.status === 'needs_review')
-        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
-          reason: 'provider_balance_below_principal',
+      // A hold (released, a person must act): paged now, then acknowledged;
+      // if this page is lost the daily sweep pages the hold instead.
+      const hold = HOLD_PAGES[split.status];
+      if (hold) {
+        emitPiggyvestWebhookAlert(hold.code, {
+          reason: hold.reason,
           operationId,
         });
-      if (split.status === 'forfeit_unavailable')
-        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
-          reason: 'interest_wallet_missing',
-          operationId,
-        });
+        await store.ackHoldAlert(operationId).catch(() => undefined);
+      }
       return split;
     },
     cancelBeforeDispatch: (operationId) =>

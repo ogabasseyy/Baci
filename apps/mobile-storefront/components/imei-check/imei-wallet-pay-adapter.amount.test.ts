@@ -31,7 +31,7 @@ describe('bugfix: an issued amount above the shown price was asked for (Muse)', 
     start.mockResolvedValue(issued(shownKobo + 100));
     await expect(adapter().start()).resolves.toEqual({
       kind: 'outcome',
-      outcome: { kind: 'failed', failedReason: 'check_details' },
+      outcome: { kind: 'failed', failedReason: 'price_changed' },
     });
   });
 

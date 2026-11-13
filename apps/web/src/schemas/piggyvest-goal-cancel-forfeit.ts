@@ -107,6 +107,25 @@ export const piggyvestGoalCancelForfeitSchemas = {
     )
     .length(1),
   ackRows: z.array(z.strictObject({ result: z.boolean() })).length(1),
+  // Cancels held before anything was sent, for the sweep to page.
+  holdRows: z
+    .array(
+      z.strictObject({
+        result: z
+          .array(
+            z.strictObject({
+              operationId: z.uuid(),
+              reason: z.enum([
+                'provider_balance_below_principal',
+                'interest_wallet_missing',
+                'principal_above_transfer_limit',
+              ]),
+            })
+          )
+          .max(50),
+      })
+    )
+    .length(1),
   // manage_goal_cancel_forfeit 'ack' (customer scope).
   manageAckRows: z
     .array(z.strictObject({ result: z.enum(['acked', 'not_released']) }))

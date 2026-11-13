@@ -150,7 +150,7 @@ export function createImeiWalletPayAdapter(input: {
         const shownKobo = Math.round(IMEI_SERVICE_TIERS[tier].price * 100);
         if (payment.data.status === 'payment_required')
           return amountKobo > shownKobo
-            ? outcome('failed', 'check_details')
+            ? outcome('failed', 'price_changed')
             : { kind: 'pin', operationId, amountKobo };
         // Pending or under review: keep the operation and check on it, so
         // a payment PiggyVest confirms later still delivers the check.

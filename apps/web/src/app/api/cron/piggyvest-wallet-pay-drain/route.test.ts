@@ -101,4 +101,18 @@ describe('GET /api/cron/piggyvest-wallet-pay-drain', () => {
     mocks.drain.mockRejectedValue(new Error('db'));
     expect((await GET(request())).status).toBe(500);
   });
+
+  it('bugfix: fails the run when any item threw, still with counts only (Codex P2)', async () => {
+    mocks.drain.mockResolvedValue({
+      released: 0,
+      settled: 0,
+      refunds: 0,
+      delivered: 0,
+      skipped: 0,
+      failed: 1,
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ failed: 1 });
+  });
 });

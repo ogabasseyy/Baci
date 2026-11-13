@@ -11,6 +11,8 @@ const FAILED_REASONS: Record<WalletPayFailedReason, string> = {
     'This IMEI does not match the check you started. Nothing more was taken.',
   check_details:
     "We couldn't start this purchase. Check the number and amount, then try again. Nothing was taken from your PiggyVest wallet.",
+  price_changed:
+    'The price of this check has changed. Please update the app to see the new price. Nothing was taken from your PiggyVest wallet.',
 };
 
 export type WalletPayNoticeTone = 'success' | 'info' | 'warning';

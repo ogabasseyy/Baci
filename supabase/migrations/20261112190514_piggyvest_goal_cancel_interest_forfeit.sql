@@ -1238,10 +1238,13 @@ BEGIN
     -- moved, so an unsent replacement is frozen for review in the same
     -- transaction: neither the sweep nor a status check may send it again.
     IF v_forfeit.state = 'released' AND v_forfeit.dispatched_at IS NOT NULL THEN
+      -- Any live replacement, sent or not: an unsent one must not be sent, and
+      -- a sent one must not be settled or replaced automatically (that could
+      -- move the same interest twice). Paged by the caller (conflict).
       UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS replacement
          SET state = 'needs_review', alerted_at = pg_catalog.clock_timestamp()
        WHERE replacement.cancel_operation_id = v_forfeit.cancel_operation_id
-         AND replacement.state = 'reserved';
+         AND replacement.state IN ('reserved', 'dispatched');
     END IF;
     RETURN 'conflict';
   END IF;
@@ -1470,11 +1473,21 @@ BEGIN
   SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
    WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
   IF NOT FOUND OR NEW.amount_kobo IS NULL OR NEW.amount_kobo < 1 THEN RETURN NEW; END IF;
+  -- Only when nothing of that cancel is in flight is the unsent plan known to
+  -- contain the reversed interest. With a forfeit already sent, the reversal
+  -- may belong to it instead, so the unsent plan goes to review (paged once
+  -- by the daily sweep) rather than being shrunk for interest still there.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
-     SET amount_kobo = CASE WHEN forfeit.amount_kobo > NEW.amount_kobo
+     SET amount_kobo = CASE WHEN in_flight.cancel_operation_id IS NULL AND forfeit.amount_kobo > NEW.amount_kobo
                             THEN forfeit.amount_kobo - NEW.amount_kobo ELSE forfeit.amount_kobo END,
-         state = CASE WHEN forfeit.amount_kobo > NEW.amount_kobo THEN 'reserved' ELSE 'released' END
+         state = CASE WHEN in_flight.cancel_operation_id IS NOT NULL THEN 'needs_review'
+                      WHEN forfeit.amount_kobo > NEW.amount_kobo THEN 'reserved' ELSE 'released' END,
+         alerted_at = CASE WHEN in_flight.cancel_operation_id IS NOT NULL THEN NULL ELSE forfeit.alerted_at END
     FROM piggyvest_primary.goal_cancel_operations AS cancel
+    LEFT JOIN LATERAL (
+      SELECT sent.cancel_operation_id FROM piggyvest_primary.goal_cancel_interest_forfeits AS sent
+       WHERE sent.cancel_operation_id = cancel.id AND sent.state = 'dispatched' LIMIT 1
+    ) AS in_flight ON true
    WHERE forfeit.cancel_operation_id = cancel.id AND forfeit.state = 'reserved'
      AND cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
      AND cancel.state IN ('dispatched', 'confirmed');

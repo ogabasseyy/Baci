@@ -269,4 +269,21 @@ describe('payImeiWalletPayment', () => {
       expect(recheck.deliver).not.toHaveBeenCalled();
     });
   });
+
+  it('bugfix: a finished lookup answers a status check while the IMEI salt is missing (Codex P2)', async () => {
+    const done = { ...lookup, status: 'completed' };
+    const d = deps({
+      hashSalt: vi.fn(() => undefined),
+      readLookup: vi.fn(async () => done as never),
+    });
+    const check = { lookupId: LOOKUP, body: { ...body, pinProof: '' } };
+    const answer = await payImeiWalletPayment({ ...check, auth: {} }, d);
+    expect(answer.status).toBe(200);
+    expect(d.deliver).toHaveBeenCalledTimes(1);
+    // A pending lookup (a new delivery) or a new PIN still needs the salt.
+    const pending = deps({ hashSalt: vi.fn(() => undefined) });
+    const refused = await payImeiWalletPayment({ ...check, auth: {} }, pending);
+    expect(refused.status).toBe(503);
+    expect(pending.pay).not.toHaveBeenCalled();
+  });
 });

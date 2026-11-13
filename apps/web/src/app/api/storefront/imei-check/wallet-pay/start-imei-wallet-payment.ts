@@ -218,7 +218,7 @@ export async function startImeiWalletPayment(
         amountKobo: Math.round(amount * 100),
       },
     });
-  } catch (error) {
+  } catch {
     // The issue may or may not have committed. Removing the lookup succeeds
     // only while no payment exists for it (the database refuses otherwise),
     // so a retry with this key either issues afresh or, when the lookup
@@ -229,7 +229,13 @@ export async function startImeiWalletPayment(
         'This payment did not go through. Please start again.',
         409
       );
-    throw error;
+    // Cleaned up (or an earlier lookup kept): nothing was charged, and a
+    // retry with this key can issue, so this is retryable (Muse), not a 500.
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
   }
   if (issued.status === 'unavailable') {
     // No payment exists for the lookup this request just created: remove it

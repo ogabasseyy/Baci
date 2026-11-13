@@ -273,3 +273,18 @@ describe('bugfix: a start closed mid-replay forgot its delivered key (Codex P1)'
     );
   });
 });
+
+describe('bugfix: a storage failure hid an already-delivered answer (Muse)', () => {
+  it('still returns the delivered answer when forgetting the key fails', async () => {
+    const forget = jest
+      .spyOn(walletPayPurchaseKeys, 'forget')
+      .mockRejectedValue(new Error('storage full'));
+    const opts = options();
+    const delivered = { kind: 'delivered', result: 'ok' };
+    await expect(
+      trackWalletPayPurchase(adapter(delivered), 'p', opts).pay(OP, 'proof')
+    ).resolves.toEqual(delivered);
+    expect(opts.onSettled).toHaveBeenCalledTimes(1);
+    forget.mockRestore();
+  });
+});

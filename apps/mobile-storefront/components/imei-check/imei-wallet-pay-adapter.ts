@@ -1,4 +1,8 @@
-import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
+import {
+  IMEI_SERVICE_TIERS,
+  type ImeiDeviceCategory,
+  type ImeiServiceTierKey,
+} from '@baci/shared/imei';
 import { z } from 'zod';
 import type {
   WalletPayAdapter,
@@ -140,8 +144,14 @@ export function createImeiWalletPayAdapter(input: {
       if (reply.httpStatus === 202 && payment.success) {
         lookupId = payment.data.lookupId;
         const { operationId, amountKobo } = payment.data;
+        // Never ask a PIN for more than the price this screen showed: a
+        // larger issued amount is refused before any money moves (Muse).
+        // A lower one (an older lookup's recorded price) is fine.
+        const shownKobo = Math.round(IMEI_SERVICE_TIERS[tier].price * 100);
         if (payment.data.status === 'payment_required')
-          return { kind: 'pin', operationId, amountKobo };
+          return amountKobo > shownKobo
+            ? outcome('failed', 'check_details')
+            : { kind: 'pin', operationId, amountKobo };
         // Pending or under review: keep the operation and check on it, so
         // a payment PiggyVest confirms later still delivers the check.
         return { kind: 'recheck', operationId, amountKobo };

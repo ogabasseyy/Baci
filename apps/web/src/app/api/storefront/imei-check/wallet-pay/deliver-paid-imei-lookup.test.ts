@@ -236,7 +236,7 @@ describe('deliverPaidImeiLookup', () => {
     }
   });
 
-  it('does not record delivery when the result was not durably saved', async () => {
+  it('bugfix: never shows (or records) a result that was not durably saved (Muse high)', async () => {
     submit.mockResolvedValue({
       kind: 'complete',
       body: {},
@@ -246,7 +246,9 @@ describe('deliverPaidImeiLookup', () => {
     });
     const d = deps({ readStatus: vi.fn(async () => 'pending') });
     const response = await deliverPaidImeiLookup(base, d);
-    expect(response.status).toBe(200);
+    // Still delivering: a later reclaim finds it saved or refunds.
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ status: 'delivering' });
     expect(d.finish).not.toHaveBeenCalled();
   });
 

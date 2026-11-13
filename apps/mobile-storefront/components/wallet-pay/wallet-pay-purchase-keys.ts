@@ -202,7 +202,9 @@ export function trackWalletPayPurchase<Result>(
     // replays it instead of paying again.
     if (options.stillWanted && !options.stillWanted()) return;
     const id = typeof purchase === 'string' ? purchase : purchase();
-    if (id) await walletPayPurchaseKeys.forget(id);
+    // A storage failure never hides the settled answer (Muse): the key just
+    // stays, and the next try replays the same settled request.
+    if (id) await walletPayPurchaseKeys.forget(id).catch(() => undefined);
     options.onSettled();
   };
   const switched = {

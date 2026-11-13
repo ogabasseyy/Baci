@@ -3,6 +3,7 @@ import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { WALLET_PAY_DELIVERERS } from '@/lib/piggyvest/wallet-pay-deliverers';
 import { runWalletPayDrain } from '@/lib/piggyvest/wallet-pay-drain';
 import { readWalletPayRecoveryRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
+import { isWalletPayWorkPending } from '@/lib/piggyvest/wallet-pay-work-pending';
 
 export const maxDuration = 300;
 
@@ -14,11 +15,24 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  // Scheduled before switch-on: with no collection wallet configured there
-  // is no wallet pay and nothing to drain. Any other misconfiguration still
-  // pages (503) below, so money is never silently stranded.
-  if (!process.env.PIGGYVEST_COLLECTION_WALLET_ID)
-    return NextResponse.json({ status: 'not_configured' });
+  // Scheduled before switch-on: with no collection wallet configured and no
+  // wallet pay work waiting, wallet pay was never used and the drain idles.
+  // Work waiting without the collection wallet (configuration removed, e.g.
+  // in a rollback) pages instead, so money is never silently stranded.
+  if (!process.env.PIGGYVEST_COLLECTION_WALLET_ID) {
+    let pending: boolean;
+    try {
+      pending = await isWalletPayWorkPending();
+    } catch {
+      pending = true;
+    }
+    return pending
+      ? NextResponse.json(
+          { error: 'Wallet pay work is waiting but not configured' },
+          { status: 503 }
+        )
+      : NextResponse.json({ status: 'not_configured' });
+  }
   let runtime: ReturnType<typeof readWalletPayRecoveryRuntime>;
   try {
     runtime = readWalletPayRecoveryRuntime();

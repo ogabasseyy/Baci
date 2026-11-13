@@ -589,6 +589,9 @@ BEGIN
      AND payment.purchase_ref = request ->> 'purchaseRef'
      AND (payment.state NOT IN ('issued', 'released')
           OR (payment.state = 'issued' AND payment.expires_at > pg_catalog.clock_timestamp()))
+     -- A confirmed payment whose delivery failed and is (being) refunded no
+     -- longer covers the purchase (the same rule as the live-payment index).
+     AND NOT (payment.state = 'confirmed' AND payment.fulfilment IN ('refund_owed', 'refunded'))
    ORDER BY payment.issued_at DESC
    LIMIT 1;
   RETURN v_result;
@@ -1193,13 +1196,14 @@ BEGIN
       SELECT 1 FROM piggyvest_primary.wallet_payment_refunds AS live
        WHERE live.payment_id = v_refund.payment_id AND live.id <> v_refund.id
          AND live.state IN ('owed', 'dispatched', 'confirmed', 'needs_review')) THEN
+    -- A newer attempt never sent is retired (the DELETE re-checks 'owed'
+    -- under the row lock, so one the worker dispatched meanwhile is kept).
+    DELETE FROM piggyvest_primary.wallet_payment_refunds
+     WHERE payment_id = v_refund.payment_id AND id <> v_refund.id AND state = 'owed';
+    -- Anything still live could refund too: a person decides.
     IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payment_refunds AS live
                 WHERE live.payment_id = v_refund.payment_id AND live.id <> v_refund.id
-                  AND live.state = 'owed') THEN
-      -- The newer attempt was never sent: retire it and settle this one.
-      DELETE FROM piggyvest_primary.wallet_payment_refunds
-       WHERE payment_id = v_refund.payment_id AND id <> v_refund.id AND state = 'owed';
-    ELSE
+                  AND live.state IN ('owed', 'dispatched', 'confirmed', 'needs_review')) THEN
       UPDATE piggyvest_primary.wallet_payments SET review_reason = 'late_refund_success'
        WHERE id = v_refund.payment_id;
       RETURN 'needs_review';

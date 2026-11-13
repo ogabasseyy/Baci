@@ -55,6 +55,8 @@ export type UseStartSavingsSubmitInput = {
   primaryRail?: boolean;
   /** The plan exists but its hand-off could not finish (wallet not loaded). */
   onHandOffPending?: (goalId: string) => void;
+  /** The plan exists (called before setup, the reminder or any hand-off). */
+  onPlanCreated?: (goalId: string) => void;
   effectiveInitialContribution: number;
   frequency: SavingsFrequency;
   fundingAccount: FundingAccount;
@@ -181,6 +183,7 @@ export async function runSavingsGoalSubmission(
     }
     // The plan exists now: record it before anything can cut this short (a
     // form edit or reload in flight), so a later submit never creates another.
+    input.onPlanCreated?.(result.goalId);
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.onHandOffPending?.(result.goalId);
     }

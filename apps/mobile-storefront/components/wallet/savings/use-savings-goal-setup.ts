@@ -34,12 +34,14 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
-  useEffect(
-    () => () => {
+  // Re-armed on every mount: StrictMode (and a remount) runs the cleanup
+  // once and then the effect again, which must not leave this false.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
       mounted.current = false;
-    },
-    []
-  );
+    };
+  }, []);
 
   /** Resolves true when a send actually started (false when deduped). */
   const run = async (

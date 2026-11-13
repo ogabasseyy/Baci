@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
+import { StrictMode } from 'react';
 import {
   retrySavingsGoalSetup,
   setupExistingSavingsGoal,
@@ -132,5 +133,29 @@ describe('bugfix: a device write that never finished blocked the setup send', ()
       expect.objectContaining({ interestAccepted: false })
     );
     expect(planInterestAnswer(SERVER_OFF_GOAL_ID)).toBe(false);
+  });
+});
+
+describe('bugfix: under StrictMode the hook thought it was unmounted', () => {
+  it('re-reads status and clears submitting after a StrictMode remount', async () => {
+    jest.mocked(setupExistingSavingsGoal).mockClear();
+    jest
+      .mocked(setupExistingSavingsGoal)
+      .mockResolvedValue({ status: 'pending' });
+    const onSettled = jest.fn();
+    const { result } = renderHook(
+      () =>
+        useSavingsGoalSetup({
+          goalId: SERVER_OFF_GOAL_ID,
+          merchantId: SERVER_OFF_MERCHANT_ID,
+          onSettled,
+        }),
+      { wrapper: StrictMode }
+    );
+    await act(async () => {
+      await result.current.submit(true);
+    });
+    expect(onSettled).toHaveBeenCalledTimes(1);
+    expect(result.current.submitting).toBe(false);
   });
 });

@@ -175,3 +175,23 @@ Confirmed end to end:
 | Completed plan card after Complete shows ₦0 / target and "Start with your first contribution" | #4223 session | Sent |
 | No savings movements in any wallet history | — | Follow-up (no list exists yet) |
 | Cancel was rejected locally | — | Local build drift (missing #4222's latest); fixed by updating the local build |
+
+## Final verification walk (2026-11-13, mock PiggyVest)
+
+All six checks passed on the simulator against the latest #4216, #4222, #4223
+and #4224:
+- A pending contribution settles by itself in about 15 s.
+- Cancel shows "In this goal ₦2,000" and refunds the saved amount.
+- Complete shows "In this goal ₦250,000" and moves it.
+- The completed-plan card reads "Purchase requested" (#4223 821ec60a17).
+- The "Copied" label doesn't shift the card (#4216).
+- The wallet notice is inset like the cards.
+
+The one new medium finding, a stale "Savings updated" notice outliving its
+plan, is fixed in #4224.
+
+Still owed outside this build:
+- The same money steps on live PiggyVest staging, once outbound transfers
+  resume.
+- The exact interest split on the reviews, which needs the server to
+  expose each goal's saved principal (#4222 follow-up).

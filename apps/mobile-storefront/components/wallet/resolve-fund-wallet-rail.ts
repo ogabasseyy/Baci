@@ -31,12 +31,20 @@ export async function resolveFundWalletRail(
   // A saved PiggyVest card funding (maybe already charged) is recovered
   // first through the primary path, never doubled by a new legacy charge.
   if (isWalletPurchaseReturnHref(options?.walletReturnTo)) {
-    return (await hasRetainedPrimaryCardFunding(
+    const retained = await hasRetainedPrimaryCardFunding(
       activeMerchantId,
       options?.userId
-    ))
-      ? 'primary'
-      : 'legacy';
+    );
+    // A saved funding we can't read may still charge (Codex): block, never
+    // start a second card charge; the wallet's own top-up recovers it.
+    if (retained === 'unreadable') {
+      Alert.alert(
+        'Finish your earlier card payment',
+        'We found an unfinished card payment we could not read. Open your wallet and tap Add money to finish it before topping up again.'
+      );
+      return 'blocked';
+    }
+    return retained ? 'primary' : 'legacy';
   }
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) return 'primary';
   if (

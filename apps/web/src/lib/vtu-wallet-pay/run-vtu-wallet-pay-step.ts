@@ -124,7 +124,7 @@ export async function runVtuWalletPayStep(
   // fresh row instead of joining this one (Codex P2).
   const purchaseRef = { runtime, scope, transactionId };
   if (input.cancel === true && operationId !== undefined)
-    return await cancelVtuWalletPay(deps.closeUnpaid, purchaseRef);
+    return await cancelVtuWalletPay(deps.closeUnpaid, purchaseRef, operationId);
   // The amount fixed when the purchase was prepared, never the request's.
   const amountKobo = Math.round(purchase.amount * 100);
   const extra = { transactionId, amountKobo };

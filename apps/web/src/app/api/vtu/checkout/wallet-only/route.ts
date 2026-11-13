@@ -99,8 +99,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const walletPayOff = refuseUnavailableWalletPayStart(input);
-    if (walletPayOff) return walletPayOff;
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     // Authenticated client for everything except the admission
@@ -176,6 +174,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Wallet pay off: refuse a fresh PiggyVest purchase (replays recover above).
+    const walletPayOff = refuseUnavailableWalletPayStart(input);
+    if (walletPayOff) return walletPayOff;
     const prepared = await preparePendingVtuTransaction({
       supabase: userSupabase,
       // Service-role-only insert (Codex P1): the settlement

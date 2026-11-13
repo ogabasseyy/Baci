@@ -64,3 +64,16 @@ describe('bugfix: a refused start said "Something went wrong" twice with no reas
     expect(notice.message).toMatch(/Nothing was taken/);
   });
 });
+
+describe('bugfix: a replayed start said "nothing was taken" (Codex P2)', () => {
+  it('tells the customer not to pay again when the payment may have gone through', () => {
+    const notice = walletPayNotice(
+      { kind: 'not_started', maybePaid: true },
+      250_000,
+      'IMEI check'
+    );
+    expect(notice.message).toContain("Please don't pay again");
+    expect(notice.message).not.toContain('Nothing was taken');
+    expect(notice.action).toBe('try_again');
+  });
+});

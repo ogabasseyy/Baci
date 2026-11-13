@@ -100,7 +100,9 @@ export function UtilityPaymentOptions({
   // More than the savings wallet holds (and store credit is short too): say
   // its real balance and shortfall above the store credit options.
   const savingsShort =
-    savingsKobo !== null && balance < amount && savingsKobo < amount * 100;
+    savingsKobo !== null &&
+    balance < amount &&
+    savingsKobo < Math.round(amount * 100);
 
   return (
     <View style={styles.container}>

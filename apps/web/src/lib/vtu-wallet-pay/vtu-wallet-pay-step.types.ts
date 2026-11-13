@@ -69,6 +69,6 @@ export interface VtuWalletPayStepDeps {
     runtime: WalletPayRuntime;
     scope: Scope;
     transactionId: string;
-    cancelIssued?: boolean;
+    cancelOperationId?: string;
   }) => Promise<boolean>;
 }

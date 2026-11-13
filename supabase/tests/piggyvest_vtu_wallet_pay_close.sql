@@ -51,17 +51,33 @@ BEGIN
   PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
     jsonb_build_object('transactionId', c_paid)), 'an open issued payment was closed without cancelling');
   PERFORM pg_temp.wp_assert(piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
-    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true)), 'a cancelled purchase was not closed');
+    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true, 'operationId', v_op)), 'a cancelled purchase was not closed');
   PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) = 'released', 'the issued payment was not released');
   PERFORM pg_temp.wp_assert(pg_temp.wp_reserve(v_op, pg_temp.wp_proof('vtu-cancel', 'wallet_pay', 100000,
     pg_temp.wp_key(v_op, c_paid::text, 'vtu'))) ->> 'status' <> 'claimed', 'a released payment was reserved');
+  -- REGRESSION (Codex P2): a stale cancel for another operation releases
+  -- nothing, and a cancel must name its operation.
+  UPDATE public.vtu_transactions SET status = 'pending' WHERE id = c_paid;
+  v_op := pg_temp.wp_issue(c_paid::text, 100000, 'vtu') ->> 'operationId';
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
+    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true,
+      'operationId', 'f9a10000-0000-4000-8000-0000000000ee')), 'a stale cancel closed the purchase');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) = 'issued', 'a stale cancel released another operation');
+  v_threw := false;
+  BEGIN
+    PERFORM piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
+      jsonb_build_object('transactionId', c_paid, 'cancelIssued', true));
+  EXCEPTION WHEN invalid_parameter_value THEN v_threw := true;
+  END;
+  PERFORM pg_temp.wp_assert(v_threw, 'a cancel without its operation was accepted');
+  UPDATE piggyvest_primary.wallet_payments SET state = 'released' WHERE id = v_op::uuid;
   -- A reserved payment is never released by a cancel.
   UPDATE public.vtu_transactions SET status = 'pending' WHERE id = c_paid;
   v_op := pg_temp.wp_issue(c_paid::text, 100000, 'vtu') ->> 'operationId';
   PERFORM pg_temp.wp_assert(pg_temp.wp_reserve(v_op, pg_temp.wp_proof('vtu-res-' || v_op, 'wallet_pay',
     100000, pg_temp.wp_key(v_op, c_paid::text, 'vtu'))) ->> 'status' = 'claimed', 'vtu reserve');
   PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),
-    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true)), 'a reserved payment was cancelled');
+    jsonb_build_object('transactionId', c_paid, 'cancelIssued', true, 'operationId', v_op)), 'a reserved payment was cancelled');
   PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) <> 'released', 'a reserved payment was released');
   -- A store credit row, or another customer's row, is never touched.
   PERFORM pg_temp.wp_assert(NOT piggyvest_primary.close_unpaid_vtu_wallet_purchase(pg_temp.wp_scope(),

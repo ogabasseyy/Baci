@@ -26,6 +26,14 @@ jest.mock('@/lib/piggyvest-primary-capability', () => ({
 
 const KEY = ['wallet', 'data', 'merchant-1', 'owner-1'] as const;
 
+// The live verdict the app reads: a probe records it in the shared cache.
+function setVerdict(verdict: boolean | null) {
+  mockCapability = verdict;
+  clearObservedPiggyvestPrimaryCapability();
+  if (verdict !== null)
+    observePiggyvestPrimaryCapability('merchant-1', verdict);
+}
+
 // What useWallet passes: the query's current wallet.
 function walletOf(queryClient: QueryClient) {
   const read = (queryClient as unknown as { getQueryData?: () => unknown })
@@ -37,7 +45,7 @@ function setup(
   initial: boolean | null,
   cachedWallet: Record<string, unknown> | undefined = undefined
 ) {
-  mockCapability = initial;
+  setVerdict(initial);
   const invalidateQueries = jest.fn(async () => undefined);
   const getQueryData = () =>
     cachedWallet ? { transactions: [], wallet: cachedWallet } : undefined;
@@ -58,11 +66,11 @@ function setup(
 
 describe('bugfix: cached legacy wallet kept after the server enables PiggyVest', () => {
   it('refetches the cached wallet when the capability turns from false to true', () => {
-    // Arrange: wallet cached while the server ruled PiggyVest out.
-    const { hook, invalidateQueries } = setup(false);
+    // Arrange: legacy wallet cached while the server ruled PiggyVest out.
+    const { hook, invalidateQueries } = setup(false, { balance: 0 });
 
     // Act: the negative verdict expires and the server now enables it.
-    mockCapability = true;
+    act(() => setVerdict(true));
     hook.rerender({});
 
     // Assert
@@ -71,12 +79,106 @@ describe('bugfix: cached legacy wallet kept after the server enables PiggyVest',
       exact: true,
     });
   });
+});
 
-  it('refetches when a ruled-out verdict becomes unknown again', () => {
-    const { hook, invalidateQueries } = setup(false);
-    mockCapability = null;
+describe('bugfix: ruled-out wallet reloaded at every negative-cache expiry', () => {
+  it('does not refetch a non-pilot merchant across a false, expiry, false cycle', () => {
+    // Arrange: a non-pilot merchant the server rules out, legacy wallet.
+    act(() => setVerdict(false));
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = { invalidateQueries } as unknown as QueryClient;
+    const hook = renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-2', KEY, {
+        balance: 0,
+      } as never)
+    );
+
+    // Act: the negative verdict expires (hook goes unknown), then re-probes.
+    act(() => setVerdict(null));
     hook.rerender({});
+    act(() => setVerdict(false));
+    hook.rerender({});
+
+    // Assert
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: unavailable wallet kept after a live rollback', () => {
+  it('reloads an unavailable-shaped wallet once the live verdict rolls back to false', () => {
+    // Arrange: the PiggyVest read timed out (no funding account cached).
+    const { hook, invalidateQueries } = setup(true, {
+      balance: 0,
+      primary_unavailable: true,
+    });
+    // A positive verdict reloads the timed-out wallet once on mount.
     expect(invalidateQueries).toHaveBeenCalledTimes(1);
+
+    // Act: another flow rolls the live verdict back to false.
+    act(() => observePiggyvestPrimaryCapability('merchant-1', false));
+    hook.rerender({});
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledTimes(2);
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+function renderWith(wallet: Record<string, unknown>) {
+  const invalidateQueries = jest.fn(async () => undefined);
+  const queryClient = { invalidateQueries } as unknown as QueryClient;
+  const hook = renderHook(
+    ({ cached }: { cached: Record<string, unknown> }) =>
+      useWalletRecheckOnPiggyvest(
+        queryClient,
+        'merchant-1',
+        KEY,
+        cached as never
+      ),
+    { initialProps: { cached: wallet } }
+  );
+  return { hook, invalidateQueries };
+}
+
+describe('bugfix: rolled-back pilot wallet reloaded at every expiry', () => {
+  it('keeps the expired verdict unknown across true, rollback, legacy, expiry', () => {
+    // Arrange: PiggyVest confirmed, PiggyVest-shaped wallet.
+    setVerdict(true);
+    const { hook, invalidateQueries } = renderWith({
+      balance: 0,
+      primary_balance_kobo: 0,
+    });
+
+    // Act: rollback reloads; the reload lands legacy; the ruling-out expires
+    // while the capability hook still holds its stale true.
+    act(() => observePiggyvestPrimaryCapability('merchant-1', false));
+    hook.rerender({ cached: { balance: 0 } });
+    act(() => clearObservedPiggyvestPrimaryCapability());
+    mockCapability = true;
+    hook.rerender({ cached: { balance: 0 } });
+
+    // Assert: only the rollback reloaded; the expiry did not.
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: timed-out wallet kept after a late positive verdict', () => {
+  it('reloads an unavailable wallet when the late probe turns positive', () => {
+    // Arrange: the primary read timed out; the verdict is still unknown.
+    setVerdict(null);
+    const { hook, invalidateQueries } = renderWith({
+      balance: 0,
+      primary_unavailable: true,
+    });
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    // Act: the late read completes and records a positive verdict.
+    act(() => observePiggyvestPrimaryCapability('merchant-1', true));
+    hook.rerender({ cached: { balance: 0, primary_unavailable: true } });
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    clearObservedPiggyvestPrimaryCapability();
   });
 });
 
@@ -92,7 +194,7 @@ describe('wallet recheck with the server keeping PiggyVest off', () => {
       balance: 0,
       primary_balance_kobo: 0,
     });
-    mockCapability = true;
+    act(() => setVerdict(true));
     hook.rerender({});
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
@@ -105,7 +207,7 @@ describe('bugfix: legacy wallet restored after a cold restart stays authoritativ
     const { hook, invalidateQueries } = setup(null, { balance: 0 });
 
     // Act: the first probe answers that PiggyVest is enabled.
-    mockCapability = true;
+    act(() => setVerdict(true));
     hook.rerender({});
 
     // Assert
@@ -117,7 +219,7 @@ describe('bugfix: legacy wallet restored after a cold restart stays authoritativ
 
   it('does not refetch when the first verdict rules PiggyVest out', () => {
     const { hook, invalidateQueries } = setup(null, { balance: 0 });
-    mockCapability = false;
+    act(() => setVerdict(false));
     hook.rerender({});
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
@@ -127,7 +229,7 @@ describe('bugfix: account switch restores a legacy wallet while PiggyVest is on'
   it('refetches when the wallet scope changes onto a cached legacy wallet', () => {
     // Arrange: PiggyVest already confirmed; the next account's wallet is
     // still cached in the plain legacy shape.
-    mockCapability = true;
+    act(() => setVerdict(true));
     const invalidateQueries = jest.fn(async () => undefined);
     const queryClient = {
       getQueryData: () => ({ transactions: [], wallet: { balance: 0 } }),
@@ -156,7 +258,7 @@ describe('bugfix: account switch restores a legacy wallet while PiggyVest is on'
   });
 
   it('does not refetch a new scope that already reads as PiggyVest', () => {
-    mockCapability = true;
+    act(() => setVerdict(true));
     const invalidateQueries = jest.fn(async () => undefined);
     const queryClient = {
       getQueryData: () => ({
@@ -185,7 +287,7 @@ describe('bugfix: account switch restores a legacy wallet while PiggyVest is on'
 describe('bugfix: persisted wallet restored after the positive verdict', () => {
   it('refetches when a legacy wallet lands in the cache after PiggyVest is confirmed', () => {
     // Arrange: the probe answers before the persisted cache is restored.
-    mockCapability = true;
+    act(() => setVerdict(true));
     let cached: unknown;
     const invalidateQueries = jest.fn(async () => undefined);
     const queryClient = {

@@ -81,8 +81,10 @@ export async function POST(
     )
       return invalid();
     // Charged only once a real PIN check will happen.
+    // Its own budget: IMEI payment attempts never lock the customer out of
+    // savings goal PIN checks (Codex P2).
     const limited = await chargeWalletPinCustomerLimit(
-      'goal-verify',
+      'wallet-pay-verify',
       identity.merchantId,
       identity.userId
     );

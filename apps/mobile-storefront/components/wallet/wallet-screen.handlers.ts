@@ -5,7 +5,10 @@ import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-ca
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
 import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
-import { fundPrimaryWalletCard } from './fund-primary-wallet-card';
+import {
+  fundPrimaryWalletCard,
+  NOTHING_TO_RECOVER,
+} from './fund-primary-wallet-card';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 import {
   buildWalletTopUpGatewayParams,
@@ -73,8 +76,7 @@ export async function fundWallet({
     );
     return;
   }
-  // A transient probe failure blocks with a retry affordance instead of a
-  // dead end: the retry re-runs funding (and the probe) with these params.
+  // A failed probe blocks with a retry that re-runs funding with these params.
   const rail = await resolveFundWalletRail(activeMerchantId, {
     userId: user?.id ?? undefined,
     walletReturnTo,
@@ -93,12 +95,10 @@ export async function fundWallet({
   });
   if (rail === 'blocked') return;
   if (rail === 'primary') {
-    // Recovery runs before any amount validation: a saved primary-card
-    // operation (possibly already charged) must be rechecked even when the
-    // funding form holds its normal empty amount. New primary fundings
-    // validate inside fundPrimaryWalletCard.
+    // Recovery before amount validation: a saved (maybe charged) funding is
+    // rechecked even with an empty amount; new fundings validate inside.
     try {
-      return await fundPrimaryWalletCard({
+      const outcome = await fundPrimaryWalletCard({
         activeMerchantId,
         activeMerchantSlug,
         customer,
@@ -109,9 +109,9 @@ export async function fundWallet({
         user,
         walletReturnTo,
       });
+      if (outcome !== NOTHING_TO_RECOVER) return;
     } catch (error) {
-      // The server reports primary as unconfigured: fall through to the
-      // working legacy top-up below instead of stranding the customer.
+      // Primary unconfigured on the server: fall through to legacy below.
       if (!rollbackObservedCapabilityOnNotReady(activeMerchantId, error))
         throw error;
     }

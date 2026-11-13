@@ -5,6 +5,7 @@ import {
   piggyvestPayingBalanceKobo,
   piggyvestWalletCovers,
 } from '@/components/wallet-pay/piggyvest-wallet-covers';
+import { startWithReplayCaution } from '@/components/wallet-pay/replay-start-caution';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
 import {
@@ -98,9 +99,14 @@ export function useVtuWalletPayHost({
           buildVtuPurchaseDescriptor({ ...next.request })
         );
         purchase = `vtu|${user?.id ?? ''}|${CONFIG.MERCHANT_ID}|${descriptor}`;
+        // Reused = a replay of an earlier attempt that may have paid.
+        let minted = false;
         const idempotencyKey = await walletPayPurchaseKeys.keyFor(
           purchase,
-          Crypto.randomUUID
+          () => {
+            minted = true;
+            return Crypto.randomUUID();
+          }
         );
         // The account may have changed during the awaits above.
         if (useAuthStore.getState().user?.id !== user.id)
@@ -115,7 +121,10 @@ export function useVtuWalletPayHost({
           ...owned,
           expectedUserId: user.id,
         });
-        const answer = await inner.start();
+        const started = inner;
+        const answer = await startWithReplayCaution(!minted, () =>
+          started.start()
+        );
         const issuedKey = purchase;
         if (answer.kind === 'pin') {
           const cancel = async () => {

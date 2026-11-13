@@ -40,11 +40,17 @@ vi.mock('@/lib/vtu-fulfillment', () => ({
   fulfillPendingVtuTransaction: mockFulfill,
 }));
 
+const walletPayOff = vi.hoisted(() => ({ on: false }));
 // Pay from the PiggyVest wallet (dark): store credit gets no fulfiller, so
 // every existing path below is unchanged; PiggyVest requests reach the step.
 vi.mock('@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller', () => ({
   // Wallet pay switched on for these route tests (its own tests cover off).
-  refuseUnavailableWalletPayStart: () => null,
+  refuseUnavailableWalletPayStart: () =>
+    walletPayOff.on
+      ? new Response(JSON.stringify({ code: 'PIGGYVEST_PAY_UNAVAILABLE' }), {
+          status: 503,
+        })
+      : null,
   createVtuWalletPayFulfiller: (input: {
     charge: { paymentMethod?: string };
   }) =>
@@ -913,6 +919,43 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       transactionId: 'vtu-tx-existing',
     });
     expect(state.insertCalls).toBe(0);
+  });
+
+  it('bugfix: wallet pay off still replays a retained key, refusing only a fresh purchase (Codex P1)', async () => {
+    walletPayOff.on = true;
+    try {
+      const state: IdempotencyRowState = {
+        row: {
+          key: VALID_KEY,
+          vtu_transaction_id: 'vtu-tx-existing',
+          customer_id: 'customer-1',
+          merchant_id: 'merchant-1',
+          request_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+        insertCalls: 0,
+      };
+      userSupabaseMockRef.current = buildSupabase(state);
+      mockFulfill.mockResolvedValue({
+        amount: 1000,
+        reference: 'VTU-REF-OLD',
+        status: 'successful',
+      });
+      const replay = await callRoute(
+        makeRequest({ idempotencyKey: VALID_KEY })
+      );
+      expect(replay.status).toBe(200);
+      expect(mockPrepare).not.toHaveBeenCalled();
+
+      userSupabaseMockRef.current = buildSupabase({
+        row: null,
+        insertCalls: 0,
+      });
+      const fresh = await callRoute(makeRequest({ idempotencyKey: VALID_KEY }));
+      expect(fresh.status).toBe(503);
+      expect(mockPrepare).not.toHaveBeenCalled();
+    } finally {
+      walletPayOff.on = false;
+    }
   });
 
   it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {

@@ -212,12 +212,13 @@ export async function closeUnpaidVtuWalletPurchase(input: {
   runtime: WalletPayRuntime;
   scope: unknown;
   transactionId: string;
-  cancelIssued?: boolean;
+  /** Releases this one issued operation first (the sheet closed pre-PIN). */
+  cancelOperationId?: string;
 }) {
   const ports = createWalletPayPorts(input.runtime);
   return await ports
     .customerStore(input.scope)
-    .closeUnpaidVtu(input.transactionId, input.cancelIssued === true);
+    .closeUnpaidVtu(input.transactionId, input.cancelOperationId);
 }
 
 /** Delivery claim and outcome for confirmed payments (worker side). */

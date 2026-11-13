@@ -6,6 +6,7 @@ import { useLegacyFundingUnconfirmed } from '@/hooks/use-legacy-funding-unconfir
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hasSpendableBalance } from '@/lib/has-spendable-balance';
+import { SAVINGS_WALLET_CAN_PAY_UTILITIES } from '@/lib/savings-wallet-can-pay-utilities';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
 import { WalletHeroAddMoneyButton } from './WalletHeroAddMoneyButton';
@@ -103,6 +104,8 @@ export function WalletHeroSection({
     hasSpendableBalance({
       savingsWalletBalance: pendingPiggyvest ? 0 : savingsWalletBalance,
       storeCreditBalance: storeCredit,
+      // Utilities' own switch, not IMEI's (Codex): the shortcuts open them.
+      savingsWalletCanPay: SAVINGS_WALLET_CAN_PAY_UTILITIES,
     });
   const isDark = useColorScheme() === 'dark';
   return (

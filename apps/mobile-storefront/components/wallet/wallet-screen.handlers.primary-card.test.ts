@@ -8,6 +8,7 @@ const mockLegacy = jest
   .mockRejectedValue(new Error('Legacy funding must not run'));
 jest.mock('./fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: mockPrimary,
+  NOTHING_TO_RECOVER: 'nothing-to-recover',
 }));
 jest.mock('@/lib/wallet-top-up', () => ({ initializeWalletTopUp: mockLegacy }));
 jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({

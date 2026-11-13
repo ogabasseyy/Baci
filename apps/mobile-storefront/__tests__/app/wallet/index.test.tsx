@@ -55,6 +55,7 @@ jest.mock('@/components/wallet/savings/savings-notice', () => {
 jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: (...args: unknown[]) =>
     mockFundPrimaryWalletCard(...args),
+  NOTHING_TO_RECOVER: 'nothing-to-recover',
 }));
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';

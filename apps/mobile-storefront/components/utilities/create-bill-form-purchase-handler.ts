@@ -19,8 +19,8 @@ import {
 import { IDENTIFIER_LABELS } from './bill-form.constants';
 import type { CreateBillFormPurchaseHandlerInput } from './bill-form-purchase.types';
 import { getBillPaymentAmountError } from './bill-payment-amount-validation';
+import { buildBillPurchaseRequest } from './build-bill-purchase-request';
 import { resolveBillCustomerOfRecord } from './resolve-bill-customer-of-record';
-import { resolveBillFulfillment } from './resolve-bill-fulfillment';
 import {
   awaitUtilitySettlementGate,
   preserveSuppressedVtuSuccess,
@@ -102,35 +102,20 @@ export function createBillFormPurchaseHandler({
         verifiedCustomerName,
         verifiedCustomerAddress,
       });
-      // Kuda-display + Monnify-fulfillment routing (folded items vend via Monnify).
-      const {
-        provider: selectedProvider,
-        billerCode: selectedBillerCode,
-        productCode: selectedProductCode,
-      } = resolveBillFulfillment(
-        selectedBillItem,
-        selectedBiller,
-        selectedBillItemIdentifier ?? undefined
-      );
-
-      const request = {
+      const request = buildBillPurchaseRequest({
         amount: numericAmount,
-        billItemIdentifier: selectedBillItemIdentifier ?? undefined,
-        billerCode: selectedBillerCode,
-        billerName: selectedBillItemPathLabel
-          ? `${selectedBiller.billerName} - ${selectedBillItemPathLabel}`
-          : selectedBiller.billerName,
+        billItem: selectedBillItem,
+        biller: selectedBiller,
+        billItemIdentifier: selectedBillItemIdentifier,
+        billItemPathLabel: selectedBillItemPathLabel,
         customerIdentifier: customerId,
         customerName,
-        ...(customerAddress ? { customerAddress } : {}),
-        customerPhone: customer?.phone || undefined,
-        productCode: selectedProductCode,
-        provider: selectedProvider,
-        ...(requireValidationRef !== undefined ? { requireValidationRef } : {}),
+        customerAddress,
+        customerPhone: customer?.phone,
+        requireValidationRef,
         type: billType,
-        ...(validationReference ? { validationReference } : {}),
-        walletAmount: numericAmount,
-      };
+        validationReference,
+      });
       // Submitting flips synchronously, so taps during the wait hit the
       // guard; validation above never reaches this (no flash).
       // Settle-await BEFORE the peek (R66): peeking first bypasses the

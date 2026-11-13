@@ -91,7 +91,7 @@ export function usePrimaryWalletCreditPoll({
     // open, and on the wallet once it closes. Never an iOS alert.
     notifySavings(
       'Money received',
-      'Your PiggyVest wallet balance has been updated.',
+      'Your savings wallet balance has been updated.',
       'success'
     );
   }, [balanceKobo, enabled]);

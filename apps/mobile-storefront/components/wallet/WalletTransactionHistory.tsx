@@ -9,7 +9,7 @@ import { styles } from './wallet.styles';
 
 // Says what this list covers: the PiggyVest wallet has its own list above.
 export const STORE_CREDIT_SCOPE_COPY =
-  'Only your older store credit balance, which you spend on purchases. Your PiggyVest savings wallet activity is listed above.';
+  'Only older store credit, for purchases. Your PiggyVest savings wallet activity is listed above.';
 
 /** The list's heading for PiggyVest customers: the older balance only. */
 export const STORE_CREDIT_HISTORY_TITLE = 'Older store credit';

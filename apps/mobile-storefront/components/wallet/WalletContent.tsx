@@ -9,17 +9,16 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
-import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { isPrimaryWallet } from './is-primary-wallet';
 import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
 import type { SavingsVariantResolveResult } from './resolve-completed-savings-goal-variant';
-import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletActivitySection } from './WalletActivitySection';
 import { WalletFundModal } from './WalletFundModal';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
+import { WalletInlineNotices } from './WalletInlineNotices';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
@@ -205,21 +204,12 @@ export function WalletContent(props: WalletContentProps) {
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
         />
-        {savingsSheetOpen ? null : (
-          // Same side inset as the wallet's cards.
-          <SavingsNoticeCard
-            colors={colors}
-            goalId={activeSavingsGoal?.id}
-            style={{ marginHorizontal: 16, marginTop: 12 }}
-          />
-        )}
-        {savingsSheetOpen || props.showFundPanel ? null : (
-          // A funding question left open when its sheet closed.
-          <WalletFundPromptCard
-            colors={colors}
-            style={{ marginHorizontal: 16, marginTop: 12 }}
-          />
-        )}
+        <WalletInlineNotices
+          colors={colors}
+          fundSheetOpen={props.showFundPanel}
+          goalId={activeSavingsGoal?.id}
+          savingsSheetOpen={savingsSheetOpen}
+        />
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard
             colors={colors}

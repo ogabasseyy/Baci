@@ -128,7 +128,7 @@ describe('WalletFundModal', () => {
       />
     );
     expect(screen.queryByText('Primary setup panel')).toBeNull();
-    expect(screen.getByText('Add Money')).toBeOnTheScreen();
+    expect(screen.getByText('Add money')).toBeOnTheScreen();
   });
   it('shows savings return guidance when funding an existing plan', () => {
     const props = createWalletContentProps();

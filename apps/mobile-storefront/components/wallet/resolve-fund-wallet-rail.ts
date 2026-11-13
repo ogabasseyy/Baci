@@ -1,10 +1,9 @@
+import { Alert } from 'react-native';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
-import { askWalletFund } from './fund/ask-wallet-fund';
 import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
-import { notifySavings } from './savings/notify-savings';
 
 /**
  * Resolves which rail a wallet funding must use. Known verdicts (and the
@@ -12,8 +11,8 @@ import { notifySavings } from './savings/notify-savings';
  * authoritative probe instead of defaulting to legacy, so a quick tap on
  * a cold start cannot mint a legacy top-up the server would have routed
  * primary moments later. An ambiguous probe failure blocks funding
- * ('blocked', after an inline notice) rather than guessing a rail with money on
- * the line — the verdict stays fail-closed, but the inline question offers a retry
+ * ('blocked', after alerting) rather than guessing a rail with money on
+ * the line — the verdict stays fail-closed, but the alert offers a retry
  * (via onRetry) so a transient probe failure is not a dead end.
  *
  * A blank merchant id is NOT an unknown verdict: it is a supported
@@ -49,18 +48,21 @@ export async function resolveFundWalletRail(
         ? 'primary'
         : 'legacy';
     } catch {
-      const title = 'We couldn’t check your wallet';
-      const message =
-        'Nothing was charged. Check your connection, then try again.';
-      // Asked inline (never an iOS alert); the answer is not awaited so the
-      // caller still sees 'blocked' at once.
       if (options?.onRetry) {
         const onRetry = options.onRetry;
-        void askWalletFund(title, message, 'Try again').then((retry) => {
-          if (retry) onRetry();
-        });
+        Alert.alert(
+          'Unable to fund wallet',
+          'We could not confirm your wallet rail. Please try again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Try again', onPress: onRetry },
+          ]
+        );
       } else {
-        notifySavings(title, message, 'warning');
+        Alert.alert(
+          'Unable to fund wallet',
+          'We could not confirm your wallet rail. Please try again.'
+        );
       }
       return 'blocked';
     }

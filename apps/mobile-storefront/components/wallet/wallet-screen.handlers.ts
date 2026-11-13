@@ -4,14 +4,12 @@ import { createLogger } from '@/lib/logger';
 import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-capability';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
+import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
 import { fundPrimaryWalletCard } from './fund-primary-wallet-card';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
-import { savingsNotifier } from './savings/savings-notifier';
-import { WALLET_FUNDING_ACCOUNT_MESSAGES } from './wallet-funding-account.constants';
 import {
   buildWalletTopUpGatewayParams,
   getWalletCustomerName,
-  resolveCreateFundingAccountOutcome,
   validateWalletTopUpAmount,
 } from './wallet-screen.helpers';
 
@@ -30,23 +28,6 @@ interface WalletHandlerUser {
   id?: string | null;
 }
 
-type CreateFundingAccount = Parameters<
-  typeof resolveCreateFundingAccountOutcome
->[0];
-interface WalletFundingAccountHandlerParams {
-  activeMerchantId?: string;
-  activeMerchantSlug?: string;
-  createFundingAccount: CreateFundingAccount;
-  customerId?: string | null;
-  customerPhone: string;
-  isPaymentSettingsError: boolean;
-  isPaymentSettingsPending: boolean;
-  // Invoked when the server rejects with CUSTOMER_PHONE_REQUIRED so the caller
-  // can show the phone prompt instead of a dead-end message.
-  onPhoneRequired?: () => void;
-  walletDvaEnabled: boolean;
-}
-
 interface FundWalletParams {
   activeMerchantId?: string;
   activeMerchantSlug?: string;
@@ -59,79 +40,10 @@ interface FundWalletParams {
   walletReturnTo?: string;
 }
 
-// Redeeming points lives in its own module; re-exported for existing callers.
+// Account creation and points redemption live in their own modules;
+// re-exported for existing callers.
+export { createWalletFundingAccount } from './create-wallet-funding-account';
 export { redeemWalletPoints } from './redeem-wallet-points';
-
-export async function createWalletFundingAccount({
-  activeMerchantId,
-  activeMerchantSlug,
-  createFundingAccount,
-  customerId,
-  customerPhone,
-  isPaymentSettingsError,
-  isPaymentSettingsPending,
-  onPhoneRequired,
-  walletDvaEnabled,
-}: WalletFundingAccountHandlerParams): Promise<boolean> {
-  // Every outcome below is the inline wallet notice, never an iOS alert.
-  const notify = savingsNotifier();
-  if (isPaymentSettingsPending) {
-    notify(
-      'Account number unavailable',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING,
-      'info'
-    );
-    return false;
-  }
-
-  if (isPaymentSettingsError) {
-    notify(
-      'Account number unavailable',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_ERROR,
-      'warning'
-    );
-    return false;
-  }
-
-  if (!walletDvaEnabled) {
-    notify(
-      'Account number unavailable',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.DVA_DISABLED,
-      'warning'
-    );
-    return false;
-  }
-
-  if (!customerPhone) {
-    notify(
-      'Phone number required',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.PHONE_REQUIRED,
-      'warning'
-    );
-    return false;
-  }
-
-  const outcome =
-    await resolveCreateFundingAccountOutcome(createFundingAccount);
-  if (outcome.status === 'phone-required') {
-    onPhoneRequired?.();
-    return false;
-  }
-  if (outcome.status === 'error') {
-    trackError(
-      'wallet_funding_account_create_failed',
-      outcome.telemetryMessage,
-      {
-        customer_id: customerId,
-        merchant_id: activeMerchantId,
-        merchant_slug: activeMerchantSlug,
-      }
-    );
-    notify('Unable to create account number', outcome.alertMessage, 'warning');
-    return false;
-  }
-  return true;
-}
 
 export async function fundWallet({
   activeMerchantId,
@@ -144,12 +56,20 @@ export async function fundWallet({
   user,
   walletReturnTo,
 }: FundWalletParams): Promise<void> {
-  const notify = savingsNotifier();
+  const notify = walletOutcomeNotifier(activeMerchantId);
   if (isHostedStagingWalletTopUpBlocked()) {
     notify(
-      'Wallet top-up unavailable',
-      'Card wallet top-ups are disabled in this hosted staging preview.',
-      'warning'
+      {
+        title: 'Wallet top-up unavailable',
+        message:
+          'Card wallet top-ups are disabled in this hosted staging preview.',
+        tone: 'warning',
+      },
+      {
+        title: 'Wallet top-up unavailable',
+        message:
+          'Card wallet top-ups are disabled in this hosted staging preview.',
+      }
     );
     return;
   }
@@ -199,7 +119,14 @@ export async function fundWallet({
   const amount = Number(fundAmount);
   const amountValidationError = validateWalletTopUpAmount(amount);
   if (amountValidationError) {
-    notify('Check the amount', amountValidationError, 'warning');
+    notify(
+      {
+        title: 'Check the amount',
+        message: amountValidationError,
+        tone: 'warning',
+      },
+      { title: 'Invalid Amount', message: amountValidationError }
+    );
     return;
   }
   setIsFundPending(true);
@@ -240,12 +167,13 @@ export async function fundWallet({
       error instanceof Error ? error.message : 'Unknown error',
       { amount, customer_id: customer?.id }
     );
-    notify(
-      'Top-up didn’t start',
+    const message =
       error instanceof Error
         ? error.message
-        : 'Failed to start wallet top-up. Please try again.',
-      'warning'
+        : 'Failed to start wallet top-up. Please try again.';
+    notify(
+      { title: 'Top-up didn’t start', message, tone: 'warning' },
+      { title: 'Top-up Failed', message }
     );
   } finally {
     setIsFundPending(false);

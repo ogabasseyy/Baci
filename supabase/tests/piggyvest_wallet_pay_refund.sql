@@ -76,6 +76,16 @@ BEGIN
     pg_temp.wp_refund_proof(v_op, 'txn-rf0-late')) = 'needs_review', 'a late second refund settled');
   PERFORM pg_temp.wp_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.wallet_payment_refunds
     WHERE payment_id = v_op::uuid AND state = 'confirmed') = 1, 'a late refund was confirmed');
+  -- REGRESSION (Codex P2): the proven late success is still recorded (its
+  -- provider record kept for review), and its replay is a duplicate.
+  PERFORM pg_temp.wp_assert((SELECT refund.state = 'released'
+      AND refund.provider_transaction_id = 'txn-rf0-late'
+      AND refund.settled_at IS NOT NULL
+      AND refund.review_reason = 'late_refund_success'
+      FROM piggyvest_primary.wallet_payment_refunds AS refund
+     WHERE refund.payment_id = v_op::uuid AND refund.attempt = 0), 'the late refund success was not recorded');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.settle_wallet_refund(c_integration, 'staging',
+    pg_temp.wp_refund_proof(v_op, 'txn-rf0-late')) = 'duplicate', 'a recorded late refund replayed as new');
 
   -- 5. A delivered purchase owes nothing.
   v_op := pg_temp.wp_dispatched('lookup-r2');

@@ -229,6 +229,54 @@ describe('startImeiWalletPayment', () => {
       expect(deletePending).toHaveBeenCalledTimes(3);
     });
 
+    it('bugfix: an issue that throws removes the new lookup, then fails (Codex P2)', async () => {
+      const deletePending = vi.fn(async () => ({ data: null, error: null }));
+      const issue = vi.fn(async () => {
+        throw new Error('database unreachable');
+      });
+      await expect(
+        startImeiWalletPayment(
+          input({
+            supabaseAdmin: {
+              insertPending: vi.fn(async () => ({
+                data: { id: LOOKUP },
+                error: null,
+              })),
+              deletePending,
+            },
+          }),
+          deps({ issue })
+        )
+      ).rejects.toThrow('database unreachable');
+      expect(deletePending).toHaveBeenCalledWith(LOOKUP);
+    });
+
+    it('bugfix: an issue that throws and leaves the lookup asks to start again (Codex P2)', async () => {
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending: vi.fn(async () => ({
+              data: null,
+              error: { message: 'payment exists' },
+            })),
+          },
+        }),
+        deps({
+          issue: vi.fn(async () => {
+            throw new Error('timeout after commit');
+          }),
+        })
+      );
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PAYMENT_NOT_COMPLETED',
+      });
+    });
+
     it('retries a clean-up that throws once, then answers 503', async () => {
       const deletePending = vi
         .fn()

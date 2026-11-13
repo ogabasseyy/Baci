@@ -184,7 +184,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-/** Status check: the only thing a retry does. It never sends money. */
+/**
+ * Status check: the only thing a retry does. It never sends the customer's
+ * money; once the cancel is confirmed it may start Ogabassey's interest
+ * transfer after answering (the forfeit the customer agreed to).
+ */
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const guarded = await guard(request);
   if ('error' in guarded) return guarded.error;

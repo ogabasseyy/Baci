@@ -25,6 +25,7 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
 import { createLogger } from '@/lib/logger';
@@ -75,6 +76,8 @@ export default function ImeiCheckerScreen() {
   const walletBalance = wallet?.balance ?? 0;
   const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, wallet);
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
+  // Same rule as fundWallet: not ruled out means a card-only top-up.
+  const topUpCardOnly = usePiggyvestCapabilityNow(merchantId) !== false;
   const fundWallet = (amount: number) =>
     imeiCheckScreenActions.fundWallet(amount, merchantId);
 
@@ -285,6 +288,7 @@ export default function ImeiCheckerScreen() {
             visitedDevices={visitedDevices}
             walletBalance={walletBalance}
             walletIsStoreCredit={walletIsStoreCredit}
+            topUpCardOnly={topUpCardOnly}
             onPageSelected={handlePageSelected}
             onVerify={handleVerify}
             onTopUpWallet={fundWallet}

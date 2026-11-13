@@ -991,6 +991,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1629,6 +1630,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1666,6 +1668,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1717,6 +1720,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 1000,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',

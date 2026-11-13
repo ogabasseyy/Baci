@@ -9,6 +9,7 @@ import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
@@ -122,10 +123,13 @@ export function WalletFundModal({
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
   // fallback once setup completes.
+  // Not while a rollback's ruling-out has just expired (Codex): the stale
+  // hook's true must not reopen PiggyVest setup; the sheet keeps checking.
   const showPrimarySetup =
     !storeCreditTopUp &&
     !!merchantId &&
     piggyvestMerchant &&
+    !(verdictNow === null && wasPiggyvestLastRuledOut(merchantId)) &&
     fundingAccount?.provider !== 'piggyvest';
   // Keep the panel rendered while the card slides down on close, so the
   // exit animation shows the sheet instead of an empty card; it unmounts

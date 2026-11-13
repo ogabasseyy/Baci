@@ -46,6 +46,8 @@ interface ImeiCheckFormViewProps {
   walletBalance: number;
   /** PiggyVest customer: the balance is store credit. */
   walletIsStoreCredit?: boolean;
+  /** The top-up opens the card-only sheet (verdict unknown at the pilot). */
+  topUpCardOnly?: boolean;
   onBrandSelect: (brand: ImeiBrandFilter) => void;
   onChangeImei: (value: string) => void;
   onCheck: () => void;
@@ -75,6 +77,7 @@ export function ImeiCheckFormView({
   showAllServices,
   walletBalance,
   walletIsStoreCredit = false,
+  topUpCardOnly = false,
   onBrandSelect,
   onChangeImei,
   onCheck,
@@ -87,7 +90,7 @@ export function ImeiCheckFormView({
   // The home-indicator inset is buried under the keyboard while it's open —
   // keeping it floats the footer a full inset above the keyboard for nothing.
   const { isKeyboardVisible } = useKeyboard();
-  const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
+  const walletCopy = getImeiWalletCopy(walletIsStoreCredit, topUpCardOnly);
   const isWalletReady = !(isWalletLoading || isWalletError);
   const hasEnoughBalance = isWalletReady && walletBalance >= currentTier.price;
   const needsTopUp =

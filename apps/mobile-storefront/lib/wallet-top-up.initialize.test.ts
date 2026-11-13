@@ -270,3 +270,31 @@ describe('initializeWalletTopUp', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: account switch while the top-up acquired credentials', () => {
+  it('aborts before creating a checkout when another account is signed in', async () => {
+    // Arrange: the flow started for user-1; user-2 is now signed in.
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-2' } },
+      error: null,
+    });
+
+    // Act + Assert
+    await expect(
+      initializeWalletTopUp({ amount: 2500, expectedUserId: 'user-1' })
+    ).rejects.toThrow('You switched accounts');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it('aborts when the session switched after the user read', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'token', user: { id: 'user-2' } } },
+      error: null,
+    });
+
+    await expect(
+      initializeWalletTopUp({ amount: 2500, expectedUserId: 'user-1' })
+    ).rejects.toThrow('You switched accounts');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+});

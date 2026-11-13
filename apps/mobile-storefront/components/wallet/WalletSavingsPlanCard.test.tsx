@@ -146,7 +146,7 @@ describe('WalletSavingsPlanCard', () => {
     );
     expect(
       screen.getByRole('button', {
-        name: 'Complete goal for iPhone 15 Pro',
+        name: 'Move your savings for iPhone 15 Pro',
       })
     ).toBeOnTheScreen();
     expect(screen.queryByText('Start another plan')).toBeNull();

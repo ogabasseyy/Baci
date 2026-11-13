@@ -10,7 +10,7 @@ import type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
  * the recovery runtime (same store, same customer):
  *  - a start (a replayed purchase whose operation the app lost) hands back a
  *    payment that already moved money, so it resumes and is delivered
- *    (Codex P1);
+ *    (Codex P1); one that moved nothing is released and closed (Codex P2);
  *  - a PIN proof is refused, and its still-issued payment is released and the
  *    purchase closed, so a store credit retry never stays held (Codex P2).
  * Anything else answers `refusal` (the caller's unavailable answer).
@@ -53,6 +53,17 @@ export async function answerWhileSwitchedOff(
         existing.operationId,
         { transactionId, amountKobo: input.amountKobo }
       );
+    // Nothing moved money: release a still-issued attempt (or, with none
+    // live, e.g. one that expired) and close the purchase, so it never stays
+    // stuck holding a store credit retry (Codex P2).
+    const ref = { runtime, scope, transactionId };
+    await Promise.resolve()
+      .then(() =>
+        existing
+          ? cancelVtuWalletPay(deps.closeUnpaid, ref, existing.operationId)
+          : deps.closeUnpaid(ref)
+      )
+      .catch(() => null);
     return await refusal();
   }
   // Only this operation, and only while still issued (the database refuses

@@ -4,6 +4,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SPACING } from '@/constants/Colors';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { UtilityPiggyvestPayRow } from './UtilityPiggyvestPayRow';
+import { UtilitySavingsMethod } from './UtilitySavingsMethod';
 import { UtilityWalletTransferNudge } from './UtilityWalletTransferNudge';
 import { getUtilityWalletCopy } from './utility-wallet-copy';
 import { useVtuWalletPayStore } from './vtu-wallet-pay-store';
@@ -87,20 +88,26 @@ export function UtilityPaymentOptions({
   );
   // A kept PiggyVest attempt replays there, so it is the method shown.
   const savingsPays = covered || (amount > 0 && retainedPiggyvest);
+  // A kept attempt resumes on the savings wallet even while paying from it
+  // is switched off (no live balance then): shown as the method (Codex P2).
+  if (
+    savingsKobo === null &&
+    !retainedStoreCredit &&
+    amount > 0 &&
+    retainedPiggyvest
+  )
+    return (
+      <UtilitySavingsMethod colors={colors} balanceKobo={null} mode="resumes" />
+    );
   // Before an amount is chosen (or when it pays) the savings wallet is the
   // only row: no store credit ₦0 for a PiggyVest customer.
   if (savingsKobo !== null && (savingsPays || amount <= 0))
     return (
-      <View style={styles.container}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Payment Method
-        </Text>
-        <UtilityPiggyvestPayRow
-          balanceKobo={savingsKobo}
-          colors={colors}
-          mode={savingsPays ? 'pays' : 'available'}
-        />
-      </View>
+      <UtilitySavingsMethod
+        colors={colors}
+        balanceKobo={savingsKobo}
+        mode={savingsPays ? 'pays' : 'available'}
+      />
     );
   // More than the savings wallet holds (and store credit is short too): say
   // its real balance and shortfall above the store credit options.

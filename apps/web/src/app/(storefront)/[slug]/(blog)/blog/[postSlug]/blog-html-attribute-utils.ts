@@ -42,6 +42,10 @@ export function readHtmlTagAttribute(
       index += 1;
     }
 
+    if (index === nameStart) {
+      break;
+    }
+
     const name = tag.slice(nameStart, index).toLowerCase();
 
     while (index < tag.length && /\s/.test(tag[index] ?? '')) {
@@ -160,7 +164,9 @@ export function setHtmlAttribute(
   const withoutAttribute = stripHtmlAttribute(tag, attributeName);
   const insertion = ` ${attributeName}="${value}"`;
   return withoutAttribute.replace(/\s*\/?>$/, (ending) => {
-    return ending.startsWith('/') ? `${insertion} />` : `${insertion}>`;
+    return ending.trimStart().startsWith('/')
+      ? `${insertion} />`
+      : `${insertion}>`;
   });
 }
 

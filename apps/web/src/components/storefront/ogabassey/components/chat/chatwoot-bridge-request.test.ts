@@ -33,4 +33,28 @@ describe('postChatwootBridgeJson', () => {
       })
     );
   });
+
+  it('preserves JSON error responses and fails closed on non-JSON errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(response({ accepted: false, code: 'refresh_required' }, false))
+        .mockResolvedValueOnce({ ok: false, json: async () => { throw new SyntaxError('not JSON'); } })
+    );
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toEqual({ accepted: false, code: 'refresh_required' });
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toBeNull();
+  });
+
+  it('returns null when the request transport fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toBeNull();
+  });
 });

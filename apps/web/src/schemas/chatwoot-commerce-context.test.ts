@@ -31,6 +31,7 @@ describe('Chatwoot commerce request schemas', () => {
     for (const [field, value] of [
       ['cartVersion', 0],
       ['cartVersion', 1.5],
+      ['cartVersion', Number.MAX_SAFE_INTEGER + 1],
       ['conversationId', 0],
       ['conversationId', Number.MAX_SAFE_INTEGER + 1],
       ['expectedQuantity', 0],

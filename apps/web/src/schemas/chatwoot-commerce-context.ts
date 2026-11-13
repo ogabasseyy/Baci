@@ -40,7 +40,7 @@ export const chatwootCommerceSessionAuthorizeRequestSchema = z
 
 export const chatwootCartQuantityMutationRequestSchema = z
   .object({
-    cartVersion: z.number().int().positive(),
+    cartVersion: z.number().int().positive().safe(),
     conversationId: z.number().int().positive().safe(),
     // Existing carts can exceed the UI's 10-item ceiling; a shopper can still
     // reduce or remove those lines by confirming their full current quantity.

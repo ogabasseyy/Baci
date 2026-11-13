@@ -91,3 +91,20 @@ describe('bugfix: a payment in flight kept its sheet after an account switch (Co
     mockState.user = { id: 'user-a' };
   });
 });
+
+describe('bugfix: signed-out starts shared one saved key (Muse)', () => {
+  it('asks to sign in without calling the server or saving a key', async () => {
+    const { imeiWalletPayApi } = jest.requireMock(
+      '@/lib/wallet-pay/imei-wallet-pay-api'
+    ) as { imeiWalletPayApi: { start: jest.Mock } };
+    imeiWalletPayApi.start.mockClear();
+    mockState.user = null;
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.open('basic', '356938035643809');
+    });
+    expect(hook.result.current.sheet.outcome).toEqual({ kind: 'sign_in' });
+    expect(imeiWalletPayApi.start).not.toHaveBeenCalled();
+    mockState.user = { id: 'user-a' };
+  });
+});

@@ -140,6 +140,9 @@ export function useImeiWalletPay({
       // saved keys shows "Try again" instead of paying with a new key.
       const lazy: WalletPayAdapter<ImeiWalletPayResult> = {
         async start() {
+          // Signed out: nothing to resume, so no shared key is ever saved.
+          if (!user?.id)
+            return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
           // One key per purchase (per account) until it settles, kept across
           // restarts. The IMEI is hashed so the saved purchase doesn't show
           // it in plain text. The hash is an identifier, not a secret (an
@@ -187,6 +190,7 @@ export function useImeiWalletPay({
         trackWalletPayPurchase(lazy, () => purchase, {
           onSettled: () => void walletQuery.refetch?.(),
           stillOwner: () => useAuthStore.getState().user?.id === user?.id,
+          stillWanted: sheet.nextSession(),
         })
       );
     },

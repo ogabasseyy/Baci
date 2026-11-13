@@ -358,3 +358,20 @@ describe('bugfix: an IMEI mismatch on a re-check said nothing was taken (Muse)',
     });
   });
 });
+
+describe('bugfix: an ambiguous 5xx start forgot its key (Codex P1)', () => {
+  it('answers not started (key kept) for a server error with no known code', async () => {
+    api.start.mockResolvedValue(reply(500, { code: 'INTERNAL_ERROR' }));
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'not_started' },
+    });
+  });
+
+  it('still answers failed for a definite 4xx refusal', async () => {
+    api.start.mockResolvedValue(reply(409, { code: 'IDEMPOTENCY_CONFLICT' }));
+    await expect(adapter().start()).resolves.toMatchObject({
+      outcome: { kind: 'failed' },
+    });
+  });
+});

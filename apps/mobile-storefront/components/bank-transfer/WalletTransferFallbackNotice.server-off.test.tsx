@@ -16,5 +16,7 @@ describe('WalletTransferFallbackNotice', () => {
   it('uses calm copy, never an error', () => {
     expect(WALLET_TRANSFER_FALLBACK_COPY).toMatch(/one-time bank transfer/);
     expect(WALLET_TRANSFER_FALLBACK_COPY).not.toMatch(/error|failed/i);
+    // By design for this order, not a passing outage (Muse).
+    expect(WALLET_TRANSFER_FALLBACK_COPY).not.toMatch(/right now/i);
   });
 });

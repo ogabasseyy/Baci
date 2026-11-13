@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 
 export const WALLET_TRANSFER_FALLBACK_COPY =
-  "Bank transfer to wallet isn't available right now, so this order uses a one-time bank transfer instead.";
+  "Bank transfer to wallet isn't available for this order, so it uses a one-time bank transfer instead.";
 
 type WalletTransferFallbackNoticeProps = {
   colors: typeof Colors.light;

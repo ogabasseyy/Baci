@@ -37,7 +37,7 @@ Rules that apply throughout:
 | Manage | Full-page goal-actions route | `app/wallet/savings/goal-actions.tsx` | Retired in #4224: old links open the in-sheet steps |
 | Spend | Checkout "Use device savings" / wallet rows | `PaymentMethodStoreCreditRows` | **To review** |
 | Spend | IMEI check paid from the PiggyVest wallet | `app/imei-check` + #4218/#4220 | Built: server #4218/#4220, app #4225 |
-| Spend | Airtime/data/power paid from the wallet | `app/utilities/[type]` | **Building** (pay-from-wallet session, after #4225) |
+| Spend | Airtime/data/power paid from the wallet | `app/utilities/[type]`, `VtuWalletPayHost` | Built in #4227 (dark, on #4225); **Fable walk owed** after it absorbs #4222's executor change |
 | Spend | Wallet transactions | `WalletTransactionHistory` | **To review** (no detail view) |
 | Clean-up | Orphans: `WalletFundingAccountCard`, `checkout/WalletPayment`, `LocalSavingsDraftScreen` (+ history, review, draft hooks), `PlanWalletStagingSection` | | Removed in #4224 |
 
@@ -204,4 +204,16 @@ the airtime/data/power payment are being built by their owning sessions; the
 on the combined build. A Fable check of the cancel review breakdown
 ("Split check plan", no interest) passed: "Saved ₦50,000", "Back to your
 wallet ₦50,000"; the forfeit line correctly stays hidden with no interest.
+
+## Walk findings and fixes (2026-11-13, afternoon)
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| Savings notification inbox rows had no card (style function dropped) | #4224 | **Fixed** 041fa26e2c, checked on simulator |
+| Unlabelled "₦100 a month" in Add to savings | #4223 | **Fixed** 3b5838c558 ("Your plan: ₦100 a month, …"), checked on simulator |
+| WalletContent / savings sheet over 300 lines once #4223 + #4224 combine | #4224 | **Fixed** 9e5ded499d (288 / 269 alone; 295 / 275 combined) |
+| Savings wallet has no transaction history ("Store credit activity" only) | #4216 session | Sent; part of the Fund follow-up |
+| Checkout wallet rows not walked: shipping rates fail in the local stack | owner | Walk on staging, or allow local rate mocking |
+| #4227 conflicts with #4222 in the savings/evidence executors | pay-from-wallet session | Sent; reconcile by merging #4222 |
+| Storefront UI issues outside PiggyVest (blank toast, city error, Redeem contrast, home overlap, empty cart, settings footer) | proposed session | Awaiting owner start |
 

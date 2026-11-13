@@ -147,10 +147,7 @@ export async function addSavingsContributionToGoal({
     clearSavingsContributionAmount();
     clearIdempotencyKey?.();
     triggerHaptic('success');
-    const refreshFailed = await refetchWallet().then(
-      () => false,
-      () => true
-    );
+    const refreshFailed = !(await walletRefreshWorked(refetchWallet));
     const success = buildSavingsSuccessMessage({
       amount,
       goal,

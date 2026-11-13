@@ -156,6 +156,11 @@ BEGIN
     IS DISTINCT FROM ARRAY['piggyvest_primary_evidence'] THEN
     RAISE EXCEPTION 'read_goal_wallet_setup_health EXECUTE reaches roles beyond the evidence role';
   END IF;
+  -- Counts only the named in-flight states, never "anything not enrolled".
+  IF (SELECT prosrc FROM pg_catalog.pg_proc WHERE oid = routine)
+    NOT LIKE '%state IN (''dispatched'',''unknown'',''accepted'')%' THEN
+    RAISE EXCEPTION 'read_goal_wallet_setup_health does not name its counted states';
+  END IF;
   -- The scan's partial index: not-yet-enrolled setups by integration and age.
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_indexes

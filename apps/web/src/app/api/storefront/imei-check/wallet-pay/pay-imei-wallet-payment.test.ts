@@ -120,6 +120,25 @@ describe('payImeiWalletPayment', () => {
     expect(d.deliver).not.toHaveBeenCalled();
   });
 
+  it("bugfix: returns a finished lookup's saved result even if the IMEI no longer hashes the same (Codex P1)", async () => {
+    const d = deps({
+      readLookup: vi.fn(
+        async () =>
+          ({
+            ...lookup,
+            status: 'completed',
+            imei_hash: 'f'.repeat(64),
+          }) as never
+      ),
+    });
+    const response = await payImeiWalletPayment(
+      { lookupId: LOOKUP, body: { ...body, pinProof: '' }, auth: {} as never },
+      d
+    );
+    expect(response.status).toBe(200);
+    expect(d.deliver).toHaveBeenCalledTimes(1);
+  });
+
   it('answers a wrong-purchase claim with a definite 409', async () => {
     const d = deps({
       deliver: vi.fn(async () =>

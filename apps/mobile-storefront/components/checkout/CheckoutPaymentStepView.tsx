@@ -118,7 +118,7 @@ export function CheckoutPaymentStepView({
         orderTotal={total}
         enabledMethods={availablePaymentMethods}
         hiddenMethods={hiddenPaymentMethods}
-        initiallyCollapsed
+        initiallyCollapsed={!selectedPayment}
         walletMode="orders"
         walletBalance={walletBalance}
         walletOrderTotal={total}

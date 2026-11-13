@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { CheckoutReviewStep } from './CheckoutReviewStep';
 
@@ -55,9 +55,30 @@ describe('CheckoutReviewStep', () => {
   it('shows the selected payment and edit action in normal checkout', () => {
     render(<CheckoutReviewStep {...commonProps} selectedPayment="paystack" />);
 
-    expect(screen.getByText('Card Payment (Paystack)')).toBeTruthy();
+    // Matches the Payment step's label instead of naming the gateway.
+    expect(screen.getByText('Pay with Card')).toBeTruthy();
+    expect(screen.queryByText('Card Payment (Paystack)')).toBeNull();
     expect(
       screen.getByRole('button', { name: 'Edit payment method' })
     ).toBeTruthy();
+  });
+
+  it('shows the full door-delivery address with an Edit action', () => {
+    const onEditAddress = jest.fn();
+    render(
+      <CheckoutReviewStep
+        {...commonProps}
+        onEditAddress={onEditAddress}
+        selectedPayment="paystack"
+      />
+    );
+
+    expect(
+      screen.getByText('2 Olaide Tomori Street\nIkeja, Lagos')
+    ).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Edit delivery address' })
+    );
+    expect(onEditAddress).toHaveBeenCalledTimes(1);
   });
 });

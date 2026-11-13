@@ -10,8 +10,9 @@
 --                      sent by the wallet pay ledger ('refund_owed'). The
 --                      wallet pay ledger sends that refund exactly once.
 --   * failed_error / wallet_rejected : refused while a PiggyVest payment holds
---                      or is moving the customer's money ('charged' or
---                      'delivering'), like a legacy debit.
+--                      or is moving the customer's money ('charged',
+--                      'delivering' or 'refund_owed'), like a legacy debit:
+--                      a refunded check must stay refunded_*.
 --   * delete_pending : refused once any PiggyVest payment exists.
 -- It also adds imei_wallet_payment_delivered, which the wallet pay drain asks
 -- before refunding an uncollected payment (a saved result is fulfilled).
@@ -221,7 +222,7 @@ BEGIN
           WHERE t.source_type='imei_wallet_payment' AND t.type='redemption' AND t.source_id=lookup_id
             AND t.customer_id=customer_id AND t.merchant_id=merchant_id)
         OR piggyvest_primary.imei_wallet_payment_state(lookup_id,customer_id,merchant_id,lookup_row.amount_ngn)
-          IN ('charged','delivering')) THEN
+          IN ('charged','delivering','refund_owed')) THEN
         RAISE EXCEPTION 'imei_access_charged_lookup_failure_denied' USING ERRCODE='42501';
       END IF;
       IF lookup_row.status IS NOT DISTINCT FROM patch->>'status'
@@ -299,4 +300,39 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.imei_lookup_access(text,text) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.imei_lookup_access(text,text) TO authenticated;
+-- Whether this customer's wallet flow ever issued a payment for one purchase
+-- (dead attempts included). The IMEI start uses it to tell a lookup the
+-- wallet flow created (its issued attempt expired, so it may be re-issued)
+-- from one a store-credit request owns (never paid from the wallet).
+CREATE FUNCTION piggyvest_primary.wallet_payment_attempted(scope jsonb, request jsonb)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_intent_id uuid;
+BEGIN
+  IF request IS NULL OR pg_catalog.jsonb_typeof(request) <> 'object'
+    OR (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(request)) <> 2
+    OR request ->> 'purpose' NOT IN ('imei_check', 'vtu')
+    OR COALESCE(request ->> 'purchaseRef', '') !~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$' THEN
+    RAISE EXCEPTION 'invalid wallet payment request' USING ERRCODE = '22023';
+  END IF;
+  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
+  RETURN EXISTS (
+    SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
+     WHERE payment.integration_id = (scope ->> 'integrationId')::uuid
+       AND payment.intent_id = v_intent_id
+       AND payment.purpose = request ->> 'purpose'
+       AND payment.purchase_ref = request ->> 'purchaseRef');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION piggyvest_primary.wallet_payment_attempted(jsonb, jsonb)
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_evidence;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.wallet_payment_attempted(jsonb, jsonb)
+  TO piggyvest_primary_authorizer;
+
 COMMIT;

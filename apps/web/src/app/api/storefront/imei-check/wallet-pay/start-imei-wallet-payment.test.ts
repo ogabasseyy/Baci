@@ -33,6 +33,7 @@ function deps(overrides: Record<string, unknown> = {}) {
       operationId: OP,
       state: 'issued' as const,
     })),
+    wasAttempted: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -230,13 +231,34 @@ describe('startImeiWalletPayment', () => {
       expect(d.issue).toHaveBeenCalled();
     });
 
-    it('bugfix: an expired (or never-issued) attempt asks to start again, never pays (Codex P2)', async () => {
+    it('bugfix: re-issues when this wallet flow’s earlier attempt expired unpaid (Codex P2)', async () => {
       const d = deps({ findForPurchase: vi.fn(async () => null) });
       const response = await startImeiWalletPayment(replayInput(existing), d);
-      expect(response.status).toBe(409);
-      await expect(response.json()).resolves.toMatchObject({
-        code: 'PAYMENT_NOT_COMPLETED',
+      expect(response.status).toBe(202);
+      expect(d.wasAttempted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'imei_check',
+          purchaseRef: LOOKUP,
+        })
+      );
+      expect(d.issue).toHaveBeenCalled();
+    });
+
+    it('bugfix: keeps a lookup with no wallet attempt in flight, never pays it (Codex P1)', async () => {
+      const d = deps({
+        findForPurchase: vi.fn(async () => null),
+        wasAttempted: vi.fn(async () => false),
       });
+      const replay = replayInput(existing) as unknown as {
+        replayContext: Record<string, unknown>;
+      };
+      replay.replayContext = {
+        ...replay.replayContext,
+        deviceCategory: 'smartphone',
+      };
+      const response = await startImeiWalletPayment(replay as never, d);
+      const body = await response.json();
+      expect(body.code).toBe('IDEMPOTENT_REQUEST_IN_FLIGHT');
       expect(d.issue).not.toHaveBeenCalled();
     });
 

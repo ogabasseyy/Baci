@@ -11,8 +11,12 @@ DECLARE
   c_lookup constant text := 'f9a10000-0000-4000-8000-0000000000a1';
   v_op text;
   v_late text;
+  v_threw boolean;
 BEGIN
   PERFORM pg_temp.wp_collection();
+  -- Attempted: false before any payment exists for the purchase.
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.wallet_payment_attempted(pg_temp.wp_scope(),
+    jsonb_build_object('purpose', 'imei_check', 'purchaseRef', c_lookup)), 'attempted with no payment');
   -- No payment: no PiggyVest state.
   PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_state(c_lookup::uuid, c_customer, c_merchant, 1000) IS NULL,
     'a lookup with no payment has a state');
@@ -22,6 +26,29 @@ BEGIN
     'an issued payment counts as money');
   -- Reserved / dispatched: charged.
   UPDATE piggyvest_primary.wallet_payments SET expires_at = pg_catalog.clock_timestamp() - interval '1 second' WHERE id = v_op::uuid;
+  -- Attempted: an expired attempt still counts (the lookup is this wallet
+  -- flow's); another purchase or purpose never does.
+  PERFORM pg_temp.wp_assert(piggyvest_primary.read_wallet_payment_for_purchase(pg_temp.wp_scope(),
+    jsonb_build_object('purpose', 'imei_check', 'purchaseRef', c_lookup)) IS NULL, 'an expired attempt is live');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.wallet_payment_attempted(pg_temp.wp_scope(),
+    jsonb_build_object('purpose', 'imei_check', 'purchaseRef', c_lookup)), 'an expired attempt was not attempted');
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.wallet_payment_attempted(pg_temp.wp_scope(),
+    jsonb_build_object('purpose', 'vtu', 'purchaseRef', c_lookup)), 'another purpose was attempted');
+  PERFORM pg_temp.wp_assert(NOT piggyvest_primary.wallet_payment_attempted(pg_temp.wp_scope(),
+    jsonb_build_object('purpose', 'imei_check', 'purchaseRef', 'another-lookup')), 'another purchase was attempted');
+  v_threw := false;
+  BEGIN
+    PERFORM piggyvest_primary.wallet_payment_attempted(pg_temp.wp_scope(),
+      jsonb_build_object('purpose', 'imei_check', 'purchaseRef', c_lookup, 'extra', 1));
+  EXCEPTION WHEN invalid_parameter_value THEN v_threw := true;
+  END;
+  PERFORM pg_temp.wp_assert(v_threw, 'an extra request key was accepted');
+  PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('authenticated',
+    'piggyvest_primary.wallet_payment_attempted(jsonb,jsonb)', 'EXECUTE'), 'authenticated can read attempted');
+  PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('anon',
+    'piggyvest_primary.wallet_payment_attempted(jsonb,jsonb)', 'EXECUTE'), 'anon can read attempted');
+  PERFORM pg_temp.wp_assert(pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+    'piggyvest_primary.wallet_payment_attempted(jsonb,jsonb)', 'EXECUTE'), 'the authorizer can not read attempted');
   v_op := pg_temp.wp_dispatched(c_lookup);
   PERFORM pg_temp.wp_assert(piggyvest_primary.imei_wallet_payment_state(c_lookup::uuid, c_customer, c_merchant, 1000) = 'charged',
     'a dispatched payment is not charged');

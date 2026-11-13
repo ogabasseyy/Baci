@@ -9,6 +9,7 @@ import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import {
   findWalletPaymentForPurchase,
   issueWalletPayment,
+  walletPaymentAttemptedForPurchase,
 } from '@/lib/piggyvest/wallet-pay-service';
 import {
   errorBody,
@@ -31,6 +32,7 @@ export interface StartImeiWalletPaymentDeps {
   } | null>;
   issue: Issue;
   findForPurchase: typeof findWalletPaymentForPurchase;
+  wasAttempted: typeof walletPaymentAttemptedForPurchase;
 }
 
 const defaultDeps: StartImeiWalletPaymentDeps = {
@@ -39,6 +41,7 @@ const defaultDeps: StartImeiWalletPaymentDeps = {
     resolvePrimaryWalletIdentity({ ...input, forOnboarding: false }),
   issue: issueWalletPayment,
   findForPurchase: findWalletPaymentForPurchase,
+  wasAttempted: walletPaymentAttemptedForPurchase,
 };
 
 function refuse(code: string, error: string, status: number) {
@@ -147,24 +150,22 @@ export async function startImeiWalletPayment(
     // Only a lookup this wallet flow owns (a PiggyVest payment was issued for
     // it) is re-asked: a concurrent store-credit request that won the insert
     // must never also be paid from the wallet.
-    const owned = await deps.findForPurchase({
+    const purchase = {
       runtime,
       scope: walletPayScope(runtime, identity),
-      purpose: 'imei_check',
+      purpose: 'imei_check' as const,
       purchaseRef: String(existing.id),
-    });
-    // No live wallet payment (its issued attempt expired, or none was ever
-    // issued): nothing was charged, so the client starts again with a new
-    // key rather than waiting on a lookup no payment will ever complete.
-    if (!owned)
-      return refuse(
-        'PAYMENT_NOT_COMPLETED',
-        'This payment did not go through. Please start again.',
-        409
-      );
-    // Only a payment still open (not yet settled) is re-asked: a confirmed or
-    // refunded one must never be followed by a second payment for the check.
-    if (!['issued', 'reserved', 'dispatched'].includes(owned.state))
+    };
+    const owned = await deps.findForPurchase(purchase);
+    // No live wallet payment. Re-issue only when one was issued before (it
+    // expired unpaid): the lookup is positively this wallet flow's. Otherwise
+    // it may be a concurrent store-credit request's, or ours mid-issue, so the
+    // replay answers in flight exactly as the store-credit path does.
+    if (!owned) {
+      if (!(await deps.wasAttempted(purchase)))
+        return mapExistingLookup(existing, input.replayContext);
+    } else if (!['issued', 'reserved', 'dispatched'].includes(owned.state))
+      // A confirmed or refunded payment is never followed by a second one.
       return mapExistingLookup(existing, input.replayContext);
     lookupId = String(existing.id);
     // The price recorded on the lookup, never today's tier price.

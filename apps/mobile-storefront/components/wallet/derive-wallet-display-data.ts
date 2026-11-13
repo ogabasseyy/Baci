@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { hasMalformedPrimaryBalance } from '@/lib/has-malformed-primary-balance';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { WalletDisplayFundingAccount } from './wallet.types';
@@ -136,7 +137,10 @@ export function deriveWalletDisplayData(
     ...primaryFields,
     // The PiggyVest check is unsettled (failed, pending, or no customer row
     // yet): purchase top-ups stay card-only store credit, like IMEI's.
+    // A malformed PiggyVest balance (negative, non-finite) is no answer
+    // either (Muse): purchase top-ups stay card-only store credit.
     ...(isWalletPrimaryUnknown(walletData) ||
+    hasMalformedPrimaryBalance(walletData) ||
     walletData.owner_unresolved === true
       ? { walletPrimaryUnsettled: true as const }
       : {}),

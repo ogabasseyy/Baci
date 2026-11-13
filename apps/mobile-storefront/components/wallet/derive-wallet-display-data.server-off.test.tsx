@@ -99,3 +99,27 @@ describe('bugfix: account-less pending PiggyVest wallet shown as legacy', () => 
     expect(display.legacyBalance).toBe(1200);
   });
 });
+
+describe('bugfix: malformed PiggyVest balance on a PiggyVest account', () => {
+  it('marks the wallet unsettled so purchase top-ups stay card-only store credit', () => {
+    // Arrange: a negative balance is no PiggyVest answer.
+    const wallet = {
+      balance: 1_000,
+      funding_account: { provider: 'piggyvest' },
+      primary_balance_kobo: -5,
+    };
+
+    // Act
+    const display = deriveWalletDisplayData(wallet);
+
+    // Assert
+    expect(display.primaryReady).toBeUndefined();
+    expect(display.walletPrimaryUnsettled).toBe(true);
+  });
+
+  it('leaves a ruled-out legacy wallet without a PiggyVest balance untouched', () => {
+    const display = deriveWalletDisplayData({ balance: 1_000 });
+    expect(display.walletPrimaryUnsettled).toBeUndefined();
+    expect(display.walletBalance).toBe(1_000);
+  });
+});

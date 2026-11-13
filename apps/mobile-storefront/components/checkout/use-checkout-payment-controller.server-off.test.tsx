@@ -554,3 +554,45 @@ describe('owner decision 2026-11-13: PiggyVest holds apply only to the Ogabassey
     );
   });
 });
+
+describe('bugfix: wallet turned PiggyVest after render while a ruling-out is cached', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('holds the wallet-funded transfer when the latest wallet is PiggyVest', () => {
+    // Arrange: the cached verdict still rules PiggyVest out, but the wallet
+    // read that landed before Place Order carries a PiggyVest balance.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0, primary_balance_kobo: 500_000 };
+
+    // Act
+    const { result } = renderController();
+
+    // Assert
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+
+  it('holds while the latest wallet reports a pending PiggyVest account', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0, primary_pending: true };
+
+    const { result } = renderController();
+
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+
+  it('keeps the transfer for a ruled-out legacy wallet', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+
+    const { result } = renderController();
+
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(false);
+  });
+});

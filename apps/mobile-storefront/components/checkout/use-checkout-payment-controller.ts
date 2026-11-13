@@ -21,12 +21,12 @@ import {
   getKlumpDisabledReason,
   shouldHideKlumpPaymentMethod,
 } from '@/lib/klump-checkout';
-import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
+import { isSubmitWalletTransferHeld } from './is-submit-wallet-transfer-held';
 import { useRedvaultAvailability } from './use-redvault-availability';
 import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 
@@ -277,13 +277,12 @@ export function useCheckoutPaymentController({
     // Unknown verdict (Ogabassey pilot only): show "Checking…", not a gap.
     walletFundedBankTransferChecking: verdictNow === null,
     // Live re-check at submit: verdict and wallet read now, not at render.
-    isWalletFundedBankTransferHeld: () => {
-      // Chosen earlier but no longer eligible: fall back with the notice.
-      if (!walletFundedBankTransferOptionEnabled) return true;
-      // The live verdict alone decides (Muse): unknown or PiggyVest holds,
-      // never a wallet-funded transfer; a loading or failed refresh doesn't.
-      return readPiggyvestCapabilityNow(merchantId) !== false;
-    },
+    isWalletFundedBankTransferHeld: () =>
+      isSubmitWalletTransferHeld({
+        merchantId,
+        optionEnabled: walletFundedBankTransferOptionEnabled,
+        wallet: walletQuery.data?.wallet,
+      }),
     walletIsStoreCredit,
     walletSelection,
   };

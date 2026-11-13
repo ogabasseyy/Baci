@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type {
@@ -36,8 +36,12 @@ export function SavingsVariantPickStep({
   useSavingsSheetLock(pending);
   const [error, setError] = useState<string | null>(null);
 
+  // Blocks a second tap before React re-renders with `pending` set.
+  const inFlight = useRef(false);
+
   const confirm = async () => {
-    if (!chosen || pending) return;
+    if (!chosen || inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
     setError(null);
     try {
@@ -47,6 +51,7 @@ export function SavingsVariantPickStep({
     } catch {
       setError("We couldn't save your choice. Please try again.");
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   };

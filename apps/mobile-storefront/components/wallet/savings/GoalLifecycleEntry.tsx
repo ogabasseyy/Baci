@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -44,8 +45,25 @@ export function GoalLifecycleEntry({
   onComplete,
   walletUpdatedAt,
 }: Props) {
-  const gate = usePrimaryGoalGate(walletUpdatedAt);
-  if (gate !== 'ready' || hasPendingContribution) return null;
+  // A failed readiness read offers a retry instead of hiding Cancel and
+  // Complete until something else refreshes the wallet.
+  const [retry, setRetry] = useState(0);
+  const gate = usePrimaryGoalGate(walletUpdatedAt, retry);
+  if (hasPendingContribution) return null;
+  if (gate === 'error')
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Try loading goal options again"
+        onPress={() => setRetry((value) => value + 1)}
+        style={styles.quietLink}
+      >
+        <Text style={[styles.quietText, { color: colors.textSecondary }]}>
+          Couldn't load your goal options. Try again
+        </Text>
+      </Pressable>
+    );
+  if (gate !== 'ready') return null;
   const kinds: GoalActionKind[] = [];
   if (goal.status === 'active' || goal.status === 'paused')
     kinds.push('cancel');

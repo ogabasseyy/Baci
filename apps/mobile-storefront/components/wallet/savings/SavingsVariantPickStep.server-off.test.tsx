@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -41,6 +42,23 @@ function renderStep(onResolve: (id: string) => Promise<true | string>) {
 }
 
 describe('Choose your exact phone, server off', () => {
+  it('saves once even when Confirm is tapped twice before it re-renders', async () => {
+    const onResolve = jest.fn(
+      (): Promise<true | string> => new Promise(() => undefined)
+    );
+    renderStep(onResolve);
+    fireEvent.press(screen.getByRole('radio', { name: '128GB Black' }));
+    // Both presses land in one batch, before React re-renders with pending.
+    const confirmButton = screen.getByRole('button', {
+      name: 'Confirm this option',
+    });
+    act(() => {
+      fireEvent.press(confirmButton);
+      fireEvent.press(confirmButton);
+    });
+    await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(1));
+  });
+
   it('keeps the savings sheet open while the choice saves', async () => {
     let finish: (value: true) => void = () => undefined;
     const onResolve = jest.fn(

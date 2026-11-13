@@ -125,7 +125,17 @@ describe('GoalLifecycleEntry', () => {
         walletUpdatedAt={99}
       />
     );
-    expect(usePrimaryGoalGate).toHaveBeenCalledWith(99);
+    expect(usePrimaryGoalGate).toHaveBeenCalledWith(99, 0);
+  });
+
+  it('offers a retry when the readiness read fails, and re-reads on tap', () => {
+    jest.mocked(usePrimaryGoalGate).mockReturnValue('error');
+    renderEntry(makeGoal());
+    expect(cancel()).toBeNull();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Try loading goal options again' })
+    );
+    expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 1);
   });
 
   it('opens the in-sheet Cancel and Complete steps, never another screen', () => {

@@ -26,11 +26,9 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  * never service role, and pages with counts only. Like the reconciliation it
  * ignores the master kill switch: a rollback must not hide a stuck transfer.
  *
- * Rate limit: one page per reason per UTC hour. The hour bucket is both the
- * page claim and the PostHog operation id, so a 5-minute schedule pages at
- * most once an hour per reason. Buckets centre on the top of the hour (the
- * nearest hour), matching the claim's Redis-less window: a run a minute
- * early (10:59) belongs to the coming hour (11), not the one ending.
+ * Rate limit: at most one page per reason in any rolling hour (see
+ * degraded-health-page-claim). The nearest hour labels the PostHog operation
+ * id, so a run a minute early (10:59) is labelled with the coming hour.
  */
 const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
@@ -139,7 +137,7 @@ export async function runPiggyvestDegradedHealth(
   const hour = Math.round(now / MS_PER_HOUR);
   let paged = 0;
   for (const alert of alerts) {
-    if (!(await claimDegradedPage(alert.reason, hour, deps.claimShared, now)))
+    if (!(await claimDegradedPage(alert.reason, deps.claimShared, now)))
       continue;
     paged += 1;
     deps.emitAlert('PIGGYVEST_DEGRADED', {
@@ -152,7 +150,7 @@ export async function runPiggyvestDegradedHealth(
   // hourly throttle), so an outage of the read itself is seen.
   if (
     readFailed &&
-    (await claimDegradedPage('health_read_failed', hour, deps.claimShared, now))
+    (await claimDegradedPage('health_read_failed', deps.claimShared, now))
   ) {
     paged += 1;
     deps.emitAlert('PIGGYVEST_DEGRADED', {

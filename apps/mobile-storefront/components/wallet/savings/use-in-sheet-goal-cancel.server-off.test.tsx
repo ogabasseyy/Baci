@@ -99,6 +99,21 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a refresh that resolves with an error, then asks to pull down', async () => {
+    const refresh = jest.fn(async () => ({ isError: true }));
+    const notice = renderHook(() => useSavingsNotice());
+    const { result, rerender } = renderHook(() =>
+      useInSheetGoalCancel(goal, refresh)
+    );
+    act(() => result.current.start());
+    mockStep.current = 'done';
+    await act(async () => {
+      rerender({});
+    });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(notice.result.current.notice?.title).toBe('Pull to refresh');
+  });
+
   it('refreshes once per settled action, even when the refresh callback changes every render', () => {
     const { result, rerender } = renderHook(
       ({ cb }: { cb: () => unknown }) => useInSheetGoalCancel(goal, cb),

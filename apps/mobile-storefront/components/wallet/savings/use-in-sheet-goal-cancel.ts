@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
-import { clearSavingsNotice } from './savings-notice';
+import { walletRefreshWorked } from '../wallet-refresh-worked';
+import { clearSavingsNotice, savingsNotifier } from './savings-notice';
 import { useGoalLifecycle } from './use-goal-lifecycle';
 
 const IN_FLIGHT = new Set(['submitting', 'polling']);
@@ -75,7 +76,23 @@ export function useInSheetGoalCancel(
   useEffect(() => {
     if (!outcomeKey || refreshed.current === outcomeKey) return;
     refreshed.current = outcomeKey;
-    void refreshRef.current?.();
+    const refresh = refreshRef.current;
+    if (refresh) {
+      // A refetch that resolves with an error counts as failed; one retry,
+      // then the customer is told to pull down for the latest balance.
+      const notify = savingsNotifier();
+      const once = () => Promise.resolve(refresh());
+      void (async () => {
+        for (let tries = 0; tries < 2; tries += 1) {
+          if (await walletRefreshWorked(once)) return;
+        }
+        notify(
+          'Pull to refresh',
+          'Your savings changed. Pull down on the wallet to see the latest.',
+          'info'
+        );
+      })();
+    }
     if (closedInFlight.current === attempt) {
       closedInFlight.current = null;
       setHeld(null);

@@ -30,7 +30,7 @@ describe('bugfix: legacy account number shown before the PiggyVest verdict', () 
     expect(result.current).toBe(true);
   });
 
-  it('never holds a PiggyVest account', () => {
+  it('does not hold a PiggyVest account while the verdict is unknown', () => {
     const { result } = renderHook(() =>
       useLegacyFundingUnconfirmed('piggyvest')
     );
@@ -95,5 +95,31 @@ describe('bugfix: legacy account kept visible after the real expiry', () => {
     // Assert
     expect(result.current).toBe(true);
     jest.useRealTimers();
+  });
+});
+
+describe('bugfix: PiggyVest account shown after a rollback to not ready', () => {
+  it('hides a PiggyVest account while the server rules PiggyVest out', () => {
+    // Arrange: rolled back; the reload hasn't replaced the cached account
+    // (it may have failed).
+    mockCapability = false;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+
+    // Act
+    const { result } = renderHook(() =>
+      useLegacyFundingUnconfirmed('piggyvest')
+    );
+
+    // Assert
+    expect(result.current).toBe(true);
+  });
+
+  it('shows a PiggyVest account once PiggyVest is confirmed', () => {
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const { result } = renderHook(() =>
+      useLegacyFundingUnconfirmed('piggyvest')
+    );
+    expect(result.current).toBe(false);
   });
 });

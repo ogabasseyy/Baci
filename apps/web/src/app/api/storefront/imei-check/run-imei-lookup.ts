@@ -18,7 +18,12 @@ export function continuesWalletPayment(
   );
 }
 
-/** The answer for a replayed Idempotency-Key, or null to carry on. */
+/**
+ * The answer for a replayed Idempotency-Key, or null to carry on. Null never
+ * proves ownership: a pending wallet lookup is handed back to the start step,
+ * which re-checks customer, IMEI, tier and device and that this wallet flow
+ * issued a payment for it before re-asking.
+ */
 export function replayFor(
   existing: ImeiLookupRow | null,
   body: { paymentMethod: 'store_credit' | 'piggyvest_wallet' },

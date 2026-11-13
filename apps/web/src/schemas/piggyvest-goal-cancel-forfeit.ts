@@ -124,11 +124,15 @@ export const piggyvestGoalCancelForfeitSchemas = {
   releaseRows: z
     .array(
       z.strictObject({
-        result: z.enum([
-          'released',
-          'released_needs_review',
-          'needs_review',
-          'not_released',
+        // released_needs_review names the forfeit that went to review, so
+        // the caller acknowledges exactly that row after paging.
+        result: z.union([
+          z.enum(['released', 'needs_review', 'not_released']),
+          z.custom<`released_needs_review:${string}`>(
+            (value) =>
+              typeof value === 'string' &&
+              /^released_needs_review:[0-9a-f-]{36}$/.test(value)
+          ),
         ]),
       })
     )

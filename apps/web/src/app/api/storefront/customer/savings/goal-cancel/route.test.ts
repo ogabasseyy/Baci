@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PATCH, POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -45,7 +45,14 @@ const goalId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
 const pinProof = createHash('sha256').update('s6-route-proof').digest('hex');
 const issue = { step: 'issue', merchantId, goalId };
-const submit = { step: 'submit', merchantId, goalId, operationId, pinProof };
+const submit = {
+  step: 'submit',
+  merchantId,
+  goalId,
+  operationId,
+  pinProof,
+  interestForfeitAcknowledged: true,
+};
 const url = 'https://example.com/api/storefront/customer/savings/goal-cancel';
 const post = (body: unknown) =>
   POST(new NextRequest(url, { method: 'POST', body: JSON.stringify(body) }));
@@ -91,6 +98,7 @@ it.each([
   { ...submit, pinProof: undefined },
   { step: 'submit', merchantId, goalId, pinProof },
   { step: 'refund', merchantId, goalId },
+  { ...submit, interestForfeitAcknowledged: 'yes' },
 ])('rejects malformed input %j', async (body) => {
   expect((await post(body)).status).toBe(400);
   expect(mocks.issue).not.toHaveBeenCalled();
@@ -259,4 +267,36 @@ it('fails closed when the recovery configuration is unavailable', async () => {
   });
   expect((await post(submit)).status).toBe(503);
   expect(mocks.submit).not.toHaveBeenCalled();
+});
+
+describe('bugfix: an app that never showed the interest forfeit could still cancel', () => {
+  it.each([
+    ['missing', undefined],
+    ['false', false],
+  ])('refuses a submit with the acknowledgement %s, moving nothing', async (_why, value) => {
+    const response = await post({
+      ...submit,
+      interestForfeitAcknowledged: value,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Please update the app to cancel this goal.',
+      code: 'APP_UPDATE_REQUIRED',
+    });
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(mocks.recovery).not.toHaveBeenCalled();
+  });
+
+  it('proceeds as before when the app acknowledged the forfeit', async () => {
+    mocks.submit.mockResolvedValue({ status: 'confirmed' });
+    expect((await post(submit)).status).toBe(200);
+    expect(mocks.submit).toHaveBeenCalledOnce();
+  });
+
+  it('accepts the acknowledgement on the issue step too', async () => {
+    mocks.issue.mockResolvedValue({ status: 'issued', operationId });
+    expect(
+      (await post({ ...issue, interestForfeitAcknowledged: true })).status
+    ).toBe(200);
+  });
 });

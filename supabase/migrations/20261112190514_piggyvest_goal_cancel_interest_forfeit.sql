@@ -486,6 +486,9 @@ DECLARE
   v_residual bigint := 0;
   v_expected_residual bigint := 0;
   v_target text;
+  v_owed bigint;
+  v_owed_wallet text;
+  v_last_wallet text;
 BEGIN
   SELECT candidate.* INTO v_binding FROM piggyvest_primary.integrations AS candidate
     JOIN piggyvest_primary.inflow_authorities AS authority ON authority.integration_id = candidate.id
@@ -617,6 +620,33 @@ BEGIN
        AND event.goal_id = receipt.goal_id
        AND event.event_key = 'primary-interest:' || receipt.integration_id::text || ':' || receipt.payout_id;
   END IF;
+  -- A released attempt proven successful late: releasing it also released its
+  -- unsent interest plan, so the interest still owed (the forfeited total less
+  -- what settled or is still live) is planned again under a fresh reference,
+  -- for the sweep or the next status check to send. Above the per-transfer
+  -- ceiling it is recorded for review instead (paged by the sweep).
+  IF v_late AND NOT v_review THEN
+    SELECT COALESCE(v_operation.forfeited_interest_kobo, 0)
+             - COALESCE(pg_catalog.sum(forfeit.amount_kobo)
+                          FILTER (WHERE forfeit.state IN ('confirmed', 'reserved', 'dispatched')), 0),
+           (SELECT wallet.provider_wallet_id FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
+             WHERE wallet.integration_id = v_operation.integration_id),
+           (SELECT last.destination_wallet_id FROM piggyvest_primary.goal_cancel_interest_forfeits AS last
+             WHERE last.cancel_operation_id = v_operation.id ORDER BY last.reserved_at DESC LIMIT 1)
+      INTO v_owed, v_owed_wallet, v_last_wallet
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+     WHERE forfeit.cancel_operation_id = v_operation.id;
+    v_owed_wallet := COALESCE(v_owed_wallet, v_last_wallet);
+    IF v_owed > 0 AND v_owed_wallet IS NOT NULL AND v_owed_wallet <> v_operation.source_wallet_id THEN
+      INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+        cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+        source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+      VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+        CASE WHEN v_owed <= 9999999999 THEN 'reserved' ELSE 'needs_review' END,
+        piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+        v_operation.source_wallet_id, v_owed_wallet, LEAST(v_owed, 9999999999), v_now);
+    END IF;
+  END IF;
   IF v_review THEN RETURN 'conflict'; END IF;
   RETURN 'confirmed';
 END;
@@ -633,6 +663,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_review_id uuid;
   v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
   v_released integer;
   v_wallet text;
@@ -674,13 +705,15 @@ BEGIN
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
       THEN 'reserved' ELSE 'needs_review' END;
   -- The replacement could not be merged under the ceiling: the plan is now in
-  -- review, so the caller pages for it. Not stamped: the daily sweep pages it
-  -- again until it acknowledges a page, so a lost page is never silent.
-  IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS review
-              WHERE review.cancel_operation_id = v_forfeit.cancel_operation_id
-                AND review.state = 'needs_review' AND review.alerted_at IS NULL) THEN
-    RETURN 'released_needs_review';
-  END IF;
+  -- review, so the caller pages for it and then acknowledges that row, named
+  -- in the answer ('released_needs_review:<forfeit id>'). Not stamped here:
+  -- until acknowledged the daily sweep pages it, so a lost page is never
+  -- silent.
+  SELECT review.id INTO v_review_id FROM piggyvest_primary.goal_cancel_interest_forfeits AS review
+   WHERE review.cancel_operation_id = v_forfeit.cancel_operation_id
+     AND review.state = 'needs_review' AND review.alerted_at IS NULL
+   ORDER BY review.reserved_at DESC LIMIT 1;
+  IF FOUND THEN RETURN 'released_needs_review:' || v_review_id::text; END IF;
   RETURN 'released';
 END;
 $$;
@@ -1392,6 +1425,7 @@ AS $$
 DECLARE
   v_binding piggyvest_primary.integrations%ROWTYPE;
   v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
+  v_outcome text;
 BEGIN
   v_binding := piggyvest_primary.assert_goal_cancel_evidence(integration_id, environment);
   v_forfeit := piggyvest_primary.lock_goal_cancel_forfeit_for_proof(v_binding, proof);
@@ -1400,8 +1434,8 @@ BEGIN
   IF v_forfeit.state <> 'dispatched' THEN RETURN 'conflict'; END IF;
   -- Either review outcome (the third rejection, or a replacement that could
   -- not merge under the ceiling) answers conflict, which pages.
-  IF piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id)
-       IN ('needs_review', 'released_needs_review') THEN
+  v_outcome := piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
+  IF v_outcome = 'needs_review' OR v_outcome LIKE 'released_needs_review:%' THEN
     RETURN 'conflict';
   END IF;
   RETURN 'released';

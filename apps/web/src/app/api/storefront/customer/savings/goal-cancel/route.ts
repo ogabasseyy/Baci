@@ -139,6 +139,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       'SAVINGS_UNAVAILABLE',
       503
     );
+  // An app that never showed the interest forfeit (older builds say the
+  // whole balance, interest included, comes back) can not move money: it is
+  // asked to update. Nothing is reserved; the issued attempt simply expires.
+  if (input.step === 'submit' && input.interestForfeitAcknowledged !== true)
+    return refuse(
+      'Please update the app to cancel this goal.',
+      'APP_UPDATE_REQUIRED',
+      409
+    );
   try {
     const resolved = await resolve(guarded.caller, input.merchantId);
     if (!resolved.ok) return resolved.error;

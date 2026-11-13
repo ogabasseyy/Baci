@@ -42,6 +42,7 @@ function store(claim: unknown) {
     releaseForfeit: vi.fn().mockResolvedValue('needs_review'),
     unclaimForfeit: vi.fn().mockResolvedValue('unclaimed'),
     markForfeitPosting: vi.fn().mockResolvedValue('posting'),
+    ackForfeitAlert: vi.fn().mockResolvedValue('acked'),
     readAmounts: vi
       .fn()
       .mockResolvedValue({ principalKobo: 1, forfeitedInterestKobo: 0 }),

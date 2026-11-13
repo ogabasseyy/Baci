@@ -679,6 +679,7 @@ DECLARE
   v_op text;
   v_forfeit text;
   v_ref text;
+  v_text text;
   v_round integer;
 BEGIN
   DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits;
@@ -789,9 +790,12 @@ BEGIN
       'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(forfeit.goal_id),
       forfeit.source_wallet_id, forfeit.destination_wallet_id, 9999999990, pg_catalog.clock_timestamp()
       FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit WHERE forfeit.id = v_forfeit::uuid;
+    -- It names the row in review, so the caller acknowledges exactly it.
+    v_text := piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release');
     PERFORM pg_temp.gc_assert(
-      piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release') = 'released_needs_review',
-      'an over-ceiling replacement went to review without the caller being told');
+      v_text = 'released_needs_review:' || (SELECT id::text FROM piggyvest_primary.goal_cancel_interest_forfeits
+                                             WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'),
+      'an over-ceiling replacement went to review without the caller being told: ' || COALESCE(v_text, '-'));
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -893,6 +897,30 @@ BEGIN
         'f3860000-0000-4000-8000-000000000006', 'staging',
         pg_temp.gf_forfeit_proof(v_forfeit) || '{"residualKobo":300}'::jsonb) = 'confirmed',
       'a sibling held in review moved a successful forfeit into review');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a principal first reported failed (its unsent interest plan
+  -- released with it) and later proven successful plans the interest again,
+  -- so it is not stranded in the goal wallet with nothing left to send it.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('late-principal');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'late split');
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0), 'late release');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'released', 'plan not released');
+    v_result := pg_catalog.to_jsonb(pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb));
+    PERFORM pg_temp.gc_assert(
+      v_result = '"confirmed"'::jsonb
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'reserved'
+      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12000
+      AND pg_temp.gf_forfeit(v_op, 'reference') <> 'pvb-forfeit-' || c_goal::text
+      AND piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid) ->> 'status' = 'claimed',
+      'a late-confirmed principal left its interest with nothing to send it: ' || v_result::text
+        || ' ' || COALESCE(pg_temp.gf_forfeit(v_op, 'state'), '-') || ' ' || COALESCE(pg_temp.gf_forfeit(v_op, 'reference'), '-')
+        || ' ' || pg_temp.gc_state(v_op));
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

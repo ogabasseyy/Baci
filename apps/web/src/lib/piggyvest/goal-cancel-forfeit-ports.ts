@@ -19,7 +19,13 @@ type Ports = Parameters<typeof driveGoalCancelForfeit>[1];
  */
 export function forfeitDriverPorts(input: {
   claim: Ports['claim'];
-  release: Ports['release'];
+  // As Ports['release'], but released_needs_review names the reviewed row.
+  release: (
+    forfeitId: string
+  ) => Promise<
+    | Exclude<Awaited<ReturnType<Ports['release']>>, 'released_needs_review'>
+    | `released_needs_review:${string}`
+  >;
   unclaim: Ports['unclaim'];
   markPosting: Ports['markPosting'];
   // Records an emitted page for a forfeit; a failure only means it pages again.
@@ -37,7 +43,11 @@ export function forfeitDriverPorts(input: {
   const { provider, evidence, operationId } = input;
   // Never fails the caller: an unacknowledged page is simply sent again.
   const acknowledge = async (forfeitId: string) => {
-    await input.ackAlert(forfeitId).catch(() => undefined);
+    try {
+      await input.ackAlert(forfeitId);
+    } catch {
+      // Not acknowledged: the page is simply sent again later.
+    }
   };
   return {
     claim: async (id) => {
@@ -126,19 +136,23 @@ export function forfeitDriverPorts(input: {
     },
     release: async (id) => {
       const released = await input.release(id);
-      // Paged now; the daily sweep repeats it until a page is acknowledged.
-      if (released === 'needs_review' || released === 'released_needs_review')
-        emitPiggyvestWebhookAlert(
-          'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
-          {
-            reason:
-              released === 'needs_review'
-                ? 'forfeit_rejected_three_times'
-                : 'forfeit_over_ceiling',
-            operationId,
-          }
-        );
-      return released;
+      // The reviewed row: this forfeit at the third rejection, or the plan the
+      // replacement could not merge into. Paged, then acknowledged.
+      if (released === 'released' || released === 'not_released')
+        return released;
+      const reviewed =
+        released === 'needs_review'
+          ? id
+          : released.slice('released_needs_review:'.length);
+      emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
+        reason:
+          released === 'needs_review'
+            ? 'forfeit_rejected_three_times'
+            : 'forfeit_over_ceiling',
+        operationId,
+      });
+      await acknowledge(reviewed);
+      return released === 'needs_review' ? released : 'released_needs_review';
     },
     ...(evidence === null
       ? {}

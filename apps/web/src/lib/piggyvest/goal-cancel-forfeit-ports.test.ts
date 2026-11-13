@@ -219,13 +219,15 @@ it('pages a wallet-check outage as a failed check, not a mismatch', async () => 
   );
 });
 
-it('pages when a rejected forfeit could not be merged under the ceiling', async () => {
+it('pages when a rejected forfeit could not be merged under the ceiling, then acknowledges the reviewed row', async () => {
+  const reviewId = '88888888-8888-4888-8888-888888888888';
+  const ackAlert = vi.fn().mockResolvedValue('acked');
   const ports = forfeitDriverPorts({
     claim: vi.fn(),
-    release: vi.fn().mockResolvedValue('released_needs_review'),
+    release: vi.fn().mockResolvedValue(`released_needs_review:${reviewId}`),
     unclaim: vi.fn(),
     markPosting: vi.fn(),
-    ackAlert: vi.fn().mockResolvedValue('acked'),
+    ackAlert,
     provider,
     evidence: null,
     operationId,
@@ -239,6 +241,30 @@ it('pages when a rejected forfeit could not be merged under the ceiling', async 
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
     { reason: 'forfeit_over_ceiling', operationId }
   );
+  // Regression: acknowledged after the page, so the sweep does not page the
+  // same review a second time.
+  expect(ackAlert).toHaveBeenCalledWith(reviewId);
+  expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
+    ackAlert.mock.invocationCallOrder[0]
+  );
+});
+
+it('acknowledges the third-rejection review on the forfeit itself after paging', async () => {
+  const ackAlert = vi.fn().mockResolvedValue('acked');
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn().mockResolvedValue('needs_review'),
+    unclaim: vi.fn(),
+    markPosting: vi.fn(),
+    ackAlert,
+    provider,
+    evidence: null,
+    operationId,
+    expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
+  });
+  expect(await ports.release(forfeit.operationId)).toBe('needs_review');
+  expect(ackAlert).toHaveBeenCalledWith(forfeit.operationId);
 });
 
 it('refuses a wallet that is not owned by the configured Ogabassey owner, even when both wallet settings agree', async () => {

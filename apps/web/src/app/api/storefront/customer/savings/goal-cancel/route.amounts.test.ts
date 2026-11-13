@@ -88,6 +88,7 @@ describe('bugfix: the app guessed what an early cancel refunds', () => {
       goalId,
       operationId,
       pinProof,
+      interestForfeitAcknowledged: true,
     });
     expect(response.status).toBe(code);
     expect(await response.json()).toEqual({
@@ -113,6 +114,7 @@ it('answers a cancel that owes interest with no interest wallet as a temporary o
     goalId,
     operationId,
     pinProof,
+    interestForfeitAcknowledged: true,
   });
   expect(response.status).toBe(503);
   expect((await response.json()).code).toBe('WALLET_UNAVAILABLE');

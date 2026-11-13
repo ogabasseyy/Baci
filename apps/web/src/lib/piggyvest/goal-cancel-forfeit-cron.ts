@@ -12,7 +12,10 @@ import {
 // subsystems never set them; the interest wallet ids are required before any
 // forfeit is sent). Any one present means savings were installed,
 // so a missing or broken other setting (even the savings authorizer password
-// itself) is a failure, never "not configured".
+// itself) is a failure, never "not configured". On purpose this includes a
+// host with only the interest-wallet ids set: a partial rollout pages as a
+// failed sweep instead of staying quiet, so a removed password can never
+// silently stop in-flight forfeits from settling (fail closed).
 function hasAnyPrimaryWalletSetting(env: NodeJS.ProcessEnv): boolean {
   return [
     env.PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD,

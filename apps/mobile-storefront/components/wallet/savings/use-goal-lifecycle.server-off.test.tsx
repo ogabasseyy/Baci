@@ -44,6 +44,21 @@ describe('server keeps PiggyVest off', () => {
     expect(result.current.canStartAgain).toBe(false);
   });
 
+  it('an app-update refusal shows the server text with no retry', async () => {
+    jest
+      .mocked(issueGoalAction)
+      .mockRejectedValue(serverOffError('APP_UPDATE_REQUIRED'));
+    const { result } = renderHook(() =>
+      useGoalLifecycle({ kind: 'cancel', goalId: SERVER_OFF_GOAL_ID })
+    );
+    await act(async () => {
+      await result.current.begin();
+    });
+    expect(result.current.step).toBe('failed');
+    expect(result.current.message).toBe('not ready');
+    expect(result.current.canStartAgain).toBe(false);
+  });
+
   it('a plan that was never set up shows the server text with no retry', async () => {
     jest
       .mocked(issueGoalAction)

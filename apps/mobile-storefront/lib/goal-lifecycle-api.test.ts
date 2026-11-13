@@ -37,7 +37,12 @@ describe.each(['cancel', 'complete'] as const)('%s', (kind) => {
       method: 'POST',
       includeCsrf: true,
       expectedUserId: 'user-a',
-      body: { step: 'issue', merchantId, goalId },
+      body: {
+        step: 'issue',
+        merchantId,
+        goalId,
+        ...(kind === 'cancel' ? { interestForfeitAcknowledged: true } : {}),
+      },
     });
   });
 
@@ -59,7 +64,14 @@ describe.each(['cancel', 'complete'] as const)('%s', (kind) => {
       method: 'POST',
       includeCsrf: true,
       expectedUserId: 'user-a',
-      body: { step: 'submit', merchantId, goalId, operationId, pinProof },
+      body: {
+        step: 'submit',
+        merchantId,
+        goalId,
+        operationId,
+        pinProof,
+        ...(kind === 'cancel' ? { interestForfeitAcknowledged: true } : {}),
+      },
     });
   });
 

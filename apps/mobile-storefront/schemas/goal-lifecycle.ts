@@ -13,8 +13,15 @@ const pinProof = z.string().regex(/^[0-9a-f]{64}$/);
 // field the server did not ask for.
 export const GoalLifecycleSchemas = {
   // POST goal-X {step:'issue'}: the server mints the operation id.
+  // Sent on a cancel: this client has shown that an early cancel forfeits
+  // the goal's interest (the server refuses a forfeiting cancel without it).
   issueRequest: z
-    .object({ step: z.literal('issue'), merchantId, goalId })
+    .object({
+      step: z.literal('issue'),
+      merchantId,
+      goalId,
+      interestForfeitAcknowledged: z.literal(true).optional(),
+    })
     .strict(),
   issueResponse: {
     cancel: z.object({
@@ -35,6 +42,7 @@ export const GoalLifecycleSchemas = {
       goalId,
       operationId,
       pinProof,
+      interestForfeitAcknowledged: z.literal(true).optional(),
     })
     .strict(),
   submitResponse: z.object({

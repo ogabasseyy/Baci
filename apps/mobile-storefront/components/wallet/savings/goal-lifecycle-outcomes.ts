@@ -47,6 +47,8 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
   'GOAL_NEEDS_REVIEW',
   'GOAL_NOT_FOUND',
   'GOAL_NOT_SET_UP',
+  // An older app tried to cancel without showing the interest forfeit.
+  'APP_UPDATE_REQUIRED',
   'NOTHING_TO_REFUND',
   'NOTHING_TO_MOVE',
   'AMOUNT_TOO_LARGE',
@@ -84,6 +86,7 @@ export const NOT_STARTABLE_CODES: readonly string[] = [
   'GOAL_NOT_FOUND',
   // The plan's savings wallet was never set up: nothing to cancel yet.
   'GOAL_NOT_SET_UP',
+  'APP_UPDATE_REQUIRED',
   'SAVINGS_NOT_READY',
   'PROFILE_VERIFICATION_REQUIRED',
   'SAVINGS_UNAVAILABLE',

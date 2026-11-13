@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { PATCH, POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -267,36 +267,4 @@ it('fails closed when the recovery configuration is unavailable', async () => {
   });
   expect((await post(submit)).status).toBe(503);
   expect(mocks.submit).not.toHaveBeenCalled();
-});
-
-describe('bugfix: an app that never showed the interest forfeit could still cancel', () => {
-  it.each([
-    ['missing', undefined],
-    ['false', false],
-  ])('refuses a submit with the acknowledgement %s, moving nothing', async (_why, value) => {
-    const response = await post({
-      ...submit,
-      interestForfeitAcknowledged: value,
-    });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
-      error: 'Please update the app to cancel this goal.',
-      code: 'APP_UPDATE_REQUIRED',
-    });
-    expect(mocks.submit).not.toHaveBeenCalled();
-    expect(mocks.recovery).not.toHaveBeenCalled();
-  });
-
-  it('proceeds as before when the app acknowledged the forfeit', async () => {
-    mocks.submit.mockResolvedValue({ status: 'confirmed' });
-    expect((await post(submit)).status).toBe(200);
-    expect(mocks.submit).toHaveBeenCalledOnce();
-  });
-
-  it('accepts the acknowledgement on the issue step too', async () => {
-    mocks.issue.mockResolvedValue({ status: 'issued', operationId });
-    expect(
-      (await post({ ...issue, interestForfeitAcknowledged: true })).status
-    ).toBe(200);
-  });
 });

@@ -8,6 +8,9 @@
 const LABEL_BY_SOURCE: Readonly<Record<string, string>> = {
   imei_wallet_payment: 'IMEI check',
   imei_wallet_refund: 'IMEI check refund',
+  // Stored as "PiggyVest bank transfer" / "PiggyVest card funding".
+  piggyvest_primary_inflow: 'Money added',
+  piggyvest_primary_card_custody: 'Card top-up',
 };
 
 // Back-office providers (payments, checks, delivery, bills) that never belong

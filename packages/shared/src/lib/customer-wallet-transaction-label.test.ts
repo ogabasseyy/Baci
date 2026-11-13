@@ -23,6 +23,21 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('IMEI check refund');
   });
 
+  it('labels PiggyVest wallet funding rows without the provider name', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'PiggyVest bank transfer',
+        sourceType: 'piggyvest_primary_inflow',
+      })
+    ).toBe('Money added');
+    expect(
+      customerWalletTransactionLabel({
+        description: 'PiggyVest card funding',
+        sourceType: 'piggyvest_primary_card_custody',
+      })
+    ).toBe('Card top-up');
+  });
+
   it('strips a provider from an unmapped description (old rows, other kinds)', () => {
     expect(
       customerWalletTransactionLabel({

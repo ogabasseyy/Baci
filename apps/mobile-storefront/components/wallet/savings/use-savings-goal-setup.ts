@@ -3,7 +3,10 @@ import {
   retrySavingsGoalSetup,
   setupExistingSavingsGoal,
 } from '@/lib/customer-savings';
-import { planInterestAnswer } from './plan-interest-answers';
+import {
+  planInterestAnswer,
+  rememberPlanInterestAnswer,
+} from './plan-interest-answers';
 
 type Input = {
   goalId: string;
@@ -68,6 +71,9 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
   /** Sends the chosen answer (or one passed in, e.g. the form's own). */
   const submit = async (answer: boolean | null = choice) => {
     if (answer === null) return;
+    // The customer's latest explicit answer is the one any later resume
+    // (even after a restart) must send, never an older saved one.
+    await rememberPlanInterestAnswer(goalId, answer);
     await run(
       () =>
         setupExistingSavingsGoal({

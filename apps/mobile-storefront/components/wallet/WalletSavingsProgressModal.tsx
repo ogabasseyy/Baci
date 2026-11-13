@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalCancelStep } from './savings/GoalCancelStep';
@@ -214,6 +215,8 @@ export function WalletSavingsProgressModal({
             }
           >
             <SavingsNoticeCard colors={colors} goalId={goal?.id} />
+            {/* A top-up started here asks its funding question here. */}
+            <WalletFundPromptCard colors={colors} />
             <SavingsGoalSummary
               colors={colors}
               goal={goal}

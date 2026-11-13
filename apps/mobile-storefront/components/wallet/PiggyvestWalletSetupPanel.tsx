@@ -12,6 +12,7 @@ import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
 import { PrimaryWalletSetupPending } from './PrimaryWalletSetupPending';
+import { PrimaryWalletSetupReview } from './PrimaryWalletSetupReview';
 
 const AUTO_CHECK_INTERVAL_MS = 5000;
 const AUTO_CHECK_LIMIT = 12;
@@ -182,10 +183,7 @@ export function PiggyvestWalletSetupPanel({
         <Ionicons name="close" size={18} color={colors.text} />
       </Pressable>
       {reviewRequired ? (
-        <Text accessibilityRole="alert" style={{ color: colors.text }}>
-          Your PiggyVest wallet setup needs review. Please contact support
-          before trying again.
-        </Text>
+        <PrimaryWalletSetupReview colors={colors} />
       ) : needsPhone ? (
         <WalletFundPhonePrompt
           key={authUserId ?? 'signed-out'}

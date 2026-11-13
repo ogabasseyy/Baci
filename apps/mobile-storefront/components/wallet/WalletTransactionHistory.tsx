@@ -9,7 +9,10 @@ import { styles } from './wallet.styles';
 
 // Until a savings-wallet history exists, say what this list covers.
 export const STORE_CREDIT_SCOPE_COPY =
-  'Only your store credit, the older balance you spend on purchases. Savings wallet activity is not listed here yet.';
+  'Only your older store credit balance, which you spend on purchases. Your PiggyVest savings wallet history isn’t shown in the app yet.';
+
+/** The list's heading for PiggyVest customers: the older balance only. */
+export const STORE_CREDIT_HISTORY_TITLE = 'Older store credit';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -82,7 +85,7 @@ export function WalletTransactionHistory({
       ]}
     >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        {primaryReady ? 'Store credit activity' : 'Recent Transactions'}
+        {primaryReady ? STORE_CREDIT_HISTORY_TITLE : 'Recent Transactions'}
       </Text>
       {primaryReady ? (
         <Text style={[localStyles.scope, { color: colors.textSecondary }]}>

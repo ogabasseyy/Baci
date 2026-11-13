@@ -9,6 +9,7 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { isPrimaryWallet } from './is-primary-wallet';
 import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
 import type { SavingsVariantResolveResult } from './resolve-completed-savings-goal-variant';
@@ -211,6 +212,13 @@ export function WalletContent(props: WalletContentProps) {
           <SavingsNoticeCard
             colors={colors}
             goalId={activeSavingsGoal?.id}
+            style={{ marginHorizontal: 16, marginTop: 12 }}
+          />
+        )}
+        {savingsSheetOpen || props.showFundPanel ? null : (
+          // A funding question left open when its sheet closed.
+          <WalletFundPromptCard
+            colors={colors}
             style={{ marginHorizontal: 16, marginTop: 12 }}
           />
         )}

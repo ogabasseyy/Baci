@@ -1,6 +1,13 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
+import { Alert, type AlertButton } from 'react-native';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackEvent } from '@/services/analytics';
 import { scheduleLocalNotification } from '@/services/push-notifications';
@@ -59,7 +66,9 @@ jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
+    debug: jest.fn(),
     error: jest.fn(),
+    warn: jest.fn(),
   }),
 }));
 
@@ -72,7 +81,26 @@ jest.mock('@/services/push-notifications', () => ({
   scheduleLocalNotification: jest.fn(),
 }));
 
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+// Outcomes are the inline wallet notice and question now: replay both
+// through one Alert-shaped spy, and keep the real iOS alert unused.
+const mockAlert =
+  jest.fn<(title: string, message?: string, buttons?: AlertButton[]) => void>();
+jest.mock('./savings/savings-notifier', () => ({
+  savingsNotifier: () => (title: string, message?: string) =>
+    mockAlert(title, message),
+}));
+jest.mock('./fund/ask-wallet-fund', () => ({
+  askWalletFund: (title: string, message: string, label: string) =>
+    (
+      jest.requireActual(
+        './fund/alert-shaped.test-support'
+      ) as typeof import('./fund/alert-shaped.test-support')
+    )
+      .alertShapedTestBridge(mockAlert)
+      .ask(title, message, label),
+}));
+const iosAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+afterEach(() => expect(iosAlert).not.toHaveBeenCalled());
 const mockInitializeWalletTopUp = jest.mocked(initializeWalletTopUp);
 const mockScheduleLocalNotification = jest.mocked(scheduleLocalNotification);
 const mockTrackEvent = jest.mocked(trackEvent);
@@ -95,7 +123,7 @@ describe('wallet-screen.handlers', () => {
     });
 
     expect(createFundingAccount).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(mockAlert).toHaveBeenCalledWith(
       'Phone number required',
       WALLET_FUNDING_ACCOUNT_MESSAGES.PHONE_REQUIRED
     );
@@ -115,7 +143,7 @@ describe('wallet-screen.handlers', () => {
       walletDvaEnabled: true,
     });
 
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(mockAlert).not.toHaveBeenCalled();
   });
 
   it('shows the phone prompt instead of alerting on CUSTOMER_PHONE_REQUIRED', async () => {
@@ -138,7 +166,7 @@ describe('wallet-screen.handlers', () => {
 
     expect(created).toBe(false);
     expect(onPhoneRequired).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).not.toHaveBeenCalledWith(
+    expect(mockAlert).not.toHaveBeenCalledWith(
       'Unable to create account number',
       expect.anything()
     );
@@ -152,8 +180,8 @@ describe('wallet-screen.handlers', () => {
     });
 
     expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Invalid Amount',
+    expect(mockAlert).toHaveBeenCalledWith(
+      'Check the amount',
       expect.stringContaining('between')
     );
   });
@@ -178,7 +206,7 @@ describe('wallet-screen.handlers', () => {
       });
 
       expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
-      expect(Alert.alert).toHaveBeenCalledWith(
+      expect(mockAlert).toHaveBeenCalledWith(
         'Wallet top-up unavailable',
         expect.stringContaining('hosted staging preview')
       );
@@ -315,12 +343,13 @@ describe('wallet-screen.handlers', () => {
     await fundWallet(params);
 
     expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Unable to fund wallet',
-      'We could not confirm your wallet rail. Please try again.',
-      expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+    expect(mockAlert).toHaveBeenCalledWith(
+      'We couldn’t check your wallet',
+      'Nothing was charged. Check your connection, then try again.',
+      expect.arrayContaining([expect.objectContaining({ text: 'Try again' })]),
+      expect.anything()
     );
-    const buttons = jest.mocked(Alert.alert).mock.calls[0][2] ?? [];
+    const buttons = mockAlert.mock.calls[0][2] ?? [];
     const retry = buttons.find((button) => button?.text === 'Try again');
     expect(retry?.onPress).toEqual(expect.any(Function));
 
@@ -376,7 +405,7 @@ describe('wallet-screen.handlers', () => {
     });
 
     expect(redeemPoints).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(mockAlert).toHaveBeenCalledWith(
       'Invalid Points',
       'Minimum redemption is 100 points'
     );
@@ -409,11 +438,11 @@ describe('wallet-screen.handlers', () => {
       { type: 'loyalty_redemption', points: 200 },
       1
     );
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Points Redeemed!',
-      '200 points converted to ₦1,500 wallet credit.',
-      [{ text: 'OK', onPress: closeRedeemPanel }]
+    expect(mockAlert).toHaveBeenCalledWith(
+      'Points redeemed',
+      '200 points converted to ₦1,500 wallet credit.'
     );
+    expect(closeRedeemPanel).toHaveBeenCalledTimes(1);
     expect(clearRedeemPoints).toHaveBeenCalledTimes(1);
   });
 });

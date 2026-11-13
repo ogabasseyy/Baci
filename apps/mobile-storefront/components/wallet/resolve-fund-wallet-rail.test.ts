@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Alert } from 'react-native';
+import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
+import { useWalletFundPromptStore } from './fund/wallet-fund-prompt-store';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 
 const mockGetCapability = jest.fn<(...args: unknown[]) => Promise<boolean>>();
@@ -59,7 +61,7 @@ describe('resolveFundWalletRail', () => {
     await expect(resolveFundWalletRail('merchant-1')).resolves.toBe('legacy');
   });
 
-  it('blocks with a retry alert when the probe is ambiguous', async () => {
+  it('blocks and asks inline (never an iOS alert) when the probe is ambiguous', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockReadObserved.mockReturnValue(null);
     mockGetCapability.mockRejectedValue(new Error('network down'));
@@ -68,14 +70,30 @@ describe('resolveFundWalletRail', () => {
       await expect(
         resolveFundWalletRail('merchant-1', { onRetry })
       ).resolves.toBe('blocked');
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Unable to fund wallet',
-        'We could not confirm your wallet rail. Please try again.',
-        expect.any(Array)
-      );
+      const prompt = useWalletFundPromptStore.getState().prompt;
+      expect(prompt).toMatchObject({
+        title: 'We couldn’t check your wallet',
+        message: expect.stringContaining('Nothing was charged'),
+        confirmLabel: 'Try again',
+      });
+      expect(alertSpy).not.toHaveBeenCalled();
+      answerWalletFundPrompt(true);
+      await Promise.resolve();
+      expect(onRetry).toHaveBeenCalledTimes(1);
     } finally {
       alertSpy.mockRestore();
     }
+  });
+
+  it('does not retry when the customer answers Not now', async () => {
+    mockReadObserved.mockReturnValue(null);
+    mockGetCapability.mockRejectedValue(new Error('network down'));
+    const onRetry = jest.fn();
+    await resolveFundWalletRail('merchant-1', { onRetry });
+    answerWalletFundPrompt(false);
+    await Promise.resolve();
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(useWalletFundPromptStore.getState().prompt).toBeNull();
   });
 
   it('routes a blank merchant id legacy: slug carries the scope and primary needs an id', async () => {

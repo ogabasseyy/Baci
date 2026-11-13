@@ -1,20 +1,17 @@
-import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { createLogger } from '@/lib/logger';
 import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-capability';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
-import { scheduleLocalNotification } from '@/services/push-notifications';
 import { fundPrimaryWalletCard } from './fund-primary-wallet-card';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
+import { savingsNotifier } from './savings/savings-notifier';
 import { WALLET_FUNDING_ACCOUNT_MESSAGES } from './wallet-funding-account.constants';
 import {
   buildWalletTopUpGatewayParams,
   getWalletCustomerName,
   resolveCreateFundingAccountOutcome,
-  resolveWalletRedeemPointsOutcome,
   validateWalletTopUpAmount,
 } from './wallet-screen.helpers';
 
@@ -36,10 +33,6 @@ interface WalletHandlerUser {
 type CreateFundingAccount = Parameters<
   typeof resolveCreateFundingAccountOutcome
 >[0];
-type RedeemPoints = Parameters<
-  typeof resolveWalletRedeemPointsOutcome
->[0]['redeemPoints'];
-
 interface WalletFundingAccountHandlerParams {
   activeMerchantId?: string;
   activeMerchantSlug?: string;
@@ -49,7 +42,7 @@ interface WalletFundingAccountHandlerParams {
   isPaymentSettingsError: boolean;
   isPaymentSettingsPending: boolean;
   // Invoked when the server rejects with CUSTOMER_PHONE_REQUIRED so the caller
-  // can show the phone prompt instead of a dead-end Alert.
+  // can show the phone prompt instead of a dead-end message.
   onPhoneRequired?: () => void;
   walletDvaEnabled: boolean;
 }
@@ -66,13 +59,8 @@ interface FundWalletParams {
   walletReturnTo?: string;
 }
 
-interface RedeemWalletPointsParams {
-  clearRedeemPoints: () => void;
-  closeRedeemPanel: () => void;
-  customerId?: string | null;
-  rawPoints: string;
-  redeemPoints: RedeemPoints;
-}
+// Redeeming points lives in its own module; re-exported for existing callers.
+export { redeemWalletPoints } from './redeem-wallet-points';
 
 export async function createWalletFundingAccount({
   activeMerchantId,
@@ -85,34 +73,40 @@ export async function createWalletFundingAccount({
   onPhoneRequired,
   walletDvaEnabled,
 }: WalletFundingAccountHandlerParams): Promise<boolean> {
+  // Every outcome below is the inline wallet notice, never an iOS alert.
+  const notify = savingsNotifier();
   if (isPaymentSettingsPending) {
-    Alert.alert(
+    notify(
       'Account number unavailable',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING
+      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING,
+      'info'
     );
     return false;
   }
 
   if (isPaymentSettingsError) {
-    Alert.alert(
+    notify(
       'Account number unavailable',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_ERROR
+      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_ERROR,
+      'warning'
     );
     return false;
   }
 
   if (!walletDvaEnabled) {
-    Alert.alert(
+    notify(
       'Account number unavailable',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.DVA_DISABLED
+      WALLET_FUNDING_ACCOUNT_MESSAGES.DVA_DISABLED,
+      'warning'
     );
     return false;
   }
 
   if (!customerPhone) {
-    Alert.alert(
+    notify(
       'Phone number required',
-      WALLET_FUNDING_ACCOUNT_MESSAGES.PHONE_REQUIRED
+      WALLET_FUNDING_ACCOUNT_MESSAGES.PHONE_REQUIRED,
+      'warning'
     );
     return false;
   }
@@ -133,7 +127,7 @@ export async function createWalletFundingAccount({
         merchant_slug: activeMerchantSlug,
       }
     );
-    Alert.alert('Unable to create account number', outcome.alertMessage);
+    notify('Unable to create account number', outcome.alertMessage, 'warning');
     return false;
   }
   return true;
@@ -150,10 +144,12 @@ export async function fundWallet({
   user,
   walletReturnTo,
 }: FundWalletParams): Promise<void> {
+  const notify = savingsNotifier();
   if (isHostedStagingWalletTopUpBlocked()) {
-    Alert.alert(
+    notify(
       'Wallet top-up unavailable',
-      'Card wallet top-ups are disabled in this hosted staging preview.'
+      'Card wallet top-ups are disabled in this hosted staging preview.',
+      'warning'
     );
     return;
   }
@@ -203,7 +199,7 @@ export async function fundWallet({
   const amount = Number(fundAmount);
   const amountValidationError = validateWalletTopUpAmount(amount);
   if (amountValidationError) {
-    Alert.alert('Invalid Amount', amountValidationError);
+    notify('Check the amount', amountValidationError, 'warning');
     return;
   }
   setIsFundPending(true);
@@ -244,57 +240,14 @@ export async function fundWallet({
       error instanceof Error ? error.message : 'Unknown error',
       { amount, customer_id: customer?.id }
     );
-    Alert.alert(
-      'Top-up Failed',
+    notify(
+      'Top-up didn’t start',
       error instanceof Error
         ? error.message
-        : 'Failed to start wallet top-up. Please try again.'
+        : 'Failed to start wallet top-up. Please try again.',
+      'warning'
     );
   } finally {
     setIsFundPending(false);
   }
-}
-
-export async function redeemWalletPoints({
-  clearRedeemPoints,
-  closeRedeemPanel,
-  customerId,
-  rawPoints,
-  redeemPoints,
-}: RedeemWalletPointsParams): Promise<void> {
-  const outcome = await resolveWalletRedeemPointsOutcome({
-    minimumRedeemablePoints: VTU_MIN_REDEEMABLE_POINTS,
-    rawPoints,
-    redeemPoints,
-  });
-  if (outcome.status === 'invalid') {
-    Alert.alert(outcome.title, outcome.message);
-    return;
-  }
-  if (outcome.status === 'error') {
-    log.error('Redemption error:', outcome.alertMessage);
-    trackError('loyalty_redemption_failed', outcome.telemetryMessage, {
-      points_attempted: outcome.points,
-      customer_id: customerId,
-    });
-    Alert.alert('Error', outcome.alertMessage);
-    return;
-  }
-  trackEvent('loyalty_redeemed', {
-    points_redeemed: outcome.points,
-    wallet_credit: outcome.result.walletCredit,
-    remaining_points: outcome.result.remainingPoints,
-    conversion_rate: outcome.result.conversionRate,
-    customer_id: customerId,
-  });
-  await scheduleLocalNotification(
-    'Points Redeemed! 🎁',
-    outcome.successMessage,
-    { type: 'loyalty_redemption', points: outcome.points },
-    1
-  );
-  Alert.alert('Points Redeemed!', outcome.successMessage, [
-    { text: 'OK', onPress: closeRedeemPanel },
-  ]);
-  clearRedeemPoints();
 }

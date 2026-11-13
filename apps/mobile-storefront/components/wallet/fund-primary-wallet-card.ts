@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import { getWalletReturnHref } from '@/components/payment-gateway/payment-gateway-controller.helpers';
 import {
   getPiggyvestPrimaryCapability,
@@ -8,11 +7,14 @@ import {
 } from '@/lib/piggyvest-primary-capability';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
+import { askWalletFund } from './fund/ask-wallet-fund';
 import { validateFundAmountKobo } from './fund-primary-wallet-card-amount';
 import {
   alertPrimaryWalletCardEmailFallback,
   alertPrimaryWalletCardFundingFailure,
 } from './primary-wallet-card-funding-alerts';
+import { notifySavings } from './savings/notify-savings';
+import { savingsNotifier } from './savings/savings-notifier';
 import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
@@ -55,12 +57,16 @@ function formatGatewayAmountNaira(amountKobo: number): string {
 export async function fundPrimaryWalletCard(
   input: Parameters<typeof fundWallet>[0]
 ) {
+  // Outcomes show as the wallet notice (inline in the add money sheet, or
+  // on the wallet once it closes), bound to the account that started them.
+  const notify = savingsNotifier();
   const merchantId = input.activeMerchantId;
   const userId = input.user?.id;
   if (!merchantId || !userId) {
-    Alert.alert(
+    notify(
       'Sign in required',
-      'Please sign in again before card funding.'
+      'Please sign in again before card funding.',
+      'warning'
     );
     return;
   }
@@ -71,7 +77,7 @@ export async function fundPrimaryWalletCard(
   // silently — a changed amount must never be mistaken for submitted.
   const fundingKey = `${merchantId} ${userId}`;
   if (activeFundings.has(fundingKey)) {
-    Alert.alert(
+    notify(
       'Funding in progress',
       'Your card funding is already running. Wait for it to finish before starting another.'
     );
@@ -101,20 +107,14 @@ export async function fundPrimaryWalletCard(
       if ('error' in validated) {
         // Invalid input is a user error, not a failed charge: say so
         // directly instead of falling into the retained-operation alert.
-        Alert.alert('Check the amount', validated.error);
+        notify('Check the amount', validated.error, 'warning');
         return;
       }
       const amountKobo = validated.amountKobo;
-      const accepted = await new Promise<boolean>((resolve) =>
-        Alert.alert(
-          'Confirm card wallet funding',
-          `Authorize a one-time ₦${formatNairaFromKobo(amountKobo)} charge to fund your wallet. Your card will not be saved. Money appears in your wallet after funding is confirmed.`,
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Authorize one-time charge', onPress: () => resolve(true) },
-          ],
-          { cancelable: true, onDismiss: () => resolve(false) }
-        )
+      const accepted = await askWalletFund(
+        'Confirm card wallet funding',
+        `Authorize a one-time ₦${formatNairaFromKobo(amountKobo)} charge to fund your wallet. Your card will not be saved. Money appears in your wallet after funding is confirmed.`,
+        'Authorize one-time charge'
       );
       if (!accepted) return;
       result = await client.start({
@@ -140,9 +140,12 @@ export async function fundPrimaryWalletCard(
     const activeAccountChanged = () =>
       useAuthStore.getState().user?.id !== userId;
     const rejectAccountSwitch = () => {
-      Alert.alert(
+      // Shown to the account signed in now, so it bypasses the bound
+      // notifier on purpose; it reveals nothing about the other account.
+      notifySavings(
         'Signed-in account changed',
-        'You switched accounts during card funding. Any pending funding stays saved under the previous account.'
+        'You switched accounts during card funding. Any pending funding stays saved under the previous account.',
+        'warning'
       );
       input.resetFundPanel();
     };
@@ -157,9 +160,10 @@ export async function fundPrimaryWalletCard(
     // adoption flag — matching amount/consent skips adoption, but the
     // fallback below would then wrongly claim an operation is saved.
     if (result.status === 'abandoned') {
-      Alert.alert(
+      notify(
         'Previous funding closed',
-        'Your earlier card funding could not complete. Start a new funding with the amount you want.'
+        'Your earlier card funding could not complete. Start a new funding with the amount you want.',
+        'warning'
       );
       input.resetFundPanel();
       return;
@@ -173,24 +177,15 @@ export async function fundPrimaryWalletCard(
       const consentChanged =
         result.saveCard !== undefined &&
         result.saveCard !== ENTERED_CONSENT.saveCard;
-      const resume = await new Promise<boolean>((resolve) =>
-        Alert.alert(
-          'Resume pending funding',
-          consentChanged
-            ? `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. It was set up to save your card for faster checkout. Continue?`
-            : `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. Continue with this amount?`,
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            {
-              text: `Resume ₦${formatNairaFromKobo(result.amountKobo)}`,
-              onPress: () => resolve(true),
-            },
-          ],
-          { cancelable: true, onDismiss: () => resolve(false) }
-        )
+      const resume = await askWalletFund(
+        'Resume pending funding',
+        consentChanged
+          ? `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. It was set up to save your card for faster checkout. Continue?`
+          : `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. Continue with this amount?`,
+        `Resume ₦${formatNairaFromKobo(result.amountKobo)}`
       );
       if (!resume) {
-        Alert.alert(
+        notify(
           'Card funding pending',
           'This operation is saved. Check again later; do not start another card charge.'
         );
@@ -227,13 +222,17 @@ export async function fundPrimaryWalletCard(
       // Refresh before confirming: the user lands on the wallet balance,
       // which would otherwise stay stale until a manual refresh.
       await input.refetchWalletBalance?.().catch(() => undefined);
-      Alert.alert('Funding confirmed', 'Your wallet funding is confirmed.');
+      notify(
+        'Funding confirmed',
+        'Your wallet funding is confirmed.',
+        'success'
+      );
       input.resetFundPanel();
       // Re-sanitize at the navigation boundary: the saved handoff was
       // validated at write time, but storage is outside our trust.
       if (result.returnTo) router.replace(getWalletReturnHref(result.returnTo));
     } else
-      Alert.alert(
+      notify(
         'Card funding pending',
         'This operation is saved. Check again later; do not start another card charge.'
       );
@@ -250,7 +249,7 @@ export async function fundPrimaryWalletCard(
         .readPending({ merchantId, userId })
         .catch(() => pending);
       if (!retained) {
-        alertPrimaryWalletCardEmailFallback();
+        alertPrimaryWalletCardEmailFallback(notify);
         const fallback = new Error(
           'Primary card funding needs a verified email.'
         ) as Error & { code: string };
@@ -269,7 +268,7 @@ export async function fundPrimaryWalletCard(
         .catch(() => pending);
       if (!retained) throw error;
     }
-    alertPrimaryWalletCardFundingFailure(error);
+    alertPrimaryWalletCardFundingFailure(error, notify);
   } finally {
     activeFundings.delete(fundingKey);
     input.setIsFundPending(false);

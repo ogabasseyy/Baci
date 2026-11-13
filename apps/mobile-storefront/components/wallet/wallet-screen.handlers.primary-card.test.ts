@@ -14,7 +14,11 @@ jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
   isHostedStagingWalletTopUpBlocked: () => false,
 }));
 jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({ error: jest.fn() }),
+  createLogger: () => ({
+    debug: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+  }),
 }));
 jest.mock('@/services/analytics', () => ({
   trackError: jest.fn(),
@@ -78,7 +82,7 @@ it('recovers a saved primary operation before validating the empty form amount',
   };
   await fundWallet(input);
   expect(mockPrimary).toHaveBeenCalledWith(input);
-  expect(alert).not.toHaveBeenCalledWith('Invalid Amount', expect.anything());
+  expect(alert).not.toHaveBeenCalled();
   expect(mockLegacy).not.toHaveBeenCalled();
 });
 it('awaits an unknown verdict and routes primary when the probe confirms', async () => {
@@ -126,10 +130,12 @@ it('blocks funding on an ambiguous probe instead of guessing a rail', async () =
     resetFundPanel: jest.fn(),
     setIsFundPending: jest.fn(),
   });
-  expect(alert).toHaveBeenCalledWith(
-    'Unable to fund wallet',
-    'We could not confirm your wallet rail. Please try again.',
-    expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+  // Asked inline with a retry, never as an iOS alert.
+  expect(alert).not.toHaveBeenCalled();
+  const { useWalletFundPromptStore } =
+    require('./fund/wallet-fund-prompt-store') as typeof import('./fund/wallet-fund-prompt-store');
+  expect(useWalletFundPromptStore.getState().prompt?.confirmLabel).toBe(
+    'Try again'
   );
   expect(mockPrimary.mock.calls.length).toBe(primaryCalls);
   expect(mockLegacy.mock.calls.length).toBe(legacyCalls);

@@ -10,7 +10,9 @@ import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-mercha
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
+import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import type { WalletContentProps } from './WalletContent';
 import { WalletFundPanel } from './WalletFundPanel';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
@@ -36,6 +38,9 @@ type WalletFundModalProps = Pick<
   | 'showFundPanel'
   | 'walletPrimaryUnsettled'
 > & { creditWatch: WalletCreditWatch };
+
+// Same side inset as the sheet's panels; the panels keep their own top.
+const INLINE_INSET = { marginHorizontal: 24, marginTop: 20 };
 
 export function WalletFundModal({
   canCreateFundingAccount,
@@ -151,6 +156,9 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Funding outcomes and questions stay in the sheet: no iOS alerts. */}
+          <SavingsNoticeCard colors={colors} style={INLINE_INSET} />
+          <WalletFundPromptCard colors={colors} style={INLINE_INSET} />
           {/* PiggyVest setup outranks the hold: it never shows the old account. */}
           {legacyUnconfirmed && !storeCreditTopUp && !showPrimarySetup ? (
             <Text

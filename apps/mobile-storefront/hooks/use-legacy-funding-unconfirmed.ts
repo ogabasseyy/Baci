@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth-store';
 
 /**
  * True while a legacy (non-PiggyVest) funding account would be shown but
- * the merchant's PiggyVest status is still unknown: the account may come
+ * the merchant's PiggyVest status isn't a ruling-out: the account may come
  * from a wallet cached before PiggyVest was enabled, and a transfer to it
  * would land as store credit, not savings (Codex). Merchants the server
  * rules out show it as today once the probe answers.
@@ -25,5 +25,7 @@ export function useLegacyFundingUnconfirmed(
   if (!provider || provider === 'piggyvest') {
     return false;
   }
-  return readPiggyvestCapabilityNow(merchantId) === null;
+  // Unknown, or PiggyVest confirmed before the wallet is reclassified
+  // (Codex): only a ruling-out makes a legacy account safe to show.
+  return readPiggyvestCapabilityNow(merchantId) !== false;
 }

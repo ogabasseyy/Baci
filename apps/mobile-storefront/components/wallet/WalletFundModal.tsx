@@ -145,7 +145,8 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {legacyUnconfirmed && !storeCreditTopUp ? (
+          {/* PiggyVest setup outranks the hold: it never shows the old account. */}
+          {legacyUnconfirmed && !storeCreditTopUp && !showPrimarySetup ? (
             <Text
               accessibilityLiveRegion="polite"
               style={{ color: colors.textSecondary, padding: 24 }}

@@ -9,6 +9,7 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { isPrimaryWallet } from './is-primary-wallet';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
@@ -174,7 +175,7 @@ export function WalletContent(props: WalletContentProps) {
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (
-    <WalletPrimaryContext.Provider value={props.primaryReady === true}>
+    <WalletPrimaryContext.Provider value={isPrimaryWallet(props)}>
       <AppKeyboardAwareScrollView
         testID="wallet-scroll"
         contentContainerStyle={contentContainerStyle}

@@ -52,6 +52,17 @@ describe('bugfix: legacy account shown after the ruling-out expired', () => {
   });
 });
 
+describe('bugfix: legacy account shown under a positive verdict', () => {
+  it('holds a legacy account once PiggyVest is confirmed, until reclassified', () => {
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const { result } = renderHook(() =>
+      useLegacyFundingUnconfirmed('paystack')
+    );
+    expect(result.current).toBe(true);
+  });
+});
+
 describe('server keeps PiggyVest off', () => {
   it('shows the legacy account once PiggyVest is ruled out', () => {
     mockCapability = false;

@@ -3,6 +3,7 @@ import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant'
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
+import { discardUnreadablePrimaryCardFunding } from './discard-unreadable-primary-card-funding';
 import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
 
 /**
@@ -35,12 +36,25 @@ export async function resolveFundWalletRail(
       activeMerchantId,
       options?.userId
     );
-    // A saved funding we can't read may still charge (Codex): block, never
-    // start a second card charge; the wallet's own top-up recovers it.
+    // A saved funding we can't read may still charge (Codex): never start a
+    // second card charge silently. The customer can cancel, or knowingly
+    // clear it and continue; a charged payment still lands in savings.
     if (retained === 'unreadable') {
+      const onRetry = options?.onRetry;
       Alert.alert(
-        'Finish your earlier card payment',
-        'We found an unfinished card payment we could not read. Open your wallet and tap Add money to finish it before topping up again.'
+        'Earlier card payment unreadable',
+        'We could not read an earlier card payment on this device. If it was charged, the money will still appear in your savings wallet. Continue to add store credit for this purchase?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue anyway',
+            onPress: () =>
+              void discardUnreadablePrimaryCardFunding(
+                activeMerchantId,
+                options?.userId
+              ).then(() => onRetry?.()),
+          },
+        ]
       );
       return 'blocked';
     }

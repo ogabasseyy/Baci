@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 
 const mockGetCapability = jest.fn<(...args: unknown[]) => Promise<boolean>>();
@@ -45,6 +46,38 @@ describe('bugfix: corrupt saved card funding let a purchase top-up charge again'
         walletReturnTo: '/imei-check',
       })
     ).resolves.toBe('blocked');
+    await AsyncStorage.clear();
+  });
+
+  it('resolves through "Continue anyway": clears the record, then adds store credit', async () => {
+    // Arrange
+    const USER = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    const key = `@baci_primary_card:${MERCHANT}:${USER}`;
+    await AsyncStorage.setItem(key, 'x');
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    let retried: Promise<string> | undefined;
+    const onRetry = () => {
+      retried = resolveFundWalletRail(MERCHANT, {
+        userId: USER,
+        walletReturnTo: '/imei-check',
+      });
+    };
+
+    // Act: blocked, then the customer taps "Continue anyway".
+    await resolveFundWalletRail(MERCHANT, {
+      onRetry,
+      userId: USER,
+      walletReturnTo: '/imei-check',
+    });
+    const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
+    const proceed = buttons.find((b) => b.text === 'Continue anyway');
+    proceed?.onPress?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Assert: the unreadable record is gone and the retry adds store credit.
+    expect(await AsyncStorage.getItem(key)).toBeNull();
+    await expect(retried).resolves.toBe('legacy');
+    alertSpy.mockRestore();
     await AsyncStorage.clear();
   });
 });

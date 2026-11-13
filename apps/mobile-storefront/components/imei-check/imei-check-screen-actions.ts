@@ -16,7 +16,7 @@ export const imeiCheckScreenActions = {
   },
   fundWallet(
     amount: number,
-    storeCredit = false,
+    _storeCredit = false,
     merchantId: string | null | undefined = undefined
   ) {
     // A store credit top-up is card-only, so a real shortfall is never
@@ -25,8 +25,10 @@ export const imeiCheckScreenActions = {
     // Re-read at navigation (Codex): the PiggyVest verdict may have turned
     // positive (or unknown) while the check request was in flight, and the
     // wallet sheet classifies this return by the verdict it sees now.
-    const storeCreditNow =
-      storeCredit || readPiggyvestCapabilityNow(merchantId) !== false;
+    // The live verdict decides, not the captured mode (Codex): a rollback
+    // mid-request means a legacy top-up of the exact shortfall. The captured
+    // mode only ever came from a verdict that wasn't false.
+    const storeCreditNow = readPiggyvestCapabilityNow(merchantId) !== false;
     const requiredAmount = storeCreditNow
       ? amount > 0
         ? Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(amount))

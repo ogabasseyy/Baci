@@ -3,6 +3,7 @@ import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now'
 import type { WalletData } from '@/hooks/wallet-query';
 import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
 import { usePrimaryWalletUnknownRetry } from './use-primary-wallet-unknown-retry';
@@ -54,10 +55,29 @@ export function usePrimaryWalletWatch({
         // as current (any money decision re-reads PiggyVest fresh).
         { ...wallet, primary_balance_kobo: kobo, primary_stale: true }
       : wallet;
+  // Same merchant resolution as the wallet reads.
+  const verdict = usePiggyvestCapabilityNow(
+    pickMerchantId(
+      useAuthStore((state) => state.merchantId),
+      CONFIG.MERCHANT_ID
+    )
+  );
+  // PiggyVest confirmed, wallet still legacy-shaped (Codex): its reload may
+  // fail, so show it as a pending PiggyVest account, never the old Total
+  // Balance, and keep re-checking until the reclassified wallet lands.
+  const awaitingReclassification =
+    verdict === true &&
+    wallet !== undefined &&
+    !isWalletStoreCredit(wallet) &&
+    wallet.primary_pending !== true &&
+    wallet.primary_unavailable !== true &&
+    wallet.owner_unresolved !== true;
   usePrimaryWalletUnknownRetry({
     // A recalled balance is shown but still re-checked until fresh.
     unknown:
-      wallet?.primary_unavailable === true || wallet?.primary_stale === true,
+      wallet?.primary_unavailable === true ||
+      wallet?.primary_stale === true ||
+      awaitingReclassification,
     scopeKey,
     refetch,
   });
@@ -73,13 +93,6 @@ export function usePrimaryWalletWatch({
     scopeKey,
     refetch,
   });
-  // Same merchant resolution as the wallet reads.
-  const verdict = usePiggyvestCapabilityNow(
-    pickMerchantId(
-      useAuthStore((state) => state.merchantId),
-      CONFIG.MERCHANT_ID
-    )
-  );
   // Once ruled out, PiggyVest stays suppressed until a positive verdict
   // re-confirms it (Codex): the ruling-out expiring to "unknown", or a
   // failed re-probe, must not bring a stale savings balance back.
@@ -87,5 +100,11 @@ export function usePrimaryWalletWatch({
   const nextSuppressed =
     verdict === false ? true : verdict === true ? false : suppressed;
   if (nextSuppressed !== suppressed) setSuppressed(nextSuppressed);
-  return withoutRuledOutPrimary(effective, nextSuppressed ? false : verdict);
+  const shown = withoutRuledOutPrimary(
+    effective,
+    nextSuppressed ? false : verdict
+  );
+  return awaitingReclassification && shown
+    ? { ...shown, primary_pending: true }
+    : shown;
 }

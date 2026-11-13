@@ -48,7 +48,9 @@ describe('imeiCheckScreenActions.alertInvalidIdentifier', () => {
 
 describe('bugfix: IMEI shortfall below the card minimum', () => {
   it('prefills the card top-up minimum for a ₦50 store credit shortfall', () => {
+    mockCapabilityNow = true;
     imeiCheckScreenActions.fundWallet(50, true);
+    mockCapabilityNow = false;
 
     expect(router.push).toHaveBeenLastCalledWith(
       '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
@@ -76,6 +78,21 @@ describe('bugfix: IMEI request settles after PiggyVest turned on', () => {
     // Assert: the wallet sheet will show the card-only store credit form.
     expect(router.push).toHaveBeenLastCalledWith(
       '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
+    );
+  });
+});
+
+describe('bugfix: IMEI request settles after PiggyVest was switched off', () => {
+  it('keeps the exact shortfall when the live verdict rolled back mid-request', () => {
+    // Arrange: rendered as store credit (captured true); now ruled out.
+    mockCapabilityNow = false;
+
+    // Act
+    imeiCheckScreenActions.fundWallet(50, true);
+
+    // Assert: a legacy top-up of exactly what the check needs.
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=50&returnTo=/imei-check'
     );
   });
 });

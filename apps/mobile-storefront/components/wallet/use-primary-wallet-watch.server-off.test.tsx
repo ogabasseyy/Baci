@@ -129,3 +129,49 @@ describe('bugfix: rolled-back balance returns when the ruling-out expires', () =
     mockVerdict = null;
   });
 });
+
+describe('bugfix: legacy wallet presented after a positive verdict', () => {
+  it('shows a pending PiggyVest wallet and keeps re-checking after the reload fails', async () => {
+    // Arrange: PiggyVest confirmed, the cached wallet still legacy-shaped,
+    // and every reload fails (rejected refetch).
+    jest.useFakeTimers();
+    mockVerdict = true;
+    const wallet: WalletData = { balance: 900, loyalty_points: 3 };
+    const refetch = jest.fn(async () => {
+      throw new Error('network down');
+    });
+
+    // Act
+    const { result } = renderHook(() =>
+      usePrimaryWalletWatch({
+        wallet,
+        showFundPanel: false,
+        scopeKey: 'u:m',
+        refetch,
+      })
+    );
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    // Assert: never the old Total Balance view; the reload is retried.
+    expect(result.current?.primary_pending).toBe(true);
+    expect(result.current?.balance).toBe(900);
+    expect(refetch).toHaveBeenCalled();
+    mockVerdict = null;
+    jest.useRealTimers();
+  });
+
+  it('leaves a ruled-out legacy wallet exactly as today', () => {
+    mockVerdict = false;
+    const wallet: WalletData = { balance: 900, loyalty_points: 3 };
+    const { result } = renderHook(() =>
+      usePrimaryWalletWatch({
+        wallet,
+        showFundPanel: false,
+        scopeKey: 'u:m',
+        refetch: jest.fn(),
+      })
+    );
+    expect(result.current?.primary_pending).toBeUndefined();
+    mockVerdict = null;
+  });
+});

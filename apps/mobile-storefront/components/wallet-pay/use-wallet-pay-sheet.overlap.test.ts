@@ -207,4 +207,26 @@ describe('bugfix: overlapping wallet pay calls (Muse review)', () => {
     expect(adapter.pay).not.toHaveBeenCalled();
     expect(hook.result.current.step).toBe('closed');
   });
+
+  it('bugfix: back did not wait for a PIN check like the close button (Muse)', async () => {
+    const hook = setup();
+    const gate = deferred<unknown>();
+    const adapter = makeAdapter({
+      verifyPin: jest.fn(() => gate.promise) as never,
+    });
+    await act(async () => {
+      await hook.result.current.open(adapter);
+    });
+    act(() => hook.result.current.setPin('1234'));
+    act(() => {
+      void hook.result.current.submit();
+    });
+    expect(hook.result.current.busy).toBe(true);
+    act(() => hook.result.current.back());
+    expect(hook.result.current.step).toBe('enter');
+    await act(async () => {
+      gate.resolve({ kind: 'proof', proof: PROOF });
+    });
+    expect(adapter.pay).toHaveBeenCalledWith(OP, PROOF);
+  });
 });

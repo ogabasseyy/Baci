@@ -214,7 +214,8 @@ export function useWalletPaySheet<Result>({
      * Closing while starting is safe: no money moves before the PIN.
      */
     back: () => {
-      if (step !== 'paying') close();
+      // Same gate as the sheet's own close button.
+      if (step !== 'paying' && !busy) close();
     },
   };
 }

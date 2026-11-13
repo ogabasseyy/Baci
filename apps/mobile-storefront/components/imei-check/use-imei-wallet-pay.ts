@@ -137,7 +137,9 @@ export function useImeiWalletPay({
       const lazy: WalletPayAdapter<ImeiWalletPayResult> = {
         async start() {
           // One key per purchase (per account) until it settles, kept across
-          // restarts. The IMEI is hashed: the saved purchase never holds it.
+          // restarts. The IMEI is hashed so the saved purchase doesn't show
+          // it in plain text. The hash is an identifier, not a secret (an
+          // IMEI can be brute-forced); the app's own storage is the boundary.
           const imeiHash = await Crypto.digestStringAsync(
             Crypto.CryptoDigestAlgorithm.SHA256,
             imei

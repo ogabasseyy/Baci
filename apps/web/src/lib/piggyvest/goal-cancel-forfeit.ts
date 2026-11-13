@@ -36,7 +36,9 @@ interface Ports {
   // rejection (the caller pages), 'not_released' when it was not dispatched.
   release: (
     forfeitId: string
-  ) => Promise<'released' | 'needs_review' | 'not_released'>;
+  ) => Promise<
+    'released' | 'released_needs_review' | 'needs_review' | 'not_released'
+  >;
   // Hands a claimed forfeit back unsent (same reference): retryable, never a
   // rejection, for a destination check that fails or can not run.
   unclaim: (
@@ -140,5 +142,6 @@ async function releaseUnsent(
   ports: Pick<Ports, 'release'>
 ): Promise<'released' | 'needs_review' | 'pending'> {
   const released = await ports.release(forfeit.operationId);
-  return released === 'not_released' ? 'pending' : released;
+  if (released === 'not_released') return 'pending';
+  return released === 'released' ? 'released' : 'needs_review';
 }

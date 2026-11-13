@@ -609,6 +609,13 @@ BEGIN
     state = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
       THEN 'reserved' ELSE 'needs_review' END;
+  -- The replacement could not be merged under the ceiling: the plan is now in
+  -- review, so the caller pages for it once (stamped here).
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS review
+     SET alerted_at = pg_catalog.clock_timestamp()
+   WHERE review.cancel_operation_id = v_forfeit.cancel_operation_id
+     AND review.state = 'needs_review' AND review.alerted_at IS NULL;
+  IF FOUND THEN RETURN 'released_needs_review'; END IF;
   RETURN 'released';
 END;
 $$;
@@ -917,13 +924,17 @@ BEGIN
              ORDER BY (forfeit.alerted_at IS NOT NULL), forfeit.reserved_at, forfeit.id) AS lane_rank,
            forfeit.id, forfeit.cancel_operation_id, forfeit.state,
            forfeit.state = 'dispatched' AND forfeit.alerted_at IS NULL
-             AND forfeit.dispatched_at < pg_catalog.clock_timestamp() - interval '1 day' AS overdue
+             AND forfeit.dispatched_at < pg_catalog.clock_timestamp() - interval '1 day'
+           -- A plan that went to review without anyone being paged (an
+           -- over-ceiling merge from a late payout) is paged by the sweep.
+           OR (forfeit.state = 'needs_review' AND forfeit.alerted_at IS NULL) AS overdue
       FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
       JOIN piggyvest_primary.goal_cancel_operations AS cancel ON cancel.id = forfeit.cancel_operation_id
      WHERE forfeit.integration_id = v_binding.id
        -- While new transfers are off only in-flight work is listed, so a
        -- backlog of unsent forfeits can not crowd out settling sent ones.
        AND (forfeit.state = 'dispatched'
+            OR (forfeit.state = 'needs_review' AND forfeit.alerted_at IS NULL)
             OR (p_include_unsent AND forfeit.state = 'reserved' AND cancel.state = 'confirmed'))
   ), work AS (
     SELECT pg_catalog.row_number() OVER (

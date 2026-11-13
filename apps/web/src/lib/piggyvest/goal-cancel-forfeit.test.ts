@@ -174,3 +174,12 @@ it('marks the forfeit as posting before its single POST', async () => {
     p.transfer.mock.invocationCallOrder[0]
   );
 });
+
+it('reports needs_review when the replacement could not be merged under the ceiling', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  p.release.mockResolvedValue('released_needs_review');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('needs_review');
+});

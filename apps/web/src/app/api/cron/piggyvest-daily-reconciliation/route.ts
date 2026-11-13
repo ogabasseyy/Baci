@@ -37,7 +37,14 @@ export async function GET(request: Request) {
     undefined,
     startedAt + FORFEIT_SWEEP_BUDGET_MS
   );
-  const sweepFields = forfeitSweep === null ? {} : { forfeitSweep };
+  // Counts on success; a failed sweep is reported under its own field so the
+  // counts shape stays numeric for anything reading it.
+  const sweepFields =
+    forfeitSweep === null
+      ? {}
+      : 'status' in forfeitSweep
+        ? { forfeitSweepError: forfeitSweep.status }
+        : { forfeitSweep };
   if (report === null)
     return NextResponse.json(
       { error: 'Reconciliation failed', ...sweepFields },

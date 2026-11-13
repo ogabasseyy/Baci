@@ -221,3 +221,17 @@ it('lists only in-flight forfeits while new transfers are off', async () => {
     'false',
   ]);
 });
+
+it('pages a review nobody was paged about and drives nothing for it', async () => {
+  db([{ operationId: opA, state: 'needs_review', alert: true }]);
+  expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
+    listed: 1,
+    attention: 1,
+  });
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'forfeit_needs_review', operationId: opA }
+  );
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.execute).toHaveBeenCalledOnce();
+});

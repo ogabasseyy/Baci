@@ -197,3 +197,23 @@ it('pages a wallet-check outage as a failed check, not a mismatch', async () => 
     { reason: 'interest_wallet_check_failed', operationId }
   );
 });
+
+it('pages when a rejected forfeit could not be merged under the ceiling', async () => {
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn().mockResolvedValue('released_needs_review'),
+    unclaim: vi.fn(),
+    markPosting: vi.fn(),
+    provider,
+    evidence: null,
+    operationId,
+    expectedDestinationWalletId: 'interest-wallet',
+  });
+  expect(await ports.release(forfeit.operationId)).toBe(
+    'released_needs_review'
+  );
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'forfeit_over_ceiling', operationId }
+  );
+});

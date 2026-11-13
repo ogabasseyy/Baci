@@ -97,13 +97,23 @@ export async function sweepPendingGoalCancelForfeits(input: {
   for (const item of work)
     if (item.alert)
       emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
-        reason: 'forfeit_overdue',
+        // A plan that went to review with nobody paged (an over-ceiling
+        // late-interest merge), or a sent forfeit still in flight a day on.
+        reason:
+          item.state === 'needs_review'
+            ? 'forfeit_needs_review'
+            : 'forfeit_overdue',
         operationId: item.operationId,
       });
   for (const [index, item] of work.entries()) {
     if (input.deadlineAt !== undefined && now() >= input.deadlineAt) {
       result.deferred = work.length - index;
       break;
+    }
+    if (item.state === 'needs_review') {
+      // Listed only to page it: a person resolves it, nothing is driven.
+      result.attention += 1;
+      continue;
     }
     if (item.state === 'reserved' && !input.allowNewTransfers) {
       result.skipped += 1;

@@ -109,11 +109,15 @@ export function forfeitDriverPorts(input: {
     },
     release: async (id) => {
       const released = await input.release(id);
-      if (released === 'needs_review')
+      // Both are stamped by the database, so each pages once.
+      if (released === 'needs_review' || released === 'released_needs_review')
         emitPiggyvestWebhookAlert(
           'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
           {
-            reason: 'forfeit_rejected_three_times',
+            reason:
+              released === 'needs_review'
+                ? 'forfeit_rejected_three_times'
+                : 'forfeit_over_ceiling',
             operationId,
           }
         );

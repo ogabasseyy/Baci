@@ -656,6 +656,33 @@ BEGIN
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
       AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 9999999990,
       'an overflowing merge was truncated instead of going to review');
+    -- Nobody was paged by the payout: the sweep lists it once with an alert.
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true)
+        = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'operationId', v_op, 'state', 'needs_review', 'alert', true))
+      AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) = '[]'::jsonb,
+      'a review nobody was paged about was not paged exactly once by the sweep');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- A rejected forfeit whose replacement can not merge under the ceiling
+  -- answers released_needs_review, so the caller pages for the review once.
+  BEGIN
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'dispatched', amount_kobo = 20, posted_at = pg_catalog.clock_timestamp(),
+           dispatched_at = pg_catalog.clock_timestamp(), alerted_at = NULL
+     WHERE id = v_forfeit::uuid;
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    SELECT forfeit.cancel_operation_id, forfeit.integration_id, forfeit.intent_id, forfeit.goal_id,
+      'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(forfeit.goal_id),
+      forfeit.source_wallet_id, forfeit.destination_wallet_id, 9999999990, pg_catalog.clock_timestamp()
+      FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit WHERE forfeit.id = v_forfeit::uuid;
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release') = 'released_needs_review',
+      'an over-ceiling replacement went to review without the caller being told');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

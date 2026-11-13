@@ -85,3 +85,12 @@ it('runs the daily report before the forfeit sweep, and bounds the sweep', async
   expect(deadline).toBeGreaterThanOrEqual(before + 200_000);
   expect(deadline).toBeLessThan(before + 300_000);
 });
+
+it('reports a failed sweep under its own field, never in the counts shape', async () => {
+  mocks.sweep.mockResolvedValue({ status: 'failed' });
+  mocks.run.mockResolvedValue({ status: 'disabled' });
+  expect(await (await GET(request())).json()).toEqual({
+    status: 'disabled',
+    forfeitSweepError: 'failed',
+  });
+});

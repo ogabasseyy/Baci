@@ -104,15 +104,33 @@ describe('runPiggyvestDegradedHealth', () => {
     expect(d.emitAlert).toHaveBeenCalledTimes(2);
   });
 
-  it('bugfix: an early top-of-hour run without Redis pages for the coming hour', async () => {
+  it('bugfix: without Redis never pages one reason twice inside the hour', async () => {
     const hour = 1_800_000_000_000;
-    let now = hour + 60_000; // 10:01 style: pages for this hour
+    let now = hour + 60_000; // 10:01: pages
     const d = deps({ stuck: 3, nowMs: () => now });
     const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
     await runPiggyvestDegradedHealth({ env, deps: d.value });
-    now = hour + 3_600_000 - 60_000; // 10:59: the next hour's run, early
+    now = hour + 3_600_000 - 60_000; // 10:59: still inside the span
+    const held = await runPiggyvestDegradedHealth({ env, deps: d.value });
+    expect(d.emitAlert).toHaveBeenCalledTimes(1);
+    expect(held).toMatchObject({ alerts: 1, paged: 0 });
+    now = hour + 2 * 3_600_000; // 12:00: the span has passed
     await runPiggyvestDegradedHealth({ env, deps: d.value });
     expect(d.emitAlert).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs, counts only, when an alert is held back by the hourly limit', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    let now = 1_800_000_000_000;
+    const d = deps({ stuck: 3, nowMs: () => now });
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+    await runPiggyvestDegradedHealth({ env, deps: d.value });
+    now += 20 * 60_000;
+    await runPiggyvestDegradedHealth({ env, deps: d.value });
+    expect(log).toHaveBeenCalledWith(
+      '[PiggyVest degraded-health] 1 alert(s) held back by the hourly limit'
+    );
+    log.mockRestore();
   });
 
   it('bugfix: waits for the alert send before returning', async () => {

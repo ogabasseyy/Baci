@@ -32,9 +32,9 @@ export const MAX_SLOW_ATTEMPTS = 180;
  * first saw the setup waiting, so closing and reopening the sheet never
  * brings back the "about a minute" promise or hides Check now. Only reads
  * status; it never re-sends setup. A
- * read that fails is retried on the next tick; if the last read of the first
- * minute also failed, `onExhausted` is called with that error, so one network
- * blip never ends the automatic checks.
+ * read that fails is retried on the next tick; only if the last two reads of
+ * the first minute both failed is `onExhausted` called with that error, so a
+ * single network blip never turns the plan into an error state.
  */
 export function useGoalWalletSetupPoll({
   phase,
@@ -62,6 +62,7 @@ export function useGoalWalletSetupPoll({
   readsPaused?: boolean;
 }) {
   const lastFailure = useRef<{ error: unknown } | null>(null);
+  const failuresInARow = useRef(0);
   const [attempt, setAttempt] = useState({ scopeKey, count: 0 });
   const count = attempt.scopeKey === scopeKey ? attempt.count : 0;
   // While PiggyVest is slow, a failed read is shown as "getting ready", so
@@ -83,18 +84,27 @@ export function useGoalWalletSetupPoll({
       return;
     }
     if (count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS) return;
-    if (count === 0) lastFailure.current = null;
+    if (count === 0) {
+      lastFailure.current = null;
+      failuresInARow.current = 0;
+    }
     let current = true;
     const timer = setTimeout(
       async () => {
         try {
           await reread({ silent: true });
           lastFailure.current = null;
+          failuresInARow.current = 0;
         } catch (error) {
           lastFailure.current = { error };
+          failuresInARow.current += 1;
         }
         if (!current) return;
-        if (count + 1 === FAST_ATTEMPTS && lastFailure.current) {
+        if (
+          count + 1 === FAST_ATTEMPTS &&
+          lastFailure.current &&
+          failuresInARow.current >= 2
+        ) {
           setSelfErrored(scopeKey);
           onExhausted?.(lastFailure.current.error);
         }

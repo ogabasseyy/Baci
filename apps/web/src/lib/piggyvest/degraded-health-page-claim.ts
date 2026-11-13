@@ -74,14 +74,11 @@ export async function claimDegradedPage(
 ): Promise<boolean> {
   const last = lastPagedAt.get(reason);
   if (last !== undefined && nowMs - last.at < LOCAL_MIN_GAP_MS) return false;
-  // A page sent without Redis left no shared claim. For the rest of that
-  // claim's span, Redis (even if back) must not page this reason again;
-  // only the next top-of-hour run may, as the fallback would anyway.
-  if (last?.viaFallback && nowMs - last.at < SHARED_CLAIM_TTL_MS) {
-    if (!isTopOfHourRun(nowMs)) return false;
-    lastPagedAt.set(reason, { at: nowMs, viaFallback: true });
-    return true;
-  }
+  // A page sent without Redis left no shared claim, so this copy holds the
+  // full span itself: no page for this reason until it has passed, whether
+  // Redis has come back or not. Without Redis that can skip a slightly early
+  // top-of-hour run; the runbook treats Redis as required for prompt pages.
+  if (last?.viaFallback && nowMs - last.at < SHARED_CLAIM_TTL_MS) return false;
   // Held while asking, so a second call in this copy cannot page too.
   lastPagedAt.set(reason, { at: nowMs, viaFallback: false });
   const sharedResult = await shared(reason);

@@ -209,6 +209,30 @@ describe('useGoalWalletSetupPoll', () => {
     });
   });
 
+  describe('bugfix: one failed read at the end of the first minute turned the plan into an error', () => {
+    it('does not escalate a single blip on the last quick read', async () => {
+      const onExhausted = jest.fn();
+      let call = 0;
+      const reread = jest.fn(() => {
+        call += 1;
+        return call === 12
+          ? Promise.reject(new Error('blip'))
+          : Promise.resolve(undefined);
+      });
+      renderHook(() =>
+        useGoalWalletSetupPoll({
+          phase: 'pending',
+          scopeKey: 'a',
+          reread,
+          onExhausted,
+        })
+      );
+      await ticks(12);
+      expect(reread).toHaveBeenCalledTimes(12);
+      expect(onExhausted).not.toHaveBeenCalled();
+    });
+  });
+
   describe('bugfix: reopening the sheet brought back "about a minute" forever', () => {
     it('stays slow after a remount once a minute has passed since it was first seen waiting', async () => {
       const first = setup({ phase: 'pending' });

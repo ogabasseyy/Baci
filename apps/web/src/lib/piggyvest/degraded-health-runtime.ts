@@ -173,6 +173,13 @@ export async function runPiggyvestDegradedHealth(
       operationId: `degraded-health_read_failed-${hour}`,
     });
   }
+  // Say so when the hourly limit held an alert back, so on-call can tell a
+  // quiet hour from a throttled one (counts only, no detail).
+  const held = alerts.length + (readFailed ? 1 : 0) - paged;
+  if (held > 0)
+    console.info(
+      `[PiggyVest degraded-health] ${held} alert(s) held back by the hourly limit`
+    );
   return {
     status: 'checked',
     indeterminateTransfers,

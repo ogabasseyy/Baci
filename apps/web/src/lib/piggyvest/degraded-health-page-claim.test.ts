@@ -65,13 +65,16 @@ describe('claimDegradedPage', () => {
       ).toBe(true);
     });
 
-    it('still lets the next top-of-hour run page inside the span', async () => {
+    it('bugfix: never pages twice within the span, even at the next top of the hour', async () => {
       expect(await claimDegradedPage('transfers', none, HOUR + 2 * MIN)).toBe(
         true
       );
+      // 57 minutes later: a top-of-hour run, but still inside the span.
       expect(await claimDegradedPage('transfers', none, 2 * HOUR - MIN)).toBe(
-        true
+        false
       );
+      // The next eligible top-of-hour run after the span pages again.
+      expect(await claimDegradedPage('transfers', none, 3 * HOUR)).toBe(true);
     });
   });
 
@@ -107,13 +110,6 @@ describe('claimDegradedPage', () => {
       expect(await claimDegradedPage('early', none, 2 * HOUR - MIN)).toBe(true);
       expect(await claimDegradedPage('late', none, HOUR + 140_000)).toBe(true);
       expect(await claimDegradedPage('next', none, HOUR + 3 * MIN)).toBe(false);
-    });
-
-    it('pages again at the next top of the hour, even when that run is early', async () => {
-      expect(await claimDegradedPage('transfers', none, HOUR + MIN)).toBe(true);
-      expect(await claimDegradedPage('transfers', none, 2 * HOUR - MIN)).toBe(
-        true
-      );
     });
 
     it('asks Redis again next run after a transient outage outside the window', async () => {

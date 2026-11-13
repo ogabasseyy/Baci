@@ -61,6 +61,30 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- REGRESSION (Codex P1): a lookup whose PiggyVest payment was only issued
+-- (the operation may already be with a client) is never deleted; a lookup
+-- with no payment at all still can be.
+SET LOCAL ROLE authenticated;
+SELECT set_config('test.issued_lookup', pg_temp.new_lookup(), true);
+SELECT set_config('test.bare_lookup', pg_temp.new_lookup(), true);
+RESET ROLE;
+SELECT pg_temp.wp_issue(current_setting('test.issued_lookup'), 50000);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  IF NOT pg_temp.imei_refused('delete_pending',
+    jsonb_build_object('lookup_id', current_setting('test.issued_lookup')),
+    'imei_access_charged_lookup_delete_denied') THEN
+    RAISE EXCEPTION 'a lookup with an issued PiggyVest payment was deleted';
+  END IF;
+  IF pg_temp.imei_refused('delete_pending',
+    jsonb_build_object('lookup_id', current_setting('test.bare_lookup')),
+    'imei_access_charged_lookup_delete_denied') THEN
+    RAISE EXCEPTION 'a lookup with no payment could not be deleted';
+  END IF;
+END $$;
+RESET ROLE;
+
 -- A PiggyVest payment of exactly the price (500 NGN = 50000 kobo) is sent.
 SELECT set_config('test.paid_op', pg_temp.wp_dispatched(current_setting('test.paid_lookup'), 50000), true);
 SET LOCAL ROLE authenticated;

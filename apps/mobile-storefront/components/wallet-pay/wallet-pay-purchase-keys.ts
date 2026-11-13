@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import type {
   WalletPayAdapter,
   WalletPayOutcomeKind,
@@ -103,9 +104,34 @@ async function save(purchases: OpenPurchases) {
 
 // Every read-modify-write runs one at a time, so two quick taps on a cold
 // cache can never mint two keys for the same purchase.
+const WEB_LOCK_NAME = 'baci:wallet-pay-keys/v1';
+type WebLocks = {
+  request: (name: string, callback: () => Promise<unknown>) => Promise<unknown>;
+};
+
+/**
+ * On the web every tab has its own memory but shares storage, so two tabs
+ * could each mint a key for the same purchase (two payable requests). There
+ * the work runs under a browser-wide lock and re-reads storage inside it; a
+ * browser without such a lock refuses wallet pay (fail closed) rather than
+ * risk it. Native apps run one JavaScript runtime: the queue is enough.
+ */
+function acrossTabs<T>(work: () => Promise<T>): Promise<T> {
+  if (Platform.OS !== 'web') return work();
+  const locks = (globalThis.navigator as { locks?: WebLocks } | undefined)
+    ?.locks;
+  if (!locks?.request)
+    return Promise.reject(new Error('Wallet pay keys need a tab lock'));
+  return locks.request(WEB_LOCK_NAME, async () => {
+    cache = null;
+    return await work();
+  }) as Promise<T>;
+}
+
 let queue: Promise<unknown> = Promise.resolve();
 function serialized<T>(work: () => Promise<T>): Promise<T> {
-  const next = queue.then(work, work);
+  const guarded = () => acrossTabs(work);
+  const next = queue.then(guarded, guarded);
   queue = next.catch(() => undefined);
   return next;
 }

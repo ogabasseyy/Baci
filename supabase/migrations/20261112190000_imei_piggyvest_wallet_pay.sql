@@ -53,7 +53,9 @@ AS $$
        AND payment.amount_kobo = (p_amount_ngn * 100)::bigint
        AND p_amount_ngn * 100 = trunc(p_amount_ngn * 100)
        AND payment.state NOT IN ('issued', 'released')
-     ORDER BY COALESCE(payment.reserved_at, payment.issued_at) DESC
+     -- Ties broken by issue time, then id, so the choice is deterministic.
+     ORDER BY COALESCE(payment.reserved_at, payment.issued_at) DESC,
+              payment.issued_at DESC, payment.id DESC
      LIMIT 1
   ) AS latest;
 $$;
@@ -208,7 +210,10 @@ BEGIN
     WHEN 'delete_pending' THEN
       IF lookup_row.status <> 'pending' OR EXISTS (SELECT 1 FROM public.customer_wallet_transactions t
         WHERE t.source_type='imei_wallet_payment' AND t.source_id=lookup_id AND t.type='redemption')
-        OR piggyvest_primary.imei_wallet_payment_state(lookup_id,customer_id,merchant_id,lookup_row.amount_ngn) IS NOT NULL THEN
+        -- Any PiggyVest payment ever issued for it (issued or released too):
+        -- an operation already handed out must keep its lookup.
+        OR EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
+          WHERE payment.purpose='imei_check' AND payment.purchase_ref=lookup_id::text) THEN
         RAISE EXCEPTION 'imei_access_charged_lookup_delete_denied' USING ERRCODE='42501';
       END IF;
       DELETE FROM public.imei_lookups WHERE id=lookup_id;

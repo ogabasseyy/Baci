@@ -84,6 +84,27 @@ describe('bugfix: savings sheet left empty space below short content', () => {
     expect(mockSnapToIndex).toHaveBeenLastCalledWith(0);
   });
 
+  it('does not re-snap for a pixel or two of measurement noise', () => {
+    const sheetAt = (contentHeight: number) => (
+      <SavingsBottomSheet
+        colors={Colors.light}
+        contentHeight={contentHeight}
+        onClose={jest.fn()}
+        visible
+      >
+        <Text>content</Text>
+      </SavingsBottomSheet>
+    );
+    mockSnapToIndex.mockClear();
+    const { rerender } = render(sheetAt(300));
+    const afterOpen = mockSnapToIndex.mock.calls.length;
+    rerender(sheetAt(301));
+    rerender(sheetAt(302));
+    expect(mockSnapToIndex.mock.calls.length).toBe(afterOpen);
+    rerender(sheetAt(360));
+    expect(mockSnapToIndex.mock.calls.length).toBe(afterOpen + 1);
+  });
+
   it('keeps the given heights until the content is measured', () => {
     expect(renderSheet()).toEqual(['64%', '92%']);
     expect(renderSheet(0)).toEqual(['64%', '92%']);

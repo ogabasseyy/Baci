@@ -14,6 +14,9 @@ import {
   SavingsSheetPinHeightContext,
 } from './SavingsSheetPinCancelContext';
 
+/** Height changes smaller than this keep the sheet where it is. */
+const MIN_RESNAP_PX = 4;
+
 const DEFAULT_SNAP_POINTS = ['72%', '92%'];
 /** The drag handle above the content, plus the content's top padding. */
 const HANDLE_AND_TOP = 32;
@@ -103,9 +106,15 @@ export function SavingsBottomSheet({
   };
   // When the content grows or shrinks after opening (a list finishes
   // loading), move the open sheet to the new fitted height.
+  // Measurement noise of a pixel or two never re-snaps (no jitter).
   const fittedHeight = fitted?.[0];
+  const snappedHeight = useRef<number | null>(null);
   useEffect(() => {
-    if (fittedHeight !== undefined) sheet.current?.snapToIndex(0);
+    if (fittedHeight === undefined) return;
+    const last = snappedHeight.current;
+    if (last !== null && Math.abs(fittedHeight - last) < MIN_RESNAP_PX) return;
+    snappedHeight.current = fittedHeight;
+    sheet.current?.snapToIndex(0);
   }, [fittedHeight]);
   const dismiss = () => {
     if (!locked) sheet.current?.close();

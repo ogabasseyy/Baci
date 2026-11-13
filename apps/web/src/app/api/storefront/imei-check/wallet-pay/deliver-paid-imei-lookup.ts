@@ -129,9 +129,16 @@ async function failAndRefund(
   claimToken: string,
   outcome: Outcome
 ) {
-  await deps
+  const recorded = await deps
     .finish(input.operationId, 'failed', claimToken)
-    .catch(() => deps.finish(input.operationId, 'failed', claimToken));
+    .catch(() => deps.finish(input.operationId, 'failed', claimToken))
+    .catch(() => 'conflict');
+  // Only the current claimant opens the refund (Codex P2). A lost claim (a
+  // newer claimant holds it) or a refusal (a delivered check is never
+  // refunded) means another delivery decides: answer delivering, with no
+  // refund and no refunded cache.
+  if (recorded !== 'refund_owed' && recorded !== 'duplicate')
+    return pending('delivering');
   await deps.refund(input.operationId).catch(() => 'pending');
   return await cacheRefunded(input, outcome);
 }
@@ -269,9 +276,14 @@ export async function deliverPaidImeiLookup(
     // customer never keeps both the result and the refund (Muse high).
     const saved = await deps.readStatus(lookup.id).catch(() => null);
     if (saved !== 'completed') return pending('delivering');
-    await deps
+    // A lost claim is honoured before the result is shown (Codex P2): only a
+    // recorded delivery returns it now; otherwise the next poll answers from
+    // the stored state (the saved result, which can no longer be refunded).
+    const recorded = await deps
       .finish(operationId, 'fulfilled', claim.claimToken)
       .catch(() => 'conflict');
+    if (recorded !== 'fulfilled' && recorded !== 'duplicate')
+      return pending('delivering');
     return response;
   }
   // Anything but a definite failure (an unexpected non-terminal answer)

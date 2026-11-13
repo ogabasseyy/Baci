@@ -5,9 +5,17 @@ const mocks = vi.hoisted(() => ({
   checkCartQuota: vi.fn(async () => ({ allowed: true })),
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   createCartScopedClient: vi.fn(() => ({ rpc: vi.fn() })),
+  getCartProofEnvironment: vi.fn(() => 'test'),
+  issueCartSessionProof: vi.fn(() => 'renewed-proof'),
+  cartSessionCookieMaxAge: vi.fn(() => 3600),
+  loadLiveGrantOperations: vi.fn(async () => ({
+    allowedOperations: ['set_quantity', 'remove'],
+    grantExpiresAt: '2026-11-20T00:00:00.000Z',
+  })),
   loadChatwootCartContext: vi.fn(),
   mutateCart: vi.fn(),
   readCartJsonBody: vi.fn(),
+  upgradeLegacySessionPrincipal: vi.fn(),
   verifyChatwootSessionCapability: vi.fn(),
 }));
 
@@ -16,6 +24,17 @@ vi.mock('@/lib/cart/request-quota', () => ({
 }));
 vi.mock('@/lib/cart/request-context', () => ({
   readCartJsonBody: mocks.readCartJsonBody,
+}));
+vi.mock('@/lib/cart/grant-operations', () => ({
+  loadLiveGrantOperations: mocks.loadLiveGrantOperations,
+  upgradeLegacySessionPrincipal: mocks.upgradeLegacySessionPrincipal,
+}));
+vi.mock('@/lib/cart/cart-runtime-env', () => ({
+  getCartProofEnvironment: mocks.getCartProofEnvironment,
+}));
+vi.mock('@/lib/cart/session-proof', () => ({
+  cartSessionCookieMaxAge: mocks.cartSessionCookieMaxAge,
+  issueCartSessionProof: mocks.issueCartSessionProof,
 }));
 vi.mock('@/lib/cart/scoped-client', () => ({
   createCartScopedClient: mocks.createCartScopedClient,
@@ -34,17 +53,20 @@ vi.mock('@/lib/chatwoot/commerce-context', () => ({
 import { POST } from './route';
 
 const principal = {
-  allowedOperations: ['commands'],
+  allowedOperations: ['set_quantity', 'remove'],
   cartId: '6df442af-4d21-4f4f-9f0b-607400000002',
   grantId: '6df442af-4d21-4f4f-9f0b-607400000003',
   merchantId: '6df442af-4d21-4f4f-9f0b-607400000001',
   principalId: '6df442af-4d21-4f4f-9f0b-607400000004',
+  expiresAt: '2026-11-20T00:00:00.000Z',
+  operationsClaimPresent: true,
   scope: 'session',
 };
 const cart = {
   cartId: principal.cartId,
   merchantId: principal.merchantId,
   version: 12,
+  expiresAt: '2026-11-30T00:00:00.000Z',
   lines: [{ id: '11111111-1111-4111-8111-111111111111', quantity: 2 }],
 };
 const state = {
@@ -96,6 +118,7 @@ describe('Chatwoot shared-cart quantity route', () => {
       principal,
       state: { ...state, cartVersion: snapshot.version },
     });
+    mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principal);
     mocks.verifyChatwootSessionCapability.mockResolvedValue({
       conversationId: 905,
       sessionExpiresAt: 1_799_000_000,
@@ -104,7 +127,10 @@ describe('Chatwoot shared-cart quantity route', () => {
       ok: true,
       operationId: input.requestId,
       replayed: false,
-      cart: { version: snapshot.version + 1 },
+      cart: {
+        expiresAt: snapshot.expiresAt,
+        version: snapshot.version + 1,
+      },
     });
   }
 
@@ -113,7 +139,8 @@ describe('Chatwoot shared-cart quantity route', () => {
     const response = await POST(request());
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    const payload = await response.json();
+    expect(payload).toEqual({
       accepted: true,
       cartVersion: 13,
       operationId: 'quantity-0001',
@@ -135,6 +162,42 @@ describe('Chatwoot shared-cart quantity route', () => {
         expectedVersion: 12,
         operationId: 'quantity-0001',
       }
+    );
+    expect(mocks.upgradeLegacySessionPrincipal).toHaveBeenCalledOnce();
+    expect(response.headers.get('set-cookie')).toContain(
+      `baci-cart-${principal.merchantId}=renewed-proof`
+    );
+    expect(payload).not.toHaveProperty('proof');
+    expect(mocks.issueCartSessionProof).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedOperations: ['set_quantity', 'remove'],
+        cartId: principal.cartId,
+        grantExpiresAt: principal.expiresAt,
+        grantId: principal.grantId,
+        merchantId: principal.merchantId,
+        principalId: principal.principalId,
+        scope: 'session',
+      }),
+      { environment: 'test' }
+    );
+    expect(mocks.cartSessionCookieMaxAge).toHaveBeenCalledWith(
+      '2026-11-20T00:00:00.000Z'
+    );
+  });
+
+  it('uses upgraded live operations for a legacy cart principal', async () => {
+    arrange();
+    const upgraded = {
+      ...principal,
+      allowedOperations: ['set_quantity', 'remove'],
+      operationsClaimPresent: true,
+    };
+    mocks.upgradeLegacySessionPrincipal.mockResolvedValue(upgraded);
+    await POST(request());
+
+    expect(mocks.mutateCart).toHaveBeenCalledWith(
+      { client: expect.anything(), principal: upgraded },
+      expect.objectContaining({ operationId: 'quantity-0001' })
     );
   });
 
@@ -204,7 +267,7 @@ describe('Chatwoot shared-cart quantity route', () => {
       ok: true,
       operationId: staleBody.requestId,
       replayed: true,
-      cart: { version: 13 },
+      cart: { expiresAt: cart.expiresAt, version: 13 },
     });
     const response = await POST(request());
 

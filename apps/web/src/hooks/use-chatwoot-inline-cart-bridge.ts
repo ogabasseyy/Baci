@@ -258,6 +258,11 @@ export function useChatwootInlineCartBridge(
               ready: false,
               items: [],
             });
+          } else if (message.event === 'baci-cart-quantity') {
+            post(actionTarget, 'baci-cart-quantity-result:', {
+              requestId,
+              accepted: false,
+            });
           }
         }
         return;
@@ -275,10 +280,14 @@ export function useChatwootInlineCartBridge(
       if (message.event === 'baci-cart-quantity') {
         await handleChatwootInlineCartQuantity({
           conversationId,
-          isCurrent: () =>
+          isCurrentAction: () =>
             isCurrentTarget(frame, actionTarget, conversationId) &&
             actionGeneration === latestActionGeneration &&
             messageSessionToken === authorizedSessionToken,
+          isCurrentContext: () =>
+            isCurrentTarget(frame, actionTarget, conversationId) &&
+            messageSessionToken === authorizedSessionToken &&
+            sessionExpiresAt > Date.now(),
           lineTokens,
           message,
           post: (value) =>

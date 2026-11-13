@@ -10,7 +10,8 @@ type QuantityMessage = Extract<
 
 export async function handleChatwootInlineCartQuantity(input: {
   conversationId: number;
-  isCurrent: () => boolean;
+  isCurrentAction: () => boolean;
+  isCurrentContext: () => boolean;
   lineTokens: Map<string, string>;
   message: QuantityMessage;
   post: (value: unknown) => void;
@@ -57,16 +58,17 @@ export async function handleChatwootInlineCartQuantity(input: {
   }
 
   // The mutation route commits through the canonical service directly, so
-  // refresh the storefront's serialized shared-cart client before reporting
-  // success. Do not refresh after this action has been invalidated.
-  if (mutation?.accepted === true && input.isCurrent()) {
+  // Refresh the storefront's serialized shared-cart client after a commit
+  // whenever this same authorized context remains current. A later action can
+  // supersede the reply while this mutation still commits successfully.
+  if (mutation?.accepted === true && input.isCurrentContext()) {
     try {
       await input.refreshSharedCart?.();
     } catch {
       // The server commit is authoritative; leave the action outcome intact.
     }
   }
-  if (!input.isCurrent() || input.sessionExpiresAt <= Date.now()) return;
+  if (!input.isCurrentAction() || input.sessionExpiresAt <= Date.now()) return;
   input.post({
     requestId,
     accepted: mutation?.accepted === true,

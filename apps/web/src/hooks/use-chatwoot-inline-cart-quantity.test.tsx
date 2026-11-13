@@ -132,6 +132,60 @@ describe('Chatwoot inline cart quantity mutations', () => {
     expect(mocks.cartState.refreshSharedCart).toHaveBeenCalledOnce();
   });
 
+  it('returns a bounded failure result when session authorization cannot be refreshed', async () => {
+    let authorizeCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init: RequestInit) => {
+        const url = new URL(path, 'https://store.test');
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        if (url.pathname.endsWith('/challenge')) {
+          return challengeResponse(String(body.requestId));
+        }
+        if (url.pathname.endsWith('/verify')) {
+          return contextResponse(String(body.contextToken));
+        }
+        authorizeCalls += 1;
+        return authorizeCalls === 1
+          ? authorizedCartResponse(905)
+          : { ok: false, json: async () => ({}) };
+      })
+    );
+    const { cart, postMessage, target } = await mountWithCartView();
+    const item = cart.items[0];
+
+    await act(async () => {
+      sendChatwootWidgetMessage(target, 'baci-cart-quantity', {
+        requestId: 'quantity-auth-failed',
+        lineToken: item.lineToken,
+        cartVersion: cart.cartVersion,
+        expectedQuantity: item.quantity,
+        quantity: item.quantity + 1,
+        conversationId: 905,
+        sessionToken: 'session-905',
+      });
+      await waitFor(() =>
+        expect(
+          postMessage.mock.calls.some(([payload]) => {
+            const raw = String(payload);
+            return (
+              raw.startsWith('baci-cart-quantity-result:') &&
+              JSON.parse(raw.slice('baci-cart-quantity-result:'.length))
+                .requestId === 'quantity-auth-failed'
+            );
+          })
+        ).toBe(true)
+      );
+    });
+
+    expect(
+      postMessage.mock.calls
+        .map(([payload]) => String(payload))
+        .find((raw) => raw.startsWith('baci-cart-quantity-result:'))
+    ).toContain('"accepted":false');
+    expect(mocks.cartState.refreshSharedCart).not.toHaveBeenCalled();
+  });
+
   it('retries the exact operation after a lost acknowledgement at a newer cart version', async () => {
     let authorizeCalls = 0;
     const quantityBodies: Record<string, unknown>[] = [];
@@ -221,6 +275,85 @@ describe('Chatwoot inline cart quantity mutations', () => {
       requestId: 'quantity-replay-01',
     });
     expect(mocks.cartState.refreshSharedCart).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes a same-context commit even when a later quantity action supersedes its reply', async () => {
+    const firstMutation = {
+      resolve: undefined as
+        | ((response: {
+            ok: true;
+            json: () => Promise<Record<string, unknown>>;
+          }) => void)
+        | undefined,
+    };
+    let quantityCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init: RequestInit) => {
+        const url = new URL(path, 'https://store.test');
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        if (url.pathname.endsWith('/challenge')) {
+          return challengeResponse(String(body.requestId));
+        }
+        if (url.pathname.endsWith('/verify')) {
+          return contextResponse(String(body.contextToken));
+        }
+        if (url.pathname.endsWith('/quantity')) {
+          quantityCalls += 1;
+          if (quantityCalls === 1) {
+            return new Promise((resolve) => {
+              firstMutation.resolve = resolve as typeof firstMutation.resolve;
+            });
+          }
+          return { ok: false, json: async () => ({}) };
+        }
+        return authorizedCartResponse(905);
+      })
+    );
+    const { cart, postMessage, target } = await mountWithCartView();
+    const item = cart.items[0];
+    const message = (requestId: string) => ({
+      requestId,
+      lineToken: item.lineToken,
+      cartVersion: cart.cartVersion,
+      expectedQuantity: item.quantity,
+      quantity: item.quantity + 1,
+      conversationId: 905,
+      sessionToken: 'session-905',
+    });
+
+    await act(async () => {
+      sendChatwootWidgetMessage(
+        target,
+        'baci-cart-quantity',
+        message('quantity-overlap-first')
+      );
+      await waitFor(() => expect(quantityCalls).toBe(1));
+      sendChatwootWidgetMessage(
+        target,
+        'baci-cart-quantity',
+        message('quantity-overlap-second')
+      );
+      await waitFor(() => expect(quantityCalls).toBe(2));
+    });
+
+    firstMutation.resolve?.({
+      ok: true,
+      json: async () => ({ accepted: true, cartVersion: 9 }),
+    });
+    await waitFor(() =>
+      expect(mocks.cartState.refreshSharedCart).toHaveBeenCalledOnce()
+    );
+    expect(
+      postMessage.mock.calls.some(([payload]) => {
+        const raw = String(payload);
+        return (
+          raw.startsWith('baci-cart-quantity-result:') &&
+          JSON.parse(raw.slice('baci-cart-quantity-result:'.length))
+            .requestId === 'quantity-overlap-first'
+        );
+      })
+    ).toBe(false);
   });
 
   it('suppresses the reply and refresh when a newer context invalidates an in-flight mutation', async () => {

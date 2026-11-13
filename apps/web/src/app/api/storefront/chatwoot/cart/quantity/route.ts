@@ -1,9 +1,19 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import {
+  loadLiveGrantOperations,
+  upgradeLegacySessionPrincipal,
+} from '@/lib/cart/grant-operations';
 import { readCartJsonBody } from '@/lib/cart/request-context';
 import { checkCartQuota } from '@/lib/cart/request-quota';
+import { setCartSessionCookie } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { mutateCart } from '@/lib/cart/service';
+import {
+  cartSessionCookieMaxAge,
+  issueCartSessionProof,
+} from '@/lib/cart/session-proof';
 import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
 import { verifyChatwootSessionCapability } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -76,10 +86,22 @@ export async function POST(request: NextRequest) {
   }
   if (!quota.allowed) return unavailable(429, 'quota_exceeded');
 
+  const client = createCartScopedClient(cartContext.principal);
+  let principal: typeof cartContext.principal | null;
+  try {
+    principal = await upgradeLegacySessionPrincipal(
+      client,
+      cartContext.principal
+    );
+  } catch {
+    return unavailable(503, 'temporarily_unavailable');
+  }
+  if (!principal) return unavailable(503, 'temporarily_unavailable');
+
   const result = await mutateCart(
     {
-      client: createCartScopedClient(cartContext.principal),
-      principal: cartContext.principal,
+      client,
+      principal,
     },
     {
       command:
@@ -99,16 +121,18 @@ export async function POST(request: NextRequest) {
       result.code === 'version_conflict' ||
       result.code === 'idempotency_conflict'
         ? 409
-        : result.code === 'invalid_item'
-          ? 400
-          : 503;
+        : result.code === 'unauthorized'
+          ? 403
+          : result.code === 'invalid_item'
+            ? 400
+            : 503;
     return unavailable(
       status,
       status === 409 ? 'refresh_required' : 'temporarily_unavailable'
     );
   }
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     {
       accepted: true,
       cartVersion: result.cart.version,
@@ -117,4 +141,40 @@ export async function POST(request: NextRequest) {
     },
     { headers: NO_STORE_HEADERS }
   );
+  let liveGrant: Awaited<ReturnType<typeof loadLiveGrantOperations>> = null;
+  try {
+    liveGrant = await loadLiveGrantOperations(client, principal);
+  } catch {
+    // Retain the incoming proof's expiry when live grant refresh is unavailable.
+  }
+  const proofGrantExpiry = liveGrant
+    ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)
+      ? liveGrant.grantExpiresAt
+      : result.cart.expiresAt
+    : principal.expiresAt;
+  let proof: string | null = null;
+  try {
+    proof = issueCartSessionProof(
+      {
+        allowedOperations:
+          liveGrant?.allowedOperations ?? principal.allowedOperations,
+        cartId: principal.cartId,
+        grantId: principal.grantId,
+        grantExpiresAt: proofGrantExpiry,
+        merchantId: cartContext.state.merchantId,
+        principalId: principal.principalId,
+        scope: 'session',
+      },
+      { environment: getCartProofEnvironment() }
+    );
+  } catch (error) {
+    console.error('Chatwoot cart proof reissue failed after commit', {
+      message: error instanceof Error ? error.message : 'unknown',
+    });
+  }
+  const maxAge = cartSessionCookieMaxAge(proofGrantExpiry);
+  if (proof && maxAge > 0) {
+    setCartSessionCookie(response, cartContext.state.merchantId, proof, maxAge);
+  }
+  return response;
 }

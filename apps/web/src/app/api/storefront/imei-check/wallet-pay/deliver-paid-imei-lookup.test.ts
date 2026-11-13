@@ -170,6 +170,31 @@ describe('deliverPaidImeiLookup', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it('bugfix: never records a foreign payment as delivered by a saved result (Muse)', async () => {
+    const d = deps({
+      claim: vi.fn(async () => ({
+        status: 'claimed' as const,
+        purpose: 'imei_check' as const,
+        purchaseRef: 'another-lookup',
+        amountKobo: 50000,
+        claimToken: 'tok-1',
+      })),
+    });
+    await deliverPaidImeiLookup(
+      {
+        ...base,
+        lookup: {
+          ...lookup,
+          status: 'completed',
+          cached_response: { status: 'complete' } as never,
+          cached_status: 200,
+        },
+      },
+      d
+    );
+    expect(d.finish).not.toHaveBeenCalled();
+  });
+
   it('refunds when the tier can no longer be served by Sickw', async () => {
     const d = deps({
       prepare: vi.fn(async () => ({

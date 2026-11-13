@@ -189,15 +189,30 @@ export async function startImeiWalletPayment(
     created = true;
   }
 
-  const issued = await deps.issue({
-    runtime,
-    scope: walletPayScope(runtime, identity),
-    request: {
-      purpose: 'imei_check',
-      purchaseRef: lookupId,
-      amountKobo: Math.round(amount * 100),
-    },
-  });
+  let issued: Awaited<ReturnType<Issue>>;
+  try {
+    issued = await deps.issue({
+      runtime,
+      scope: walletPayScope(runtime, identity),
+      request: {
+        purpose: 'imei_check',
+        purchaseRef: lookupId,
+        amountKobo: Math.round(amount * 100),
+      },
+    });
+  } catch (error) {
+    // The issue may or may not have committed. Removing the lookup succeeds
+    // only while no payment exists for it (the database refuses otherwise),
+    // so a retry with this key either issues afresh or, when the lookup
+    // stays, is told to start again with a new key. Nothing was charged.
+    if (created && !(await removePending(input.supabaseAdmin, lookupId)))
+      return refuse(
+        'PAYMENT_NOT_COMPLETED',
+        'This payment did not go through. Please start again.',
+        409
+      );
+    throw error;
+  }
   if (issued.status === 'unavailable') {
     // No payment exists for the lookup this request just created: remove it
     // (best effort; the database refuses once a payment exists) so a retry

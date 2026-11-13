@@ -158,7 +158,15 @@ export async function deliverPaidImeiLookup(
   // take the claim (its token) and record it, never a second lookup.
   if (lookup.status === 'completed') {
     const late = await deps.claim(operationId).catch(() => null);
-    if (late && (late.status === 'claimed' || late.status === 'reclaimed'))
+    // Only this lookup's own payment (same purchase and price) is recorded
+    // as delivered by it, as on the pending path below.
+    if (
+      late &&
+      (late.status === 'claimed' || late.status === 'reclaimed') &&
+      late.purpose === 'imei_check' &&
+      late.purchaseRef === lookup.id &&
+      late.amountKobo === lookupPriceKobo(lookup)
+    )
       await deps
         .finish(operationId, 'fulfilled', late.claimToken)
         .catch(() => 'conflict');

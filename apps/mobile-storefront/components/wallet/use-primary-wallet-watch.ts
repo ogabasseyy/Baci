@@ -96,10 +96,13 @@ export function usePrimaryWalletWatch({
   // Once ruled out, PiggyVest stays suppressed until a positive verdict
   // re-confirms it (Codex): the ruling-out expiring to "unknown", or a
   // failed re-probe, must not bring a stale savings balance back.
-  const [suppressed, setSuppressed] = useState(false);
+  // Keyed by scope (Codex): a new account or merchant starts unsuppressed.
+  const [suppression, setSuppression] = useState({ scopeKey, on: false });
+  const suppressed = suppression.scopeKey === scopeKey && suppression.on;
   const nextSuppressed =
     verdict === false ? true : verdict === true ? false : suppressed;
-  if (nextSuppressed !== suppressed) setSuppressed(nextSuppressed);
+  if (suppression.scopeKey !== scopeKey || suppression.on !== nextSuppressed)
+    setSuppression({ scopeKey, on: nextSuppressed });
   const shown = withoutRuledOutPrimary(
     effective,
     nextSuppressed ? false : verdict

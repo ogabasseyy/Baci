@@ -58,11 +58,12 @@ export function useWalletFundingAccountController({
   const primary = Boolean(
     primaryObserved && primaryCapability !== false && verdictNow !== false
   );
-  // A never-observed non-pilot merchant must wait for the first capability
-  // verdict before creating a legacy DVA: creating now could orphan the
-  // account when the merchant turns out primary-enabled.
+  // Wait for a verdict only where it can still be unknown (Codex): per the
+  // owner decision (2026-11-13) a non-pilot merchant is legacy-only, so the
+  // live verdict is never unknown there and a failed probe never holds its
+  // Paystack account creation.
   const primaryVerdictPending = Boolean(
-    activeMerchantId && !primaryObserved && primaryCapability === null
+    activeMerchantId && !primaryObserved && verdictNow === null
   );
   const availability = deriveWalletFundingAccountAvailability({
     customerPhone,

@@ -134,7 +134,12 @@ export function createWalletSavingsActions({
   };
 
   const handleAddSavingsContribution = () => {
-    const isPrimary = isPiggyvestPrimaryMerchant(activeMerchantId);
+    // A live ruling-out picks legacy for a new contribution (Codex): the
+    // wallet shows legacy funds then, so the rail must match. A stored
+    // PiggyVest id is still kept, never moved (planWalletSavingsRail).
+    const isPrimary =
+      isPiggyvestPrimaryMerchant(activeMerchantId) &&
+      readPiggyvestCapabilityNow(activeMerchantId) !== false;
     const plan = planWalletSavingsRail({
       hasStoredId: idempotencyKeyRef.current !== null,
       isPrimary,

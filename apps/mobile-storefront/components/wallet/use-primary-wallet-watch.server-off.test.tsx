@@ -175,3 +175,33 @@ describe('bugfix: legacy wallet presented after a positive verdict', () => {
     mockVerdict = null;
   });
 });
+
+describe('bugfix: ruled-out suppression carried into a new wallet scope', () => {
+  it('shows the new scope PiggyVest balance while its verdict is unknown', () => {
+    // Arrange: the first scope was ruled out, so PiggyVest is suppressed.
+    mockVerdict = false;
+    const primaryWallet = {
+      balance: 900,
+      loyalty_points: 3,
+      primary_balance_kobo: 500_000,
+    } as WalletData;
+    const { result, rerender } = renderHook(
+      ({ scopeKey }: { scopeKey: string }) =>
+        usePrimaryWalletWatch({
+          wallet: primaryWallet,
+          showFundPanel: false,
+          scopeKey,
+          refetch: jest.fn(),
+        }),
+      { initialProps: { scopeKey: 'u1:legacy' } }
+    );
+    expect(result.current?.primary_balance_kobo).toBeUndefined();
+
+    // Act: switch to a pilot scope whose verdict is still unknown.
+    mockVerdict = null;
+    rerender({ scopeKey: 'u1:pilot' });
+
+    // Assert: its PiggyVest balance is not stripped by the old scope.
+    expect(result.current?.primary_balance_kobo).toBe(500_000);
+  });
+});

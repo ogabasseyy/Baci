@@ -36,6 +36,16 @@ BEGIN
     'pvb-refund-' || v_imei, 100000, 'synthetic-walletpay-collection',
     'synthetic-walletpay-main', pg_catalog.clock_timestamp() - interval '1 hour',
     pg_catalog.clock_timestamp());
+  -- REGRESSION (Codex P2): an earlier attempt released but later proven
+  -- successful credited the customer too: it is listed, completed.
+  INSERT INTO piggyvest_primary.wallet_payment_refunds (
+    payment_id, integration_id, attempt, state, reference, amount_kobo,
+    source_wallet_id, destination_wallet_id, dispatched_at, settled_at,
+    provider_transaction_id, review_reason)
+  VALUES (v_imei::uuid, 'f9a10000-0000-4000-8000-000000000006', 1, 'released',
+    'pvb-refund-' || v_imei || '-1', 100000, 'synthetic-walletpay-collection',
+    'synthetic-walletpay-main', pg_catalog.clock_timestamp() - interval '2 hours',
+    pg_catalog.clock_timestamp(), 'txn-activity-late', 'late_refund_success');
   -- Airtime paid from the wallet: PIN reserved, not yet confirmed.
   INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider,
     phone_number, request_reference, source, metadata, amount, status)
@@ -98,15 +108,19 @@ BEGIN
        WHERE row.id = c_cancel AND row.occurred_at = c_dispatched
          AND row.label = 'Returned from a savings goal'),
     'the goal return moved to its settle date or named another customer''s goal');
+  PERFORM pg_temp.wp_assert((SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_array_elements(v_rows) AS item
+      WHERE item ->> 'kind' = 'wallet_refund' AND item ->> 'status' = 'completed') = 1,
+    'the late refund success is not listed as completed: ' || v_rows::text);
   v_rows := (SELECT pg_catalog.jsonb_agg(item) FROM pg_catalog.jsonb_array_elements(v_rows) AS item
-              WHERE item ->> 'label' <> 'Short Bet · …');
+              WHERE item ->> 'label' <> 'Short Bet · …'
+                AND NOT (item ->> 'kind' = 'wallet_refund' AND item ->> 'status' = 'completed'));
   PERFORM pg_temp.wp_assert(pg_catalog.jsonb_array_length(v_rows) = 3,
     'expected two spends and one refund: ' || COALESCE(v_rows::text, 'none'));
   -- REGRESSION (Muse): a refund is dated when it was sent, not opened.
   PERFORM pg_temp.wp_assert((SELECT row.occurred_at = refund.dispatched_at
       FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
       JOIN piggyvest_primary.wallet_payment_refunds AS refund ON refund.id = row.id
-     WHERE row.kind = 'wallet_refund'), 'the refund is not dated when it was sent');
+     WHERE row.kind = 'wallet_refund' AND refund.attempt = 0), 'the refund is not dated when it was sent');
   PERFORM pg_temp.wp_assert(v_rows -> 0 ->> 'kind' = 'wallet_refund'
       AND v_rows -> 0 ->> 'direction' = 'in'
       AND v_rows -> 0 ->> 'label' = 'Refund: IMEI check'

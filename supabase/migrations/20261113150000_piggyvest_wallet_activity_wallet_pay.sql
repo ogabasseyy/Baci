@@ -11,7 +11,8 @@
 -- A spend is listed once its PIN has reserved money (reserved, dispatched,
 -- confirmed or under review); an issued, released or expired attempt never
 -- moved money and is not activity. A refund is listed once it is sent
--- (dispatched, confirmed or under review). The label names the purchase:
+-- (dispatched, confirmed or under review), or proven successful late, and
+-- only for a listed spend. The label names the purchase:
 -- "IMEI check", or for airtime/data/bills the type, network or biller and
 -- the phone or meter number masked to its first and last four characters,
 -- read from the caller's own vtu_transactions row (same customer and store).
@@ -196,13 +197,21 @@ BEGIN
            'in',
            refund.amount_kobo,
            'Refund: ' || paid.label,
-           CASE WHEN refund.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
+           CASE WHEN refund.state = 'confirmed' OR refund.state = 'released'
+                THEN 'completed' ELSE 'pending' END,
            -- Dated when sent (when it first shows), fixed from then on: an
            -- owed refund sent later never lands behind a page already read.
            COALESCE(refund.dispatched_at, refund.created_at)
       FROM piggyvest_primary.wallet_payment_refunds AS refund
       JOIN paid ON paid.id = refund.payment_id
-     WHERE refund.state IN ('dispatched', 'confirmed', 'needs_review')
+     -- Only a refund of a listed spend (money that moved), so a refund never
+     -- shows without the spend it returns (Muse).
+     WHERE paid.state IN ('reserved', 'dispatched', 'confirmed', 'needs_review')
+       AND (refund.state IN ('dispatched', 'confirmed', 'needs_review')
+            -- A released attempt later proven successful (it credited the
+            -- customer while another attempt was live) is a refund too.
+            OR (refund.state = 'released' AND refund.review_reason = 'late_refund_success'
+                AND refund.provider_transaction_id IS NOT NULL))
   )
   -- Labels carry free text (biller names, goal titles): capped well under
   -- the row schema's 600 characters so one long name never fails a page.

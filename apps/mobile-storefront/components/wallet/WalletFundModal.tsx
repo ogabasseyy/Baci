@@ -119,9 +119,10 @@ export function WalletFundModal({
       storeCreditTopUp || (!!fundReturnTo && latchedReturn === fundReturnTo);
     setLatchedReturn(null);
     if (!returnToPurchase || !fundReturnTo) return;
-    // A deep link has no history underneath: open the purchase instead.
-    if (router.canGoBack()) router.back();
-    else router.replace(fundReturnTo);
+    // Back to that purchase, not merely the previous screen (Codex): a warm
+    // deep link may sit on unrelated history. dismissTo pops to the purchase
+    // when it is in the stack and opens it otherwise (cold deep link).
+    router.dismissTo(fundReturnTo);
   };
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy

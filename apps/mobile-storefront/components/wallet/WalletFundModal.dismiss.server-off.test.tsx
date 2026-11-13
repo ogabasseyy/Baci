@@ -22,12 +22,14 @@ jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 let mockCanGoBack = true;
 let mockCapability: boolean | null = false;
 jest.mock('expo-router', () => ({
   router: {
     back: () => mockBack(),
     canGoBack: () => mockCanGoBack,
+    dismissTo: (href: string) => mockDismissTo(href),
     push: jest.fn(),
     replace: (href: string) => mockReplace(href),
   },
@@ -79,6 +81,7 @@ function renderModal(
 beforeEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockCanGoBack = true;
   mockCapability = false;
 });
@@ -96,7 +99,7 @@ describe('bugfix: closing Add store credit strands the customer on a pushed wall
 
     // Assert
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
   });
 
   it('bugfix: opens the purchase when a deep link left no screen to go back to', () => {
@@ -109,8 +112,7 @@ describe('bugfix: closing Add store credit strands the customer on a pushed wall
 
     // Assert
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockReplace).toHaveBeenCalledWith('/utilities/airtime');
+    expect(mockDismissTo).toHaveBeenCalledWith('/utilities/airtime');
   });
 });
 
@@ -121,7 +123,7 @@ describe('server keeps PiggyVest off', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
 
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 
   it('keeps a plain top-up on the wallet page', () => {
@@ -129,8 +131,7 @@ describe('server keeps PiggyVest off', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
 
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 });
 
@@ -145,7 +146,7 @@ describe('bugfix: unobserved rollout merchant with an unsettled wallet on a purc
 
     // Assert
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the plain sheet where the server rules PiggyVest out', () => {
@@ -167,7 +168,7 @@ describe('bugfix: restored legacy wallet before any PiggyVest verdict on a purch
 
     // Assert
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -277,7 +278,7 @@ describe('bugfix: rollback while the sheet was open stranded the customer', () =
 
     // Assert
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
     clearObservedPiggyvestPrimaryCapability();
   });
 });
@@ -311,8 +312,22 @@ describe('bugfix: purchase latch leaked into a later savings sheet', () => {
 
     // Assert: the savings sheet just closes; no purchase navigation.
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
     clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+describe('bugfix: warm deep link returned to unrelated history', () => {
+  it('returns to the explicit purchase, not just the previous screen', () => {
+    // Arrange: the funding link opened over unrelated history.
+    mockCanGoBack = true;
+    renderModal(true, '/utilities/airtime');
+
+    // Act
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert: navigate to the purchase itself; never a bare back().
+    expect(mockDismissTo).toHaveBeenCalledWith('/utilities/airtime');
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

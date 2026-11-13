@@ -1,5 +1,5 @@
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
@@ -95,8 +95,11 @@ export default function WalletGoalActionsRoute() {
   // A goal confirmed gone (settled, cancelled or not on this account) opens
   // the plain wallet with a short note, so an old link does not look broken.
   const gone = missing && recheckedThis && recheck?.failed === false;
+  const noted = useRef<string | null>(null);
   useEffect(() => {
-    if (!gone) return;
+    // Once per goal link, even if the effect runs twice (StrictMode).
+    if (!gone || !goalId || noted.current === goalId) return;
+    noted.current = goalId;
     notifySavings(
       'That savings plan has closed',
       "It's finished or isn't on this account, so here's your wallet.",
@@ -104,7 +107,7 @@ export default function WalletGoalActionsRoute() {
     );
     // Not tied to any goal: the wallet's next goal must not clear it.
     useSavingsNoticeStore.setState({ goalId: null });
-  }, [gone]);
+  }, [gone, goalId]);
   // After sign-in the customer comes back here, so the ownership check runs.
   const back = goalId
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`

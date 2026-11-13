@@ -121,6 +121,28 @@ describe('handleChatwootInlineCartQuantity', () => {
     expect(value.refreshSharedCart).not.toHaveBeenCalled();
   });
 
+  it('refreshes after a non-JSON gateway error without retrying the mutation', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new Error('non-json gateway response');
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const value = input();
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: false,
+      code: 'temporarily_unavailable',
+    });
+  });
+
   it('surfaces refresh-required and refreshes the snapshot on conflict', async () => {
     vi.stubGlobal(
       'fetch',

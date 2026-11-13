@@ -72,6 +72,10 @@ export async function handleChatwootInlineCartQuantity(input: {
   // whenever this same authorized context remains current. A later action can
   // supersede the reply while this mutation still commits successfully.
   const refreshRequired = mutation?.code === 'refresh_required';
+  const outcomeUnavailable =
+    mutation === null ||
+    (typeof mutation?.httpStatus === 'number' &&
+      Number.isSafeInteger(mutation.httpStatus));
   if (
     mutation?.accepted === true &&
     input.isCurrentContext() &&
@@ -82,7 +86,7 @@ export async function handleChatwootInlineCartQuantity(input: {
     input.onSessionTokenRenewed?.(mutation.sessionToken);
   }
   if (
-    (mutation?.accepted === true || refreshRequired || mutation === null) &&
+    (mutation?.accepted === true || refreshRequired || outcomeUnavailable) &&
     input.isCurrentCartContext()
   ) {
     try {

@@ -117,6 +117,15 @@ describe('customerWalletTransactionLabel', () => {
     }
   });
 
+  it('keeps a 20-digit electricity token', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Electricity token 12345678901234567890',
+        sourceType: null,
+      })
+    ).toBe('Electricity token 12345678901234567890');
+  });
+
   it('strips PiggyVest from an unmapped row as a backstop', () => {
     expect(
       customerWalletTransactionLabel({

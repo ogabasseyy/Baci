@@ -6,6 +6,7 @@ import {
   type BillersResponsePayload,
   getMonnifyCategoryCode,
   type NormalizedBiller,
+  type NormalizedBillItem,
 } from './biller-normalizers';
 import {
   getErrorMessage,
@@ -13,6 +14,15 @@ import {
   loadMonnifyBillers,
 } from './biller-route-helpers';
 import { dedupeElectricityBillers } from './dedupe-electricity-billers';
+
+// Plans can nest (Kuda bill items carry their own billItems): strip every level.
+function withoutProviderNames(item: NormalizedBillItem): NormalizedBillItem {
+  return {
+    ...item,
+    itemName: stripProviderNames(item.itemName) || 'Plan',
+    billItems: item.billItems?.map(withoutProviderNames),
+  };
+}
 
 // Customers never see provider names or provider error text; details are logged.
 const BILLERS_UNAVAILABLE =
@@ -132,11 +142,8 @@ export async function GET(request: NextRequest) {
     const payload: BillersResponsePayload = {
       billers: mergedBillers.map((biller) => ({
         ...biller,
-        billerName: stripProviderNames(biller.billerName) || biller.billerName,
-        billItems: biller.billItems?.map((item) => ({
-          ...item,
-          itemName: stripProviderNames(item.itemName) || item.itemName,
-        })),
+        billerName: stripProviderNames(biller.billerName) || 'Biller',
+        billItems: biller.billItems?.map(withoutProviderNames),
       })),
     };
     // Older clients read these fields as the message to show, so they carry

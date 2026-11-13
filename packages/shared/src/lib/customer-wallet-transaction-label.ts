@@ -22,9 +22,9 @@ const IDS = [
   /:?\s*\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
   /:?\s*\b(?=[0-9a-f]*\d)[0-9a-f]{3,}(?:…|\.{3})/gi,
   /\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi,
-  // 15+ digits: an IMEI or long provider reference. A phone number, even with
-  // +234 (13 digits), stays.
-  /(?<![₦\d,.])\b\d{15,}\b/g,
+  // 15–16 digits: an IMEI (or IMEISV). A phone number (+234 is 13 digits) and
+  // a 20-digit electricity token the customer needs both stay.
+  /(?<![₦\d,.])\b\d{15,16}\b/g,
 ];
 
 export function customerWalletTransactionLabel(input: {

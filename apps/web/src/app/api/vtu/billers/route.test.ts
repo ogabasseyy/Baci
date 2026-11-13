@@ -345,6 +345,24 @@ describe('GET /api/vtu/billers', () => {
             itemCurrencySymbol: 'NGN',
             isAmountFixed: false,
             itemFee: 0,
+            billItems: [
+              {
+                itemCode: 'kuda-item-9a',
+                itemName: 'Residential (Kuda)',
+                amount: 0,
+                itemCurrencySymbol: 'NGN',
+                isAmountFixed: false,
+                itemFee: 0,
+              },
+            ],
+          },
+          {
+            itemCode: 'kuda-item-9b',
+            itemName: '(Kuda)',
+            amount: 0,
+            itemCurrencySymbol: 'NGN',
+            isAmountFixed: false,
+            itemFee: 0,
           },
         ],
       },
@@ -354,13 +372,18 @@ describe('GET /api/vtu/billers', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
+    type Item = { itemName: string; billItems?: Item[] };
+    const itemNames = (items: Item[] = []): string[] =>
+      items.flatMap((item) => [item.itemName, ...itemNames(item.billItems)]);
     const names = data.billers.flatMap(
-      (biller: { billerName: string; billItems?: { itemName: string }[] }) => [
+      (biller: { billerName: string; billItems?: Item[] }) => [
         biller.billerName,
-        ...(biller.billItems ?? []).map((item) => item.itemName),
+        ...itemNames(biller.billItems),
       ]
     );
     expect(names).toContain('Ikeja Electric');
+    // Nested plans are stripped too, and a provider-only name gets a neutral one.
+    expect(names).toEqual(expect.arrayContaining(['Residential', 'Plan']));
     expect(names.join(' ')).not.toMatch(/kuda|monnify/i);
   });
 

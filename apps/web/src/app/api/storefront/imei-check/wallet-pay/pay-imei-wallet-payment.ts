@@ -1,4 +1,5 @@
 import 'server-only';
+import { NextResponse } from 'next/server';
 import type { z } from 'zod';
 import {
   type WalletPayAnswer,
@@ -158,7 +159,7 @@ export async function payImeiWalletPayment(
     if (error instanceof WalletPaymentMismatchError)
       return NextResponse.json(
         { status: 'payment_review', operationId: body.operationId },
-        { status: 202, headers: NO_STORE }
+        { status: 202, headers: { 'Cache-Control': 'no-store' } }
       );
     throw error;
   }

@@ -1,6 +1,8 @@
 type PrimaryWalletInput = {
   fundingAccount?: { provider?: string | null } | null;
   primaryReady?: boolean;
+  /** PiggyVest confirmed, balance pending, maybe no account yet (Codex). */
+  savingsPrimary?: boolean;
 };
 
 /**
@@ -11,6 +13,11 @@ type PrimaryWalletInput = {
 export function isPrimaryWallet({
   fundingAccount,
   primaryReady,
+  savingsPrimary,
 }: PrimaryWalletInput): boolean {
-  return primaryReady === true || fundingAccount?.provider === 'piggyvest';
+  return (
+    primaryReady === true ||
+    savingsPrimary === true ||
+    fundingAccount?.provider === 'piggyvest'
+  );
 }

@@ -272,9 +272,7 @@ export function usePiggyvestPrimaryCapability(
       (result) => {
         if (!active) return;
         setAvailable(result);
-        // Re-probe at the cached ruling-out's real expiry (Codex), not a
-        // full TTL from now: a screen mounted near the end of the window
-        // would otherwise hold wallet funding for up to another minute.
+        // Re-probe at the cached ruling-out's real expiry, not a full TTL.
         if (result === false)
           refreshTimer = setTimeout(() => {
             if (active) setRevision((value) => value + 1);
@@ -282,11 +280,10 @@ export function usePiggyvestPrimaryCapability(
             NEGATIVE_CAPABILITY_TTL_MS);
       },
       () => {
-        // Ambiguous probe failure (timeout, network): stay unknown instead
-        // of reporting false, so an observed merchant keeps its primary
-        // routing and financial actions wait for a confirmed verdict
-        // rather than misrouting through legacy — and reprobe so a
-        // mounted screen recovers without remount.
+        // Ambiguous probe failure (timeout, network): stay unknown, not
+        // false, so an observed merchant keeps primary routing and money
+        // waits for a confirmed verdict rather than misrouting through
+        // legacy — and reprobe so a mounted screen recovers unremounted.
         if (!active) return;
         setAvailable(null);
         refreshTimer = setTimeout(() => {

@@ -61,6 +61,7 @@ export interface WalletContentProps {
   needsPhone: boolean;
   primaryReady?: boolean;
   walletPrimaryUnsettled?: boolean;
+  savingsPrimary?: boolean;
   onCreateFundingAccount: () => void;
   onChangeFundAmount: (value: string) => void;
   onChangeRedeemPoints: (value: string) => void;

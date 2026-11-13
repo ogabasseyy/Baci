@@ -14,6 +14,12 @@ describe('isPrimaryWallet', () => {
     );
   });
 
+  it('bugfix: is true for a pending PiggyVest wallet with no account yet', () => {
+    expect(
+      isPrimaryWallet({ fundingAccount: null, savingsPrimary: true })
+    ).toBe(true);
+  });
+
   it('stays false for a legacy wallet with a legacy account', () => {
     expect(
       isPrimaryWallet({

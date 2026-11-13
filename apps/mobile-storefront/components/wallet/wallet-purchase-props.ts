@@ -1,6 +1,7 @@
 type WalletPurchaseDisplay =
   | {
       legacyBalance?: number;
+      savingsPrimary?: true;
       walletPrimaryUnsettled?: true;
     }
   | null
@@ -12,10 +13,13 @@ type WalletPurchaseDisplay =
  * treats a purchase top-up like the purchase screens did).
  */
 export function walletPurchaseProps(display: WalletPurchaseDisplay): {
+  savingsPrimary: boolean;
   storeCreditBalance: number | undefined;
   walletPrimaryUnsettled: boolean;
 } {
   return {
+    // PiggyVest confirmed, ready or pending (with or without an account).
+    savingsPrimary: display?.savingsPrimary === true,
     storeCreditBalance: display?.legacyBalance,
     walletPrimaryUnsettled: display?.walletPrimaryUnsettled === true,
   };

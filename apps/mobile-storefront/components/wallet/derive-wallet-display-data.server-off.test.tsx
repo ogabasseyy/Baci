@@ -85,3 +85,17 @@ describe('server keeps PiggyVest off: savings rail', () => {
     ).toBeUndefined();
   });
 });
+
+describe('bugfix: account-less pending PiggyVest wallet shown as legacy', () => {
+  it('marks a pending wallet with no funding account as a PiggyVest savings wallet', () => {
+    const display = deriveWalletDisplayData({
+      balance: 1200,
+      funding_account: null,
+      primary_pending: true,
+    });
+
+    expect(display.fundingAccount).toBeNull();
+    expect(display.savingsPrimary).toBe(true);
+    expect(display.legacyBalance).toBe(1200);
+  });
+});

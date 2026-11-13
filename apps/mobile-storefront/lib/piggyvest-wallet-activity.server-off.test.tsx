@@ -43,6 +43,7 @@ describe('PiggyVest wallet activity client with the server keeping PiggyVest off
           kind: 'bank_transfer',
           direction: 'in',
           amountKobo: 100,
+          feeKobo: 0,
           label: 'Money added',
           status: 'completed',
           occurredAt: '2026-11-13T10:00:00Z',

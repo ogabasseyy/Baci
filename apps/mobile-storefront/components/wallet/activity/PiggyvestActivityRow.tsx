@@ -28,11 +28,20 @@ export function PiggyvestActivityRow({
   const amount = `${incoming ? '+' : '−'}${formatNgnCurrency(item.amountKobo / 100)}`;
   const date = formatActivityDate(item.occurredAt);
   const pending = item.status === 'pending';
+  // PiggyVest takes its deposit fee from the transfer: the amount shown is
+  // what reached the wallet, and the fee is named so the two reconcile.
+  const fee =
+    item.feeKobo > 0
+      ? `${formatNgnCurrency(item.feeKobo / 100)} fee deducted`
+      : null;
+  const detail = [pending ? 'Pending' : null, fee, date]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <View
       accessible
       accessibilityRole="text"
-      accessibilityLabel={`${item.label}. ${amount}. ${pending ? 'Pending. ' : ''}${date}.`}
+      accessibilityLabel={`${item.label}. ${amount}. ${detail}.`}
       style={[styles.transactionItem, { borderBottomColor: colors.border }]}
     >
       <View style={[styles.txIcon, { backgroundColor: hexToRgba(tint, 0.12) }]}>
@@ -49,7 +58,7 @@ export function PiggyvestActivityRow({
           {item.label}
         </Text>
         <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-          {pending ? `Pending · ${date}` : date}
+          {detail}
         </Text>
       </View>
       <Text style={[styles.txAmount, { color: tint }]}>{amount}</Text>

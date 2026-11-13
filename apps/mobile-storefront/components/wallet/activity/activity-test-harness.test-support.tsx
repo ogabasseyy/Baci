@@ -19,6 +19,7 @@ export function activityItem(
     kind: 'bank_transfer',
     direction: 'in',
     amountKobo: 5000000,
+    feeKobo: 0,
     label: 'Money added',
     status: 'completed',
     occurredAt: '2026-11-13T10:00:00+00:00',

@@ -84,6 +84,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           kind: row.kind,
           direction: row.direction,
           amountKobo: row.amount_kobo,
+          feeKobo: row.fee_kobo,
           label: row.label,
           status: row.status,
           occurredAt: row.occurred_at,

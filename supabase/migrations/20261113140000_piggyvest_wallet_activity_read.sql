@@ -14,7 +14,9 @@
 --   goal completes  piggyvest_primary.goal_complete_operations money in
 --
 -- Never returned: provider customer, wallet or transaction ids, references,
--- event ids, fingerprints, review notes. The row id is the ledger row's own
+-- event ids, fingerprints, review notes. Deposits report the amount that
+-- reached the wallet (transfer amount less PiggyVest's deposit fee) and the
+-- fee on its own; every other row has a zero fee. The row id is the ledger row's own
 -- uuid (a stable list key and pagination tie-break, meaningless outside).
 --
 -- Not covered because nothing records them yet: spends paid from the main
@@ -37,6 +39,7 @@ RETURNS TABLE (
   kind text,
   direction text,
   amount_kobo bigint,
+  fee_kobo bigint,
   label text,
   status text,
   occurred_at timestamptz
@@ -77,7 +80,16 @@ BEGIN
            CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
                 THEN 'card_funding' ELSE 'bank_transfer' END AS kind,
            'in'::text AS direction,
-           (receipt.financial_identity ->> 'amountKobo')::bigint AS amount_kobo,
+           -- The amount that reached the wallet: PiggyVest deducts the
+           -- deposit fee from the transfer, so the balance moves by the
+           -- net. Rows then add up to the balance (Fable walk F3).
+           (receipt.financial_identity ->> 'amountKobo')::bigint
+             - CASE WHEN receipt.financial_identity ->> 'feeKobo' ~ '^[0-9]{1,12}$'
+                    THEN (receipt.financial_identity ->> 'feeKobo')::bigint ELSE 0 END
+             AS amount_kobo,
+           CASE WHEN receipt.financial_identity ->> 'feeKobo' ~ '^[0-9]{1,12}$'
+                THEN (receipt.financial_identity ->> 'feeKobo')::bigint ELSE 0 END
+             AS fee_kobo,
            CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
                 THEN 'Card top-up' ELSE 'Money added' END AS label,
            'completed'::text AS status,
@@ -85,6 +97,10 @@ BEGIN
       FROM piggyvest_primary.inflow_receipts AS receipt
       JOIN mine ON mine.intent_id = receipt.intent_id
      WHERE receipt.financial_identity ->> 'amountKobo' ~ '^[1-9][0-9]{0,11}$'
+       -- A fee that would leave nothing credited is not a deposit row.
+       AND (receipt.financial_identity ->> 'amountKobo')::bigint
+           > CASE WHEN receipt.financial_identity ->> 'feeKobo' ~ '^[0-9]{1,12}$'
+                  THEN (receipt.financial_identity ->> 'feeKobo')::bigint ELSE 0 END
     UNION ALL
     -- Contributions: wallet to savings goal. A cancelled reservation never
     -- moved money, so it is not activity.
@@ -92,6 +108,7 @@ BEGIN
            'savings_contribution',
            'out',
            operation.amount_kobo,
+           0::bigint,
            'Saved to ' || COALESCE(goal.title, 'a savings goal'),
            CASE WHEN operation.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
            operation.created_at
@@ -105,6 +122,7 @@ BEGIN
            'goal_refund',
            'in',
            cancel.amount_kobo,
+           0::bigint,
            'Returned from ' || COALESCE(goal.title, 'a savings goal'),
            CASE WHEN cancel.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
            COALESCE(cancel.settled_at, cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
@@ -119,6 +137,7 @@ BEGIN
            'goal_completed',
            'in',
            complete.amount_kobo,
+           0::bigint,
            'Goal completed: ' || COALESCE(goal.title, 'savings goal'),
            CASE WHEN complete.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
            COALESCE(complete.settled_at, complete.dispatched_at, complete.reserved_at, complete.issued_at)
@@ -129,7 +148,7 @@ BEGIN
        AND complete.amount_kobo IS NOT NULL
   )
   SELECT movement.id, movement.kind, movement.direction, movement.amount_kobo,
-         movement.label, movement.status, movement.occurred_at
+         movement.fee_kobo, movement.label, movement.status, movement.occurred_at
     FROM movements AS movement
    WHERE p_before_at IS NULL
       OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id)

@@ -65,7 +65,7 @@ INSERT INTO piggyvest_primary.inflow_receipts (
    now() - interval '5 days'),
   ('f3870000-0000-4000-8000-0000000000b1', 'f3870000-0000-4000-8000-000000000006',
    'f3870000-0000-4000-8000-000000000017', 'secret-provider-tx-b', 'evt-activity-b', repeat('f', 64),
-   '{"amountKobo":999900,"feeKobo":0,"currency":"NGN","reference":"secret-ref-b"}'::jsonb,
+   '{"amountKobo":999900,"feeKobo":5000,"currency":"NGN","reference":"secret-ref-b"}'::jsonb,
    now() - interval '1 day');
 -- A: a confirmed contribution (4 days), a pending one (3 days), a cancelled
 -- reservation that never moved money (2 days, must not appear).
@@ -119,7 +119,7 @@ BEGIN
         (SELECT p.proargnames FROM pg_catalog.pg_proc AS p WHERE p.oid = v_oid),
         (SELECT p.proargmodes FROM pg_catalog.pg_proc AS p WHERE p.oid = v_oid)::text[])
         WITH ORDINALITY AS a(name, mode, ord) WHERE mode = 't')
-     IS DISTINCT FROM ARRAY['id','kind','direction','amount_kobo','label','status','occurred_at'] THEN
+     IS DISTINCT FROM ARRAY['id','kind','direction','amount_kobo','fee_kobo','label','status','occurred_at'] THEN
     RAISE EXCEPTION 'activity read returns unexpected columns';
   END IF;
 END
@@ -141,10 +141,10 @@ BEGIN
     FROM public.list_piggyvest_wallet_activity(
       'f3870000-0000-4000-8000-000000000002') AS activity;
   IF v_rows IS DISTINCT FROM '[
-    {"kind":"goal_refund","direction":"in","amount_kobo":200000,"label":"Returned from Laptop fund","status":"completed"},
-    {"kind":"savings_contribution","direction":"out","amount_kobo":200000,"label":"Saved to Laptop fund","status":"pending"},
-    {"kind":"savings_contribution","direction":"out","amount_kobo":1000000,"label":"Saved to iPhone fund","status":"completed"},
-    {"kind":"bank_transfer","direction":"in","amount_kobo":5000000,"label":"Money added","status":"completed"}
+    {"kind":"goal_refund","direction":"in","amount_kobo":200000,"fee_kobo":0,"label":"Returned from Laptop fund","status":"completed"},
+    {"kind":"savings_contribution","direction":"out","amount_kobo":200000,"fee_kobo":0,"label":"Saved to Laptop fund","status":"pending"},
+    {"kind":"savings_contribution","direction":"out","amount_kobo":1000000,"fee_kobo":0,"label":"Saved to iPhone fund","status":"completed"},
+    {"kind":"bank_transfer","direction":"in","amount_kobo":5000000,"fee_kobo":0,"label":"Money added","status":"completed"}
   ]'::jsonb THEN
     RAISE EXCEPTION 'wrong activity for customer A: %', v_rows;
   END IF;
@@ -188,7 +188,8 @@ BEGIN
 END
 $own_rows$;
 
--- Customer B sees only B's deposit.
+-- Customer B sees only B's deposit, credited net of its ₦50 fee
+-- (999900 - 5000 kobo), with the fee reported on its own (Fable walk F3).
 SELECT set_config('request.jwt.claims', jsonb_build_object(
   'sub', 'f3870000-0000-4000-8000-000000000011', 'role', 'authenticated')::text, true);
 DO $neighbour$
@@ -197,7 +198,7 @@ BEGIN
   SELECT jsonb_agg(to_jsonb(activity) - 'id' - 'occurred_at') INTO v_rows
     FROM public.list_piggyvest_wallet_activity(
       'f3870000-0000-4000-8000-000000000002') AS activity;
-  IF v_rows IS DISTINCT FROM '[{"kind":"bank_transfer","direction":"in","amount_kobo":999900,"label":"Money added","status":"completed"}]'::jsonb THEN
+  IF v_rows IS DISTINCT FROM '[{"kind":"bank_transfer","direction":"in","amount_kobo":994900,"fee_kobo":5000,"label":"Money added","status":"completed"}]'::jsonb THEN
     RAISE EXCEPTION 'customer B saw the wrong activity: %', v_rows;
   END IF;
 END

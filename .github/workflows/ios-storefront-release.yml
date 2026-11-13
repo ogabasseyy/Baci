@@ -355,10 +355,15 @@ jobs:
         if: ${{ always() && steps.fastlane_release.outcome == 'success' }}
         env:
           TESTFLIGHT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+          SUBMISSION_OUTCOME: ${{ steps.submit.outcome }}
           SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
         run: |
           if [ "$TESTFLIGHT_ONLY" = "true" ]; then
             echo 'This run uploaded a TestFlight build only. App Store submission was intentionally skipped.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_OUTCOME" = "failure" ]; then
+            echo 'The TestFlight upload completed, but App Store submission failed. Inspect the Fastlane submit logs.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SUBMISSION_OUTCOME" = "cancelled" ]; then
+            echo 'The TestFlight upload completed, but App Store submission was cancelled. Inspect the workflow run before retrying.' >> "$GITHUB_STEP_SUMMARY"
           elif [ "$SUBMISSION_RESULT" = "submitted" ]; then
             echo 'This run uploaded the iOS build and submitted it for App Store review.' >> "$GITHUB_STEP_SUMMARY"
           elif [ "$SUBMISSION_RESULT" = "skipped" ]; then

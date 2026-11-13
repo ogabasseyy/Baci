@@ -18,9 +18,12 @@ export function useLegacyFundingUnconfirmed(
     useAuthStore((state) => state.merchantId),
     CONFIG.MERCHANT_ID
   );
-  const capability = usePiggyvestPrimaryCapability(merchantId);
+  // Subscribed so the screen re-renders when the verdict changes; the
+  // cache is the authority, so an expired ruling-out hides the account
+  // at once, before the hook catches up (Codex).
+  usePiggyvestPrimaryCapability(merchantId);
   if (!provider || provider === 'piggyvest') {
     return false;
   }
-  return capability === null && readPiggyvestCapabilityNow(merchantId) === null;
+  return readPiggyvestCapabilityNow(merchantId) === null;
 }

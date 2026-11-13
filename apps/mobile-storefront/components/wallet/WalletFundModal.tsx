@@ -89,7 +89,11 @@ export function WalletFundModal({
         readPiggyvestCapabilityNow(merchantId) === null));
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
-  const hideCardFunding = primaryReady && !storeCreditTopUp;
+  // A PiggyVest account with its balance still pending is primary too
+  // (Codex): a card top-up there would add store credit, not savings.
+  const hideCardFunding =
+    (primaryReady || fundingAccount?.provider === 'piggyvest') &&
+    !storeCreditTopUp;
   // A store credit top-up opened from a purchase pushes the wallet page;
   // dismissing the sheet returns straight to that purchase instead of
   // leaving the customer on the pushed page (walk-through M8).

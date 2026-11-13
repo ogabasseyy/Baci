@@ -37,6 +37,21 @@ describe('bugfix: legacy account number shown before the PiggyVest verdict', () 
   });
 });
 
+describe('bugfix: legacy account shown after the ruling-out expired', () => {
+  it('holds as soon as the cached verdict expires, before the hook re-renders', () => {
+    // Arrange: the hook still says "ruled out", but the cache has expired.
+    mockCapability = false;
+
+    // Act
+    const { result } = renderHook(() =>
+      useLegacyFundingUnconfirmed('paystack')
+    );
+
+    // Assert
+    expect(result.current).toBe(true);
+  });
+});
+
 describe('server keeps PiggyVest off', () => {
   it('shows the legacy account once PiggyVest is ruled out', () => {
     mockCapability = false;

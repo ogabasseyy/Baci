@@ -52,6 +52,27 @@ export function imeiWalletPayCovers(input: {
 }
 
 /**
+ * The saved-key name of one IMEI check (per account, store, device, tier and
+ * IMEI). The build's merchant, never the hydrated one: that can still be
+ * null at startup, and the key must match after a restart. The IMEI is
+ * hashed so the saved purchase doesn't show it in plain text (an identifier,
+ * not a secret; the app's own storage is the boundary).
+ */
+async function imeiWalletPayPurchase(
+  userId: string,
+  device: ImeiDeviceCategory,
+  tier: ImeiServiceTierKey,
+  imei: string
+) {
+  const imeiHash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    // One device, one key, however it was typed (spaces, case).
+    imei.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  );
+  return `imei|${userId}|${CONFIG.MERCHANT_ID ?? ''}|${device}|${tier}|${imeiHash}`;
+}
+
+/**
  * IMEI check paid from the PiggyVest wallet (dark until
  * SAVINGS_WALLET_CAN_PAY). The screen asks `covers` first and, when true,
  * opens the sheet instead of the store credit top-up.
@@ -90,6 +111,7 @@ export function useImeiWalletPay({
     closeForSwitch();
   }, [userId]);
   const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
+  const checkingKept = useRef(false);
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();
     router.push(href);
@@ -124,11 +146,32 @@ export function useImeiWalletPay({
         ? null
         : piggyvestPayingBalanceKobo({ canPay, wallet }),
     },
+    /**
+     * Whether an earlier PiggyVest attempt for this check is kept (its answer
+     * was lost): it replays there, whatever the balances say now (Codex P1).
+     * A key store that can not be read counts as kept (fails closed). Null
+     * while switched off (the verify tap stays synchronous, as today), and a
+     * check already in flight answers null (the tap is ignored).
+     */
+    retains: canPay
+      ? async (tier: ImeiServiceTierKey, imei: string) => {
+          if (checkingKept.current) return null;
+          const userId = useAuthStore.getState().user?.id;
+          if (!userId) return false;
+          checkingKept.current = true;
+          try {
+            return await imeiWalletPayPurchase(userId, device, tier, imei)
+              .then((purchase) => walletPayPurchaseKeys.has(purchase))
+              .catch(() => true);
+          } finally {
+            checkingKept.current = false;
+          }
+        }
+      : null,
     open: async (tier: ImeiServiceTierKey, imei: string) => {
       // The build's merchant, never the hydrated one: that can still be
       // null at startup, and the key must match after a restart.
       const { user } = useAuthStore.getState();
-      const merchantId = CONFIG.MERCHANT_ID;
       let purchase: string | null = null;
       let inner: WalletPayAdapter<ImeiWalletPayResult> | null = null;
       // The key is read inside the start, so a phone that can't read its
@@ -142,12 +185,7 @@ export function useImeiWalletPay({
           // restarts. The IMEI is hashed so the saved purchase doesn't show
           // it in plain text. The hash is an identifier, not a secret (an
           // IMEI can be brute-forced); the app's own storage is the boundary.
-          const imeiHash = await Crypto.digestStringAsync(
-            Crypto.CryptoDigestAlgorithm.SHA256,
-            // One device, one key, however it was typed (spaces, case).
-            imei.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
-          );
-          purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imeiHash}`;
+          purchase = await imeiWalletPayPurchase(user.id, device, tier, imei);
           // Minted now = a new purchase; reused = a replay of an earlier
           // attempt whose payment may already have gone through.
           let minted = false;

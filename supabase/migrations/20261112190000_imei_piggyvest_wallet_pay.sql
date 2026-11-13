@@ -106,6 +106,12 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.imei_wallet_payment_delivered(uuid, 
 -- 'cache' below), so the two are serialised: whichever commits first wins,
 -- and the other is refused (a refund already owed blocks the completion
 -- through imei_wallet_payment_state; a saved result blocks the refund here).
+-- The lock below (and the guards above) find a lookup's payments by purpose
+-- and purchase reference: indexed, so a delivery never scans the ledger
+-- while holding the lookup lock (Codex P2).
+CREATE INDEX IF NOT EXISTS wallet_payments_purpose_purchase_ref_idx
+  ON piggyvest_primary.wallet_payments (purpose, purchase_ref);
+
 CREATE FUNCTION piggyvest_primary.refuse_refund_of_delivered_imei_check()
 RETURNS trigger
 LANGUAGE plpgsql

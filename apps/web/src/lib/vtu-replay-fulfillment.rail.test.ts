@@ -28,7 +28,7 @@ const KEY_ROW: ExistingIdempotencyRow = {
   request_fingerprint: 'fp-1',
 };
 
-function supabase(piggyvestPaid: boolean) {
+function supabase(piggyvestPaid: boolean | null) {
   return {
     from: vi.fn(() => ({
       select: vi.fn(() => ({
@@ -41,7 +41,7 @@ function supabase(piggyvestPaid: boolean) {
       })),
     })),
     rpc: vi.fn().mockResolvedValue({
-      data: [{ piggyvest_paid: piggyvestPaid }],
+      data: piggyvestPaid === null ? [] : [{ piggyvest_paid: piggyvestPaid }],
       error: null,
     }),
   } as unknown as SupabaseClient;
@@ -84,5 +84,13 @@ describe('bugfix: a PiggyVest request joined to a store credit purchase answered
     await replay(supabase(true), walletPay);
     expect(walletPay).toHaveBeenCalledWith('vtu-tx-winner');
     expect(mocks.fulfill).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: an invisible purchase was routed to the PiggyVest step (Muse)', () => {
+  it('replays it on the store credit rail, whose own checks answer it', async () => {
+    const walletPay = vi.fn();
+    await replay(supabase(null), walletPay);
+    expect(walletPay).not.toHaveBeenCalled();
   });
 });

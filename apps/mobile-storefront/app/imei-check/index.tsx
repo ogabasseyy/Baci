@@ -138,8 +138,13 @@ export default function ImeiCheckerScreen() {
       setError(walletCopy.unavailable);
       return;
     }
+    const retainedPiggyvest = walletPay.retains
+      ? await walletPay.retains(tier, imei)
+      : false;
+    if (retainedPiggyvest === null) return;
     const rail = chooseImeiPaymentRail({
       retainedStoreCredit: requestIdentity.retains(tier, imei),
+      retainedPiggyvest,
       piggyvestCovers: walletPay.covers(tier),
       walletBalance,
       price: serviceTier.price,

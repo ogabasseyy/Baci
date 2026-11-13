@@ -55,3 +55,16 @@ describe('bugfix: a price refusal forgot the key of an issued payment (Codex P2)
     );
   });
 });
+
+describe('bugfix: a malformed saved entry was dropped instead of failing closed (Codex P2)', () => {
+  it('refuses to mint a new key while any saved entry is malformed', async () => {
+    await AsyncStorage.setItem(
+      'baci.walletPay.openPurchases.v1',
+      JSON.stringify({ p: { key: 'open-key' }, q: { key: 'k', at: 1 } })
+    );
+    walletPayPurchaseKeys.resetMemory();
+    await expect(
+      walletPayPurchaseKeys.keyFor('p', () => 'new')
+    ).rejects.toThrow('unreadable');
+  });
+});

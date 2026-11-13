@@ -100,6 +100,36 @@ REVOKE ALL ON FUNCTION piggyvest_primary.imei_wallet_payment_delivered(uuid, tex
 GRANT EXECUTE ON FUNCTION piggyvest_primary.imei_wallet_payment_delivered(uuid, text, uuid)
   TO piggyvest_primary_authorizer;
 
+-- A delivered IMEI check is never refunded (Codex P1): once its lookup is
+-- completed, a claimed payment can not move to refund_owed. Saving a
+-- completed result locks the lookup's payments first (imei_lookup_access
+-- 'cache' below), so the two are serialised: whichever commits first wins,
+-- and the other is refused (a refund already owed blocks the completion
+-- through imei_wallet_payment_state; a saved result blocks the refund here).
+CREATE FUNCTION piggyvest_primary.refuse_refund_of_delivered_imei_check()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.imei_lookups AS lookup
+              WHERE lookup.id::text = NEW.purchase_ref
+                AND lookup.status = 'completed') THEN
+    RAISE EXCEPTION 'imei_wallet_payment_already_delivered' USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION piggyvest_primary.refuse_refund_of_delivered_imei_check()
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
+CREATE TRIGGER wallet_payments_refuse_refund_of_delivered_imei_check
+  BEFORE UPDATE OF fulfilment ON piggyvest_primary.wallet_payments
+  FOR EACH ROW
+  WHEN (OLD.purpose = 'imei_check' AND OLD.fulfilment = 'claimed'
+        AND NEW.fulfilment = 'refund_owed')
+  EXECUTE FUNCTION piggyvest_primary.refuse_refund_of_delivered_imei_check();
+
 CREATE OR REPLACE FUNCTION public.imei_lookup_access(p_payload text, p_signature text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 #variable_conflict use_variable
@@ -241,6 +271,12 @@ BEGIN
         OR (patch->>'cached_status')::integer NOT BETWEEN 200 AND 599
         OR jsonb_typeof(patch->'cached_response') IS DISTINCT FROM 'object' THEN
         RAISE EXCEPTION 'imei_access_cache_state_invalid' USING ERRCODE='42501';
+      END IF;
+      -- Serialised with a refund of the same payment (see the trigger above).
+      IF patch->>'status'='completed' THEN
+        PERFORM 1 FROM piggyvest_primary.wallet_payments AS payment
+          WHERE payment.purpose='imei_check' AND payment.purchase_ref=lookup_id::text
+          FOR UPDATE;
       END IF;
       IF patch->>'status'='completed' AND NOT EXISTS (SELECT 1 FROM public.customer_wallet_transactions t
           WHERE t.source_type='imei_wallet_payment' AND t.source_id=lookup_id AND t.type='redemption'

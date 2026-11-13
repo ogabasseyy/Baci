@@ -152,7 +152,7 @@ describe('bugfix: overlapping wallet pay calls (Muse review)', () => {
     expect(hook.result.current.step).toBe('closed');
   });
 
-  it('retries a start that never answered, without calling it failed', async () => {
+  it('bugfix: retries a start that threw, never claiming nothing was taken (Muse)', async () => {
     const hook = setup();
     const start = jest
       .fn()
@@ -166,7 +166,11 @@ describe('bugfix: overlapping wallet pay calls (Muse review)', () => {
     await act(async () => {
       await hook.result.current.open(adapter);
     });
-    expect(hook.result.current.outcome).toEqual({ kind: 'not_started' });
+    // It may have been the replay of an attempt that already paid.
+    expect(hook.result.current.outcome).toEqual({
+      kind: 'not_started',
+      maybePaid: true,
+    });
     await act(async () => {
       await hook.result.current.retryStart();
     });

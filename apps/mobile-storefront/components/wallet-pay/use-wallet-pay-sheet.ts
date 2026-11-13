@@ -108,9 +108,11 @@ export function useWalletPaySheet<Result>({
   const begin = async (next: WalletPayAdapter<Result>, mine: number) => {
     inFlight.current = true;
     setStep('starting');
+    // A start that throws may have been the replay of an attempt that
+    // already paid: never claim nothing was taken (Muse).
     const started = await next.start().catch(() => ({
       kind: 'outcome' as const,
-      outcome: { kind: 'not_started' as const },
+      outcome: { kind: 'not_started' as const, maybePaid: true },
     }));
     if (!current(mine)) return;
     inFlight.current = false;

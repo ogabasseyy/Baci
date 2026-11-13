@@ -106,11 +106,32 @@ export async function fulfillReplayVtuTransaction({
     customerPhone: input.customerPhone,
     validationReference: input.validationReference,
   });
-  if (fulfillTransaction)
+  // The winning row replays through its own rail (Codex P1): a PiggyVest
+  // request that joined a store credit purchase replays that purchase, never
+  // a terminal mismatch that would free the key for a second purchase.
+  if (
+    fulfillTransaction &&
+    (await paysFromPiggyvest(authSupabase, keyRow.vtu_transaction_id))
+  )
     return await fulfillTransaction(keyRow.vtu_transaction_id);
   const replayedFulfillment = await fulfillPendingVtuTransaction({
     supabase,
     transactionId: keyRow.vtu_transaction_id,
   });
   return mapFulfillmentToResponse(replayedFulfillment);
+}
+
+/** Whether the purchase was prepared as PiggyVest-paid (owner-scoped read). */
+async function paysFromPiggyvest(
+  authSupabase: SupabaseClient,
+  transactionId: string
+) {
+  const { data, error } = await authSupabase.rpc(
+    'get_vtu_wallet_pay_purchase',
+    { p_transaction_id: transactionId }
+  );
+  if (error) throw new Error('VTU purchase payment source read failed');
+  const row = (data as Array<{ piggyvest_paid: boolean }> | null)?.[0];
+  // No row for this owner: the PiggyVest step refuses it as before.
+  return row ? row.piggyvest_paid === true : true;
 }

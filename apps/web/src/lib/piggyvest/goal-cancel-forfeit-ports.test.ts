@@ -395,7 +395,27 @@ describe('bugfix: the interest was sent without checking the goal wallet it come
       expectedDestinationWalletId: 'interest-wallet',
       expectedDestinationOwnerId: 'ogabassey',
     });
-    expect(await ports.verifyDestination(forfeit)).toBe(false);
+    expect(await ports.verifyDestination(forfeit)).toBe('source_unavailable');
     expect(mocks.retrieve).toHaveBeenCalledWith(provider, 'goal-wallet');
   });
+});
+
+it('bugfix: pages a goal-wallet problem as a review, not as a wrong interest wallet', async () => {
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn(),
+    unclaim: vi.fn().mockResolvedValue('unclaimed_first'),
+    markPosting: vi.fn(),
+    ackAlert: vi.fn().mockResolvedValue('acked'),
+    provider,
+    evidence: null,
+    operationId,
+    expectedDestinationWalletId: 'interest-wallet',
+    expectedDestinationOwnerId: 'ogabassey',
+  });
+  await ports.unclaim(forfeit.operationId, 'source_unavailable');
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'goal_wallet_short', operationId }
+  );
 });

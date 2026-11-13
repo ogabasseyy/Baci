@@ -7,6 +7,7 @@ import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { GoalCancelRow as Row } from './GoalCancelRow';
 import { GoalCancelButton as Button } from './GoalCancelStepParts';
 import { styles } from './goal-cancel-step.styles';
+import { goalCompleteBreakdown } from './goal-complete-breakdown';
 import { GOAL_COMPLETE_STEP_COPY as COPY } from './goal-complete-step-copy';
 import type { useGoalLifecycle } from './use-goal-lifecycle';
 
@@ -21,16 +22,6 @@ type Flow = Pick<
   | 'retryPin'
   | 'checkAgain'
 >;
-
-/** Completing keeps the interest: everything in the goal moves to the wallet. */
-export function goalCompleteBreakdown(goal: WalletActiveSavingsGoal) {
-  const total = goal.current_amount;
-  // Without the stored balance the interest split (and so the exact amount
-  // PiggyVest moves) is unknown: show no figures rather than guess.
-  const known = goal.principal_amount !== undefined;
-  const saved = Math.min(goal.principal_amount ?? total, total);
-  return { known, saved, interest: Math.max(0, total - saved), total };
-}
 
 /**
  * Completing a goal inside the savings sheet: a celebration, the money that

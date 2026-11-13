@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { GoalCompleteStep, goalCompleteBreakdown } from './GoalCompleteStep';
+import { GoalCompleteStep } from './GoalCompleteStep';
+import { goalCompleteBreakdown } from './goal-complete-breakdown';
 import type { GoalLifecycleStep } from './use-goal-lifecycle';
 
 const goal = {

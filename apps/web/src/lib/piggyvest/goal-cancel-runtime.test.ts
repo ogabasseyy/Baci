@@ -233,6 +233,16 @@ it('sends nothing when the principal alone is above the transfer ceiling', async
   expect(mocks.transfer).not.toHaveBeenCalled();
   // The whole balance goes to the split, which applies the ceiling per leg.
   expect(mocks.execute.mock.calls[1][1].at(-1)).toBe('10000000000');
+  // Regression: held, so a person is paged, and the page is acknowledged
+  // only after it was emitted.
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    {
+      reason: 'principal_above_transfer_limit',
+      operationId,
+    }
+  );
+  expect(mocks.execute.mock.calls[2][0]).toContain('ack_goal_cancel_hold(');
 });
 
 it('asks whether an operation id is live for the goal', async () => {

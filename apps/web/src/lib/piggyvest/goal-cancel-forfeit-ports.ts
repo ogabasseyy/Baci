@@ -97,8 +97,35 @@ export function forfeitDriverPorts(input: {
         wallet.api_customer_id !== forfeit.providerCustomerId &&
         wallet.currency === 'NGN' &&
         wallet.status === 'active';
+      if (!ours) return false;
+      // The source must still be this customer's active NGN goal wallet in
+      // this business, holding at least the interest being sent: a reassigned
+      // or poisoned wallet id can never be debited by the business token.
+      const source = (await retrievePiggyvestWallet(
+        provider,
+        forfeit.sourceWalletId
+      )) as Partial<
+        Record<
+          | 'id'
+          | 'business_id'
+          | 'api_customer_id'
+          | 'currency'
+          | 'status'
+          | 'balance',
+          unknown
+        >
+      >;
       // Not paged here: the hand-back that follows pages once per forfeit.
-      return ours;
+      return (
+        source.id === forfeit.sourceWalletId &&
+        source.business_id === forfeit.businessId &&
+        source.api_customer_id === forfeit.providerCustomerId &&
+        source.currency === 'NGN' &&
+        source.status === 'active' &&
+        typeof source.balance === 'number' &&
+        Number.isSafeInteger(source.balance) &&
+        source.balance >= forfeit.amountKobo
+      );
     },
     transfer: async (forfeit) =>
       await transferToWallet(provider, {

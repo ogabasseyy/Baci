@@ -17,7 +17,26 @@ it('schedules the interest leg after the response instead of running it now', as
   expect(task).toHaveBeenCalledOnce();
 });
 
-it('never lets a failing interest leg throw out of the deferred task', async () => {
+it('never lets a failing interest leg throw out of the deferred task, and logs it', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   deferGoalCancelForfeit(vi.fn().mockRejectedValue(new Error('provider down')));
   await expect(after.mock.calls[0][0]()).resolves.toBeUndefined();
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringContaining('interest leg failed'),
+    'provider down'
+  );
+  warn.mockRestore();
+});
+
+it('bugfix: a scheduling failure never turns a confirmed cancel into an error', () => {
+  after.mockImplementationOnce(() => {
+    throw new Error('after() called outside a request scope');
+  });
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(() => deferGoalCancelForfeit(vi.fn())).not.toThrow();
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringContaining('not scheduled'),
+    'after() called outside a request scope'
+  );
+  warn.mockRestore();
 });

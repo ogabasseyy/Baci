@@ -2,6 +2,9 @@ import { imeiWalletPayCovers } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => ({ user: null, merchantId: null }) },
+}));
 
 // basic tier: ₦300 (see @baci/shared/imei).
 describe('imeiWalletPayCovers', () => {
@@ -75,5 +78,22 @@ describe('bugfix: wallet pay offered where the server refuses it (Codex P2)', ()
         tier: 'basic',
       })
     ).toBe(false);
+  });
+});
+
+describe('bugfix: wallet pay offered for an unavailable or unresolved wallet (Muse)', () => {
+  it('holds wallet pay like the checkout transfer does', () => {
+    const ready = { balance: 0, primary_balance_kobo: 100_000_000 };
+    for (const hold of [
+      { primary_unavailable: true },
+      { owner_unresolved: true },
+    ])
+      expect(
+        imeiWalletPayCovers({
+          canPay: true,
+          wallet: { ...ready, ...hold },
+          tier: 'basic',
+        })
+      ).toBe(false);
   });
 });

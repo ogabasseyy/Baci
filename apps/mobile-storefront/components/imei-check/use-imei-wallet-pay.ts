@@ -16,6 +16,7 @@ import {
   isWalletStoreCredit,
   type WalletPrimaryLike,
 } from '@/lib/wallet-store-credit';
+import { useAuthStore } from '@/stores/auth-store';
 import {
   createImeiWalletPayAdapter,
   type ImeiWalletPayResult,
@@ -46,7 +47,13 @@ export function imeiWalletPayCovers(input: {
   if (IMEI_SERVICE_TIERS[tier].providerServiceId === 'petrock-only')
     return false;
   if (input.refusedTiers?.includes(tier)) return false;
-  if (wallet.primary_stale === true || wallet.primary_pending === true)
+  // Only a fresh, settled PiggyVest answer for one known customer counts.
+  if (
+    wallet.primary_stale === true ||
+    wallet.primary_pending === true ||
+    wallet.primary_unavailable === true ||
+    wallet.owner_unresolved === true
+  )
     return false;
   const price = IMEI_SERVICE_TIERS[tier].price;
   const priceKobo = Math.round(price * 100);
@@ -100,26 +107,29 @@ export function useImeiWalletPay({
     },
     covers: (tier: ImeiServiceTierKey) =>
       imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
-    open: (tier: ImeiServiceTierKey, imei: string) => {
-      // One key per purchase until it settles: a lost, pending or
-      // under-review payment is resumed by the next tap, never paid again.
-      const purchase = `imei|${device}|${tier}|${imei}`;
+    open: async (tier: ImeiServiceTierKey, imei: string) => {
+      // One key per purchase (per account) until it settles, kept across
+      // restarts: a lost, pending or under-review payment is resumed by the
+      // next tap, never paid again.
+      const { user, merchantId } = useAuthStore.getState();
+      const purchase = `imei|${user?.id ?? ''}|${merchantId ?? ''}|${device}|${tier}|${imei}`;
+      const idempotencyKey = await walletPayPurchaseKeys.keyFor(
+        purchase,
+        Crypto.randomUUID
+      );
       const adapter = createImeiWalletPayAdapter({
         connection: { apiBaseUrl, accessToken },
         device,
         tier,
         imei,
-        idempotencyKey: walletPayPurchaseKeys.keyFor(
-          purchase,
-          Crypto.randomUUID
-        ),
+        idempotencyKey,
         onTierRefused: () =>
           setRefusedTiers((tiers) =>
             tiers.includes(tier) ? tiers : [...tiers, tier]
           ),
       });
       // Settled purchases may have moved money: show the new balance.
-      return sheet.open(
+      await sheet.open(
         trackWalletPayPurchase(adapter, purchase, () => {
           void walletQuery.refetch?.();
         })

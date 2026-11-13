@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
 import * as Crypto from 'expo-crypto';
 import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
@@ -6,6 +7,11 @@ import { useImeiWalletPay } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({ user: { id: 'user-1' }, merchantId: 'merchant-1' }),
+  },
+}));
 jest.mock('@/lib/wallet-pay/imei-wallet-pay-api', () => ({
   imeiWalletPayApi: { start: jest.fn(), verifyPin: jest.fn(), pay: jest.fn() },
 }));
@@ -46,9 +52,12 @@ async function openAndClose(
   act(() => hook.result.current.sheet.close());
 }
 
-beforeEach(() => {
-  jest.resetAllMocks();
-  walletPayPurchaseKeys.reset();
+beforeEach(async () => {
+  start.mockReset();
+  uuid.mockReset();
+  refetch.mockReset();
+  await AsyncStorage.clear();
+  walletPayPurchaseKeys.resetMemory();
   let n = 0;
   uuid.mockImplementation(() => {
     n += 1;
@@ -57,7 +66,7 @@ beforeEach(() => {
 });
 
 describe('bugfix: closing a pending payment let the next tap pay again (Codex P1)', () => {
-  it('resumes a payment still being confirmed with the same key, even after a remount', async () => {
+  it('resumes a payment still being confirmed with the same key, even after an app restart', async () => {
     start.mockResolvedValue({
       httpStatus: 202,
       body: {
@@ -70,6 +79,8 @@ describe('bugfix: closing a pending payment let the next tap pay again (Codex P1
     const first = setup();
     await openAndClose(first);
     first.unmount();
+    // An app restart: only what was saved on the phone survives.
+    walletPayPurchaseKeys.resetMemory();
     const second = setup();
     await openAndClose(second);
     expect(keyOfCall(0)).toBe('key-1');

@@ -37,3 +37,19 @@ export const chatwootCommerceSessionAuthorizeRequestSchema = z
     includeCartSnapshot: z.boolean().optional(),
   })
   .strict();
+
+export const chatwootCartQuantityMutationRequestSchema = z
+  .object({
+    cartVersion: z.number().int().positive(),
+    conversationId: z.number().int().positive().safe(),
+    expectedQuantity: z.number().int().min(1).max(1000),
+    lineId: z.string().trim().min(1).max(64),
+    quantity: z.number().int().min(0).max(10),
+    requestId: z
+      .string()
+      .min(1)
+      .max(80)
+      .regex(/^[A-Za-z0-9_-]+$/),
+    sessionToken: z.string().min(1).max(12_000),
+  })
+  .strict();

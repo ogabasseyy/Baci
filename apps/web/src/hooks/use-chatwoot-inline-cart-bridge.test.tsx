@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
     ],
     isHydrated: true,
     merchantSlug: 'store',
+    refreshSharedCart: vi.fn(async () => {}),
     sharedCartEnabled: true,
     sharedCartRef: { cartId: 'cart-1', version: 8 },
     syncStatus: 'synced',
@@ -149,6 +150,14 @@ describe('ChatwootInlineCartBridge', () => {
         if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return contextResponse(String(body.contextToken));
         }
+        if (
+          new URL(path, 'https://store.test').pathname.endsWith('/quantity')
+        ) {
+          return {
+            ok: true,
+            json: async () => ({ accepted: true, cartVersion: 9 }),
+          };
+        }
         const conversationId = Number(
           String(body.sessionToken).split('-').at(-1)
         );
@@ -199,53 +208,5 @@ describe('ChatwootInlineCartBridge', () => {
       requestId: 'review-0004',
       status: 'unavailable',
     });
-  });
-
-  it('rejects quantity changes until a durable shared-cart receipt exists', async () => {
-    const { target, postMessage } = installFrame();
-    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
-    await act(async () => {
-      await establishWidgetContext(target, postMessage);
-      sendWidgetMessage(target, 'baci-cart-request', {
-        requestId: 'cart-0001',
-        conversationId: 905,
-        sessionToken: 'session-905',
-      });
-      await waitFor(() =>
-        expect(
-          postMessage.mock.calls.some(([payload]) =>
-            String(payload).startsWith('baci-cart-view:')
-          )
-        ).toBe(true)
-      );
-    });
-    const cartPayload = String(postMessage.mock.calls.at(-1)?.[0]);
-    const cart = JSON.parse(cartPayload.slice('baci-cart-view:'.length));
-    const item = cart.items[0];
-
-    await act(async () => {
-      sendWidgetMessage(target, 'baci-cart-quantity', {
-        requestId: 'quantity-0001',
-        lineToken: item.lineToken,
-        expectedQuantity: item.quantity,
-        quantity: item.quantity + 1,
-        conversationId: 905,
-        sessionToken: 'session-905',
-      });
-      await waitFor(() =>
-        expect(
-          postMessage.mock.calls.some(([payload]) =>
-            String(payload).startsWith('baci-cart-quantity-result:')
-          )
-        ).toBe(true)
-      );
-    });
-
-    const quantityPayload = String(postMessage.mock.calls.at(-1)?.[0]);
-    expect(quantityPayload.startsWith('baci-cart-quantity-result:')).toBe(true);
-    expect(
-      JSON.parse(quantityPayload.slice('baci-cart-quantity-result:'.length))
-    ).toEqual({ requestId: 'quantity-0001', accepted: false });
-    expect(mocks.cartState.updateQuantity).not.toHaveBeenCalled();
   });
 });

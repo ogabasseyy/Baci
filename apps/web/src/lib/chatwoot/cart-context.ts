@@ -2,6 +2,7 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { createAnonMerchantFeatureLookup } from '@/lib/cart/merchant-resolution';
+import type { CartPrincipal } from '@/lib/cart/principal';
 import {
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -25,6 +26,8 @@ export type ChatwootCartContextResult =
       ok: true;
       binding: ChatwootTenantBinding;
       state: ChatwootCommerceContextState;
+      /** RLS-scoped shopper principal resolved from the request proof. */
+      principal: CartPrincipal;
       /** Server-loaded cart; never serialized directly to Chatwoot. */
       cart: CartSnapshot;
       /** Merchant-scoped public catalog names for in-chat cart presentation. */
@@ -173,6 +176,7 @@ export async function loadChatwootCartContext(
     ok: true,
     binding,
     cart: snapshot.cart,
+    principal: cartContext.principal,
     ...(productNames ? { productNames } : {}),
     state: {
       cartId: snapshot.cart.cartId,

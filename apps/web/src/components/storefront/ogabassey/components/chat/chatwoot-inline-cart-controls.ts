@@ -7,10 +7,15 @@ export function postChatwootCanonicalCartView(input: {
   post: (payload: string) => void;
 }) {
   const { requestId, snapshot, lineTokens, post } = input;
-  lineTokens.clear();
   const items = snapshot.items.map((item) => {
     const lineToken = crypto.randomUUID();
     lineTokens.set(lineToken, item.lineId);
+    // Keep recent locators for exact lost-response retries. The token is not
+    // authority: the server rechecks session, cart, version and operation.
+    if (lineTokens.size > 100) {
+      const oldest = lineTokens.keys().next().value;
+      if (oldest) lineTokens.delete(oldest);
+    }
     return {
       lineToken,
       name: item.name,

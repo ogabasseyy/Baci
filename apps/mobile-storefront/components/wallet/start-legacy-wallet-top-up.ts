@@ -102,6 +102,7 @@ export async function startLegacyWalletTopUp({
         activeMerchantSlug,
         amount,
         result,
+        userId: user?.id,
         walletReturnTo,
       }),
     });

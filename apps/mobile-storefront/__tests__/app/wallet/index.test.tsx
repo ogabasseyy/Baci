@@ -1025,6 +1025,7 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -1654,6 +1655,7 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(pushArg.params).not.toHaveProperty('merchantId');
@@ -1692,6 +1694,7 @@ describe('WalletScreen', () => {
         merchantId: 'merchant-1',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(pushArg.params).not.toHaveProperty('merchantSlug');

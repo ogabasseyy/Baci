@@ -83,3 +83,15 @@ describe('bugfix: account switch after the checkout was created', () => {
     alert.mockRestore();
   });
 });
+
+describe('bugfix: legacy checkout carried no owner stamp', () => {
+  it('stamps the starting account into the gateway params', async () => {
+    await startLegacyWalletTopUp(params);
+
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({ userId: 'user-a' }),
+      })
+    );
+  });
+});

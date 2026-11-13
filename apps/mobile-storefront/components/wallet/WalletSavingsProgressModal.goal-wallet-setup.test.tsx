@@ -26,7 +26,10 @@ jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
   isHostedStagingWalletTopUpBlocked: () => false,
 }));
 jest.mock('expo-image', () => ({ Image: () => null }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+  useFocusEffect: jest.fn(),
+}));
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 500,

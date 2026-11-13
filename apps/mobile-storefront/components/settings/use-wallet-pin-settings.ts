@@ -8,7 +8,7 @@ import {
   useWalletPinSettingsGate,
   type WalletPinStatus,
 } from './use-wallet-pin-settings-gate';
-import { MISMATCH_ERROR, SAME_PIN_ERROR } from './wallet-pin-errors';
+import { WALLET_PIN_ERRORS } from './wallet-pin-errors';
 
 export type WalletPinMode = 'set' | 'change' | 'reset';
 
@@ -47,8 +47,8 @@ function validate(
 ) {
   if (mode === 'change' && !isPin(current)) return FORMAT_ERROR;
   if (!isPin(next)) return FORMAT_ERROR;
-  if (next !== confirm) return MISMATCH_ERROR;
-  if (mode === 'change' && next === current) return SAME_PIN_ERROR;
+  if (next !== confirm) return WALLET_PIN_ERRORS.mismatch;
+  if (mode === 'change' && next === current) return WALLET_PIN_ERRORS.samePin;
   return null;
 }
 

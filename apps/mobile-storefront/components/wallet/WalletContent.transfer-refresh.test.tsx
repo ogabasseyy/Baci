@@ -16,6 +16,7 @@ jest.mock('react-native-reanimated', () => {
 });
 
 jest.mock('expo-router', () => ({
+  useFocusEffect: jest.fn(),
   useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
 }));
 

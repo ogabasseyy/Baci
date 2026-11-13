@@ -17,8 +17,8 @@ import {
   NOT_STARTABLE_CODES,
   type Outcome,
   REVIEW,
-  submitFailure,
 } from './goal-lifecycle-outcomes';
+import { submitFailure } from './goal-submit-failure';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 
 export type { GoalLifecycleStep };

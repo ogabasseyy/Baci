@@ -13,6 +13,7 @@ import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { WalletPinSheet } from './savings/WalletPinSheet';
+import { useCloseSavingsSheetOnBlur } from './use-close-savings-sheet-on-blur';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -49,6 +50,13 @@ export function WalletSavingsProgressModal({
     primaryLowOpacity: BRAND.primaryAlpha12,
   };
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
+  // Every close, by the customer or by leaving the wallet, drops an unsent
+  // cancel/complete review and lets the parent reset its pickers.
+  const closeSheet = () => {
+    cancel.closed();
+    onClose();
+  };
+  useCloseSavingsSheetOnBlur(visible, closeSheet);
   // The sheet is sized to what it shows, so it never ends in empty space.
   const [cancelHeight, setCancelHeight] = useState(0);
   const [swapHeight, setSwapHeight] = useState(0);
@@ -71,10 +79,7 @@ export function WalletSavingsProgressModal({
         colors={colors}
         snapPoints={COMPACT_SNAP_POINTS}
         contentHeight={cancelHeight}
-        onClose={() => {
-          cancel.closed();
-          onClose();
-        }}
+        onClose={closeSheet}
         overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
       >
         {(dismiss) => (
@@ -118,7 +123,7 @@ export function WalletSavingsProgressModal({
         colors={colors}
         snapPoints={COMPACT_SNAP_POINTS}
         contentHeight={swapHeight}
-        onClose={onClose}
+        onClose={closeSheet}
       >
         <BottomSheetScrollView
           keyboardDismissMode="on-drag"
@@ -162,7 +167,7 @@ export function WalletSavingsProgressModal({
           ? headerHeight + HEADER_GAP + bodyHeight
           : undefined
       }
-      onClose={onClose}
+      onClose={closeSheet}
       overlay={overlay}
     >
       {(dismiss) => (

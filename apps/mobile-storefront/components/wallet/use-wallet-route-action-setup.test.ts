@@ -4,11 +4,6 @@ import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { storeWalletFundingIntent } from '@/lib/wallet-funding-intent';
 import { startWalletFundingSession } from '@/lib/wallet-funding-session';
 
-// Focus handling is covered by its own test; this suite has no navigator.
-jest.mock('./use-close-savings-sheet-on-blur', () => ({
-  useCloseSavingsSheetOnBlur: jest.fn(),
-}));
-
 jest.mock('@/lib/wallet-funding-intent', () => ({
   storeWalletFundingIntent: jest.fn(),
 }));

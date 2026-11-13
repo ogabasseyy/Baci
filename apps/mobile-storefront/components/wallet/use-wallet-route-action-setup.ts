@@ -4,7 +4,6 @@ import { createLogger } from '@/lib/logger';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { storeWalletFundingIntent } from '@/lib/wallet-funding-intent';
 import { startWalletFundingSession } from '@/lib/wallet-funding-session';
-import { useCloseSavingsSheetOnBlur } from './use-close-savings-sheet-on-blur';
 
 const log = createLogger('WalletRouteActionSetup');
 
@@ -57,7 +56,6 @@ export function useWalletRouteActionSetup({
   setShowSavingsProgressModal,
   walletReturnTo,
 }: UseWalletRouteActionSetupParams) {
-  useCloseSavingsSheetOnBlur(setShowSavingsProgressModal);
   const isBankTransferAction = routeAction === 'bank-transfer';
   const fundingSessionKey =
     isBankTransferAction && customerId

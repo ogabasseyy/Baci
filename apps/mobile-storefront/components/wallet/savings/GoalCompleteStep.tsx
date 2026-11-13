@@ -49,9 +49,13 @@ export function GoalCompleteStep({
   useSavingsSheetLock(flow.step === 'submitting');
   const done = flow.step === 'done';
   // A plan can also be completed at its end date without reaching the target.
-  // Same test as the database: saved principal, not principal plus interest.
+  // Celebrate only when the saved principal itself reached the target. With
+  // no principal figure the balance may include interest, so the neutral
+  // "plan is ready" wording is used instead.
   const reachedTarget =
-    (goal.principal_amount ?? goal.current_amount) >= goal.target_amount;
+    goal.principal_amount !== undefined &&
+    goal.principal_amount !== null &&
+    goal.principal_amount >= goal.target_amount;
   const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
     flow.step
   );

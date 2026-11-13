@@ -30,7 +30,7 @@ describe('planCardView with PiggyVest off', () => {
   it('asks to move the savings of a funded completed plan', () => {
     expect(
       view(goal({ status: 'completed', current_amount: 250000 }), true)
-    ).toMatchObject({ actionLabel: 'Move your savings', showProgress: true });
+    ).toMatchObject({ actionLabel: 'Complete goal', showProgress: true });
   });
 
   describe('bugfix: a completed plan read ₦0 of target with "Start with your first contribution"', () => {

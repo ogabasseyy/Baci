@@ -51,14 +51,24 @@ const noteElement = () => (
   />
 );
 const renderNote = () => render(noteElement());
+/** The try settles and status is read again, still stalled. */
+const rereadStalled = (
+  view: ReturnType<typeof renderNote>,
+  change: Record<string, unknown> = {}
+) => {
+  mockSetupHook.mockReturnValue(setupState(change));
+  status('loading');
+  view.rerender(noteElement());
+  status('setup_retryable');
+  view.rerender(noteElement());
+};
 /** Renders a retryable goal and lets both automatic tries finish. */
 const renderExhausted = async (change: Record<string, unknown> = {}) => {
   const view = renderNote();
   for (let attempt = 0; attempt < 2; attempt += 1) {
     mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     view.rerender(noteElement());
-    mockSetupHook.mockReturnValue(setupState(change));
-    view.rerender(noteElement());
+    rereadStalled(view, change);
     // The automatic try settles.
     await act(async () => {});
   }
@@ -187,17 +197,15 @@ describe('retry of an expired claim', () => {
     const view = renderNote();
     expect(retry).toHaveBeenCalledTimes(1);
     await act(async () => {});
-    // A running try ends (submitting flips back), so the second one starts.
+    // A running try ends and status still reads stalled, so the second starts.
     mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     view.rerender(noteElement());
-    mockSetupHook.mockReturnValue(setupState());
-    view.rerender(noteElement());
+    rereadStalled(view);
     expect(retry).toHaveBeenCalledTimes(2);
     await act(async () => {});
     mockSetupHook.mockReturnValue(setupState({ submitting: true }));
     view.rerender(noteElement());
-    mockSetupHook.mockReturnValue(setupState());
-    view.rerender(noteElement());
+    rereadStalled(view);
     expect(retry).toHaveBeenCalledTimes(2);
     expect(submit).not.toHaveBeenCalled();
     expect(
@@ -378,8 +386,7 @@ describe('bugfix: the final automatic retry showed "couldn’t finish" while sti
       setupState({ retry: tries, submitting: true })
     );
     view.rerender(noteElement());
-    mockSetupHook.mockReturnValue(setupState({ retry: tries }));
-    view.rerender(noteElement());
+    rereadStalled(view, { retry: tries });
     await act(async () => {});
     expect(tries).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/couldn’t finish setting up/)).toBeNull();

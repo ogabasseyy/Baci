@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
 import {
   retrySavingsGoalSetup,
@@ -9,6 +10,7 @@ import {
 } from '@/test-support/piggyvest-server-off.test-support';
 import {
   loadPlanInterestAnswer,
+  planInterestAnswer,
   rememberPlanInterestAnswer,
   resetPlanInterestAnswers,
 } from './plan-interest-answers';
@@ -59,5 +61,50 @@ describe('bugfix: a changed answer after a failed resume was lost on restart', (
     });
     resetPlanInterestAnswers(); // the app restarted
     expect(await loadPlanInterestAnswer(SERVER_OFF_GOAL_ID)).toBe(false);
+  });
+});
+
+describe('bugfix: a second submit while the answer was still saving sent a different answer', () => {
+  it('locks on the first submit, so the server and the saved answer agree', async () => {
+    // Arrange: the device write is slow.
+    let finishWrite: () => void = () => undefined;
+    jest.spyOn(AsyncStorage, 'setItem').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishWrite = resolve;
+        })
+    );
+    jest.mocked(setupExistingSavingsGoal).mockClear();
+    jest
+      .mocked(setupExistingSavingsGoal)
+      .mockResolvedValue({ status: 'pending' });
+    const { result } = renderHook(() =>
+      useSavingsGoalSetup({
+        goalId: SERVER_OFF_GOAL_ID,
+        merchantId: SERVER_OFF_MERCHANT_ID,
+        onSettled: jest.fn(),
+      })
+    );
+
+    // Act: submit Yes, then No before the first write finishes.
+    let first: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.submit(true);
+    });
+    expect(result.current.submitting).toBe(true);
+    await act(async () => {
+      await result.current.submit(false);
+    });
+    await act(async () => {
+      finishWrite();
+      await first;
+    });
+
+    // Assert: only Yes was sent, and Yes is what a later resume would send.
+    expect(setupExistingSavingsGoal).toHaveBeenCalledTimes(1);
+    expect(setupExistingSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ interestAccepted: true })
+    );
+    expect(planInterestAnswer(SERVER_OFF_GOAL_ID)).toBe(true);
   });
 });

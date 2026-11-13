@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { boundedMapSet } from '@/lib/bounded-map-set';
 
 /** Automatic re-starts of a stalled setup before asking the customer. */
@@ -51,15 +51,26 @@ export function useAutoRetrySetup({
   const exhausted = blocked || count >= AUTO_SETUP_RETRIES;
   // An automatic retry is running (the last one may still succeed).
   const [inFlight, setInFlight] = useState(false);
+  // A sent retry waits for the status to be read again (the caller leaves
+  // the retryable phase while it re-reads), so the next try answers a fresh
+  // stalled reading and both tries are never spent back to back.
+  const awaitingReread = useRef<string | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry is a fresh closure each render; the scope and state identify the attempt.
   useEffect(() => {
-    if (!active || submitting || exhausted) return;
+    if (!active) {
+      awaitingReread.current = null;
+      return;
+    }
+    if (submitting || exhausted || awaitingReread.current === scopeKey) return;
+    awaitingReread.current = scopeKey;
     // Spend a try now (so this effect never sends twice); only real sends
     // keep it spent.
     setTriesFor(scopeKey, count + 1);
     setTries({ scopeKey, count: count + 1 });
     const giveBack = () => {
+      // Nothing was sent, so no re-read is coming: the next change may retry.
+      if (awaitingReread.current === scopeKey) awaitingReread.current = null;
       const left = Math.max(0, triesFor(scopeKey) - 1);
       setTriesFor(scopeKey, left);
       setTries((current) =>

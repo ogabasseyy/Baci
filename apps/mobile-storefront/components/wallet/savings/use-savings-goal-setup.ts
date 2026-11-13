@@ -44,15 +44,19 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
   /** Resolves true when a send actually started (false when deduped). */
   const run = async (
     send: () => Promise<unknown>,
-    isRetry: boolean
+    isRetry: boolean,
+    prepare?: () => Promise<void>
   ): Promise<boolean> => {
     if (inFlight.current) return false;
+    // Locked before anything is awaited, so a second tap while the answer
+    // is still being saved can never start a competing send.
     inFlight.current = true;
     setSubmitting(true);
     setAttempted(true);
     setRetried(isRetry);
     setError(null);
     try {
+      await prepare?.();
       await send();
     } catch {
       if (mounted.current)
@@ -71,9 +75,6 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
   /** Sends the chosen answer (or one passed in, e.g. the form's own). */
   const submit = async (answer: boolean | null = choice) => {
     if (answer === null) return;
-    // The customer's latest explicit answer is the one any later resume
-    // (even after a restart) must send, never an older saved one.
-    await rememberPlanInterestAnswer(goalId, answer);
     await run(
       () =>
         setupExistingSavingsGoal({
@@ -81,7 +82,11 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
           merchantId,
           interestAccepted: answer,
         }),
-      false
+      false,
+      // The customer's latest explicit answer is the one any later resume
+      // (even after a restart) must send, never an older saved one. Saved
+      // only once this submit holds the lock, so a deduped tap saves nothing.
+      () => rememberPlanInterestAnswer(goalId, answer)
     );
   };
   const retry = () =>

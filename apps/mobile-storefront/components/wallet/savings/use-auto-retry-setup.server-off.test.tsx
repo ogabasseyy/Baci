@@ -26,6 +26,8 @@ describe('useAutoRetrySetup with PiggyVest off', () => {
       const first = setup({ active: true, submitting: false, scopeKey: 'a' });
       await act(async () => {});
       first.rerender({ active: true, submitting: true, scopeKey: 'a' });
+      // The caller re-reads status (leaving the retryable phase).
+      first.rerender({ active: false, submitting: false, scopeKey: 'a' });
       first.rerender({ active: true, submitting: false, scopeKey: 'a' });
       await act(async () => {});
       expect(first.retry).toHaveBeenCalledTimes(AUTO_SETUP_RETRIES);
@@ -63,6 +65,8 @@ describe('useAutoRetrySetup with PiggyVest off', () => {
       expect(retry).toHaveBeenCalledTimes(1);
       for (let attempt = 1; attempt < AUTO_SETUP_RETRIES + 1; attempt += 1) {
         rerender({ active: true, submitting: true, scopeKey: 'a' });
+        // The caller re-reads status (leaving the retryable phase).
+        rerender({ active: false, submitting: false, scopeKey: 'a' });
         rerender({ active: true, submitting: false, scopeKey: 'a' });
         await act(async () => {});
       }
@@ -129,6 +133,8 @@ describe('bugfix: the retry counter grew without limit', () => {
     const first = setup({ active: true, submitting: false, scopeKey: 'g0' });
     await act(async () => {});
     first.rerender({ active: true, submitting: true, scopeKey: 'g0' });
+    // The caller re-reads status (leaving the retryable phase).
+    first.rerender({ active: false, submitting: false, scopeKey: 'g0' });
     first.rerender({ active: true, submitting: false, scopeKey: 'g0' });
     await act(async () => {});
     expect(first.result.current.exhausted).toBe(true);
@@ -144,5 +150,30 @@ describe('bugfix: the retry counter grew without limit', () => {
     }
     const again = setup({ active: false, submitting: false, scopeKey: 'g0' });
     expect(again.result.current.exhausted).toBe(false);
+  });
+});
+
+describe('bugfix: both automatic tries could be spent back to back', () => {
+  it('waits for a fresh stalled reading before the next try', async () => {
+    // Arrange: the first try is sent.
+    const { retry, rerender, result } = setup({
+      active: true,
+      submitting: false,
+      scopeKey: 'r',
+    });
+    await act(async () => {});
+
+    // Act: the send settles, but status has not been read again yet.
+    rerender({ active: true, submitting: true, scopeKey: 'r' });
+    rerender({ active: true, submitting: false, scopeKey: 'r' });
+    await act(async () => {});
+
+    // Assert: the second try is still left until a new reading arrives.
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(result.current.exhausted).toBe(false);
+    rerender({ active: false, submitting: false, scopeKey: 'r' });
+    rerender({ active: true, submitting: false, scopeKey: 'r' });
+    await act(async () => {});
+    expect(retry).toHaveBeenCalledTimes(2);
   });
 });

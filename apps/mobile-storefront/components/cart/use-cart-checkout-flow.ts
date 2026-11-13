@@ -21,10 +21,24 @@ export function useCartCheckoutFlow({
   const isRouteFocused = useIsFocused();
   const isPriceChangeVisibleRef = useRef(isPriceChangeVisible);
   const ownsIdentityModal = useRef(false);
+  const closeIdentityModalRef = useRef(closeCheckoutIdentity);
 
   useLayoutEffect(() => {
     isPriceChangeVisibleRef.current = isPriceChangeVisible;
   }, [isPriceChangeVisible]);
+
+  useLayoutEffect(() => {
+    closeIdentityModalRef.current = closeCheckoutIdentity;
+  }, [closeCheckoutIdentity]);
+
+  useEffect(
+    () => () => {
+      if (!ownsIdentityModal.current) return;
+      ownsIdentityModal.current = false;
+      closeIdentityModalRef.current();
+    },
+    []
+  );
 
   useEffect(() => {
     if (!isIdentityModalOpen) {

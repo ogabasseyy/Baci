@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { CHECKOUT_IDENTITY_RESUME_TIMEOUT_MS } from './checkout-recovery.constants';
 
 export function useCartCheckoutIdentityRecovery(
   isAuthenticated: boolean,
@@ -7,6 +8,7 @@ export function useCartCheckoutIdentityRecovery(
   isRouteFocused = true
 ) {
   const checkoutRecoveryRef = useRef<(() => Promise<void>) | null>(null);
+  const isAuthenticatedRef = useRef(isAuthenticated);
   const isRouteFocusedRef = useRef(isRouteFocused);
   const [resumeCheckoutAfterAuth, setResumeCheckoutAfterAuth] = useState(false);
   const resumeExpiryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -19,13 +21,22 @@ export function useCartCheckoutIdentityRecovery(
     isRouteFocusedRef.current = isRouteFocused;
   }, [isRouteFocused]);
 
+  useLayoutEffect(() => {
+    const signedOut = isAuthenticatedRef.current && !isAuthenticated;
+    isAuthenticatedRef.current = isAuthenticated;
+    if (!signedOut || !resumeCheckoutAfterAuth) return;
+    if (resumeExpiryRef.current) clearTimeout(resumeExpiryRef.current);
+    resumeExpiryRef.current = null;
+    setResumeCheckoutAfterAuth(false);
+  }, [isAuthenticated, resumeCheckoutAfterAuth]);
+
   useEffect(() => {
-    if (!resumeCheckoutAfterAuth || !isAuthenticated) return;
+    if (!resumeCheckoutAfterAuth || !isAuthenticated || !isRouteFocused) return;
     if (resumeExpiryRef.current) clearTimeout(resumeExpiryRef.current);
     resumeExpiryRef.current = null;
     setResumeCheckoutAfterAuth(false);
     void checkoutRecoveryRef.current?.();
-  }, [isAuthenticated, resumeCheckoutAfterAuth]);
+  }, [isAuthenticated, isRouteFocused, resumeCheckoutAfterAuth]);
 
   useEffect(
     () => () => {
@@ -39,6 +50,7 @@ export function useCartCheckoutIdentityRecovery(
     setResumeCheckoutAfterAuth(true);
     resumeExpiryRef.current = setTimeout(() => {
       resumeExpiryRef.current = null;
+      if (isAuthenticatedRef.current && !isRouteFocusedRef.current) return;
       setResumeCheckoutAfterAuth(false);
       if (isRouteFocusedRef.current) {
         Alert.alert(
@@ -46,6 +58,6 @@ export function useCartCheckoutIdentityRecovery(
           'Tap Checkout again to continue with your current cart.'
         );
       }
-    }, 60_000);
+    }, CHECKOUT_IDENTITY_RESUME_TIMEOUT_MS);
   };
 }

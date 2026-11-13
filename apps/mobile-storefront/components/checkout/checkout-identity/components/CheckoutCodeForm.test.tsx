@@ -90,12 +90,18 @@ it('resumes verification and preserves resend cooldown after switching email', a
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
 
     const resend = screen.getByRole('button', {
-      name: 'Resend code unavailable.',
+      name: 'You can resend a code in 60 seconds.',
     });
     expect(resend).toBeDisabled();
     fireEvent.press(resend);
     expect(mockSendCode).toHaveBeenCalledTimes(1);
 
+    act(() => jest.advanceTimersByTime(1_000));
+    expect(
+      screen.getByRole('button', {
+        name: 'You can resend a code in 59 seconds.',
+      })
+    ).toBeDisabled();
     act(() => jest.advanceTimersByTime(60_000));
     const availableResend = screen.getByRole('button', {
       name: 'Resend code',

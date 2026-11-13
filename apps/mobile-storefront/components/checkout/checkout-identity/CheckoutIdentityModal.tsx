@@ -70,7 +70,8 @@ function CheckoutIdentitySheet({
 
   const handleSignInSuccess = () => {
     onClose();
-    onVerified?.();
+    if (onVerified) onVerified();
+    else router.push('/checkout');
   };
 
   const {

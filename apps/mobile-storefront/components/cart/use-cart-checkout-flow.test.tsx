@@ -165,3 +165,16 @@ it('closes its own overlay if the cart becomes empty', () => {
 
   expect(mockCloseIdentity).toHaveBeenCalledTimes(1);
 });
+
+it('closes its owned overlay when the cart route unmounts', () => {
+  const { unmount } = renderHook(() =>
+    useCartCheckoutFlow({ isAuthenticated: false, isPriceChangeVisible: false })
+  );
+
+  act(() => mockOnReady?.());
+  mockIsIdentityOpen = true;
+  expect(mockOpenIdentity).toHaveBeenCalledTimes(1);
+  unmount();
+
+  expect(mockCloseIdentity).toHaveBeenCalledTimes(1);
+});

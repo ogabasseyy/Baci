@@ -24,11 +24,19 @@ export function CheckoutCodeFormActions({
 }) {
   if (!sentTo) return renderSocial(busy);
   const cooldownActive = resendAfter !== null && resendAfter > Date.now();
+  const remainingSeconds = cooldownActive
+    ? Math.max(1, Math.ceil((resendAfter - Date.now()) / 1_000))
+    : 0;
 
   return (
     <>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel={
+          cooldownActive
+            ? `You can resend a code in ${remainingSeconds} seconds.`
+            : 'Resend code'
+        }
         disabled={busy || cooldownActive}
         accessibilityState={{ disabled: busy || cooldownActive }}
         onPress={onResend}
@@ -39,7 +47,9 @@ export function CheckoutCodeFormActions({
             { color: cooldownActive ? theme.mutedText : theme.primary },
           ]}
         >
-          {cooldownActive ? 'Resend code unavailable.' : 'Resend code'}
+          {cooldownActive
+            ? `Resend code in ${remainingSeconds}s`
+            : 'Resend code'}
         </Text>
       </Pressable>
       <Pressable

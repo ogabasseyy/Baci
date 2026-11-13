@@ -84,6 +84,16 @@ it('routes social sign-in success through checkout revalidation', () => {
   expect(router.replace).not.toHaveBeenCalled();
 });
 
+it('continues to checkout after social sign-in when no cart callback is supplied', () => {
+  const close = jest.fn();
+  render(<CheckoutIdentityModal isOpen onClose={close} />);
+
+  act(() => mockSignInSuccess?.());
+
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(router.push).toHaveBeenCalledWith('/checkout');
+});
+
 it('keeps guest checkout available when the code cannot be sent', async () => {
   mockSendCode.mockResolvedValue({ success: false, error: 'Try again later.' });
   const close = jest.fn();
@@ -236,7 +246,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
     await enterVerificationCode();
     expect(
       screen.getByRole('button', {
-        name: 'Resend code unavailable.',
+        name: 'You can resend a code in 60 seconds.',
       })
     ).toBeDisabled();
 
@@ -248,7 +258,7 @@ it('allows a code resend only after the cooldown and restarts the cooldown on su
     expect(mockSendCode).toHaveBeenCalledTimes(2);
     expect(
       screen.getByRole('button', {
-        name: 'Resend code unavailable.',
+        name: 'You can resend a code in 60 seconds.',
       })
     ).toBeDisabled();
   } finally {
@@ -283,7 +293,7 @@ it('resumes the existing code and keeps resend disabled after switching email mo
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
     expect(
       screen.getByRole('button', {
-        name: 'Resend code unavailable.',
+        name: 'You can resend a code in 60 seconds.',
       })
     ).toBeDisabled();
     expect(mockSendCode).toHaveBeenCalledTimes(1);

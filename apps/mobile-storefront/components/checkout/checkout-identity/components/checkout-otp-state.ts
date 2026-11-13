@@ -10,8 +10,8 @@ export type OtpSendOutcome = {
   cooldownUntil: number | null;
 };
 
-export const resendCooldownsByEmail = new Map<string, number>();
-export const pendingOtpEmails = new Map<string, number>();
+const resendCooldownsByEmail = new Map<string, number>();
+const pendingOtpEmails = new Map<string, number>();
 const inFlightOtpSends = new Map<string, Promise<OtpSendOutcome>>();
 
 function pruneExpired(entries: Map<string, number>, now: number) {
@@ -20,12 +20,12 @@ function pruneExpired(entries: Map<string, number>, now: number) {
   }
 }
 
-export function clearOtpState(email: string) {
+function clearOtpState(email: string) {
   resendCooldownsByEmail.delete(email);
   pendingOtpEmails.delete(email);
 }
 
-export function getResendCooldown(email: string): number | null {
+function getResendCooldown(email: string): number | null {
   const now = Date.now();
   pruneExpired(resendCooldownsByEmail, now);
   pruneExpired(pendingOtpEmails, now);
@@ -56,7 +56,7 @@ function startResendCooldown(email: string): number {
   return until;
 }
 
-export function hasPendingOtp(email: string): boolean {
+function hasPendingOtp(email: string): boolean {
   const now = Date.now();
   pruneExpired(pendingOtpEmails, now);
   pruneExpired(resendCooldownsByEmail, now);
@@ -64,7 +64,7 @@ export function hasPendingOtp(email: string): boolean {
   return expiresAt !== undefined;
 }
 
-export function sendOtpOnce(
+function sendOtpOnce(
   email: string,
   sendCode: (address: string) => Promise<OtpSendResult>
 ): Promise<OtpSendOutcome> {
@@ -95,6 +95,14 @@ export function sendOtpOnce(
   return request;
 }
 
-export function getInFlightOtpSend(email: string) {
+function getInFlightOtpSend(email: string) {
   return inFlightOtpSends.get(email);
 }
+
+export const checkoutOtpState = {
+  clear: clearOtpState,
+  getInFlightSend: getInFlightOtpSend,
+  getResendCooldown,
+  hasPending: hasPendingOtp,
+  sendOnce: sendOtpOnce,
+};

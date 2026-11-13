@@ -13,13 +13,7 @@ import type { CheckoutIdentityTheme } from '../colors';
 import { styles } from './CheckoutCodeForm.styles';
 import { CheckoutCodeFormActions } from './CheckoutCodeFormActions';
 import type { OtpSendResult } from './checkout-otp-state';
-import {
-  clearOtpState,
-  getInFlightOtpSend,
-  getResendCooldown,
-  hasPendingOtp,
-  sendOtpOnce,
-} from './checkout-otp-state';
+import { checkoutOtpState } from './checkout-otp-state';
 import { ErrorAlert } from './ErrorAlert';
 
 export function CheckoutCodeForm({
@@ -63,11 +57,14 @@ export function CheckoutCodeForm({
   const isEmailValid =
     checkoutIdentityEmailSchema.safeParse(normalizedEmail).success;
   const activeEmail = sentTo || normalizedEmail;
-  const canResumeOtp = !sentTo && hasPendingOtp(normalizedEmail);
-  const pendingSend = !sentTo ? getInFlightOtpSend(normalizedEmail) : undefined;
+  const canResumeOtp = !sentTo && checkoutOtpState.hasPending(normalizedEmail);
+  const pendingSend = !sentTo
+    ? checkoutOtpState.getInFlightSend(normalizedEmail)
+    : undefined;
   const isSendInProgress = pendingSend !== undefined;
   const resendAfter =
-    resendAfterByEmail[activeEmail] ?? getResendCooldown(activeEmail);
+    resendAfterByEmail[activeEmail] ??
+    checkoutOtpState.getResendCooldown(activeEmail);
   const emailCoolingDown =
     !sentTo && isEmailValid && resendAfter !== null && resendAfter > Date.now();
 
@@ -87,7 +84,14 @@ export function CheckoutCodeForm({
       },
       Math.max(0, resendAfter - Date.now())
     );
-    return () => clearTimeout(timer);
+    const countdown = setInterval(
+      () => setCooldownVersion((version) => version + 1),
+      1_000
+    );
+    return () => {
+      clearTimeout(timer);
+      clearInterval(countdown);
+    };
   }, [activeEmail, resendAfter]);
 
   useEffect(() => {
@@ -132,10 +136,10 @@ export function CheckoutCodeForm({
       (!resend &&
         !sentTo &&
         !canResumeOtp &&
-        (getResendCooldown(normalizedEmail) ?? 0) > Date.now())
+        (checkoutOtpState.getResendCooldown(normalizedEmail) ?? 0) > Date.now())
     )
       return;
-    if (!sentTo && !resend && hasPendingOtp(normalizedEmail)) {
+    if (!sentTo && !resend && checkoutOtpState.hasPending(normalizedEmail)) {
       setSentTo(normalizedEmail);
       setCode('');
       setError(null);
@@ -156,12 +160,12 @@ export function CheckoutCodeForm({
       if (sentTo && !resend) {
         result = await verifyCode(sentTo, code);
       } else {
-        const outcome = await sendOtpOnce(sentEmail, sendCode);
+        const outcome = await checkoutOtpState.sendOnce(sentEmail, sendCode);
         result = outcome.result;
         successfulSendCooldown = outcome.cooldownUntil;
       }
       if (result.success && sentTo && !resend) {
-        clearOtpState(sentTo);
+        checkoutOtpState.clear(sentTo);
       }
       if (!active.current) return;
       if (!result.success) {

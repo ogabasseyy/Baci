@@ -20,3 +20,12 @@ it('rejects email addresses longer than the supported maximum', () => {
     checkoutIdentityEmailSchema.safeParse(`${localPart}@example.com`).success
   ).toBe(false);
 });
+
+it('accepts an address at the supported 254-character maximum', () => {
+  const localPart = 'a'.repeat(64);
+  const domain = ['b'.repeat(63), 'c'.repeat(63), 'd'.repeat(61)].join('.');
+
+  expect(
+    checkoutIdentityEmailSchema.safeParse(`${localPart}@${domain}`).success
+  ).toBe(true);
+});

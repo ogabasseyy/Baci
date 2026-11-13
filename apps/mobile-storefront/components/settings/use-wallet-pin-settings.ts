@@ -180,6 +180,11 @@ export function useWalletPinSettings() {
     if (!isRequestCurrent(generation, requestUserId)) return;
     setOverride({ mode: 'change', status: gate.status });
     setSaved({ mode: savedMode, userId: requestUserId });
+    // Refresh now, not only on Done: Back or a swipe also leaves the saved
+    // view, and Settings must show the new PIN status either way.
+    void Promise.resolve()
+      .then(() => gate.refresh())
+      .catch(() => undefined);
   };
 
   const onFailure = (

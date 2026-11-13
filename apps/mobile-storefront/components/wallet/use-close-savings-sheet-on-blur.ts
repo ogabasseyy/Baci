@@ -1,22 +1,37 @@
 import { useFocusEffect } from 'expo-router';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * The savings sheet is a modal: it would otherwise stay on top when another
  * screen opens over the wallet (a deep link, a notification tap). On blur
  * this runs the sheet's own close, the same cleanup as the customer closing
- * it (pickers reset, an unsent cancel/complete review dropped; an action
- * already in flight keeps its held state and refreshes when it settles).
+ * it (pickers reset, an unsent cancel/complete review dropped).
+ *
+ * While the sheet is locked (a cancel or complete is being sent) it is not
+ * closed: a PIN re-prompt from that request must stay reachable. The close
+ * then runs once the request settles, if the wallet is still out of focus.
  */
 export function useCloseSavingsSheetOnBlur(
   visible: boolean,
-  close: () => void
+  close: () => void,
+  locked = false
 ) {
   // Read at blur time, so the focus callback never changes identity (a new
   // callback would run its cleanup, i.e. close the sheet, on every render).
-  const latest = useRef({ visible, close });
-  latest.current = { visible, close };
-  useFocusEffect(() => () => {
-    if (latest.current.visible) latest.current.close();
+  const latest = useRef({ visible, close, locked });
+  latest.current = { visible, close, locked };
+  const [closeWhenUnlocked, setCloseWhenUnlocked] = useState(false);
+  useFocusEffect(() => {
+    setCloseWhenUnlocked(false);
+    return () => {
+      if (!latest.current.visible) return;
+      if (latest.current.locked) setCloseWhenUnlocked(true);
+      else latest.current.close();
+    };
   });
+  useEffect(() => {
+    if (!closeWhenUnlocked || locked) return;
+    setCloseWhenUnlocked(false);
+    if (latest.current.visible) latest.current.close();
+  }, [closeWhenUnlocked, locked]);
 }

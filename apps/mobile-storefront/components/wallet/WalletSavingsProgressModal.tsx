@@ -56,7 +56,11 @@ export function WalletSavingsProgressModal({
     cancel.closed();
     onClose();
   };
-  useCloseSavingsSheetOnBlur(visible, closeSheet);
+  useCloseSavingsSheetOnBlur(
+    visible,
+    closeSheet,
+    cancel.goal !== null && ['submitting', 'polling'].includes(cancel.flow.step)
+  );
   // The sheet is sized to what it shows, so it never ends in empty space.
   const [cancelHeight, setCancelHeight] = useState(0);
   const [swapHeight, setSwapHeight] = useState(0);
@@ -70,7 +74,9 @@ export function WalletSavingsProgressModal({
     // Sign in, then come back to this goal's savings sheet.
     const signIn = (dismiss: () => void) => {
       dismiss();
-      const back = `/wallet?action=savings&savingsGoalId=${cancelGoal.id}`;
+      // Back through the goal link route: it re-checks the goal is still
+      // this (possibly different) account's before opening its sheet.
+      const back = `/wallet/savings/goal-actions?goalId=${encodeURIComponent(cancelGoal.id)}`;
       router.push(`/auth/login?returnTo=${encodeURIComponent(back)}`);
     };
     return (

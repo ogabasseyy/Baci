@@ -1,0 +1,44 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { isWalletPayWorkPending } from './wallet-pay-work-pending';
+
+vi.mock('server-only', () => ({}));
+const mocks = vi.hoisted(() => ({ runtime: vi.fn(), listWork: vi.fn() }));
+vi.mock('./primary-wallet-savings-runtime', () => ({
+  readPrimaryWalletSavingsRecoveryRuntime: mocks.runtime,
+}));
+vi.mock('./primary-wallet-savings-executor', () => ({
+  createPrimaryWalletSavingsExecutor: () => vi.fn(),
+}));
+vi.mock('./wallet-pay-store', () => ({
+  createWalletPayWorkerStore: () => ({ listWork: mocks.listWork }),
+}));
+
+const none = { settle: [], refund: [], deliver: [] };
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.runtime.mockReturnValue({
+    configuration: { integrationId: 'i', environment: 'production' },
+  });
+});
+
+describe('isWalletPayWorkPending', () => {
+  it('is false when PiggyVest savings is not configured at all', async () => {
+    mocks.runtime.mockImplementation(() => {
+      throw new Error('missing');
+    });
+    await expect(isWalletPayWorkPending({})).resolves.toBe(false);
+  });
+
+  it('is false when nothing waits and true when any work waits', async () => {
+    mocks.listWork.mockResolvedValueOnce(none);
+    await expect(isWalletPayWorkPending({})).resolves.toBe(false);
+    mocks.listWork.mockResolvedValueOnce({ ...none, refund: ['r'] });
+    await expect(isWalletPayWorkPending({})).resolves.toBe(true);
+  });
+
+  it('throws when the work cannot be read (the caller pages)', async () => {
+    mocks.listWork.mockRejectedValue(new Error('db down'));
+    await expect(isWalletPayWorkPending({})).rejects.toThrow('db down');
+  });
+});

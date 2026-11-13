@@ -5,6 +5,10 @@ const mocks = vi.hoisted(() => ({
   secret: vi.fn(),
   runtime: vi.fn(),
   drain: vi.fn(),
+  pending: vi.fn(),
+}));
+vi.mock('@/lib/piggyvest/wallet-pay-work-pending', () => ({
+  isWalletPayWorkPending: mocks.pending,
 }));
 vi.mock('@/lib/cron-secret-auth', () => ({ hasValidCronSecret: mocks.secret }));
 vi.mock('@/lib/piggyvest/wallet-pay-runtime', () => ({
@@ -59,14 +63,24 @@ describe('GET /api/cron/piggyvest-wallet-pay-drain', () => {
     });
   });
 
-  it('is a 200 no-op while no collection wallet is configured (scheduled before switch-on)', async () => {
+  it('is a 200 no-op while no collection wallet is configured and nothing waits', async () => {
     vi.stubEnv('PIGGYVEST_COLLECTION_WALLET_ID', '');
+    mocks.pending.mockResolvedValue(false);
     const response = await GET(request());
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       status: 'not_configured',
     });
     expect(mocks.runtime).not.toHaveBeenCalled();
+    expect(mocks.drain).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: pages when wallet pay work waits but the collection wallet is gone (Codex P1)', async () => {
+    vi.stubEnv('PIGGYVEST_COLLECTION_WALLET_ID', '');
+    mocks.pending.mockResolvedValue(true);
+    expect((await GET(request())).status).toBe(503);
+    mocks.pending.mockRejectedValue(new Error('db down'));
+    expect((await GET(request())).status).toBe(503);
     expect(mocks.drain).not.toHaveBeenCalled();
   });
 

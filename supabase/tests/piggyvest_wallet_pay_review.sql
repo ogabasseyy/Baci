@@ -115,6 +115,14 @@ BEGIN
       '{"purpose":"vtu","purchaseRef":"rv-6b"}'::jsonb) IS NULL,
     'another product matched the purchase');
 
+  -- 6d. REGRESSION (Codex P1): a confirmed payment whose delivery failed and
+  -- is being refunded no longer covers its purchase.
+  UPDATE piggyvest_primary.wallet_payments SET fulfilment = 'refund_owed' WHERE id = v_op::uuid;
+  PERFORM pg_temp.wp_assert(piggyvest_primary.read_wallet_payment_for_purchase(v_scope,
+      '{"purpose":"imei_check","purchaseRef":"rv-6b"}'::jsonb) IS NULL,
+    'a refunded purchase payment still covered the purchase');
+  UPDATE piggyvest_primary.wallet_payments SET fulfilment = 'awaiting' WHERE id = v_op::uuid;
+
   -- 7. Deletion waits while a released send can still settle late.
   UPDATE piggyvest_primary.wallet_payments SET review_reason = NULL;
   DELETE FROM piggyvest_primary.wallet_payment_refunds;

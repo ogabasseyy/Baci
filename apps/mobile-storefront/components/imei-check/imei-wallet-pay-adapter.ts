@@ -73,7 +73,9 @@ function delivered(
 /** Maps a pay (or re-check) answer. Money may have moved: unknown = pending. */
 export function imeiPayAnswer(
   reply: WalletPayReply,
-  tier: ImeiServiceTierKey
+  tier: ImeiServiceTierKey,
+  /** An empty-proof re-check: the payment may already have been sent. */
+  recheck = false
 ): WalletPayPayAnswer<ImeiWalletPayResult> {
   const result = delivered(reply, tier);
   if (result) return result;
@@ -88,6 +90,14 @@ export function imeiPayAnswer(
   if (code === 'PIN_PROOF_REQUIRED' || code === 'PIN_PROOF_REFUSED')
     return { kind: 'pin_again', message: 'Please enter your PIN again.' };
   if (code === 'IMEI_MISMATCH') return outcome('failed', 'imei_mismatch');
+  // On a re-check only the payment record's own end states (short of money,
+  // released or expired, refunded) can say nothing was taken; a mismatched
+  // operation says nothing about it, so keep confirming.
+  if (recheck && code === 'PAYMENT_OPERATION_INVALID')
+    return {
+      kind: 'outcome',
+      outcome: { kind: 'pending', maybePaid: true },
+    };
   const refused = refusal(reply);
   // A lost session or a pause says nothing about a payment already sent.
   if (
@@ -191,7 +201,7 @@ export function createImeiWalletPayAdapter(input: {
         pinProof: proof,
         imei,
       });
-      return imeiPayAnswer(reply, tier);
+      return imeiPayAnswer(reply, tier, proof === '');
     },
   };
 }

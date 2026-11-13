@@ -288,3 +288,31 @@ describe('bugfix: an unreadable accepted start showed a failure (Muse)', () => {
     });
   });
 });
+
+describe('bugfix: a re-check refusal claimed nothing was taken (Muse)', () => {
+  it('keeps confirming when a re-check is answered with an invalid operation', () => {
+    expect(
+      imeiPayAnswer(
+        reply(409, { code: 'PAYMENT_OPERATION_INVALID' }),
+        'basic',
+        true
+      )
+    ).toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'pending', maybePaid: true },
+    });
+  });
+
+  it('still trusts the payment record: short of money or released moved nothing', () => {
+    expect(
+      imeiPayAnswer(reply(409, { code: 'INSUFFICIENT_FUNDS' }), 'basic', true)
+    ).toMatchObject({ outcome: { kind: 'insufficient' } });
+    expect(
+      imeiPayAnswer(
+        reply(409, { code: 'PAYMENT_NOT_COMPLETED' }),
+        'basic',
+        true
+      )
+    ).toMatchObject({ outcome: { kind: 'not_completed' } });
+  });
+});

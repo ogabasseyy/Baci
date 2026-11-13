@@ -155,6 +155,17 @@ BEGIN
     IS DISTINCT FROM ARRAY['piggyvest_primary_evidence'] THEN
     RAISE EXCEPTION 'read_goal_wallet_setup_health EXECUTE reaches roles beyond the evidence role';
   END IF;
+  -- The scan's partial index: not-yet-enrolled setups by integration and age.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_indexes
+    WHERE schemaname = 'piggyvest_primary'
+      AND tablename = 'goal_wallet_intents'
+      AND indexname = 'piggyvest_primary_goal_wallet_intents_unenrolled_idx'
+      AND indexdef LIKE '%(integration_id, created_at)%'
+      AND indexdef LIKE '%WHERE%enrolled%'
+  ) THEN
+    RAISE EXCEPTION 'stalled-setup scan index is missing or changed';
+  END IF;
 END;
 $catalog$;
 ROLLBACK;

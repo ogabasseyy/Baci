@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import Colors from '@/constants/Colors';
 import { StartSavingsReviewPlan } from './StartSavingsReviewPlan';
 import { createStartSavingsController } from './start-savings-controller.test-support';
@@ -88,6 +89,28 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           'Yours in about 125 days, not counting your head start'
         )
       ).toBeOnTheScreen();
+    });
+  });
+
+  describe('bugfix: a fully funded head start showed the phone both today and later', () => {
+    it('dates "Your phone" today when the head start covers the whole price', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            initialContributionEnabled: true,
+            initialContributionAmount: '250000',
+            effectiveInitialContribution: 250_000,
+            startDate: '2026-11-20',
+            maturityDate: '2027-03-16',
+          })}
+        />
+      );
+      const today = formatDateTimeDisplay('2026-11-12', 'date');
+      const later = formatDateTimeDisplay('2027-03-16', 'date');
+      expect(screen.getByText('Yours today')).toBeOnTheScreen();
+      expect(screen.getByText(today)).toBeOnTheScreen();
+      expect(screen.queryByText(later)).toBeNull();
     });
   });
 });

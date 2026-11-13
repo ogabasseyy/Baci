@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { BRAND, palette } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { daysUntil } from '../get-savings-pace';
+import { daysUntil, localDay } from '../get-savings-pace';
 import { SavingsProductThumb } from './SavingsProductThumb';
 import { EARLY_CANCEL_INTEREST_NOTE } from './savings-interest-copy';
 import { savingsPaceWords } from './savings-pace-words';
@@ -24,6 +24,11 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
   // Counted from today to the plan's end date, so a later start is included.
   const daysToGo = daysUntil(controller.maturityDate, new Date());
   const auto = controller.sourceMode === 'auto_debit';
+  // A head start that covers the whole price completes the plan today.
+  const phoneDate =
+    headStartShare(controller) === 'all'
+      ? localDay(new Date())
+      : controller.maturityDate;
   return (
     <View style={styles.wrap}>
       <View style={styles.phoneCard}>
@@ -57,7 +62,10 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           )}
         </Text>
       </View>
-      <View accessible accessibilityLabel={timelineLabel(controller)}>
+      <View
+        accessible
+        accessibilityLabel={timelineLabel(controller, phoneDate)}
+      >
         <View style={styles.barRow}>
           <Ionicons name="flag-outline" size={16} color={BRAND.primary} />
           <View style={styles.bar}>
@@ -71,12 +79,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
             label="Start"
             date={controller.startDate}
           />
-          <DateLabel
-            colors={colors}
-            label="Your phone"
-            date={controller.maturityDate}
-            end
-          />
+          <DateLabel colors={colors} label="Your phone" date={phoneDate} end />
         </View>
       </View>
       <View style={[styles.rows, { borderColor: colors.border }]}>
@@ -138,8 +141,8 @@ function yoursLine(
   return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;
 }
 
-function timelineLabel(controller: StartSavingsController) {
-  return `From ${formatDateTimeDisplay(controller.startDate, 'date')} to about ${formatDateTimeDisplay(controller.maturityDate, 'date')}`;
+function timelineLabel(controller: StartSavingsController, phoneDate: string) {
+  return `From ${formatDateTimeDisplay(controller.startDate, 'date')} to about ${formatDateTimeDisplay(phoneDate, 'date')}`;
 }
 
 function DateLabel({

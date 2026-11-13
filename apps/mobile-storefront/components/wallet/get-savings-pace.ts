@@ -19,7 +19,7 @@ export type SavingsPace = {
 const MS_PER_DAY = 86_400_000;
 
 /** The phone's own calendar day (e.g. Lagos), as YYYY-MM-DD. */
-function localDay(now: Date): string {
+export function localDay(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${now.getFullYear()}-${month}-${day}`;

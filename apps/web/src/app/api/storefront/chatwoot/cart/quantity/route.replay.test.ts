@@ -132,7 +132,10 @@ function arrange() {
 }
 
 describe('Chatwoot cart mutation replay', () => {
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
 
   it('renews proof from the live cart expiry and version, not the stored receipt', async () => {
     arrange();
@@ -169,6 +172,41 @@ describe('Chatwoot cart mutation replay', () => {
     expect(await response.json()).toEqual({
       accepted: false,
       code: 'refresh_required',
+    });
+  });
+
+  it('logs a live grant refresh failure and keeps proof expiry bounded by the cart', async () => {
+    arrange();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const liveCart = {
+      ...cart,
+      version: 13,
+      expiresAt: '2026-11-18T00:00:00.000Z',
+    };
+    mocks.getCart.mockResolvedValue({ ok: true, cart: liveCart });
+    mocks.loadLiveGrantOperations.mockRejectedValue(
+      new Error('private provider details')
+    );
+    mocks.mutateCart.mockResolvedValue({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      currentVersion: liveCart.version,
+      cart: { version: 13, expiresAt: cart.expiresAt },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(log).toHaveBeenCalledWith(
+      'Chatwoot live grant refresh failed after cart mutation'
+    );
+    expect(log).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ message: 'private provider details' })
+    );
+    expect(mocks.issueCartSessionProof.mock.calls[0]?.[0]).toMatchObject({
+      grantExpiresAt: liveCart.expiresAt,
     });
   });
 });

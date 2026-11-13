@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
   try {
     liveGrant = await loadLiveGrantOperations(client, principal);
   } catch {
-    // Retain the incoming proof's expiry when live grant refresh is unavailable.
+    console.error('Chatwoot live grant refresh failed after cart mutation');
   }
   const reportedCartVersion = result.currentVersion;
   let liveCartVersion =

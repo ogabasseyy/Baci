@@ -1,11 +1,15 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { styles } from './wallet.styles';
+
+// Until a savings-wallet history exists, say what this list covers.
+export const STORE_CREDIT_SCOPE_COPY =
+  'Only your store credit, the older balance you spend on purchases. Savings wallet activity is not listed here yet.';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -70,11 +74,21 @@ export function WalletTransactionHistory({
   return (
     <Animated.View
       entering={FadeIn.duration(400).delay(200)}
-      style={[styles.historySection, { backgroundColor: colors.card }]}
+      style={[
+        styles.historySection,
+        { backgroundColor: colors.card },
+        // Aligned with the card edges above it (walk-through).
+        primaryReady && localStyles.alignedSection,
+      ]}
     >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
         {primaryReady ? 'Store credit activity' : 'Recent Transactions'}
       </Text>
+      {primaryReady ? (
+        <Text style={[localStyles.scope, { color: colors.textSecondary }]}>
+          {STORE_CREDIT_SCOPE_COPY}
+        </Text>
+      ) : null}
 
       {transactions.length === 0 ? (
         <View style={styles.emptyTransactions}>
@@ -163,3 +177,8 @@ export function WalletTransactionHistory({
     </Animated.View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  alignedSection: { paddingHorizontal: 0 },
+  scope: { fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -8 },
+});

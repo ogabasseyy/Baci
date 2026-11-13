@@ -2,7 +2,10 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
-import { WalletTransactionHistory } from './WalletTransactionHistory';
+import {
+  STORE_CREDIT_SCOPE_COPY,
+  WalletTransactionHistory,
+} from './WalletTransactionHistory';
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
@@ -30,6 +33,8 @@ describe('bugfix: "No transactions yet" beside a ₦50,000 savings wallet', () =
     expect(screen.getByText('Store credit activity')).toBeOnTheScreen();
     expect(screen.getByText('No store credit activity yet')).toBeOnTheScreen();
     expect(screen.queryByText('No transactions yet')).toBeNull();
+    // Says it covers only store credit, not the savings wallet (walk-through).
+    expect(screen.getByText(STORE_CREDIT_SCOPE_COPY)).toBeOnTheScreen();
   });
 });
 
@@ -39,5 +44,6 @@ describe('server keeps PiggyVest off', () => {
 
     expect(screen.getByText('Recent Transactions')).toBeOnTheScreen();
     expect(screen.getByText('No transactions yet')).toBeOnTheScreen();
+    expect(screen.queryByText(STORE_CREDIT_SCOPE_COPY)).toBeNull();
   });
 });

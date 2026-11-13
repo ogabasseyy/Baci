@@ -65,4 +65,33 @@ describe('changing the savings device with the server off', () => {
     });
     expect(result.current.notice).toBeNull();
   });
+
+  it('drops the outcome when the account changes before the swap settles', async () => {
+    const swap = jest.mocked(swapSavingsGoalDevice);
+    let fail: (error: Error) => void = () => undefined;
+    swap.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        })
+    );
+    const { result } = renderHook(() => useSavingsNotice());
+    let pending: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      pending = change();
+    });
+    act(() => {
+      useAuthStore.setState({ user: { id: 'user-b' } as never });
+    });
+    await act(async () => {
+      fail(new Error('Network down'));
+      await pending;
+    });
+    expect(result.current.notice).toBeNull();
+    // Nor is it waiting for the first account to come back.
+    act(() => {
+      useAuthStore.setState({ user: { id: 'user-a' } as never });
+    });
+    expect(result.current.notice).toBeNull();
+  });
 });

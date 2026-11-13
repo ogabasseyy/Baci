@@ -10,7 +10,10 @@ jest.mock('@/hooks/use-product-search', () => ({
     resolveProduct: jest.fn(),
   }),
 }));
-jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
 
 const product = { id: 'p' } as Product;
 

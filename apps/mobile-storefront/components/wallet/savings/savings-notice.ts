@@ -41,6 +41,27 @@ export function clearSavingsNotice() {
   useSavingsNoticeStore.setState({ notice: null });
 }
 
+export type SavingsNotify = (
+  title: string,
+  message?: string,
+  tone?: SavingsNoticeTone
+) => void;
+
+/**
+ * A notifier bound to the customer and store signed in now. Call it before
+ * any awaited work: if the account or store changes before the work settles,
+ * its notice is dropped instead of being shown to the new account.
+ */
+export function savingsNotifier(): SavingsNotify {
+  const scope = currentScope();
+  return (title, message, tone = 'info') => {
+    if (currentScope() !== scope) return;
+    useSavingsNoticeStore.setState({
+      notice: { title, message, tone, scope },
+    });
+  };
+}
+
 /**
  * The latest notice, only for the customer and store it was shown for:
  * another account signing in on the same phone never sees it.

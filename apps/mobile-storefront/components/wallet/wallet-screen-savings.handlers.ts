@@ -4,7 +4,7 @@ import { swapSavingsGoalDevice } from '@/lib/customer-savings';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { readConfirmedContribution } from './read-confirmed-contribution';
-import { clearSavingsNotice, notifySavings } from './savings/savings-notice';
+import { clearSavingsNotice, savingsNotifier } from './savings/savings-notice';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
@@ -53,28 +53,22 @@ export async function addSavingsContributionToGoal({
   setIsAddingSavingsContribution,
   walletBalance,
 }: AddSavingsContributionParams): Promise<void> {
+  // Captured before any await: a result never reaches another account.
+  const notify = savingsNotifier();
   if (!goal) {
-    notifySavings(
-      'No active savings goal',
-      'Start a savings goal first.',
-      'warning'
-    );
+    notify('No active savings goal', 'Start a savings goal first.', 'warning');
     return;
   }
 
   const amount = Number(rawAmount);
   if (!Number.isFinite(amount) || amount <= 0) {
-    notifySavings(
-      'Invalid amount',
-      'Enter the amount you want to save.',
-      'warning'
-    );
+    notify('Invalid amount', 'Enter the amount you want to save.', 'warning');
     return;
   }
 
   const remainingAmount = Math.max(0, goal.target_amount - goal.current_amount);
   if (amount > remainingAmount) {
-    notifySavings(
+    notify(
       'Amount too high',
       `You only have ${formatNgnCurrency(remainingAmount)} left on this goal.`,
       'warning'
@@ -83,7 +77,7 @@ export async function addSavingsContributionToGoal({
   }
 
   if (amount > walletBalance) {
-    notifySavings(
+    notify(
       'Add money first',
       `Your wallet has ${formatNgnCurrency(walletBalance)} available. Fund it before adding ${formatNgnCurrency(amount)} to savings.`,
       'warning'
@@ -107,7 +101,7 @@ export async function addSavingsContributionToGoal({
       contributionResult.status === 'pending'
     ) {
       await refetchWallet().catch(() => undefined);
-      notifySavings(
+      notify(
         'Contribution pending',
         'Your savings will update after PiggyVest confirms the transfer. Check its status before starting another contribution.',
         'info'
@@ -126,7 +120,7 @@ export async function addSavingsContributionToGoal({
       // entered amount stays for the retry.
       clearIdempotencyKey?.();
       await refetchWallet().catch(() => undefined);
-      notifySavings(
+      notify(
         'Contribution cancelled',
         'The transfer was cancelled before submission and your reserved wallet funds were released.',
         'info'
@@ -168,9 +162,9 @@ export async function addSavingsContributionToGoal({
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });
-    notifySavings(success.title, success.message, 'success');
+    notify(success.title, success.message, 'success');
   } catch (error) {
-    reportContributionError(error, clearIdempotencyKey);
+    reportContributionError(error, clearIdempotencyKey, notify);
   } finally {
     setIsAddingSavingsContribution(false);
   }
@@ -184,18 +178,16 @@ export async function changeSavingsGoalDevice({
   refetchWallet,
   variantId,
 }: ChangeSavingsGoalDeviceParams): Promise<boolean> {
+  // Captured before any await: a result never reaches another account.
+  const notify = savingsNotifier();
   if (!goal) {
-    notifySavings(
-      'No active savings goal',
-      'Start a savings goal first.',
-      'warning'
-    );
+    notify('No active savings goal', 'Start a savings goal first.', 'warning');
     return false;
   }
 
   const choice = toSelectedProductChoice({ product, variantId });
   if (choice.price < goal.current_amount) {
-    notifySavings(
+    notify(
       'Device price too low',
       `You have already saved ${formatNgnCurrency(goal.current_amount)}. Choose a device priced at or above this amount.`,
       'warning'
@@ -216,7 +208,7 @@ export async function changeSavingsGoalDevice({
     try {
       await refetchWallet();
     } catch {
-      notifySavings(
+      notify(
         'Device updated',
         'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.',
         'success'
@@ -226,7 +218,7 @@ export async function changeSavingsGoalDevice({
     // The savings sheet shows the new phone; no alert on top of it.
     return true;
   } catch (error) {
-    notifySavings(
+    notify(
       'Unable to change device',
       error instanceof Error ? error.message : 'Please try again in a moment.',
       'warning'

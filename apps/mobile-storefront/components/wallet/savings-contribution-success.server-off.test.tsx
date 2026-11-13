@@ -5,7 +5,10 @@ import { notifySavings } from './savings/savings-notice';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,

@@ -7,7 +7,10 @@ jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
   checkPiggyvestPrimarySavingsStatus: (...args: unknown[]) =>
     mockCheck(...args),
 }));
-jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
 function input() {
   return {
     merchantId: 'merchant',

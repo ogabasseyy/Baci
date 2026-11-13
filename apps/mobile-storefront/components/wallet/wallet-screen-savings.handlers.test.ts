@@ -3,10 +3,14 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { notifySavings } from './savings/savings-notice';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.mock('./savings/savings-notice', () => ({
-  clearSavingsNotice: jest.fn(),
-  notifySavings: jest.fn(),
-}));
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return {
+    clearSavingsNotice: jest.fn(),
+    notifySavings,
+    savingsNotifier: () => notifySavings,
+  };
+});
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,

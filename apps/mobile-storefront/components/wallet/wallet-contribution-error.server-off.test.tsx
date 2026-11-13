@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { notifySavings } from './savings/savings-notice';
 import { reportContributionError } from './wallet-contribution-error';
 
-jest.mock('./savings/savings-notice', () => ({ notifySavings: jest.fn() }));
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
 const noticeSpy = jest.mocked(notifySavings);
 
 beforeEach(() => {

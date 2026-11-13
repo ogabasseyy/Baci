@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useProductSearch } from '@/hooks/use-product-search';
 import type { Product } from '@/types/product';
-import { notifySavings } from './savings/savings-notice';
+import { savingsNotifier } from './savings/savings-notice';
 
 /** State for the "change savings device" sheet: search, results, and the swap. */
 export function useSavingsDeviceSwap(
@@ -27,6 +27,7 @@ export function useSavingsDeviceSwap(
     product: Product,
     variantId?: string | null
   ) => {
+    const notify = savingsNotifier();
     setIsChangingSavingsDevice(true);
     try {
       const didChange = await onChangeSavingsDevice(product, variantId);
@@ -35,7 +36,7 @@ export function useSavingsDeviceSwap(
         setSavingsDeviceSearch('');
       }
     } catch {
-      notifySavings(
+      notify(
         'Unable to change device',
         'Please try again in a moment.',
         'warning'

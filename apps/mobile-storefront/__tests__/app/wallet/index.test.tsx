@@ -42,12 +42,16 @@ jest.mock('@/lib/piggyvest-primary-savings-recovery', () => {
       mockRecoverPrimarySavings(...args),
   };
 });
-jest.mock('@/components/wallet/savings/savings-notice', () => ({
-  ...(jest.requireActual(
-    '@/components/wallet/savings/savings-notice'
-  ) as object),
-  notifySavings: jest.fn(),
-}));
+jest.mock('@/components/wallet/savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return {
+    ...(jest.requireActual(
+      '@/components/wallet/savings/savings-notice'
+    ) as object),
+    notifySavings,
+    savingsNotifier: () => notifySavings,
+  };
+});
 jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: (...args: unknown[]) =>
     mockFundPrimaryWalletCard(...args),

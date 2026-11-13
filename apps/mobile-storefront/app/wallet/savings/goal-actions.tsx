@@ -79,7 +79,10 @@ export default function WalletGoalActionsRoute() {
     let live = true;
     void refetch().then(
       (result) => {
-        if (live) setRecheck({ goalId, failed: Boolean(result?.isError) });
+        // Only a real result without an error counts as a fresh read; a
+        // missing result is indeterminate and keeps the link (with a retry).
+        const failed = !result || result.isError === true;
+        if (live) setRecheck({ goalId, failed });
       },
       () => {
         if (live) setRecheck({ goalId, failed: true });

@@ -83,7 +83,7 @@ describe('old goal-actions links', () => {
   });
 
   it("open the plain wallet when the goal is no longer the customer's, after one fresh read", async () => {
-    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refetch = jest.fn().mockResolvedValue({ isError: false });
     mockWallet.mockReturnValue({
       isLoading: false,
       data: { wallet: { savings_goals: [{ id: 'another-goal' }] } },
@@ -99,6 +99,20 @@ describe('old goal-actions links', () => {
     );
     // Not tied to a goal, so the wallet's next goal keeps it on screen.
     expect(useSavingsNoticeStore.getState().goalId).toBeNull();
+  });
+
+  it('treat a fresh read with no result as indeterminate and keep the link', async () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: { wallet: { savings_goals: [{ id: 'another-goal' }] } },
+      refetch: jest.fn().mockResolvedValue(undefined),
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(
+      await screen.findByRole('button', { name: 'Try again' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
   });
 
   it('keep the link with a retry when the fresh read fails', async () => {
@@ -138,6 +152,7 @@ describe('old goal-actions links', () => {
     let goals = [{ id: 'another-goal' }];
     const refetch = jest.fn(async () => {
       goals = [{ id: GOAL }];
+      return { isError: false };
     });
     mockWallet.mockImplementation(() => ({
       isLoading: false,
@@ -161,7 +176,7 @@ describe('old goal-actions links', () => {
   });
 
   it('keep the link and offer a retry when the wallet fails to load', () => {
-    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refetch = jest.fn().mockResolvedValue({ isError: false });
     mockWallet.mockReturnValue({
       isLoading: false,
       isError: true,

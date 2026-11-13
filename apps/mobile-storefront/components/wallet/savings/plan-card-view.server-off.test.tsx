@@ -45,6 +45,18 @@ describe('planCardView with PiggyVest off', () => {
       });
     });
 
+    it('judges by the stored principal when interest keeps a balance showing', () => {
+      expect(
+        view(
+          goal({
+            status: 'completed',
+            current_amount: 1200,
+            principal_amount: 0,
+          })
+        ).eyebrow
+      ).toBe('Purchase requested');
+    });
+
     it('keeps the variant choice when the exact phone is still unresolved', () => {
       expect(
         view(

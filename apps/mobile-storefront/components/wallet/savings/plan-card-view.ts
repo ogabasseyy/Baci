@@ -31,7 +31,9 @@ export function planCardView({
     goal.status === 'completed' &&
     !awaitingSettlement &&
     !goal.selection_unresolved &&
-    goal.current_amount <= 0;
+    // The stored principal, as the settlement check uses: credited interest
+    // can keep current_amount above zero after the savings moved.
+    (goal.principal_amount ?? goal.current_amount) <= 0;
   const actionLabel = goal.selection_unresolved
     ? 'Choose exact variant'
     : awaitingSettlement

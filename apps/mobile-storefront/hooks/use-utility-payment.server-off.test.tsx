@@ -320,3 +320,30 @@ describe('bugfix: utility verdict follows the configured merchant fallback', () 
     expect(result.current.walletPrimaryUnknown).toBeUndefined();
   });
 });
+
+describe('bugfix: stale PiggyVest wallet treated as store credit after a rollback', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('keeps the bank-transfer path once PiggyVest is rolled back, despite the cached shape', () => {
+    // Arrange: rolled back to "not ready"; the reload failed and the cache
+    // still holds a PiggyVest balance.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: true },
+    });
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_balance_kobo: 500_000 } },
+    };
+
+    // Act
+    const { result } = renderHook(() => useUtilityPayment());
+
+    // Assert
+    expect(result.current.walletIsStoreCredit).toBeUndefined();
+  });
+});

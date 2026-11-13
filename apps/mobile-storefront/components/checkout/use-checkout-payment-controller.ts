@@ -108,11 +108,11 @@ export function useCheckoutPaymentController({
   const walletQuery = useWallet();
   // Orders spend the older balance: store credit for PiggyVest customers.
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
-  const walletIsStoreCredit = isStoreCreditPurchaseCopy(
-    walletQuery.data?.wallet
-  );
   const piggyvestPossible = usePiggyvestPossible(merchantId);
   const verdictNow = usePiggyvestCapabilityNow(merchantId);
+  // A live ruling-out overrides a stale cached PiggyVest wallet (Codex).
+  const walletIsStoreCredit =
+    verdictNow !== false && isStoreCreditPurchaseCopy(walletQuery.data?.wallet);
 
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);

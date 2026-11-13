@@ -179,7 +179,7 @@ export function useUtilityPayment() {
     walletIsLoading: wallet.isLoading,
     // PiggyVest customers spend store credit (the older wallet balance).
     // Spread so the key stays optional: absent means today's wallet wording.
-    ...(isStoreCreditPurchaseCopy(wallet.data?.wallet)
+    ...(verdictNow !== false && isStoreCreditPurchaseCopy(wallet.data?.wallet)
       ? { walletIsStoreCredit: true as const }
       : {}),
     // PiggyVest check failed, or a refresh may change the verdict (Codex):

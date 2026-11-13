@@ -12,9 +12,11 @@ export function withoutRuledOutPrimary(
   verdict: boolean | null
 ): WalletData | undefined {
   if (!wallet || verdict !== false) return wallet;
+  const piggyvestAccount = wallet.funding_account?.provider === 'piggyvest';
   if (
     typeof wallet.primary_balance_kobo !== 'number' &&
-    wallet.primary_pending !== true
+    wallet.primary_pending !== true &&
+    !piggyvestAccount
   ) {
     return wallet;
   }
@@ -24,5 +26,7 @@ export function withoutRuledOutPrimary(
     primary_stale: _stale,
     ...legacy
   } = wallet;
-  return legacy;
+  // The PiggyVest account too (Codex): its provider alone would put the
+  // wallet back into the savings presentation.
+  return piggyvestAccount ? { ...legacy, funding_account: null } : legacy;
 }

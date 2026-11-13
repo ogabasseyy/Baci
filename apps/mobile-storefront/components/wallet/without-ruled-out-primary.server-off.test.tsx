@@ -29,3 +29,24 @@ describe('server keeps PiggyVest off', () => {
     expect(withoutRuledOutPrimary(undefined, false)).toBeUndefined();
   });
 });
+
+describe('bugfix: stale PiggyVest account re-enables the savings view after a rollback', () => {
+  it('drops the PiggyVest funding account too while PiggyVest is ruled out', () => {
+    const wallet = {
+      balance: 1200,
+      funding_account: {
+        account_name: 'Ada Obi',
+        account_number: '3685660013',
+        bank_name: 'Provider Bank',
+        provider: 'piggyvest',
+      },
+      loyalty_points: 0,
+      primary_balance_kobo: 500_000,
+    } as WalletData;
+
+    const result = withoutRuledOutPrimary(wallet, false);
+
+    expect(result?.funding_account).toBeNull();
+    expect(result?.primary_balance_kobo).toBeUndefined();
+  });
+});

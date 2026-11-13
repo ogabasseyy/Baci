@@ -25,8 +25,9 @@ export function useCardOnlyPurchaseTopUp(
   const capability = usePiggyvestPrimaryCapability(activeMerchantId);
   const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   return (
-    isWalletStoreCredit(wallet) ||
-    isWalletPrimaryUnknown(wallet) ||
+    // A live ruling-out overrides a stale cached PiggyVest wallet (Codex).
+    (verdictNow !== false &&
+      (isWalletStoreCredit(wallet) || isWalletPrimaryUnknown(wallet))) ||
     // No customer row yet: unclassified where PiggyVest is possible (Codex).
     (wallet?.owner_unresolved === true && capability !== false) ||
     isPiggyvestCardOnlyMerchant(activeMerchantId, capability) ||

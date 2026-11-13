@@ -384,12 +384,34 @@ describe('bugfix: chosen wallet transfer dropped without the fallback notice', (
       result.current.setSelectedPayment('bank_transfer');
     });
 
-    // Act: the wallet turns PiggyVest before Place Order.
+    // Act: PiggyVest turns on and the wallet reloads as PiggyVest.
+    act(() => {
+      observePiggyvestPrimaryCapability('merchant-1', true);
+    });
     mockWallet = { balance: 0, primary_balance_kobo: 0 };
     rerender({});
 
     // Assert: still the chosen option; the submit hold falls back (notice).
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: stale PiggyVest wallet hides bank transfer to wallet after a rollback', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+    mockWallet = undefined;
+  });
+
+  it('offers bank transfer to wallet again once PiggyVest is rolled back', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0, primary_balance_kobo: 500_000 };
+
+    const { result } = renderController();
+
+    expect(result.current.walletIsStoreCredit).toBe(false);
+    expect(result.current.walletFundedBankTransferOptionEnabled).toBe(true);
   });
 });

@@ -1,9 +1,5 @@
-import { createContext, useContext, useEffect } from 'react';
-
-/** Lets a step inside the savings sheet stop it closing while it saves. */
-export const SavingsSheetLockContext = createContext<
-  ((locked: boolean) => void) | null
->(null);
+import { useContext, useEffect } from 'react';
+import { SavingsSheetLockContext } from './SavingsSheetLockContext';
 
 /**
  * While `locked` is true the savings sheet can't be swiped down, closed from

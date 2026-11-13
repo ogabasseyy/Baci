@@ -27,7 +27,10 @@ function utcToday() {
 // the final call and their message is shown if they disagree.
 function looksCompletable(goal: WalletActiveSavingsGoal) {
   if (goal.status === 'completed') return true;
-  if (goal.current_amount >= goal.target_amount) return true;
+  // The database checks saved principal, not principal plus credited
+  // interest, so interest alone never makes a goal look complete.
+  if ((goal.principal_amount ?? goal.current_amount) >= goal.target_amount)
+    return true;
   const day = /^\d{4}-\d{2}-\d{2}/.exec(goal.maturity_date ?? '')?.[0];
   return day !== undefined && day <= utcToday();
 }

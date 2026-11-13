@@ -8,11 +8,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
 import { SavingsSheetContext } from './SavingsSheetContext';
-import { SavingsSheetLockContext } from './SavingsSheetLock';
-import {
-  SavingsSheetPinCancelContext,
-  SavingsSheetPinHeightContext,
-} from './SavingsSheetPinCancelContext';
+import { SavingsSheetLockContext } from './SavingsSheetLockContext';
+import { SavingsSheetPinCancelContext } from './SavingsSheetPinCancelContext';
+import { SavingsSheetPinHeightContext } from './SavingsSheetPinHeightContext';
 
 /** Height changes smaller than this keep the sheet where it is. */
 const MIN_RESNAP_PX = 4;

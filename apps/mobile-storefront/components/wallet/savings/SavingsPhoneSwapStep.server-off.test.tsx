@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { Product } from '@/types/product';
+import { SavingsSheetLockContext } from '../SavingsSheetLockContext';
 import { SavingsPhoneSwapStep } from './SavingsPhoneSwapStep';
 import { goal, iphone, renderStep } from './savings-phone-swap.test-support';
 
@@ -105,6 +106,21 @@ describe('Change phone inside the savings sheet, server off', () => {
     expect(
       screen.getByRole('button', { name: 'Switch phone' })
     ).toHaveAccessibilityState({ disabled: true, busy: true });
+  });
+
+  it('keeps the savings sheet open while the switch is being saved', () => {
+    const { swap } = renderStep();
+    const setLocked = jest.fn();
+    render(
+      <SavingsSheetLockContext.Provider value={setLocked}>
+        <SavingsPhoneSwapStep
+          colors={Colors.light}
+          goal={goal}
+          swap={{ ...swap, isChangingSavingsDevice: true }}
+        />
+      </SavingsSheetLockContext.Provider>
+    );
+    expect(setLocked).toHaveBeenLastCalledWith(true);
   });
 
   it('drops a picked phone when the goal changes', () => {

@@ -14,7 +14,6 @@ import { isFundedUnsettledGoal } from './savings/goal-settlement';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { WalletPinSheet } from './savings/WalletPinSheet';
-import { useCloseSavingsSheetOnBlur } from './use-close-savings-sheet-on-blur';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -57,11 +56,6 @@ export function WalletSavingsProgressModal({
     cancel.closed();
     onClose();
   };
-  useCloseSavingsSheetOnBlur(
-    visible,
-    closeSheet,
-    cancel.goal !== null && ['submitting', 'polling'].includes(cancel.flow.step)
-  );
   // The sheet is sized to what it shows, so it never ends in empty space.
   const [cancelHeight, setCancelHeight] = useState(0);
   const [swapHeight, setSwapHeight] = useState(0);

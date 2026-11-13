@@ -8,6 +8,7 @@ import { clearSavingsNotice, savingsNotifier } from './savings/savings-notice';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
+import { walletRefreshWorked } from './wallet-refresh-worked';
 
 interface AddSavingsContributionParams {
   activeMerchantId?: string;
@@ -205,9 +206,7 @@ export async function changeSavingsGoalDevice({
       productId: product.id,
       variantId: variantId ?? null,
     });
-    try {
-      await refetchWallet();
-    } catch {
+    if (!(await walletRefreshWorked(refetchWallet))) {
       notify(
         'Device updated',
         'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.',

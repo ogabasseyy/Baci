@@ -69,6 +69,24 @@ describe('changing the savings device with the server off', () => {
     );
   });
 
+  it('treats a refetch that resolves with isError as a failed refresh', async () => {
+    jest
+      .mocked(swapSavingsGoalDevice)
+      .mockResolvedValueOnce(undefined as never);
+    const { result } = renderHook(() => useSavingsNotice());
+    await act(async () => {
+      expect(
+        await changeSavingsGoalDevice({
+          activeMerchantId: 'm-1',
+          goal,
+          product,
+          refetchWallet: async () => ({ isError: true }),
+        })
+      ).toBe(true);
+    });
+    expect(result.current.notice?.title).toBe('Device updated');
+  });
+
   it('keeps the pull-to-refresh notice when the wallet refresh fails', async () => {
     jest
       .mocked(swapSavingsGoalDevice)

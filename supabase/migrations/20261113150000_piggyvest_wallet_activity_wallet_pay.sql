@@ -3,7 +3,8 @@
 -- payments, so every spend and refund leaves a customer-readable record.
 -- Replaces public.list_piggyvest_wallet_activity from
 -- 20261113140000_piggyvest_wallet_activity_read with the same signature,
--- columns, keyset paging and grants, adding two branches:
+-- columns (fee_kobo included: zero for every row but a deposit), keyset
+-- paging and grants, adding two branches:
 --
 --   wallet_spend    piggyvest_primary.wallet_payments         money out
 --   wallet_refund   piggyvest_primary.wallet_payment_refunds  money in
@@ -40,6 +41,7 @@ RETURNS TABLE (
   kind text,
   direction text,
   amount_kobo bigint,
+  fee_kobo bigint,
   label text,
   status text,
   occurred_at timestamptz
@@ -129,7 +131,16 @@ BEGIN
            CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
                 THEN 'card_funding' ELSE 'bank_transfer' END AS kind,
            'in'::text AS direction,
-           (receipt.financial_identity ->> 'amountKobo')::bigint AS amount_kobo,
+           -- The amount that reached the wallet: PiggyVest deducts the
+           -- deposit fee from the transfer, so the balance moves by the
+           -- net. Rows then add up to the balance (Fable walk F3).
+           (receipt.financial_identity ->> 'amountKobo')::bigint
+             - CASE WHEN receipt.financial_identity ->> 'feeKobo' ~ '^[0-9]{1,12}$'
+                    THEN (receipt.financial_identity ->> 'feeKobo')::bigint ELSE 0 END
+             AS amount_kobo,
+           CASE WHEN receipt.financial_identity ->> 'feeKobo' ~ '^[0-9]{1,12}$'
+                THEN (receipt.financial_identity ->> 'feeKobo')::bigint ELSE 0 END
+             AS fee_kobo,
            CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
                 THEN 'Card top-up' ELSE 'Money added' END AS label,
            'completed'::text AS status,
@@ -137,6 +148,10 @@ BEGIN
       FROM piggyvest_primary.inflow_receipts AS receipt
       JOIN mine ON mine.intent_id = receipt.intent_id
      WHERE receipt.financial_identity ->> 'amountKobo' ~ '^[1-9][0-9]{0,11}$'
+       -- A fee that would leave nothing credited is not a deposit row.
+       AND (receipt.financial_identity ->> 'amountKobo')::bigint
+           > CASE WHEN receipt.financial_identity ->> 'feeKobo' ~ '^[0-9]{1,12}$'
+                  THEN (receipt.financial_identity ->> 'feeKobo')::bigint ELSE 0 END
     UNION ALL
     -- Contributions: wallet to savings goal. A cancelled reservation never
     -- moved money, so it is not activity.
@@ -144,6 +159,7 @@ BEGIN
            'savings_contribution',
            'out',
            operation.amount_kobo,
+           0::bigint,
            'Saved to ' || COALESCE(goal.title, 'a savings goal'),
            CASE WHEN operation.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
            operation.created_at
@@ -160,6 +176,7 @@ BEGIN
            'goal_refund',
            'in',
            cancel.amount_kobo,
+           0::bigint,
            'Returned from ' || COALESCE(goal.title, 'a savings goal'),
            CASE WHEN cancel.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
            COALESCE(cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
@@ -177,6 +194,7 @@ BEGIN
            'goal_completed',
            'in',
            complete.amount_kobo,
+           0::bigint,
            'Goal completed: ' || COALESCE(goal.title, 'savings goal'),
            CASE WHEN complete.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
            COALESCE(complete.dispatched_at, complete.reserved_at, complete.issued_at)
@@ -194,6 +212,7 @@ BEGIN
            'wallet_spend',
            'out',
            paid.amount_kobo,
+           0::bigint,
            paid.label,
            CASE WHEN paid.state = 'confirmed' THEN 'completed' ELSE 'pending' END,
            paid.occurred_at
@@ -205,6 +224,7 @@ BEGIN
            'wallet_refund',
            'in',
            refund.amount_kobo,
+           0::bigint,
            'Refund: ' || paid.label,
            CASE WHEN refund.state = 'confirmed' OR refund.state = 'released'
                 THEN 'completed' ELSE 'pending' END,
@@ -225,7 +245,7 @@ BEGIN
   -- Labels carry free text (biller names, goal titles): capped well under
   -- the row schema's 600 characters so one long name never fails a page.
   SELECT movement.id, movement.kind, movement.direction, movement.amount_kobo,
-         pg_catalog.left(movement.label, 120), movement.status, movement.occurred_at
+         movement.fee_kobo, pg_catalog.left(movement.label, 120), movement.status, movement.occurred_at
     FROM movements AS movement
    WHERE p_before_at IS NULL
       OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id)

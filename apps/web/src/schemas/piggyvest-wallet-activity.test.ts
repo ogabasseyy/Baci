@@ -83,6 +83,7 @@ describe('wallet-pay activity rows', () => {
           kind,
           direction,
           amount_kobo: 50000,
+          fee_kobo: 0,
           label,
           status: 'pending',
           occurred_at: '2026-11-13T10:00:00Z',

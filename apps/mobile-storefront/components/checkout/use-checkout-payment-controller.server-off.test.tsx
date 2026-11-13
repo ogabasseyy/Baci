@@ -209,7 +209,9 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
 
     const { result } = renderController();
 
-    expect(result.current.walletIsStoreCredit).toBe(false);
+    // Confirmed PiggyVest, balance pending: labelled store credit (Codex),
+    // and bank transfer to wallet stays held.
+    expect(result.current.walletIsStoreCredit).toBe(true);
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
   });
 

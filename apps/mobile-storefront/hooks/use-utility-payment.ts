@@ -1,6 +1,7 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { CONFIG } from '@/lib/config';
+import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   buildVtuPurchaseDescriptor,
@@ -172,7 +173,7 @@ export function useUtilityPayment() {
     walletIsLoading: wallet.isLoading,
     // PiggyVest customers spend store credit (the older wallet balance).
     // Spread so the key stays optional: absent means today's wallet wording.
-    ...(isWalletStoreCredit(wallet.data?.wallet)
+    ...(isStoreCreditPurchaseCopy(wallet.data?.wallet)
       ? { walletIsStoreCredit: true as const }
       : {}),
     // PiggyVest check failed, or a refresh may change the verdict (Codex):

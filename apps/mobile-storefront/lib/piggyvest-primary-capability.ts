@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   clearObservedPiggyvestPrimaryCapability,
+  msUntilNegativeCapabilityExpires,
   NEGATIVE_CAPABILITY_TTL_MS,
   observePiggyvestPrimaryCapability,
   readObservedPiggyvestPrimaryCapability,
@@ -271,10 +272,14 @@ export function usePiggyvestPrimaryCapability(
       (result) => {
         if (!active) return;
         setAvailable(result);
+        // Re-probe at the cached ruling-out's real expiry (Codex), not a
+        // full TTL from now: a screen mounted near the end of the window
+        // would otherwise hold wallet funding for up to another minute.
         if (result === false)
           refreshTimer = setTimeout(() => {
             if (active) setRevision((value) => value + 1);
-          }, NEGATIVE_CAPABILITY_TTL_MS);
+          }, msUntilNegativeCapabilityExpires(merchantId) ??
+            NEGATIVE_CAPABILITY_TTL_MS);
       },
       () => {
         // Ambiguous probe failure (timeout, network): stay unknown instead

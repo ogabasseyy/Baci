@@ -91,8 +91,12 @@ export function WalletFundModal({
   // the savings wallet by bank transfer, never by card.
   // A PiggyVest account with its balance still pending is primary too
   // (Codex): a card top-up there would add store credit, not savings.
+  // Also until PiggyVest is ruled out (Codex): a card top-up started before
+  // the verdict could settle on the legacy rail as store credit.
   const hideCardFunding =
-    (primaryReady || fundingAccount?.provider === 'piggyvest') &&
+    (primaryReady ||
+      fundingAccount?.provider === 'piggyvest' ||
+      verdictNow !== false) &&
     !storeCreditTopUp;
   // A store credit top-up opened from a purchase pushes the wallet page;
   // dismissing the sheet returns straight to that purchase instead of

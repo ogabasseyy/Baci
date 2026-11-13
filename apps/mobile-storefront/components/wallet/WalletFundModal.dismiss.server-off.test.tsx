@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+} from '@/lib/piggyvest-primary-capability-cache';
 import { WalletFundModal } from './WalletFundModal';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { createWalletContentProps } from './wallet-content.test-utils';
@@ -152,5 +156,44 @@ describe('bugfix: restored legacy wallet before any PiggyVest verdict on a purch
     // Assert
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: card top-up offered before the PiggyVest verdict', () => {
+  function renderWithoutAccount() {
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletFundModal
+          {...createWalletContentProps()}
+          canCreateFundingAccount={false}
+          creditWatch={creditWatch}
+          fundingAccount={null}
+          merchantId="merchant-1"
+          onResetFund={jest.fn()}
+          showFundPanel
+        />
+      </WalletPrimaryContext.Provider>
+    );
+  }
+
+  it('hides card funding for a plain top-up while the verdict is unknown', () => {
+    // Arrange: capability probe unanswered, no cached verdict, no account.
+    mockCapability = null;
+
+    // Act
+    renderWithoutAccount();
+
+    // Assert: a card charge now could settle as store credit.
+    expect(screen.queryByText(/card/i)).toBeNull();
+  });
+
+  it('offers card funding once the server rules PiggyVest out', () => {
+    mockCapability = false;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+
+    renderWithoutAccount();
+
+    expect(screen.getAllByText(/card/i).length).toBeGreaterThan(0);
+    clearObservedPiggyvestPrimaryCapability();
   });
 });

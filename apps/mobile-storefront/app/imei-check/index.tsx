@@ -27,6 +27,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
 import { useCardOnlyPurchaseTopUp } from '@/hooks/use-card-only-purchase-top-up';
 import { useWallet } from '@/hooks/use-wallet';
+import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { createLogger } from '@/lib/logger';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
 import {
@@ -34,7 +35,6 @@ import {
   type ImeiResult,
   parseApiResponse,
 } from '@/lib/validation';
-import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 
 const log = createLogger('ImeiChecker');
@@ -72,13 +72,11 @@ export default function ImeiCheckerScreen() {
   const requestIdentity = useImeiRequestIdentity(Crypto.randomUUID);
 
   // Checks spend the older balance: store credit for PiggyVest customers.
-  const walletBalance = walletQuery.data?.wallet.balance ?? 0;
-  const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
+  const wallet = walletQuery.data?.wallet;
+  const walletBalance = wallet?.balance ?? 0;
+  const walletIsStoreCredit = isStoreCreditPurchaseCopy(wallet);
   const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
-  const cardOnlyTopUp = useCardOnlyPurchaseTopUp(
-    merchantId,
-    walletQuery.data?.wallet
-  );
+  const cardOnlyTopUp = useCardOnlyPurchaseTopUp(merchantId, wallet);
   const fundWallet = (amount: number) =>
     imeiCheckScreenActions.fundWallet(amount, cardOnlyTopUp);
 

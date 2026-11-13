@@ -15,6 +15,7 @@ import {
   useMerchantPaymentSettings,
 } from '@/hooks/useMerchantPaymentSettings';
 import { calculateCommerce } from '@/lib/commerce-brain';
+import { isStoreCreditPurchaseCopy } from '@/lib/is-store-credit-purchase-copy';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import {
   getKlumpDisabledReason,
@@ -23,7 +24,6 @@ import {
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
-import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
@@ -107,7 +107,9 @@ export function useCheckoutPaymentController({
   const walletQuery = useWallet();
   // Orders spend the older balance: store credit for PiggyVest customers.
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
-  const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
+  const walletIsStoreCredit = isStoreCreditPurchaseCopy(
+    walletQuery.data?.wallet
+  );
   const piggyvestPossible = usePiggyvestPossible(merchantId);
   const verdictNow = usePiggyvestCapabilityNow(merchantId);
 

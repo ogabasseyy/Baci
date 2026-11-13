@@ -133,6 +133,9 @@ export function createImeiWalletPayAdapter(input: {
       // A replayed start: the purchase already finished (its result or its
       // refund), or its delivery is still running. None of these is a
       // failure before payment.
+      // An accepted (202) answer we can't read is an unknown: keep
+      // confirming (the start runs again with the same key), never 'failed'.
+      if (reply.httpStatus === 202) return outcome('pending');
       const replayed = delivered(reply, tier);
       if (replayed) return replayed;
       if (reply.body.refund === 'piggyvest_wallet') return outcome('refunded');

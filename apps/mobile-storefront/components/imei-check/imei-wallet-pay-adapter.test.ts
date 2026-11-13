@@ -278,3 +278,13 @@ describe('bugfix: a refused re-check claimed nothing was taken (Codex P2)', () =
     });
   });
 });
+
+describe('bugfix: an unreadable accepted start showed a failure (Muse)', () => {
+  it('keeps confirming instead', async () => {
+    api.start.mockResolvedValue(reply(202, { status: 'payment_required' }));
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'pending' },
+    });
+  });
+});

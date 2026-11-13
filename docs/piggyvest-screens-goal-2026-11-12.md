@@ -21,25 +21,25 @@ Rules that apply throughout:
 | Stage | Screen | Where | Status |
 | --- | --- | --- | --- |
 | Shell | Wallet hero card, account number, shortcuts | `WalletHeroSection` | One honest wallet in #4216 |
-| Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | **To redesign** |
-| Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | **To redesign** |
-| Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` (Alert) | **To redesign** (no alert) |
+| Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | **Building** (#4216 session, follow-up PR; no alerts) |
+| Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | **Building** (#4216 session, follow-up PR) |
+| Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` (Alert) | **Building** (#4216 session: wallet notice, no alert) |
 | Save | Start Savings, Check your plan | `StartSavingsScreen` and modals | Redesigned in #4223 |
 | Save | Add to savings + PIN step | `WalletSavingsProgressModal`, `WalletPinSheet` | Done (#4215) |
 | Save | Goal setup pending / retry / slow notice | `SavingsPlanStatusNote` | Done in #4223 |
 | Save | Change phone | `SavingsPhoneSwapStep` | Done in #4224 |
-| Save | Variant resolution (completed goal) | `WalletSavingsVariantResolutionModal` | **To redesign** (in-sheet, no alerts) |
-| Save | Contribution outcomes ("Add money first", success, pending) | `wallet-screen-savings.handlers` (Alerts) | **To redesign** (inline) |
+| Save | Variant resolution (completed goal) | `SavingsVariantPickStep` (modal removed) | Done in #4224 (in-sheet, no alerts) |
+| Save | Contribution outcomes ("Add money first", success, pending, still checking) | `savings-notice`, `WalletPendingSavingsContribution` | Done in #4224 (inline notices, auto-check) |
 | Manage | Cancel goal (forfeits interest) | `GoalCancelStep` | Done in #4224; needs #4222 |
 | Manage | Complete goal (purchase request) | `GoalCompleteStep` | Done in #4224 |
 | Manage | Settings > Wallet PIN | `WalletPinSettingsScreen` | Done in #4224 |
 | Manage | Savings notifications | `SavingsNotificationsScreen` | **To review** |
-| Manage | Full-page goal-actions route | `GoalLifecycleScreen` | Now unreachable from the app; **retire or redirect** |
+| Manage | Full-page goal-actions route | `app/wallet/savings/goal-actions.tsx` | Retired in #4224: old links open the in-sheet steps |
 | Spend | Checkout "Use device savings" / wallet rows | `PaymentMethodStoreCreditRows` | **To review** |
-| Spend | IMEI check paid from the PiggyVest wallet | `app/imei-check` + #4218/#4220 | Server in #4218/#4220; **app step to build** |
-| Spend | Airtime/data/power paid from the wallet | `app/utilities/[type]` | After IMEI; **app step to build** |
+| Spend | IMEI check paid from the PiggyVest wallet | `app/imei-check` + #4218/#4220 | Built: server #4218/#4220, app #4225 |
+| Spend | Airtime/data/power paid from the wallet | `app/utilities/[type]` | **Building** (pay-from-wallet session, after #4225) |
 | Spend | Wallet transactions | `WalletTransactionHistory` | **To review** (no detail view) |
-| Clean-up | Orphans: `WalletFundingAccountCard`, `checkout/WalletPayment`, `LocalSavingsDraftScreen`, `PlanWalletStagingSection` | | **Remove** |
+| Clean-up | Orphans: `WalletFundingAccountCard`, `checkout/WalletPayment`, `LocalSavingsDraftScreen` (+ history, review, draft hooks), `PlanWalletStagingSection` | | Removed in #4224 |
 
 ## End-to-end test plan (sandbox stack, simulator)
 
@@ -195,3 +195,13 @@ Still owed outside this build:
   resume.
 - The exact interest split on the reviews, which needs the server to
   expose each goal's saved principal (#4222 follow-up).
+
+## Status audit (2026-11-13, later)
+
+The table above was re-checked against the pushed branches. Fund screens and
+the airtime/data/power payment are being built by their owning sessions; the
+"To review" rows (notifications, checkout rows, transactions) get a Fable walk
+on the combined build. A Fable check of the cancel review breakdown
+("Split check plan", no interest) passed: "Saved ₦50,000", "Back to your
+wallet ₦50,000"; the forfeit line correctly stays hidden with no interest.
+

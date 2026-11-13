@@ -1,6 +1,5 @@
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
@@ -11,6 +10,7 @@ import {
 } from '@/lib/wallet-pin-proof';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
+import { savingsNotifier } from './savings/savings-notice';
 import type { ContributionRail } from './savings/stored-contribution-operation';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import {
@@ -139,7 +139,12 @@ export function createWalletSavingsActions({
     if (plan.kind === 'blocked') {
       // The original rail is no longer available and the id must never move
       // to legacy: keep it and wait.
-      Alert.alert('Still checking', EARLIER_CONTRIBUTION_CHECKING_MESSAGE);
+      // An inline wallet notice, like every other contribution outcome.
+      savingsNotifier()(
+        'Still checking',
+        EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
+        'warning'
+      );
       return;
     }
     if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {

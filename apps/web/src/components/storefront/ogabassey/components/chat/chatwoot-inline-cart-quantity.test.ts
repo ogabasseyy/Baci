@@ -160,6 +160,23 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
+  it('preserves quota errors so the bridge can back off', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ accepted: false, code: 'quota_exceeded' }, false))
+    );
+    const value = input();
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: false,
+      code: 'quota_exceeded',
+    });
+  });
+
   it('does not echo unsafe or regressing cart versions from a mutation response', async () => {
     for (const cartVersion of [1.5, Number.MAX_SAFE_INTEGER + 1, 7]) {
       vi.stubGlobal(

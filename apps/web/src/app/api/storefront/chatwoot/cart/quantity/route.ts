@@ -169,7 +169,12 @@ export async function POST(request: NextRequest) {
         : null;
   let proofCartExpiresAt = result.cart.expiresAt;
   if (result.replayed && liveCartVersion !== null) {
-    const latestCart = await getCart({ client, principal });
+    let latestCart: Awaited<ReturnType<typeof getCart>>;
+    try {
+      latestCart = await getCart({ client, principal });
+    } catch {
+      return unavailable(503, 'temporarily_unavailable');
+    }
     if (
       !latestCart.ok ||
       latestCart.cart.cartId !== principal.cartId ||
@@ -184,18 +189,19 @@ export async function POST(request: NextRequest) {
     return unavailable(409, 'refresh_required');
   }
 
-  const proofGrantExpiry = resolveChatwootCartProofExpiry({
-    cartExpiresAt: proofCartExpiresAt,
-    existingProofExpiresAt: principal.expiresAt,
-    liveGrantExpiresAt: liveGrant?.grantExpiresAt,
-  });
+  const proofGrantExpiry = liveGrant
+    ? resolveChatwootCartProofExpiry({
+        cartExpiresAt: proofCartExpiresAt,
+        existingProofExpiresAt: principal.expiresAt,
+        liveGrantExpiresAt: liveGrant.grantExpiresAt,
+      })
+    : null;
   let proof: string | null = null;
-  if (proofGrantExpiry !== null) {
+  if (proofGrantExpiry !== null && liveGrant !== null) {
     try {
       proof = issueCartSessionProof(
         {
-          allowedOperations:
-            liveGrant?.allowedOperations ?? principal.allowedOperations,
+          allowedOperations: liveGrant.allowedOperations,
           cartId: principal.cartId,
           grantId: principal.grantId,
           grantExpiresAt: proofGrantExpiry,

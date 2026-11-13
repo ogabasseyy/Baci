@@ -175,7 +175,7 @@ describe('Chatwoot cart mutation replay', () => {
     });
   });
 
-  it('logs a live grant refresh failure and keeps proof expiry bounded by the cart', async () => {
+  it('logs a live grant refresh failure and does not reissue stale operations', async () => {
     arrange();
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const liveCart = {
@@ -205,8 +205,31 @@ describe('Chatwoot cart mutation replay', () => {
       expect.anything(),
       expect.objectContaining({ message: 'private provider details' })
     );
-    expect(mocks.issueCartSessionProof.mock.calls[0]?.[0]).toMatchObject({
-      grantExpiresAt: liveCart.expiresAt,
+    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
+    expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
+    expect(await response.json()).not.toHaveProperty('sessionToken');
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('fails closed when the replay snapshot read throws', async () => {
+    arrange();
+    mocks.getCart.mockRejectedValue(new Error('private repository details'));
+    mocks.mutateCart.mockResolvedValue({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      currentVersion: 15,
+      cart: { version: 13, expiresAt: cart.expiresAt },
     });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      accepted: false,
+      code: 'temporarily_unavailable',
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 });

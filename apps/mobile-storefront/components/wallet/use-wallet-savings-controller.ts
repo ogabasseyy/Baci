@@ -1,6 +1,6 @@
 import { useRef } from 'react';
-import { Alert } from 'react-native';
 import { isFundedUnsettledGoal } from './savings/goal-settlement';
+import { notifySavings } from './savings/savings-notice';
 import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { useWalletPinPrompt } from './savings/use-wallet-pin-prompt';
 import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
@@ -53,9 +53,10 @@ export function useWalletSavingsController(
   });
   const retryRecovery = () => {
     recovery.retry();
-    Alert.alert(
+    notifySavings(
       'Checking contributions',
-      'We need to check for an existing transfer before starting another payment. Please try again after this check.'
+      'We need to check for an existing transfer before starting another payment. Please try again after this check.',
+      'info'
     );
   };
   const hasPendingSavingsContribution =

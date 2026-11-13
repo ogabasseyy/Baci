@@ -32,6 +32,9 @@ export const HIDDEN_ROUTES = [
   '/quiz',
   // Savings setup: the main button sits at the bottom of a long form.
   '/wallet/savings/start',
+  // The Wallet PIN pad and its button sit where the chat button floats; the
+  // rest of Settings keeps chat for help.
+  '/settings/wallet-pin',
 ];
 
 // H24 note: These are intentionally static — used only for FAB initial position

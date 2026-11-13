@@ -11,7 +11,9 @@ import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
+import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import type { WalletContentProps } from './WalletContent';
 import { WalletFundPanel } from './WalletFundPanel';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
@@ -37,6 +39,9 @@ type WalletFundModalProps = Pick<
   | 'showFundPanel'
   | 'walletPrimaryUnsettled'
 > & { creditWatch: WalletCreditWatch };
+
+// Inside a panel: the panel's own side padding applies.
+const INLINE_GAP = { marginTop: 4 };
 
 export function WalletFundModal({
   canCreateFundingAccount,
@@ -139,14 +144,29 @@ export function WalletFundModal({
   // Keep the panel rendered while the card slides down on close, so the
   // exit animation shows the sheet instead of an empty card; it unmounts
   // (clearing any retained BVN state) once the slide has finished.
+  const piggyvestSheet =
+    !storeCreditTopUp &&
+    (showPrimarySetup || fundingAccount?.provider === 'piggyvest');
+  // Funding outcomes and questions stay inside the sheet, under its header
+  // (never above the drag handle, never an iOS alert).
+  const notices = (
+    <>
+      <SavingsNoticeCard colors={colors} style={INLINE_GAP} />
+      <WalletFundPromptCard colors={colors} style={INLINE_GAP} />
+    </>
+  );
   const [retainContent, setRetainContent] = useState(showFundPanel);
   if (showFundPanel && !retainContent) setRetainContent(true);
   return (
     <ModalSheet
       presentation="fade-backdrop"
       backdropStyle={{
-        // Soft blue-white wash in light mode; plain dim in dark mode.
-        backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(226,232,240,0.72)',
+        // PiggyVest: the savings sheet's dark scrim, so the black wallet card
+        // stays dark behind it. Other stores keep today's soft wash.
+        backgroundColor:
+          piggyvestSheet || isDark
+            ? 'rgba(0,0,0,0.55)'
+            : 'rgba(226,232,240,0.72)',
       }}
       cardStyle={{
         backgroundColor: colors.card,
@@ -164,6 +184,10 @@ export function WalletFundModal({
     >
       {showFundPanel || retainContent ? (
         <ScrollView
+          // PiggyVest sheet: no rubber-band, so its header never scrolls away
+          // when the content already fits.
+          alwaysBounceVertical={!piggyvestSheet}
+          bounces={!piggyvestSheet}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -184,6 +208,7 @@ export function WalletFundModal({
               onSubmitPhone={onSubmitPhone}
               onRefresh={onRefresh}
               onClose={onResetFund}
+              notices={notices}
             />
           ) : (
             <WalletFundPanel
@@ -210,6 +235,7 @@ export function WalletFundModal({
               onCreateFundingAccount={onCreateFundingAccount}
               onResetFund={dismissFund}
               onSubmitPhone={onSubmitPhone}
+              notices={notices}
               returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
               storeCreditTopUp={storeCreditTopUp}
             />

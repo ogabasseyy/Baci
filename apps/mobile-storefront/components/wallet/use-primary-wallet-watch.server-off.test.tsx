@@ -10,6 +10,7 @@ jest.mock('@/hooks/use-piggyvest-capability-now', () => ({
 }));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: '' } }));
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
+jest.mock('./savings/notify-savings', () => ({ notifySavings: jest.fn() }));
 jest.mock('@/stores/auth-store', () => {
   const state = { merchantId: null, user: null };
   const useAuthStore = (select: (s: typeof state) => unknown) => select(state);

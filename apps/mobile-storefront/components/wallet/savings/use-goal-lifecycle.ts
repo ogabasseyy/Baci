@@ -12,76 +12,23 @@ import { useAuthStore } from '@/stores/auth-store';
 import {
   codeOf,
   GOAL_LIFECYCLE_COPY,
+  type GoalLifecycleStep,
   messageOf,
   NOT_STARTABLE_CODES,
+  type Outcome,
+  REVIEW,
+  submitFailure,
 } from './goal-lifecycle-outcomes';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 
+export type { GoalLifecycleStep };
 export { GOAL_LIFECYCLE_COPY };
-
-export type GoalLifecycleStep =
-  | 'review'
-  | 'issuing'
-  | 'pin'
-  | 'submitting'
-  | 'polling'
-  | 'timed_out'
-  | 'pin_cancelled'
-  | 'done'
-  | 'failed'
-  | 'needs_review';
-
-type Outcome = {
-  step: GoalLifecycleStep;
-  message: string | null;
-  canStartAgain: boolean;
-  needsSignIn: boolean;
-};
 
 const POLL_MS = 5000;
 const MAX_WAITS = 24; // 24 x 5 s = the two minutes we poll for
-const REVIEW: Outcome = {
-  step: 'review',
-  message: null,
-  canStartAgain: false,
-  needsSignIn: false,
-};
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-function submitFailure(kind: GoalActionKind, error: unknown): Outcome | null {
-  const K = kind.toUpperCase();
-  const code = codeOf(error);
-  if (code === 'GOAL_NEEDS_REVIEW')
-    return {
-      step: 'needs_review',
-      message: messageOf(error),
-      canStartAgain: false,
-      needsSignIn: false,
-    };
-  const again = [`${K}_EXPIRED`, `${K}_OPERATION_INVALID`, `${K}_BUSY`];
-  const final = [
-    `${K}_REJECTED`,
-    `${K}_NOT_ELIGIBLE`,
-    `${K}_CONFLICT`,
-    'NOTHING_TO_REFUND',
-    'NOTHING_TO_MOVE',
-    'AMOUNT_TOO_LARGE',
-    'WALLET_UNAVAILABLE',
-    ...NOT_STARTABLE_CODES,
-  ];
-  if (code && (again.includes(code) || final.includes(code)))
-    return {
-      step: 'failed',
-      message: messageOf(error),
-      canStartAgain: again.includes(code),
-      needsSignIn: code === 'UNAUTHORIZED',
-    };
-  // Anything else (a 503 unavailable, a timeout, an unreadable reply) may
-  // have moved money: the caller must read status, never resubmit.
-  return null;
-}
 
 /**
  * State machine for cancelling or completing a goal behind a wallet PIN:
@@ -93,9 +40,11 @@ function submitFailure(kind: GoalActionKind, error: unknown): Outcome | null {
 export function useGoalLifecycle({
   kind,
   goalId,
+  resetKey = 0,
 }: {
   kind: GoalActionKind;
   goalId: string;
+  resetKey?: number; // a new value starts a fresh attempt
 }) {
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
@@ -110,7 +59,7 @@ export function useGoalLifecycle({
   const submitted = useRef(false);
   const generation = useRef(0);
 
-  // A different account, goal or kind never inherits an attempt in flight.
+  // A new account, goal, kind or attempt never inherits an earlier outcome.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the scope is the trigger, the body reads none of it.
   useEffect(() => {
     generation.current += 1;
@@ -123,7 +72,7 @@ export function useGoalLifecycle({
     return () => {
       generation.current += 1;
     };
-  }, [userId, merchantId, goalId, kind]);
+  }, [userId, merchantId, goalId, kind, resetKey]);
 
   const show = (
     step: GoalLifecycleStep,
@@ -232,7 +181,12 @@ export function useGoalLifecycle({
   };
 
   const guarded = async (work: (isCurrent: () => boolean) => Promise<void>) => {
-    if (busy.current || !merchantId || !userId) return;
+    if (busy.current) return;
+    // A lapsed session offers sign-in; after a submit the outcome is unknown.
+    if (!merchantId || !userId)
+      return submitted.current
+        ? show('timed_out', null, false, true)
+        : show('failed', GOAL_LIFECYCLE_COPY.signedOut, false, true);
     const started = generation.current;
     const isCurrent = () => generation.current === started;
     busy.current = true;

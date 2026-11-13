@@ -1,6 +1,5 @@
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
@@ -13,6 +12,7 @@ import {
 } from '@/lib/wallet-pin-proof';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
+import { savingsNotifier } from './savings/savings-notice';
 import type { ContributionRail } from './savings/stored-contribution-operation';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import {
@@ -149,18 +149,45 @@ export function createWalletSavingsActions({
     if (plan.kind === 'blocked') {
       // The original rail is no longer available and the id must never move
       // to legacy: keep it and wait.
-      Alert.alert('Still checking', EARLIER_CONTRIBUTION_CHECKING_MESSAGE);
+      // An inline wallet notice, like every other contribution outcome.
+      savingsNotifier()(
+        'Still checking',
+        EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
+        'warning'
+      );
       return;
     }
     if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {
+      // A check answers only for the operation it started with. If the
+      // stored id changed meanwhile (another account, merchant or goal took
+      // over the screen), its late answer must not clear that newer
+      // operation, its amount or its busy flag.
+      const operationId = idempotencyKeyRef.current;
+      let released = false;
+      let pendingSet = false;
+      const ours = () => idempotencyKeyRef.current === operationId;
       return checkPendingPrimarySavings({
         goal,
         merchantId: activeMerchantId,
-        operationId: idempotencyKeyRef.current,
-        clearOperation: releaseOperation,
-        clearAmount: () => setSavingsContributionAmount(''),
+        operationId,
+        clearOperation: () => {
+          if (!ours()) return;
+          released = true;
+          releaseOperation();
+        },
+        clearAmount: () => {
+          if (released || ours()) setSavingsContributionAmount('');
+        },
         refetchWallet,
-        setPending: setIsAddingSavingsContribution,
+        // Busy is only ever set while this check still owns the operation,
+        // and that busy flag also blocks any new contribution; so the check
+        // always clears the flag it set, even after a scope change.
+        setPending: (value) => {
+          if (value && !ours()) return;
+          if (value) pendingSet = true;
+          else if (!pendingSet) return;
+          setIsAddingSavingsContribution(value);
+        },
       });
     }
     // PiggyVest confirmed but not yet reclassified, or unknown after a
@@ -178,7 +205,11 @@ export function createWalletSavingsActions({
           !!activeMerchantId &&
           wasPiggyvestLastRuledOut(activeMerchantId)))
     ) {
-      Alert.alert('Still checking', WALLET_RECLASSIFYING_MESSAGE);
+      savingsNotifier()(
+        'Still checking',
+        WALLET_RECLASSIFYING_MESSAGE,
+        'warning'
+      );
       void refetchWallet?.();
       return;
     }

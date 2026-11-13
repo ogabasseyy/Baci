@@ -9,7 +9,10 @@ import { styles } from './wallet.styles';
 
 // Until a savings-wallet history exists, say what this list covers.
 export const STORE_CREDIT_SCOPE_COPY =
-  'Only your store credit, the older balance you spend on purchases. Savings wallet activity is not listed here yet.';
+  'Only older store credit, for purchases. PiggyVest savings wallet history isn’t in the app yet.';
+
+/** The list's heading for PiggyVest customers: the older balance only. */
+export const STORE_CREDIT_HISTORY_TITLE = 'Older store credit';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -37,6 +40,8 @@ export interface WalletTransaction {
 
 interface WalletTransactionHistoryProps {
   colors: WalletColors;
+  /** Older store credit balance; undefined when unknown. */
+  storeCreditBalance?: number;
   transactions: WalletTransaction[];
 }
 
@@ -66,11 +71,16 @@ function formatWalletDate(dateString: string) {
 
 export function WalletTransactionHistory({
   colors,
+  storeCreditBalance,
   transactions,
 }: WalletTransactionHistoryProps) {
   // PiggyVest customers: this list is store credit only. Savings wallet
   // credits are not in it yet, so never imply it is the whole history.
   const primaryReady = useWalletPrimaryReady();
+  // A PiggyVest customer with no older store credit (none left, none ever)
+  // has nothing to see here (Fable walk). Unknown balance keeps the list.
+  if (primaryReady && transactions.length === 0 && storeCreditBalance === 0)
+    return null;
   return (
     <Animated.View
       entering={FadeIn.duration(400).delay(200)}
@@ -82,7 +92,7 @@ export function WalletTransactionHistory({
       ]}
     >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        {primaryReady ? 'Store credit activity' : 'Recent Transactions'}
+        {primaryReady ? STORE_CREDIT_HISTORY_TITLE : 'Recent Transactions'}
       </Text>
       {primaryReady ? (
         <Text style={[localStyles.scope, { color: colors.textSecondary }]}>

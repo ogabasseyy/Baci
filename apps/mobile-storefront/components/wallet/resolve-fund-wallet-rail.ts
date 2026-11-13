@@ -3,7 +3,8 @@ import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant'
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
-import { discardUnreadablePrimaryCardFunding } from './discard-unreadable-primary-card-funding';
+import { confirmDiscardUnreadableFunding } from './confirm-discard-unreadable-funding';
+import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
 import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
 import { isSameSignedInUser } from './is-same-signed-in-user';
 
@@ -41,52 +42,21 @@ export async function resolveFundWalletRail(
     // second card charge silently. The customer can cancel, or knowingly
     // clear it and continue; a charged payment still lands in savings.
     if (retained === 'unreadable') {
-      const onRetry = options?.onRetry;
-      Alert.alert(
-        'Earlier card payment unreadable',
-        'We could not read an earlier card payment on this device. If it was charged, the money will still appear in your savings wallet. Continue to add store credit for this purchase?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Continue anyway',
-            onPress: () => {
-              // The alert can outlive an account switch (Codex): the retry
-              // carries the previous account's funding, so continue only
-              // for the account that started it.
-              if (!isSameSignedInUser(options?.userId)) {
-                Alert.alert(
-                  'Signed-in account changed',
-                  'You switched accounts. Start the top-up again from this account.'
-                );
-                return;
-              }
-              void discardUnreadablePrimaryCardFunding(
-                activeMerchantId,
-                options?.userId
-              ).then((cleared) => {
-                if (cleared) {
-                  onRetry?.();
-                  return;
-                }
-                // Storage kept the record (Codex): retrying now would only
-                // reopen this prompt, so say so and let the customer retry.
-                Alert.alert(
-                  'Could not update this device',
-                  'We could not clear the earlier card payment from this device. Please try again in a moment.'
-                );
-              });
-            },
-          },
-        ]
-      );
+      confirmDiscardUnreadableFunding({
+        merchantId: activeMerchantId,
+        onRetry: options?.onRetry,
+        userId: options?.userId,
+      });
       return 'blocked';
     }
     // The read awaited storage (Codex): an account switch meanwhile must not
     // release this flow's funding under the new account's token.
     if (options?.userId && !isSameSignedInUser(options.userId)) {
-      Alert.alert(
-        'Signed-in account changed',
-        'You switched accounts. Start the top-up again from this account.'
+      const message =
+        'You switched accounts. Start the top-up again from this account.';
+      walletOutcomeNotifier(activeMerchantId)(
+        { title: 'Signed-in account changed', message, tone: 'warning' },
+        { title: 'Signed-in account changed', message }
       );
       return 'blocked';
     }

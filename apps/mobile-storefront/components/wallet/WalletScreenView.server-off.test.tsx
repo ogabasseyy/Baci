@@ -57,7 +57,7 @@ describe('WalletScreenView', () => {
     needsPhone: false,
     onAddSavingsContribution: jest.fn(),
     onChangeSavingsDevice: jest.fn(async () => true),
-    onResolveSavingsVariant: jest.fn(async () => true),
+    onResolveSavingsVariant: jest.fn(async (): Promise<true | string> => true),
     onChangeSavingsContributionAmount: jest.fn(),
     onChangeFundAmount: jest.fn(),
     onCreateFundingAccount: jest.fn(),

@@ -24,6 +24,11 @@ const params = {
   resetFundPanel: jest.fn(),
   setIsFundPending: jest.fn(),
   user: { id: 'user-a' },
+  // Today's alert path (a non-PiggyVest store).
+  notify: (
+    _notice: { title: string; message?: string },
+    legacy: { title: string; message?: string }
+  ) => Alert.alert(legacy.title, legacy.message),
 };
 
 beforeEach(() => {

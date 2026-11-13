@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import {
@@ -12,6 +11,14 @@ import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+// Outcomes are inline wallet notices (owner: no alerts on fund screens).
+const mockNotify = jest.fn();
+jest.mock('./savings/savings-notice', () => ({
+  ...jest.requireActual<typeof import('./savings/savings-notice')>(
+    './savings/savings-notice'
+  ),
+  savingsNotifier: () => mockNotify,
+}));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'synthetic-key' }));
 jest.mock('./check-pending-primary-savings', () => ({
   checkPendingPrimarySavings: jest.fn(),
@@ -109,16 +116,18 @@ describe('bugfix: contribution sent to PiggyVest after a ruling-out expired', ()
     const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
     observePiggyvestPrimaryCapability(PILOT, false);
     clock.mockReturnValue(now + NEGATIVE_CAPABILITY_TTL_MS + 1);
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
     // Act
     const refetchWallet = contribute(false);
 
     // Assert: held and reloaded, never sent on either rail.
     expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith('Still checking', expect.any(String));
+    expect(mockNotify).toHaveBeenCalledWith(
+      'Still checking',
+      expect.any(String),
+      'warning'
+    );
     expect(refetchWallet).toHaveBeenCalled();
-    alertSpy.mockRestore();
     clock.mockRestore();
   });
 

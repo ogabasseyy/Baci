@@ -60,7 +60,9 @@ jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
+    debug: jest.fn(),
     error: jest.fn(),
+    warn: jest.fn(),
   }),
 }));
 

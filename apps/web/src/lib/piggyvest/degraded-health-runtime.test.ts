@@ -104,6 +104,17 @@ describe('runPiggyvestDegradedHealth', () => {
     expect(d.emitAlert).toHaveBeenCalledTimes(2);
   });
 
+  it('bugfix: an early top-of-hour run without Redis pages for the coming hour', async () => {
+    const hour = 1_800_000_000_000;
+    let now = hour + 60_000; // 10:01 style: pages for this hour
+    const d = deps({ stuck: 3, nowMs: () => now });
+    const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
+    await runPiggyvestDegradedHealth({ env, deps: d.value });
+    now = hour + 3_600_000 - 60_000; // 10:59: the next hour's run, early
+    await runPiggyvestDegradedHealth({ env, deps: d.value });
+    expect(d.emitAlert).toHaveBeenCalledTimes(2);
+  });
+
   it('pages stalled goal-wallet setups once per hour, counts only', async () => {
     const d = deps({ stalled: 3 });
     const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });

@@ -27,8 +27,10 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  * ignores the master kill switch: a rollback must not hide a stuck transfer.
  *
  * Rate limit: one page per reason per UTC hour. The hour bucket is both the
- * in-process claim below and the PostHog operation id, so a 5-minute schedule
- * pages at most once an hour per reason from a warm instance.
+ * page claim and the PostHog operation id, so a 5-minute schedule pages at
+ * most once an hour per reason. Buckets centre on the top of the hour (the
+ * nearest hour), matching the claim's Redis-less window: a run a minute
+ * early (10:59) belongs to the coming hour (11), not the one ending.
  */
 const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
@@ -134,7 +136,7 @@ export async function runPiggyvestDegradedHealth(
     stalledGoalWallets,
   });
   const now = deps.nowMs();
-  const hour = Math.floor(now / MS_PER_HOUR);
+  const hour = Math.round(now / MS_PER_HOUR);
   let paged = 0;
   for (const alert of alerts) {
     if (!(await claimDegradedPage(alert.reason, hour, deps.claimShared, now)))

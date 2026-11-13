@@ -123,7 +123,7 @@ describe.each([
     'Cancel this goal?',
     'Keep goal',
     'Goal cancelled',
-    'The money you saved is back in your main wallet. Any interest this goal earned was not refunded.',
+    'Your money is back in your main wallet.',
   ],
   [
     'complete',

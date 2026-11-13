@@ -154,7 +154,13 @@ export function useImeiWalletPay({
             Crypto.randomUUID
           );
           inner = createImeiWalletPayAdapter({
-            connection: { apiBaseUrl, accessToken },
+            // The live token on every call: a refresh while the sheet is
+            // open must not leave PIN checks and re-checks on an old one.
+            connection: {
+              apiBaseUrl,
+              accessToken: () =>
+                useAuthStore.getState().session?.access_token ?? accessToken,
+            },
             device,
             tier,
             imei,

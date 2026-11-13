@@ -179,3 +179,17 @@ describe('bugfix: a key that failed to save was still used (Codex P1)', () => {
     );
   });
 });
+
+describe('bugfix: a settled key came back after a failed save (Codex P2)', () => {
+  it('retries saving the removal', async () => {
+    await walletPayPurchaseKeys.keyFor('p', () => 'a');
+    (AsyncStorage.setItem as jest.Mock).mockRejectedValueOnce(
+      new Error('disk busy')
+    );
+    await walletPayPurchaseKeys.forget('p');
+    walletPayPurchaseKeys.resetMemory();
+    await expect(walletPayPurchaseKeys.keyFor('p', () => 'b')).resolves.toBe(
+      'b'
+    );
+  });
+});

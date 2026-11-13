@@ -63,11 +63,15 @@ async function load(): Promise<OpenPurchases> {
   return cache;
 }
 
+const FORGET_ATTEMPTS = 3;
+
+/** True once saved. Every later save also carries an earlier removal. */
 async function save(purchases: OpenPurchases) {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(purchases));
+    return true;
   } catch {
-    // Kept in memory for this session even when the phone can't save it.
+    return false;
   }
 }
 
@@ -105,7 +109,10 @@ export const walletPayPurchaseKeys = {
       const purchases = await load();
       if (!(purchase in purchases)) return;
       delete purchases[purchase];
-      await save(purchases);
+      // Retried: a removal that never reaches the phone would bring the old
+      // key back after a restart (a replay of the finished purchase).
+      for (let attempt = 0; attempt < FORGET_ATTEMPTS; attempt += 1)
+        if (await save(purchases)) return;
     });
   },
   /** Tests only: drops the in-memory copy, as an app restart does. */

@@ -151,3 +151,31 @@ describe('bugfix: a body that never finished outlived the timeout (Codex P2)', (
     jest.useRealTimers();
   });
 });
+
+describe('bugfix: a refreshed session kept using the old token (Codex P2)', () => {
+  it('reads the token on every request', async () => {
+    const fetchImpl = fakeFetch(202, { status: 'payment_pending' });
+    let token = 'old';
+    const connection = {
+      apiBaseUrl: 'https://api.test',
+      accessToken: () => token,
+      fetchImpl,
+    };
+    const input = {
+      lookupId: LOOKUP,
+      operationId: OP,
+      pinProof: '',
+      imei: '356938035643809',
+    };
+    await imeiWalletPayApi.pay(connection, input);
+    token = 'new';
+    await imeiWalletPayApi.pay(connection, input);
+    const auth = (n: number) =>
+      (fetchImpl.mock.calls[n][1] as RequestInit).headers as Record<
+        string,
+        string
+      >;
+    expect(auth(0).Authorization).toBe('Bearer old');
+    expect(auth(1).Authorization).toBe('Bearer new');
+  });
+});

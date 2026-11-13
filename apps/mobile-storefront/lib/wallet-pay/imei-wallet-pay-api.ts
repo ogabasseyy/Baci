@@ -8,7 +8,8 @@ export type WalletPayReply = {
 
 export type WalletPayConnection = {
   apiBaseUrl: string;
-  accessToken: string | undefined;
+  /** A token, or a getter read on every request (sessions refresh). */
+  accessToken: string | undefined | (() => string | undefined);
   fetchImpl?: typeof fetch;
 };
 
@@ -32,6 +33,10 @@ async function post(
       reject(new Error('Wallet pay request timed out'));
     }, WALLET_PAY_TIMEOUT_MS);
   });
+  const token =
+    typeof connection.accessToken === 'function'
+      ? connection.accessToken()
+      : connection.accessToken;
   const send = async (): Promise<WalletPayReply> => {
     const response = await (connection.fetchImpl ?? fetch)(
       `${connection.apiBaseUrl}${path}`,
@@ -39,9 +44,7 @@ async function post(
         signal: controller.signal,
         body: JSON.stringify(body),
         headers: {
-          ...(connection.accessToken
-            ? { Authorization: `Bearer ${connection.accessToken}` }
-            : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           'Content-Type': 'application/json',
           ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
         },

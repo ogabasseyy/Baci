@@ -162,7 +162,7 @@ it('keeps the isolated draft harness free of unsupported financial choices', asy
   expect(screen.queryByLabelText('Savings target amount')).toBeNull();
   expect(screen.queryByLabelText('Savings contribution amount')).toBeNull();
   expect(screen.queryByLabelText('Savings start date')).toBeNull();
-  expect(screen.queryByLabelText('Savings reminder time')).toBeNull();
+  expect(screen.queryByLabelText('Savings debit time')).toBeNull();
   expect(screen.queryByLabelText('Use auto debit for savings')).toBeNull();
   expect(
     screen.queryByLabelText('Accept non-withdrawable savings terms')

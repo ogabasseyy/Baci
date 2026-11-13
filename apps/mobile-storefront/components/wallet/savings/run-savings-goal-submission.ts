@@ -55,6 +55,8 @@ export type UseStartSavingsSubmitInput = {
   primaryRail?: boolean;
   /** The plan exists but its hand-off could not finish (wallet not loaded). */
   onHandOffPending?: (goalId: string) => void;
+  /** The plan exists (called before setup, the reminder or any hand-off). */
+  onPlanCreated?: (goalId: string) => void;
   effectiveInitialContribution: number;
   frequency: SavingsFrequency;
   fundingAccount: FundingAccount;
@@ -181,13 +183,16 @@ export async function runSavingsGoalSubmission(
     }
     // The plan exists now: record it before anything can cut this short (a
     // form edit or reload in flight), so a later submit never creates another.
+    input.onPlanCreated?.(result.goalId);
     if (input.deferInitialContribution && input.onContinueInWallet) {
       input.onHandOffPending?.(result.goalId);
     }
     // Kept (also on the device) so the sheet can finish setup if this start
-    // never lands, even after a restart.
+    // never lands, even after a restart. The in-memory answer is set at once;
+    // the device write is never waited for, so a slow one cannot hold up
+    // setup, the reminder or the hand-off for a plan that already exists.
     if (input.startGoalWalletSetup && typeof input.interestChoice === 'boolean')
-      await rememberPlanInterestAnswer(result.goalId, input.interestChoice);
+      void rememberPlanInterestAnswer(result.goalId, input.interestChoice);
     // Started now but waited for only after the reminder is scheduled, so a
     // slow start can never leave a created plan without its reminder.
     const setupStart = input.startGoalWalletSetup

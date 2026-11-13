@@ -16,15 +16,8 @@ export function useSavingsNotice(goalId?: string | null) {
     if (!goalId) return;
     const previous = useSavingsNoticeStore.getState().goalId;
     if (previous === goalId) return;
-    const current = useSavingsNoticeStore.getState().notice;
-    // A carried success (a contribution that completed its goal) survives
-    // this one switch; anything else belongs to the previous goal.
     useSavingsNoticeStore.setState(
-      !previous
-        ? { goalId }
-        : current?.carry
-          ? { goalId, notice: { ...current, carry: false } }
-          : { goalId, notice: null }
+      previous ? { goalId, notice: null } : { goalId }
     );
   }, [goalId]);
   const visible =

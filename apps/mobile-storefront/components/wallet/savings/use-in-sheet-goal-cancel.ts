@@ -93,11 +93,16 @@ export function useInSheetGoalCancel(
         );
       })();
     }
-    if (closedInFlight.current === attempt) {
-      closedInFlight.current = null;
-      setHeld(null);
-    }
-  }, [outcomeKey, attempt]);
+  }, [outcomeKey]);
+  // Every final outcome, refreshed or not (a definite refusal included),
+  // releases an action whose sheet was closed while it was in flight.
+  const finished =
+    settled || flow.step === 'failed' || flow.step === 'pin_cancelled';
+  useEffect(() => {
+    if (!finished || closedInFlight.current !== attempt) return;
+    closedInFlight.current = null;
+    setHeld(null);
+  }, [finished, attempt]);
 
   return {
     goal: active,

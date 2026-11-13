@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { createOpenSavingsShortfallFunding } from './open-savings-shortfall-funding';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import { WalletPinSheet } from './savings/WalletPinSheet';
+import { usePinnedSavingsGoal } from './use-pinned-savings-goal';
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
@@ -45,9 +46,6 @@ export function WalletScreen({
 }: WalletScreenProps = {}) {
   const { colors, scrollContentStyle } = useWalletAppearance(presentation);
   const routeAction = Array.isArray(action) ? action[0] : action;
-  const routeSavingsGoalId = Array.isArray(savingsGoalId)
-    ? savingsGoalId[0]
-    : savingsGoalId;
   const routeRequiredAmount = normalizeWalletFundAmountParam(requiredAmount);
   const walletReturnTo = sanitizeWalletReturnTo(returnTo);
   const { isLoading: authLoading, redirectTo } = useRequireAuth();
@@ -105,6 +103,7 @@ export function WalletScreen({
   const [showSavingsProgressModal, setShowSavingsProgressModal] = useState(
     routeAction === 'savings'
   );
+  const goalPin = usePinnedSavingsGoal(showSavingsProgressModal, savingsGoalId);
   const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
     useState(false);
   const savingsRefs = useWalletSavingsRefs();
@@ -145,7 +144,7 @@ export function WalletScreen({
     },
     customerId: customer?.id,
     routeAction,
-    routeSavingsGoalId,
+    routeSavingsGoalId: goalPin.routeGoalId,
     routeIntentId: Array.isArray(intent) ? intent[0] : intent,
     routeRequiredAmount,
     setFundAmount,
@@ -161,7 +160,8 @@ export function WalletScreen({
     scopeKey: `${user?.id ?? ''}:${activeMerchantId ?? ''}`,
     refetch,
   });
-  const display = wallet && deriveWalletDisplayData(wallet, routeSavingsGoalId);
+  const display = wallet && deriveWalletDisplayData(wallet, goalPin.goalId);
+  goalPin.noteShown(display?.activeSavingsGoal?.id);
   const {
     walletContentSavingsProps,
     handleAddSavingsContribution,
@@ -221,7 +221,7 @@ export function WalletScreen({
     showQuickSave,
     spendableBalance,
     totalBalance,
-  } = display ?? deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
+  } = display ?? deriveWalletDisplayData(data.wallet, goalPin.goalId);
   return (
     <>
       <WalletScreenView

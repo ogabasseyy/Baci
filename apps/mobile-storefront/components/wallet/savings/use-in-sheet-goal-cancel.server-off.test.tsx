@@ -171,6 +171,18 @@ describe('in-sheet goal cancel with the server off', () => {
     expect(result.current.goal).toBeNull();
   });
 
+  it('releases a goal closed mid-save once its action is definitely refused', () => {
+    const { result, rerender } = renderHook(() => useInSheetGoalCancel(goal));
+    act(() => result.current.start());
+    mockStep.current = 'polling';
+    rerender({});
+    act(() => result.current.closed());
+    expect(result.current.goal?.id).toBe('goal-1');
+    mockStep.current = 'failed';
+    rerender({});
+    expect(result.current.goal).toBeNull();
+  });
+
   it('keeps a held step when the sheet is reopened before the action settles', () => {
     const { result, rerender } = renderHook(
       ({ visible }: { visible: boolean }) =>

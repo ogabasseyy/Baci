@@ -55,7 +55,7 @@ export async function addSavingsContributionToGoal({
   walletBalance,
 }: AddSavingsContributionParams): Promise<void> {
   // Captured before any await: a result never reaches another account.
-  const notify = savingsNotifier({ successFollowsGoal: true });
+  const notify = savingsNotifier();
   if (!goal) {
     notify('No active savings goal', 'Start a savings goal first.', 'warning');
     return;

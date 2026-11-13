@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, matchesGlob } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
 import { isFullAffectedTrigger } from './resolve-ci-test-plan.mjs';
@@ -41,11 +41,23 @@ test('planner, path classes and provider changes always run the full suite', () 
   assert.equal(isFullAffectedTrigger('.github/workflows/ci.yml'), true);
 });
 
-test('the web and mobile admin gates list the planner modules', () => {
-  for (const file of NEW_PLANNER_FILES) {
-    assert.ok(filters.web.includes(file), `${file} must trigger the web gate`);
+// The web gate keeps the planner and the Vitest provider as two prefix globs instead of one line
+// per module, and the mobile admin gate as brace patterns, so the filter file does not grow with
+// every new module.
+const selects = (group, file) =>
+  group.some((pattern) => matchesGlob(file, pattern));
+
+test('the web and mobile admin gates select the planner modules', () => {
+  for (const file of [
+    ...PLANNER_SOURCES,
+    '.github/scripts/resolve-ci-test-plan.test.mjs',
+    '.github/scripts/resolve-ci-test-plan-config.test.mjs',
+    ...NEW_PLANNER_FILES,
+  ]) {
+    assert.ok(selects(filters.web, file), `${file} must trigger the web gate`);
   }
   for (const file of [
+    ...PLANNER_SOURCES,
     PROVIDER,
     '.github/scripts/resolve-ci-test-plan-cli.mjs',
     '.github/scripts/resolve-ci-test-plan-paths.mjs',
@@ -53,9 +65,18 @@ test('the web and mobile admin gates list the planner modules', () => {
     '.github/scripts/resolve-ci-test-plan-reasons.mjs',
   ]) {
     assert.ok(
-      filters.mobile_admin.includes(file),
+      selects(filters.mobile_admin, file),
       `${file} must trigger mobile admin`
     );
+  }
+});
+
+test('a new planner or provider module selects the web gate without editing the filter file', () => {
+  for (const file of [
+    '.github/scripts/resolve-ci-test-plan-next-module.mjs',
+    '.github/scripts/vitest-changed-files-provider-next.test.mjs',
+  ]) {
+    assert.ok(selects(filters.web, file), `${file} must trigger the web gate`);
   }
 });
 

@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { driveGoalCancelForfeit } from './goal-cancel-forfeit';
 
@@ -193,4 +193,28 @@ it('reports needs_review when the replacement could not be merged under the ceil
   );
   p.release.mockResolvedValue('released_needs_review');
   expect(await driveGoalCancelForfeit(operationId, p)).toBe('needs_review');
+});
+
+describe('bugfix: a posting mark whose answer was lost stranded the forfeit unsent', () => {
+  it('repeats the mark once with the same token and posts when the database confirms it', async () => {
+    const p = ports();
+    p.markPosting
+      .mockReset()
+      .mockRejectedValueOnce(new Error('connection lost'))
+      .mockResolvedValueOnce('posting');
+    await driveGoalCancelForfeit(operationId, p);
+    expect(p.markPosting).toHaveBeenCalledTimes(2);
+    expect(p.markPosting.mock.calls[0][1]).toBe(p.markPosting.mock.calls[1][1]);
+    expect(p.transfer).toHaveBeenCalledOnce();
+  });
+
+  it('sends nothing when the repeat is refused', async () => {
+    const p = ports();
+    p.markPosting
+      .mockReset()
+      .mockRejectedValueOnce(new Error('connection lost'))
+      .mockResolvedValueOnce('not_released');
+    expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+    expect(p.transfer).not.toHaveBeenCalled();
+  });
 });

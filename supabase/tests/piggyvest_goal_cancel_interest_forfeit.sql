@@ -803,10 +803,15 @@ BEGIN
   -- Once marked as posting it was (or may have been) sent: never handed back.
   PERFORM piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid);
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting') = 'posting'
-    AND piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(c_integration, 'staging', v_forfeit::uuid) = 'not_released'
+    piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting:11111111-1111-4111-8111-111111111111') = 'posting'
+    -- Regression: a repeat of the same claimer's mark (its answer was lost)
+    -- is told to go ahead; any other token is refused, so only that claimer
+    -- ever makes the single POST.
+    AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting:11111111-1111-4111-8111-111111111111') = 'posting'
+    AND piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(c_integration, 'staging', v_forfeit::uuid,
+          '22222222-2222-4222-8222-222222222222'::uuid) = 'not_released'
     AND piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') = 'not_released',
-    'a posted forfeit could be handed back');
+    'a posted forfeit could be handed back, or a lost posting answer stranded it');
   -- A claim abandoned before posting (no posted_at) for over ten minutes is
   -- recovered by the next claim instead of waiting on a transfer that does
   -- not exist.
@@ -820,7 +825,7 @@ BEGIN
   -- Posting clears a spent wallet-check page, so a later overdue page can fire.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET alerted_at = pg_catalog.clock_timestamp()
    WHERE id = v_forfeit::uuid;
-  PERFORM pg_temp.gc_assert( piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting') = 'posting'
+  PERFORM pg_temp.gc_assert( piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'posting:11111111-1111-4111-8111-111111111111') = 'posting'
     AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NULL,
     'posting did not clear the wallet-check page stamp');
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET posted_at = NULL WHERE id = v_forfeit::uuid;
@@ -1134,7 +1139,7 @@ BEGIN
       repeat('d', 64), 'synthetic-reversal-2');
     PERFORM pg_temp.gc_assert(
       pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
-      AND piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'posting') = 'not_released',
+      AND piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'posting:11111111-1111-4111-8111-111111111111') = 'not_released',
       'a reversal left a claimed, unposted forfeit sendable');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
@@ -1276,8 +1281,8 @@ BEGIN
     'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.unclaim_goal_cancel_forfeit_row(uuid,boolean)',
-    'piggyvest_primary.mark_goal_cancel_forfeit_posting_row(uuid)',
-    'piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid,text,uuid)',
+    'piggyvest_primary.mark_goal_cancel_forfeit_posting_row(uuid,uuid)',
+    'piggyvest_primary.mark_goal_cancel_forfeit_posting_worker(uuid,text,uuid,uuid)',
     'piggyvest_primary.manage_goal_cancel_forfeit(jsonb,uuid,text)',
     'piggyvest_primary.assert_goal_cancel_evidence(uuid,text)',
     'piggyvest_primary.read_dispatched_goal_cancel_forfeit(uuid,text,uuid)',

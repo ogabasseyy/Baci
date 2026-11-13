@@ -164,12 +164,21 @@ it('hands a claimed forfeit back unsent through the fixed statement', async () =
   ]);
 });
 
-it('marks a claimed forfeit as posting through the fixed statement', async () => {
+it("marks a claimed forfeit as posting under the claimer's token", async () => {
+  const token = '88888888-8888-4888-8888-888888888888';
   const { execute, store: s } = store([{ result: 'posting' }]);
-  expect(await s.markForfeitPosting(forfeitId)).toBe('posting');
+  expect(await s.markForfeitPosting(forfeitId, token)).toBe('posting');
   expect(execute).toHaveBeenCalledWith(forfeitSql.manage, [
     scopeText,
     forfeitId,
-    'posting',
+    `posting:${token}`,
   ]);
+});
+
+it('refuses a posting token that is not a uuid before any statement runs', async () => {
+  const { execute, store: s } = store([]);
+  await expect(
+    s.markForfeitPosting(forfeitId, 'not-a-token')
+  ).rejects.toThrow();
+  expect(execute).not.toHaveBeenCalled();
 });

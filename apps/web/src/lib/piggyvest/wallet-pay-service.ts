@@ -138,6 +138,7 @@ export async function refundWalletPayment(input: {
     { paymentId },
     {
       collectionWalletId: input.runtime.collectionWalletId,
+      previousCollectionWalletIds: input.runtime.previousCollectionWalletIds,
       readOwed: ports.worker.readOwedRefund,
       retrieveWallet: ports.retrieveWallet,
       claimDispatch: (id) => ports.worker.manageRefund(id, 'dispatch'),

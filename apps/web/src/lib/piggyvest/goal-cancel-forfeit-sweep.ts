@@ -175,9 +175,9 @@ export async function sweepPendingGoalCancelForfeits(input: {
             schemas.unclaimRows.parse(
               (await execute(sql.workerUnclaim, bound(id))).rows
             )[0].result,
-          markPosting: async (id) =>
+          markPosting: async (id, token) =>
             schemas.postingRows.parse(
-              (await execute(sql.workerPosting, bound(id))).rows
+              (await execute(sql.workerPosting, [...bound(id), token])).rows
             )[0].result,
           ackAlert: async (id) =>
             schemas.ackRows.parse(

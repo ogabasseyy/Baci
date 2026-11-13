@@ -73,14 +73,12 @@ export function imeiWalletPayCovers(input: {
  * opens the sheet instead of the store credit top-up.
  */
 export function useImeiWalletPay({
-  accessToken,
   apiBaseUrl,
   device,
   walletQuery,
   onDelivered,
   canPay = SAVINGS_WALLET_CAN_PAY,
 }: {
-  accessToken: string | undefined;
   apiBaseUrl: string;
   device: ImeiDeviceCategory;
   walletQuery: {
@@ -112,6 +110,11 @@ export function useImeiWalletPay({
     sheet.close();
     router.push(href);
   };
+  // A stale balance during a refresh never chooses PiggyVest, so the badge,
+  // the amount shown and the verify gate always agree (Muse).
+  const refreshing = walletQuery.isRefetching === true;
+  const covers = (tier: ImeiServiceTierKey) =>
+    !refreshing && imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers });
   const openWallet = () => leaveTo('/wallet');
   const signIn = () => leaveTo('/auth/login?returnTo=/imei-check');
   return {
@@ -129,16 +132,13 @@ export function useImeiWalletPay({
       onOpenWallet: openWallet,
       onSignIn: signIn,
     },
-    covers: (tier: ImeiServiceTierKey) =>
-      imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
+    covers,
     /** What the form shows and asks about paying from PiggyVest. */
     view: {
-      covers: (tier: ImeiServiceTierKey) =>
-        imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers }),
-      savingsKobo:
-        walletQuery.isRefetching === true
-          ? null
-          : piggyvestPayingBalanceKobo({ canPay, wallet }),
+      covers,
+      savingsKobo: refreshing
+        ? null
+        : piggyvestPayingBalanceKobo({ canPay, wallet }),
     },
     open: async (tier: ImeiServiceTierKey, imei: string) => {
       // The build's merchant, never the hydrated one: that can still be
@@ -183,8 +183,8 @@ export function useImeiWalletPay({
             // open must not leave PIN checks and re-checks on an old one.
             connection: {
               apiBaseUrl,
-              accessToken: () =>
-                useAuthStore.getState().session?.access_token ?? accessToken,
+              // Fails closed: no live session sends no token (Muse).
+              accessToken: () => useAuthStore.getState().session?.access_token,
             },
             device,
             tier,

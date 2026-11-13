@@ -1,3 +1,4 @@
+import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
 import { imeiWalletPayApi } from '@/lib/wallet-pay/imei-wallet-pay-api';
 import {
   createImeiWalletPayAdapter,
@@ -15,6 +16,7 @@ const api = imeiWalletPayApi as unknown as Record<
 const LOOKUP = '11111111-1111-4111-8111-111111111111';
 const OP = '22222222-2222-4222-8222-222222222222';
 const PROOF = 'a'.repeat(64);
+const PRICE_KOBO = Math.round(IMEI_SERVICE_TIERS.basic.price * 100);
 const RESULT = {
   imei: '356938035643809',
   device: 'iPhone 15',
@@ -52,14 +54,14 @@ async function started() {
       status: 'payment_required',
       lookupId: LOOKUP,
       operationId: OP,
-      amountKobo: 250_000,
+      amountKobo: PRICE_KOBO,
     })
   );
   const pay = adapter();
   await expect(pay.start()).resolves.toEqual({
     kind: 'pin',
     operationId: OP,
-    amountKobo: 250_000,
+    amountKobo: PRICE_KOBO,
   });
   return pay;
 }
@@ -77,7 +79,7 @@ describe('createImeiWalletPayAdapter (mocked PiggyVest replies)', () => {
         status: 'payment_pending',
         lookupId: LOOKUP,
         operationId: OP,
-        amountKobo: 250_000,
+        amountKobo: PRICE_KOBO,
       })
     );
     await expect(adapter().start()).resolves.toMatchObject({ kind: 'recheck' });

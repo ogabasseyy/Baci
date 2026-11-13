@@ -43,7 +43,6 @@ const wallet = { balance: 0, primary_balance_kobo: 1_000_000 };
 function setup(isRefetching = false) {
   return renderHook(() =>
     useImeiWalletPay({
-      accessToken: 'token',
       apiBaseUrl: 'https://api.test',
       device: 'smartphone',
       walletQuery: { data: { wallet }, isRefetching },

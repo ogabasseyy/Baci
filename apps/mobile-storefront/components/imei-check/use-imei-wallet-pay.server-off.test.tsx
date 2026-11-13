@@ -15,7 +15,6 @@ describe('useImeiWalletPay while paying from PiggyVest is switched off', () => {
   it('never offers the PiggyVest wallet, even to a funded PiggyVest customer', () => {
     const hook = renderHook(() =>
       useImeiWalletPay({
-        accessToken: 'token',
         apiBaseUrl: 'https://api.test',
         device: 'smartphone',
         walletQuery: {
@@ -31,7 +30,6 @@ describe('useImeiWalletPay while paying from PiggyVest is switched off', () => {
   it('never offers it when the server sent no PiggyVest verdict', () => {
     const hook = renderHook(() =>
       useImeiWalletPay({
-        accessToken: 'token',
         apiBaseUrl: 'https://api.test',
         device: 'smartphone',
         walletQuery: { data: { wallet: { balance: 0 } } },
@@ -47,7 +45,6 @@ describe('useImeiWalletPay wallet refresh while switched off', () => {
   it('never holds the check for a refresh, exactly as today', () => {
     const hook = renderHook(() =>
       useImeiWalletPay({
-        accessToken: 'token',
         apiBaseUrl: 'https://api.test',
         device: 'smartphone',
         walletQuery: { data: { wallet: { balance: 0 } }, isRefetching: true },

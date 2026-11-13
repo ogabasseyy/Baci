@@ -33,6 +33,7 @@ function Line({
       <Text
         style={[
           styles.lineText,
+          styles.lineLabel,
           { color: total ? colors.text : colors.textSecondary },
           total && styles.bold,
         ]}
@@ -40,7 +41,12 @@ function Line({
         {label}
       </Text>
       <Text
-        style={[styles.lineText, { color: colors.text }, total && styles.bold]}
+        style={[
+          styles.lineText,
+          styles.lineValue,
+          { color: colors.text },
+          total && styles.bold,
+        ]}
       >
         {value}
       </Text>

@@ -59,10 +59,14 @@ export default function WalletGoalActionsRoute() {
   const goalId = parsed.success ? parsed.data : undefined;
   const goals = wallet.data?.wallet?.savings_goals ?? [];
   const owned = goals.some((goal) => goal.id === goalId);
-  // A goal missing from the cached wallet (created or changed elsewhere since
-  // the last read) gets one fresh read before the link gives up on it.
-  const missing = Boolean(goalId && wallet.data && !owned);
-  // Keyed by goal: a link to another missing goal gets its own fresh read.
+  // Every link gets one fresh read before it is followed: a goal missing
+  // from the cached wallet may have been created elsewhere, and one present
+  // in it may have closed elsewhere since the last read.
+  const needsCheck = Boolean(
+    goalId && wallet.data && !auth.isLoading && !auth.redirectTo
+  );
+  const missing = needsCheck && !owned;
+  // Keyed by goal: a link to another goal gets its own fresh read.
   // `failed` keeps the link (with a retry) when that read itself errored.
   const [recheck, setRecheck] = useState<{
     goalId: string;
@@ -71,7 +75,7 @@ export default function WalletGoalActionsRoute() {
   const recheckedThis = recheck !== null && recheck.goalId === goalId;
   const { refetch } = wallet;
   useEffect(() => {
-    if (!missing || recheckedThis || !goalId) return;
+    if (!needsCheck || recheckedThis || !goalId) return;
     let live = true;
     void refetch().then(
       (result) => {
@@ -84,7 +88,7 @@ export default function WalletGoalActionsRoute() {
     return () => {
       live = false;
     };
-  }, [missing, recheckedThis, goalId, refetch]);
+  }, [needsCheck, recheckedThis, goalId, refetch]);
   // A goal confirmed gone (settled, cancelled or not on this account) opens
   // the plain wallet with a short note, so an old link does not look broken.
   const gone = missing && recheckedThis && recheck?.failed === false;
@@ -115,9 +119,9 @@ export default function WalletGoalActionsRoute() {
   if (wallet.isError && !wallet.data) {
     return <GoalLinkShell onRetry={() => void wallet.refetch()} />;
   }
-  if (missing && !recheckedThis) return <GoalLinkShell />;
+  if (needsCheck && !recheckedThis) return <GoalLinkShell />;
   // The fresh read failed: the goal may still be theirs, so keep the link.
-  if (missing && recheck?.failed) {
+  if (needsCheck && recheck?.failed) {
     return <GoalLinkShell onRetry={() => setRecheck(null)} />;
   }
   // A goal that is no longer the customer's (settled, cancelled, someone

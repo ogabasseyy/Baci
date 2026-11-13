@@ -103,9 +103,12 @@ export function WalletScreen({
   const [showSavingsProgressModal, setShowSavingsProgressModal] = useState(
     routeAction === 'savings'
   );
-  const goalPin = usePinnedSavingsGoal(showSavingsProgressModal, savingsGoalId);
   const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
     useState(false);
+  const goalPin = usePinnedSavingsGoal(
+    showSavingsProgressModal || isAddingSavingsContribution,
+    savingsGoalId
+  );
   const savingsRefs = useWalletSavingsRefs();
   const hasSavedCards = useWalletSavedCards(customer?.id, activeMerchantId);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;

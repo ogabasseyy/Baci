@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from 'react';
  * Otherwise, while the savings sheet is open, it stays on the goal it opened
  * on: a contribution that completes that goal must not swap the sheet to
  * another active goal (the completed goal still needs its Complete action).
- * Closing the sheet releases the pin.
+ * Pass the sheet as open while a contribution is still settling too: the pin
+ * holds until it settles, even if the sheet was dismissed meanwhile.
+ * Closing the sheet (with nothing in flight) releases the pin.
  */
 export function usePinnedSavingsGoal(
   sheetOpen: boolean,

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import {
   confirmIdentityCode,
   sendIdentityCode,
@@ -120,6 +121,38 @@ describe('bugfix: Settings > Wallet PIN told customers to sign out', () => {
     expect(set).toHaveBeenCalledTimes(2);
     expect(set).toHaveBeenLastCalledWith('reset', '2468', 'user-1');
     expect(screen.getByRole('header', { name: 'PIN reset' })).toBeTruthy();
+  });
+
+  it('discards a reset PIN waiting for confirmation when the customer backs out of Forgot', async () => {
+    ready({ hasPin: true });
+    set.mockRejectedValueOnce(
+      Object.assign(new Error('Please sign in again to continue.'), {
+        code: 'REAUTHENTICATION_REQUIRED',
+      })
+    );
+    render(<WalletPinSettingsScreen />);
+    press('Forgot your PIN?');
+    for (const digit of '1357') press(digit);
+    press('Continue');
+    for (const digit of '1357') press(digit);
+    await act(async () => press('Reset PIN'));
+    expect(screen.getByText("Confirm it's you")).toBeTruthy();
+    // Back (header or swipe) runs the screen's step-back handler.
+    const calls = jest.mocked(usePreventRemove).mock.calls;
+    const [enabled, goBack] = calls[calls.length - 1];
+    expect(enabled).toBe(true);
+    act(() => (goBack as () => void)());
+    expect(
+      screen.getByRole('header', { name: 'Enter your current PIN' })
+    ).toBeTruthy();
+    // Forgot again starts fresh: the PIN form, not the old confirmation,
+    // and the abandoned PIN is never sent.
+    press('Forgot your PIN?');
+    expect(screen.queryByText("Confirm it's you")).toBeNull();
+    expect(
+      screen.getByRole('header', { name: 'Choose a new PIN' })
+    ).toBeTruthy();
+    expect(set).toHaveBeenCalledTimes(1);
   });
 
   it('never asks to confirm for a PIN change', () => {

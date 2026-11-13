@@ -274,8 +274,16 @@ export function useWalletPinSettings() {
     userId,
     submit,
     forgotPin: () => switchMode('reset'),
-    /** Back out of "Forgot your PIN?" to changing it with the current PIN. */
-    cancelForgot: () => switchMode('change'),
+    /**
+     * Back out of "Forgot your PIN?" to changing it with the current PIN. A
+     * reset PIN waiting for identity confirmation is discarded, so a later
+     * "Forgot your PIN?" never submits it.
+     */
+    cancelForgot: () => {
+      pendingPin.current = null;
+      setIdentity((prev) => ({ ...prev, forced: false }));
+      switchMode('change');
+    },
     identityConfirmed: identityConfirmedNow,
   };
 }

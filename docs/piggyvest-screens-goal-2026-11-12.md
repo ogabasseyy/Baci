@@ -280,3 +280,35 @@ Not walkable locally:
 - IMEI and airtime Pay → PIN.
 
 These, and the staging transfer test both ways (business → customer, customer → business), are owed on staging. A ₦1 probe at 17:49 UTC got 202 but never settled.
+
+## Walks 5 and 6: fixes confirmed on the simulator (2026-11-13, mock PiggyVest)
+
+Walk 5 (all heads merged) confirmed:
+- F3: net rows plus a fee line, and Add money mentions the fee.
+- F7: neutral airtime error.
+- The Start Savings fixes, the onboarding fixes, and notifications.
+- No "Older store credit" section for a new customer; "Money received" shows inside the sheet.
+
+It also found a blocker: the savings sheet never opened (close-on-blur via useFocusEffect). That is fixed in 16891aa374 (navigation blur/focus events).
+
+Walk 6, on that fix, passed all seven items:
+- the sheet opens;
+- F4 monthly pace and "Phone changed";
+- F5 sheet closes on leaving and reopens fresh;
+- F6 goal created outside the app;
+- PIN line "Cancelling <goal>";
+- "Complete goal" card label (#4223 e42be94e1a);
+- F1 settled plan notice and cancelled plan notice.
+
+Walk 5/6 lows:
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| Settled plan sheet showed "₦0 of ₦250,000" with no context | #4224 | **Fixed** 2ee4afd868 ("Purchase requested…") |
+| Change phone pace read as a quote (₦25,018) while the plan line stays ₦100/month | #4224 | **Fixed** 2ee4afd868 ("Suggested to finish by", rounded to ₦100) |
+| BVN field red border at rest | #4230 | **Fixed** a7aa48eaf2 |
+| Activity amount touching the fee line | #4232 | **Fixed** 21e0fdddfc |
+| Sign-in placeholder letter-spaced after code sign-in | #4229 | Sent |
+| Airtime phone field over 11 digits; IMEI arrow back button | #4227 / #4225 | Queued (waits on the owner's "Finish and push" in that session) |
+| #4216 vs #4223 head-start rail conflict | #4216 session | Sent (reconcile so either can merge first) |
+| Change phone replaces a custom goal title with the phone name | owner | Decision |

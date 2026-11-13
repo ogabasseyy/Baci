@@ -73,6 +73,52 @@ describe('bugfix: a plan created while setup was still running was created again
     );
   });
 
+  it("keeps each account's created plan when another account submits in between", async () => {
+    // Arrange: account A's plan is created, then A switches away mid-setup.
+    let finishSetup: () => void = () => undefined;
+    const startSetup = jest
+      .fn<() => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishSetup = resolve;
+          })
+      )
+      .mockResolvedValue(undefined);
+    const input = createInput({
+      effectiveInitialContribution: 0,
+      interestChoice: true,
+      startGoalWalletSetup: startSetup,
+    });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    let first: Promise<void> = Promise.resolve();
+    await act(async () => {
+      first = result.current.submitSavingsGoal();
+    });
+    signIn('user-b');
+    await act(async () => {
+      finishSetup();
+      await first;
+    });
+
+    // Act: account B creates its own plan (which finishes on screen), then
+    // A comes back and submits the unchanged draft.
+    await act(async () => {
+      await result.current.submitSavingsGoal();
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(2);
+    signIn('user-a');
+    await act(async () => {
+      await result.current.submitSavingsGoal();
+    });
+
+    // Assert: A's plan is not created a second time.
+    expect(createSavingsGoal).toHaveBeenCalledTimes(2);
+    expect(input.setFormError).toHaveBeenLastCalledWith(
+      PLAN_ALREADY_CREATED_MESSAGE
+    );
+  });
+
   it('lets a plan that finished on screen be followed by a new submit', async () => {
     const input = createInput({ effectiveInitialContribution: 0 });
     const { result } = renderHook(() => useStartSavingsSubmit(input));

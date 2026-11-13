@@ -159,3 +159,13 @@ describe('vtuPayAnswer', () => {
     ).toMatchObject({ kind: 'pin_again' });
   });
 });
+
+describe('bugfix: a PIN check without a started payment said failed (Muse)', () => {
+  it('asks to try again instead', async () => {
+    await expect(adapter().verifyPin(OP, '1234')).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'not_started' },
+    });
+    expect(api.verifyPin).not.toHaveBeenCalled();
+  });
+});

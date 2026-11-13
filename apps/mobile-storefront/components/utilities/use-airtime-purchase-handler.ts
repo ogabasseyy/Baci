@@ -31,7 +31,7 @@ import {
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
-import { payFromPiggyvestIfCovered } from './vtu-wallet-pay-store';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 interface UseAirtimePurchaseHandlerProps {
   amount: string;
@@ -250,11 +250,11 @@ export function useAirtimePurchaseHandler({
       isSubmittingRef.current = false;
       return;
     }
-    if (payFromPiggyvestIfCovered(request, onSuccess, phoneNumber)) {
+    const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+    if (payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay)) {
       isSubmittingRef.current = false;
       return;
     }
-    const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
     if (
       !ensureUtilityWalletReady({
         amount: numericAmount,

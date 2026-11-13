@@ -58,6 +58,7 @@ beforeEach(() => {
   deps.resolveIdentity.mockResolvedValue(identity);
   deps.findForPurchase.mockResolvedValue(null);
   deps.check.mockResolvedValue({
+    state: 'dispatched',
     purpose: 'vtu',
     purchaseRef: TXN,
     amountKobo: 100000,
@@ -231,7 +232,6 @@ describe('runVtuWalletPayStep: pay', () => {
 
   it('re-checks a sent payment with wallet pay switched off (never strands money)', async () => {
     deps.readRuntime.mockReturnValue(null);
-    deps.pay.mockResolvedValue({ status: 'pending' });
     const answer = await json(
       await runVtuWalletPayStep({ ...paying, pinProof: '' }, deps)
     );
@@ -239,14 +239,31 @@ describe('runVtuWalletPayStep: pay', () => {
       status: 202,
       body: { status: 'payment_pending' },
     });
-    expect(deps.pay).toHaveBeenCalledWith(
-      expect.objectContaining({ pinProof: '' })
-    );
+    // bugfix (Muse): a re-check never reaches the pay step.
+    expect(deps.pay).not.toHaveBeenCalled();
   });
 
   it('refuses a new PIN proof while switched off', async () => {
     deps.readRuntime.mockReturnValue(null);
     expect((await runVtuWalletPayStep(paying, deps)).status).toBe(503);
+    expect(deps.pay).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: delivers a confirmed payment on a re-check without calling pay (Muse)', async () => {
+    deps.check.mockResolvedValue({
+      state: 'confirmed',
+      purpose: 'vtu',
+      purchaseRef: TXN,
+      amountKobo: 100000,
+    });
+    delivery.claim.mockResolvedValue({ status: 'busy' });
+    const answer = await json(
+      await runVtuWalletPayStep({ ...paying, pinProof: '' }, deps)
+    );
+    expect(answer).toMatchObject({
+      status: 202,
+      body: { status: 'delivering' },
+    });
     expect(deps.pay).not.toHaveBeenCalled();
   });
 });

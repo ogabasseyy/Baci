@@ -98,6 +98,11 @@ describe('POST /api/vtu/checkout/wallet-pin', () => {
     );
   });
 
+  it('charges its own wallet pay PIN budget, never the savings goal one', async () => {
+    await call({ operationId: OP, pin: '1234' });
+    expect(mocks.limit).toHaveBeenCalledWith('wallet-pay-verify', 'm', 'u');
+  });
+
   it('refuses a client-sent amount', async () => {
     const response = await call({
       operationId: OP,

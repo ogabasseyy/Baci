@@ -115,7 +115,9 @@ export function createVtuWalletPayAdapter(input: {
       return refusal(reply) ?? outcome('failed');
     },
     async verifyPin(operationId, pin) {
-      if (!transactionId) return outcome('failed');
+      // No payment was started (the sheet never shows the PIN then): ask to
+      // try again rather than call it a failed payment.
+      if (!transactionId) return outcome('not_started');
       const reply = await vtuWalletPayApi.verifyPin(connection, {
         transactionId,
         operationId,

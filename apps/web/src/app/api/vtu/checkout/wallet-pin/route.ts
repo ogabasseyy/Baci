@@ -77,7 +77,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return invalid();
     // Charged only once a real PIN check will happen.
     const limited = await chargeWalletPinCustomerLimit(
-      'goal-verify',
+      'wallet-pay-verify',
       identity.merchantId,
       identity.userId
     );

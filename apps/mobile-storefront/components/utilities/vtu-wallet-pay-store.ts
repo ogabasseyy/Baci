@@ -52,14 +52,20 @@ export type VtuPiggyvestSuccess = {
 
 /**
  * A form's hand-over: pays this purchase from the PiggyVest wallet when it
- * covers it, reporting success the way the form's store credit path does.
+ * covers it (and no store credit attempt for it is retained), reporting
+ * success the way the form's store credit path does.
  * False = carry on with store credit, exactly as before.
  */
-export function payFromPiggyvestIfCovered(
+export function payFromPiggyvest(
   request: VtuWalletPayRequest & { customerAddress?: string },
   onSuccess: (result: VtuPiggyvestSuccess) => void,
-  customerIdentifier: string
+  customerIdentifier: string,
+  /** The form's retained-replay peek, taken once before this call. */
+  isRetainedReplay: boolean
 ): boolean {
+  // A store credit attempt that was charged but never answered must replay
+  // on its own key, never be forked into a second (PiggyVest) purchase.
+  if (isRetainedReplay) return false;
   return openVtuWalletPay(request, (result) =>
     onSuccess({
       amount: result.amount ?? request.amount,

@@ -27,7 +27,7 @@ import {
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
-import { payFromPiggyvestIfCovered } from './vtu-wallet-pay-store';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 const GENERIC_PAYMENT_ERROR_MESSAGE = 'Payment failed. Please try again.';
 
@@ -143,9 +143,10 @@ export function createBillFormPurchaseHandler({
         setIsSubmitting(false);
         return;
       }
-      if (payFromPiggyvestIfCovered(request, onSuccess, customerId)) return;
-      // Retained-replay peek (R65): a charged retry bypasses the gate.
       const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+      if (payFromPiggyvest(request, onSuccess, customerId, isRetainedReplay))
+        return;
+      // Retained-replay peek (R65): a charged retry bypasses the gate.
       if (
         !ensureUtilityWalletReady({
           amount: numericAmount,

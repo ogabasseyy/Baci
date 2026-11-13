@@ -56,6 +56,7 @@ export interface VtuWalletPayStepDeps {
     scope: Scope;
     operationId: string;
   }) => Promise<{
+    state: string;
     purpose: string;
     purchaseRef: string;
     amountKobo: number;
@@ -69,6 +70,13 @@ export interface VtuWalletPayStepDeps {
   delivery: (
     runtime: WalletPayRuntime
   ) => Omit<DeliverVtuWalletPaymentDeps, 'fulfil'>;
+}
+
+/** A re-check answers from the stored state alone (it never sends). */
+function recheckStatus(state: string) {
+  if (state === 'confirmed' || state === 'needs_review' || state === 'released')
+    return state;
+  return 'pending';
 }
 
 const unavailable = () =>
@@ -208,12 +216,16 @@ export async function runVtuWalletPayStep(
     payment.amountKobo !== amountKobo
   )
     return invalid();
-  const result = await deps.pay({
-    runtime,
-    scope,
-    operationId,
-    pinProof: input.pinProof ?? '',
-  });
+  // A re-check (empty proof) never reaches the pay step: the status check
+  // above already reconciled from PiggyVest's record without sending.
+  const result: WalletPayAnswer = recheck
+    ? { status: recheckStatus(payment.state) }
+    : await deps.pay({
+        runtime,
+        scope,
+        operationId,
+        pinProof: input.pinProof ?? '',
+      });
   if (result.status !== 'confirmed')
     return walletPayResponse(result, operationId, 'purchase');
   try {

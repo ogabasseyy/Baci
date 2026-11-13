@@ -413,7 +413,30 @@ describe('startImeiWalletPayment', () => {
           state: 'confirmed' as const,
         })),
       });
-      await startImeiWalletPayment(replay(), d);
+      const response = await startImeiWalletPayment(replay(), d);
+      expect(d.issue).not.toHaveBeenCalled();
+      // bugfix (Codex P2): the operation comes back so delivery can resume.
+      expect(response.status).toBe(202);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      await expect(response.json()).resolves.toEqual({
+        status: 'payment_pending',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 40000,
+      });
+    });
+
+    it('hands back a payment under review as such', async () => {
+      const d = deps({
+        findForPurchase: vi.fn(async () => ({
+          operationId: OP,
+          state: 'needs_review' as const,
+        })),
+      });
+      const response = await startImeiWalletPayment(replay(), d);
+      await expect(response.json()).resolves.toMatchObject({
+        status: 'payment_review',
+      });
       expect(d.issue).not.toHaveBeenCalled();
     });
   });

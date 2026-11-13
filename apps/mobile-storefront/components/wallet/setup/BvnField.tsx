@@ -23,17 +23,25 @@ export function BvnField({
   editable: boolean;
 }) {
   const [visible, setVisible] = useState(false);
+  const [focused, setFocused] = useState(false);
+  // Neutral at rest, brand colour while typing, red only for a real error.
+  const borderColor = error
+    ? colors.error
+    : focused
+      ? BRAND.primary
+      : colors.border;
   return (
     <View style={setupStyles.field}>
       <Text style={[setupStyles.fieldLabel, { color: colors.text }]}>
         Your BVN
       </Text>
       <View
+        testID="bvn-input-wrap"
         style={[
           setupStyles.inputWrap,
           {
             backgroundColor: colors.muted,
-            borderColor: error ? colors.error : BRAND.primary,
+            borderColor,
           },
         ]}
       >
@@ -54,6 +62,8 @@ export function BvnField({
           autoCorrect={false}
           textContentType="none"
           editable={editable}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder="11-digit BVN"
           placeholderTextColor={colors.placeholder}
           style={[setupStyles.input, { color: colors.text }]}

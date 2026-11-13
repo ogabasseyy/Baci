@@ -1,4 +1,5 @@
-import { imeiWalletPayCovers } from './use-imei-wallet-pay';
+import { renderHook } from '@testing-library/react-native';
+import { imeiWalletPayCovers, useImeiWalletPay } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
@@ -99,5 +100,26 @@ describe('bugfix: wallet pay offered for an unavailable or unresolved wallet (Mu
           tier: 'basic',
         })
       ).toBe(false);
+  });
+});
+
+describe('bugfix: a stale balance chose PiggyVest during a refresh (Muse)', () => {
+  it('covers nothing while the wallet is re-read, so badge and verify agree', () => {
+    const ready = { balance: 0, primary_balance_kobo: 1_000_000 };
+    const render = (isRefetching: boolean) =>
+      renderHook(() =>
+        useImeiWalletPay({
+          apiBaseUrl: 'https://api.test',
+          device: 'smartphone',
+          walletQuery: { data: { wallet: ready }, isRefetching },
+          onDelivered: jest.fn(),
+          canPay: true,
+        })
+      ).result.current;
+    expect(render(false).covers('basic')).toBe(true);
+    const refreshing = render(true);
+    expect(refreshing.covers('basic')).toBe(false);
+    expect(refreshing.view.covers('basic')).toBe(false);
+    expect(refreshing.view.savingsKobo).toBeNull();
   });
 });

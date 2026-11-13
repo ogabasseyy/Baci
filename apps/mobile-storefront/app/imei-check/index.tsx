@@ -85,7 +85,6 @@ export default function ImeiCheckerScreen() {
   });
   const requestIdentity = useImeiRequestIdentity(Crypto.randomUUID);
   const walletPay = useImeiWalletPay({
-    accessToken: session?.access_token,
     apiBaseUrl: API_BASE_URL,
     device: selectedDevice,
     walletQuery,

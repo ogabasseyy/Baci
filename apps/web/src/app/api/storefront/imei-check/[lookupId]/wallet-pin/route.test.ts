@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   binding: vi.fn(),
   limit: vi.fn(),
   verify: vi.fn(),
+  readLookup: vi.fn(),
+}));
+vi.mock('@/lib/imei-access', () => ({
+  createImeiAccessClient: () => ({ readStatus: mocks.readLookup }),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -73,6 +77,10 @@ beforeEach(() => {
     purchase: { purpose: 'imei_check', purchaseRef: LOOKUP },
   });
   mocks.limit.mockResolvedValue(null);
+  mocks.readLookup.mockResolvedValue({
+    data: { amount_ngn: 500 },
+    error: null,
+  });
   mocks.verify.mockResolvedValue({
     status: 'verified',
     proof: 'b'.repeat(64),
@@ -175,6 +183,20 @@ describe('POST /imei-check/[lookupId]/wallet-pin', () => {
       '-'.repeat(36)
     );
     expect(response.status).toBe(400);
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: refuses a payment whose amount is not the lookup price, before charging the PIN budget (Muse)', async () => {
+    mocks.readLookup.mockResolvedValue({
+      data: { amount_ngn: 499 },
+      error: null,
+    });
+    const response = await call({ operationId: OP, pin: '1234' });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_OPERATION_INVALID',
+    });
+    expect(mocks.limit).not.toHaveBeenCalled();
     expect(mocks.verify).not.toHaveBeenCalled();
   });
 });

@@ -229,25 +229,27 @@ describe('startImeiWalletPayment', () => {
       expect(deletePending).toHaveBeenCalledTimes(3);
     });
 
-    it('bugfix: an issue that throws removes the new lookup, then fails (Codex P2)', async () => {
+    it('bugfix: an issue that throws removes the new lookup and answers a retryable 503, not a 500 (Muse)', async () => {
       const deletePending = vi.fn(async () => ({ data: null, error: null }));
       const issue = vi.fn(async () => {
         throw new Error('database unreachable');
       });
-      await expect(
-        startImeiWalletPayment(
-          input({
-            supabaseAdmin: {
-              insertPending: vi.fn(async () => ({
-                data: { id: LOOKUP },
-                error: null,
-              })),
-              deletePending,
-            },
-          }),
-          deps({ issue })
-        )
-      ).rejects.toThrow('database unreachable');
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue })
+      );
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PIGGYVEST_PAY_UNAVAILABLE',
+      });
       expect(deletePending).toHaveBeenCalledWith(LOOKUP);
     });
 

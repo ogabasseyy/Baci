@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { createImeiAccessClient } from '@/lib/imei-access';
 import { verifyGoalPin } from '@/lib/piggyvest/goal-pin-verify';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
@@ -78,6 +79,22 @@ export async function POST(
     if (
       issued.purchase.purpose !== 'imei_check' ||
       issued.purchase.purchaseRef !== lookupId
+    )
+      return invalid();
+    // The payment must carry the lookup's recorded price: a wrong-price
+    // payment never spends the PIN budget or gets a proof (Muse).
+    const lookup = await createImeiAccessClient({
+      customerId: identity.customerId,
+      merchantId: identity.merchantId,
+      supabase,
+      userId: identity.userId,
+    }).readStatus(lookupId);
+    if (lookup.error) throw new Error('IMEI lookup read failed');
+    const priceNgn = (lookup.data as { amount_ngn?: unknown } | null)
+      ?.amount_ngn;
+    if (
+      priceNgn === undefined ||
+      Math.round(Number(priceNgn) * 100) !== issued.binding.amountKobo
     )
       return invalid();
     // Charged only once a real PIN check will happen.

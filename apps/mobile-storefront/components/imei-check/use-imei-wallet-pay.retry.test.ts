@@ -33,7 +33,6 @@ const refetch = jest.fn();
 function setup() {
   return renderHook(() =>
     useImeiWalletPay({
-      accessToken: 'token',
       apiBaseUrl: 'https://api.test',
       device: 'smartphone',
       walletQuery: {

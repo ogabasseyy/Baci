@@ -135,7 +135,9 @@ export async function payImeiWalletPayment(
   const lookup = await deps.readLookup(identity, lookupId);
   if (!lookup) return refuse('IMEI check not found.', 'LOOKUP_NOT_FOUND', 404);
   const salt = deps.hashSalt();
-  if (!salt)
+  // Only a new spend or a new delivery hashes the IMEI: a finished lookup's
+  // status check answers without the salt (Codex P2).
+  if (!salt && (body.pinProof !== '' || lookup.status === 'pending'))
     return refuse(
       'IMEI lookup is temporarily unavailable.',
       'IMEI_HASH_SALT_MISSING',
@@ -150,6 +152,7 @@ export async function payImeiWalletPayment(
   const normalizedImei = normalizeForLookup(body.imei, lookup);
   const matches =
     normalizedImei !== null &&
+    !!salt &&
     hashImei(normalizedImei, salt) === lookup.imei_hash;
   const mismatch = () =>
     refuse(

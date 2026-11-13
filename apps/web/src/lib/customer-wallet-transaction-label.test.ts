@@ -38,6 +38,60 @@ describe('customerWalletTransactionLabel', () => {
     ).toBe('IMEI wallet payment');
   });
 
+  it('strips truncated ids, long hex or digit tokens and an IMEI on the generic path', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Petrock IMEI wallet payment: 3f2b…',
+        sourceType: null,
+      })
+    ).toBe('IMEI wallet payment');
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Check for 356938035643809 ref a1b2c3d4e5f6',
+        sourceType: null,
+      })
+    ).toBe('Check for ref');
+  });
+
+  it('strips an unlisted provider named after via/by/through, and known stack providers', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Wallet top-up via Acmepay',
+        sourceType: null,
+      })
+    ).toBe('Wallet top-up');
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Refund from Kuda for bill payment',
+        sourceType: null,
+      })
+    ).toBe('Refund for bill payment');
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Delivery fee Shiip',
+        sourceType: null,
+      })
+    ).toBe('Delivery fee');
+  });
+
+  it('keeps an amount and a multi-word "via" phrase', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Wallet top-up via bank transfer ₦5000',
+        sourceType: null,
+      })
+    ).toBe('Wallet top-up via bank transfer ₦5000');
+  });
+
+  it('keeps ordinary words that only use hex letters', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Money added… to a faded deed',
+        sourceType: null,
+      })
+    ).toBe('Money added… to a faded deed');
+  });
+
   it('keeps networks and billers the customer chose', () => {
     expect(
       customerWalletTransactionLabel({

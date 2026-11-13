@@ -131,4 +131,40 @@ describe('vtuWalletOnlyChargeSchema', () => {
       expect('customerId' in result.data).toBe(false);
     }
   });
+
+  describe('paying from the PiggyVest wallet (dark)', () => {
+    it('defaults to store credit, exactly as before', () => {
+      const result = vtuWalletOnlyChargeSchema.parse({
+        ...baseAirtime,
+        walletAmount: 1000,
+      });
+      expect(result.paymentMethod).toBe('store_credit');
+    });
+
+    it('accepts the PiggyVest method with an operation id and a PIN proof', () => {
+      const result = vtuWalletOnlyChargeSchema.safeParse({
+        ...baseAirtime,
+        walletAmount: 1000,
+        paymentMethod: 'piggyvest_wallet',
+        walletPayOperationId: '22222222-2222-4222-8222-222222222222',
+        walletPayPinProof: 'a'.repeat(64),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an unknown method or a malformed proof', () => {
+      for (const extra of [
+        { paymentMethod: 'card' },
+        { walletPayPinProof: 'not-a-proof' },
+        { walletPayOperationId: 'not-a-uuid' },
+      ])
+        expect(
+          vtuWalletOnlyChargeSchema.safeParse({
+            ...baseAirtime,
+            walletAmount: 1000,
+            ...extra,
+          }).success
+        ).toBe(false);
+    });
+  });
 });

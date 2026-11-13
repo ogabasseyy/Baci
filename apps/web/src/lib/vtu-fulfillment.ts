@@ -40,6 +40,10 @@ import {
   throwVtuPersistenceError,
   VtuPersistenceError,
 } from '@/lib/vtu-persistence-error';
+import {
+  isPiggyvestWalletPaid,
+  piggyvestWalletPaidHold,
+} from '@/lib/vtu-piggyvest-wallet-paid';
 
 export { VtuPersistenceError };
 
@@ -2050,13 +2054,20 @@ async function executeVtuPurchase(
 }
 
 export async function fulfillPendingVtuTransaction({
-  retryFailed = false,
+  retryFailed: retryFailedRequested = false,
   supabase,
   transactionId,
+  walletPayClaimed = false,
 }: {
   retryFailed?: boolean;
   supabase: SupabaseClient;
   transactionId: string;
+  /**
+   * The caller holds the delivery claim of this row's confirmed PiggyVest
+   * payment (vtu-piggyvest-wallet-paid). Only then may a PiggyVest-paid
+   * row be vended.
+   */
+  walletPayClaimed?: boolean;
 }): Promise<FulfilledVtuResult> {
   const { data: existing, error: existingError } = await supabase
     .from('vtu_transactions')
@@ -2071,6 +2082,10 @@ export async function fulfillPendingVtuTransaction({
   }
 
   const row = existing as VtuTransactionRow;
+  // A PiggyVest-paid row is never re-vended after a failure: its refund goes
+  // to the PiggyVest wallet (vtu-piggyvest-wallet-paid).
+  const piggyvestPaid = isPiggyvestWalletPaid(row.metadata);
+  const retryFailed = retryFailedRequested && !piggyvestPaid;
   if (row.status === 'successful') {
     return resolveSuccessfulVtuTransaction({ row, supabase });
   }
@@ -2160,6 +2175,11 @@ export async function fulfillPendingVtuTransaction({
       supabase,
     });
   }
+
+  // A PiggyVest-paid row moves no store credit and is vended only by the
+  // request holding its payment's delivery claim; every other caller (cron,
+  // history, replays) waits.
+  if (piggyvestPaid && !walletPayClaimed) return piggyvestWalletPaidHold(row);
 
   let claimedViaRetryRpc = false;
   if (row.status === 'failed' && retryFailed) {
@@ -2385,7 +2405,9 @@ export async function fulfillPendingVtuTransaction({
     paymentSplitForDebit.wallet > 0 &&
     preDebitMetadata.walletDebited !== true &&
     row.customer_id &&
-    row.source === 'checkout'
+    row.source === 'checkout' &&
+    // Paid by the confirmed PiggyVest payment, never by store credit.
+    !isPiggyvestWalletPaid(preDebitMetadata)
   ) {
     const { error: debitError } = await supabase.rpc(
       'redeem_vtu_wallet_payment',

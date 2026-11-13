@@ -13,6 +13,7 @@ import {
   verifyBillCustomer as verifyMonnifyBillCustomer,
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
+import { piggyvestPaymentSourceMetadata } from '@/lib/vtu-piggyvest-wallet-paid';
 import {
   type CustomerRecord,
   resolveVtuCustomer,
@@ -474,7 +475,10 @@ export async function preparePendingVtuTransaction({
    * `vtu_transactions.customer_name` so receipts and "Repeat last" can
    * surface the verified name.
    */
-  input: PurchaseInput & { customerName?: string };
+  input: PurchaseInput & {
+    customerName?: string;
+    paymentMethod?: 'store_credit' | 'piggyvest_wallet';
+  };
   source: PurchaseInput['source'];
   requireCustomer?: boolean;
   /** Fail 5xx (not 400/404) on transient lookup errors; see resolver. */
@@ -892,6 +896,7 @@ export async function preparePendingVtuTransaction({
       // purchases`) and the fulfillment debit gate enforces it at
       // the money-movement layer; this guard keeps the persisted
       // metadata coherent with both.
+      ...piggyvestPaymentSourceMetadata(source, input.paymentMethod),
       ...(source === 'checkout' && input.walletAmount && input.walletAmount > 0
         ? {
             paymentSplit: {

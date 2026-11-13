@@ -14,6 +14,16 @@ export function useImeiRequestIdentity(createKey: () => string) {
     clear() {
       active.current = null;
     },
+    /**
+     * True while a store credit request for this check keeps its key (its
+     * answer was lost): it must be replayed, never switched to another rail.
+     */
+    retains(tier: ImeiServiceTierKey, identifier: string) {
+      return (
+        active.current?.identifier === identifier &&
+        active.current.tier === tier
+      );
+    },
     get(tier: ImeiServiceTierKey, identifier: string) {
       if (
         active.current?.identifier === identifier &&

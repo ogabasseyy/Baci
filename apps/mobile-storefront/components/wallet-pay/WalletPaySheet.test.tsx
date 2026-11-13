@@ -113,6 +113,13 @@ describe('WalletPaySheet', () => {
     expect(onOpenWallet).toHaveBeenCalled();
   });
 
+  it('bugfix: keeps Pay disabled for a PIN longer than 6 digits (Muse)', () => {
+    renderSheet(sheetState({ pin: '1234567' }));
+    expect(
+      screen.getByRole('button', { name: 'Pay ₦300' }).props.accessibilityState
+    ).toMatchObject({ disabled: true });
+  });
+
   it('keeps Pay disabled until the PIN has 4 digits', () => {
     const sheet = sheetState({ pin: '12' });
     renderSheet(sheet);

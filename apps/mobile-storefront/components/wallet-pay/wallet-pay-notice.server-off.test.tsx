@@ -51,3 +51,15 @@ describe('walletPayNotice', () => {
     }
   });
 });
+
+describe('bugfix: a refused start said "Something went wrong" twice with no reason (Fable walk)', () => {
+  it('names a failed payment and asks to check the details', () => {
+    const notice = walletPayNotice({
+      kind: 'failed',
+      failedReason: 'check_details',
+    });
+    expect(notice.title).toBe("Payment didn't go through");
+    expect(notice.message).toMatch(/Check the number and amount/);
+    expect(notice.message).toMatch(/Nothing was taken/);
+  });
+});

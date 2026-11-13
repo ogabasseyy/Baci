@@ -8,6 +8,8 @@ import { router } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { Keyboard, View } from 'react-native';
+import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
+import { chooseImeiPaymentRail } from '@/components/imei-check/choose-imei-payment-rail';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
 import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
 import HeroCard from '@/components/imei-check/imei-check-hero-card';
@@ -139,11 +141,15 @@ export default function ImeiCheckerScreen() {
       setError(walletCopy.unavailable);
       return;
     }
-    if (walletPay.covers(tier)) return void walletPay.open(tier, imei);
-    if (walletBalance < serviceTier.price) {
-      fundWallet(serviceTier.price - walletBalance);
-      return;
-    }
+    const rail = chooseImeiPaymentRail({
+      retainedStoreCredit: requestIdentity.retains(tier, imei),
+      piggyvestCovers: walletPay.covers(tier),
+      walletBalance,
+      price: serviceTier.price,
+    });
+    if (rail === 'piggyvest') return void walletPay.open(tier, imei);
+    if (rail === 'top_up')
+      return void fundWallet(serviceTier.price - walletBalance);
 
     setIsLoading(true);
     setError(null);
@@ -171,23 +177,13 @@ export default function ImeiCheckerScreen() {
           walletBalance,
         });
 
-        if (outcome.shouldClearIdempotencyKey) {
-          clearIdempotencyKey();
-        }
-        if (outcome.shouldRedirectToLogin) {
-          router.push('/auth/login?returnTo=/imei-check');
-          return;
-        }
-        if (outcome.topUpAmount !== null) {
-          fundWallet(outcome.topUpAmount);
-          return;
-        }
-        if (outcome.shouldRefetchWallet) {
-          await walletQuery.refetch?.();
-        }
-        if (outcome.errorMessage) {
-          setError(outcome.errorMessage);
-        }
+        await applyImeiCheckFailure(outcome, {
+          clearKey: clearIdempotencyKey,
+          signIn: () => router.push('/auth/login?returnTo=/imei-check'),
+          topUp: fundWallet,
+          refetchWallet: () => walletQuery.refetch?.(),
+          showError: setError,
+        });
         return;
       }
 

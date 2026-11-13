@@ -17,7 +17,7 @@ export type WalletPayOutcomeKind =
   | 'not_started'
   | 'failed';
 
-export type WalletPayFailedReason = 'imei_mismatch';
+export type WalletPayFailedReason = 'imei_mismatch' | 'check_details';
 
 export type WalletPayOutcome = {
   kind: WalletPayOutcomeKind;

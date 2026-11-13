@@ -15,7 +15,7 @@ export async function checkPendingPrimarySavings(input: {
   setPending: (value: boolean) => void;
 }) {
   // Captured before any await: a result never reaches another account.
-  const notify = savingsNotifier();
+  const notify = savingsNotifier({ successFollowsGoal: true });
   input.setPending(true);
   try {
     const result = await checkPiggyvestPrimarySavingsStatus({

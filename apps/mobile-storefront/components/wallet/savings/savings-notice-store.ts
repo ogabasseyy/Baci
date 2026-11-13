@@ -8,6 +8,12 @@ export type SavingsNotice = {
   tone: SavingsNoticeTone;
   /** The signed-in customer and store it was shown for. */
   scope?: string;
+  /**
+   * Survives the next goal switch once: a contribution that completes its
+   * goal moves the sheet to another goal, and its confirmation must not be
+   * dropped by that switch.
+   */
+  carry?: boolean;
 };
 
 /**

@@ -26,6 +26,27 @@ describe('server keeps PiggyVest off: useSavingsNotice', () => {
     expect(result.current.notice).toBeNull();
   });
 
+  it('keeps a carried success through one goal switch, then drops it', () => {
+    const { result, rerender } = renderHook(
+      ({ goalId }: { goalId: string | null }) => useSavingsNotice(goalId),
+      { initialProps: { goalId: 'goal-a' as string | null } }
+    );
+    act(() => {
+      useSavingsNoticeStore.setState({
+        notice: {
+          title: 'Goal reached! 🎉',
+          tone: 'success',
+          scope: 'u-1:m-1',
+          carry: true,
+        },
+      });
+    });
+    rerender({ goalId: 'goal-b' });
+    expect(result.current.notice?.title).toBe('Goal reached! 🎉');
+    rerender({ goalId: 'goal-c' });
+    expect(result.current.notice).toBeNull();
+  });
+
   it('keeps an outcome when the goal leaves the wallet (no goal on screen)', () => {
     const { result, rerender } = renderHook(
       ({ goalId }: { goalId: string | null }) => useSavingsNotice(goalId),

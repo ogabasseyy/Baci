@@ -39,4 +39,26 @@ describe('server keeps PiggyVest off: savingsNotifier', () => {
     act(() => notify('Phone changed', 'iPhone 15 for goal A'));
     expect(useSavingsNoticeStore.getState().notice).toBeNull();
   });
+
+  it("keeps a contribution's success once completing its goal moved the sheet", () => {
+    const notify = savingsNotifier({ successFollowsGoal: true });
+    act(() => {
+      useSavingsNoticeStore.setState({ goalId: 'goal-b' });
+    });
+    act(() =>
+      notify('Goal reached! 🎉', 'iPhone 15 is fully saved', 'success')
+    );
+    expect(useSavingsNoticeStore.getState().notice?.title).toBe(
+      'Goal reached! 🎉'
+    );
+  });
+
+  it('still drops a non-success notice after the goal changed', () => {
+    const notify = savingsNotifier({ successFollowsGoal: true });
+    act(() => {
+      useSavingsNoticeStore.setState({ goalId: 'goal-b' });
+    });
+    act(() => notify('Contribution pending', 'still checking', 'info'));
+    expect(useSavingsNoticeStore.getState().notice).toBeNull();
+  });
 });

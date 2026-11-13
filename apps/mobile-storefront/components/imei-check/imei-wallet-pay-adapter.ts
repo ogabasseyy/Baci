@@ -2,6 +2,7 @@ import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
 import { z } from 'zod';
 import type {
   WalletPayAdapter,
+  WalletPayFailedReason,
   WalletPayOutcome,
   WalletPayPayAnswer,
 } from '@/components/wallet-pay/wallet-pay.types';
@@ -27,12 +28,12 @@ const issued = z.object({
 
 const codeOf = (reply: WalletPayReply) =>
   typeof reply.body.code === 'string' ? reply.body.code : '';
-// Only the app's own wording reaches the outcome card, never server text.
-const IMEI_MISMATCH_TEXT =
-  'This IMEI does not match the check you started. Nothing more was taken.';
-const outcome = (kind: WalletPayOutcome['kind'], message?: string) => ({
+const outcome = (
+  kind: WalletPayOutcome['kind'],
+  failedReason?: WalletPayFailedReason
+) => ({
   kind: 'outcome' as const,
-  outcome: message ? { kind, message } : { kind },
+  outcome: failedReason ? { kind, failedReason } : { kind },
 });
 
 /** Answers every step can give before any money moves. */
@@ -86,7 +87,7 @@ export function imeiPayAnswer(
   const code = codeOf(reply);
   if (code === 'PIN_PROOF_REQUIRED' || code === 'PIN_PROOF_REFUSED')
     return { kind: 'pin_again', message: 'Please enter your PIN again.' };
-  if (code === 'IMEI_MISMATCH') return outcome('failed', IMEI_MISMATCH_TEXT);
+  if (code === 'IMEI_MISMATCH') return outcome('failed', 'imei_mismatch');
   const refused = refusal(reply);
   // A lost session or a pause says nothing about a payment already sent.
   if (

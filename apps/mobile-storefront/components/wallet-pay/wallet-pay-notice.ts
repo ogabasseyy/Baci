@@ -1,8 +1,15 @@
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type {
+  WalletPayFailedReason,
   WalletPayOutcome,
   WalletPayOutcomeKind,
 } from './wallet-pay.types';
+
+// The only extra failure wording the card can show (app copy, never server).
+const FAILED_REASONS: Record<WalletPayFailedReason, string> = {
+  imei_mismatch:
+    'This IMEI does not match the check you started. Nothing more was taken.',
+};
 
 export type WalletPayNoticeTone = 'success' | 'info' | 'warning';
 
@@ -117,7 +124,9 @@ export function walletPayNotice(
     (outcome.maybePaid ? maybePaid[outcome.kind] : undefined) ??
     notices[outcome.kind];
   // Callers pass only the app's own wording here, never server text.
-  return outcome.message && outcome.kind === 'failed'
-    ? { ...notice, message: outcome.message }
-    : notice;
+  const reason =
+    outcome.kind === 'failed' && outcome.failedReason
+      ? FAILED_REASONS[outcome.failedReason]
+      : null;
+  return reason ? { ...notice, message: reason } : notice;
 }

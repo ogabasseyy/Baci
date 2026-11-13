@@ -17,10 +17,15 @@ export type WalletPayOutcomeKind =
   | 'not_started'
   | 'failed';
 
+export type WalletPayFailedReason = 'imei_mismatch';
+
 export type WalletPayOutcome = {
   kind: WalletPayOutcomeKind;
-  /** The server's own words, when they say more than the default. */
-  message?: string;
+  /**
+   * Why a 'failed' happened, from a fixed list: the notice turns it into the
+   * app's own wording, so no server or adapter text ever reaches the card.
+   */
+  failedReason?: WalletPayFailedReason;
   /**
    * The payment may already have been sent (a refusal on a re-check), so
    * the wording must not claim that nothing was taken.

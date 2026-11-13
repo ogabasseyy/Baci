@@ -22,17 +22,17 @@ describe('walletPayNotice', () => {
     expect(notice.message).toContain('Nothing was taken');
   });
 
-  it('uses the server wording only for a plain failure', () => {
+  it('uses an allow-listed reason only for a plain failure', () => {
     expect(
       walletPayNotice(
-        { kind: 'failed', message: 'This IMEI does not match.' },
+        { kind: 'failed', failedReason: 'imei_mismatch' },
         null,
         'IMEI check'
       ).message
-    ).toBe('This IMEI does not match.');
+    ).toContain('This IMEI does not match');
     expect(
       walletPayNotice(
-        { kind: 'refunded', message: 'other words' },
+        { kind: 'refunded', failedReason: 'imei_mismatch' },
         null,
         'IMEI check'
       ).message

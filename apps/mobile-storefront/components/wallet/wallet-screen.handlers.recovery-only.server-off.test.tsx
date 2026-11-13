@@ -11,6 +11,7 @@ jest.mock('./is-same-signed-in-user', () => ({
 }));
 jest.mock('@/lib/primary-wallet-card', () => ({
   createPrimaryWalletCardFundingClient: () => ({
+    peekRaw: async () => null,
     readPending: () => mockReadPending(),
     recover: () => mockRecover(),
     start: () => mockStart(),

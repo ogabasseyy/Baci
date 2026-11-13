@@ -163,7 +163,8 @@ describe('bugfix: pending PiggyVest account shown as a spendable total', () => {
           onOpenFundPanel={jest.fn()}
           onOpenRedeemPanel={jest.fn()}
           savingsBalance={0}
-          savingsWalletBalance={1200}
+          savingsWalletBalance={0}
+          storeCreditBalance={1200}
           totalBalance={1200}
         />
       </WalletPrimaryContext.Provider>

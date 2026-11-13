@@ -199,6 +199,10 @@ export function useCheckoutPaymentController({
         // No authoritative verdict yet (Codex): a restored legacy wallet
         // can't be trusted until the merchant's PiggyVest status is known.
         readPiggyvestCapabilityNow(merchantId) === null ||
+        // PiggyVest confirmed: a wallet transfer would fund savings or a
+        // stale legacy wallet not yet reclassified (Codex).
+        (readPiggyvestCapabilityNow(merchantId) === true &&
+          !walletIsStoreCredit) ||
         (piggyvestPossible &&
           (!walletQuery.data?.wallet ||
             walletQuery.data.wallet.owner_unresolved === true ||
@@ -276,7 +280,9 @@ export function useCheckoutPaymentController({
     // merchant's PiggyVest status is authoritative (Codex).
     isWalletFundedBankTransferHeld: () => {
       const capabilityNow = readPiggyvestCapabilityNow(merchantId);
-      if (capabilityNow === null) return true;
+      // Unknown, or PiggyVest confirmed before the wallet is reclassified
+      // (Codex): never a wallet-funded transfer for a PiggyVest merchant.
+      if (capabilityNow !== false) return true;
       // The live verdict alone decides at submit (Muse).
       return isLiveWalletTransferHeld(walletQuery, capabilityNow);
     },

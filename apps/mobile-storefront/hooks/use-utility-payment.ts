@@ -87,8 +87,10 @@ export function useUtilityPayment() {
           const verdict = readLiveVerdict({
             holdUnsettled: capabilityNow !== false,
           });
-          // No authoritative verdict (Codex): the wallet kind is unknown.
-          return capabilityNow === null
+          // No authoritative verdict, or PiggyVest confirmed before the
+          // wallet is reclassified (Codex): the wallet kind is unknown.
+          return capabilityNow === null ||
+            (capabilityNow === true && !verdict.walletIsStoreCredit)
             ? { ...verdict, walletPrimaryUnknown: true }
             : verdict;
         },
@@ -175,6 +177,8 @@ export function useUtilityPayment() {
     // hold bank-transfer top-ups until the wallet settles.
     ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
     readPiggyvestCapabilityNow(authMerchantId) === null ||
+    (readPiggyvestCapabilityNow(authMerchantId) === true &&
+      !isWalletStoreCredit(wallet.data?.wallet)) ||
     (piggyvestPossible &&
       (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
       ? { walletPrimaryUnknown: true as const }

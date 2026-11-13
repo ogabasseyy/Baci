@@ -3,6 +3,14 @@ import { router } from 'expo-router';
 import { imeiCheckScreenActions } from './imei-check-screen-actions';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+// The server rules PiggyVest out unless a test says otherwise.
+let mockCapabilityNow: boolean | null = false;
+jest.mock('@/lib/read-piggyvest-capability-now', () => ({
+  readPiggyvestCapabilityNow: () => mockCapabilityNow,
+}));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => ({ merchantId: 'merchant-1' }) },
+}));
 
 describe('imeiCheckScreenActions', () => {
   it('rounds a wallet shortfall up and preserves the return route', () => {
@@ -55,6 +63,22 @@ describe('bugfix: IMEI shortfall below the card minimum', () => {
 
     expect(router.push).toHaveBeenLastCalledWith(
       '/wallet?action=fund&requiredAmount=50&returnTo=/imei-check'
+    );
+  });
+});
+
+describe('bugfix: IMEI request settles after PiggyVest turned on', () => {
+  it('clamps to the card minimum when the verdict turned positive mid-request', () => {
+    // Arrange: rendered as legacy (storeCredit false), verdict now positive.
+    mockCapabilityNow = true;
+
+    // Act
+    imeiCheckScreenActions.fundWallet(50);
+    mockCapabilityNow = false;
+
+    // Assert: the wallet sheet will show the card-only store credit form.
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
     );
   });
 });

@@ -82,9 +82,7 @@ export function WalletHeroSection({
   const pendingPiggyvest =
     !primaryReady && fundingAccount?.provider === 'piggyvest';
   const savingsView = primaryReady || pendingPiggyvest;
-  const storeCredit = pendingPiggyvest
-    ? savingsWalletBalance
-    : storeCreditBalance;
+  const storeCredit = storeCreditBalance;
   // A legacy account number from a wallet cached before the merchant's
   // PiggyVest status is known stays hidden until it is (Codex).
   const legacyUnconfirmed = useLegacyFundingUnconfirmed(

@@ -223,6 +223,8 @@ describe('bugfix: PiggyVest balance offered as spendable at checkout', () => {
 
   it('exposes a live re-check that holds once the wallet turns PiggyVest', () => {
     // Arrange: legacy at render; the cache now reads PiggyVest store credit.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
     mockWallet = { balance: 0 };
     mockLiveVerdict = {
       walletIsStoreCredit: true,
@@ -329,6 +331,32 @@ describe('bugfix: restored legacy wallet trusted before the PiggyVest verdict', 
 
     // Assert
     expect(result.current.walletFundedBankTransferOptionEnabled).toBe(false);
+    expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
+  });
+});
+
+describe('bugfix: positive verdict before the wallet is reclassified', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('holds at submit when PiggyVest turned on but the wallet is still legacy', () => {
+    // Arrange: rendered as ruled out with a legacy wallet.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWallet = { balance: 0 };
+    mockLiveVerdict = {
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    };
+    const { result } = renderController();
+
+    // Act: the verdict turns positive before the recheck starts.
+    observePiggyvestPrimaryCapability('merchant-1', true);
+
+    // Assert
     expect(result.current.isWalletFundedBankTransferHeld()).toBe(true);
   });
 });

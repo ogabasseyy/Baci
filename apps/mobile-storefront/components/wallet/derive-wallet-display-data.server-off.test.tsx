@@ -59,3 +59,18 @@ describe('bugfix: unsettled PiggyVest check not passed to the Add money sheet', 
     ).toBeUndefined();
   });
 });
+
+describe('bugfix: pending PiggyVest balance offered to savings contributions', () => {
+  it('gives the savings sheet nothing to spend while the PiggyVest balance is pending', () => {
+    // Arrange: PiggyVest account confirmed, balance not ready; ₦1,200 legacy.
+    const display = deriveWalletDisplayData({
+      balance: 1200,
+      primary_pending: true,
+    });
+
+    // Assert: no contribution from store credit; it stays store credit.
+    expect(display.walletBalance).toBe(0);
+    expect(display.legacyBalance).toBe(1200);
+    expect(display.primaryReady).toBeUndefined();
+  });
+});

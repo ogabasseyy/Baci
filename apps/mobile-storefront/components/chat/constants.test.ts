@@ -40,6 +40,9 @@ describe('chat constants', () => {
     it('contains expected routes', () => {
       expect(HIDDEN_ROUTES).toContain('/checkout');
       expect(HIDDEN_ROUTES).toContain('/cart');
+      // The button covered Wallet PIN and notification controls.
+      expect(HIDDEN_ROUTES).toContain('/settings');
+      expect(HIDDEN_ROUTES).toContain('/notifications');
       expect(HIDDEN_ROUTES).toContain('/auth/login');
       expect(HIDDEN_ROUTES).toContain('/order-success');
       expect(HIDDEN_ROUTES).toContain('/quiz');

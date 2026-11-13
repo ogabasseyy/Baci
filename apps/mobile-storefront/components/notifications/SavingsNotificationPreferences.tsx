@@ -113,7 +113,7 @@ export function SavingsNotificationPreferences({
           style={[styles.subtitle, { color: colors.textSecondary }]}
         >
           {formatDateTimeDisplay(quietHoursStart, 'time')} –{' '}
-          {formatDateTimeDisplay(quietHoursEnd, 'time')} (use 24-hour HH:MM)
+          {formatDateTimeDisplay(quietHoursEnd, 'time')}
         </Text>
         <View style={styles.timeFields}>
           <SavingsQuietHoursTimeField
@@ -137,7 +137,10 @@ export function SavingsNotificationPreferences({
             value={quietHoursEnd}
           />
         </View>
-        <Text style={[styles.timeZoneLabel, { color: colors.textSecondary }]}>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Enter times in 24-hour format, for example 22:00.
+        </Text>
+        <Text style={[styles.timeZoneLabel, { color: colors.text }]}>
           Time zone
         </Text>
         <TextInput

@@ -51,6 +51,22 @@ describe('PIN steps with the server off', () => {
     expect(view.result.current.steps.stage).toBe('current');
   });
 
+  it('goes back one step at a time, clearing the step it leaves', () => {
+    const { view, enter } = setup('change');
+    expect(view.result.current.steps.canGoBack).toBe(false);
+    enter('1234');
+    enter('5678');
+    expect(view.result.current.steps.stage).toBe('confirm');
+    act(() => view.result.current.steps.back());
+    expect(view.result.current.steps.stage).toBe('new');
+    expect(view.result.current.pin.newPin).toBe('5678');
+    act(() => view.result.current.steps.back());
+    expect(view.result.current.steps.stage).toBe('current');
+    expect(view.result.current.pin.newPin).toBe('');
+    expect(view.result.current.pin.currentPin).toBe('1234');
+    expect(view.result.current.steps.canGoBack).toBe(false);
+  });
+
   it('does not move on before four digits', () => {
     const { view, enter } = setup('set');
     enter('123');

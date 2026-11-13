@@ -14,6 +14,8 @@ import type { SavingsNotification } from '@/schemas/savings-notifications';
 
 type SavingsNotificationListProps = {
   header: ReactElement | null;
+  /** Scrolls with the list, so it never covers the empty state. */
+  footer?: ReactElement | null;
   isLoading: boolean;
   notifications: SavingsNotification[];
   onOpen: (notification: SavingsNotification) => void;
@@ -62,6 +64,7 @@ function getNotificationIcon(
 
 export function SavingsNotificationList({
   header,
+  footer,
   isLoading,
   notifications,
   onOpen,
@@ -126,7 +129,7 @@ export function SavingsNotificationList({
         <Text
           style={[styles.stateDescription, { color: colors.textSecondary }]}
         >
-          Your plan milestones and credited-interest alerts will appear here.
+          Your plan milestones and interest updates will appear here.
         </Text>
       </View>
     );
@@ -138,6 +141,7 @@ export function SavingsNotificationList({
       keyExtractor={(notification) => notification.id}
       ListEmptyComponent={renderEmpty}
       ListHeaderComponent={header}
+      ListFooterComponent={footer}
       contentContainerStyle={styles.content}
       renderItem={({ item }) => (
         <Pressable

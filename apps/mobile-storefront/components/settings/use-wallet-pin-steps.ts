@@ -87,5 +87,18 @@ export function useWalletPinSteps(pin: PinSettings) {
     advance,
     /** "Forgot your PIN?" and any outcome that changes the form restart it. */
     restart: () => go(firstStage(pin.mode)),
+    /** Past the first step, back goes one step back instead of leaving. */
+    canGoBack: stage !== firstStage(pin.mode),
+    back: () => {
+      pin.showError(null);
+      if (stage === 'confirm') {
+        pin.setConfirmPin('');
+        return go('new');
+      }
+      if (stage === 'new') {
+        pin.setNewPin('');
+        if (pin.mode === 'change') return go('current');
+      }
+    },
   };
 }

@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Redirect, Stack } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
@@ -23,6 +24,8 @@ export function WalletPinSettingsScreen() {
   const auth = useRequireAuth();
   const pin = useWalletPinSettings();
   const steps = useWalletPinSteps(pin);
+  // Back from "Choose a new PIN" or "Confirm" returns to the previous step.
+  usePreventRemove(steps.canGoBack && !pin.savedTitle, steps.back);
 
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
 

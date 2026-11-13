@@ -29,6 +29,10 @@ export const HIDDEN_ROUTES = [
   '/search',
   '/account',
   '/quiz',
+  // Settings (Wallet PIN's pad and button) and the notifications screen:
+  // the button covered their controls.
+  '/settings',
+  '/notifications',
 ];
 
 // H24 note: These are intentionally static — used only for FAB initial position

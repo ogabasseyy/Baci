@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { Text } from 'react-native';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
 import {
   formatSavingsNotificationTimestamp,
@@ -13,11 +14,13 @@ jest.mock('@shopify/flash-list', () => ({
     data,
     ListEmptyComponent,
     ListHeaderComponent,
+    ListFooterComponent,
     renderItem,
   }: {
     data: Array<{ id: string }>;
     ListEmptyComponent: () => ReactNode;
     ListHeaderComponent: ReactNode;
+    ListFooterComponent?: ReactNode;
     renderItem: (input: { item: { id: string } }) => ReactNode;
   }) => {
     const { View } = require('react-native') as typeof import('react-native');
@@ -29,6 +32,7 @@ jest.mock('@shopify/flash-list', () => ({
           : data.map((item) => (
               <View key={item.id}>{renderItem({ item })}</View>
             ))}
+        {ListFooterComponent}
       </View>
     );
   },
@@ -73,6 +77,22 @@ describe('SavingsNotificationList', () => {
       })
     ).toBeNull();
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the footer after the empty state, inside the list', () => {
+    render(
+      <SavingsNotificationList
+        header={null}
+        footer={<Text>orders-footer</Text>}
+        isLoading={false}
+        notifications={[]}
+        onOpen={jest.fn()}
+        onRetry={jest.fn()}
+        requestError={null}
+      />
+    );
+    expect(screen.getByText('No savings updates yet')).toBeTruthy();
+    expect(screen.getByText('orders-footer')).toBeTruthy();
   });
 
   it('opens a server-issued notification', () => {

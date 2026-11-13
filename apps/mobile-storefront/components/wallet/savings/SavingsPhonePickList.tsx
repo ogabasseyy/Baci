@@ -1,15 +1,10 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { palette } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { SavingsSheetTextInput } from '../SavingsSheetTextInput';
 import { SavingsPhoneThumb } from './SavingsPhoneThumb';
 import type { SavingsPhoneRow } from './savings-phone-rows';
 import { styles } from './savings-phone-swap.styles';
@@ -73,7 +68,7 @@ export function SavingsPhonePickList({
         />
         <View style={styles.rowText}>
           <Text style={[styles.currentLabel, { color: palette.red[800] }]}>
-            Saving for now
+            Saving for
           </Text>
           <Text style={[styles.currentName, { color: palette.red[900] }]}>
             {`${goal.title} · ${formatNgnCurrency(saved)} saved`}
@@ -87,7 +82,7 @@ export function SavingsPhonePickList({
         ]}
       >
         <Ionicons name="search" size={18} color={colors.textSecondary} />
-        <TextInput
+        <SavingsSheetTextInput
           accessibilityRole="search"
           accessibilityLabel="Search phones"
           value={searchValue}

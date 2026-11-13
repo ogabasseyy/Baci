@@ -22,6 +22,7 @@ const request = () =>
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('PIGGYVEST_COLLECTION_WALLET_ID', 'collection-wallet-1');
   mocks.secret.mockReturnValue(true);
   mocks.runtime.mockReturnValue({ tag: 'runtime' });
   mocks.drain.mockResolvedValue({
@@ -58,7 +59,24 @@ describe('GET /api/cron/piggyvest-wallet-pay-drain', () => {
     });
   });
 
-  it('answers 503 when wallet pay is not configured', async () => {
+  it('is a 200 no-op while no collection wallet is configured (scheduled before switch-on)', async () => {
+    vi.stubEnv('PIGGYVEST_COLLECTION_WALLET_ID', '');
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: 'not_configured',
+    });
+    expect(mocks.runtime).not.toHaveBeenCalled();
+    expect(mocks.drain).not.toHaveBeenCalled();
+  });
+
+  it('still requires the cron secret before the not-configured answer', async () => {
+    vi.stubEnv('PIGGYVEST_COLLECTION_WALLET_ID', '');
+    mocks.secret.mockReturnValue(false);
+    expect((await GET(request())).status).toBe(401);
+  });
+
+  it('answers 503 when wallet pay is misconfigured', async () => {
     mocks.runtime.mockImplementation(() => {
       throw new Error('missing');
     });

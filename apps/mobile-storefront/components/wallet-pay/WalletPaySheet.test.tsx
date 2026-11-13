@@ -80,7 +80,7 @@ describe('WalletPaySheet', () => {
   it('cannot be closed while the payment is being sent', () => {
     renderSheet(sheetState({ step: 'paying' }));
     expect(
-      screen.getByText('Paying from your PiggyVest wallet...')
+      screen.getByText('Paying from your savings wallet...')
     ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
   });
@@ -92,7 +92,7 @@ describe('WalletPaySheet', () => {
     });
     renderSheet(sheet);
     expect(screen.getByTestId('wallet-pay-notice')).toHaveTextContent(
-      /₦300 is going back to your PiggyVest wallet\. It is refunded exactly once/
+      /₦300 is going back to your savings wallet\. It is refunded exactly once/
     );
     fireEvent.press(screen.getByRole('button', { name: 'Done' }));
     expect(sheet.close).toHaveBeenCalled();
@@ -129,15 +129,19 @@ describe('WalletPaySheet', () => {
     expect(sheet.submit).not.toHaveBeenCalled();
   });
 
-  it('offers to try again when PiggyVest never answered the start', () => {
+  it('bugfix: a start that failed reads neutral, names no provider and shows its title once (Fable F7)', () => {
     const sheet = sheetState({
       step: 'outcome',
       outcome: { kind: 'not_started' },
     });
     renderSheet(sheet);
-    expect(screen.getByTestId('wallet-pay-notice')).toHaveTextContent(
-      /Nothing was taken/
+    expect(screen.getAllByText("We couldn't start this purchase")).toHaveLength(
+      1
     );
+    expect(screen.getByTestId('wallet-pay-notice')).toHaveTextContent(
+      'Nothing was taken from your savings wallet. Please try again.'
+    );
+    expect(screen.queryByText(/PiggyVest|connection/)).toBeNull();
     fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     expect(sheet.retryStart).toHaveBeenCalledTimes(1);
   });

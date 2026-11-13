@@ -22,7 +22,8 @@ function toneColor(tone: WalletPayNoticeTone, colors: WalletColors) {
 
 /**
  * A wallet payment outcome as a calm card, in the savings sheet's notice
- * language (tinted card, icon, title and one plain sentence).
+ * language (tinted card, icon and one plain sentence). The title is the
+ * sheet's header, so it is shown once (Fable F7).
  */
 export function WalletPayNoticeCard({
   colors,
@@ -40,9 +41,6 @@ export function WalletPayNoticeCard({
     >
       <Ionicons name={ICONS[notice.tone]} size={20} color={tint} />
       <View style={styles.text}>
-        <Text style={[styles.title, { color: colors.text }]}>
-          {notice.title}
-        </Text>
         <Text style={[styles.message, { color: colors.textSecondary }]}>
           {notice.message}
         </Text>

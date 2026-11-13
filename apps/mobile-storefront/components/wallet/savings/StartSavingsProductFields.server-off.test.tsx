@@ -150,7 +150,7 @@ describe('StartSavingsProductFields (server off)', () => {
     expect(screen.getByText('₦800,000')).toBeOnTheScreen();
     expect(screen.getByText('Storage: 256GB')).toBeOnTheScreen();
     expect(screen.queryByLabelText('Savings product search')).toBeNull();
-    expect(screen.queryByLabelText('Savings debit time')).toBeNull();
+    expect(screen.queryByLabelText('Savings reminder time')).toBeNull();
     fireEvent.press(screen.getByLabelText('Change savings device'));
     expect(controller.setSearchValue).toHaveBeenCalledWith('');
     render(
@@ -160,7 +160,9 @@ describe('StartSavingsProductFields (server off)', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Choose weekly savings frequency' })
     );
-    fireEvent.press(screen.getByRole('button', { name: 'Savings debit time' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Savings reminder time' })
+    );
     fireEvent.press(screen.getByRole('button', { name: 'Mock time picker' }));
     fireEvent.press(screen.getByRole('button', { name: 'Savings start date' }));
     fireEvent.press(screen.getByRole('button', { name: 'Mock date picker' }));

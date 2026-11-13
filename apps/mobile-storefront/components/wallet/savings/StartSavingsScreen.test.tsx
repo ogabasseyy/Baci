@@ -221,8 +221,30 @@ describe('StartSavingsScreen', () => {
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
     expect(
-      screen.getByText('You must accept the non-withdrawable savings terms.')
+      screen.getByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
     ).toBeOnTheScreen();
+  });
+
+  it('clears the tick-the-box message once the terms are ticked', () => {
+    render(<StartSavingsScreen />);
+    selectSavingsProduct();
+    setContributionAmount();
+    fireEvent.press(getSavingsButton('Continue savings setup'));
+    expect(
+      screen.getByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
+    ).toBeOnTheScreen();
+
+    acceptSavingsTerms();
+
+    expect(
+      screen.queryByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
+    ).toBeNull();
   });
 
   it('creates a manual savings goal via wallet balance', async () => {

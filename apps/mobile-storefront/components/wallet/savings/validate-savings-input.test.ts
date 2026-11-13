@@ -11,7 +11,8 @@ const validate = (overrides = {}) =>
 describe('validateSavingsInput', () => {
   it('bugfix: a missing terms answer is not acceptance', () => {
     expect(validate({ acceptsNonWithdrawableTerms: undefined })).toEqual({
-      error: 'You must accept the non-withdrawable savings terms.',
+      error:
+        'Tick the box to agree that this money stays saved until your goal is done.',
       ok: false,
     });
   });

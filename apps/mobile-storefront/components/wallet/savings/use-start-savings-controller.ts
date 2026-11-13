@@ -5,6 +5,7 @@ import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
+import { useSavingsTermsAcceptance } from './savings-terms-acceptance';
 import {
   deriveStartSavingsAmounts,
   formatDateInput,
@@ -31,7 +32,6 @@ import { useStartSavingsSheets } from './use-start-savings-sheets';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { useStartSavingsVariantSelection } from './use-start-savings-variant-selection';
 
-export const DEFAULT_PREFERRED_DEBIT_TIME = '08:00'; // round; editable
 export function useStartSavingsController() {
   const [goalIdempotencyKey, setGoalIdempotencyKey] = useState<string | null>(
     null
@@ -47,18 +47,17 @@ export function useStartSavingsController() {
   const [searchValue, setSearchValue] = useState('');
   const [contributionAmount, setContributionAmount] = useState('');
   const [frequency, setFrequency] = useState<SavingsFrequency>('daily');
-  const [preferredDebitTime, setPreferredDebitTime] = useState(
-    DEFAULT_PREFERRED_DEBIT_TIME
-  );
+  // A round default reminder time; the customer can change it.
+  const [preferredDebitTime, setPreferredDebitTime] = useState('08:00');
   const [startDate, setStartDate] = useState(getTodayIsoDate());
   const [initialContributionEnabled, setInitialContributionEnabled] =
     useState(false);
   const [initialContributionAmount, setInitialContributionAmount] =
     useState('');
   const operation = useInitialContributionOperation();
-  const [acceptsNonWithdrawableTerms, setAcceptsNonWithdrawableTerms] =
-    useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [acceptsNonWithdrawableTerms, setAcceptsNonWithdrawableTerms] =
+    useSavingsTermsAcceptance(setFormError);
   const sheets = useStartSavingsSheets();
   const [createdGoalId, setCreatedGoalId] = useState<string | null>(null);
   const [selectedFundingOption, setSelectedFundingOption] =

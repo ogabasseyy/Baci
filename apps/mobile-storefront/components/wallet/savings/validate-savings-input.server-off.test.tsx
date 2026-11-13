@@ -54,7 +54,8 @@ describe('server keeps PiggyVest off', () => {
           createInput({ acceptsNonWithdrawableTerms: false }) as never
         )
       ).toEqual({
-        error: 'You must accept the non-withdrawable savings terms.',
+        error:
+          'Tick the box to agree that this money stays saved until your goal is done.',
         ok: false,
       });
     });

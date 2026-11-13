@@ -1,3 +1,4 @@
+import { TERMS_REQUIRED_MESSAGE } from './savings-terms-acceptance';
 import type {
   SavingsProductChoice,
   SavingsSourceMode,
@@ -154,7 +155,7 @@ export function validateStartSavingsForm({
     return 'Initial contributions are only supported with manual debit for now.';
   }
   if (!acceptsNonWithdrawableTerms) {
-    return 'You must accept the non-withdrawable savings terms.';
+    return TERMS_REQUIRED_MESSAGE;
   }
   return null;
 }

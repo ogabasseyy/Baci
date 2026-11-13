@@ -66,6 +66,8 @@ function ProductSearchSection({
         <TextInput
           accessibilityRole="search"
           accessibilityLabel="Savings product search"
+          autoCapitalize="none"
+          autoCorrect={false}
           onFocus={() => onSearchFocusChange?.(true)}
           onBlur={() => onSearchFocusChange?.(false)}
           value={controller.searchValue}

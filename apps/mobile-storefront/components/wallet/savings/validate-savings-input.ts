@@ -1,4 +1,5 @@
 import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
+import { TERMS_REQUIRED_MESSAGE } from './savings-terms-acceptance';
 import { formatDateInput } from './start-savings.helpers';
 import type { SavingsProductChoice } from './start-savings.types';
 import {
@@ -67,7 +68,7 @@ export function validateSavingsInput(
   // Only an explicit yes counts: a missing answer is not acceptance.
   if (input.acceptsNonWithdrawableTerms !== true) {
     return {
-      error: 'You must accept the non-withdrawable savings terms.',
+      error: TERMS_REQUIRED_MESSAGE,
       ok: false,
     };
   }

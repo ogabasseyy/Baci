@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { isFundedUnsettledGoal } from './savings/goal-settlement';
 
 /**
  * Which savings goal the wallet shows. A goal named by the route wins.
@@ -17,20 +19,23 @@ export function usePinnedSavingsGoal(
     ? routeSavingsGoalId[0]
     : routeSavingsGoalId;
   const [pinned, setPinned] = useState<string | null>(null);
-  const shown = useRef<string | null>(null);
+  const shown = useRef<WalletActiveSavingsGoal | null>(null);
   useEffect(() => {
     if (!sheetOpen) {
-      if (pinned !== null) setPinned(null);
+      // A goal that was just completed and still holds money stays selected
+      // until it settles: its Complete action must remain reachable.
+      if (pinned !== null && !isFundedUnsettledGoal(shown.current))
+        setPinned(null);
       return;
     }
-    if (pinned === null && shown.current) setPinned(shown.current);
+    if (pinned === null && shown.current) setPinned(shown.current.id);
   });
   return {
     routeGoalId,
-    goalId: routeGoalId ?? (sheetOpen ? pinned : null) ?? undefined,
+    goalId: routeGoalId ?? pinned ?? undefined,
     /** Records the goal on screen after this render (no state change). */
-    noteShown: (goalId: string | null | undefined) => {
-      shown.current = goalId ?? null;
+    noteShown: (goal: WalletActiveSavingsGoal | null | undefined) => {
+      shown.current = goal ?? null;
     },
   };
 }

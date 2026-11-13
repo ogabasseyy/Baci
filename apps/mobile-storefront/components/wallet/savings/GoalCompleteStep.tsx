@@ -45,7 +45,9 @@ export function GoalCompleteStep({
 }) {
   const { known, saved, interest, total } = goalCompleteBreakdown(goal);
   // A PIN retry can come mid-submit: the sheet stays open until it settles.
-  useSavingsSheetLock(flow.step === 'submitting');
+  // Locked while a request is out (issue or submit), so the sheet can't be
+  // dismissed into a PIN prompt it no longer shows.
+  useSavingsSheetLock(flow.step === 'issuing' || flow.step === 'submitting');
   const done = flow.step === 'done';
   // A plan can also be completed at its end date without reaching the target.
   // Celebrate only when the saved principal itself reached the target. With

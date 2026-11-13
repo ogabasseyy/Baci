@@ -210,6 +210,23 @@ describe('Complete goal inside the savings sheet, server off', () => {
     expect(setLocked).toHaveBeenLastCalledWith(true);
   });
 
+  it('keeps the sheet open while the first request is out', () => {
+    const setLocked = jest.fn();
+    render(
+      <SavingsSheetLockContext.Provider value={setLocked}>
+        <GoalCompleteStep
+          colors={Colors.light}
+          flow={makeFlow('issuing')}
+          goal={goal}
+          onDone={jest.fn()}
+          onNotNow={jest.fn()}
+          onSignIn={jest.fn()}
+        />
+      </SavingsSheetLockContext.Provider>
+    );
+    expect(setLocked).toHaveBeenLastCalledWith(true);
+  });
+
   it('hides the buttons while it is completing', () => {
     renderStep(makeFlow('submitting'));
     expect(

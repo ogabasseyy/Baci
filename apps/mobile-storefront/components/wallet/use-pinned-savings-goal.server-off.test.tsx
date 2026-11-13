@@ -1,7 +1,28 @@
 import { renderHook } from '@testing-library/react-native';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { usePinnedSavingsGoal } from './use-pinned-savings-goal';
 
-type Props = { open: boolean; route?: string; shown?: string };
+const goal = (
+  id: string,
+  over: Partial<WalletActiveSavingsGoal> = {}
+): WalletActiveSavingsGoal => ({
+  contribution_amount: 1000,
+  contribution_frequency: 'monthly',
+  current_amount: 1000,
+  id,
+  maturity_date: '2027-01-01',
+  source_mode: 'manual',
+  status: 'active',
+  target_amount: 10000,
+  title: id,
+  ...over,
+});
+
+type Props = {
+  open: boolean;
+  route?: string;
+  shown?: WalletActiveSavingsGoal;
+};
 
 function render(initial: Props) {
   return renderHook(
@@ -17,23 +38,40 @@ function render(initial: Props) {
 // Local selection state only: nothing here needs PiggyVest.
 describe('server keeps PiggyVest off: usePinnedSavingsGoal', () => {
   it('keeps the sheet on the goal it opened on while it stays open', () => {
-    const { result, rerender } = render({ open: true, shown: 'goal-a' });
-    rerender({ open: true, shown: 'goal-a' });
+    const { result, rerender } = render({ open: true, shown: goal('goal-a') });
+    rerender({ open: true, shown: goal('goal-a') });
     expect(result.current.goalId).toBe('goal-a');
-    // The completed goal would otherwise give way to another active goal.
-    rerender({ open: true, shown: 'goal-b' });
+    rerender({ open: true, shown: goal('goal-b') });
     expect(result.current.goalId).toBe('goal-a');
   });
 
-  it('releases the pin when the sheet closes', () => {
-    const { result, rerender } = render({ open: true, shown: 'goal-a' });
-    rerender({ open: true, shown: 'goal-a' });
-    rerender({ open: false, shown: 'goal-b' });
+  it('releases the pin when the sheet closes on an ordinary goal', () => {
+    const { result, rerender } = render({ open: true, shown: goal('goal-a') });
+    rerender({ open: true, shown: goal('goal-a') });
+    rerender({ open: false, shown: goal('goal-a') });
+    rerender({ open: false, shown: goal('goal-b') });
     expect(result.current.goalId).toBeUndefined();
   });
 
+  it('keeps a just-completed goal that still holds money pinned after closing', () => {
+    const done = goal('goal-a', {
+      status: 'completed',
+      current_amount: 10000,
+      principal_amount: 10000,
+    });
+    const { result, rerender } = render({ open: true, shown: goal('goal-a') });
+    rerender({ open: true, shown: done });
+    rerender({ open: false, shown: done });
+    rerender({ open: false, shown: done });
+    expect(result.current.goalId).toBe('goal-a');
+  });
+
   it('lets a goal named by the route win', () => {
-    const { result } = render({ open: true, route: 'goal-r', shown: 'goal-a' });
+    const { result } = render({
+      open: true,
+      route: 'goal-r',
+      shown: goal('goal-a'),
+    });
     expect(result.current.goalId).toBe('goal-r');
     expect(result.current.routeGoalId).toBe('goal-r');
   });

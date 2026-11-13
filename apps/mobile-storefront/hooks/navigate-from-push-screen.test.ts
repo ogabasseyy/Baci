@@ -92,15 +92,15 @@ describe('navigateFromPushScreen', () => {
     });
   });
 
-  it('forwards the reminder goal to the savings wallet panel', () => {
+  it('sends a named goal through the ownership-checking goal link route', () => {
     navigateFromPushScreen('wallet', {
       action: 'savings',
       savingsGoalId: 'goal-older',
     });
 
     expect(push).toHaveBeenCalledWith({
-      pathname: '/wallet',
-      params: { action: 'savings', savingsGoalId: 'goal-older' },
+      pathname: '/wallet/savings/goal-actions',
+      params: { goalId: 'goal-older' },
     });
   });
 

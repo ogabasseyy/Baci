@@ -161,7 +161,7 @@ export function WalletScreen({
     refetch,
   });
   const display = wallet && deriveWalletDisplayData(wallet, goalPin.goalId);
-  goalPin.noteShown(display?.activeSavingsGoal?.id);
+  goalPin.noteShown(display?.activeSavingsGoal);
   const {
     walletContentSavingsProps,
     handleAddSavingsContribution,

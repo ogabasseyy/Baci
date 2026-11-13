@@ -11,6 +11,7 @@ type Props = {
   phase: SavingsPlanFundingPhase;
   scope?: string;
   pendingSince?: number | null;
+  readsPaused?: boolean;
 };
 
 function setup(
@@ -24,6 +25,7 @@ function setup(
         scopeKey: props.scope ?? 'a',
         reread,
         pendingSince: props.pendingSince,
+        readsPaused: props.readsPaused,
       }),
     { initialProps: initial }
   );
@@ -41,6 +43,7 @@ const ticks = async (count: number) => {
 };
 
 beforeEach(() => {
+  usePiggyvestSlowdownStore.setState({ signals: {} });
   jest.useFakeTimers();
   resetGoalSetupMemory();
 });
@@ -287,6 +290,33 @@ describe('useGoalWalletSetupPoll', () => {
       await advance(61_000);
       view.rerender({ phase: 'ready' });
       expect(view.result.current.slow).toBe(false);
+    });
+  });
+
+  describe('bugfix: the slow notice reached the sheet 10-30 s after it opened', () => {
+    const HOURS = 3 * 60 * 60 * 1000;
+
+    it('raises the shared notice at once from what is known, with reads paused', async () => {
+      const { reread } = setup({
+        phase: 'pending',
+        pendingSince: Date.now() - HOURS,
+        readsPaused: true,
+      });
+      await advance(0);
+      expect(
+        Object.keys(usePiggyvestSlowdownStore.getState().signals)
+      ).toContain('goal-setup');
+      await advance(60_000);
+      expect(reread).not.toHaveBeenCalled();
+    });
+
+    it('never clears another screen’s notice while its reads are paused', async () => {
+      act(() => usePiggyvestSlowdownStore.getState().markSlow('goal-setup'));
+      setup({ phase: 'pending', pendingSince: Date.now(), readsPaused: true });
+      await advance(0);
+      expect(
+        Object.keys(usePiggyvestSlowdownStore.getState().signals)
+      ).toContain('goal-setup');
     });
   });
 });

@@ -13,6 +13,7 @@ let mockUserId: string | undefined = 'user-1';
 const mockFundingInput = jest.fn();
 const mockPollInput = jest.fn();
 const mockPollSince = jest.fn();
+const mockPollPaused = jest.fn();
 
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: 'merchant-1' } }));
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
@@ -35,8 +36,10 @@ jest.mock('./use-goal-wallet-setup-poll', () => ({
   useGoalWalletSetupPoll: (input: {
     phase: string;
     pendingSince?: number | null;
+    readsPaused?: boolean;
   }) => {
     mockPollInput(input.phase);
+    mockPollPaused(input.readsPaused ?? false);
     mockPollSince(input.pendingSince);
     return { slow: false, paused: false, checkAgain: jest.fn() };
   },
@@ -67,10 +70,12 @@ describe('useGoalCardSetupState', () => {
     expect(mockPollInput).toHaveBeenLastCalledWith('pending');
   });
 
-  it('bugfix: stops its own checks while the savings sheet checks the same plan', () => {
+  it('bugfix: sends no reads while the savings sheet checks the same plan, but keeps its status', () => {
     mockPhase = 'pending';
     expect(run(goal(), true)).toBe('getting_ready');
-    expect(mockPollInput).toHaveBeenLastCalledWith('idle');
+    expect(mockPollPaused).toHaveBeenLastCalledWith(true);
+    // Still told the plan is pending, so it can keep a slow notice up.
+    expect(mockPollInput).toHaveBeenLastCalledWith('pending');
   });
 
   it('times a slow setup from the plan creation time', () => {

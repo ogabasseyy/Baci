@@ -52,13 +52,12 @@ export function useGoalCardSetupState(
   // The poll only reads status, so a stalled setup (which the sheet may
   // re-run) keeps being read like a pending one: the card turns back to
   // "Add to savings" on its own once the plan is ready.
+  // While the sheet checks the same plan the card sends no reads of its own,
+  // but still reports a slow setup it already knows about, so the shared
+  // notice is there when the sheet opens.
   useGoalWalletSetupPoll({
-    phase:
-      !checked || pausePolling
-        ? 'idle'
-        : phase === 'setup_retryable'
-          ? 'pending'
-          : phase,
+    phase: !checked ? 'idle' : phase === 'setup_retryable' ? 'pending' : phase,
+    readsPaused: pausePolling,
     scopeKey,
     reread: funding.fetchExistingPlanFunding,
     pendingSince: goal.created_at ? Date.parse(goal.created_at) : null,

@@ -24,6 +24,12 @@ describe('PiggyvestSlowdownNotice with PiggyVest off', () => {
     ).toBeOnTheScreen();
   });
 
+  it('bugfix: shows on the first render when the slowdown is already known', () => {
+    act(() => usePiggyvestSlowdownStore.getState().markSlow('goal-setup'));
+    render(<PiggyvestSlowdownNotice />);
+    expect(screen.getByText(PIGGYVEST_SLOWDOWN_MESSAGE)).toBeOnTheScreen();
+  });
+
   describe('bugfix: the notice ran edge to edge and showed twice', () => {
     it('stays hidden where it is shown elsewhere (the sheet is open)', () => {
       act(() => usePiggyvestSlowdownStore.getState().markSlow('wallet-read'));

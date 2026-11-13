@@ -42,6 +42,7 @@ export function useGoalWalletSetupPoll({
   reread,
   onExhausted,
   pendingSince,
+  readsPaused = false,
 }: {
   phase: SavingsPlanFundingPhase;
   scopeKey: string;
@@ -53,6 +54,12 @@ export function useGoalWalletSetupPoll({
    * so a plan pending for hours is slow on the very first open.
    */
   pendingSince?: number | null;
+  /**
+   * Another screen re-reads this goal for now (the sheet over the wallet
+   * card): send no reads, but keep saying "slow" from what is already known,
+   * so the shared notice is there the moment that screen opens.
+   */
+  readsPaused?: boolean;
 }) {
   const lastFailure = useRef<{ error: unknown } | null>(null);
   const [attempt, setAttempt] = useState({ scopeKey, count: 0 });
@@ -64,8 +71,9 @@ export function useGoalWalletSetupPoll({
   // the checks going too, so they recover on their own instead of stopping.
   const [selfErrored, setSelfErrored] = useState<string | null>(null);
   const active =
-    phase === 'pending' ||
-    (phase === 'error' && (slowdown || selfErrored === scopeKey));
+    !readsPaused &&
+    (phase === 'pending' ||
+      (phase === 'error' && (slowdown || selfErrored === scopeKey)));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reread is a fresh closure each render; the scope is what identifies it.
   useEffect(() => {
@@ -142,11 +150,13 @@ export function useGoalWalletSetupPoll({
   const paused = active && count >= FAST_ATTEMPTS + MAX_SLOW_ATTEMPTS;
   // Only a still-pending setup raises the signal: an errored read kept alive
   // by the signal must never renew it, or it would latch itself on.
-  // A paused or idle check (e.g. the wallet card while the sheet checks the
-  // same plan) has no say, so it never clears the sheet's signal.
+  // An idle check has no say, and one whose reads are paused (the wallet
+  // card while the sheet checks the same plan) only ever raises it, so
+  // neither clears the sheet's signal.
+  const pendingSlow = phase === 'pending' && slow;
   useReportPiggyvestSlow(
     'goal-setup',
-    phase === 'idle' ? null : phase === 'pending' && slow
+    phase === 'idle' || (readsPaused && !pendingSlow) ? null : pendingSlow
   );
   // Reads once right away and starts the quick checks again.
   const checkAgain = () => {

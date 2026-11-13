@@ -5,7 +5,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { transformImageTitlesToFigureCaptions } from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/blog-post-image-html';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import {
-  getImageMimeType,
   normalizeBlogFeedPostForFilter,
   truncateFeedText,
   xmlSafeFeedImageUrl,
@@ -14,6 +13,7 @@ import {
 } from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
+import { getImageMimeType } from '@/lib/get-blog-feed-image-mime-type';
 import {
   isPublicBlogCategory,
   isPublicBlogPost,

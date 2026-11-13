@@ -54,7 +54,7 @@ const refuse = (error: string, code: string, status: number) =>
 const accepted = (status: string, operationId: string) =>
   NextResponse.json(
     { status, operationId },
-    { status: 202, headers: NO_STORE }
+    { status: 202, headers: { 'Cache-Control': 'no-store' } }
   );
 
 /** The HTTP answer for every payment outcome except a confirmed one. */
@@ -203,7 +203,7 @@ export async function payImeiWalletPayment(
     if (error instanceof WalletPaymentMismatchError)
       return NextResponse.json(
         { status: 'payment_review', operationId: body.operationId },
-        { status: 202, headers: NO_STORE }
+        { status: 202, headers: { 'Cache-Control': 'no-store' } }
       );
     throw error;
   }

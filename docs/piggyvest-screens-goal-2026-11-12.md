@@ -96,3 +96,38 @@ Still to walk once the owning PRs land and staging outbound transfers
 resume: Start Savings, amount entry and the in-sheet PIN, Complete goal,
 funded Cancel breakdown, Add money sheet, checkout payment step, IMEI and
 airtime paid from the wallet.
+
+## Second walk-through (2026-11-13)
+
+The second walk-through ran on the updated combined build (#4216, #4222's
+not-set-up fix, #4223 and #4224), signed in as the sandbox test customer.
+
+Confirmed fixed:
+- Pending plan card ("Getting your plan ready", "View plan").
+- One balance name ("Savings wallet") and an Add money button.
+- No amount-entry flash.
+- "New" badge and sheet spacing.
+- Cancel on a plan that was never set up: "This plan is still being set
+  up, so there's nothing to cancel yet." with no retry and no PIN.
+- Change phone: phone icon instead of "No Image", and the sheet lifts above
+  the keyboard.
+- Notifications: title, orders link position and quiet-hours copy.
+- No chat button on Wallet PIN; App Settings keeps it.
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| "Check now" and the pending copy depend on when the sheet opened, not how long setup has been pending | #4223 session | Sent |
+| Slowdown banner: edge to edge, no gap, shown twice while the sheet is open | #4223 session | Sent |
+| Account-number copy gives no "Copied" feedback | #4216 session | Sent |
+| Stacked `/wallet` screen has no back button or tab bar; two wallet header styles | #4216 session | Sent |
+| Back from "Forgot your PIN?" left the flow | #4224 | **Fixed** (ef05a7e526) |
+| Quiet-hours summary in 12-hour time, fields in 24-hour | #4224 | **Fixed** |
+| Change phone search: auto-capitalise and suggestion bubble; wide placeholder | #4224 | **Fixed** |
+| Cancel review says "You'll confirm with your wallet PIN" for a plan the server then refuses | #4224 | Kept: the review can't know setup state; the refusal message is clear |
+| "4 to 6 digits" while 4 boxes show | #4224 | Kept: the boxes grow as digits are typed (same pad as the in-sheet PIN step) |
+| Chat button covers the end of some rows (Settings chevron, Notifications text) | #4224 | Kept on purpose: Muse asked to keep in-app help on these screens |
+| White band clipping the last row on Notifications and App Settings | Not yet triaged | Open |
+
+Still owed: money steps (Add to savings with PIN, Complete goal, funded
+cancel breakdown, checkout and wallet payments) once PiggyVest staging
+outbound transfers resume and a plan finishes setup.

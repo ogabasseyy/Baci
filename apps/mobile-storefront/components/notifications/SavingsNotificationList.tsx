@@ -151,39 +151,48 @@ export function SavingsNotificationList({
           )}
           accessibilityRole="button"
           onPress={() => onOpen(item)}
-          style={({ pressed }) => [
-            styles.notification,
-            { backgroundColor: colors.card, borderColor: colors.border },
-            item.readAt === null && {
-              borderLeftColor: BRAND.primary,
-              borderLeftWidth: 3,
-            },
-            pressed && styles.pressed,
-          ]}
+          // Only the press feedback is a style function: the card itself is
+          // a plain View, so its layout never depends on a function style.
+          style={({ pressed }) => (pressed ? styles.pressed : null)}
         >
-          <View style={[styles.icon, { backgroundColor: colors.background }]}>
-            <Ionicons
-              color={colors.primary}
-              name={getNotificationIcon(item.type)}
-              size={22}
-            />
-          </View>
-          <View style={styles.copy}>
-            <Text
-              numberOfLines={1}
-              style={[styles.notificationTitle, { color: colors.text }]}
-            >
-              {item.title}
-            </Text>
-            <Text
-              numberOfLines={3}
-              style={[styles.notificationBody, { color: colors.textSecondary }]}
-            >
-              {item.body}
-            </Text>
-            <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
-              {formatSavingsNotificationTimestamp(item.createdAt)}
-            </Text>
+          <View
+            testID="savings-notification-card"
+            style={[
+              styles.notification,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              item.readAt === null && {
+                borderLeftColor: BRAND.primary,
+                borderLeftWidth: 3,
+              },
+            ]}
+          >
+            <View style={[styles.icon, { backgroundColor: colors.background }]}>
+              <Ionicons
+                color={colors.primary}
+                name={getNotificationIcon(item.type)}
+                size={22}
+              />
+            </View>
+            <View style={styles.copy}>
+              <Text
+                numberOfLines={1}
+                style={[styles.notificationTitle, { color: colors.text }]}
+              >
+                {item.title}
+              </Text>
+              <Text
+                numberOfLines={3}
+                style={[
+                  styles.notificationBody,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                {item.body}
+              </Text>
+              <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
+                {formatSavingsNotificationTimestamp(item.createdAt)}
+              </Text>
+            </View>
           </View>
         </Pressable>
       )}
@@ -204,6 +213,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: SPACING.sm,
+    // FlashList ignores the container's gap, so each card keeps its own space.
+    marginBottom: SPACING.sm,
     padding: SPACING.md,
   },
   icon: {

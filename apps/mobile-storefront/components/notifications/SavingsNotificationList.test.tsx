@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
 import {
   formatSavingsNotificationTimestamp,
@@ -118,6 +118,28 @@ describe('SavingsNotificationList', () => {
     );
 
     expect(onOpen).toHaveBeenCalledWith(notification);
+  });
+
+  it('lays each notification out as a card row with a plain style, not a press-time style function', () => {
+    render(
+      <SavingsNotificationList
+        header={null}
+        isLoading={false}
+        notifications={[notification]}
+        onOpen={jest.fn<(item: SavingsNotification) => void>()}
+        onRetry={jest.fn<() => void>()}
+        requestError={null}
+      />
+    );
+
+    const card = screen.getByTestId('savings-notification-card');
+    expect(typeof card.props.style).not.toBe('function');
+    expect(StyleSheet.flatten(card.props.style)).toEqual(
+      expect.objectContaining({
+        flexDirection: 'row',
+        borderWidth: expect.any(Number),
+      })
+    );
   });
 
   it('labels duplicate titles distinctly using the pinned-locale timestamp', () => {

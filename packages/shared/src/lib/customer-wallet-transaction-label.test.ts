@@ -65,7 +65,7 @@ describe('customerWalletTransactionLabel', () => {
         description: 'Check for 356938035643809 ref a1b2c3d4e5f6',
         sourceType: null,
       })
-    ).toBe('Check for ref');
+    ).toBe('Check for ref a1b2c3d4e5f6');
   });
 
   it('strips known stack providers wherever they appear', () => {
@@ -124,6 +124,21 @@ describe('customerWalletTransactionLabel', () => {
         sourceType: null,
       })
     ).toBe('Electricity token 12345678901234567890');
+  });
+
+  it('leaves no stray dash or punctuation after removing a provider', () => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Payment — Paystack',
+        sourceType: null,
+      })
+    ).toBe('Payment');
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Payment via Paystack.',
+        sourceType: null,
+      })
+    ).toBe('Payment');
   });
 
   it('strips PiggyVest from an unmapped row as a backstop', () => {

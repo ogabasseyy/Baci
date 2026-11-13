@@ -15,13 +15,12 @@ const LABEL_BY_SOURCE: Readonly<Record<string, string>> = {
   piggyvest_primary_card_custody: 'Card top-up',
 };
 
-// Internal ids: UUIDs, shortened hex ("3f2b…"), long mixed hex tokens, and
+// Internal ids: UUIDs, shortened hex ("3f2b…") and
 // long digit runs such as an IMEI or provider reference (never an amount or
 // the customer's own phone number).
 const IDS = [
   /:?\s*\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
   /:?\s*\b(?=[0-9a-f]*\d)[0-9a-f]{3,}(?:…|\.{3})/gi,
-  /\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi,
   // 15–16 digits: an IMEI (or IMEISV). A phone number (+234 is 13 digits) and
   // a 20-digit electricity token the customer needs both stay.
   /(?<![₦\d,.])\b\d{15,16}\b/g,
@@ -39,7 +38,8 @@ export function customerWalletTransactionLabel(input: {
   for (const id of IDS) cleaned = cleaned.replace(id, '');
   cleaned = cleaned
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[\s:–-]+|[\s:–-]+$/g, '')
+    .replace(/\s+([.,;])/g, '$1')
+    .replace(/^[\s:–—|.,;-]+|[\s:–—|.,;-]+$/g, '')
     .trim();
   if (!cleaned) return 'Transaction';
   // Untouched text is returned as written; only a cleaned label is re-capitalised.

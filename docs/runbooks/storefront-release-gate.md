@@ -65,9 +65,10 @@ base, so a TestFlight-only build consumes a number and gaps are expected. A
 tag build number must exceed every previously uploaded build, including these
 TestFlight-only uploads. Select the build in TestFlight on the
 device after processing and tester assignment. Record the tested app version
-and build number. To submit that exact build later, enter both values in
-"iOS Storefront Submit for Review". Check the latest App Store release date
-and confirm that App Store Connect still offers the tested build. If a release
+and build number. To submit that exact build later, enter both required values
+in "iOS Storefront Submit for Review". Requiring both values pins the tested
+build even if another upload happens concurrently. Check the latest App Store
+release date and confirm that App Store Connect still offers the tested build. If a release
 since the upload makes the build unavailable, rebuild and retest. Use a newer
 version if the tested version has already gone live.
 [Apple's build selection rules](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit/).

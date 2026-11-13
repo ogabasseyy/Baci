@@ -118,10 +118,19 @@ const VALID_FASTFILE = `import("asc_version_slot.rb")
 
 lane :submit do
   api_key = asc_api_key
+  build_number = ENV["SUBMIT_BUILD_NUMBER"].to_s.strip
+  app_version = ENV["SUBMIT_APP_VERSION"].to_s.strip
+
+  if build_number.empty? || app_version.empty?
+    UI.user_error!("SUBMIT_BUILD_NUMBER and SUBMIT_APP_VERSION are required")
+  end
+
   deliver_opts = {
     reject_if_possible: false,
     submit_for_review: true
   }
+  deliver_opts[:build_number] = build_number
+  deliver_opts[:app_version] = app_version
 
   unless app_store_version_slot_ready?(app_version: app_version, build_number: build_number)
     next

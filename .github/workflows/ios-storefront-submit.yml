@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       build_number:
-        description: 'TestFlight build number to submit (leave empty for latest)'
-        required: false
+        description: 'TestFlight build number to submit'
+        required: true
         type: string
       app_version:
-        description: 'App Store version (leave empty for latest editable)'
-        required: false
+        description: 'App Store version for the selected build'
+        required: true
         type: string
       release_notes:
         description: 'What''s New in This Version (leave empty for default)'

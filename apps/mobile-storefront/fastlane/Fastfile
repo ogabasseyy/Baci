@@ -193,7 +193,7 @@ platform :ios do
     )
   end
 
-  desc "Submit the latest (or specified) TestFlight build for App Store review"
+  desc "Submit a specified TestFlight build for App Store review"
   lane :submit do
     api_key = asc_api_key
 
@@ -240,15 +240,15 @@ platform :ios do
     build_number = ENV["SUBMIT_BUILD_NUMBER"].to_s.strip
     app_version = ENV["SUBMIT_APP_VERSION"].to_s.strip
 
-    if build_number.empty? ^ app_version.empty?
+    if build_number.empty? || app_version.empty?
       UI.user_error!(
-        "SUBMIT_BUILD_NUMBER and SUBMIT_APP_VERSION must be set together or both left empty. " \
-        "Setting only one creates ambiguity about which version to attach the changelog to."
+        "SUBMIT_BUILD_NUMBER and SUBMIT_APP_VERSION are required. " \
+        "Select the tested TestFlight build so a concurrent upload cannot change which build is submitted."
       )
     end
 
-    deliver_opts[:build_number] = build_number unless build_number.empty?
-    deliver_opts[:app_version] = app_version unless app_version.empty?
+    deliver_opts[:build_number] = build_number
+    deliver_opts[:app_version] = app_version
 
     # Free the single editable-version slot BEFORE set_changelog, which would
     # otherwise try to create a version Apple refuses to create.
@@ -259,7 +259,7 @@ platform :ios do
     end
 
     changelog_opts = { api_key: api_key, changelog: release_notes_text }
-    changelog_opts[:version] = app_version unless app_version.empty?
+    changelog_opts[:version] = app_version
     set_changelog(changelog_opts)
 
     # set_changelog creates or renames the editable App Store version first.

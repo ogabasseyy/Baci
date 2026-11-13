@@ -71,11 +71,12 @@ export function createPayImeiWalletPaymentDeps(auth: {
       lookup,
       operationId,
       normalizedImei,
+      payment,
     }) => {
       const supabaseAdmin = access(identity);
       const delivery = walletPayDelivery(runtime);
       return await deliverPaidImeiLookup(
-        { lookup, operationId, normalizedImei, supabaseAdmin },
+        { lookup, operationId, normalizedImei, supabaseAdmin, payment },
         {
           claim: delivery.claim,
           finish: delivery.finish,

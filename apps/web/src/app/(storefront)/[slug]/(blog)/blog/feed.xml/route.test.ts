@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockHeaders = vi.fn();
 const mockResolveStorefrontSitemapContext = vi.fn();
-const mockGetMerchantBlogFeed = vi.fn();
+const mockGetMerchantBlogFeed =
+  vi.fn<typeof import('@/app/api/blog/feed/[merchantSlug]/route').GET>();
 
 vi.mock('next/headers', () => ({
   headers: () => mockHeaders(),
@@ -15,7 +16,11 @@ vi.mock('../../../sitemap-data', () => ({
 }));
 
 vi.mock('@/app/api/blog/feed/[merchantSlug]/route', () => ({
-  GET: (...args: unknown[]) => mockGetMerchantBlogFeed(...args),
+  GET: (
+    ...args: Parameters<
+      typeof import('@/app/api/blog/feed/[merchantSlug]/route').GET
+    >
+  ) => mockGetMerchantBlogFeed(...args),
 }));
 
 import { GET } from './route';
@@ -50,12 +55,13 @@ describe('GET /[slug]/blog/feed.xml', () => {
     expect(mockGetMerchantBlogFeed).toHaveBeenCalledWith(request, {
       params: expect.any(Promise),
     });
-    const delegatedArgs = mockGetMerchantBlogFeed.mock.calls[0]?.[1] as {
-      params: Promise<{ merchantSlug: string }>;
-    };
-    await expect(delegatedArgs.params).resolves.toEqual({
-      merchantSlug: 'ogabassey',
-    });
+    const delegatedArgs = mockGetMerchantBlogFeed.mock.calls[0]?.[1];
+    expect(delegatedArgs).toBeDefined();
+    if (delegatedArgs) {
+      await expect(delegatedArgs.params).resolves.toEqual({
+        merchantSlug: 'ogabassey',
+      });
+    }
   });
 
   it('returns 404 when blog is disabled or merchant context is missing', async () => {

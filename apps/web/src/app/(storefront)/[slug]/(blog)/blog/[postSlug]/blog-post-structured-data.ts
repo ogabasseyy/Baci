@@ -97,8 +97,14 @@ export function buildBlogPostStructuredData({
     post.seo_description || post.excerpt || getBlogPostTextPreview(post.content)
   );
   const title = post.seo_title || post.title;
+  const isOrganizationAuthor = author.type
+    ? author.type === 'Organization'
+    : !post.author_name?.trim() ||
+      author.name.trim().toLowerCase() ===
+        merchant.business_name.trim().toLowerCase();
   const videoMetadata = buildBlogVideoMetadata({
     authorName: author.name,
+    authorType: isOrganizationAuthor ? 'Organization' : 'Person',
     content,
     description: schemaDescription,
     postUrl,
@@ -106,12 +112,6 @@ export function buildBlogPostStructuredData({
     title,
     videoUploadDate: post.video_upload_date ?? post.videoUploadDate ?? null,
   });
-
-  const isOrganizationAuthor = author.type
-    ? author.type === 'Organization'
-    : !post.author_name?.trim() ||
-      author.name.trim().toLowerCase() ===
-        merchant.business_name.trim().toLowerCase();
 
   const blogSchema = generateBlogPostSchema({
     title,

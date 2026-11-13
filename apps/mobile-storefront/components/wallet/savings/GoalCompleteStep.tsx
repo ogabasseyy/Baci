@@ -4,6 +4,7 @@ import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { useSavingsSheetLock } from '../SavingsSheetLock';
 import { GoalCancelRow as Row } from './GoalCancelRow';
 import { GoalCancelButton as Button } from './GoalCancelStepParts';
 import { styles } from './goal-cancel-step.styles';
@@ -44,6 +45,8 @@ export function GoalCompleteStep({
   onSignIn: () => void;
 }) {
   const { known, saved, interest, total } = goalCompleteBreakdown(goal);
+  // A PIN retry can come mid-submit: the sheet stays open until it settles.
+  useSavingsSheetLock(flow.step === 'submitting');
   const done = flow.step === 'done';
   // A plan can also be completed at its end date without reaching the target.
   const reachedTarget = total >= goal.target_amount;
@@ -142,10 +145,10 @@ export function GoalCompleteStep({
         {done ? COPY.doneTitle : reachedTarget ? COPY.title : COPY.maturedTitle}
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
+        {/* Amount-neutral: the server moved the balance at confirmation,
+            which can differ from the snapshot this review opened with. */}
         {done
-          ? known
-            ? COPY.doneBody(formatNgnCurrency(total), goal.title)
-            : COPY.doneBodyUnknown(goal.title)
+          ? COPY.doneBodyUnknown(goal.title)
           : reachedTarget
             ? COPY.subtitle(goal.title)
             : COPY.maturedSubtitle(goal.title)}

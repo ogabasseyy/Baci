@@ -1,9 +1,9 @@
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { CONFIG } from '@/lib/config';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
-import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
   isWalletStoreCredit,
   type WalletPrimaryLike,
@@ -23,6 +23,7 @@ export function useCardOnlyPurchaseTopUp(
   // Same merchant resolution as the wallet screen the top-up opens.
   const activeMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
   const capability = usePiggyvestPrimaryCapability(activeMerchantId);
+  const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   return (
     isWalletStoreCredit(wallet) ||
     isWalletPrimaryUnknown(wallet) ||
@@ -30,7 +31,6 @@ export function useCardOnlyPurchaseTopUp(
     (wallet?.owner_unresolved === true && capability !== false) ||
     isPiggyvestCardOnlyMerchant(activeMerchantId, capability) ||
     // No verdict yet: same rule as the Add money sheet (Codex).
-    (capability === null &&
-      readPiggyvestCapabilityNow(activeMerchantId) === null)
+    (capability === null && verdictNow === null)
   );
 }

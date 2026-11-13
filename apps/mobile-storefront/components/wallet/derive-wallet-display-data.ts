@@ -56,7 +56,12 @@ export function deriveWalletDisplayData(
   // PiggyVest account confirmed, balance not ready yet: the savings wallet
   // has nothing spendable for contributions (Codex), and the older balance
   // stays store credit.
-  const primaryPending = !primaryReady && walletData.primary_pending === true;
+  const primaryPending =
+    !primaryReady &&
+    (walletData.primary_pending === true ||
+      normalizeRequiredFundingAccountValue(
+        walletData.funding_account?.provider
+      ) === 'piggyvest');
   const walletBalance =
     primaryReady && typeof walletData.primary_balance_kobo === 'number'
       ? koboToNaira(walletData.primary_balance_kobo)
@@ -103,12 +108,22 @@ export function deriveWalletDisplayData(
     walletData.active_savings_goal ||
     null;
 
-  const primaryFields: { legacyBalance?: number; primaryReady?: true } =
-    primaryReady
-      ? { primaryReady: true, legacyBalance: walletData.balance ?? 0 }
-      : primaryPending
-        ? { legacyBalance: walletData.balance ?? 0 }
-        : {};
+  // savingsPrimary: the savings flows treat this wallet as PiggyVest, also
+  // while its balance is pending (Codex), so funding opens the PiggyVest
+  // transfer, never a card top-up into store credit.
+  const primaryFields: {
+    legacyBalance?: number;
+    primaryReady?: true;
+    savingsPrimary?: true;
+  } = primaryReady
+    ? {
+        primaryReady: true,
+        legacyBalance: walletData.balance ?? 0,
+        savingsPrimary: true,
+      }
+    : primaryPending
+      ? { legacyBalance: walletData.balance ?? 0, savingsPrimary: true }
+      : {};
   return {
     earningsBalance,
     earningsAvailable,

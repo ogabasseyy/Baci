@@ -35,6 +35,20 @@ export function readObservedPiggyvestPrimaryCapability(
   return cached.available;
 }
 
+/**
+ * Milliseconds until a cached ruling-out expires, or null when there is no
+ * current negative verdict. Lets a screen re-render exactly at expiry.
+ */
+export function msUntilNegativeCapabilityExpires(
+  merchantId: string
+): number | null {
+  const cached = capabilityCache.get(merchantId);
+  if (!cached || cached.available) return null;
+  const remaining =
+    NEGATIVE_CAPABILITY_TTL_MS - (Date.now() - cached.observedAt);
+  return remaining > 0 ? remaining : null;
+}
+
 export function observePiggyvestPrimaryCapability(
   merchantId: string,
   available: boolean

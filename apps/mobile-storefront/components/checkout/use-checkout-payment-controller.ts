@@ -6,6 +6,7 @@ import type {
   PaymentTab,
 } from '@/components/checkout/PaymentMethodSelector';
 import { useCheckoutSavings } from '@/hooks/use-checkout-savings';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { usePiggyvestPossible } from '@/hooks/use-piggyvest-possible';
 import { useWallet } from '@/hooks/use-wallet';
 import {
@@ -108,6 +109,7 @@ export function useCheckoutPaymentController({
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
   const walletIsStoreCredit = isWalletStoreCredit(walletQuery.data?.wallet);
   const piggyvestPossible = usePiggyvestPossible(merchantId);
+  const verdictNow = usePiggyvestCapabilityNow(merchantId);
 
   const handleSelectPaymentTab = (tab: PaymentTab) => {
     setPaymentTab(tab);
@@ -198,11 +200,10 @@ export function useCheckoutPaymentController({
         isWalletPrimaryUnknown(walletQuery.data?.wallet) ||
         // No authoritative verdict yet (Codex): a restored legacy wallet
         // can't be trusted until the merchant's PiggyVest status is known.
-        readPiggyvestCapabilityNow(merchantId) === null ||
+        verdictNow === null ||
         // PiggyVest confirmed: a wallet transfer would fund savings or a
         // stale legacy wallet not yet reclassified (Codex).
-        (readPiggyvestCapabilityNow(merchantId) === true &&
-          !walletIsStoreCredit) ||
+        (verdictNow === true && !walletIsStoreCredit) ||
         (piggyvestPossible &&
           (!walletQuery.data?.wallet ||
             walletQuery.data.wallet.owner_unresolved === true ||

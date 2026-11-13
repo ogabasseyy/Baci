@@ -179,7 +179,7 @@ export function WalletScreen({
       setShowFundPanel,
       setShowSavingsProgressModal,
     }),
-    primaryReady: display?.primaryReady ?? false,
+    primaryReady: display?.savingsPrimary ?? false,
     refetchWallet: refetch,
     savingsContributionAmount,
     legacyBalance: display?.legacyBalance,

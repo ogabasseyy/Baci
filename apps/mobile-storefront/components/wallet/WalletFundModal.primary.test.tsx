@@ -114,3 +114,18 @@ describe('bugfix: card funding offered for a pending PiggyVest account', () => {
     expect(screen.queryByRole('button', { name: CARD })).toBeNull();
   });
 });
+
+describe('bugfix: PiggyVest account in the fund sheet not identified as savings', () => {
+  it('says transfers add to the savings wallet, not store credit', () => {
+    renderModal(true);
+
+    expect(
+      screen.getByText(
+        /add to your savings wallet\. It doesn't add store credit/
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Copy savings account number' })
+    ).toBeOnTheScreen();
+  });
+});

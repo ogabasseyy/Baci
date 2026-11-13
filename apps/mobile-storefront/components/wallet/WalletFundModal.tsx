@@ -4,11 +4,11 @@ import { ScrollView, Text } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useLegacyFundingUnconfirmed } from '@/hooks/use-legacy-funding-unconfirmed';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
-import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
@@ -59,6 +59,7 @@ export function WalletFundModal({
   walletPrimaryUnsettled = false,
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  const verdictNow = usePiggyvestCapabilityNow(merchantId);
   const isDark = useColorScheme() === 'dark';
   // An old account number isn't offered until PiggyVest is ruled in or out.
   const legacyUnconfirmed = useLegacyFundingUnconfirmed(
@@ -85,8 +86,7 @@ export function WalletFundModal({
       piggyvestMerchant ||
       (walletPrimaryUnsettled && primaryCapability !== false) ||
       // No verdict yet: a restored legacy wallet isn't trusted (Codex).
-      (primaryCapability === null &&
-        readPiggyvestCapabilityNow(merchantId) === null));
+      (primaryCapability === null && verdictNow === null));
   // Every other PiggyVest top-up (plain, savings plan, start savings) funds
   // the savings wallet by bank transfer, never by card.
   // A PiggyVest account with its balance still pending is primary too

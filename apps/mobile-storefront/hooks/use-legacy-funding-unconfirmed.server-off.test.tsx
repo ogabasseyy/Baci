@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import {
   clearObservedPiggyvestPrimaryCapability,
   observePiggyvestPrimaryCapability,
@@ -71,5 +71,28 @@ describe('server keeps PiggyVest off', () => {
       useLegacyFundingUnconfirmed('paystack')
     );
     expect(result.current).toBe(false);
+  });
+});
+
+describe('bugfix: legacy account kept visible after the real expiry', () => {
+  it('hides the account at the cached ruling-out expiry, not a full TTL later', () => {
+    // Arrange: a ruling-out observed 59 s ago, screen mounts now.
+    jest.useFakeTimers({ now: 1_000_000 });
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    jest.setSystemTime(1_000_000 + 59_000);
+    mockCapability = false;
+    const { result } = renderHook(() =>
+      useLegacyFundingUnconfirmed('paystack')
+    );
+    expect(result.current).toBe(false);
+
+    // Act: advance through the real expiry (1 s left).
+    act(() => {
+      jest.advanceTimersByTime(1_100);
+    });
+
+    // Assert
+    expect(result.current).toBe(true);
+    jest.useRealTimers();
   });
 });

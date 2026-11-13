@@ -141,6 +141,7 @@ describe('WalletScreen PiggyVest main wallet', () => {
     earningsBalance: 0,
     fundingAccount: null,
     primaryReady: true,
+    savingsPrimary: true,
     savingsBalance: 0,
     showQuickSave: false,
     walletBalance: 1234.56,
@@ -162,7 +163,12 @@ describe('WalletScreen PiggyVest main wallet', () => {
     mockDeriveWalletDisplayData.mockReturnValue(
       primaryReady
         ? primaryDisplay()
-        : { ...primaryDisplay(), primaryReady: false, walletBalance: 5000 }
+        : {
+            ...primaryDisplay(),
+            primaryReady: false,
+            savingsPrimary: undefined,
+            walletBalance: 5000,
+          }
     );
     render(<WalletScreen />);
     const controller = () =>

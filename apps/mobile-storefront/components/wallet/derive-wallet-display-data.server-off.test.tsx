@@ -72,5 +72,16 @@ describe('bugfix: pending PiggyVest balance offered to savings contributions', (
     expect(display.walletBalance).toBe(0);
     expect(display.legacyBalance).toBe(1200);
     expect(display.primaryReady).toBeUndefined();
+    // Savings flows still treat it as PiggyVest: funding opens the PiggyVest
+    // transfer, never a card top-up into store credit.
+    expect(display.savingsPrimary).toBe(true);
+  });
+});
+
+describe('server keeps PiggyVest off: savings rail', () => {
+  it('never marks a legacy wallet as a PiggyVest savings wallet', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 1200 }).savingsPrimary
+    ).toBeUndefined();
   });
 });

@@ -1,7 +1,6 @@
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
-import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
-import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**
@@ -18,14 +17,12 @@ export function useLegacyFundingUnconfirmed(
     useAuthStore((state) => state.merchantId),
     CONFIG.MERCHANT_ID
   );
-  // Subscribed so the screen re-renders when the verdict changes; the
-  // cache is the authority, so an expired ruling-out hides the account
-  // at once, before the hook catches up (Codex).
-  usePiggyvestPrimaryCapability(merchantId);
+  // Re-renders on a new verdict and exactly at a ruling-out's expiry.
+  const verdict = usePiggyvestCapabilityNow(merchantId);
   if (!provider || provider === 'piggyvest') {
     return false;
   }
   // Unknown, or PiggyVest confirmed before the wallet is reclassified
   // (Codex): only a ruling-out makes a legacy account safe to show.
-  return readPiggyvestCapabilityNow(merchantId) !== false;
+  return verdict !== false;
 }

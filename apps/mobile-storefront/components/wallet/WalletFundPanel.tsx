@@ -26,6 +26,9 @@ const SETTING_UP_ACCOUNT = 'Setting up your account number...';
 const SETUP_FAILED =
   "We couldn't set up your account number just now. Fund with card below, or try bank transfer again later.";
 const CARD_TOGGLE_LABEL = 'Fund with card instead';
+// PiggyVest account: transfers fund savings only (Codex), never store credit.
+const PIGGYVEST_TRANSFER_SUBTITLE =
+  "Transfer to your account number below to add to your savings wallet. It doesn't add store credit for purchases.";
 const STORE_CREDIT_TITLE = 'Add store credit';
 const STORE_CREDIT_SUBTITLE =
   "Your savings wallet can't pay for this yet. Pay by card to add store credit, then finish your purchase.";
@@ -163,7 +166,7 @@ export function WalletFundPanel({
         <>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {fundingAccount.provider === 'piggyvest'
-              ? 'Transfer to your account number below. Your wallet updates after PiggyVest confirms receipt.'
+              ? PIGGYVEST_TRANSFER_SUBTITLE
               : BANK_TRANSFER_SUBTITLE}
           </Text>
           <View
@@ -189,8 +192,16 @@ export function WalletFundPanel({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Copy wallet account number"
-              accessibilityHint="Copies your account number"
+              accessibilityLabel={
+                fundingAccount.provider === 'piggyvest'
+                  ? 'Copy savings account number'
+                  : 'Copy wallet account number'
+              }
+              accessibilityHint={
+                fundingAccount.provider === 'piggyvest'
+                  ? 'Transfers add to your savings wallet, not store credit'
+                  : 'Copies your account number'
+              }
               style={[
                 styles.accountCopyButton,
                 { backgroundColor: colors.card },

@@ -233,3 +233,75 @@ describe('bugfix: cached PiggyVest wallet kept after a rollback to not ready', (
     clearObservedPiggyvestPrimaryCapability();
   });
 });
+
+describe('bugfix: cached wallet out of step with a verdict that changed elsewhere', () => {
+  const primaryWallet = {
+    balance: 0,
+    loyalty_points: 0,
+    primary_balance_kobo: 500_000,
+  };
+  const legacyWallet = { balance: 0, loyalty_points: 0 };
+
+  it('reloads a PiggyVest wallet when mounting after a rollback to not ready', () => {
+    // Arrange: another flow already rolled the verdict back.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = { invalidateQueries } as unknown as QueryClient;
+
+    // Act: the wallet screen mounts over a cached PiggyVest wallet.
+    renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY, primaryWallet)
+    );
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: KEY,
+      exact: true,
+    });
+    clearObservedPiggyvestPrimaryCapability();
+  });
+
+  it('reloads the legacy wallet when a later re-probe turns positive again', () => {
+    // Arrange: after a rollback the wallet was reloaded as legacy.
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = true; // the nested hook still holds its old answer
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = { invalidateQueries } as unknown as QueryClient;
+    renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY, legacyWallet)
+    );
+    invalidateQueries.mockClear();
+
+    // Act: the ruling-out expires and the re-probe answers "enabled".
+    act(() => {
+      observePiggyvestPrimaryCapability('merchant-1', true);
+    });
+
+    // Assert
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: KEY,
+      exact: true,
+    });
+    clearObservedPiggyvestPrimaryCapability();
+  });
+
+  it('reloads only once for the same mismatch', () => {
+    clearObservedPiggyvestPrimaryCapability();
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = { invalidateQueries } as unknown as QueryClient;
+    const hook = renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY, primaryWallet)
+    );
+
+    hook.rerender({});
+    hook.rerender({});
+
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});

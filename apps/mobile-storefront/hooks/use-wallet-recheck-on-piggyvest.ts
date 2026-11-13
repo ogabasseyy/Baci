@@ -36,31 +36,36 @@ export function useWalletRecheckOnPiggyvest(
     cached.owner_unresolved !== true &&
     !isWalletStoreCredit(cached) &&
     !isWalletPrimaryUnknown(cached);
+  // PiggyVest-shaped: a PiggyVest balance or a pending PiggyVest account.
   const cachedPrimary =
     cached !== undefined &&
-    (isWalletStoreCredit(cached) || isWalletPrimaryUnknown(cached));
-  const previous = useRef({ cachedLegacy, capability, scope, verdictNow });
-  // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): `scope` is its serialised form; the key is read at that moment.
+    (isWalletStoreCredit(cached) || cached.primary_pending === true);
+  // The live verdict (it follows rollbacks), else the hook's own answer.
+  const verdict = verdictNow ?? capability;
+  // State, not transitions (Codex): whenever the current verdict and the
+  // cached wallet's shape disagree, reload once for that combination. This
+  // covers rollbacks before mount, restores after a verdict, account
+  // switches and a re-probe that turns positive again.
+  const mismatch =
+    (verdict === true && cachedLegacy) || (verdict === false && cachedPrimary);
+  const mismatchKey = mismatch
+    ? `${scope}|${String(verdict)}|${cachedLegacy ? 'legacy' : 'primary'}`
+    : null;
+  const previous = useRef<{
+    capability: boolean | null;
+    mismatchKey: string | null;
+  }>({ capability, mismatchKey: null });
+  // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): `scope` (inside mismatchKey) is its serialised form; the key is read at that moment.
   useEffect(() => {
     const was = previous.current;
-    previous.current = { cachedLegacy, capability, scope, verdictNow };
+    previous.current = { capability, mismatchKey };
     const turnedOn = was.capability === false && capability !== false;
-    // A legacy-shaped wallet appearing while PiggyVest is confirmed: the
-    // first verdict over a restored cache, a new account scope, or a
-    // persisted restore landing after the verdict (Codex).
-    const legacyUnderVerdict =
-      capability === true &&
-      cachedLegacy &&
-      (was.capability !== true || was.scope !== scope || !was.cachedLegacy);
-    // PiggyVest rolled back to "not ready" (Codex): a cached PiggyVest
-    // wallet would keep directing transfers to PiggyVest; reclassify it.
-    const rolledBack =
-      was.verdictNow === true && verdictNow === false && cachedPrimary;
-    if (turnedOn || legacyUnderVerdict || rolledBack) {
+    const newMismatch = mismatchKey !== null && mismatchKey !== was.mismatchKey;
+    if (turnedOn || newMismatch) {
       void queryClient.invalidateQueries({
         queryKey: walletQueryKey,
         exact: true,
       });
     }
-  }, [cachedLegacy, cachedPrimary, capability, queryClient, scope, verdictNow]);
+  }, [capability, mismatchKey, queryClient]);
 }

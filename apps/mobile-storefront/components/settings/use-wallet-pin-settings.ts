@@ -274,6 +274,8 @@ export function useWalletPinSettings() {
     userId,
     submit,
     forgotPin: () => switchMode('reset'),
+    /** Back out of "Forgot your PIN?" to changing it with the current PIN. */
+    cancelForgot: () => switchMode('change'),
     identityConfirmed: identityConfirmedNow,
   };
 }

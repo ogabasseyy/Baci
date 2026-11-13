@@ -120,10 +120,7 @@ export function WalletPinSettingsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Forgot your PIN?"
               disabled={pin.busy}
-              onPress={() => {
-                steps.restart();
-                pin.forgotPin();
-              }}
+              onPress={steps.forgot}
               style={styles.secondary}
             >
               <Text style={[styles.secondaryText, { color: colors.primary }]}>

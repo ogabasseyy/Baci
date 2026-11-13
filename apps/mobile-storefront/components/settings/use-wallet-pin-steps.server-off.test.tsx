@@ -5,7 +5,8 @@ import { useWalletPinSteps } from './use-wallet-pin-steps';
 
 // A stand-in for the settings hook: the steps decide nothing about saving,
 // they only hand a complete form to `submit` (which the server can refuse).
-function useFakeSettings(mode: WalletPinMode, submit: () => void) {
+function useFakeSettings(initialMode: WalletPinMode, submit: () => void) {
+  const [mode, setMode] = useState(initialMode);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -22,6 +23,8 @@ function useFakeSettings(mode: WalletPinMode, submit: () => void) {
     showError,
     submit,
     error,
+    forgotPin: () => setMode('reset'),
+    cancelForgot: () => setMode('change'),
   };
 }
 
@@ -64,6 +67,23 @@ describe('PIN steps with the server off', () => {
     expect(view.result.current.steps.stage).toBe('current');
     expect(view.result.current.pin.newPin).toBe('');
     expect(view.result.current.pin.currentPin).toBe('1234');
+    expect(view.result.current.steps.canGoBack).toBe(false);
+  });
+
+  it('backs out of Forgot your PIN to the current-PIN step', () => {
+    const { view } = setup('change');
+    act(() => view.result.current.steps.forgot());
+    expect(view.result.current.pin.mode).toBe('reset');
+    expect(view.result.current.steps.stage).toBe('new');
+    expect(view.result.current.steps.canGoBack).toBe(true);
+    act(() => view.result.current.steps.back());
+    expect(view.result.current.pin.mode).toBe('change');
+    expect(view.result.current.steps.stage).toBe('current');
+    expect(view.result.current.steps.canGoBack).toBe(false);
+  });
+
+  it('leaves a forced reset with Back (no change form to return to)', () => {
+    const { view } = setup('reset');
     expect(view.result.current.steps.canGoBack).toBe(false);
   });
 

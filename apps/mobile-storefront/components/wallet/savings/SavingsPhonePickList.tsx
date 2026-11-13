@@ -85,6 +85,8 @@ export function SavingsPhonePickList({
         <SavingsSheetTextInput
           accessibilityRole="search"
           accessibilityLabel="Search phones"
+          autoCapitalize="none"
+          autoCorrect={false}
           value={searchValue}
           onChangeText={onSearchChange}
           placeholder="Search phones"

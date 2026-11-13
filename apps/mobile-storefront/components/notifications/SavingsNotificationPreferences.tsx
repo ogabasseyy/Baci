@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, View } from 'react-native';
-import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import type {
@@ -112,8 +111,8 @@ export function SavingsNotificationPreferences({
           accessibilityLabel="Quiet hours summary"
           style={[styles.subtitle, { color: colors.textSecondary }]}
         >
-          {formatDateTimeDisplay(quietHoursStart, 'time')} –{' '}
-          {formatDateTimeDisplay(quietHoursEnd, 'time')}
+          {/* Same 24-hour times as the fields below. */}
+          {`${preferences.quietHoursStart} – ${preferences.quietHoursEnd}`}
         </Text>
         <View style={styles.timeFields}>
           <SavingsQuietHoursTimeField

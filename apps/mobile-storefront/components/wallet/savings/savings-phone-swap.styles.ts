@@ -29,7 +29,7 @@ export const styles = StyleSheet.create({
     gap: SPACING.xs,
     paddingHorizontal: SPACING.sm,
   },
-  searchInput: { flex: 1, fontSize: 14, paddingVertical: 10 },
+  searchInput: { flex: 1, fontSize: 14, letterSpacing: 0, paddingVertical: 10 },
   row: {
     alignItems: 'center',
     borderTopWidth: StyleSheet.hairlineWidth,

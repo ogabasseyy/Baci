@@ -19,6 +19,8 @@ type PinSettings = Pick<
   | 'setConfirmPin'
   | 'showError'
   | 'submit'
+  | 'forgotPin'
+  | 'cancelForgot'
 >;
 
 const MIN_DIGITS = 4;
@@ -38,6 +40,9 @@ export function useWalletPinSteps(pin: PinSettings) {
   }>({ stage: firstStage(pin.mode), mode: pin.mode });
   // A new form (set, change or reset) always starts at its first step.
   const stage = held.mode === pin.mode ? held.stage : firstStage(pin.mode);
+  // "Forgot your PIN?" from the change form: back returns to that form.
+  const [forgotFromChange, setForgotFromChange] = useState(false);
+  const canLeaveForgot = pin.mode === 'reset' && forgotFromChange;
   const go = (next: WalletPinStage) => setHeld({ stage: next, mode: pin.mode });
 
   const value =
@@ -87,10 +92,22 @@ export function useWalletPinSteps(pin: PinSettings) {
     advance,
     /** "Forgot your PIN?" and any outcome that changes the form restart it. */
     restart: () => go(firstStage(pin.mode)),
+    /** "Forgot your PIN?": a reset that Back can undo. */
+    forgot: () => {
+      setForgotFromChange(pin.mode === 'change');
+      setHeld({ stage: 'new', mode: 'reset' });
+      pin.forgotPin();
+    },
     /** Past the first step, back goes one step back instead of leaving. */
-    canGoBack: stage !== firstStage(pin.mode),
+    canGoBack: stage !== firstStage(pin.mode) || canLeaveForgot,
     back: () => {
       pin.showError(null);
+      if (stage === firstStage(pin.mode) && canLeaveForgot) {
+        pin.setNewPin('');
+        setForgotFromChange(false);
+        setHeld({ stage: 'current', mode: 'change' });
+        return pin.cancelForgot();
+      }
       if (stage === 'confirm') {
         pin.setConfirmPin('');
         return go('new');

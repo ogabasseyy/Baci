@@ -25,7 +25,7 @@ describe('savings notification preferences with the server off', () => {
       />
     );
     expect(screen.getByLabelText('Quiet hours summary')).toHaveTextContent(
-      '10:00 PM – 8:00 AM'
+      '22:00 – 08:00'
     );
     expect(screen.queryByText(/HH:MM/)).toBeNull();
     expect(

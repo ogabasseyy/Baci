@@ -25,9 +25,17 @@ export function useStartSavingsPrimarySetup({
   /** The wallet read; undefined while loading. */
   wallet?: WalletData;
 }) {
-  // Known once the wallet read has answered and was not unavailable.
+  // Known once the wallet read has answered and was not unavailable. At the
+  // PiggyVest merchant a wallet with no owner yet stays unknown (Codex);
+  // other merchants keep today's rule.
+  const pilot = isPiggyvestPrimaryMerchant(activeMerchantId);
   const walletKnown =
-    wallet !== undefined && wallet.primary_unavailable !== true;
+    wallet !== undefined &&
+    wallet.primary_unavailable !== true &&
+    !(pilot && wallet.owner_unresolved === true);
+  // A confirmed PiggyVest account whose balance isn't ready yet is PiggyVest
+  // (Codex), never a known legacy wallet.
+  const primaryPending = wallet?.primary_pending === true;
   // PiggyVest when the wallet says so. The merchant only decides while the
   // customer's own wallet type is still unknown; once the read shows a
   // legacy wallet, that customer stays on the legacy rail. The form, review
@@ -38,8 +46,7 @@ export function useStartSavingsPrimarySetup({
   const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   const primary =
     verdictNow !== false &&
-    (primaryWallet ||
-      (!walletKnown && isPiggyvestPrimaryMerchant(activeMerchantId)));
+    (primaryWallet || primaryPending || (!walletKnown && pilot));
   const [answer, setAnswer] = useState<{
     userId?: string;
     value: boolean | null;

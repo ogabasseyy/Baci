@@ -198,3 +198,56 @@ describe('bugfix: cached PiggyVest wallet kept the PiggyVest form after a rollba
     expect(result.current.startGoalWalletSetup).toBeUndefined();
   });
 });
+
+describe('bugfix: pending PiggyVest account treated as a known legacy wallet', () => {
+  it('keeps a pending PiggyVest wallet on the PiggyVest form', () => {
+    // Arrange: account confirmed, balance not ready, so primaryWallet is false.
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'pv-merchant',
+        primaryWallet: false,
+        wallet: { balance: 0, loyalty_points: 0, primary_pending: true },
+      })
+    );
+
+    // Assert: interest asked, no legacy auto debit.
+    expect(result.current.askInterest).toBe(true);
+    expect(result.current.allowAutoDebit).toBe(false);
+  });
+
+  it('treats a wallet with no owner yet as unknown, not legacy', () => {
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'pv-merchant',
+        primaryWallet: false,
+        wallet: { balance: 0, loyalty_points: 0, owner_unresolved: true },
+      })
+    );
+    expect(result.current.askInterest).toBe(true);
+    expect(result.current.allowAutoDebit).toBe(false);
+  });
+
+  it('keeps an owned legacy wallet at a non-PiggyVest merchant on legacy', () => {
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'm',
+        primaryWallet: false,
+        wallet: { balance: 0, loyalty_points: 0 },
+      })
+    );
+    expect(result.current.askInterest).toBe(false);
+    expect(result.current.allowAutoDebit).toBe(true);
+  });
+
+  it("keeps today's auto debit for an ownerless wallet at another merchant", () => {
+    const { result } = renderHook(() =>
+      useStartSavingsPrimarySetup({
+        activeMerchantId: 'm',
+        primaryWallet: false,
+        wallet: { balance: 0, loyalty_points: 0, owner_unresolved: true },
+      })
+    );
+    expect(result.current.askInterest).toBe(false);
+    expect(result.current.allowAutoDebit).toBe(true);
+  });
+});

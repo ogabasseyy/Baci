@@ -14,6 +14,11 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Scheduled before switch-on: with no collection wallet configured there
+  // is no wallet pay and nothing to drain. Any other misconfiguration still
+  // pages (503) below, so money is never silently stranded.
+  if (!process.env.PIGGYVEST_COLLECTION_WALLET_ID)
+    return NextResponse.json({ status: 'not_configured' });
   let runtime: ReturnType<typeof readWalletPayRecoveryRuntime>;
   try {
     runtime = readWalletPayRecoveryRuntime();

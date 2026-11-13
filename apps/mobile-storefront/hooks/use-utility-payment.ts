@@ -191,11 +191,13 @@ export function useUtilityPayment() {
       : {}),
     // PiggyVest check failed, or a refresh may change the verdict (Codex):
     // hold bank-transfer top-ups until the wallet settles.
-    ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
-    verdictNow === null ||
-    (verdictNow === true && !isWalletStoreCredit(wallet.data?.wallet)) ||
-    (piggyvestPossible &&
-      (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
+    // A live ruling-out clears every hold, even an unavailable-shaped wallet.
+    ...(verdictNow !== false &&
+    (isWalletPrimaryUnknown(wallet.data?.wallet) ||
+      verdictNow === null ||
+      (verdictNow === true && !isWalletStoreCredit(wallet.data?.wallet)) ||
+      (piggyvestPossible &&
+        (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true)))
       ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

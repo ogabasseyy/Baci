@@ -24,6 +24,7 @@ let mockWalletQuery: {
     wallet: {
       balance: number;
       owner_unresolved?: boolean;
+      primary_unavailable?: boolean;
       primary_balance_kobo?: number;
     };
   };
@@ -159,6 +160,23 @@ describe('useUtilityPayment store credit', () => {
     const { result } = renderHook(() => useUtilityPayment());
     mockCapability = null;
 
+    expect(result.current.walletPrimaryUnknown).toBeUndefined();
+  });
+
+  it('bugfix: clears the render-time unknown hold for an unavailable wallet after a live rollback', () => {
+    // Arrange: the PiggyVest read timed out; the live verdict rolled back.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_unavailable: true } },
+    };
+
+    // Act
+    const { result } = renderHook(() => useUtilityPayment());
+    mockCapability = null;
+
+    // Assert: the legacy bank-transfer nudge comes back.
     expect(result.current.walletPrimaryUnknown).toBeUndefined();
   });
 });

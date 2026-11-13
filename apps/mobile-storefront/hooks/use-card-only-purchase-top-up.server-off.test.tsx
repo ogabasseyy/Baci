@@ -21,10 +21,12 @@ describe('useCardOnlyPurchaseTopUp', () => {
   });
 
   it("keeps today's top-up when the server keeps PiggyVest off", () => {
+    observePiggyvestPrimaryCapability(PILOT, false);
     const { result } = renderHook(() =>
       useCardOnlyPurchaseTopUp(PILOT, LEGACY_WALLET)
     );
     expect(result.current).toBe(false);
+    clearObservedPiggyvestPrimaryCapability();
   });
 
   it('bugfix: is card-only for a PiggyVest merchant whose read is unknown', () => {
@@ -123,5 +125,23 @@ describe('owner decision 2026-11-13: PiggyVest is only for the Ogabassey pilot',
       useCardOnlyPurchaseTopUp(ROLLOUT, { primary_unavailable: true })
     );
     expect(result.current).toBe(false);
+  });
+});
+
+describe('bugfix: IMEI clamp kept after a live rollback for the pilot', () => {
+  it("keeps today's exact prefill when the live verdict rolls back to false", () => {
+    // Arrange: the hook still holds a stale true; the cache now says false.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability(PILOT, false);
+
+    // Act
+    const { result } = renderHook(() =>
+      useCardOnlyPurchaseTopUp(PILOT, LEGACY_WALLET)
+    );
+
+    // Assert
+    expect(result.current).toBe(false);
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = false;
   });
 });

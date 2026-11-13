@@ -24,7 +24,7 @@ Rules that apply throughout:
 | Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Done in #4230 (outcomes are the wallet notice in the sheet; questions are an inline card; no iOS alerts) |
 | Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | Done in #4230 (calm review card; offline/retry state on a failed check) |
 | Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` | Done in #4230 (success wallet notice, no alert) |
-| Fund | Wallet activity under the card | `activity/PiggyvestWalletActivity`, `list_piggyvest_wallet_activity` | Built in the activity PR stacked on #4230: deposits, contributions, goal refunds and completions. **Owed:** IMEI/VTU spends from the wallet are not recorded anywhere yet (pay-from-wallet #4225/#4227 must record them before they can be listed) |
+| Fund | Wallet activity under the card | `activity/PiggyvestWalletActivity`, `list_piggyvest_wallet_activity` | Built in #4232 (stacked on #4230): deposits, contributions, goal refunds and completions. **Owed:** IMEI/VTU spends from the wallet are not recorded anywhere yet (pay-from-wallet #4225/#4227 must record them before they can be listed) |
 | Save | Start Savings, Check your plan | `StartSavingsScreen` and modals | Redesigned in #4223 |
 | Save | Add to savings + PIN step | `WalletSavingsProgressModal`, `WalletPinSheet` | Done (#4215) |
 | Save | Goal setup pending / retry / slow notice | `SavingsPlanStatusNote` | Done in #4223 |

@@ -10,6 +10,7 @@ it('calls only the forfeit functions of migration 20261112190514', () => {
     'claim_goal_cancel_forfeit',
     'manage_goal_cancel_forfeit',
     'list_goal_cancel_forfeit_work',
+    'ack_goal_cancel_forfeit_alert_worker',
     'claim_goal_cancel_forfeit_worker',
     'release_goal_cancel_forfeit_worker',
     'unclaim_goal_cancel_forfeit_worker',

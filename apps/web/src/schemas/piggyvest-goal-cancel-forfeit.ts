@@ -2,14 +2,23 @@ import { z } from 'zod';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 
 // The ledger bound for one PiggyVest amount (same as the goal cancel).
-const kobo = z.int().nonnegative().max(9999999999);
 const positiveKobo = z.int().positive().max(9999999999);
+// The largest goal balance a cancel split accepts (migration 20261112190514);
+// the per-transfer ceiling then applies to each leg on its own.
+export const GOAL_CANCEL_MAX_SPLIT_BALANCE_KOBO = 999_999_999_999_999;
+// The whole interest forfeited by a cancel, which may exceed one transfer
+// (the excess goes to review in the database).
+const interestKobo = z
+  .int()
+  .nonnegative()
+  .max(GOAL_CANCEL_MAX_SPLIT_BALANCE_KOBO);
 
 /**
  * Database answers for the early-cancel split (migration 20261112190514): the
  * customer gets the principal back, the interest is forfeited by its own leg.
  */
 export const piggyvestGoalCancelForfeitSchemas = {
+  splitBalanceKobo: z.int().positive().max(GOAL_CANCEL_MAX_SPLIT_BALANCE_KOBO),
   splitRows: z
     .array(
       z.strictObject({
@@ -17,13 +26,14 @@ export const piggyvestGoalCancelForfeitSchemas = {
           z.strictObject({
             status: z.literal('dispatched'),
             principalKobo: positiveKobo,
-            forfeitedInterestKobo: kobo,
+            forfeitedInterestKobo: interestKobo,
           }),
           z.strictObject({
             status: z.enum([
               'not_claimed',
               'needs_review',
               'forfeit_unavailable',
+              'too_large',
             ]),
           }),
         ]),
@@ -36,7 +46,7 @@ export const piggyvestGoalCancelForfeitSchemas = {
         result: z
           .strictObject({
             principalKobo: positiveKobo,
-            forfeitedInterestKobo: kobo,
+            forfeitedInterestKobo: interestKobo,
           })
           .nullable(),
       })
@@ -93,6 +103,7 @@ export const piggyvestGoalCancelForfeitSchemas = {
       })
     )
     .length(1),
+  ackRows: z.array(z.strictObject({ result: z.boolean() })).length(1),
   unclaimRows: z
     .array(
       z.strictObject({

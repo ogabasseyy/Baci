@@ -63,3 +63,13 @@ it('reports a failed sweep as a 500', async () => {
   expect(response.status).toBe(500);
   expect(await response.json()).toEqual({ status: 'failed' });
 });
+
+it('fails the cron when any single forfeit in the sweep failed', async () => {
+  mocks.sweep.mockResolvedValue({ ...counts, failed: 1 });
+  const response = await GET(authorized());
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({
+    status: 'failed',
+    forfeitSweep: { ...counts, failed: 1 },
+  });
+});

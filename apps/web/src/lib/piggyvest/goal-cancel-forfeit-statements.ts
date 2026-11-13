@@ -10,6 +10,9 @@ export const GOAL_CANCEL_FORFEIT_STATEMENTS = {
   // parameters are integration id, environment, then the selection.
   workerList:
     'SELECT piggyvest_primary.list_goal_cancel_forfeit_work($1::uuid,$2::text,$3::integer,$4::boolean) AS result',
+  // Records an emitted page (after the alert, never before).
+  workerAck:
+    'SELECT piggyvest_primary.ack_goal_cancel_forfeit_alert_worker($1::uuid,$2::text,$3::uuid) AS result',
   workerClaim:
     'SELECT piggyvest_primary.claim_goal_cancel_forfeit_worker($1::uuid,$2::text,$3::uuid) AS result',
   workerRelease:

@@ -34,6 +34,7 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_FORFEIT_STATEMENTS.claim, 2],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.manage, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerList, 4],
+  [GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease, 3],
   [GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim, 3],
@@ -47,6 +48,7 @@ const parameterCounts = new Map<string, number>([
 // The goal cancel forfeit sweep (integration id, environment, selection).
 const workerStatements = new Set<string>([
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,

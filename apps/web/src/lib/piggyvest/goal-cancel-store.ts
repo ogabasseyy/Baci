@@ -87,7 +87,7 @@ export function createGoalCancelStore(input: {
       const result = await input.execute(sql.splitDispatch, [
         scope,
         schemas.operationId.parse(operationId),
-        String(schemas.amountKobo.parse(balanceKobo)),
+        String(forfeitSchemas.splitBalanceKobo.parse(balanceKobo)),
       ]);
       return forfeitSchemas.splitRows.parse(result.rows)[0].result;
     },

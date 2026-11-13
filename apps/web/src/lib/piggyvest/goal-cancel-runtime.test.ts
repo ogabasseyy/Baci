@@ -209,7 +209,7 @@ it('does not resend on a replay: pending goes to a status check', async () => {
   expect(mocks.transfer).not.toHaveBeenCalled();
 });
 
-it('releases the reservation and sends nothing when the balance is above the ceiling', async () => {
+it('sends nothing when the principal alone is above the transfer ceiling', async () => {
   mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
     id,
     api_customer_id: 'customer',
@@ -218,7 +218,8 @@ it('releases the reservation and sends nothing when the balance is above the cei
     status: 'active',
     balance: id === 'goal-wallet' ? 10_000_000_000 : 10,
   }));
-  dbAnswers({ status: 'claimed', reservation }, true);
+  // The database checks each leg against the ceiling and released it.
+  dbAnswers({ status: 'claimed', reservation }, { status: 'too_large' });
   expect(
     await submitPrimaryWalletGoalCancel({
       configuration,
@@ -230,8 +231,8 @@ it('releases the reservation and sends nothing when the balance is above the cei
     })
   ).toEqual({ status: 'too_large' });
   expect(mocks.transfer).not.toHaveBeenCalled();
-  // The second statement is the 'cancel' transition, not a dispatch.
-  expect(mocks.execute.mock.calls[1][1][2]).toBe('cancel');
+  // The whole balance goes to the split, which applies the ceiling per leg.
+  expect(mocks.execute.mock.calls[1][1].at(-1)).toBe('10000000000');
 });
 
 it('asks whether an operation id is live for the goal', async () => {

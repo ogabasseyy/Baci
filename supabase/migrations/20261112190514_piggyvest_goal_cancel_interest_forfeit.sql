@@ -92,7 +92,9 @@ ALTER TABLE piggyvest_primary.goal_cancel_operations
            OR held_reason IN ('provider_balance_below_principal', 'interest_wallet_missing'));
 ALTER TABLE piggyvest_primary.goal_cancel_operations
   ADD COLUMN forfeited_interest_kobo bigint
-    CHECK (forfeited_interest_kobo IS NULL OR forfeited_interest_kobo BETWEEN 0 AND 9999999999);
+    -- The whole interest forfeited, which may exceed the per-transfer ceiling
+    -- (that part goes to review, see dispatch_goal_cancel_split).
+    CHECK (forfeited_interest_kobo IS NULL OR forfeited_interest_kobo BETWEEN 0 AND 999999999999999);
 
 CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -175,6 +177,11 @@ $$;
 --                       that is not a whole positive kobo amount; released
 --   forfeit_unavailable interest is owed but no enabled interest wallet;
 --                       released
+--   too_large           the principal alone is above the per-transfer
+--                       ceiling; released
+-- The ceiling applies to each transfer, not to the goal balance: interest
+-- above it still lets the principal go, and the interest is recorded as a
+-- forfeit in review (paged by the daily sweep), as late interest is.
 CREATE FUNCTION piggyvest_primary.dispatch_goal_cancel_split(
   scope jsonb,
   operation_id uuid,
@@ -195,7 +202,7 @@ DECLARE
   v_now timestamptz;
 BEGIN
   IF operation_id IS NULL OR provider_balance_kobo IS NULL
-    OR provider_balance_kobo NOT BETWEEN 1 AND 9999999999 THEN
+    OR provider_balance_kobo NOT BETWEEN 1 AND 999999999999999 THEN
     RAISE EXCEPTION 'invalid goal cancel dispatch' USING ERRCODE = '22023';
   END IF;
   v_intent_id := piggyvest_primary.assert_savings_scope(scope);
@@ -240,6 +247,11 @@ BEGIN
   END IF;
   v_principal := (v_current * 100)::bigint;
   v_interest := provider_balance_kobo - v_principal;
+  IF v_principal > 9999999999 THEN
+    -- One transfer can not carry it: released, nothing sent.
+    UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released' WHERE id = v_operation.id;
+    RETURN pg_catalog.jsonb_build_object('status', 'too_large');
+  END IF;
   IF v_interest > 0 THEN
     SELECT forfeit.provider_wallet_id INTO v_wallet
       FROM piggyvest_primary.goal_interest_forfeit_wallets AS forfeit
@@ -262,7 +274,17 @@ BEGIN
      SET state = 'dispatched', amount_kobo = v_principal, forfeited_interest_kobo = v_interest,
          dispatched_at = v_now
    WHERE id = v_operation.id;
-  IF v_interest > 0 THEN
+  IF v_interest > 9999999999 THEN
+    -- Above the per-transfer ceiling: recorded for review (paged by the
+    -- daily sweep), never sent or truncated. The amount is the ceiling
+    -- marker; forfeited_interest_kobo holds the real figure.
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+      'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+      v_operation.source_wallet_id, v_wallet, 9999999999, v_now);
+  ELSIF v_interest > 0 THEN
     INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
       cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
       source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
@@ -925,8 +947,10 @@ $$;
 
 -- Up to p_limit cancel attempts whose forfeit needs the sweep: reserved behind
 -- a confirmed principal (to send), or dispatched (to settle). A forfeit still
--- dispatched a day after it was sent is stamped and returned with
--- "alert": true once, so a person is paged about it. Unsent and in-flight
+-- dispatched a day after it was sent (or a plan in review nobody was paged
+-- about) is returned with "alert": true until the sweep acknowledges the page
+-- (ack_goal_cancel_forfeit_alert_worker) after emitting it, so a lost answer
+-- or a crash before the page can never suppress it. Unsent and in-flight
 -- work are taken in turn (each lane oldest first, already-paged stuck rows
 -- last), so neither old stuck rows nor a backlog of unsent ones can starve
 -- the rest.
@@ -976,17 +1000,41 @@ BEGIN
       FROM candidates
      ORDER BY candidates.lane_rank, (candidates.state = 'reserved') DESC
      LIMIT p_limit
-  ), stamped AS (
-    UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
-       SET alerted_at = pg_catalog.clock_timestamp()
-      FROM work WHERE forfeit.id = work.id AND work.overdue
-    RETURNING forfeit.id
   )
   SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'operationId', work.cancel_operation_id, 'state', work.state,
-      'alert', work.id IN (SELECT stamped.id FROM stamped)) ORDER BY work.rank), '[]'::jsonb)
+      'alert', work.overdue) ORDER BY work.rank), '[]'::jsonb)
     INTO v_result FROM work;
   RETURN v_result;
+END;
+$$;
+
+-- Records that the sweep has emitted the page for a cancel attempt's overdue
+-- or unpaged forfeit, so it is not paged again. Called only after the page;
+-- true when something was acknowledged.
+CREATE FUNCTION piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(
+  integration_id uuid,
+  environment text,
+  operation_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+BEGIN
+  v_binding := piggyvest_primary.assert_goal_cancel_worker(integration_id, environment);
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+     SET alerted_at = pg_catalog.clock_timestamp()
+   WHERE forfeit.cancel_operation_id = ack_goal_cancel_forfeit_alert_worker.operation_id
+     AND forfeit.integration_id = v_binding.id
+     AND forfeit.alerted_at IS NULL
+     AND ((forfeit.state = 'dispatched'
+           AND forfeit.dispatched_at < pg_catalog.clock_timestamp() - interval '1 day')
+          OR forfeit.state = 'needs_review');
+  RETURN FOUND;
 END;
 $$;
 
@@ -1438,8 +1486,7 @@ BEGIN
     VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
       'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
       v_operation.source_wallet_id, v_wallet, 9999999999, pg_catalog.clock_timestamp());
-    RETURN NEW;
-  END IF;
+  ELSE
   INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
     cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
     source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
@@ -1461,6 +1508,14 @@ BEGIN
     alerted_at = CASE
       WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
       THEN piggyvest_primary.goal_cancel_interest_forfeits.alerted_at ELSE NULL END;
+  END IF;
+  -- The cancel's forfeited total (what the app shows as interest not
+  -- refunded) includes this late payout too, never only the dispatch-time
+  -- figure.
+  UPDATE piggyvest_primary.goal_cancel_operations
+     SET forfeited_interest_kobo = LEAST(999999999999999,
+           COALESCE(forfeited_interest_kobo, 0) + NEW.net_kobo)
+   WHERE id = v_operation.id;
   EXCEPTION WHEN unique_violation OR check_violation THEN
     -- Never refuse the payout over the forfeit plan.
     NULL;
@@ -1544,6 +1599,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.claim_goal_cancel_forfeit_core(uuid, text, text),
   piggyvest_primary.assert_goal_cancel_worker(uuid, text),
   piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer, boolean),
+  piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(uuid, text, uuid),
   piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.release_goal_cancel_forfeit_worker(uuid, text, uuid),
   piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid, text, uuid),
@@ -1576,6 +1632,8 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.claim_goal_cancel_forfeit(jsonb, uui
 GRANT EXECUTE ON FUNCTION piggyvest_primary.manage_goal_cancel_forfeit(jsonb, uuid, text)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(uuid, text, integer, boolean)
+  TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(uuid, text, uuid)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid, text, uuid)
   TO piggyvest_primary_authorizer;

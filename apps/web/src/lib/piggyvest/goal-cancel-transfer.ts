@@ -4,6 +4,7 @@ import {
   GOAL_CANCEL_MAX_AMOUNT_KOBO,
   piggyvestGoalCancelSchemas as schemas,
 } from '@/schemas/piggyvest-goal-cancel';
+import { GOAL_CANCEL_MAX_SPLIT_BALANCE_KOBO } from '@/schemas/piggyvest-goal-cancel-forfeit';
 import { isDefinitiveNoTransferRejection } from './primary-wallet-savings-transfer';
 import type { TransferReferenceLookup } from './transfer-reference-lookup';
 
@@ -35,7 +36,13 @@ export type GoalCancelSplit =
       principalKobo: number;
       forfeitedInterestKobo: number;
     }
-  | { status: 'not_claimed' | 'needs_review' | 'forfeit_unavailable' };
+  | {
+      status:
+        | 'not_claimed'
+        | 'needs_review'
+        | 'forfeit_unavailable'
+        | 'too_large';
+    };
 
 interface Ports {
   reserve: (request: { goalId: string; operationId: string }) => Promise<Claim>;
@@ -190,9 +197,16 @@ export async function submitGoalCancel(
     await releaseReservation(request.operationId, ports);
     return { status: 'empty' };
   }
-  if (amountKobo > GOAL_CANCEL_MAX_AMOUNT_KOBO) {
-    // Above the shared dispatch ceiling: release the reservation now so the
-    // attempt is never left reserved with the PIN already spent.
+  if (
+    amountKobo >
+    (ports.splitDispatch
+      ? GOAL_CANCEL_MAX_SPLIT_BALANCE_KOBO
+      : GOAL_CANCEL_MAX_AMOUNT_KOBO)
+  ) {
+    // Above what one dispatch can carry (for a cancel split, the database
+    // checks each leg against the transfer ceiling itself): release the
+    // reservation now so the attempt is never left reserved with the PIN
+    // already spent.
     await releaseReservation(request.operationId, ports);
     return { status: 'too_large' };
   }
@@ -221,7 +235,9 @@ async function claimTransferAmount(
   operationId: string,
   balanceKobo: number,
   ports: Pick<Ports, 'claimDispatch' | 'splitDispatch'>
-): Promise<number | { status: 'pending' | 'needs_review' | 'unavailable' }> {
+): Promise<
+  number | { status: 'pending' | 'needs_review' | 'unavailable' | 'too_large' }
+> {
   if (!ports.splitDispatch)
     return (await ports.claimDispatch(operationId, balanceKobo))
       ? balanceKobo
@@ -229,6 +245,9 @@ async function claimTransferAmount(
   const split = await ports.splitDispatch(operationId, balanceKobo);
   if (split.status !== 'dispatched') {
     if (split.status === 'needs_review') return { status: 'needs_review' };
+    // The principal alone is above the transfer ceiling: the database has
+    // released the attempt, nothing is sent.
+    if (split.status === 'too_large') return { status: 'too_large' };
     // No interest wallet set up: held for an operator (a retry can not
     // succeed), so the customer is told it is under review.
     if (split.status === 'forfeit_unavailable')

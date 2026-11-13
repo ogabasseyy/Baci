@@ -8,10 +8,17 @@ import {
   readPrimaryWalletSavingsRuntime,
 } from './primary-wallet-savings-runtime';
 
-// The setting that only a primary-savings installation has (the savings
-// authorizer login); other PiggyVest subsystems never set it.
+// Settings only a primary-savings installation has (other PiggyVest
+// subsystems never set them; the interest wallet ids are required before any
+// forfeit is sent). Any one present means savings were installed,
+// so a missing or broken other setting (even the savings authorizer password
+// itself) is a failure, never "not configured".
 function hasAnyPrimaryWalletSetting(env: NodeJS.ProcessEnv): boolean {
-  return (env.PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD ?? '').trim() !== '';
+  return [
+    env.PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD,
+    env.PIGGYVEST_INTEREST_WALLET_ID,
+    env.PIGGYVEST_INTEREST_WALLET_OWNER_ID,
+  ].some((value) => (value ?? '').trim() !== '');
 }
 
 /** True only while PiggyVest savings are switched on (flags and kill switch). */

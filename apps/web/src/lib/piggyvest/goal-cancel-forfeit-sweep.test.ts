@@ -117,8 +117,8 @@ it('sends nothing new while savings are switched off, but still settles in-fligh
   );
 });
 
-it('pages once for an overdue in-flight forfeit', async () => {
-  db([{ operationId: opB, state: 'dispatched', alert: true }], {
+it('pages an overdue in-flight forfeit, then acknowledges the page', async () => {
+  db([{ operationId: opB, state: 'dispatched', alert: true }], true, {
     status: 'pending',
     forfeitId,
   });
@@ -127,6 +127,33 @@ it('pages once for an overdue in-flight forfeit', async () => {
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
     { reason: 'forfeit_overdue', operationId: opB }
   );
+  expect(mocks.execute.mock.calls[1]).toEqual([
+    sql.workerAck,
+    [integrationId, 'staging', opB],
+  ]);
+  // Regression: the alert is recorded as sent only after it was emitted.
+  expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.execute.mock.invocationCallOrder[1]
+  );
+});
+
+it('counts a failed page acknowledgement as a failure and still drives the forfeit', async () => {
+  mocks.execute.mockReset();
+  mocks.execute
+    .mockResolvedValueOnce({
+      rows: [
+        { result: [{ operationId: opB, state: 'dispatched', alert: true }] },
+      ],
+    })
+    .mockRejectedValueOnce(new Error('db'))
+    .mockResolvedValueOnce({
+      rows: [{ result: { status: 'pending', forfeitId } }],
+    });
+  expect(await sweepPendingGoalCancelForfeits(input(false))).toMatchObject({
+    failed: 1,
+    confirmed: 1,
+  });
+  expect(mocks.alert).toHaveBeenCalledOnce();
 });
 
 it('counts a failing forfeit and carries on with the next', async () => {
@@ -199,7 +226,7 @@ it('starts no new forfeit once the deadline has passed', async () => {
 });
 
 it('pages an overdue forfeit even when the deadline defers its item', async () => {
-  db([{ operationId: opB, state: 'dispatched', alert: true }]);
+  db([{ operationId: opB, state: 'dispatched', alert: true }], true);
   const result = await sweepPendingGoalCancelForfeits({
     ...input(true),
     deadlineAt: 0,
@@ -224,7 +251,7 @@ it('lists only in-flight forfeits while new transfers are off', async () => {
 });
 
 it('pages a review nobody was paged about and drives nothing for it', async () => {
-  db([{ operationId: opA, state: 'needs_review', alert: true }]);
+  db([{ operationId: opA, state: 'needs_review', alert: true }], true);
   expect(await sweepPendingGoalCancelForfeits(input(true))).toMatchObject({
     listed: 1,
     attention: 1,
@@ -234,5 +261,6 @@ it('pages a review nobody was paged about and drives nothing for it', async () =
     { reason: 'forfeit_needs_review', operationId: opA }
   );
   expect(mocks.transfer).not.toHaveBeenCalled();
-  expect(mocks.execute).toHaveBeenCalledOnce();
+  expect(mocks.execute).toHaveBeenCalledTimes(2);
+  expect(mocks.execute.mock.calls[1][0]).toBe(sql.workerAck);
 });

@@ -63,13 +63,21 @@ describe('split dispatch', () => {
     await expect(s.splitDispatch(operationId, 1)).rejects.toThrow();
   });
 
-  it('refuses a balance outside the ledger range before any statement runs', async () => {
+  it('refuses a balance outside the split range before any statement runs', async () => {
     const { execute, store: s } = store([]);
     await expect(s.splitDispatch(operationId, 0)).rejects.toThrow();
     await expect(
-      s.splitDispatch(operationId, 10_000_000_000)
+      s.splitDispatch(operationId, 1_000_000_000_000_000)
     ).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('passes a balance above one transfer to the database, which checks each leg', async () => {
+    const { execute, store: s } = store([{ result: { status: 'too_large' } }]);
+    expect(await s.splitDispatch(operationId, 10_000_000_000)).toEqual({
+      status: 'too_large',
+    });
+    expect(execute.mock.calls[0][1].at(-1)).toBe('10000000000');
   });
 });
 

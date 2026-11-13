@@ -219,6 +219,7 @@ it('binds the forfeit worker statements to this integration and environment, wit
   const id = '55555555-5555-4555-8555-555555555555';
   for (const text of [
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck,
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerClaim,
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
     GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,

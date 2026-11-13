@@ -36,7 +36,8 @@ export interface GoalCancelForfeitSweepResult {
  * left) and settles in-flight ones from a verified PiggyVest record. New
  * transfers go only while PiggyVest savings are switched on
  * (allowNewTransfers); a rollback still lets in-flight ones settle. An
- * overdue in-flight forfeit pages once. Never throws per forfeit.
+ * overdue in-flight forfeit pages until the page is acknowledged (after it
+ * was emitted). Never throws per forfeit.
  */
 export async function sweepPendingGoalCancelForfeits(input: {
   configuration: unknown;
@@ -94,20 +95,29 @@ export async function sweepPendingGoalCancelForfeits(input: {
     deferred: 0,
   };
   const now = input.now ?? Date.now;
-  // The database stamped these alerts while listing, so every one is paged
-  // now, before the deadline can defer its item: a deferred item comes back
-  // unstamped-for-alert next run and the page would otherwise be lost.
-  for (const item of work)
-    if (item.alert)
-      emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
-        // A plan that went to review with nobody paged (an over-ceiling
-        // late-interest merge), or a sent forfeit still in flight a day on.
-        reason:
-          item.state === 'needs_review'
-            ? 'forfeit_needs_review'
-            : 'forfeit_overdue',
-        operationId: item.operationId,
-      });
+  // Every alert is paged now, before the deadline can defer its item, and
+  // only then acknowledged, so a crash or lost answer before the page leaves
+  // it unacknowledged and it pages again next run. A failed acknowledgement
+  // fails the run (a repeat page next time beats none).
+  for (const item of work) {
+    if (!item.alert) continue;
+    emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
+      // A plan that went to review with nobody paged (an over-ceiling
+      // late-interest merge), or a sent forfeit still in flight a day on.
+      reason:
+        item.state === 'needs_review'
+          ? 'forfeit_needs_review'
+          : 'forfeit_overdue',
+      operationId: item.operationId,
+    });
+    try {
+      schemas.ackRows.parse(
+        (await execute(sql.workerAck, bound(item.operationId))).rows
+      );
+    } catch {
+      result.failed += 1;
+    }
+  }
   for (const [index, item] of work.entries()) {
     if (input.deadlineAt !== undefined && now() >= input.deadlineAt) {
       result.deferred = work.length - index;

@@ -115,3 +115,36 @@ it('stays inert where only another PiggyVest subsystem is configured', async () 
     )
   ).toBeNull();
 });
+
+it('reports a failed sweep when an established installation lost its authorizer password', async () => {
+  mocks.recovery.mockImplementation(() => {
+    throw new Error('Primary savings configuration unavailable');
+  });
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(
+    await runScheduledGoalCancelForfeitSweep(
+      {
+        PIGGYVEST_PRIMARY_INTEGRATION_ID: 'id',
+        PIGGYVEST_PRIMARY_DB_HOST: 'db.example.com',
+        PIGGYVEST_INTEREST_WALLET_ID: 'wallet',
+      } as unknown as NodeJS.ProcessEnv,
+      vi.fn()
+    )
+  ).toEqual({ status: 'failed' });
+  warn.mockRestore();
+});
+
+it('stays inert for a primary wallet installed without savings', async () => {
+  mocks.recovery.mockImplementation(() => {
+    throw new Error('Primary savings configuration unavailable');
+  });
+  expect(
+    await runScheduledGoalCancelForfeitSweep(
+      {
+        PIGGYVEST_PRIMARY_INTEGRATION_ID: 'id',
+        PIGGYVEST_PRIMARY_DB_HOST: 'db.example.com',
+      } as unknown as NodeJS.ProcessEnv,
+      vi.fn()
+    )
+  ).toBeNull();
+});

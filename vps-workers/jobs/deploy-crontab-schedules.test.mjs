@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -51,8 +53,45 @@ describe('deploy crontab schedules', () => {
       // The early-cancel interest forfeit sweep runs right after the report,
       // as its own route with its own time budget (deploy.sh is at its line
       // limit, so it shares this entry); either one failing fails the line.
-      /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation; s=\$\?; \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep \|\| exit 1; exit \$s' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
+      /^0 23 {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && if \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation; then \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep; else \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-goal-cancel-forfeit-sweep; false; fi' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
     );
+  });
+
+  // Regression: the line is rendered through an unquoted heredoc, so a shell
+  // variable in it ($s, $?) was filled in at deploy time and broke the entry.
+  // Render it the same way and run it: both jobs always run, and the line
+  // fails if either one fails.
+  it('renders the PiggyVest 23:00 line into a command that runs both jobs and fails if either fails', () => {
+    const line = readDeployScript()
+      .split('\n')
+      .find((entry) => entry.includes('piggyvest-daily-reconciliation'));
+    const dir = mkdtempSync(join(tmpdir(), 'pv-cron-'));
+    const node = join(dir, 'node');
+    writeFileSync(
+      node,
+      '#!/bin/sh\necho "$2" >> "$PV_LOG"\ncase "$2" in *reconciliation) exit "$PV_A";; *) exit "$PV_B";; esac\n'
+    );
+    chmodSync(node, 0o755);
+    const rendered = spawnSync(
+      'bash',
+      ['-c', `REMOTE_DIR=${dir}; NODE_BIN=${node}; cat <<EOF\n${line}\nEOF`],
+      { encoding: 'utf8' }
+    ).stdout;
+    const command = /bash -lc '([^']*)'/.exec(rendered)?.[1];
+    assert.ok(command, rendered);
+    for (const [a, b, expected] of [
+      ['0', '0', 0],
+      ['1', '0', 1],
+      ['0', '1', 1],
+      ['1', '1', 1],
+    ]) {
+      const log = join(dir, `log-${a}${b}`);
+      const run = spawnSync('bash', ['-c', command], {
+        env: { ...process.env, PV_A: a, PV_B: b, PV_LOG: log },
+      });
+      assert.equal(run.status === 0 ? 0 : 1, expected, `${a}/${b}`);
+      assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, 2);
+    }
   });
 
   it('schedules the order notification outbox cron through run-web-cron', () => {

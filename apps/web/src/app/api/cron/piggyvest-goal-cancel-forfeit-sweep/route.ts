@@ -26,5 +26,12 @@ export async function GET(request: Request) {
   if (result === null) return NextResponse.json({ status: 'inert' });
   if ('status' in result)
     return NextResponse.json({ status: 'failed' }, { status: 500 });
+  // A forfeit that threw (a failed claim or query) fails the scheduled run, so
+  // the crontab's failure alerting sees it; the others were still driven.
+  if (result.failed > 0)
+    return NextResponse.json(
+      { status: 'failed', forfeitSweep: result },
+      { status: 500 }
+    );
   return NextResponse.json({ status: 'ok', forfeitSweep: result });
 }

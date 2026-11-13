@@ -81,7 +81,7 @@ BEGIN
 
   -- Invalid balances are refused outright.
   v_op := pg_temp.gc_reserved('bad-balance');
-  FOREACH v_text IN ARRAY ARRAY['0', '-1', '10000000000'] LOOP
+  FOREACH v_text IN ARRAY ARRAY['0', '-1', '1000000000000000'] LOOP
     BEGIN
       PERFORM pg_temp.gf_split(v_op, v_text::bigint);
       RAISE EXCEPTION 'an invalid provider balance was accepted: %', v_text USING ERRCODE = 'PVT00';
@@ -408,13 +408,21 @@ BEGIN
     piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid) ->> 'status' = 'pending',
     'a dispatched forfeit was claimed twice by the worker');
   v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
-  -- An in-flight forfeit is listed for settlement; a day overdue pages once.
+  -- An in-flight forfeit is listed for settlement; a day overdue pages until
+  -- the sweep acknowledges the page it emitted, then never again.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits
      SET dispatched_at = pg_catalog.clock_timestamp() - interval '2 days' WHERE id = v_forfeit::uuid;
+  -- Regression: listing alone never stamps the alert, so a lost answer or a
+  -- crash before the page can not suppress it.
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) -> 0 ->> 'alert' = 'true'
+    AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) -> 0 ->> 'alert' = 'true',
+    'listing an overdue forfeit stamped its alert before the page was emitted');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(c_integration, 'staging', v_op::uuid)
+    AND NOT piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(c_integration, 'staging', v_op::uuid)
     AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) -> 0 ->> 'alert' = 'false',
-    'an overdue forfeit did not page exactly once');
+    'an acknowledged overdue forfeit paged again');
   -- An already-paged stuck transfer never starves newer work: an unsent
   -- forfeit of another cancel comes first in a window of one.
   INSERT INTO piggyvest_primary.goal_cancel_operations (
@@ -542,7 +550,8 @@ BEGIN
   -- read is already inside the planned forfeit, so a late receipt for it
   -- plans nothing more.
   PERFORM pg_temp.gf_receipt('gf-before-read', 900, pg_catalog.clock_timestamp() - interval '1 hour');
-  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12000,
+  PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12000
+    AND (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = 12000,
     'interest already inside the planned forfeit was counted twice');
   PERFORM pg_temp.gf_receipt('gf-during', 500);
   -- While the principal is in flight the notice stays (the cancel may fail).
@@ -552,6 +561,11 @@ BEGIN
   PERFORM pg_temp.gc_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 1
     AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 12500,
     'interest paid during the cancel was not merged into the unsent forfeit');
+  -- Regression (stale figure): the cancel's forfeited total, which the app
+  -- shows as interest not refunded, includes the late payout.
+  PERFORM pg_temp.gc_assert(
+    (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = 12500,
+    'the forfeited interest shown to the customer stayed at the dispatch-time figure');
   PERFORM pg_temp.gc_assert(
     pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12500}'::jsonb) = 'confirmed',
     'the principal did not settle with the merged interest still in the goal wallet');
@@ -565,7 +579,9 @@ BEGIN
     PERFORM pg_temp.gf_receipt('gf-huge', 10000000000);
     PERFORM pg_temp.gc_assert(EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
                                        WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
-                                         AND alerted_at IS NULL),
+                                         AND alerted_at IS NULL)
+      AND (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations
+            WHERE id = v_op::uuid) = 10000012500,
       'an oversized late payout was ignored instead of going to review');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
@@ -577,6 +593,7 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     (SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_interest_forfeits
       WHERE cancel_operation_id = v_op::uuid AND state = 'reserved' AND amount_kobo = 300) = 1
+    AND (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = 12800
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'pending',
     'late interest after the forfeit was sent was not planned, or the in-flight one was not read first');
   -- The goal wallet still holding the planned 300 is expected, more is not.
@@ -715,13 +732,18 @@ BEGIN
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
       AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 9999999990,
       'an overflowing merge was truncated instead of going to review');
-    -- Nobody was paged by the payout: the sweep lists it once with an alert.
+    -- Nobody was paged by the payout: the sweep lists it with an alert until
+    -- it acknowledges the page.
     PERFORM pg_temp.gc_assert(
       piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true)
         = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
             'operationId', v_op, 'state', 'needs_review', 'alert', true))
+      AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true)
+        = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'operationId', v_op, 'state', 'needs_review', 'alert', true))
+      AND piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(c_integration, 'staging', v_op::uuid)
       AND piggyvest_primary.list_goal_cancel_forfeit_work(c_integration, 'staging', 10, true) = '[]'::jsonb,
-      'a review nobody was paged about was not paged exactly once by the sweep');
+      'a review nobody was paged about was not paged until acknowledged');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -763,6 +785,68 @@ BEGIN
 END
 $notsetup$;
 
+-- 18. The per-transfer ceiling applies to each leg, not the goal balance.
+DO $ceiling$
+DECLARE
+  c_goal constant uuid := 'f3860000-0000-4000-8000-000000000005';
+  v_op text;
+  v_result jsonb;
+BEGIN
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'released'
+   WHERE state IN ('reserved', 'dispatched', 'needs_review');
+  -- Regression: a balance above the ceiling whose legs both fit dispatches
+  -- (it was refused outright, stranding a principal below the ceiling).
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 99000000, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('ceiling-both-fit');
+    v_result := pg_temp.gf_split(v_op, 10100000000);
+    PERFORM pg_temp.gc_assert(v_result
+        = '{"status":"dispatched","principalKobo":9900000000,"forfeitedInterestKobo":200000000}'::jsonb
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'reserved'
+      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 200000000,
+      'a balance above the ceiling with both legs under it was not split: ' || v_result::text);
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- A principal above the ceiling can not be sent: released, nothing planned.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('ceiling-principal');
+    v_result := pg_temp.gf_split(v_op, 10000000000);
+    PERFORM pg_temp.gc_assert(v_result = '{"status":"too_large"}'::jsonb
+      AND pg_temp.gc_state(v_op) = 'released'
+      AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                       WHERE cancel_operation_id = v_op::uuid),
+      'a principal above the ceiling was not released: ' || v_result::text);
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Interest above the ceiling: the principal still goes; the interest is a
+  -- forfeit in review (never sent or truncated), paged by the sweep.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('ceiling-interest');
+    v_result := pg_temp.gf_split(v_op, 10000250000);
+    PERFORM pg_temp.gc_assert(v_result
+        = '{"status":"dispatched","principalKobo":250000,"forfeitedInterestKobo":10000000000}'::jsonb
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND pg_temp.gf_forfeit(v_op, 'amount_kobo')::bigint = 9999999999
+      AND pg_temp.gf_forfeit(v_op, 'alerted_at') IS NULL
+      AND piggyvest_primary.list_goal_cancel_forfeit_work('f3860000-0000-4000-8000-000000000006', 'staging', 10, true)
+        = pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'operationId', v_op, 'state', 'needs_review', 'alert', true)),
+      'interest above the ceiling blocked the principal or was sent: ' || v_result::text);
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+END
+$ceiling$;
+
 -- 13. Catalog: both new tables are row-level-secured and closed; every new
 --     function is SECURITY DEFINER with an empty search_path and not PUBLIC.
 DO $catalog$
@@ -791,6 +875,7 @@ BEGIN
     'piggyvest_primary.claim_goal_cancel_forfeit_core(uuid,text,text)',
     'piggyvest_primary.assert_goal_cancel_worker(uuid,text)',
     'piggyvest_primary.list_goal_cancel_forfeit_work(uuid,text,integer,boolean)',
+    'piggyvest_primary.ack_goal_cancel_forfeit_alert_worker(uuid,text,uuid)',
     'piggyvest_primary.claim_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.release_goal_cancel_forfeit_worker(uuid,text,uuid)',
     'piggyvest_primary.unclaim_goal_cancel_forfeit_worker(uuid,text,uuid)',

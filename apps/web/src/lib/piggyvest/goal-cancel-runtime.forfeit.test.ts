@@ -253,3 +253,34 @@ it('sends no new interest transfer while PiggyVest savings are switched off', as
   ).toEqual({ status: 'confirmed', amounts });
   expect(mocks.transfer).not.toHaveBeenCalled();
 });
+
+describe('bugfix: a slow interest leg held up the confirmed answer', () => {
+  it('answers confirmed first and runs the interest leg after the response', async () => {
+    dbAnswers(
+      { status: 'claimed', reservation },
+      SPLIT,
+      amounts,
+      { status: 'claimed', forfeit },
+      'posting'
+    );
+    mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
+    const deferred: Array<() => Promise<unknown>> = [];
+    expect(
+      await submitPrimaryWalletGoalCancel({
+        ...submitInput,
+        deferForfeit: (task) => {
+          deferred.push(task);
+        },
+      })
+    ).toEqual({ status: 'confirmed', amounts });
+    // Only the principal went out before the answer.
+    expect(mocks.transfer).toHaveBeenCalledOnce();
+    expect(deferred).toHaveLength(1);
+    await deferred[0]();
+    expect(mocks.transfer).toHaveBeenCalledTimes(2);
+    expect(mocks.transfer.mock.calls[1][1]).toMatchObject({
+      destinationWalletId: 'interest-wallet',
+      amountKobo: 12000,
+    });
+  });
+});

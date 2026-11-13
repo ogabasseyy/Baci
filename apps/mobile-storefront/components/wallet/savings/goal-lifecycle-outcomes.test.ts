@@ -29,3 +29,14 @@ it('shows the PIN step answer for an attempt that is no longer valid', () => {
     expect(messageOf(Object.assign(new Error(text), { code }))).toBe(text);
   }
 });
+
+describe('bugfix: the update-required refusal showed as a generic error', () => {
+  it('shows the server copy and never offers Start again', () => {
+    const error = Object.assign(
+      new Error('Please update the app to cancel this goal.'),
+      { code: 'APP_UPDATE_REQUIRED' }
+    );
+    expect(messageOf(error)).toBe('Please update the app to cancel this goal.');
+    expect(NOT_STARTABLE_CODES).toContain('APP_UPDATE_REQUIRED');
+  });
+});

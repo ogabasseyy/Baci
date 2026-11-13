@@ -61,10 +61,19 @@ beforeEach(() => {
 });
 
 describe('bugfix: the app guessed what an early cancel refunds', () => {
+  // Not under review: the runtime attaches no amounts then (the money moved
+  // but our books refused to settle it), so nothing is shown as back.
+  it('a needs_review status check carries no split', async () => {
+    mocks.status.mockResolvedValue({ status: 'needs_review' });
+    expect(await (await patch({ merchantId, operationId })).json()).toEqual({
+      status: 'needs_review',
+      operationId,
+    });
+  });
+
   it.each([
     'pending',
     'confirmed',
-    'needs_review',
   ])('a %s status check carries the server split', async (status) => {
     mocks.status.mockResolvedValue({ status, amounts });
     const response = await patch({ merchantId, operationId });
@@ -130,9 +139,11 @@ describe('bugfix: a cancel refused for a missing interest wallet read as a Piggy
     const payload = await response.json();
     expect(payload.code).toBe('CANCEL_REJECTED');
     expect(payload.error).toBe(
-      'This cancellation did not go through. Nothing was moved and your savings are unchanged. You can try again later.'
+      'This cancellation did not go through. Nothing was moved and your savings are unchanged.'
     );
     expect(payload.error).not.toMatch(/PiggyVest/);
+    // Regression: never invites a retry the hold would refuse.
+    expect(payload.error).not.toMatch(/try again/i);
   });
 });
 

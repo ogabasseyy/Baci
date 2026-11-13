@@ -30,4 +30,6 @@ export const GOAL_CANCEL_FORFEIT_STATEMENTS = {
     'SELECT piggyvest_primary.settle_goal_cancel_forfeit($1::uuid,$2::text,$3::jsonb) AS result',
   release:
     'SELECT piggyvest_primary.release_failed_goal_cancel_forfeit($1::uuid,$2::text,$3::jsonb) AS result',
+  // Records a page the evidence side emitted (after the alert, never before).
+  ack: 'SELECT piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence($1::uuid,$2::text,$3::uuid) AS result',
 } as const;

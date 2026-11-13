@@ -35,7 +35,10 @@ export class GoalBalanceMismatchError extends Error {
 /** The four evidence statements a goal cancel or goal complete settles with. */
 export type GoalEvidenceStatements = Readonly<
   Record<'readDispatched' | 'findByReference' | 'settle' | 'release', string>
->;
+> & {
+  // Optional: records an emitted page so the forfeit sweep does not repeat it.
+  readonly ack?: string;
+};
 
 type Execute = (
   statement: string,
@@ -81,13 +84,16 @@ export function createGoalCancelEvidenceStore(input: {
   // (for example a late success while a newer attempt is live). The money may
   // have moved, so a person is paged and the status path is told.
   let conflicted = false;
-  function flagConflict(reason: string, proof: object) {
+  async function flagConflict(reason: string, proof: object) {
     conflicted = true;
     const { operationId } = proof as { operationId?: unknown };
     emitPiggyvestWebhookAlert(alertCode, {
       reason,
       ...(typeof operationId === 'string' ? { operationId } : {}),
     });
+    // Acknowledged only after the page; a failure just means it repeats.
+    if (statements.ack && typeof operationId === 'string')
+      await run(statements.ack, operationId).catch(() => undefined);
   }
   // Reads the goal wallet balance left after a verified transfer. A transient
   // failure (network, provider jitter) is NOT a settlement conflict: it is
@@ -106,7 +112,7 @@ export function createGoalCancelEvidenceStore(input: {
       return Number.isSafeInteger(residual) && residual > 0 ? residual : 0;
     } catch (error) {
       if (error instanceof GoalBalanceMismatchError)
-        flagConflict('settle_balance_mismatch', receipt);
+        await flagConflict('settle_balance_mismatch', receipt);
       throw error;
     }
   }
@@ -137,10 +143,10 @@ export function createGoalCancelEvidenceStore(input: {
       if (!allowed.includes(result as T))
         throw new Error('Goal cancel settlement unavailable');
     } catch (error) {
-      flagConflict(`${kind}_failed`, receipt);
+      await flagConflict(`${kind}_failed`, receipt);
       throw error;
     }
-    if (result === 'conflict') flagConflict(`${kind}_conflict`, receipt);
+    if (result === 'conflict') await flagConflict(`${kind}_conflict`, receipt);
     return result as T;
   }
   return {

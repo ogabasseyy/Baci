@@ -169,3 +169,32 @@ it('answers unmatched when no reference is a known forfeit', async () => {
     })
   ).toBe('unmatched');
 });
+
+it('bugfix: acknowledges a settle-conflict page after emitting it, so the sweep does not page the review again', async () => {
+  retrieveWallet.mockResolvedValue(goalWallet(0));
+  evidenceExecute.mockReset();
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({ rows: [{ result: 'conflict' }] })
+    .mockResolvedValueOnce({ rows: [{ result: true }] });
+  await runGoalCancelForfeitReconciliation({
+    configuration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: fetchRecord('successful'),
+  });
+  expect(alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'settle_conflict', operationId }
+  );
+  const ack = evidenceExecute.mock.calls.findIndex(
+    (call) => call[0] === sql.ack
+  );
+  expect(evidenceExecute.mock.calls[ack]).toEqual([
+    sql.ack,
+    [integrationId, 'staging', operationId],
+  ]);
+  expect(alert.mock.invocationCallOrder[0]).toBeLessThan(
+    evidenceExecute.mock.invocationCallOrder[ack]
+  );
+});

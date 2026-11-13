@@ -5,9 +5,9 @@ import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primar
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
 import {
-  sweepGoalCancelForfeit,
-  withGoalCancelAmounts,
-} from './goal-cancel-forfeit-runtime';
+  type DeferForfeit,
+  finishGoalCancel as finish,
+} from './goal-cancel-finish';
 import { runGoalCancelReconciliation } from './goal-cancel-reconciliation';
 import { publicStatus, readGoalCancelStatus } from './goal-cancel-status';
 import { createGoalCancelStore } from './goal-cancel-store';
@@ -120,6 +120,10 @@ export async function submitPrimaryWalletGoalCancel(input: {
   // ignores the flags (nobody is trapped in a goal), Ogabassey's interest
   // leg does not, so a rollback stops new interest transfers.
   allowForfeitTransfers?: boolean;
+  // Runs the interest leg after the answer is sent (the route passes
+  // Next.js after()), so its provider calls never hold up or time out the
+  // customer's confirmed answer. Without it the leg runs inline.
+  deferForfeit?: DeferForfeit;
 }) {
   const { configuration, scope, store, token } = bind(input);
   if (token === null) throw new Error('Goal cancel provider unavailable');
@@ -225,29 +229,8 @@ export async function submitPrimaryWalletGoalCancel(input: {
     evidence,
     operationId: request.operationId,
     allowForfeitTransfers: input.allowForfeitTransfers === true,
+    deferForfeit: input.deferForfeit,
   });
-}
-
-/**
- * Once the customer's principal is confirmed the interest leg may go (best
- * effort, never changes the customer's answer); every answer that has a
- * dispatched attempt behind it carries the server's amounts.
- */
-async function finish<T extends { status: string }>(
-  result: T,
-  input: {
-    store: ReturnType<typeof bind>['store'];
-    provider: { token: string; baseUrl: string };
-    evidence: unknown | null;
-    operationId: string;
-    allowForfeitTransfers: boolean;
-  }
-) {
-  // With savings switched off the daily worker sweep still settles in-flight
-  // forfeits; nothing new is sent from here.
-  if (result.status === 'confirmed' && input.allowForfeitTransfers)
-    await sweepGoalCancelForfeit(input);
-  return await withGoalCancelAmounts(input.store, input.operationId, result);
 }
 
 /**
@@ -261,6 +244,7 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
   providerToken: unknown;
   operationId: unknown;
   allowForfeitTransfers?: boolean;
+  deferForfeit?: DeferForfeit;
 }) {
   const { configuration, store, token } = bind(input);
   if (token === null) throw new Error('Goal cancel provider unavailable');
@@ -282,6 +266,7 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
       evidence,
       operationId,
       allowForfeitTransfers: input.allowForfeitTransfers === true,
+      deferForfeit: input.deferForfeit,
     }
   );
 }

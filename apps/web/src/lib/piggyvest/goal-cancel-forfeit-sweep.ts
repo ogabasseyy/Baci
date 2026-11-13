@@ -95,12 +95,13 @@ export async function sweepPendingGoalCancelForfeits(input: {
     deferred: 0,
   };
   const now = input.now ?? Date.now;
-  // Every alert is paged now, before the deadline can defer its item, and
-  // only then acknowledged, so a crash or lost answer before the page leaves
-  // it unacknowledged and it pages again next run. A failed acknowledgement
-  // fails the run (a repeat page next time beats none).
-  for (const item of work) {
-    if (!item.alert) continue;
+  // Every alert is paged now, before the deadline can defer its item. Pages
+  // are cheap; acknowledgements are database round trips, so they stop at the
+  // deadline (an unacknowledged page simply repeats next run, never lost),
+  // leaving the budget for settling sent forfeits. A failed acknowledgement
+  // fails the run.
+  const alerts = work.filter((item) => item.alert);
+  for (const item of alerts)
     emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW', {
       // A plan that went to review with nobody paged (an over-ceiling
       // late-interest merge), or a sent forfeit still in flight a day on.
@@ -110,6 +111,8 @@ export async function sweepPendingGoalCancelForfeits(input: {
           : 'forfeit_overdue',
       operationId: item.operationId,
     });
+  for (const item of alerts) {
+    if (input.deadlineAt !== undefined && now() >= input.deadlineAt) break;
     try {
       schemas.ackRows.parse(
         (await execute(sql.workerAck, bound(item.forfeitId))).rows

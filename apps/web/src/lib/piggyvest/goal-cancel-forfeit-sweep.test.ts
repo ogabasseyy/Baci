@@ -283,3 +283,29 @@ it('pages a review nobody was paged about and drives nothing for it', async () =
   expect(mocks.execute).toHaveBeenCalledTimes(2);
   expect(mocks.execute.mock.calls[1][0]).toBe(sql.workerAck);
 });
+
+it('bugfix: stops acknowledging pages at the deadline, still paging every alert', async () => {
+  db(
+    [
+      { operationId: opA, forfeitId, state: 'needs_review', alert: true },
+      { operationId: opB, forfeitId, state: 'needs_review', alert: true },
+    ],
+    true
+  );
+  let clock = 1000;
+  const result = await sweepPendingGoalCancelForfeits({
+    ...input(true),
+    deadlineAt: 1500,
+    now: () => {
+      const current = clock;
+      clock += 1000;
+      return current;
+    },
+  });
+  expect(mocks.alert).toHaveBeenCalledTimes(2);
+  // One acknowledgement fits the budget; the other repeats next run.
+  expect(
+    mocks.execute.mock.calls.filter((call) => call[0] === sql.workerAck)
+  ).toHaveLength(1);
+  expect(result).toMatchObject({ failed: 0 });
+});

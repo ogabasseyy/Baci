@@ -667,6 +667,7 @@ DECLARE
   v_forfeit piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
   v_released integer;
   v_wallet text;
+  v_other piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
 BEGIN
   SELECT forfeit.* INTO v_forfeit FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.id = p_forfeit_id FOR UPDATE;
@@ -686,34 +687,38 @@ BEGIN
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'released' WHERE id = v_forfeit.id;
   SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
    WHERE wallet.integration_id = v_forfeit.integration_id AND wallet.enabled;
+  SELECT other.* INTO v_other FROM piggyvest_primary.goal_cancel_interest_forfeits AS other
+   WHERE other.cancel_operation_id = v_forfeit.cancel_operation_id AND other.state = 'reserved'
+     FOR UPDATE;
+  IF FOUND AND v_other.amount_kobo + v_forfeit.amount_kobo > 9999999999 THEN
+    -- The replacement can not merge under the per-transfer ceiling: it goes
+    -- to review as its own row with its full amount (nothing dropped), and
+    -- the plan already waiting stays sendable. The caller pages for this row
+    -- and then acknowledges it, named in the answer; until then the daily
+    -- sweep pages it, so a lost page is never silent.
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    VALUES (v_forfeit.cancel_operation_id, v_forfeit.integration_id, v_forfeit.intent_id, v_forfeit.goal_id,
+      'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_forfeit.goal_id),
+      v_forfeit.source_wallet_id, COALESCE(v_wallet, v_forfeit.destination_wallet_id),
+      v_forfeit.amount_kobo, pg_catalog.clock_timestamp())
+    RETURNING id INTO v_review_id;
+    RETURN 'released_needs_review:' || v_review_id::text;
+  END IF;
+  IF FOUND THEN
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET amount_kobo = v_other.amount_kobo + v_forfeit.amount_kobo
+     WHERE id = v_other.id;
+    RETURN 'released';
+  END IF;
   INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
     cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
     source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
   VALUES (v_forfeit.cancel_operation_id, v_forfeit.integration_id, v_forfeit.intent_id, v_forfeit.goal_id,
     'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_forfeit.goal_id),
     v_forfeit.source_wallet_id, COALESCE(v_wallet, v_forfeit.destination_wallet_id),
-    v_forfeit.amount_kobo, pg_catalog.clock_timestamp())
-  ON CONFLICT (cancel_operation_id, state) WHERE state IN ('reserved', 'dispatched')
-  DO UPDATE SET
-    -- A merge above the per-transfer ceiling is never truncated: the plan
-    -- goes to review (paged once by the next claim) with nothing discarded.
-    amount_kobo = CASE
-      WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
-      THEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo
-      ELSE piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo END,
-    state = CASE
-      WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
-      THEN 'reserved' ELSE 'needs_review' END;
-  -- The replacement could not be merged under the ceiling: the plan is now in
-  -- review, so the caller pages for it and then acknowledges that row, named
-  -- in the answer ('released_needs_review:<forfeit id>'). Not stamped here:
-  -- until acknowledged the daily sweep pages it, so a lost page is never
-  -- silent.
-  SELECT review.id INTO v_review_id FROM piggyvest_primary.goal_cancel_interest_forfeits AS review
-   WHERE review.cancel_operation_id = v_forfeit.cancel_operation_id
-     AND review.state = 'needs_review' AND review.alerted_at IS NULL
-   ORDER BY review.reserved_at DESC LIMIT 1;
-  IF FOUND THEN RETURN 'released_needs_review:' || v_review_id::text; END IF;
+    v_forfeit.amount_kobo, pg_catalog.clock_timestamp());
   RETURN 'released';
 END;
 $$;
@@ -1411,6 +1416,33 @@ BEGIN
 END;
 $$;
 
+-- Records that the evidence side emitted a page about this forfeit (a
+-- settlement it answered 'conflict' for), so the daily sweep does not page
+-- the same review again. Called only after the page; true when something was
+-- acknowledged.
+CREATE FUNCTION piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(
+  integration_id uuid,
+  environment text,
+  forfeit_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_binding piggyvest_primary.integrations%ROWTYPE;
+BEGIN
+  v_binding := piggyvest_primary.assert_goal_cancel_evidence(integration_id, environment);
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+     SET alerted_at = pg_catalog.clock_timestamp()
+   WHERE forfeit.id = ack_goal_cancel_forfeit_alert_evidence.forfeit_id
+     AND forfeit.integration_id = v_binding.id
+     AND forfeit.alerted_at IS NULL;
+  RETURN FOUND;
+END;
+$$;
+
 -- A provider record showing the forfeit transfer FAILED: released and replaced.
 CREATE FUNCTION piggyvest_primary.release_failed_goal_cancel_forfeit(
   integration_id uuid,
@@ -1454,13 +1486,17 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  -- Unsent plans, including one already moved to review, are released:
-  -- interest is only ever forfeited for a cancel that happened.
+  -- Unsent plans, including one already moved to review and one claimed but
+  -- never posted (no posted_at: its single POST has not been made, and the
+  -- posting mark takes the same customer lock, so it can not start after
+  -- this), are released: interest is only ever forfeited for a cancel that
+  -- happened, and nothing is left stranded behind a released cancel.
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
      SET state = 'released'
    WHERE forfeit.cancel_operation_id = NEW.id
      AND (forfeit.state = 'reserved'
-          OR (forfeit.state = 'needs_review' AND forfeit.dispatched_at IS NULL));
+          OR (forfeit.state = 'needs_review' AND forfeit.dispatched_at IS NULL)
+          OR (forfeit.state = 'dispatched' AND forfeit.posted_at IS NULL));
   RETURN NEW;
 END;
 $$;
@@ -1468,6 +1504,33 @@ CREATE TRIGGER release_unsent_goal_cancel_forfeit
   AFTER UPDATE OF state ON piggyvest_primary.goal_cancel_operations
   FOR EACH ROW WHEN (NEW.state IN ('released', 'reviewed') AND OLD.state IS DISTINCT FROM NEW.state)
   EXECUTE FUNCTION piggyvest_primary.release_unsent_goal_cancel_forfeit();
+
+-- 8a. The customer's Earnings never include interest forfeited by an early
+-- cancel: each goal's paid interest (net of provider reversals, as before)
+-- less the interest forfeited by its confirmed cancel (the cancel's
+-- forfeited total, final for the customer as soon as the principal confirms,
+-- whatever the internal interest transfer's state), never below zero. Same signature, so
+-- its grants (none beyond the owner) persist through CREATE OR REPLACE.
+CREATE OR REPLACE FUNCTION piggyvest_primary.customer_paid_interest(p_merchant uuid,p_customer uuid)
+RETURNS TABLE(goal_id uuid,amount numeric)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+  SELECT paid.goal_id,
+         GREATEST(0, paid.amount - COALESCE((
+           SELECT sum(cancel.forfeited_interest_kobo)::numeric
+             FROM piggyvest_primary.goal_cancel_operations cancel
+            WHERE cancel.goal_id=paid.goal_id AND cancel.state='confirmed'), 0))
+  FROM (
+    SELECT receipt.goal_id,sum(receipt.net_kobo-coalesce(reversal.amount,0))::numeric AS amount
+    FROM piggyvest_primary.paid_interest_receipts receipt
+    JOIN piggyvest_primary.integrations integration ON integration.id=receipt.integration_id AND integration.environment='production'
+      AND integration.merchant_id=receipt.merchant_id
+    JOIN public.customer_savings_goals goal ON goal.id=receipt.goal_id AND goal.merchant_id=receipt.merchant_id AND goal.customer_id=receipt.customer_id
+    LEFT JOIN LATERAL (SELECT sum(amount_kobo)::numeric AS amount FROM piggyvest_primary.paid_interest_reversals
+      WHERE integration_id=receipt.integration_id AND payout_id=receipt.payout_id) reversal ON true
+    WHERE receipt.merchant_id=p_merchant AND receipt.customer_id=p_customer
+    GROUP BY receipt.goal_id
+  ) paid;
+$$;
 
 -- 8b. Interest PiggyVest pays into a goal wallet after an early cancel was
 -- dispatched or confirmed is forfeited too: each such payout plans (or merges
@@ -1486,6 +1549,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_planned bigint;
   v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
   v_wallet text;
   v_paid_at timestamptz;
@@ -1531,43 +1595,48 @@ BEGIN
   END IF;
   SELECT wallet.provider_wallet_id INTO v_wallet FROM piggyvest_primary.goal_interest_forfeit_wallets AS wallet
    WHERE wallet.integration_id = v_operation.integration_id;
+  BEGIN
   IF NOT FOUND OR v_wallet = v_operation.source_wallet_id
     OR v_wallet = v_operation.destination_wallet_id THEN
-    RETURN NEW;
-  END IF;
-  BEGIN
-  IF NEW.net_kobo > 9999999999 THEN
-    -- Above the per-transfer ceiling: recorded for review (paged once by the
-    -- daily sweep), never ignored. The amount is the ceiling marker; the
-    -- receipt holds the real figure.
+    -- No usable interest wallet (a cancel that owed no interest never needed
+    -- one): the payout is still forfeited, recorded for review so the sweep
+    -- pages it, with a placeholder destination that can never be sent to
+    -- (review rows are never claimed for sending).
     INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
       cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
       source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
     VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
       'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
-      v_operation.source_wallet_id, v_wallet, 9999999999, pg_catalog.clock_timestamp());
+      v_operation.source_wallet_id, 'interest-wallet-not-configured',
+      LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp());
   ELSE
-  INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
-    cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
-    source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
-  VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
-    'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
-    v_operation.source_wallet_id, v_wallet, NEW.net_kobo, pg_catalog.clock_timestamp())
-  ON CONFLICT (cancel_operation_id, state) WHERE state IN ('reserved', 'dispatched')
-  DO UPDATE SET
-    -- Never truncated above the per-transfer ceiling: review instead.
-    amount_kobo = CASE
-      WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
-      THEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo
-      ELSE piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo END,
-    state = CASE
-      WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
-      THEN 'reserved' ELSE 'needs_review' END,
-    -- A review entered here pages afresh (the daily sweep pages unstamped
-    -- reviews), whatever an earlier wallet-check page left behind.
-    alerted_at = CASE
-      WHEN piggyvest_primary.goal_cancel_interest_forfeits.amount_kobo + EXCLUDED.amount_kobo <= 9999999999
-      THEN piggyvest_primary.goal_cancel_interest_forfeits.alerted_at ELSE NULL END;
+  SELECT forfeit.amount_kobo INTO v_planned FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
+   WHERE forfeit.cancel_operation_id = v_operation.id AND forfeit.state = 'reserved'
+     FOR UPDATE;
+  IF NEW.net_kobo > 9999999999 OR COALESCE(v_planned, 0) + NEW.net_kobo > 9999999999 THEN
+    -- Above the per-transfer ceiling, alone or merged into the unsent plan:
+    -- recorded for review as its own row (paged by the daily sweep until
+    -- acknowledged), never truncated or dropped; the unsent plan stays
+    -- sendable. Above the ceiling on its own, the amount is the ceiling marker
+    -- and the receipt (and the cancel's forfeited total) holds the real figure.
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+      'needs_review', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+      v_operation.source_wallet_id, v_wallet, LEAST(NEW.net_kobo, 9999999999), pg_catalog.clock_timestamp());
+  ELSIF v_planned IS NOT NULL THEN
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET amount_kobo = amount_kobo + NEW.net_kobo
+     WHERE cancel_operation_id = v_operation.id AND state = 'reserved';
+  ELSE
+    INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+      cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+      source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+    VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
+      'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
+      v_operation.source_wallet_id, v_wallet, NEW.net_kobo, pg_catalog.clock_timestamp());
+  END IF;
   END IF;
   -- The cancel's forfeited total (what the app shows as interest not
   -- refunded) includes this late payout too, never only the dispatch-time
@@ -1672,6 +1741,7 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.find_dispatched_goal_cancel_forfeit_by_reference(uuid, text, text),
   piggyvest_primary.lock_goal_cancel_forfeit_for_proof(piggyvest_primary.integrations, jsonb),
   piggyvest_primary.settle_goal_cancel_forfeit(uuid, text, jsonb),
+  piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(uuid, text, uuid),
   piggyvest_primary.release_failed_goal_cancel_forfeit(uuid, text, jsonb),
   piggyvest_primary.release_unsent_goal_cancel_forfeit(),
   piggyvest_primary.plan_forfeit_for_late_goal_interest(),
@@ -1712,6 +1782,8 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.find_dispatched_goal_cancel_forfeit_
 GRANT EXECUTE ON FUNCTION piggyvest_primary.settle_goal_cancel_forfeit(uuid, text, jsonb)
   TO piggyvest_primary_evidence;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.release_failed_goal_cancel_forfeit(uuid, text, jsonb)
+  TO piggyvest_primary_evidence;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.ack_goal_cancel_forfeit_alert_evidence(uuid, text, uuid)
   TO piggyvest_primary_evidence;
 
 COMMIT;

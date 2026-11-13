@@ -122,3 +122,23 @@ describe('the interest gate: null means unanswered, undefined means never asked'
     expect(result.current.formInterestChoice).toBeUndefined();
   });
 });
+
+describe('bugfix: switching accounts and back brought an old interest answer back', () => {
+  it('clears the answer when the signed-in account changes', () => {
+    const { result, rerender } = renderHook(
+      (props: { userId: string }) =>
+        useStartSavingsPrimarySetup({
+          activeMerchantId: 'm',
+          primaryWallet: true,
+          userId: props.userId,
+        }),
+      { initialProps: { userId: 'user-a' } }
+    );
+    act(() => result.current.setInterestChoice(true));
+    expect(result.current.interestChoice).toBe(true);
+    rerender({ userId: 'user-b' });
+    expect(result.current.interestChoice).toBeNull();
+    rerender({ userId: 'user-a' });
+    expect(result.current.interestChoice).toBeNull();
+  });
+});

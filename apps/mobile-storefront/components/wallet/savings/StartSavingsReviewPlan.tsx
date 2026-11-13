@@ -24,11 +24,12 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
   // Counted from today to the plan's end date, so a later start is included.
   const daysToGo = daysUntil(controller.maturityDate, new Date());
   const auto = controller.sourceMode === 'auto_debit';
-  // A head start that covers the whole price completes the plan today.
-  const phoneDate =
-    headStartShare(controller) === 'all'
-      ? localDay(new Date())
-      : controller.maturityDate;
+  // A head start that covers the whole price completes the plan today, so
+  // the timeline runs today to today (never a later start before its end).
+  const completeToday = headStartShare(controller) === 'all';
+  const today = localDay(new Date());
+  const startDate = completeToday ? today : controller.startDate;
+  const phoneDate = completeToday ? today : controller.maturityDate;
   return (
     <View style={styles.wrap}>
       <View style={styles.phoneCard}>
@@ -62,10 +63,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           )}
         </Text>
       </View>
-      <View
-        accessible
-        accessibilityLabel={timelineLabel(controller, phoneDate)}
-      >
+      <View accessible accessibilityLabel={timelineLabel(startDate, phoneDate)}>
         <View style={styles.barRow}>
           <Ionicons name="flag-outline" size={16} color={BRAND.primary} />
           <View style={styles.bar}>
@@ -74,11 +72,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           <Ionicons name="gift-outline" size={16} color={BRAND.primary} />
         </View>
         <View style={styles.barLabels}>
-          <DateLabel
-            colors={colors}
-            label="Start"
-            date={controller.startDate}
-          />
+          <DateLabel colors={colors} label="Start" date={startDate} />
           <DateLabel colors={colors} label="Your phone" date={phoneDate} end />
         </View>
       </View>
@@ -144,8 +138,8 @@ function yoursLine(
   return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;
 }
 
-function timelineLabel(controller: StartSavingsController, phoneDate: string) {
-  return `From ${formatDateTimeDisplay(controller.startDate, 'date')} to about ${formatDateTimeDisplay(phoneDate, 'date')}`;
+function timelineLabel(startDate: string, phoneDate: string) {
+  return `From ${formatDateTimeDisplay(startDate, 'date')} to about ${formatDateTimeDisplay(phoneDate, 'date')}`;
 }
 
 function DateLabel({

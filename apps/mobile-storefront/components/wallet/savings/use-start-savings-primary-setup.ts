@@ -34,6 +34,10 @@ export function useStartSavingsPrimarySetup({
     userId?: string;
     value: boolean | null;
   }>({ userId, value: null });
+  // A different signed-in account starts with no answer, and switching back
+  // never brings an earlier answer back: the stored one is cleared, not
+  // just hidden.
+  if (answer.userId !== userId) setAnswer({ userId, value: null });
   const interestChoice = answer.userId === userId ? answer.value : null;
   const setInterestChoice = (value: boolean) => setAnswer({ userId, value });
   const startGoalWalletSetup =

@@ -109,8 +109,12 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       const today = formatDateTimeDisplay('2026-11-12', 'date');
       const later = formatDateTimeDisplay('2027-03-16', 'date');
       expect(screen.getByText('Yours today')).toBeOnTheScreen();
-      expect(screen.getByText(today)).toBeOnTheScreen();
+      // Start and phone both today: never a later start before its end.
+      expect(screen.getAllByText(today)).toHaveLength(2);
       expect(screen.queryByText(later)).toBeNull();
+      expect(
+        screen.queryByText(formatDateTimeDisplay('2026-11-20', 'date'))
+      ).toBeNull();
     });
   });
 

@@ -59,13 +59,16 @@ export async function cancelVtuWalletPay(
  * (Codex P2). A re-check or payment keeps its purchase.
  */
 export async function refuseBeforeIssue(
-  closeUnissued: (transactionId: string) => Promise<boolean>,
-  start: { transactionId: string; isStart: boolean },
+  closeUnissued: (
+    transactionId: string,
+    merchantId: string
+  ) => Promise<boolean>,
+  start: { transactionId: string; merchantId: string; isStart: boolean },
   response: Response
 ) {
   if (start.isStart)
     await Promise.resolve()
-      .then(() => closeUnissued(start.transactionId))
+      .then(() => closeUnissued(start.transactionId, start.merchantId))
       .catch(() => false);
   return response;
 }

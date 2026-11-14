@@ -79,7 +79,7 @@ BEGIN
     END IF;
     UPDATE public.vtu_transactions AS row
        SET status = 'failed',
-           error_message = 'We could not complete this purchase. Your payment is going back to your PiggyVest wallet.',
+           error_message = 'We could not complete this purchase. Your payment is going back to your savings wallet.',
            metadata = COALESCE(row.metadata, '{}'::jsonb) || pg_catalog.jsonb_build_object(
              'refundIssued', true, 'refundAmount', row.amount,
              'refundDestination', 'piggyvest_wallet')
@@ -197,7 +197,7 @@ BEGIN
   END IF;
   UPDATE public.vtu_transactions AS row
      SET status = 'failed',
-         error_message = 'This purchase was not paid. Nothing was taken from your PiggyVest wallet.',
+         error_message = 'This purchase was not paid. Nothing was taken from your savings wallet.',
          -- Nothing was collected: no refund is owed anywhere.
          metadata = COALESCE(row.metadata, '{}'::jsonb) || pg_catalog.jsonb_build_object(
            'refundSkipped', true, 'refundSkipReason', 'piggyvest_unpaid')
@@ -217,7 +217,7 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.close_unpaid_vtu_wallet_purchase(jso
 -- that could ever pay or vend it. Owner-scoped like
 -- get_vtu_wallet_pay_purchase; only a pending, PiggyVest-marked checkout row
 -- with no wallet payment of any state is closed, and nothing was collected.
-CREATE FUNCTION public.close_unissued_vtu_wallet_purchase(p_transaction_id uuid)
+CREATE FUNCTION public.close_unissued_vtu_wallet_purchase(p_transaction_id uuid, p_merchant_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -228,6 +228,9 @@ DECLARE
 BEGIN
   SELECT t.id INTO v_id FROM public.vtu_transactions AS t
    WHERE t.id = p_transaction_id
+     -- The checkout's own store too: one login with customers in two stores
+     -- never closes the other store's purchase (Muse).
+     AND t.merchant_id = p_merchant_id
      AND t.status = 'pending'
      AND t.source = 'checkout'
      AND t.metadata ->> 'paymentSource' = 'piggyvest_wallet'
@@ -241,7 +244,7 @@ BEGIN
   END IF;
   UPDATE public.vtu_transactions AS t
      SET status = 'failed',
-         error_message = 'This purchase was not paid. Nothing was taken from your PiggyVest wallet.',
+         error_message = 'This purchase was not paid. Nothing was taken from your savings wallet.',
          metadata = COALESCE(t.metadata, '{}'::jsonb) || pg_catalog.jsonb_build_object(
            'refundSkipped', true, 'refundSkipReason', 'piggyvest_unpaid')
    WHERE t.id = v_id;
@@ -249,8 +252,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.close_unissued_vtu_wallet_purchase(uuid)
+REVOKE ALL ON FUNCTION public.close_unissued_vtu_wallet_purchase(uuid, uuid)
   FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.close_unissued_vtu_wallet_purchase(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.close_unissued_vtu_wallet_purchase(uuid, uuid) TO authenticated;
 
 COMMIT;

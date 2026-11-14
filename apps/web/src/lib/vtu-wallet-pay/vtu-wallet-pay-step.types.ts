@@ -64,7 +64,11 @@ export interface VtuWalletPayStepDeps {
   ) => Omit<DeliverVtuWalletPaymentDeps, 'fulfil'>;
   /** Closes the purchase once its payment ended unpaid (best effort). */
   /** Closes the caller's own purchase refused before any payment existed. */
-  closeUnissued: (transactionId: string) => Promise<boolean>;
+  /** Closes an unissued purchase of this checkout's store. */
+  closeUnissued: (
+    transactionId: string,
+    merchantId: string
+  ) => Promise<boolean>;
   closeUnpaid: (input: {
     runtime: WalletPayRuntime;
     scope: Scope;

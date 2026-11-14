@@ -76,7 +76,7 @@ export function piggyvestWalletPaidHold(row: {
       amount,
       error:
         row.error_message ??
-        'We could not complete this purchase. Your payment is going back to your PiggyVest wallet.',
+        'We could not complete this purchase. Your payment is going back to your savings wallet.',
       reference: row.request_reference,
       status: 'failed' as const,
     };

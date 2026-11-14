@@ -3,13 +3,13 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 
-async function runCheck(executableNonce) {
+async function runCheck(executableNonce, heading = 'Discount Codes') {
   let request = 0;
   const server = createServer((_req, res) => {
     const nonce = `test-${++request}`;
     res.setHeader('Content-Security-Policy', `script-src 'nonce-${nonce}'`);
     res.end(
-      `<script nonce="${nonce}">0</script>
+      `<h1>${heading}</h1><script nonce="${nonce}">0</script>
        <script type="application/javascript"${executableNonce ? ` nonce="${nonce}"` : ''}>0</script>
        <script type="application/ld+json">{}</script>`
     );
@@ -41,4 +41,10 @@ test('requires a nonce on application/javascript even beside a valid script', as
 
 test('accepts executable scripts with matching nonces and inert JSON-LD', async () => {
   assert.equal((await runCheck(true)).code, 0);
+});
+
+test('rejects a non-dashboard document even with valid nonces', async () => {
+  const result = await runCheck(true, 'Welcome back');
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Expected the Discount Codes dashboard/);
 });

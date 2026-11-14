@@ -32,6 +32,11 @@ async function checkDocument() {
   assert.ok(nonce, 'The response must send a CSP nonce');
 
   const html = await response.text();
+  assert.match(
+    html,
+    /<h1\b[^>]*>\s*Discount Codes\b[^<]*<\/h1>/i,
+    'Expected the Discount Codes dashboard heading in the HTML response'
+  );
   const scriptTags = [...html.matchAll(/<script\b([^>]*)>/gi)].map(
     ([, attributes]) => attributes
   );

@@ -108,7 +108,10 @@ BEGIN
                   END
                   || CASE WHEN purchase.type IN ('airtime', 'data')
                             AND NULLIF(pg_catalog.btrim(purchase.network_provider), '') IS NOT NULL
-                          THEN ' · ' || pg_catalog.upper(purchase.network_provider) ELSE '' END
+                          -- Capped like the biller name, so the masked
+                          -- number always survives the label cap (Muse).
+                          THEN ' · ' || pg_catalog.upper(pg_catalog.left(
+                                 pg_catalog.btrim(purchase.network_provider), 20)) ELSE '' END
                   || COALESCE(' · ' || CASE
                        WHEN pg_catalog.char_length(target.number) > 8
                          THEN pg_catalog.left(target.number, 4) || '…' || pg_catalog.right(target.number, 4)

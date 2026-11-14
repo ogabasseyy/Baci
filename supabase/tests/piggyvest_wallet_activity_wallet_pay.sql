@@ -169,6 +169,13 @@ BEGIN
       WHERE (row.label LIKE 'Long Biller%' OR row.label LIKE 'Refund: Long Biller%')
         AND row.label NOT LIKE '%· 4503…4567'), 'a long biller name cut the masked number');
   DELETE FROM piggyvest_primary.wallet_payment_refunds WHERE payment_id = v_vtu::uuid;
+  -- REGRESSION (Muse): a long network name never cuts the masked number.
+  UPDATE public.vtu_transactions SET network_provider = pg_catalog.repeat('n', 200)
+   WHERE id = c_airtime;
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.label LIKE 'Airtime · NNN%' AND row.label LIKE '%· 0803…4567'),
+    'a long network name cut the masked number');
+  UPDATE public.vtu_transactions SET network_provider = 'mtn' WHERE id = c_airtime;
 
   -- REGRESSION (Codex P2): a failed transfer that only charged a fee is not a
   -- purchase; a released attempt proven successful while another attempt was

@@ -173,10 +173,9 @@ export function projectChatwootProductCard(input: {
 
   const rawVariants = product.product_variants;
   if (
+    product.variants_truncated === true ||
     (hasVariants &&
-      (product.variants_truncated === true ||
-        !Array.isArray(rawVariants) ||
-        rawVariants.length > 128)) ||
+      (!Array.isArray(rawVariants) || rawVariants.length > 128)) ||
     (!hasVariants && Array.isArray(rawVariants) && rawVariants.length > 0)
   ) {
     return { ok: false, code: 'product_unavailable' };
@@ -243,7 +242,9 @@ export function projectChatwootProductCard(input: {
     const distinctSelections = new Set(
       variants.map((variant) =>
         JSON.stringify({
-          attributes: variant.attributes,
+          attributes: Object.entries(variant.attributes).sort(
+            ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)
+          ),
           condition: variant.condition,
         })
       )

@@ -60,6 +60,13 @@ describe('projectChatwootProductCard', () => {
     });
   });
 
+  it('fails closed when the snapshot marks a simple product variant list as truncated', () => {
+    expect(project(product({ variants_truncated: true }))).toEqual({
+      ok: false,
+      code: 'product_unavailable',
+    });
+  });
+
   it('uses canonical per-variant price and stock without exposing other fields', () => {
     expect(
       project(
@@ -202,6 +209,30 @@ describe('projectChatwootProductCard', () => {
       },
     });
     expect(result).not.toHaveProperty('product.condition');
+  });
+
+  it('rejects duplicate selections when variant attribute keys arrive in a different order', () => {
+    expect(
+      project(
+        product({
+          has_variants: true,
+          product_variants: [
+            {
+              id: variantId,
+              product_id: productId,
+              attributes: { storage: '128GB', color: 'Blue' },
+              stock_quantity: 1,
+            },
+            {
+              id: '55555555-5555-4555-8555-555555555555',
+              product_id: productId,
+              attributes: { color: 'Blue', storage: '128GB' },
+              stock_quantity: 1,
+            },
+          ],
+        })
+      )
+    ).toEqual({ ok: false, code: 'product_unavailable' });
   });
 
   it('rejects an unrecognized explicit variant condition instead of inheriting the product condition', () => {

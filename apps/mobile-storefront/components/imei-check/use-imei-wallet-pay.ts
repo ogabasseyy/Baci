@@ -181,11 +181,11 @@ export function useImeiWalletPay({
         return await imeiWalletPayPurchase(userId, device, tier, imei)
           .then((purchase) => walletPayPurchaseKeys.has(purchase))
           // Unreadable: while paying from PiggyVest is on it counts as kept
-          // (the sheet opens and says "Try again"). Switched off the sheet
-          // never opens for a key that was not read (Muse), but the tap
-          // still never goes on to another rail either: an unread key may
-          // hide a payment that is settling (Codex P1).
-          .catch(() => (canPay ? true : ('unreadable' as const)));
+          // (the sheet opens and says "Try again"; no other rail is chosen
+          // on a guess, Codex P1). Switched off, no PiggyVest attempt can
+          // be started, so a corrupt key store must not also withhold the
+          // store credit and top-up rails (Muse): it counts as none kept.
+          .catch(() => canPay);
       } finally {
         checkingKept.current = false;
       }

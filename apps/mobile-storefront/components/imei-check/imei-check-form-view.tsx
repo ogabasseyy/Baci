@@ -266,7 +266,11 @@ export function ImeiCheckFormView({
                           : needsTopUp
                             ? walletCopy.topUpButton
                             : paysFromPiggyvest
-                              ? `Pay ${formatServicePrice(currentTier.price)} from savings`
+                              ? // The check it pays for is named: the
+                                // preselected card can sit below the fold
+                                // (Fable walk 15); the savings badge beside
+                                // it shows where the money comes from.
+                                `Pay ${formatServicePrice(currentTier.price)} for ${currentTier.name}`
                               : `Verify Now - ${formatServicePrice(currentTier.price)}`}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />

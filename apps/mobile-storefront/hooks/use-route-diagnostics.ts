@@ -11,6 +11,15 @@ export function useRouteDiagnostics(): void {
     if (previousRoute.current === route) return;
     const from = previousRoute.current;
     previousRoute.current = route;
+    const category =
+      route === '/cart'
+        ? 'cart'
+        : route === '/(tabs)/cart-tab'
+          ? 'cart_tab'
+          : ['/', '/(tabs)', '/(tabs)/index'].includes(route)
+            ? 'home'
+            : 'other';
+    console.info('[StartupRoute]', 'route', category);
     try {
       Sentry.setTag('route', route);
       Sentry.addBreadcrumb({

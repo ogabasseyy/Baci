@@ -1,8 +1,18 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import { SearchOverlay } from './SearchOverlay';
 
+const mockRouterPush = jest.fn();
+const mockDismissKeyboardForNavigation = jest.fn(() => Promise.resolve());
+const mockAddListener = jest.fn(() => jest.fn());
+let mockCategories: { slug: string; name: string }[] = [];
+
 jest.mock('expo-router', () => ({
-  useRouter: jest.fn(() => ({ push: jest.fn() })),
+  useNavigation: () => ({
+    isFocused: () => true,
+    addListener: () => mockAddListener(),
+  }),
+  useRouter: jest.fn(() => ({ push: mockRouterPush })),
   useIsFocused: () => true,
 }));
 
@@ -42,9 +52,13 @@ jest.mock('@/hooks/use-search-storage', () => ({
   }),
 }));
 
+jest.mock('@/components/ui/dismiss-keyboard-for-navigation', () => ({
+  dismissKeyboardForNavigation: () => mockDismissKeyboardForNavigation(),
+}));
+
 jest.mock('@/hooks', () => ({
   useProducts: () => ({ products: [], isLoading: false }),
-  useCategories: () => ({ data: [] }),
+  useCategories: () => ({ data: mockCategories }),
   useDebounce: (v: unknown) => v,
 }));
 
@@ -52,6 +66,8 @@ const mockOnClose = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAddListener.mockReturnValue(jest.fn());
+  mockCategories = [];
 });
 
 describe('SearchOverlay', () => {
@@ -113,6 +129,78 @@ describe('SearchOverlay', () => {
       name: /Close search/i,
     });
     expect(closeSearchButtons).toHaveLength(0);
+  });
+
+  it('waits for keyboard dismissal before navigating to a category', async () => {
+    mockCategories = [{ slug: 'phones', name: 'Phones' }];
+    let finishKeyboardDismissal!: () => void;
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishKeyboardDismissal = resolve;
+      })
+    );
+    render(<SearchOverlay isVisible onClose={mockOnClose} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Phones' }));
+
+    expect(mockDismissKeyboardForNavigation).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    await act(async () => finishKeyboardDismissal());
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/category/[slug]',
+      params: { slug: 'phones' },
+    });
+  });
+
+  it('cancels category navigation when the query changes during keyboard dismissal', async () => {
+    mockCategories = [{ slug: 'phones', name: 'Phones' }];
+    let finishKeyboardDismissal!: () => void;
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishKeyboardDismissal = resolve;
+      })
+    );
+    render(<SearchOverlay isVisible onClose={mockOnClose} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Phones' }));
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Search products…'),
+      'new query'
+    );
+    await act(async () => finishKeyboardDismissal());
+
+    expect(mockOnClose).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('cancels category navigation if the app backgrounds while the keyboard closes', async () => {
+    mockCategories = [{ slug: 'phones', name: 'Phones' }];
+    let finishKeyboardDismissal!: () => void;
+    let onAppStateChange: ((state: string) => void) | undefined;
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishKeyboardDismissal = resolve;
+      })
+    );
+    const listenerSpy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_event, listener) => {
+        onAppStateChange = listener as (state: string) => void;
+        return { remove: jest.fn() };
+      });
+    try {
+      render(<SearchOverlay isVisible onClose={mockOnClose} />);
+      fireEvent.press(screen.getByRole('button', { name: 'Phones' }));
+
+      act(() => onAppStateChange?.('background'));
+      await act(async () => finishKeyboardDismissal());
+
+      expect(mockOnClose).not.toHaveBeenCalled();
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    } finally {
+      listenerSpy.mockRestore();
+    }
   });
 
   it('returns null when not visible', () => {

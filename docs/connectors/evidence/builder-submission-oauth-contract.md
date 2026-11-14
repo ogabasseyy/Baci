@@ -1122,3 +1122,11 @@ was stopped. After restoring the existing VM and confirming `runsc`, a second
 run reached repeated sandbox captures but exceeded the test's 420-second job
 polling window before checkout; the later capture error arose during teardown.
 Neither run establishes a completed checkout on this updated composition.
+
+On 14 November, a rerun with a 720-second synthetic-build polling allowance
+passed the full local new-merchant test in 578 seconds. The browser added the
+synthetic product, selected the synthetic merchant shipping rate, and reached
+the final Place Order button without clicking it; request assertions prohibited
+order and payment calls and the isolated orders table remained empty. This is
+local synthetic evidence, not a live OAuth, ingress or production checkout test.
+The extended wait is specific to this test and is not a performance result.

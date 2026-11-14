@@ -1,14 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Pool } from 'pg';
-import { startLocalPostgresFixture } from './local-postgres-fixture.ts';
+import { startBarePostgresFixture } from './bare-postgres-fixture.ts';
 import { verifyProductionAuthDatabaseRole } from './production-role.ts';
 
 test('requires the dedicated least-privilege login and storage execution role on real PostgreSQL', async () => {
-  const db = await startLocalPostgresFixture({
-    major: 17,
-    binDirectory: '/opt/homebrew/opt/postgresql@17/bin',
-  });
+  const db = await startBarePostgresFixture();
   let broker: Pool | undefined;
   try {
     await db.pool.query(

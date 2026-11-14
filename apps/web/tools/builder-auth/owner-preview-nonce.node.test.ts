@@ -2,14 +2,11 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Pool } from 'pg';
-import { startLocalPostgresFixture } from './local-postgres-fixture.ts';
+import { startBarePostgresFixture } from './bare-postgres-fixture.ts';
 import { createOwnerPreviewNonceStore } from './owner-preview-nonce.ts';
 
 test('durably consumes each signed nonce once across concurrent clients and service restarts', async () => {
-  const db = await startLocalPostgresFixture({
-    major: 17,
-    binDirectory: '/opt/homebrew/opt/postgresql@17/bin',
-  });
+  const db = await startBarePostgresFixture();
   let pool: Pool | undefined;
   let restarted: Pool | undefined;
   try {
@@ -117,10 +114,7 @@ test('durably consumes each signed nonce once across concurrent clients and serv
 });
 
 test('refuses a pre-existing nonce role with unrelated privileges', async () => {
-  const db = await startLocalPostgresFixture({
-    major: 17,
-    binDirectory: '/opt/homebrew/opt/postgresql@17/bin',
-  });
+  const db = await startBarePostgresFixture();
   try {
     await db.pool.query(
       'CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN; CREATE ROLE baci_owner_preview_nonce NOLOGIN NOINHERIT; GRANT authenticated TO baci_owner_preview_nonce; CREATE SCHEMA builder_authorization;'

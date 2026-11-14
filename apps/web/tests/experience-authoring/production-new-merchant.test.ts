@@ -38,6 +38,7 @@ import { experienceDataFixture } from './data-fixture.test-support';
 import { setupNewMerchantRunner } from './new-merchant-runner.test-support';
 import { checkPrivatePreviewBrowser } from './private-preview-browser.test-support';
 import { checkPublicStorefrontBrowser } from './public-storefront-browser.test-support';
+import { SYNTHETIC_BUILD_POLL_TIMEOUT_MS } from './synthetic-build-deadline.test-support';
 import { syntheticInteractiveSource } from './synthetic-interactive-source.test-support';
 import { syntheticOAuth } from './synthetic-oauth.test-support';
 import { seedSyntheticPublicRead } from './synthetic-public-read.test-support';
@@ -451,7 +452,7 @@ it('links a new synthetic user and creates a private merchant through MCP under 
       expect(finalized).toMatchObject({
         result: { structuredContent: { status: 'ok', value: { id: jobId } } },
       });
-      const deadline = Date.now() + 420000;
+      const deadline = Date.now() + SYNTHETIC_BUILD_POLL_TIMEOUT_MS;
       let completed = false;
       let previousStatus: string | undefined;
       while (Date.now() < deadline) {

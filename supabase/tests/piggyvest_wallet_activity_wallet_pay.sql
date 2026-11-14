@@ -169,6 +169,22 @@ BEGIN
       WHERE (row.label LIKE 'Long Biller%' OR row.label LIKE 'Refund: Long Biller%')
         AND row.label NOT LIKE '%· 4503…4567'), 'a long biller name cut the masked number');
   DELETE FROM piggyvest_primary.wallet_payment_refunds WHERE payment_id = v_vtu::uuid;
+  -- REGRESSION (Muse): a refund not yet sent is not listed, so its date can
+  -- not jump between pages once it is; once sent it is dated by that moment.
+  INSERT INTO piggyvest_primary.wallet_payment_refunds (
+    payment_id, integration_id, attempt, state, review_reason, reference, amount_kobo,
+    source_wallet_id, destination_wallet_id, created_at)
+  VALUES (v_vtu::uuid, 'f9a10000-0000-4000-8000-000000000006', 0, 'needs_review', 'unsure',
+    'pvb-refund-' || v_vtu, 70000, 'synthetic-walletpay-collection',
+    'synthetic-walletpay-main', pg_catalog.clock_timestamp() - interval '3 days');
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.label LIKE 'Refund: Long Biller%'), 'an unsent refund was listed');
+  UPDATE piggyvest_primary.wallet_payment_refunds
+     SET dispatched_at = pg_catalog.clock_timestamp() WHERE payment_id = v_vtu::uuid;
+  PERFORM pg_temp.wp_assert((SELECT pg_catalog.count(*) = 1 AND pg_catalog.bool_and(row.occurred_at > pg_catalog.clock_timestamp() - interval '1 day')
+      FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.label LIKE 'Refund: Long Biller%'), 'a sent refund was not dated by its sending');
+  DELETE FROM piggyvest_primary.wallet_payment_refunds WHERE payment_id = v_vtu::uuid;
   -- REGRESSION (Muse): a long network name never cuts the masked number.
   UPDATE public.vtu_transactions SET network_provider = pg_catalog.repeat('n', 200)
    WHERE id = c_airtime;

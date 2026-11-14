@@ -237,14 +237,17 @@ BEGIN
            'Refund: ' || paid.label,
            CASE WHEN refund.state = 'confirmed' OR refund.state = 'released'
                 THEN 'completed' ELSE 'pending' END,
-           -- Dated when sent (when it first shows), fixed from then on: an
-           -- owed refund sent later never lands behind a page already read.
-           COALESCE(refund.dispatched_at, refund.created_at)
+           -- Dated when sent, and listed only once it was sent: the date is
+           -- set once and never changes, so a row can not move between
+           -- keyset pages (an unsent needs_review refund used to show at its
+           -- creation date, then jump to its sending date) (Muse).
+           refund.dispatched_at
       FROM piggyvest_primary.wallet_payment_refunds AS refund
       JOIN paid ON paid.id = refund.payment_id
      -- Only a refund of a listed spend (money that moved), so a refund never
      -- shows without the spend it returns (Muse).
      WHERE paid.listed
+       AND refund.dispatched_at IS NOT NULL
        AND (refund.state IN ('dispatched', 'confirmed')
             -- A failed transfer that only charged a fee credited nothing:
             -- never shown as money coming in (Codex P2).

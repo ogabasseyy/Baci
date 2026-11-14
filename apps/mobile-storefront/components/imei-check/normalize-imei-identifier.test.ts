@@ -1,3 +1,4 @@
+import { normalizeDeviceIdentifier } from '@baci/shared/imei';
 import { normalizeImeiIdentifier } from './normalize-imei-identifier';
 
 describe('normalizeImeiIdentifier', () => {
@@ -10,5 +11,20 @@ describe('normalizeImeiIdentifier', () => {
 
   it('leaves an empty input empty', () => {
     expect(normalizeImeiIdentifier(' - ')).toBe('');
+  });
+
+  // Muse: the server must see the same identifier the app keyed and paid
+  // for. The IMEI route and the pay path both normalise with the shared
+  // normalizeDeviceIdentifier, which upper-cases serials the same way.
+  it('matches the server form for a typed serial, IMEI or either', () => {
+    expect(normalizeImeiIdentifier('c02xl0abjgh5')).toBe(
+      normalizeDeviceIdentifier('c02xl0abjgh5', 'serial')
+    );
+    expect(normalizeImeiIdentifier('f2l-xk1 abc')).toBe(
+      normalizeDeviceIdentifier('f2l-xk1 abc', 'both')
+    );
+    expect(normalizeImeiIdentifier('356938 035643809')).toBe(
+      normalizeDeviceIdentifier('356938 035643809', 'imei')
+    );
   });
 });

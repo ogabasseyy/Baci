@@ -97,4 +97,16 @@ describe('Chatwoot delivery options contracts', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects an empty ready estimate', () => {
+    expect(
+      chatwootDeliveryOptionsResponseSchema.safeParse({
+        state: 'Lagos',
+        cartVersion: 8,
+        currency: 'NGN',
+        subtotalMinor: 250000,
+        options: [],
+      }).success
+    ).toBe(false);
+  });
 });

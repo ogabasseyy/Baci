@@ -37,7 +37,7 @@ export const chatwootDeliveryOptionsResponseSchema = z
     cartVersion: z.number().int().nonnegative().safe(),
     currency: z.literal('NGN'),
     subtotalMinor: z.number().int().nonnegative().safe(),
-    options: z.array(deliveryOptionSchema).max(20),
+    options: z.array(deliveryOptionSchema).min(1).max(20),
   })
   .strict();
 

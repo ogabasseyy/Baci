@@ -13,6 +13,7 @@ import {
   isChatwootDeliveryOptionsCartValid,
 } from '@/lib/chatwoot/delivery-options-cart';
 import { projectChatwootDeliveryOptions } from '@/lib/chatwoot/delivery-options-projection';
+import { loadChatwootMerchantCurrency } from '@/lib/chatwoot/merchant-currency';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
   getSubdivisions,
@@ -82,6 +83,17 @@ export async function POST(request: NextRequest) {
     return unavailable(409, 'cart_changed');
   }
 
+  const merchantCurrency = await loadChatwootMerchantCurrency(cart.merchantId);
+  if (!merchantCurrency) {
+    return unavailable(503, 'merchant_context_unavailable');
+  }
+  if (
+    merchantCurrency.currency !== 'NGN' ||
+    (merchantCurrency.country && merchantCurrency.country !== 'NG')
+  ) {
+    return unavailable(409, 'merchant_rate_context_unavailable');
+  }
+
   const subdivisionCode = resolveSubdivisionCode('NG', parsed.data.state);
   const subdivision = getSubdivisions('NG').find(
     (candidate) => candidate.code === subdivisionCode
@@ -93,7 +105,7 @@ export async function POST(request: NextRequest) {
     merchantRates = await loadPublicMerchantRates(cart.merchantId, {
       receiverCountryCode: 'NG',
       receiverState: subdivision.name,
-      merchantCurrency: cart.currency,
+      merchantCurrency: merchantCurrency.currency,
       cartSubtotal: Number(
         (
           cart.subtotalMinor /
@@ -108,9 +120,20 @@ export async function POST(request: NextRequest) {
     return unavailable(503, 'rate_lookup_unavailable');
   }
   if (
-    (merchantRates.resolvedCurrency !== undefined &&
-      merchantRates.resolvedCurrency !== 'NGN') ||
+    (merchantRates.resolvedCurrency &&
+      merchantRates.resolvedCurrency !== merchantCurrency.currency) ||
     (merchantRates.resolvedCountry && merchantRates.resolvedCountry !== 'NG')
+  ) {
+    return unavailable(409, 'merchant_rate_context_unavailable');
+  }
+
+  const latestMerchantCurrency = await loadChatwootMerchantCurrency(
+    cart.merchantId
+  );
+  if (
+    !latestMerchantCurrency ||
+    latestMerchantCurrency.currency !== merchantCurrency.currency ||
+    latestMerchantCurrency.country !== merchantCurrency.country
   ) {
     return unavailable(409, 'merchant_rate_context_unavailable');
   }
@@ -162,6 +185,9 @@ export async function POST(request: NextRequest) {
     quotes: merchantRates.quotes,
   });
   if (!response) return unavailable(503, 'rate_projection_unavailable');
+  if (response.options.length === 0) {
+    return unavailable(409, 'no_delivery_options');
+  }
 
   return NextResponse.json(response, { headers: NO_STORE_HEADERS });
 }

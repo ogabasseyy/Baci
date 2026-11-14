@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   },
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   loadChatwootCartContext: vi.fn(),
+  loadChatwootMerchantCurrency: vi.fn(),
   loadPublicMerchantRates: vi.fn(),
   readCartJsonBody: vi.fn(),
   verifyChatwootSessionCapability: vi.fn(),
@@ -22,6 +23,9 @@ vi.mock('@/lib/csrf', () => ({
 }));
 vi.mock('@/lib/chatwoot/cart-context', () => ({
   loadChatwootCartContext: mocks.loadChatwootCartContext,
+}));
+vi.mock('@/lib/chatwoot/merchant-currency', () => ({
+  loadChatwootMerchantCurrency: mocks.loadChatwootMerchantCurrency,
 }));
 vi.mock('@/lib/chatwoot/commerce-context', () => ({
   ChatwootCommerceContextError: mocks.ChatwootCommerceContextError,
@@ -109,6 +113,10 @@ beforeEach(() => {
     },
   });
   mocks.loadChatwootCartContext.mockResolvedValue(loadedContext());
+  mocks.loadChatwootMerchantCurrency.mockResolvedValue({
+    country: 'NG',
+    currency: 'NGN',
+  });
   mocks.verifyChatwootSessionCapability.mockResolvedValue({
     conversationId: 905,
     sessionExpiresAt: 1_799_000_000,
@@ -253,6 +261,7 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
     const response = await POST(request());
 
     expect(response.status).toBe(200);
+    expect(mocks.loadChatwootMerchantCurrency).toHaveBeenCalledTimes(2);
     expect(mocks.loadPublicMerchantRates).toHaveBeenCalledWith(
       binding.merchantId,
       expect.objectContaining({ cartSubtotal: 1.99 })
@@ -277,6 +286,38 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
     const response = await POST(request());
 
     expect(response.status).toBe(200);
+    expect(mocks.loadPublicMerchantRates).toHaveBeenCalledWith(
+      binding.merchantId,
+      expect.objectContaining({ merchantCurrency: 'NGN' })
+    );
+    expect(mocks.loadChatwootMerchantCurrency).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects rates when the current merchant currency cannot be resolved', async () => {
+    mocks.loadChatwootMerchantCurrency.mockResolvedValueOnce(null);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'merchant_context_unavailable',
+    });
+    expect(mocks.loadPublicMerchantRates).not.toHaveBeenCalled();
+  });
+
+  it('returns unavailable when the merchant has no delivery rates', async () => {
+    mocks.loadPublicMerchantRates.mockResolvedValueOnce({
+      resolvedCountry: 'NG',
+      resolvedCurrency: 'NGN',
+      quotes: [],
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'no_delivery_options',
+    });
   });
 
   it('preserves authorization errors during the post-rate session recheck', async () => {

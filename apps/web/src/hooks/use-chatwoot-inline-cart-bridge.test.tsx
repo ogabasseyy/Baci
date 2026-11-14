@@ -337,5 +337,10 @@ describe('ChatwootInlineCartBridge', () => {
       status: 'ready',
       ...deliveryEstimate,
     });
+    expect(
+      postMessage.mock.calls.some(([payload]) =>
+        String(payload).includes('"cartId"')
+      )
+    ).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { walletActivityCursor } from '@/lib/piggyvest/wallet-activity-cursor';
 import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({
+  logError: vi.fn(),
   auth: vi.fn(),
   runtime: vi.fn(),
   drain: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('@/lib/logger', () => ({ logger: { error: mocks.logError } }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: mocks.runtime,
@@ -149,6 +151,20 @@ describe('GET piggyvest wallet activity', () => {
       error: 'We couldn’t load your wallet activity.',
       code: 'ACTIVITY_UNAVAILABLE',
     });
+  });
+
+  it('bugfix: logs a failed read without leaking its message or row data', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: Object.assign(new Error('row with label Saved to Jane'), {
+        code: 'XX000',
+      }),
+    });
+    await GET(request(`merchantId=${merchantId}`));
+    expect(mocks.logError).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(mocks.logError.mock.calls[0]);
+    expect(logged).toContain('XX000');
+    expect(logged).not.toContain('Jane');
   });
 
   it('never passes through an unexpected row shape: the row is left out, the page still loads (Muse)', async () => {

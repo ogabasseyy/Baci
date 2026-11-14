@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 import { parseWalletActivityRows } from '@/lib/piggyvest/parse-wallet-activity-rows';
 import { isPiggyvestFeatureFlagSet } from '@/lib/piggyvest/piggyvest-feature-on';
 import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
@@ -94,7 +95,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );
-  } catch {
+  } catch (error) {
+    // Name and code only: row values and error messages can carry customer
+    // data (labels, amounts), so they stay out of the logs.
+    logger.error({
+      message: 'PiggyVest wallet activity read failed',
+      route: 'piggyvest-activity',
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorCode:
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code: unknown }).code)
+          : undefined,
+    });
     return fail(
       'We couldn’t load your wallet activity.',
       'ACTIVITY_UNAVAILABLE',

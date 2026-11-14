@@ -286,6 +286,9 @@ describe('ChatwootWidget', () => {
     ).toBe(true);
     expect(reset).toHaveBeenCalledOnce();
     expect(mocks.reload).toHaveBeenCalledOnce();
+    expect(reset.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.reload.mock.invocationCallOrder[0]
+    );
   });
 
   it.each([

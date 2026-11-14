@@ -93,6 +93,9 @@ export function ChatwootWidget({
         return false;
       }
       try {
+        // Chatwoot v4.19.1 reset synchronously removes its conversation and
+        // user cookies before it starts reloading its iframe. Reloading this
+        // document after reset returns therefore preserves that ordering.
         previousWidget.reset();
       } catch {
         previousWidget.toggleBubbleVisibility?.('hide');

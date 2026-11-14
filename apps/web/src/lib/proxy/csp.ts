@@ -123,6 +123,10 @@ function getEnabledChatwootPlatformOrigin(
   const storefrontOrigin = normalizeHttpsOrigin(
     storefrontHostname ? `https://${storefrontHostname}` : null
   );
+  // CSP sees the request host, not the server-resolved merchant slug. On a
+  // shared custom host, one valid merchant binding therefore permits this
+  // fixed platform origin on sibling storefront paths too; the widget config
+  // still performs the exact merchant binding check before loading the SDK.
   if (
     !storefrontOrigin ||
     !bindings?.some((binding) => binding.origin === storefrontOrigin)

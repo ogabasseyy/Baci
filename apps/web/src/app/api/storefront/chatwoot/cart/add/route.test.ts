@@ -292,12 +292,11 @@ describe('Chatwoot shared-cart add route', () => {
     });
   });
 
-  it.each([
-    'version_conflict',
-    'cart_locked',
-  ])('maps %s to a refresh-required conflict', async (code) => {
+  it('maps a version conflict to a refresh-required response', async () => {
     arrange();
-    mocks.rpc.mockResolvedValueOnce({ data: { ok: false, code } });
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'version_conflict' },
+    });
 
     const response = await POST(request());
 
@@ -305,6 +304,21 @@ describe('Chatwoot shared-cart add route', () => {
     await expect(response.json()).resolves.toEqual({
       accepted: false,
       code: 'refresh_required',
+    });
+  });
+
+  it('preserves a locked cart as a distinct checkout response', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'cart_locked' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'cart_locked',
     });
   });
 

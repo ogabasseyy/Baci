@@ -114,10 +114,12 @@ export async function commitChatwootCartAdd(input: {
     if (code === 'expired' || code === 'not_found') {
       return unavailable(410, 'cart_expired');
     }
+    if (code === 'cart_locked') {
+      return unavailable(409, 'cart_locked');
+    }
     const status =
       code === 'version_conflict' ||
-      code === 'idempotency_conflict' ||
-      code === 'cart_locked'
+      code === 'idempotency_conflict'
         ? 409
         : code === 'unauthorized'
           ? 403

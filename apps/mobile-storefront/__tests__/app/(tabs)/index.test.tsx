@@ -127,14 +127,14 @@ describe('HomeScreen', () => {
     scrollHomeFeed(220);
     scrollHomeFeed(149);
     expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([
-      0, 1, 0,
+      0, 1, 0, 1,
     ]);
 
     fireEvent.press(screen.getByTestId('mock-header-search'));
     scrollHomeFeed(120);
 
     expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([
-      0, 1, 0,
+      0, 1, 0, 1,
     ]);
   });
 

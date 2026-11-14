@@ -16,7 +16,7 @@ export const homeCampaignSlides: readonly HeroSlide[] = [
     image: '',
     artwork: require('@/assets/images/campaigns/home-hero-power-tank.webp'),
     ctaText: 'Shop Power Tank',
-    ctaLink: '/product/itel-power-tank-500w-1000wh',
+    ctaLink: { pathname: '/search', params: { q: 'itel Power Tank' } },
   },
   {
     title: 'Capture a moment',
@@ -24,7 +24,7 @@ export const homeCampaignSlides: readonly HeroSlide[] = [
     image: '',
     artwork: require('@/assets/images/campaigns/home-hero-camera.webp'),
     ctaText: 'Shop creator gear',
-    ctaLink: '/category/cameras',
+    ctaLink: { pathname: '/search', params: { q: 'cameras' } },
   },
   {
     title: 'On team Apple?',
@@ -40,6 +40,6 @@ export const homeCampaignSlides: readonly HeroSlide[] = [
     image: '',
     artwork: require('@/assets/images/campaigns/home-hero-audio-portrait.webp'),
     ctaText: 'Shop audio',
-    ctaLink: '/category/audio',
+    ctaLink: { pathname: '/search', params: { q: 'headphones' } },
   },
 ];

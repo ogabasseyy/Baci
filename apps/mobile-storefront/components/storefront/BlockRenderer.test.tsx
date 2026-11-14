@@ -142,6 +142,17 @@ describe('BlockRenderer', () => {
     expect(screen.getByText('Just launched')).toBeTruthy();
   });
 
+  it('keeps merchant slides alongside the home campaign slides', () => {
+    renderBlocks([configuredHeroBlock], {
+      blackFridayHeroBlockId: configuredHeroBlock.props.id,
+      nextDropHeroBlockId: configuredHeroBlock.props.id,
+    });
+
+    expect(screen.getByText('Black Friday')).toBeTruthy();
+    expect(screen.getByText('Save for your device')).toBeTruthy();
+    expect(screen.getByText('Featured phones')).toBeTruthy();
+  });
+
   it('passes the search visibility pause through to the hero', () => {
     renderBlocks([configuredHeroBlock], { autoplayPaused: true });
     expect(mockHeroProps).toHaveBeenLastCalledWith(

@@ -119,15 +119,16 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
               const useCampaignStyle =
                 nextDropHeroBlockId === heroBlock.props.id;
 
-              const slides: HeroSlide[] = useCampaignStyle
-                ? [...homeCampaignSlides]
-                : configuredSlides.map((slide) => ({
-                    title: slide.title,
-                    subtitle: slide.subtitle,
-                    image: slide.image,
-                    ctaText: slide.ctaText,
-                    ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
-                  }));
+              const slides: HeroSlide[] = [
+                ...(useCampaignStyle ? homeCampaignSlides : []),
+                ...configuredSlides.map((slide) => ({
+                  title: slide.title,
+                  subtitle: slide.subtitle,
+                  image: slide.image,
+                  ctaText: slide.ctaText,
+                  ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
+                })),
+              ];
 
               if (
                 blackFridayHeroBlockId &&

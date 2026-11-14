@@ -2,7 +2,7 @@ import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
-import { type Href, Stack, useRouter } from 'expo-router';
+import { type Href, Redirect, Stack, useRouter } from 'expo-router';
 import {
   Linking,
   Pressable,
@@ -15,6 +15,7 @@ import { SocialLinks } from '@/components/profile/SocialLinks';
 import { SUPPORT_WHATSAPP_PHONE } from '@/constants/Support';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useTheme } from '@/hooks/useTheme';
+import { CONFIG } from '@/lib/config';
 
 export function DeviceCareScreen({
   title,
@@ -38,6 +39,7 @@ export function DeviceCareScreen({
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const { data: merchant } = useMerchant();
+  if (CONFIG.MERCHANT_SLUG !== 'ogabassey') return <Redirect href="/faq" />;
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}

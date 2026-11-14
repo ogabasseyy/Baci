@@ -58,6 +58,7 @@ export default function HomeScreen() {
   } = usePageConfig('home');
 
   const [refreshing, setRefreshing] = useState(false);
+  const headerHeightShared = useSharedValue(150);
   const [headerHeight, setHeaderHeight] = useState(150); // Initial estimate for spacer
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -123,6 +124,7 @@ export default function HomeScreen() {
   }) => {
     const nextHeight = nativeEvent.layout.height;
     if (nextHeight > 0 && Math.abs(nextHeight - headerHeight) > 1) {
+      headerHeightShared.set(nextHeight);
       setHeaderHeight(nextHeight);
     }
   };
@@ -152,9 +154,8 @@ export default function HomeScreen() {
       }
 
       // Keep the header visible while its list spacer is still on screen.
-      if (normalizedOffsetY < headerHeight) {
-        headerVisibilityTarget.set(1);
-        headerVisibility.set(1);
+      if (normalizedOffsetY < headerHeightShared.get()) {
+        setHeaderVisibilityTarget(1);
       } else if (currentOffsetY > prevOffsetY) {
         setHeaderVisibilityTarget(0);
       } else if (prevOffsetY - currentOffsetY > 15) {

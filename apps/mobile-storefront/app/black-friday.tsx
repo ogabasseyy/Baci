@@ -24,7 +24,7 @@ export default function BlackFridayScreen() {
       <Stack.Screen options={{ title: 'Black Friday', headerShown: true }} />
       <FlatList
         contentContainerStyle={styles.content}
-        data={isError ? [] : data}
+        data={isError ? [] : (data ?? [])}
         keyExtractor={(product) => product.id}
         ListHeaderComponent={
           <View style={styles.hero}>

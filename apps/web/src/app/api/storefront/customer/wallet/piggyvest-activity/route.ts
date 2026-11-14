@@ -36,6 +36,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (
     !parsed.success ||
     params.getAll('merchantId').length !== 1 ||
+    params.getAll('cursor').length > 1 ||
+    params.getAll('limit').length > 1 ||
     (cursor && !decoded)
   )
     return fail('Invalid activity request.', 'INVALID_INPUT', 400);

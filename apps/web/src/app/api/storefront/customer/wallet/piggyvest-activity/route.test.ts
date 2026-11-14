@@ -69,6 +69,8 @@ describe('GET piggyvest wallet activity', () => {
   it.each([
     'merchantId=not-a-uuid',
     `merchantId=${merchantId}&merchantId=${merchantId}`,
+    `merchantId=${merchantId}&limit=10&limit=20`,
+    `merchantId=${merchantId}&cursor=a&cursor=b`,
     `merchantId=${merchantId}&limit=51`,
     `merchantId=${merchantId}&cursor=bad!cursor`,
     `merchantId=${merchantId}&cursor=${Buffer.from('["nope"]').toString('base64url')}`,

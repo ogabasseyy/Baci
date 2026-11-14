@@ -2,6 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
+import {
+  transformImageTitlesToFigureCaptions,
+  unescapeHtmlText,
+} from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/blog-post-image-html';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import {
   normalizeBlogFeedPostForFilter,
@@ -12,6 +16,8 @@ import {
 } from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
+import { getImageMimeType } from '@/lib/get-blog-feed-image-mime-type';
+import { pinDeterministicFeedImageFormat } from '@/lib/pin-deterministic-feed-image-format';
 import {
   isPublicBlogCategory,
   isPublicBlogPost,
@@ -404,11 +410,28 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     for (const { post, publishedDate } of postsWithValidDates) {
       const postUrl = `${safeStoreUrl}/blog/${xmlSafeFeedPathSegment(post.slug)}`;
+      const captionedContent = transformImageTitlesToFigureCaptions(
+        post.content || ''
+      );
       const excerpt =
-        post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
-
-      const sanitizedContent = sanitizeForFeed(post.content);
+        post.excerpt ||
+        truncateFeedText(unescapeHtmlText(stripHtml(captionedContent)), 300);
+      const sanitizedContent = sanitizeForFeed(captionedContent);
       const imageUrls = getBlogStructuredDataImageUrls(post);
+      const rawPrimaryImageUrl = xmlSafeFeedImageUrl(imageUrls[0]);
+      const primaryImageUrl = rawPrimaryImageUrl
+        ? pinDeterministicFeedImageFormat(rawPrimaryImageUrl)
+        : undefined;
+      const primaryImageMimeType = primaryImageUrl
+        ? getImageMimeType(primaryImageUrl)
+        : undefined;
+      const feedImage =
+        primaryImageUrl && primaryImageMimeType
+          ? {
+              url: primaryImageUrl,
+              type: primaryImageMimeType,
+            }
+          : undefined;
 
       feed.addItem({
         title: feedText(post.title),
@@ -423,7 +446,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           },
         ],
         date: publishedDate,
-        image: xmlSafeFeedImageUrl(imageUrls[0]),
+        image: feedImage,
         category:
           post.category && isPublicBlogCategory(post.category)
             ? [{ name: feedText(post.category) }]

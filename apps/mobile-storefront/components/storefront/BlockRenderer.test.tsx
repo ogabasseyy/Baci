@@ -3,6 +3,9 @@ import type { Block } from '@/types/blocks';
 import { BlockRenderer } from './BlockRenderer';
 import type { HeroSlide } from './Hero';
 
+const mockHeroProps = jest.fn();
+const mockUtilityProps = jest.fn();
+
 jest.mock('@/components/ui/Skeleton', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
@@ -27,22 +30,26 @@ jest.mock('@/lib/templates', () => ({
 jest.mock('./Hero', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
-    Hero: ({
-      slides,
-      trailingAdPlacement,
-    }: {
+    Hero: (props: {
       slides: HeroSlide[];
       trailingAdPlacement?: string;
-    }) => (
-      <MockText
-        testID={trailingAdPlacement ? 'hero-carousel-with-ad' : 'hero-carousel'}
-      >
-        Hero carousel
-        {slides.map((slide) => (
-          <MockText key={slide.title}>{slide.title}</MockText>
-        ))}
-      </MockText>
-    ),
+      autoplayPaused?: boolean;
+    }) => {
+      mockHeroProps(props);
+      const { slides, trailingAdPlacement } = props;
+      return (
+        <MockText
+          testID={
+            trailingAdPlacement ? 'hero-carousel-with-ad' : 'hero-carousel'
+          }
+        >
+          Hero carousel
+          {slides.map((slide) => (
+            <MockText key={slide.title}>{slide.title}</MockText>
+          ))}
+        </MockText>
+      );
+    },
   };
 });
 
@@ -52,7 +59,10 @@ jest.mock('./ProductGrid', () => ({
 }));
 
 jest.mock('./UtilityPanel', () => ({
-  UtilityPanel: () => null,
+  UtilityPanel: (props: unknown) => {
+    mockUtilityProps(props);
+    return null;
+  },
 }));
 
 jest.mock('./JustLaunchedCarousel', () => {
@@ -130,6 +140,23 @@ describe('BlockRenderer', () => {
     renderBlocks([{ type: 'JustLaunched', props: { id: 'launches' } }]);
 
     expect(screen.getByText('Just launched')).toBeTruthy();
+  });
+
+  it('passes the search visibility pause through to the hero', () => {
+    renderBlocks([configuredHeroBlock], { autoplayPaused: true });
+    expect(mockHeroProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoplayPaused: true })
+    );
+  });
+
+  it('passes the search visibility pause to the utility slogan', () => {
+    renderBlocks(
+      [{ type: 'CategoryRail', props: { id: 'categories' } } as Block],
+      { autoplayPaused: true }
+    );
+    expect(mockUtilityProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoplayPaused: true })
+    );
   });
 
   it('withholds ad placements from hero and launch blocks while suppressed', () => {

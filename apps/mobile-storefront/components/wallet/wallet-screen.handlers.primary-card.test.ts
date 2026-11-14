@@ -6,15 +6,24 @@ const mockPrimary = jest
 const mockLegacy = jest
   .fn<(...args: unknown[]) => Promise<unknown>>()
   .mockRejectedValue(new Error('Legacy funding must not run'));
+// The account that started the top-up is still signed in.
+jest.mock('./is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('./fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: mockPrimary,
+  NOTHING_TO_RECOVER: 'nothing-to-recover',
 }));
 jest.mock('@/lib/wallet-top-up', () => ({ initializeWalletTopUp: mockLegacy }));
 jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
   isHostedStagingWalletTopUpBlocked: () => false,
 }));
 jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({ error: jest.fn() }),
+  createLogger: () => ({
+    debug: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+  }),
 }));
 jest.mock('@/services/analytics', () => ({
   trackError: jest.fn(),

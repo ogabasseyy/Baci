@@ -9,6 +9,34 @@ const validate = (overrides = {}) =>
   );
 
 describe('validateSavingsInput', () => {
+  it('bugfix: a missing terms answer is not acceptance', () => {
+    expect(validate({ acceptsNonWithdrawableTerms: undefined })).toEqual({
+      error:
+        'Tick the box to agree that this money stays saved until your goal is done.',
+      ok: false,
+    });
+  });
+
+  it('bugfix: a PiggyVest plan with no interest answer at all is refused', () => {
+    expect(
+      validate({
+        interestChoice: undefined,
+        startGoalWalletSetup: async () => undefined,
+      })
+    ).toEqual({
+      error: 'Choose whether your plan earns interest.',
+      ok: false,
+    });
+    expect(validate({ interestChoice: undefined }).ok).toBe(true);
+  });
+
+  it('bugfix: refuses a negative head start instead of sending it on', () => {
+    expect(validate({ effectiveInitialContribution: -5000 })).toEqual({
+      error: 'Enter a valid savings amount.',
+      ok: false,
+    });
+  });
+
   it('accepts a complete input and formats the start date', () => {
     const result = validate();
     expect(result.ok).toBe(true);

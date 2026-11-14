@@ -34,6 +34,8 @@ type DateTimePickerFieldProps = {
   mode: DateTimePickerFieldMode;
   onChangeText: (value: string) => void;
   textStyle?: StyleProp<TextStyle>;
+  /** Times show and pick as 24-hour HH:MM (as the Notifications fields do). */
+  use24HourTime?: boolean;
   value: string;
   wrapperStyle?: StyleProp<ViewStyle>;
 };
@@ -106,6 +108,7 @@ export function DateTimePickerField({
   mode,
   onChangeText,
   textStyle,
+  use24HourTime = false,
   value,
   wrapperStyle,
 }: DateTimePickerFieldProps) {
@@ -147,9 +150,23 @@ export function DateTimePickerField({
     setIsPickerVisible(true);
   };
 
-  const displayValue = displayFormattedValue
-    ? formatDateTimeDisplay(value, mode)
-    : value || fallbackDisplay;
+  const time24 = use24HourTime && mode === 'time';
+  const displayValue =
+    displayFormattedValue && !time24
+      ? formatDateTimeDisplay(value, mode)
+      : value || fallbackDisplay;
+  const pickerIs24Hour = time24
+    ? true
+    : displayFormattedValue && mode === 'time'
+      ? false
+      : undefined;
+  const pickerLocale = time24
+    ? 'en-GB'
+    : displayFormattedValue
+      ? mode === 'time'
+        ? 'en-US'
+        : 'en-GB'
+      : undefined;
 
   const handleDone = () => {
     const valueToCommit = draftPickerValue ?? pickerValue;
@@ -191,16 +208,9 @@ export function DateTimePickerField({
                 accessibilityLabel={accessibilityLabel}
                 display={mode === 'date' ? 'inline' : 'spinner'}
                 mode={mode}
-                is24Hour={
-                  displayFormattedValue && mode === 'time' ? false : undefined
-                }
-                locale={
-                  displayFormattedValue
-                    ? mode === 'time'
-                      ? 'en-US'
-                      : 'en-GB'
-                    : undefined
-                }
+                is24Hour={pickerIs24Hour}
+                locale={pickerLocale}
+                accentColor={colors.primary}
                 themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                 value={pickerValue}
                 onChange={handlePickerChange}
@@ -230,16 +240,9 @@ export function DateTimePickerField({
             accessibilityLabel={accessibilityLabel}
             display="default"
             mode={mode}
-            is24Hour={
-              displayFormattedValue && mode === 'time' ? false : undefined
-            }
-            locale={
-              displayFormattedValue
-                ? mode === 'time'
-                  ? 'en-US'
-                  : 'en-GB'
-                : undefined
-            }
+            is24Hour={pickerIs24Hour}
+            locale={pickerLocale}
+            accentColor={colors.primary}
             themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
             value={pickerValue}
             onChange={handlePickerChange}

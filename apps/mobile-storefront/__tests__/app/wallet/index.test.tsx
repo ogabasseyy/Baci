@@ -1,3 +1,8 @@
+// The PiggyVest store's in-sheet notices are scoped to the signed-in
+// account; this test's auth store has no getState.
+jest.mock('@/components/wallet/savings/current-savings-notice-scope', () => ({
+  currentSavingsNoticeScope: () => 'user-1:merchant-1',
+}));
 jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
@@ -42,9 +47,20 @@ jest.mock('@/lib/piggyvest-primary-savings-recovery', () => {
       mockRecoverPrimarySavings(...args),
   };
 });
+jest.mock('@/components/wallet/savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return {
+    ...(jest.requireActual(
+      '@/components/wallet/savings/savings-notice'
+    ) as object),
+    notifySavings,
+    savingsNotifier: () => notifySavings,
+  };
+});
 jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: (...args: unknown[]) =>
     mockFundPrimaryWalletCard(...args),
+  NOTHING_TO_RECOVER: 'nothing-to-recover',
 }));
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -57,8 +73,9 @@ import {
 } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Alert, Text, View } from 'react-native';
-import { WALLET_TAB_SCROLL_PADDING_BOTTOM } from '@/components/wallet/wallet-tab.constants';
+import { notifySavings } from '@/components/wallet/savings/savings-notice';
 import { SPACING } from '@/constants/Colors';
+import { getHomeContentBottomPadding } from '@/constants/layout';
 
 type MockStorefrontScreenShellProps = {
   children?: ReactNode;
@@ -253,6 +270,7 @@ jest.mock('expo-router', () => ({
     Screen: () => null,
   },
   useLocalSearchParams: () => mockSearchParams,
+  useNavigation: () => ({ addListener: () => () => undefined }),
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -323,6 +341,10 @@ jest.mock('@/services/push-notifications', () => ({
     mockScheduleLocalNotification(...args),
 }));
 
+// The account that started a top-up is still signed in.
+jest.mock('@/components/wallet/is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (
     selector: (state: {
@@ -479,6 +501,7 @@ describe('WalletScreen', () => {
     });
     mockUseStorefrontInsets.mockReturnValue({
       getScrollContentStyle: mockGetScrollContentStyle,
+      insets: { top: 0, right: 0, bottom: 34, left: 0 },
     });
     mockUseRequireAuth.mockReturnValue({
       isLoading: false,
@@ -566,7 +589,7 @@ describe('WalletScreen', () => {
     const shellProps = mockStorefrontScreenShell.mock.calls[0]?.[0];
     const walletContentProps = mockWalletContent.mock.calls[0]?.[0];
 
-    expect(shellProps?.edges).toEqual(['bottom']);
+    expect(shellProps?.edges).toEqual(['top', 'bottom']);
     expect(mockGetScrollContentStyle).toHaveBeenCalledWith({
       includeBottomInset: false,
       paddingBottom: SPACING.xl,
@@ -909,8 +932,8 @@ describe('WalletScreen', () => {
     expect(shellProps?.edges).toEqual(['top']);
     expect(screen.getByText('Wallet & Loyalty')).toBeOnTheScreen();
     expect(mockGetScrollContentStyle).toHaveBeenCalledWith({
-      includeBottomInset: true,
-      paddingBottom: WALLET_TAB_SCROLL_PADDING_BOTTOM,
+      includeBottomInset: false,
+      paddingBottom: getHomeContentBottomPadding(34, true),
     });
   });
 
@@ -985,6 +1008,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1002,6 +1026,7 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -1179,9 +1204,7 @@ describe('WalletScreen', () => {
   });
 
   it('opens active savings progress and adds a manual contribution', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockUseWallet.mockReturnValue({
       data: {
         wallet: {
@@ -1243,19 +1266,18 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
       });
       expect(mockRefetch).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(noticeSpy).toHaveBeenCalledWith(
         'Savings updated',
-        "Nice! ₦500 added. You're 1% of the way to your iPhone 15 Pro. Keep it going!"
+        "Nice! ₦500 added. You're 1% of the way to your iPhone 15 Pro. Keep it going!",
+        'success'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('shows an error when active savings contribution fails', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockAddSavingsContribution.mockRejectedValue(
       new Error('Contribution failed')
     );
@@ -1316,19 +1338,18 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
       });
       expect(mockRefetch).not.toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(noticeSpy).toHaveBeenCalledWith(
         'Unable to add savings',
-        'Contribution failed'
+        'Contribution failed',
+        'warning'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('changes an active savings goal device with the active merchant context', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockUseWallet.mockReturnValue({
       data: {
         wallet: {
@@ -1391,19 +1412,20 @@ describe('WalletScreen', () => {
         variantId: 'variant-256',
       });
       expect(mockRefetch).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Device updated',
-        'Your savings goal is now for iPhone 16 Pro.'
+      // Only the calm inline confirmation, never an error on top of it.
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        'Phone changed',
+        expect.stringContaining('Your savings now go towards'),
+        'success'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('does not change an active savings goal to a device below saved amount', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockUseWallet.mockReturnValue({
       data: {
         wallet: {
@@ -1452,19 +1474,18 @@ describe('WalletScreen', () => {
       expect(didChange).toBe(false);
       expect(mockSwapSavingsGoalDevice).not.toHaveBeenCalled();
       expect(mockRefetch).not.toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(noticeSpy).toHaveBeenCalledWith(
         'Device price too low',
-        'You have already saved ₦120,000. Choose a device priced at or above this amount.'
+        'You have already saved ₦120,000. Choose a device priced at or above this amount.',
+        'warning'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('shows an error when changing the savings device fails', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockSwapSavingsGoalDevice.mockRejectedValue(new Error('Swap failed'));
     mockWalletSavingsGoal(createActiveSavingsGoal());
 
@@ -1486,19 +1507,18 @@ describe('WalletScreen', () => {
       expect(didChange).toBe(false);
       expect(mockSwapSavingsGoalDevice).toHaveBeenCalled();
       expect(mockRefetch).not.toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(noticeSpy).toHaveBeenCalledWith(
         'Unable to change device',
-        'Swap failed'
+        'Swap failed',
+        'warning'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('keeps the device change when wallet refresh fails after swap', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockRefetch.mockRejectedValueOnce(new Error('Refresh failed'));
     mockWalletSavingsGoal(createActiveSavingsGoal());
 
@@ -1520,19 +1540,18 @@ describe('WalletScreen', () => {
       expect(didChange).toBe(true);
       expect(mockSwapSavingsGoalDevice).toHaveBeenCalled();
       expect(mockRefetch).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(noticeSpy).toHaveBeenCalledWith(
         'Device updated',
-        'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.'
+        'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.',
+        'success'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('does not change savings device without an active savings goal', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockWalletSavingsGoal(null);
 
     try {
@@ -1553,19 +1572,18 @@ describe('WalletScreen', () => {
       expect(didChange).toBe(false);
       expect(mockSwapSavingsGoalDevice).not.toHaveBeenCalled();
       expect(mockRefetch).not.toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(noticeSpy).toHaveBeenCalledWith(
         'No active savings goal',
-        'Start a savings goal first.'
+        'Start a savings goal first.',
+        'warning'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
   it('allows changing to a device priced at the saved amount boundary', async () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    const noticeSpy = jest.mocked(notifySavings);
     mockWalletSavingsGoal(createActiveSavingsGoal(120000));
 
     try {
@@ -1592,12 +1610,15 @@ describe('WalletScreen', () => {
         })
       );
       expect(mockRefetch).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Device updated',
-        'Your savings goal is now for Equal Price Phone.'
+      // Only the calm inline confirmation, never an error on top of it.
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        'Phone changed',
+        expect.stringContaining('Your savings now go towards'),
+        'success'
       );
     } finally {
-      alertSpy.mockRestore();
+      noticeSpy.mockClear();
     }
   });
 
@@ -1623,6 +1644,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1644,6 +1666,7 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(pushArg.params).not.toHaveProperty('merchantId');
@@ -1660,6 +1683,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1681,6 +1705,7 @@ describe('WalletScreen', () => {
         merchantId: 'merchant-1',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(pushArg.params).not.toHaveProperty('merchantSlug');
@@ -1711,6 +1736,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 1000,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',

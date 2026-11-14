@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+import { notifySavings } from './savings/notify-savings';
 
 export const PRIMARY_CREDIT_POLL_INTERVAL_MS = 10_000;
 export const PRIMARY_CREDIT_POLL_MAX_MS = 5 * 60_000;
@@ -18,7 +18,7 @@ interface UsePrimaryWalletCreditPollInput {
  * PiggyVest bank transfers into the main wallet never appear in the legacy
  * transaction list the credit watch reads. While the fund panel is open on a
  * ready main wallet, refetch every 10s for at most 5 minutes and announce
- * once when the balance rises above its value at open.
+ * (as the wallet notice) once when the balance rises above its value at open.
  */
 export function usePrimaryWalletCreditPoll({
   balanceKobo,
@@ -78,14 +78,21 @@ export function usePrimaryWalletCreditPoll({
     if (
       !enabled ||
       announcedRef.current ||
-      baseline === null ||
       typeof balanceKobo !== 'number' ||
-      balanceKobo <= baseline
+      // A pending account opened with no balance (Codex): its first
+      // positive balance is the money received.
+      balanceKobo <= (baseline ?? 0)
     ) {
       return;
     }
     announcedRef.current = true;
     stopRef.current?.();
-    Alert.alert('Money received', 'Your wallet balance has been updated.');
+    // The inset wallet notice: inline in the add money sheet while it is
+    // open, and on the wallet once it closes. Never an iOS alert.
+    notifySavings(
+      'Money received',
+      'Your savings wallet balance has been updated.',
+      'success'
+    );
   }, [balanceKobo, enabled]);
 }

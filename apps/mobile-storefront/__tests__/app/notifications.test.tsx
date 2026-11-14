@@ -25,13 +25,22 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/components/notifications/SavingsNotificationsScreen', () => ({
+  // The orders link is handed in as the list footer, so it scrolls with the
+  // list instead of covering it.
   SavingsNotificationsScreen: ({
     merchantId,
     userId,
+    footer,
   }: {
     merchantId: string | null;
     userId: string | null;
-  }) => mockSavingsNotificationsScreen({ merchantId, userId }),
+    footer?: import('react').ReactNode;
+  }) => (
+    <>
+      {mockSavingsNotificationsScreen({ merchantId, userId })}
+      {footer}
+    </>
+  ),
 }));
 
 jest.mock('@/hooks/use-auth-guard', () => ({

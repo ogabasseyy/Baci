@@ -163,6 +163,7 @@ it('reports status as not primary when the wallet runtime is off', async () => {
     hasPin: false,
     resetRequired: false,
     available: false,
+    signInConfirmationRequired: false,
   });
   expect(mocks.rpc).not.toHaveBeenCalled();
 });
@@ -179,6 +180,7 @@ it('reports status for a signed-in customer', async () => {
     hasPin: true,
     resetRequired: true,
     available: true,
+    signInConfirmationRequired: false,
   });
 });
 

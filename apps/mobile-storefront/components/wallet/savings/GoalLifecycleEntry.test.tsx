@@ -1,12 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { router } from 'expo-router';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { GoalLifecycleEntry } from './GoalLifecycleEntry';
 import { usePrimaryGoalGate } from './use-primary-goal-gate';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('./use-primary-goal-gate');
 
 function makeGoal(over: Partial<WalletActiveSavingsGoal> = {}) {
@@ -23,17 +21,19 @@ function makeGoal(over: Partial<WalletActiveSavingsGoal> = {}) {
     ...over,
   } as WalletActiveSavingsGoal;
 }
+const mockOnCancel = jest.fn();
+const mockOnComplete = jest.fn();
 function renderEntry(
   goal: WalletActiveSavingsGoal,
-  hasPendingContribution = false,
-  onBeforeNavigate?: () => void
+  hasPendingContribution = false
 ) {
   render(
     <GoalLifecycleEntry
       colors={Colors.light}
       goal={goal}
       hasPendingContribution={hasPendingContribution}
-      onBeforeNavigate={onBeforeNavigate}
+      onCancel={mockOnCancel}
+      onComplete={mockOnComplete}
     />
   );
 }
@@ -58,11 +58,23 @@ describe('GoalLifecycleEntry', () => {
     expect(complete()).toBeNull();
   });
 
+  it('offers nothing for a completed goal that is already settled', () => {
+    renderEntry(makeGoal({ status: 'completed', current_amount: 0 }));
+    expect(complete()).toBeNull();
+    expect(cancel()).toBeNull();
+  });
+
   it('offers Complete (only) for a completed goal', () => {
     renderEntry(makeGoal({ status: 'completed' }));
     expect(complete()).toBeOnTheScreen();
     expect(screen.getByText('Complete goal')).toBeOnTheScreen();
     expect(cancel()).toBeNull();
+  });
+
+  it('does not offer Complete when only credited interest reaches the target', () => {
+    renderEntry(makeGoal({ current_amount: 5200, principal_amount: 4900 }));
+    expect(cancel()).toBeOnTheScreen();
+    expect(complete()).toBeNull();
   });
 
   it('offers both once the target is reached', () => {
@@ -120,41 +132,52 @@ describe('GoalLifecycleEntry', () => {
         colors={Colors.light}
         goal={makeGoal()}
         hasPendingContribution={false}
+        onCancel={mockOnCancel}
+        onComplete={mockOnComplete}
         walletUpdatedAt={99}
       />
     );
-    expect(usePrimaryGoalGate).toHaveBeenCalledWith(99);
+    expect(usePrimaryGoalGate).toHaveBeenCalledWith(99, 0);
   });
 
-  it('navigates to the goal actions screen with the goal and kind', () => {
+  it('offers a retry when the readiness read fails, and re-reads on tap', () => {
+    jest.mocked(usePrimaryGoalGate).mockReturnValue('error');
+    renderEntry(makeGoal());
+    expect(cancel()).toBeNull();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Try loading goal options again' })
+    );
+    expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 1);
+  });
+
+  // Walk 15: after the server came back the form recovered but this link
+  // stayed until tapped; a quiet retry lets it heal on its own.
+  it('re-reads a failed readiness verdict by itself after a pause', () => {
+    jest.useFakeTimers();
+    try {
+      jest.mocked(usePrimaryGoalGate).mockReturnValue('error');
+      renderEntry(makeGoal());
+      expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 0);
+      act(() => {
+        jest.advanceTimersByTime(10_000);
+      });
+      expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('opens the in-sheet Cancel and Complete steps, never another screen', () => {
     renderEntry(makeGoal({ current_amount: 5000 }));
     fireEvent.press(
       screen.getByRole('button', { name: 'Cancel savings goal' })
     );
-    expect(router.push).toHaveBeenLastCalledWith({
-      pathname: '/wallet/savings/goal-actions',
-      params: { goalId: 'goal-1', kind: 'cancel' },
-    });
+    expect(mockOnCancel).toHaveBeenCalledTimes(1);
+    expect(mockOnComplete).not.toHaveBeenCalled();
     fireEvent.press(
       screen.getByRole('button', { name: 'Complete savings goal' })
     );
-    expect(router.push).toHaveBeenLastCalledWith({
-      pathname: '/wallet/savings/goal-actions',
-      params: { goalId: 'goal-1', kind: 'complete' },
-    });
-  });
-
-  it('closes the sheet before pushing the goal actions route', () => {
-    const order: string[] = [];
-    const dismiss = jest.fn(() => order.push('dismiss'));
-    jest.mocked(router.push).mockImplementation(() => {
-      order.push('push');
-    });
-    renderEntry(makeGoal(), false, dismiss);
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Cancel savings goal' })
-    );
-    expect(order).toEqual(['dismiss', 'push']);
+    expect(mockOnComplete).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -183,10 +206,7 @@ describe('GoalLifecycleEntry', () => {
       'borderWidth'
     );
     fireEvent.press(cancel() as never);
-    expect(router.push).toHaveBeenCalledWith({
-      pathname: '/wallet/savings/goal-actions',
-      params: { goalId: 'goal-1', kind: 'cancel' },
-    });
+    expect(mockOnCancel).toHaveBeenCalledTimes(1);
   });
 
   it('keeps Complete as a regular button', () => {

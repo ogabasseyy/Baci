@@ -25,6 +25,7 @@ import { HeroAdSlide } from './HeroAdSlide';
 import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './hero-slide-dimensions';
 import { nextOffsetAfterAdToggle } from './launch-ad-offset';
 import { StandardSlide } from './StandardSlide';
+import { useHeroAutoplay } from './use-hero-autoplay';
 
 export interface HeroSlide {
   campaign?: 'black-friday';
@@ -40,6 +41,7 @@ export interface HeroSlide {
 interface HeroProps {
   slides?: HeroSlide[];
   autoplayDelay?: number;
+  autoplayPaused?: boolean;
   /**
    * Inserts one sponsored slide second (after the first CMS slide). The
    * existing autoplay rotates onto it like any other slide. Ignored while
@@ -61,6 +63,7 @@ const DEFAULT_SLIDES: HeroSlide[] = [];
 export function Hero({
   slides = DEFAULT_SLIDES,
   autoplayDelay = 5000,
+  autoplayPaused = false,
   trailingAdPlacement,
 }: HeroProps) {
   const { colors, isDark } = useTheme();
@@ -169,14 +172,13 @@ export function Hero({
     return STANDARD_HEIGHT;
   };
 
-  useEffect(() => {
-    if (renderSlides.length <= 1) return;
-    const interval = setInterval(() => {
-      const nextIndex = (currentIndex + 1) % renderSlides.length;
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-    }, autoplayDelay);
-    return () => clearInterval(interval);
-  }, [currentIndex, renderSlides.length, autoplayDelay]);
+  useHeroAutoplay({
+    autoplayDelay,
+    autoplayPaused,
+    currentIndex,
+    itemCount: renderSlides.length,
+    listRef: flatListRef,
+  });
 
   // Don't render if no slides available (prevents "New Collection" placeholder flash)
   if (renderSlides.length === 0) return null;

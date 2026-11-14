@@ -36,6 +36,7 @@ interface BlockRendererProps {
    * placements are withheld so no invisible delivery is requested.
    */
   suppressAds?: boolean;
+  autoplayPaused?: boolean;
   /**
    * Page-level HOME_STRIP owner elected across all feed slices. The feed
    * renders one BlockRenderer per slice, so a slice-local election would
@@ -61,6 +62,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
   blockWrapperStyle,
   renderAfterBlock,
   suppressAds = false,
+  autoplayPaused = false,
   heroAdOwnerBlockId,
   launchAdOwnerBlockId,
 }) => {
@@ -149,6 +151,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 <Hero
                   slides={slides}
                   autoplayDelay={heroBlock.props.autoplayDelay}
+                  autoplayPaused={autoplayPaused}
                   trailingAdPlacement={
                     !suppressAds &&
                     pageOwnerBlockId !== null &&
@@ -177,6 +180,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
             case 'CategoryRail':
               return (
                 <UtilityPanel
+                  autoplayPaused={autoplayPaused}
                   variant={template.categoryStyle}
                   selectedCategoryId={selectedCategoryId}
                   onCategorySelect={onCategorySelect}

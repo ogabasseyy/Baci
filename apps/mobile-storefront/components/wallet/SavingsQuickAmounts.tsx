@@ -28,7 +28,7 @@ export function SavingsQuickAmounts({
           <Pressable
             key={`${option.label}-${option.amount}`}
             accessibilityRole="button"
-            accessibilityLabel={`Use ${formatNgnCurrency(option.amount)}${option.label.startsWith('₦') ? '' : `, ${option.label.toLowerCase()}`}`}
+            accessibilityLabel={`Use ${formatNgnCurrency(option.amount)}${option.spokenLabel ? `, ${option.spokenLabel}` : ''}`}
             accessibilityState={{ disabled, selected }}
             disabled={disabled}
             onPress={() => {
@@ -41,9 +41,12 @@ export function SavingsQuickAmounts({
                 backgroundColor: selected ? colors.primary : colors.card,
                 borderColor: selected ? colors.primary : colors.border,
               },
+              // Dimmed with the rest of the form while an add is in flight.
+              disabled && styles.disabled,
             ]}
           >
             <Text
+              numberOfLines={1}
               style={[
                 styles.text,
                 { color: selected ? colors.primaryForeground : colors.text },
@@ -59,15 +62,17 @@ export function SavingsQuickAmounts({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  disabled: { opacity: 0.5 },
+  row: { flexDirection: 'row', gap: SPACING.sm },
   chip: {
     alignItems: 'center',
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.full,
     borderWidth: 1,
     justifyContent: 'center',
-    flexGrow: 1,
+    flex: 1,
     minHeight: 44,
-    paddingHorizontal: SPACING.md,
+    minWidth: 0,
+    paddingHorizontal: SPACING.xs,
   },
   text: { fontSize: 13, fontWeight: '600' },
 });

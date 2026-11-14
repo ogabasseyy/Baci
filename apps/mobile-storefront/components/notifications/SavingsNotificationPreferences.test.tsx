@@ -26,7 +26,7 @@ describe('SavingsNotificationPreferences', () => {
     );
 
     expect(screen.getByLabelText('Quiet hours summary')).toHaveTextContent(
-      '10:00 PM – 8:00 AM (use 24-hour HH:MM)'
+      '22:00 – 08:00'
     );
   });
 

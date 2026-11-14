@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   authorizedCartResponse,
   CHATWOOT_WIDGET_ORIGIN,
+  CANONICAL_CART_SNAPSHOT as canonicalSnapshot,
   challengeResponse,
   contextResponse,
   establishChatwootWidgetContext,
@@ -47,6 +48,16 @@ function stubDeferredAuthorizations(
       }
       if (route.endsWith('/verify')) {
         return Promise.resolve(contextResponse(String(body.contextToken)));
+      }
+      if (route.endsWith('/api/storefront/chatwoot/cart/add')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            accepted: true,
+            cartVersion: Number(body.cartVersion) + 1,
+            operationId: body.requestId,
+          }),
+        });
       }
       return new Promise((resolve) => pending.push(resolve));
     })
@@ -95,6 +106,48 @@ describe('Chatwoot cart and review response ordering', () => {
         expect(
           messagePayloads(postMessage.mock.calls, 'baci-cart-view:')
         ).toEqual([{ requestId: 'cart-replaced', ready: false, items: [] }])
+      );
+    });
+  });
+
+  it('allows a cart add to continue after a concurrent cart version advance', async () => {
+    const { target, postMessage } = installChatwootFrame();
+    const pending: Array<
+      (value: ReturnType<typeof authorizedCartResponse>) => void
+    > = [];
+    stubDeferredAuthorizations(pending);
+    const view = render(<HookHarness />);
+
+    await act(async () => {
+      await establishChatwootWidgetContext(target, postMessage);
+      postMessage.mockClear();
+      sendChatwootWidgetMessage(target, 'baci-cart-add', {
+        slug: 'phone-13',
+        variantId: '00000000-0000-4000-8000-000000000003',
+        displayedPrice: 1,
+        requestId: 'add-request-01',
+        conversationId: 905,
+        sessionToken: 'session-905',
+      });
+      await waitFor(() => expect(pending).toHaveLength(1));
+    });
+
+    mocks.cartState.sharedCartRef = { cartId: 'cart-1', version: 9 };
+    view.rerender(<HookHarness />);
+    await act(async () => {
+      pending[0](
+        authorizedCartResponse(905, { ...canonicalSnapshot, cartVersion: 9 })
+      );
+      await waitFor(() =>
+        expect(
+          messagePayloads(postMessage.mock.calls, 'baci-cart-add-result:')
+        ).toEqual([
+          expect.objectContaining({
+            requestId: 'add-request-01',
+            accepted: true,
+            cartVersion: 10,
+          }),
+        ])
       );
     });
   });

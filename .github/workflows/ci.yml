@@ -388,6 +388,8 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Test shared cart validated-price order binding
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_remaining_review.py
+      - name: Test Chatwoot cart add receipt authority
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_chatwoot_cart_add_receipts.py
       - name: Test shared cart reviewed assurance binding
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_agentic_checkout_economics.py
       - name: Test agentic shared-cart provider dispatch fence

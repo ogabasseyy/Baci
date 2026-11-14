@@ -56,7 +56,11 @@ describe('postChatwootBridgeJson', () => {
       postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
         allowNonOkResponse: true,
       })
-    ).resolves.toEqual({ accepted: false, code: 'refresh_required' });
+    ).resolves.toEqual({
+      accepted: false,
+      code: 'refresh_required',
+      httpStatus: 400,
+    });
     await expect(
       postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
         allowNonOkResponse: true,
@@ -70,6 +74,32 @@ describe('postChatwootBridgeJson', () => {
     await expect(
       postChatwootBridgeJson('/cart', {}, 'store-a')
     ).resolves.toBeNull();
+  });
+
+  it('does not trust an HTTP status supplied inside a successful JSON body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ accepted: true, httpStatus: 503 }))
+    );
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
+    ).resolves.toEqual({ accepted: true });
+  });
+
+  it('uses the transport status instead of a status supplied inside an error body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ accepted: false, httpStatus: 200 }, false, 503))
+    );
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
+    ).resolves.toEqual({ accepted: false, httpStatus: 503 });
   });
 
   it('passes the cart-session fence signal to fetch', async () => {

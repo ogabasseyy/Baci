@@ -93,6 +93,27 @@ describe('reconcileWalletPayTransfer', () => {
     ).resolves.toBe('pending');
   });
 
+  it('bugfix: rethrows a reconciliation exception for the drain, so the run counts it as failed (Codex P2)', async () => {
+    const down = ports(null, {
+      queryProvider: vi.fn(async () => Promise.reject(new Error('down'))),
+    });
+    await expect(
+      reconcileWalletPayTransfer(
+        { kind: 'payment', operationId: OP, surfaceErrors: true },
+        down
+      )
+    ).rejects.toThrow('down');
+    const settleFails = ports(record('successful'), {
+      settle: vi.fn(async () => Promise.reject(new Error('db'))),
+    });
+    await expect(
+      reconcileWalletPayTransfer(
+        { kind: 'payment', operationId: OP, surfaceErrors: true },
+        settleFails
+      )
+    ).rejects.toThrow('db');
+  });
+
   it('maps the database answer for a fee, a duplicate payment and a deferred late success', async () => {
     const cases = [
       ['needs_review', 'needs_review'],

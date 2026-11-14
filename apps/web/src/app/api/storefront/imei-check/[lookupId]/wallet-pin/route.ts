@@ -12,6 +12,7 @@ import { walletPinVerificationResponse } from '@/lib/piggyvest/wallet-pin-respon
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { chargeWalletPinCustomerLimit } from '@/lib/wallet-pin/wallet-pin-customer-limit';
 import { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
+import { lookupPriceKobo } from '../../wallet-pay/deliver-paid-imei-lookup';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -100,7 +101,8 @@ export async function POST(
       ?.amount_ngn;
     if (
       priceNgn === undefined ||
-      Math.round(Number(priceNgn) * 100) !== issued.binding.amountKobo
+      lookupPriceKobo({ amount_ngn: priceNgn as number }) !==
+        issued.binding.amountKobo
     )
       return invalid();
     // Charged only once a real PIN check will happen.

@@ -48,6 +48,10 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => '11111111-1111-4111-8111-111111111111'),
+  // Every verify tap first looks for a kept PiggyVest attempt by hash.
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    `sha256(${value.length})`,
 }));
 
 jest.mock('expo-router', () => ({

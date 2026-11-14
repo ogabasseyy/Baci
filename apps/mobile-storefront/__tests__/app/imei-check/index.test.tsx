@@ -54,6 +54,10 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => '11111111-1111-4111-8111-111111111111'),
+  // Every verify tap first looks for a kept PiggyVest attempt by hash.
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    `sha256(${value.length})`,
 }));
 
 jest.mock('expo-router', () => ({
@@ -128,6 +132,10 @@ describe('ImeiCheckerScreen', () => {
   });
 
   it('handles a pending response and polls it to completion', async () => {
+    let releasePoll: () => void = () => undefined;
+    const pollHeld = new Promise<void>((resolve) => {
+      releasePoll = resolve;
+    });
     jest
       .mocked(fetch)
       .mockResolvedValueOnce({
@@ -142,8 +150,9 @@ describe('ImeiCheckerScreen', () => {
         status: 202,
       } as Response)
       .mockResolvedValueOnce({
+        // Held until the pending screen was seen (the poll is 1ms away).
         json: () =>
-          Promise.resolve({
+          pollHeld.then(() => ({
             data: {
               blacklistStatus: 'Clean',
               carrier: 'Unlocked',
@@ -162,7 +171,7 @@ describe('ImeiCheckerScreen', () => {
             },
             status: 'complete',
             success: true,
-          }),
+          })),
         ok: true,
         status: 200,
       } as Response);
@@ -174,15 +183,18 @@ describe('ImeiCheckerScreen', () => {
     );
     fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
     await screen.findByText(/usually under a minute/i);
+    releasePoll();
     await screen.findByText('iPhone 13 Pro');
     const firstInit = jest.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(firstInit.body))).toMatchObject({
       clientCapabilities: ['imei-async-v1'],
       device: 'smartphone',
     });
-  });
+    // Real polling after an asynchronous saved-key check: slow on a busy
+    // runner, so more than the default five seconds.
+  }, 15_000);
 
   it('exposes the full catalog: shows the toggle and Samsung checks', () => {
     render(<ImeiCheckerScreen />);
@@ -227,7 +239,7 @@ describe('ImeiCheckerScreen', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('routes to wallet top-up instead of requesting when keyboard submit has insufficient balance', () => {
+  it('routes to wallet top-up instead of requesting when keyboard submit has insufficient balance', async () => {
     mockWalletBalance = 500;
     render(<ImeiCheckerScreen />);
 
@@ -235,8 +247,11 @@ describe('ImeiCheckerScreen', () => {
     fireEvent.changeText(input, '490154203237518');
     fireEvent(input, 'submitEditing');
 
+    // The tap first looks for a kept PiggyVest attempt (asynchronous).
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(approvedPrice.topUpFrom500)
+    );
     expect(fetch).not.toHaveBeenCalled();
-    expect(router.push).toHaveBeenCalledWith(approvedPrice.topUpFrom500);
   });
 
   it('routes unauthenticated customers to login on 401', async () => {

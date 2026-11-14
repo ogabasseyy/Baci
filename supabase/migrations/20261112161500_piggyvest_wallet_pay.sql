@@ -1122,7 +1122,23 @@ BEGIN
     OR v_binding.business_id IS DISTINCT FROM proof ->> 'businessId' THEN
     RETURN 'conflict';
   END IF;
-  IF v_payment.state = 'released' THEN RETURN 'duplicate'; END IF;
+  IF v_payment.state = 'released' THEN
+    -- A sent payment released after a definitive rejection and an empty
+    -- lookup, then indexed as failed WITH a fee: the fee moved money. It
+    -- stays released (a replacement attempt may be live under the one-live
+    -- index), but the evidence is kept: the provider id ends the drain's
+    -- late-success re-checks and the review reason puts it in the daily
+    -- needsReview report for a person (Codex P2).
+    IF v_payment.dispatched_at IS NOT NULL AND v_payment.provider_transaction_id IS NULL
+      AND COALESCE((proof ->> 'feeKobo')::bigint, 0) > 0 THEN
+      UPDATE piggyvest_primary.wallet_payments
+         SET provider_transaction_id = proof ->> 'providerTransactionId',
+             settled_at = pg_catalog.clock_timestamp(), review_reason = 'failed_with_fee'
+       WHERE id = v_payment.id;
+      RETURN 'needs_review';
+    END IF;
+    RETURN 'duplicate';
+  END IF;
   IF v_payment.state = 'needs_review' THEN
     RETURN CASE WHEN v_payment.provider_transaction_id = proof ->> 'providerTransactionId'
                 THEN 'duplicate' ELSE 'conflict' END;

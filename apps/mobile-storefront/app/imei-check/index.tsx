@@ -9,7 +9,7 @@ import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { Keyboard, View } from 'react-native';
 import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
-import { chooseImeiPaymentRail } from '@/components/imei-check/choose-imei-payment-rail';
+import { decideImeiVerify } from '@/components/imei-check/decide-imei-verify';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
 import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
 import HeroCard from '@/components/imei-check/imei-check-hero-card';
@@ -130,25 +130,25 @@ export default function ImeiCheckerScreen() {
       imeiCheckScreenActions.alertInvalidIdentifier(serviceTier.identifier);
       return;
     }
-    if (walletQuery.isLoading || walletPay.waitsForWallet) {
-      setError(`${walletCopy.loading} Please try again in a moment.`);
-      return;
-    }
-    if (walletQuery.isError) {
-      setError(walletCopy.unavailable);
-      return;
-    }
-    const retainedPiggyvest = walletPay.retains
-      ? await walletPay.retains(tier, imei)
-      : false;
-    if (retainedPiggyvest === null) return;
-    const rail = chooseImeiPaymentRail({
+    const decision = await decideImeiVerify({
       retainedStoreCredit: requestIdentity.retains(tier, imei),
-      retainedPiggyvest,
-      piggyvestCovers: walletPay.covers(tier),
+      retainsPiggyvest: () => walletPay.retains(tier, imei),
+      ownerAtTap: useAuthStore.getState().user?.id ?? null,
+      currentOwner: () => useAuthStore.getState().user?.id ?? null,
+      walletLoading: walletQuery.isLoading || walletPay.waitsForWallet,
+      walletError: walletQuery.isError,
+      piggyvestCovers: () => walletPay.covers(tier),
       walletBalance,
       price: serviceTier.price,
     });
+    if (decision.kind === 'ignore') return;
+    if (decision.kind !== 'pay')
+      return setError(
+        decision.kind === 'wait'
+          ? `${walletCopy.loading} Please try again in a moment.`
+          : walletCopy.unavailable
+      );
+    const { rail } = decision;
     if (rail === 'piggyvest') return void walletPay.open(tier, imei);
     if (rail === 'top_up')
       return void fundWallet(serviceTier.price - walletBalance);
@@ -163,7 +163,8 @@ export default function ImeiCheckerScreen() {
 
     const performCheck = async () => {
       const { rawData, response } = await submitImeiCheck({
-        accessToken: session?.access_token,
+        // The live session: the tap awaited the saved keys (Codex P1).
+        accessToken: useAuthStore.getState().session?.access_token,
         apiBaseUrl: API_BASE_URL,
         device: selectedDevice,
         idempotencyKey,

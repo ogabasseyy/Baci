@@ -75,7 +75,7 @@ export function PrimaryWalletSetupPending({
             color={colors.success}
           />
           <Text style={[setupStyles.benefitText, { color: colors.text }]}>
-            Details sent to PiggyVest
+            Details sent for checking
           </Text>
         </View>
         <View style={setupStyles.benefitRow}>

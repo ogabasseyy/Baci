@@ -57,7 +57,7 @@ it('explains when a read-only refresh still has no verified account', async () =
     expect(screen.getByText('Setting up your account number')).toBeOnTheScreen()
   );
   // Pending proves only that setup is in progress, never that the BVN passed.
-  expect(screen.getByText('Details sent to PiggyVest')).toBeOnTheScreen();
+  expect(screen.getByText('Details sent for checking')).toBeOnTheScreen();
   expect(screen.queryByText(/BVN (accepted|verified)/)).toBeNull();
   expect(screen.queryByLabelText('BVN')).toBeNull();
 });

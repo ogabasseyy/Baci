@@ -6,6 +6,12 @@ const f = vi.hoisted(() => ({
   nonce: vi.fn(async () => true),
   boot: vi.fn(),
   client: {},
+  attest: vi.fn((_settings: { key: Uint8Array; fetch?: typeof fetch }) =>
+    vi.fn()
+  ),
+  forward: vi.fn(
+    async (_request: Request) => new Response(null, { status: 204 })
+  ),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => f.client }));
@@ -17,8 +23,11 @@ vi.mock('pg', () => ({
 vi.mock('../builder-auth/owner-preview-nonce', () => ({
   createOwnerPreviewNonceStore: async () => f.nonce,
 }));
+vi.mock('../experience-verifier/loopback-forwarder', () => ({
+  createVerifierLoopbackForwarder: () => f.forward,
+}));
 vi.mock('@/lib/experience/verifier-attestation-client', () => ({
-  createVerifierAttestationClient: () => vi.fn(),
+  createVerifierAttestationClient: f.attest,
 }));
 vi.mock('./boot', () => ({ startProductionBuilderFromPrivateConfig: f.boot }));
 
@@ -61,6 +70,23 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   );
   expect(settings.integration.publicClient).toBe(f.client);
   expect(settings.verifierKey).toEqual(Buffer.alloc(32, 1));
+  expect(f.attest).toHaveBeenCalledWith({
+    key: Buffer.alloc(32, 1),
+    fetch: expect.any(Function),
+  });
+  const fetch = f.attest.mock.calls.at(-1)?.[0]?.fetch;
+  if (!fetch) throw Error('MISSING_LOCAL_VERIFIER_FETCH');
+  const response = await fetch(
+    'https://mcp.usebaci.com/internal/owner/attest',
+    { method: 'POST', body: '{}' }
+  );
+  expect(response.status).toBe(204);
+  expect(f.forward.mock.calls.at(-1)?.[0].url).toBe(
+    'https://verifier.baci-internal.invalid/v1/attest'
+  );
+  await expect(fetch('https://other.invalid/attest')).rejects.toThrow(
+    'INVALID_VERIFIER_TARGET'
+  );
   await expect(
     settings.integration.approval.confirmPublication()
   ).rejects.toThrow('PUBLIC_VERIFIER_NOT_INSTALLED');

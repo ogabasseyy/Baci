@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { createVerifierAttestationClient } from '@/lib/experience/verifier-attestation-client';
 import { createOwnerPreviewNonceStore } from '../builder-auth/owner-preview-nonce';
 import { createTransientOutputStore } from '../experience-runner/transient-output-store';
+import { createVerifierLoopbackForwarder } from '../experience-verifier/loopback-forwarder';
 import { createBuilderDraftApproval } from './approval';
 import { startProductionBuilderFromPrivateConfig } from './boot';
 import { parseBuilderProductionConfig } from './production-config';
@@ -21,6 +22,9 @@ export async function startProductionBuilder(input: unknown) {
       options: '-c role=baci_owner_preview_nonce',
     });
     const consumeNonce = await createOwnerPreviewNonceStore(pool);
+    const forwardAttestation = createVerifierLoopbackForwarder(
+      config.verifierPort
+    );
     const service = await startProductionBuilderFromPrivateConfig({
       port: config.port,
       deliveryPort: config.deliveryPort,
@@ -54,7 +58,19 @@ export async function startProductionBuilder(input: unknown) {
           }
         ),
         approval: createBuilderDraftApproval(
-          createVerifierAttestationClient({ key: config.verifierKey })
+          createVerifierAttestationClient({
+            key: config.verifierKey,
+            fetch: async (input, init) => {
+              if (input !== 'https://mcp.usebaci.com/internal/owner/attest')
+                throw Error('INVALID_VERIFIER_TARGET');
+              return await forwardAttestation(
+                new Request(
+                  'https://verifier.baci-internal.invalid/v1/attest',
+                  init
+                )
+              );
+            },
+          })
         ),
         runner: config.runner,
         build: {

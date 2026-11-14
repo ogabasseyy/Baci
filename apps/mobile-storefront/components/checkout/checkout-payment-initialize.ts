@@ -72,6 +72,9 @@ export async function initializeGatewayAndRoute({
           gateway,
           billing_address: { country: 'NG' },
           ...(isBankTransfer && { payment_type: 'dva' }),
+          ...(isBankTransfer && trackingToken
+            ? { tracking_token: trackingToken }
+            : {}),
         }),
       }
     );

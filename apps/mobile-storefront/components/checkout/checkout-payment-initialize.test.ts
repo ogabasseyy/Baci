@@ -177,6 +177,7 @@ describe('initializeGatewayAndRoute', () => {
       String(fetchCalls[0]?.[1]?.body ?? '{}')
     ) as Record<string, unknown>;
     expect(requestBody.currency).toBe('KES');
+    expect(requestBody.tracking_token).toBeUndefined();
   });
 
   it('keeps the NGN default when the order carries no currency', async () => {
@@ -299,8 +300,20 @@ describe('initializeGatewayAndRoute', () => {
     });
 
     await initializeGatewayAndRoute(
-      createParams({ selectedPayment: 'bank_transfer' })
+      createParams({
+        selectedPayment: 'bank_transfer',
+        trackingToken: 'track-order-1',
+      })
     );
+
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
+      unknown,
+      { body?: unknown },
+    ][];
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody.tracking_token).toBe('track-order-1');
 
     expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
     expect(mockRouterPush).toHaveBeenCalledWith({

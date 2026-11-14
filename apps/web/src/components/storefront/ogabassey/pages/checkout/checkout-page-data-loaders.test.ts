@@ -90,11 +90,16 @@ describe('checkout-page data loaders', () => {
       customerPhone: '+2348012345678',
       billingAddress: { line1: '12 Station Road', city: 'Osogbo', country: 'NG' },
       orderCurrency: 'NGN',
+      trackingToken: 'track-order-1',
     });
 
     expect(result).toEqual({
       dva: { account_number: '1234567890' },
       reference: 'BAC-1',
+    });
+    const fetchCalls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(JSON.parse(String(fetchCalls[0]?.[1]?.body))).toMatchObject({
+      tracking_token: 'track-order-1',
     });
   });
 

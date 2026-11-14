@@ -25,6 +25,15 @@ describe('initializeCheckoutDva', () => {
     const setDvaData = vi.fn();
     const onDvaReady = vi.fn();
     const releaseSubmitLock = vi.fn();
+    const requestDva = vi.fn(async () => ({
+      dva: {
+        account_number: '123',
+        account_name: 'Baci',
+        bank_name: 'Bank',
+        bank_code: '001',
+      },
+      reference: 'dva-ref',
+    }));
 
     await initializeCheckoutDva({
       ...base,
@@ -35,17 +44,12 @@ describe('initializeCheckoutDva', () => {
       onDvaReady,
       onPaymentFailure: vi.fn(),
       onError: vi.fn(),
-      requestDva: vi.fn(async () => ({
-        dva: {
-          account_number: '123',
-          account_name: 'Baci',
-          bank_name: 'Bank',
-          bank_code: '001',
-        },
-        reference: 'dva-ref',
-      })),
+      requestDva,
     });
 
+    expect(requestDva).toHaveBeenCalledWith(
+      expect.objectContaining({ trackingToken: 'tracking-token' })
+    );
     expect(setDvaData).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: 4500,

@@ -9,6 +9,35 @@ vi.mock('@/lib/schedule-order-product-blog-purge', () => ({
 }));
 
 import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
+import {
+  type QuizSweepWatermarks,
+  serializeBoundaryRowState,
+} from './quiz-sweep-watermarks';
+
+function makeWatermarks(
+  floor = '2026-09-01T00:00:00Z',
+  overrides: Partial<QuizSweepWatermarks> = {}
+): QuizSweepWatermarks {
+  return {
+    events: {
+      status: 'ok',
+      floor,
+      boundarySnapshots: new Map(),
+    },
+    reservations: {
+      status: 'ok',
+      floor,
+      boundarySnapshots: new Map(),
+    },
+    awards: {
+      status: 'ok',
+      floor,
+      boundarySnapshots: new Map(),
+    },
+    hasProbeFailure: false,
+    ...overrides,
+  };
+}
 
 function createClient(
   reservationRows: unknown[] = [],
@@ -97,11 +126,7 @@ describe('invalidateQuizProductCaches', () => {
   it('schedules linked article purges for changed prize events and expired awards', async () => {
     const client = createClient();
 
-    await invalidateQuizProductCaches(client as never, {
-      events: '2026-09-01T00:00:00Z',
-      reservations: '2026-09-01T00:00:00Z',
-      awards: '2026-09-01T00:00:00Z',
-    });
+    await invalidateQuizProductCaches(client as never, makeWatermarks());
 
     expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
@@ -121,11 +146,7 @@ describe('invalidateQuizProductCaches', () => {
       { merchant_id: 'merchant-3', product_id: 'product-3' },
     ]);
 
-    await invalidateQuizProductCaches(client as never, {
-      events: '2026-09-01T00:00:00Z',
-      reservations: '2026-09-01T00:00:00Z',
-      awards: '2026-09-01T00:00:00Z',
-    });
+    await invalidateQuizProductCaches(client as never, makeWatermarks());
 
     expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
       merchantId: 'merchant-3',
@@ -159,11 +180,7 @@ describe('invalidateQuizProductCaches', () => {
       }),
     })) as never;
 
-    await invalidateQuizProductCaches(client as never, {
-      events: '2026-09-01T00:00:00Z',
-      reservations: '2026-09-01T00:00:00Z',
-      awards: '2026-09-01T00:00:00Z',
-    });
+    await invalidateQuizProductCaches(client as never, makeWatermarks());
 
     expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalled();
   });
@@ -175,11 +192,7 @@ describe('invalidateQuizProductCaches', () => {
     }));
     const client = createClient(reservationRows);
 
-    await invalidateQuizProductCaches(client as never, {
-      events: '2026-09-01T00:00:00Z',
-      reservations: '2026-09-01T00:00:00Z',
-      awards: '2026-09-01T00:00:00Z',
-    });
+    await invalidateQuizProductCaches(client as never, makeWatermarks());
 
     const merchantCall = mockScheduleOrderProductBlogPurge.mock.calls.find(
       ([input]) =>
@@ -205,11 +218,7 @@ describe('invalidateQuizProductCaches', () => {
         failReservationsAfterFirstPage: true,
       });
 
-      await invalidateQuizProductCaches(client as never, {
-        events: '2026-09-01T00:00:00Z',
-        reservations: '2026-09-01T00:00:00Z',
-        awards: '2026-09-01T00:00:00Z',
-      });
+      await invalidateQuizProductCaches(client as never, makeWatermarks());
 
       const expectedIds = Array.from(
         { length: 1000 },
@@ -239,11 +248,7 @@ describe('invalidateQuizProductCaches', () => {
   it('attributes expired awards from the embedded merchant without an owner query', async () => {
     const client = createClient([]);
 
-    await invalidateQuizProductCaches(client as never, {
-      events: '2026-09-01T00:00:00Z',
-      reservations: '2026-09-01T00:00:00Z',
-      awards: '2026-09-01T00:00:00Z',
-    });
+    await invalidateQuizProductCaches(client as never, makeWatermarks());
 
     // The award-only merchant is invalidated from the embedded event
     // merchant riding with the award rows: no separate owner lookup can
@@ -270,11 +275,7 @@ describe('invalidateQuizProductCaches', () => {
     }));
     const client = createClient(reservationRows);
 
-    await invalidateQuizProductCaches(client as never, {
-      events: '2026-09-01T00:00:00Z',
-      reservations: '2026-09-01T00:00:00Z',
-      awards: '2026-09-01T00:00:00Z',
-    });
+    await invalidateQuizProductCaches(client as never, makeWatermarks());
 
     for (const table of [
       'quiz_events',
@@ -309,11 +310,10 @@ describe('invalidateQuizProductCaches', () => {
     });
     mockScheduleOrderProductBlogPurge.mockImplementation(() => gate);
     try {
-      const run = invalidateQuizProductCaches(client as never, {
-        events: '2026-09-01T00:00:00Z',
-        reservations: '2026-09-01T00:00:00Z',
-        awards: '2026-09-01T00:00:00Z',
-      });
+      const run = invalidateQuizProductCaches(
+        client as never,
+        makeWatermarks()
+      );
 
       await vi.waitFor(() =>
         expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledTimes(5)
@@ -326,5 +326,91 @@ describe('invalidateQuizProductCaches', () => {
     } finally {
       mockScheduleOrderProductBlogPurge.mockReset();
     }
+  });
+
+  it('skips unmodified boundary rows at T_max while sweeping in-place updates and new rows sharing T_max', async () => {
+    const boundaryTimestamp = '2026-09-01T00:00:00.000Z';
+    const unchangedReservation = {
+      id: 'res-unchanged',
+      merchant_id: 'merchant-unchanged',
+      product_id: 'prod-unchanged',
+      state: 'reserved',
+      quantity: 1,
+      updated_at: boundaryTimestamp,
+    };
+    const preRpcUpdatedReservation = {
+      id: 'res-updated',
+      merchant_id: 'merchant-updated',
+      product_id: 'prod-updated',
+      state: 'reserved',
+      quantity: 1,
+      updated_at: boundaryTimestamp,
+    };
+    const postRpcUpdatedReservation = {
+      ...preRpcUpdatedReservation,
+      // Same id and same timestamp T_max, but state changed in place!
+      state: 'released',
+      release_reason: 'expired',
+      updated_at: '2026-09-01T00:00:00+00:00',
+    };
+    const newlyInsertedAtBoundary = {
+      id: 'res-new-same-ts',
+      merchant_id: 'merchant-new',
+      product_id: 'prod-new',
+      state: 'reserved',
+      quantity: 1,
+      updated_at: boundaryTimestamp,
+    };
+
+    const client = createClient([
+      unchangedReservation,
+      postRpcUpdatedReservation,
+      newlyInsertedAtBoundary,
+    ]);
+
+    const boundarySnapshots = new Map<string, string>([
+      [
+        'res-unchanged',
+        serializeBoundaryRowState(
+          'quiz_prize_reservations',
+          unchangedReservation
+        ),
+      ],
+      [
+        'res-updated',
+        serializeBoundaryRowState(
+          'quiz_prize_reservations',
+          preRpcUpdatedReservation
+        ),
+      ],
+    ]);
+
+    const watermarks = makeWatermarks(boundaryTimestamp, {
+      reservations: {
+        status: 'ok',
+        floor: boundaryTimestamp,
+        boundarySnapshots,
+      },
+    });
+
+    await invalidateQuizProductCaches(client as never, watermarks);
+
+    // Unmodified boundary row is skipped, while both the in-place updated
+    // boundary row and the new row sharing T_max are swept.
+    expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId: 'merchant-unchanged' })
+    );
+    expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-updated',
+        productIds: ['prod-updated'],
+      })
+    );
+    expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-new',
+        productIds: ['prod-new'],
+      })
+    );
   });
 });

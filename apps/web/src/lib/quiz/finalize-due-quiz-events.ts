@@ -62,24 +62,67 @@ type FinalizationStep =
       name: 'set_quiz_runtime_control_v2';
     };
 
+const MUTATION_COUNT_KEYS = [
+  'scheduledPromoted',
+  'testClosed',
+  'zeroPlayerClosed',
+  'testZeroPlayerClosed',
+  'liveZeroPlayerClosed',
+  'liveTerminalized',
+  'awarded',
+  'noWinner',
+  'expired',
+  'released',
+] as const;
+
+const SCALAR_MUTATION_STEPS = new Set<FinalizationStep['name']>([
+  'promote_due_scheduled_quiz_events_service_v2',
+  'close_due_product_quiz_events',
+  'finalize_due_quiz_events',
+]);
+
+interface MutationTrackingState {
+  hasUnknownMutationResult: boolean;
+  scalarMutationCount: number;
+}
+
 const MISSING_RPC_CODES = new Set(['PGRST202']);
 
 function emptySummary(): Summary {
   return Object.fromEntries(COUNT_KEYS.map((key) => [key, 0])) as Summary;
 }
 
-function addPayload(summary: Summary, payload: unknown) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+function isNonNegativeSafeInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function addPayload(
+  summary: Summary,
+  state: MutationTrackingState,
+  payload: unknown
+) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    state.hasUnknownMutationResult = true;
+    return;
+  }
+  const record = payload as Record<string, unknown>;
+  let hasRecognizedCounter = false;
+
   for (const key of COUNT_KEYS) {
-    const value = (payload as Record<string, unknown>)[key];
-    if (
-      typeof value === 'number' &&
-      Number.isSafeInteger(value) &&
-      value >= 0
-    ) {
+    if (!(key in record) || record[key] === undefined) continue;
+    hasRecognizedCounter = true;
+    const value = record[key];
+    if (isNonNegativeSafeInt(value)) {
       summary[key] += value;
+    } else {
+      state.hasUnknownMutationResult = true;
     }
   }
+
+  if (!hasRecognizedCounter) {
+    state.hasUnknownMutationResult = true;
+  }
+
   summary.failed +=
     summaryValue(payload, 'testPublicationFailed') +
     summaryValue(payload, 'liveTerminalizationFailed') +
@@ -93,9 +136,7 @@ function addPayload(summary: Summary, payload: unknown) {
 
 function summaryValue(payload: object, key: CountKey) {
   const value = (payload as Record<string, unknown>)[key];
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : 0;
+  return isNonNegativeSafeInt(value) ? value : 0;
 }
 
 function runtimeGateRejected(payload: unknown) {
@@ -110,16 +151,19 @@ function runtimeGateRejected(payload: unknown) {
 
 function addStepPayload(
   summary: Summary,
+  state: MutationTrackingState,
   step: FinalizationStep,
   payload: unknown
 ) {
-  if (step.name === 'promote_due_scheduled_quiz_events_service_v2') {
-    if (
-      typeof payload === 'number' &&
-      Number.isSafeInteger(payload) &&
-      payload >= 0
-    ) {
+  if (SCALAR_MUTATION_STEPS.has(step.name)) {
+    if (!isNonNegativeSafeInt(payload)) {
+      state.hasUnknownMutationResult = true;
+      return;
+    }
+    if (step.name === 'promote_due_scheduled_quiz_events_service_v2') {
       summary.scheduledPromoted += payload;
+    } else {
+      state.scalarMutationCount += payload;
     }
     return;
   }
@@ -129,7 +173,7 @@ function addStepPayload(
   ) {
     summary.failed += 1;
   }
-  addPayload(summary, payload);
+  addPayload(summary, state, payload);
 }
 
 function logRpcFailure(name: FinalizationStep['name'], error: PostgrestError) {
@@ -170,10 +214,22 @@ function runStep(client: QuizFinalizationClient, step: FinalizationStep) {
 
 export async function finalizeDueQuizEvents() {
   const summary = emptySummary();
+  const mutationState: MutationTrackingState = {
+    hasUnknownMutationResult: false,
+    scalarMutationCount: 0,
+  };
   const client: QuizFinalizationClient = createAdminClient();
   const cacheInvalidationStartedAt = new Date().toISOString();
   const phaseIsProduction = getQuizPhaseEnv() === 'production';
   const productionApproved = getQuizProductionApprovedEnv();
+
+  // Capture pre-RPC sweep floors and boundary row snapshots before any RPC
+  // runs so idle ticks skip post-RPC sweeps completely and real mutations at
+  // the boundary timestamp are never missed.
+  const sweepWatermarks = await resolveQuizSweepWatermarks(
+    client,
+    cacheInvalidationStartedAt
+  );
 
   const deadlineArgs = {
     p_production_approved: productionApproved,
@@ -224,13 +280,13 @@ export async function finalizeDueQuizEvents() {
           summary.failed += 1;
           continue;
         }
-        addStepPayload(summary, step, data);
+        addStepPayload(summary, mutationState, step, data);
       }
     } else if (deadlineResult.error) {
       logRpcFailure(deadlineStep.name, deadlineResult.error);
       summary.failed += 1;
     } else {
-      addStepPayload(summary, deadlineStep, deadlineResult.data);
+      addStepPayload(summary, mutationState, deadlineStep, deadlineResult.data);
     }
   }
 
@@ -244,22 +300,25 @@ export async function finalizeDueQuizEvents() {
       // expiry until the next worker run.
       continue;
     }
-    addStepPayload(summary, step, data);
+    addStepPayload(summary, mutationState, step, data);
   }
 
   if (!phaseIsProduction || !productionApproved) {
     summary.skippedLive = summary.liveAwaitingGate;
   }
 
-  // Sweep floors come from the database clock (same domain as the columns
-  // they filter), never the worker clock: a worker running ahead of the
-  // database would otherwise stamp a watermark newer than the rows the RPCs
-  // above just wrote and silently skip them.
-  const sweepWatermarks = await resolveQuizSweepWatermarks(
-    client,
-    cacheInvalidationStartedAt
-  );
-  await invalidateQuizProductCaches(client, sweepWatermarks);
+  const hasQuizMutations =
+    mutationState.scalarMutationCount > 0 ||
+    MUTATION_COUNT_KEYS.some((key) => summary[key] > 0);
+  const shouldSweepCaches =
+    hasQuizMutations ||
+    mutationState.hasUnknownMutationResult ||
+    summary.failed > 0 ||
+    sweepWatermarks.hasProbeFailure;
+
+  if (shouldSweepCaches) {
+    await invalidateQuizProductCaches(client, sweepWatermarks);
+  }
 
   if (summary.failed > 0) {
     return {

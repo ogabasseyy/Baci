@@ -45,10 +45,12 @@ it('binds the stack broker to the fixed private auth configuration', async () =>
     port: 10001,
     deliveryPort: 10002,
     authPort: 10003,
+    ownerPort: 10004,
   } as never;
   expect(await startProductionBuilderFromPrivateConfig(settings)).toBe(stack);
   const input = fixture.startStack.mock.calls.at(-1)?.[0];
   expect(input.port).toBe(10001);
+  expect(input.ownerPort).toBe(10004);
   expect(input.host.integration.hostOrigin).toBe('https://builder.baci.test');
   await expect(input.host.integration.canonicalBase('synthetic')).resolves.toBe(
     'https://shop.example.com'

@@ -25,6 +25,10 @@ export async function startProductionBuilderFromPrivateConfig(
     return await startProductionBuilderStack({
       port: settings.port,
       deliveryPort: settings.deliveryPort,
+      ownerPort: settings.ownerPort,
+      ...(settings.backgroundWorker
+        ? { backgroundWorker: settings.backgroundWorker }
+        : {}),
       verifierPort: settings.verifierPort,
       verifierKey: settings.verifierKey,
       ownerBridge: settings.ownerBridge,

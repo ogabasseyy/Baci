@@ -24,6 +24,7 @@ export async function startProductionBuilder(input: unknown) {
     const service = await startProductionBuilderFromPrivateConfig({
       port: config.port,
       deliveryPort: config.deliveryPort,
+      ownerPort: config.ownerPort,
       authPort: config.authPort,
       verifierPort: config.verifierPort,
       verifierKey: config.verifierKey,

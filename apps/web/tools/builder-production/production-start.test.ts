@@ -29,6 +29,7 @@ const config = {
   port: 43100,
   deliveryPort: 43101,
   authPort: 43103,
+  ownerPort: 43104,
   verifierPort: 43102,
   verifierKey: key(1),
   previewKey: key(2),
@@ -53,6 +54,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   f.boot.mockResolvedValueOnce({ close: f.close });
   const service = await startProductionBuilder(config);
   const settings = f.boot.mock.calls.at(-1)?.[0];
+  expect(settings.ownerPort).toBe(43104);
   expect(settings.ownerBridge.consumeNonce).toBe(f.nonce);
   expect(settings.integration.artifactDirectory).toBe(
     '/var/lib/baci-builder/artifacts'

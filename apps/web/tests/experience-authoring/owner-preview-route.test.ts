@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
 import { readdirSync, readFileSync } from 'node:fs';
 import { request as nodeRequest } from 'node:http';
 import { NextRequest } from 'next/server';
@@ -33,7 +32,7 @@ import { POST } from '@/app/api/builder-experience/preview/route';
 import { createOwnerPreviewBridge } from '@/lib/experience/owner-preview-bridge';
 import { createOwnerPreviewBridgeClient } from '@/lib/experience/owner-preview-bridge-client';
 import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
-import { createProductionBuilderListener } from '@/lib/experience/production-builder-listener';
+import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import { experienceDataFixture } from './data-fixture.test-support';
 
@@ -41,7 +40,7 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
   const f = await experienceDataFixture();
   let pool: Pool | undefined;
   let uninstall: (() => void) | undefined;
-  let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
+  let listener: ReturnType<typeof createOwnerInternalNodeServer> | undefined;
   try {
     const directory = new URL(
       '../../../../supabase/migrations/',
@@ -93,12 +92,8 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
         token === f.owner.accessToken ? f.owner.supabase : f.other.supabase,
       launch,
     });
-    listener = createProductionBuilderListener({ keys: [] }, bridge);
-    listener.server.listen(0, '127.0.0.1');
-    await once(listener.server, 'listening');
-    const address = listener.server.address();
-    if (!address || typeof address === 'string')
-      throw Error('LOCAL_LISTENER_MISSING');
+    listener = createOwnerInternalNodeServer({ ownerPreview: bridge });
+    const ownerPort = await listener.listen(0);
     const client = createOwnerPreviewBridgeClient({
       key,
       executionOrigin: 'https://output.runtime.test',
@@ -114,7 +109,7 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
           const req = nodeRequest(
             {
               host: '127.0.0.1',
-              port: address.port,
+              port: ownerPort,
               path: '/internal/owner/preview',
               method: 'POST',
               headers: Object.fromEntries(headers),

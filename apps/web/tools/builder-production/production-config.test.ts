@@ -6,6 +6,7 @@ const valid = () => ({
   port: 43100,
   deliveryPort: 43101,
   authPort: 43103,
+  ownerPort: 43104,
   verifierPort: 43102,
   verifierKey: key(1),
   previewKey: key(2),
@@ -37,6 +38,9 @@ describe('private builder operator configuration', () => {
   it.each([
     { verifierPort: 43100 },
     { authPort: 43100 },
+    { ownerPort: 43100 },
+    { ownerPort: 43103 },
+    { ownerPort: undefined },
     { verifierKey: key(2) },
     { buildKey: key(4) },
     {

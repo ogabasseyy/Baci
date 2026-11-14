@@ -66,3 +66,36 @@ it('rejects invalid ports without binding', async () => {
   await expect(listener.listen(-1)).rejects.toThrow('INVALID_OWNER_PORT');
   await listener.close();
 });
+
+it('waits for admitted owner work to settle during shutdown', async () => {
+  let release = () => {};
+  let entered = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const listener = createOwnerInternalNodeServer({
+    ownerPreview: async () => {
+      entered();
+      await gate;
+      return Response.json({ ok: true });
+    },
+  });
+  const port = await listener.listen(0);
+  const requestDone = post(port, '/internal/owner/preview').catch(() => 0);
+  await started;
+  let closed = false;
+  const closing = listener.close().then(() => {
+    closed = true;
+  });
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(closed).toBe(false);
+  } finally {
+    release();
+    await closing;
+    await requestDone;
+  }
+});

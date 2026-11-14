@@ -1,6 +1,7 @@
 import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
+import { createOwnerInternalNodeServer } from '../../../builder-mcp-server/owner-internal-node';
 import { createVerifierLoopbackForwarder } from '../../../tools/experience-verifier/loopback-forwarder';
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
 import { createOwnerPreviewUserClientResolver } from './owner-preview-user-client';
@@ -24,6 +25,7 @@ export async function startProductionBuilderStack(settings: {
   host: Omit<Parameters<typeof startProductionBuilderHost>[0], 'buildVerifier'>;
   port: number;
   deliveryPort: number;
+  ownerPort?: number;
   verifierPort?: number;
   verifierKey?: Uint8Array;
   backgroundWorker?: { schedule(callback: () => void): () => void };
@@ -40,6 +42,17 @@ export async function startProductionBuilderStack(settings: {
     settings.deliveryPort < 1 ||
     settings.deliveryPort > 65535 ||
     settings.deliveryPort === settings.port ||
+    ((settings.ownerBridge || settings.verifierPort !== undefined) &&
+      (settings.ownerPort === undefined ||
+        !Number.isInteger(settings.ownerPort) ||
+        settings.ownerPort < 1 ||
+        settings.ownerPort > 65535 ||
+        settings.ownerPort === settings.port ||
+        settings.ownerPort === settings.deliveryPort ||
+        settings.ownerPort === settings.verifierPort)) ||
+    (settings.ownerPort !== undefined &&
+      !settings.ownerBridge &&
+      settings.verifierPort === undefined) ||
     (settings.verifierPort !== undefined &&
       (!Number.isInteger(settings.verifierPort) ||
         settings.verifierPort < 1 ||
@@ -77,6 +90,9 @@ export async function startProductionBuilderStack(settings: {
   }
   let host: Awaited<ReturnType<typeof startProductionBuilderHost>> | undefined;
   let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
+  let ownerListener:
+    | ReturnType<typeof createOwnerInternalNodeServer>
+    | undefined;
   let delivery: ReturnType<typeof createProductionDeliveryListener> | undefined;
   try {
     host = await startProductionBuilderHost({
@@ -106,16 +122,17 @@ export async function startProductionBuilderStack(settings: {
           launch: host.ownerPreviewLaunch,
         })
       : undefined;
-    listener = settings.verifierPort
-      ? createProductionBuilderListener(
-          host.publicJwks,
-          ownerPreview,
-          createVerifierLoopbackForwarder(settings.verifierPort)
-        )
-      : ownerPreview
-        ? createProductionBuilderListener(host.publicJwks, ownerPreview)
-        : createProductionBuilderListener(host.publicJwks);
+    listener = createProductionBuilderListener(host.publicJwks);
     await listen(listener.server, settings.port);
+    if (settings.ownerPort !== undefined) {
+      ownerListener = createOwnerInternalNodeServer({
+        ownerPreview,
+        ownerAttestation: settings.verifierPort
+          ? createVerifierLoopbackForwarder(settings.verifierPort)
+          : undefined,
+      });
+      await ownerListener.listen(settings.ownerPort);
+    }
     delivery = createProductionDeliveryListener({
       executionOrigin: settings.host.integration.executionOrigin,
       deliver: host.deliver,
@@ -131,7 +148,11 @@ export async function startProductionBuilderStack(settings: {
               try {
                 await delivery?.close();
               } finally {
-                await listener?.close();
+                try {
+                  await ownerListener?.close();
+                } finally {
+                  await listener?.close();
+                }
               }
             } finally {
               await host?.close();
@@ -145,6 +166,7 @@ export async function startProductionBuilderStack(settings: {
     };
   } catch {
     await delivery?.close().catch(() => undefined);
+    await ownerListener?.close().catch(() => undefined);
     await listener?.close().catch(() => undefined);
     await host?.close().catch(() => undefined);
     throw Error('BUILDER_STACK_STARTUP_FAILED');

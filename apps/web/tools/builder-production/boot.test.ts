@@ -72,3 +72,21 @@ it('starts the auth loopback only for a matching broker and closes both', async 
   expect(f.bridgeClose).toHaveBeenCalledOnce();
   expect(f.close).toHaveBeenCalledOnce();
 });
+
+it('forwards the configured background worker to the stack', async () => {
+  const backgroundWorker = { schedule: vi.fn(() => vi.fn()) };
+  f.stack.mockResolvedValueOnce({ close: vi.fn() });
+  await startProductionBuilderFromPrivateConfig({
+    port: 43100,
+    deliveryPort: 43101,
+    authPort: 43102,
+    ownerPort: 43103,
+    rootDomain: 'example.com',
+    expectedSupabase: { url: 'https://project.supabase.co', anonKey: 'public' },
+    integration: {} as never,
+    backgroundWorker,
+  });
+  expect(f.stack).toHaveBeenLastCalledWith(
+    expect.objectContaining({ backgroundWorker })
+  );
+});

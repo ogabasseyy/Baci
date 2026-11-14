@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto';
-import { once } from 'node:events';
 import { readdirSync, readFileSync } from 'node:fs';
 import { request as nodeRequest } from 'node:http';
 import { Pool } from 'pg';
@@ -8,7 +7,7 @@ import { createProductionExperienceRuntime } from '@/lib/experience/local-owner-
 import { createOwnerPreviewBridge } from '@/lib/experience/owner-preview-bridge';
 import { createOwnerPreviewBridgeClient } from '@/lib/experience/owner-preview-bridge-client';
 import type { PreviewVault } from '@/lib/experience/preview-service';
-import { createProductionBuilderListener } from '@/lib/experience/production-builder-listener';
+import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import type { experienceDataFixture } from './data-fixture.test-support';
 
@@ -48,7 +47,7 @@ export async function launchThroughOwnerBridge(input: {
     database: 'postgres',
     options: '-c role=baci_owner_preview_nonce',
   });
-  let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
+  let listener: ReturnType<typeof createOwnerInternalNodeServer> | undefined;
   try {
     const key = randomBytes(32);
     const runtime = createProductionExperienceRuntime(
@@ -64,11 +63,8 @@ export async function launchThroughOwnerBridge(input: {
         token === f.owner.accessToken ? f.owner.supabase : f.other.supabase,
       launch: runtime.createPreviewLaunch,
     });
-    listener = createProductionBuilderListener({ keys: [] }, bridge);
-    listener.server.listen(0, '127.0.0.1');
-    await once(listener.server, 'listening');
-    const address = listener.server.address();
-    if (!address || typeof address === 'string') throw Error('NO_LISTENER');
+    listener = createOwnerInternalNodeServer({ ownerPreview: bridge });
+    const ownerPort = await listener.listen(0);
     const client = createOwnerPreviewBridgeClient({
       key,
       executionOrigin: input.prerender.executionOrigin,
@@ -84,7 +80,7 @@ export async function launchThroughOwnerBridge(input: {
           const req = nodeRequest(
             {
               host: '127.0.0.1',
-              port: address.port,
+              port: ownerPort,
               path: '/internal/owner/preview',
               method: 'POST',
               headers: Object.fromEntries(headers),

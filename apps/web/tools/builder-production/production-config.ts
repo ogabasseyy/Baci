@@ -15,6 +15,7 @@ const schema = z.strictObject({
   port,
   deliveryPort: port,
   authPort: port,
+  ownerPort: port,
   verifierPort: port,
   verifierKey: key,
   backgroundBuilds: z.boolean().default(false),
@@ -45,7 +46,8 @@ export function parseBuilderProductionConfig(input: unknown) {
         config.deliveryPort,
         config.verifierPort,
         config.authPort,
-      ]).size !== 4
+        config.ownerPort,
+      ]).size !== 5
     )
       throw Error();
     if (

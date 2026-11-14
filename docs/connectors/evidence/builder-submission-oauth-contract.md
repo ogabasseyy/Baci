@@ -1112,3 +1112,13 @@ commerce `/api` returned 200. These observations describe the current
 deployment only; because the candidate ingress is not installed, they do not
 prove that its internal routes are unreachable or that commerce behavior is
 unchanged after a future routing change.
+
+The local production composition now binds owner handlers to a separate
+loopback-only port and keeps them off its public MCP listener. Focused startup,
+shutdown, private-preview and RLS tests passed. This does not provide the
+authenticated network path needed by web callers, and no production ingress
+was changed. A full synthetic rerun first failed because the local Colima VM
+was stopped. After restoring the existing VM and confirming `runsc`, a second
+run reached repeated sandbox captures but exceeded the test's 420-second job
+polling window before checkout; the later capture error arose during teardown.
+Neither run establishes a completed checkout on this updated composition.

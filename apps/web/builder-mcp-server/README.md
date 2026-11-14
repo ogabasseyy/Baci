@@ -43,9 +43,8 @@ parses the complete message using the matching ordered schema before verifying.
 The client/bridge tests cover reordered input and wire fields. Treat a schema
 ordering or signing-format change as a coordinated protocol rollout.
 
-Production ingress is not yet qualified: the internal owner routes share a
-loopback listener with public MCP, and a proxy's loopback address is not proof
-that a request is private. Require an independently verified ingress boundary
+Production ingress is not yet qualified, and a proxy's loopback address is not
+proof that a request is private. Require an independently verified ingress boundary
 that prevents public access to those routes. Preview transport now signals
 cancellation on timeout or disconnect, and retains its concurrency slot until
 the underlying work actually settles. The preview and verifier attestation
@@ -54,11 +53,14 @@ runner or attestation work already in flight. End-to-end cancellation or a
 separately qualified bounded-work strategy remains required before enabling
 the owner bridge.
 
-`owner-internal-node.ts` is a local candidate for a separate loopback-only
-owner listener. It is not wired into the production stack and does not provide
-TLS, mutual authentication, or a private network path. The current production
-composition still shares the MCP listener; do not treat the candidate's local
-separation test as deployed ingress evidence.
+`owner-internal-node.ts` provides a separate loopback-only owner listener.
+The production composition requires a distinct configured owner port and does
+not attach owner routes to the MCP listener. This source change does not
+provide TLS, mutual authentication, or a private network path. The live
+topology has not been updated or qualified; local separation tests are not
+deployed ingress evidence. The web callers still target the existing MCP host;
+until a separate authenticated path and matching caller configuration are
+implemented, owner preview and attestation must remain disabled.
 
 Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the

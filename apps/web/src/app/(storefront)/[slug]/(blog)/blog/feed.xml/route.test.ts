@@ -87,4 +87,18 @@ describe('GET /[slug]/blog/feed.xml', () => {
     expect(response.status).toBe(404);
     expect(mockGetMerchantBlogFeed).not.toHaveBeenCalled();
   });
+
+  it('returns 503 when merchant lookup is unavailable', async () => {
+    mockResolveStorefrontSitemapContext.mockResolvedValue({
+      status: 'unavailable',
+    });
+
+    const response = await GET(
+      new NextRequest('https://ogabassey.com/blog/feed.xml'),
+      { params: Promise.resolve({ slug: 'ogabassey.com' }) }
+    );
+
+    expect(response.status).toBe(503);
+    expect(mockGetMerchantBlogFeed).not.toHaveBeenCalled();
+  });
 });

@@ -55,4 +55,18 @@ describe('GET /[slug]/blog/rss.xml', () => {
 
     expect(response.status).toBe(404);
   });
+
+  it('returns 503 without redirecting when merchant lookup is unavailable', async () => {
+    mockResolveStorefrontSitemapContext.mockResolvedValue({
+      status: 'unavailable',
+    });
+
+    const response = await GET(
+      new Request('https://ogabassey.com/blog/rss.xml'),
+      { params: Promise.resolve({ slug: 'ogabassey.com' }) }
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('location')).toBeNull();
+  });
 });

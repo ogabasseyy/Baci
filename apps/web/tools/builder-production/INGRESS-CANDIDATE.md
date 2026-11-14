@@ -36,6 +36,18 @@ the Ubuntu repository offering Caddy 2.6.2; the local smoke used Caddy 2.11.4.
 Do not assume the older package supports this configuration. Confirm automatic
 TLS issuance without interfering with existing services.
 
+On 14 November, the synthetic smoke also passed on Contabo `vmi3734186` using
+a temporary loopback-only listener and Caddy 2.11.4. The downloaded official
+Linux AMD64 archive matched SHA-256
+`527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9`.
+The Caddyfile SHA-256 was
+`18a28e348e2346d4ed4084838cc74e3d250ee3a38e72f7509dd3227c1cf6c61a`
+and the smoke script SHA-256 was
+`af8dc942516e6804bc735b2f189feac71bf67a7e80f51d80ad83b39b16d6b5af`.
+The temporary directory and processes were removed after testing. No public
+port, firewall rule, DNS record, persistent installation or production service
+was changed. This is not live OAuth or deployment qualification.
+
 The candidate web clients can use a fixed, mutually authenticated owner HTTPS
 transport configured by `BACI_OWNER_MTLS_ORIGIN`, `BACI_OWNER_MTLS_CERT` and
 `BACI_OWNER_MTLS_KEY`. Missing or invalid configuration leaves preview and

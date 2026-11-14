@@ -59,7 +59,7 @@ def main():
             env[name] = f'https://{host}:{proxy_port}'
         # Host header on the delivery backend is the configured hostname, not a site URL.
         text = Path(__file__).with_name('Caddyfile.candidate').read_text()
-        text = text.replace('  admin off', '  admin off\n  skip_install_trust')
+        text = text.replace('  admin off', '  admin off\n  skip_install_trust\n  default_bind 127.0.0.1')
         for variable in ('BACI_AUTH_HOST', 'BACI_MCP_ORIGIN_HOST', 'BACI_EXECUTION_HOST'):
             text = text.replace('{$' + variable + '} {', '{$' + variable + '} {\n  tls internal', 1)
         text = text.replace('  tls {\n    client_auth', '  tls internal {\n    client_auth', 1)

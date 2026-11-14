@@ -230,6 +230,12 @@ it('reconciles a lost finalize response for the same linked job under RLS', asyn
     );
     expect(replay.error).toBeNull();
     expect(replay.data).toBe(committed.data);
+    const builds = await f.owner.supabase
+      .from('experience_builds')
+      .select('id')
+      .eq('job_id', job);
+    expect(builds.error).toBeNull();
+    expect(builds.data).toEqual([{ id: committed.data }]);
     const foreignReplay = await f.other.supabase.rpc(
       'experience_finalize_build',
       args

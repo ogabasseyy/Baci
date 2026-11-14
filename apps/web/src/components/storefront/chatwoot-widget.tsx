@@ -196,8 +196,10 @@ export function ChatwootWidget({
         const initializedWidget = getCurrentWidget();
         if (
           initializedWidget &&
-          (initializedWidget.websiteToken !== websiteToken ||
-            initializedWidget.baseUrl !== platformOrigin)
+          ((initializedWidget.websiteToken !== undefined &&
+            initializedWidget.websiteToken !== websiteToken) ||
+            (initializedWidget.baseUrl !== undefined &&
+              initializedWidget.baseUrl !== platformOrigin))
         ) {
           widgetWindow.__baciChatwootRunStarted = false;
           widgetWindow.__baciChatwootConfigKey = undefined;
@@ -213,15 +215,27 @@ export function ChatwootWidget({
     };
     const onReady = () => {
       if (
-        active &&
-        widgetWindow.__baciChatwootConfigKey === configKey &&
-        widgetWindow.__baciChatwootRunStarted &&
-        widgetWindow.$chatwoot?.websiteToken === websiteToken &&
-        widgetWindow.$chatwoot?.baseUrl === platformOrigin
+        !active ||
+        widgetWindow.__baciChatwootConfigKey !== configKey ||
+        !widgetWindow.__baciChatwootRunStarted
       ) {
-        widgetWindow.__baciChatwootReadyKey = configKey;
-        setActiveWidgetKey(configKey);
+        return;
       }
+      const readyWidget = widgetWindow.$chatwoot;
+      if (
+        !readyWidget ||
+        readyWidget.websiteToken !== websiteToken ||
+        readyWidget.baseUrl !== platformOrigin
+      ) {
+        readyWidget?.toggleBubbleVisibility?.('hide');
+        widgetWindow.__baciChatwootRunStarted = false;
+        widgetWindow.__baciChatwootConfigKey = undefined;
+        widgetWindow.__baciChatwootReadyKey = undefined;
+        setActiveWidgetKey(null);
+        return;
+      }
+      widgetWindow.__baciChatwootReadyKey = configKey;
+      setActiveWidgetKey(configKey);
     };
     window.addEventListener('chatwoot:ready', onReady);
     const cleanup = () => {

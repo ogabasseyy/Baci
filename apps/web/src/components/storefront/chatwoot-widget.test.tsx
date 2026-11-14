@@ -146,12 +146,10 @@ describe('ChatwootWidget', () => {
 
   it('waits for an asynchronously initialized SDK global before accepting ready', async () => {
     const run = vi.fn(({ websiteToken, baseUrl }) => {
+      const widget: { websiteToken?: string; baseUrl?: string } = {};
+      (window as Window & { $chatwoot?: typeof widget }).$chatwoot = widget;
       queueMicrotask(() => {
-        (
-          window as Window & {
-            $chatwoot?: { websiteToken: string; baseUrl: string };
-          }
-        ).$chatwoot = { websiteToken, baseUrl };
+        Object.assign(widget, { websiteToken, baseUrl });
       });
     });
     (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {

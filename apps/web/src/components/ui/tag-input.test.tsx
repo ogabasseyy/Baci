@@ -258,7 +258,10 @@ describe('TagInput IME composition', () => {
     const input = screen.getByRole('textbox');
 
     fireEvent.change(input, { target: { value: 'にほん' } });
-    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    // Cancelled, so a surrounding form cannot submit implicitly.
+    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(
+      false
+    );
     fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
 
     expect(onChange).not.toHaveBeenCalled();

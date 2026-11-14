@@ -65,8 +65,9 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isImeComposing(e)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (isImeComposing(e)) return;
       handleSubmit(e);
     }
   };

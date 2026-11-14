@@ -34,4 +34,14 @@ describe('isImeComposing', () => {
       })
     ).toBe(false);
   });
+
+  it("is true when the key is reported as 'Process'", () => {
+    expect(isImeComposing({ isComposing: false, key: 'Process' })).toBe(true);
+    expect(
+      isImeComposing({
+        key: 'Process',
+        nativeEvent: { isComposing: false, key: 'Process' },
+      })
+    ).toBe(true);
+  });
 });

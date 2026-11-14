@@ -253,8 +253,9 @@ export function DiscountCodeInput({
               setError(null);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isImeComposing(e)) {
+              if (e.key === 'Enter') {
                 e.preventDefault();
+                if (isImeComposing(e)) return;
                 handleApply();
               }
             }}

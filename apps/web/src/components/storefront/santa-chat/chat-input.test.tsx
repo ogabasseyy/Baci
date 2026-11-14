@@ -47,7 +47,10 @@ describe('ChatInput Enter to send', () => {
     const textbox = screen.getByRole('textbox');
 
     fireEvent.change(textbox, { target: { value: 'じてんしゃ' } });
-    fireEvent.keyDown(textbox, { key: 'Enter', isComposing: true });
+    // Cancelled, so a surrounding form cannot submit implicitly.
+    expect(
+      fireEvent.keyDown(textbox, { key: 'Enter', isComposing: true })
+    ).toBe(false);
     // Safari reports the confirming Enter as keyCode 229 with isComposing false.
     fireEvent.keyDown(textbox, { key: 'Enter', keyCode: 229 });
 

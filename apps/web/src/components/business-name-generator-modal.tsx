@@ -171,12 +171,9 @@ export function BusinessNameGeneratorModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onKeyDown={(e) => {
-                  if (
-                    e.key === 'Enter' &&
-                    !isGenerating &&
-                    !isImeComposing(e)
-                  ) {
+                  if (e.key === 'Enter' && !isGenerating) {
                     e.preventDefault();
+                    if (isImeComposing(e)) return;
                     handleGenerate();
                   }
                 }}

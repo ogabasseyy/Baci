@@ -26,7 +26,10 @@ export function QuizTopicInput({
     setDraft('');
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (isImeComposing(event)) return;
+    if (isImeComposing(event)) {
+      if (event.key === 'Enter') event.preventDefault();
+      return;
+    }
     if (event.key === 'Enter' || event.key === ',') {
       event.preventDefault();
       addDraft();

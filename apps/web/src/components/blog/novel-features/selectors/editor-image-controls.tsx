@@ -162,8 +162,9 @@ export function EditorImageControls({
                     if (urlError) setUrlError(null);
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !isImeComposing(event)) {
+                    if (event.key === 'Enter') {
                       event.preventDefault();
+                      if (isImeComposing(event)) return;
                       insertImageFromUrl();
                     }
                   }}
@@ -182,8 +183,9 @@ export function EditorImageControls({
               value={captionValue}
               onChange={(event) => setCaptionValue(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !isImeComposing(event)) {
+                if (event.key === 'Enter') {
                   event.preventDefault();
+                  if (isImeComposing(event)) return;
                   if (mode === 'insert') insertImageFromUrl();
                   else updateCaption();
                 }

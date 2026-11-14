@@ -771,8 +771,9 @@ export function VariantBuilder({
                           }))
                         }
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !isImeComposing(e)) {
+                          if (e.key === 'Enter') {
                             e.preventDefault();
+                            if (isImeComposing(e)) return;
                             const value = textInputs[attr.key];
                             if (value) {
                               handleAttributeAdd(attr.key, value);

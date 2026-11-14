@@ -40,7 +40,10 @@ export function TagInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (isImeComposing(e)) return;
+    if (isImeComposing(e)) {
+      if (e.key === 'Enter') e.preventDefault();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       addTag();

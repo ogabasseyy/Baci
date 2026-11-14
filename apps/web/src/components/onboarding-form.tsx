@@ -322,8 +322,9 @@ export default function OnboardingForm() {
   const handleKeyDown = async (
     e: React.KeyboardEvent<HTMLInputElement | HTMLButtonElement>
   ) => {
-    if (e.key === 'Enter' && !isImeComposing(e)) {
+    if (e.key === 'Enter') {
       e.preventDefault();
+      if (isImeComposing(e)) return;
       if (step < totalSteps) {
         await handleNext();
       } else {

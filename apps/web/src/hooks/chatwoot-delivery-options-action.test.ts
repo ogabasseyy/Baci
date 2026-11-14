@@ -120,4 +120,32 @@ describe('handleChatwootDeliveryOptionsAction', () => {
       status: 'unavailable',
     });
   });
+
+  it('accepts the canonical response state for an input alias', async () => {
+    mocks.postChatwootBridgeJson.mockResolvedValue(estimate);
+    const action = input({ state: 'Lagos State' });
+
+    await handleChatwootDeliveryOptionsAction(action);
+
+    expect(action.postResult).toHaveBeenCalledWith({
+      requestId: 'delivery-0001',
+      status: 'ready',
+      ...estimate,
+    });
+  });
+
+  it('rejects a response for a different canonical state', async () => {
+    mocks.postChatwootBridgeJson.mockResolvedValue({
+      ...estimate,
+      state: 'Oyo',
+    });
+    const action = input();
+
+    await handleChatwootDeliveryOptionsAction(action);
+
+    expect(action.postResult).toHaveBeenCalledWith({
+      requestId: 'delivery-0001',
+      status: 'unavailable',
+    });
+  });
 });

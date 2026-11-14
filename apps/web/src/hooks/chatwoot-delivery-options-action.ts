@@ -1,4 +1,8 @@
 import { postChatwootBridgeJson } from '@/components/storefront/ogabassey/components/chat/chatwoot-bridge-request';
+import {
+  getSubdivisions,
+  resolveSubdivisionCode,
+} from '@/lib/shipping/merchant-rates/subdivisions';
 import { chatwootDeliveryOptionsResponseSchema } from '@/schemas/chatwoot-delivery-options';
 
 type CartSnapshot = {
@@ -78,8 +82,14 @@ export async function handleChatwootDeliveryOptionsAction({
 
   const parsedOptions =
     chatwootDeliveryOptionsResponseSchema.safeParse(deliveryOptions);
+  const requestedSubdivisionCode = resolveSubdivisionCode('NG', state);
+  const requestedState = getSubdivisions('NG').find(
+    (subdivision) => subdivision.code === requestedSubdivisionCode
+  )?.name;
   if (
     !parsedOptions.success ||
+    !requestedState ||
+    parsedOptions.data.state !== requestedState ||
     parsedOptions.data.cartVersion !== snapshot.cartVersion ||
     parsedOptions.data.currency !== snapshot.currency ||
     parsedOptions.data.subtotalMinor !== snapshot.itemsSubtotalMinor

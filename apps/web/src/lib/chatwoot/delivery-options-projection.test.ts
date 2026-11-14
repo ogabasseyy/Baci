@@ -84,4 +84,26 @@ describe('projectChatwootDeliveryOptions', () => {
       })
     ).toBeNull();
   });
+
+  it('keeps the delivery projection NGN-only', () => {
+    const input = {
+      state: 'Lagos',
+      cartVersion: 4,
+      subtotalMinor: 250_000,
+    };
+    expect(
+      projectChatwootDeliveryOptions({
+        ...input,
+        currency: 'KWD',
+        quotes: [{ ...baseQuote, currency: 'KWD', price: 1.001 }],
+      })
+    ).toBeNull();
+    expect(
+      projectChatwootDeliveryOptions({
+        ...input,
+        currency: 'JPY',
+        quotes: [{ ...baseQuote, currency: 'JPY', price: 1.5 }],
+      })
+    ).toBeNull();
+  });
 });

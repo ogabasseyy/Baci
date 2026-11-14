@@ -62,4 +62,39 @@ describe('Chatwoot delivery options contracts', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects response prices with precision below the currency minor unit', () => {
+    const response = {
+      state: 'Lagos',
+      cartVersion: 8,
+      currency: 'NGN',
+      subtotalMinor: 250000,
+      options: [
+        {
+          displayName: 'Merchant delivery',
+          priceMajor: 2500.001,
+          currency: 'NGN',
+          pickup: false,
+        },
+      ],
+    };
+
+    expect(
+      chatwootDeliveryOptionsResponseSchema.safeParse(response).success
+    ).toBe(false);
+    expect(
+      chatwootDeliveryOptionsResponseSchema.safeParse({
+        ...response,
+        options: [
+          { ...response.options[0], priceMajor: 1.001, currency: 'KWD' },
+        ],
+      }).success
+    ).toBe(false);
+    expect(
+      chatwootDeliveryOptionsResponseSchema.safeParse({
+        ...response,
+        options: [{ ...response.options[0], priceMajor: 1.5, currency: 'JPY' }],
+      }).success
+    ).toBe(false);
+  });
 });

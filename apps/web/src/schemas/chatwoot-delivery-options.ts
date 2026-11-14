@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isMajorAmountRepresentable } from '@/lib/money/is-major-amount-representable';
 
 export const chatwootDeliveryOptionsRequestSchema = z
   .object({
@@ -13,19 +14,28 @@ const deliveryOptionSchema = z
   .object({
     displayName: z.string().min(1).max(120),
     priceMajor: z.number().finite().nonnegative(),
-    currency: z.string().regex(/^[A-Z]{3}$/),
+    currency: z.literal('NGN'),
     estimatedDays: z.number().int().min(0).max(365).optional(),
     pickup: z.boolean(),
     pickupLocation: z.string().min(1).max(240).optional(),
     pickupInstructions: z.string().min(1).max(240).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((option, context) => {
+    if (!isMajorAmountRepresentable(option.priceMajor, option.currency)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Price has precision smaller than the currency minor unit',
+        path: ['priceMajor'],
+      });
+    }
+  });
 
 export const chatwootDeliveryOptionsResponseSchema = z
   .object({
     state: z.string().min(2).max(100),
     cartVersion: z.number().int().nonnegative().safe(),
-    currency: z.string().regex(/^[A-Z]{3}$/),
+    currency: z.literal('NGN'),
     subtotalMinor: z.number().int().nonnegative().safe(),
     options: z.array(deliveryOptionSchema).max(20),
   })

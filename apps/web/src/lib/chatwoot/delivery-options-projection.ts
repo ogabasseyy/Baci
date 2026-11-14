@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { isMajorAmountRepresentable } from '@/lib/money/is-major-amount-representable';
 import type { ShippingQuote } from '@/lib/shipping/types';
 import type { ChatwootDeliveryOptionsResponse } from '@/schemas/chatwoot-delivery-options';
 
@@ -21,7 +22,7 @@ export function projectChatwootDeliveryOptions(input: {
 }): ChatwootDeliveryOptionsResponse | null {
   if (
     input.quotes.length > MAX_DELIVERY_OPTIONS ||
-    !/^[A-Z]{3}$/.test(input.currency) ||
+    input.currency !== 'NGN' ||
     !Number.isSafeInteger(input.cartVersion) ||
     input.cartVersion < 0 ||
     !Number.isSafeInteger(input.subtotalMinor) ||
@@ -38,7 +39,7 @@ export function projectChatwootDeliveryOptions(input: {
       !displayName ||
       !Number.isFinite(quote.price) ||
       quote.price < 0 ||
-      !Number.isSafeInteger(quote.price * 100) ||
+      !isMajorAmountRepresentable(quote.price, input.currency) ||
       quote.currency.trim().toUpperCase() !== input.currency
     ) {
       return null;

@@ -8,6 +8,10 @@ import {
   ChatwootCommerceContextError,
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
+import {
+  haveSameChatwootDeliveryOptionLines,
+  isChatwootDeliveryOptionsCartValid,
+} from '@/lib/chatwoot/delivery-options-cart';
 import { projectChatwootDeliveryOptions } from '@/lib/chatwoot/delivery-options-projection';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -72,19 +76,7 @@ export async function POST(request: NextRequest) {
   if (cart.estimatedTotals) {
     return unavailable(409, 'cart_requires_review');
   }
-  if (
-    cart.currency !== 'NGN' ||
-    !Number.isSafeInteger(cart.subtotalMinor) ||
-    cart.subtotalMinor < 0 ||
-    cart.lines.length === 0 ||
-    cart.lines.length > 20 ||
-    cart.lines.some(
-      (line) =>
-        !Number.isSafeInteger(line.lineTotalMinor) || line.lineTotalMinor < 0
-    ) ||
-    cart.lines.reduce((sum, line) => sum + line.lineTotalMinor, 0) !==
-      cart.subtotalMinor
-  ) {
+  if (!isChatwootDeliveryOptionsCartValid(cart)) {
     return unavailable(409, 'cart_changed');
   }
 
@@ -113,7 +105,7 @@ export async function POST(request: NextRequest) {
     merchantRates.resolvedCurrency !== 'NGN' ||
     (merchantRates.resolvedCountry && merchantRates.resolvedCountry !== 'NG')
   ) {
-    return unavailable(503, 'merchant_rate_context_unavailable');
+    return unavailable(409, 'merchant_rate_context_unavailable');
   }
 
   let latestCartContext: Awaited<ReturnType<typeof loadChatwootCartContext>>;
@@ -134,12 +126,17 @@ export async function POST(request: NextRequest) {
     return unavailable(409, 'cart_changed');
   }
   if (
+    !isChatwootDeliveryOptionsCartValid(latestCartContext.cart) ||
     latestCartContext.cart.cartId !== cart.cartId ||
     latestCartContext.cart.merchantId !== cart.merchantId ||
     latestCartContext.cart.version !== cart.version ||
     latestCartContext.cart.currency !== cart.currency ||
     latestCartContext.cart.subtotalMinor !== cart.subtotalMinor ||
-    latestCartContext.cart.estimatedTotals
+    latestCartContext.cart.estimatedTotals ||
+    !haveSameChatwootDeliveryOptionLines(
+      latestCartContext.cart.lines,
+      cart.lines
+    )
   ) {
     return unavailable(409, 'cart_changed');
   }

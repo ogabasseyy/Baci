@@ -263,6 +263,46 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
     expect(await response.json()).toMatchObject({ code: 'cart_changed' });
   });
 
+  it('reapplies line totals and subtotal invariants after rate lookup', async () => {
+    mocks.loadChatwootCartContext
+      .mockResolvedValueOnce(loadedContext())
+      .mockResolvedValueOnce(
+        loadedContext({
+          lines: [
+            {
+              ...cart.lines[0],
+              lineTotalMinor: 249_999,
+            },
+          ],
+        })
+      );
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'cart_changed' });
+  });
+
+  it('rejects changed lines even when the version and subtotal are unchanged', async () => {
+    mocks.loadChatwootCartContext
+      .mockResolvedValueOnce(loadedContext())
+      .mockResolvedValueOnce(
+        loadedContext({
+          lines: [
+            {
+              ...cart.lines[0],
+              item: { productId: 'substituted-product' },
+            },
+          ],
+        })
+      );
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'cart_changed' });
+  });
+
   it('refuses estimated cart totals and failed or non-NGN rate context', async () => {
     mocks.loadChatwootCartContext.mockResolvedValueOnce(
       loadedContext({ estimatedTotals: true })
@@ -276,6 +316,6 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
       resolvedCountry: 'US',
       quotes: [],
     });
-    expect((await POST(request())).status).toBe(503);
+    expect((await POST(request())).status).toBe(409);
   });
 });

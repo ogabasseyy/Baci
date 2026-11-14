@@ -117,10 +117,16 @@ describe('useGoalCardSetupState', () => {
     it.each([
       'idle',
       'loading',
-      'error',
     ] as const)('stays neutral while the status is unknown (%s)', (phase) => {
       mockPhase = phase;
       expect(run()).toBe('checking');
+    });
+  });
+
+  describe('bugfix: the card said "Checking your plan…" for as long as the server was down (walk 15)', () => {
+    it('settles to "can\u2019t check" once the read failed, never the ready card', () => {
+      mockPhase = 'error';
+      expect(run()).toBe('unreachable');
     });
   });
 

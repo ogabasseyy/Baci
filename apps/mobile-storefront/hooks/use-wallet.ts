@@ -12,16 +12,13 @@ import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
 import { loadWalletQuery } from './load-wallet-query';
+import { markWalletReadFailed } from './mark-wallet-read-failed';
 import { useWalletRecheckOnPiggyvest } from './use-wallet-recheck-on-piggyvest';
 import { walletKeys } from './wallet-query';
 
 export { useRedeemPoints } from './use-redeem-points';
 export type { WalletQueryData } from './wallet-query';
 export { walletKeys } from './wallet-query';
-
-// ============================================
-// HOOKS
-// ============================================
 
 const SAVINGS_INVALIDATION_DEBOUNCE_MS = 250;
 const WALLET_STRICT_STALE_TIME_MS = 30_000;
@@ -87,6 +84,8 @@ export function useWallet(options: UseWalletOptions = {}) {
     data,
     dataUpdatedAt,
     error,
+    errorUpdatedAt,
+    failureCount,
     fetchStatus,
     isError,
     isLoading,
@@ -243,8 +242,9 @@ export function useWallet(options: UseWalletOptions = {}) {
   // identity, not this render's — see lib/live-wallet-query.
   const liveWalletQuery = createLiveWalletQuery(queryClient);
 
+  const read = { dataUpdatedAt, errorUpdatedAt, failureCount };
   return {
-    data,
+    data: markWalletReadFailed(data, read),
     dataUpdatedAt,
     error,
     fetchStatus,

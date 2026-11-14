@@ -146,7 +146,7 @@ export function WalletHeroSection({
       </View>
       <View style={styles.balanceAndAccountRow}>
         <View style={styles.balanceBlock}>
-          <Text style={styles.balanceLabel}>
+          <Text style={styles.balanceLabel} numberOfLines={1}>
             {savingsView ? 'Savings wallet · NGN' : 'Total Balance · NGN'}
           </Text>
           <Text
@@ -178,16 +178,11 @@ export function WalletHeroSection({
         ) : lastKnownAccount && fundingAccount ? (
           // The server can't be reached: the last-known PiggyVest account
           // number is shown, marked as possibly out of date (walk 12).
-          <View>
-            <WalletHeroFundingAccount
-              account={fundingAccount}
-              emphasizeCopied
-              purpose="savings"
-            />
-            <Text style={styles.accountUnavailableMessage}>
-              Last known account. It may be out of date.
-            </Text>
-          </View>
+          <WalletHeroFundingAccount
+            account={fundingAccount}
+            emphasizeCopied
+            purpose="savings"
+          />
         ) : fundingAccount && legacyUnconfirmed ? (
           <Text style={styles.accountUnavailableMessage}>
             Checking your account…
@@ -208,6 +203,13 @@ export function WalletHeroSection({
           />
         )}
       </View>
+      {lastKnownAccount ? (
+        // Under the row, not in the account column, so the balance label
+        // keeps its one line (walk 15).
+        <Text style={styles.accountUnavailableMessage}>
+          Last known account. It may be out of date.
+        </Text>
+      ) : null}
       {savingsView && fundingAccount ? (
         <WalletHeroAddMoneyButton onPress={onOpenFundPanel} />
       ) : null}

@@ -156,6 +156,15 @@ describe('bugfix: cold launch with the server down stuck on "Checking your accou
     ).toBeOnTheScreen();
   });
 
+  it('keeps the balance label on one line while the hint shows (walk 15)', () => {
+    mockAccountUnconfirmed.mockReturnValue(true);
+    renderSaved();
+
+    expect(screen.getByText('Savings wallet · NGN').props.numberOfLines).toBe(
+      1
+    );
+  });
+
   it('marks the account as last known while the balance is a recalled one', () => {
     mockAccountUnconfirmed.mockReturnValue(false);
     renderSaved({ primaryStale: true });

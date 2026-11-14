@@ -48,7 +48,7 @@ CREATE FUNCTION private.get_storefront_pdp_core_v2(uuid, text, uuid)
 RETURNS TABLE(resolution_status text, product_data jsonb) LANGUAGE sql STABLE AS $$
   SELECT 'found', jsonb_build_object(
     'id', p.id, 'merchant_id', p.merchant_id, 'slug', p.slug, 'status', p.status,
-    'has_variants', p.has_variants, 'has_condition_offers', p.has_condition_offers,
+    'has_variants', p.has_variants, 'has_condition_offers', CASE WHEN p.slug='malformed-condition' THEN 'not-a-boolean' ELSE p.has_condition_offers::text END,
     'manage_stock', p.manage_stock, 'stock', p.stock, 'stock_quantity', p.stock_quantity,
     'condition', p.condition, 'default_variant_id', p.default_variant_id, 'effective_policy', p.effective_policy,
     'product_variants', coalesce((SELECT jsonb_agg(jsonb_build_object(
@@ -98,6 +98,7 @@ INSERT INTO public.products(id,merchant_id,slug,manage_stock,stock,stock_quantit
   ('66666666-6666-4666-8666-666666666666','11111111-1111-4111-8111-111111111111','unlimited',true,0,0);
 UPDATE public.products SET effective_policy='serialized_then_unlimited' WHERE slug='unlimited';
 INSERT INTO public.products(id,merchant_id,slug,manage_stock,stock,stock_quantity) VALUES
+  ('14141414-1414-4414-8414-141414141414','11111111-1111-4111-8111-111111111111','malformed-condition',true,2,2),
   ('55555555-5555-4555-8555-555555555555','11111111-1111-4111-8111-111111111111','legacy-stock',true,4,0);
 INSERT INTO public.products(id,merchant_id,slug,has_variants,manage_stock,stock,stock_quantity) VALUES
   ('88888888-8888-4888-8888-888888888888','11111111-1111-4111-8111-111111111111','variant',true,true,4,4);
@@ -161,6 +162,8 @@ DO $$ DECLARE r jsonb; BEGIN
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','legacy-stock-1',5,'legacy-stock',NULL);
   IF r->>'ok' <> 'true' THEN RAISE EXCEPTION 'positive legacy stock was hidden by zero quantity: %',r; END IF;
   UPDATE public.products SET stock=0,stock_quantity=0 WHERE slug='simple';
+  r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','malformed-condition-1',6,'malformed-condition',NULL);
+  IF r->>'code' <> 'invalid_item' OR r->>'currentVersion' <> '6' THEN RAISE EXCEPTION 'malformed snapshot error omitted current version: %',r; END IF;
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','variant-parent-legacy-1',6,'variant-parent-legacy','13131313-1313-4313-8313-131313131313');
   IF r->>'ok' <> 'true' THEN RAISE EXCEPTION 'variant parent legacy stock fallback rejected stock_quantity=0, stock=4: %',r; END IF;
   IF (SELECT canonical_command #>> '{item,condition}' FROM public.commerce_cart_operations WHERE operation_id='variant-parent-legacy-1') <> 'used' THEN RAISE EXCEPTION 'variant condition alias did not normalize'; END IF;

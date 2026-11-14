@@ -11,7 +11,7 @@ export const chatwootCartAddMutationRequestSchema = z
       .regex(/^[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*$/),
     requestId: z
       .string()
-      .min(1)
+      .min(8)
       .max(80)
       .regex(/^[A-Za-z0-9_-]+$/),
     sessionToken: z.string().min(1).max(12_000),

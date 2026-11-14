@@ -195,7 +195,7 @@ BEGIN
   END IF;
   RETURN v_result;
 EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN
-  RETURN jsonb_build_object('ok', false, 'code', 'invalid_item', 'state', null, 'currentVersion', null, 'replayed', false);
+  RETURN jsonb_build_object('ok', false, 'code', 'invalid_item', 'state', null, 'currentVersion', v_cart_version, 'replayed', false);
 END $$;
 
 REVOKE ALL ON FUNCTION public.commerce_cart_add_chatwoot(uuid,text,integer,text,uuid)

@@ -17,6 +17,33 @@ describe('Chatwoot commerce message schemas', () => {
     ).toBe(true);
   });
 
+  it('requires normalized add request IDs and UUID variant IDs', () => {
+    const base = {
+      event: 'baci-cart-add',
+      data: {
+        slug: 'variant-product',
+        variantId: '00000000-0000-4000-8000-000000000001',
+        displayedPrice: 10,
+        requestId: 'add-request-1',
+        conversationId: 905,
+        sessionToken: 'signed-session-token',
+      },
+    };
+    expect(chatwootCommerceMessageSchema.safeParse(base).success).toBe(true);
+    expect(
+      chatwootCommerceMessageSchema.safeParse({
+        ...base,
+        data: { ...base.data, requestId: 'short' },
+      }).success
+    ).toBe(false);
+    expect(
+      chatwootCommerceMessageSchema.safeParse({
+        ...base,
+        data: { ...base.data, variantId: 'not-a-uuid' },
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects unsafe cart versions on quantity messages', () => {
     expect(
       chatwootCommerceMessageSchema.safeParse({

@@ -54,6 +54,9 @@ describe('Chatwoot CSP response wiring', () => {
     expect(unbound.headers.get('Content-Security-Policy')).not.toContain(
       'https://support.example.com'
     );
+    expect(unbound.headers.get('Content-Security-Policy')).not.toContain(
+      'wss://support.example.com'
+    );
   });
 
   it('omits Chatwoot sources when tenant bindings are ambiguous', () => {

@@ -138,9 +138,12 @@ export async function payImeiWalletPayment(
   const lookup = await deps.readLookup(identity, lookupId);
   if (!lookup) return refuse('IMEI check not found.', 'LOOKUP_NOT_FOUND', 404);
   const salt = deps.hashSalt();
-  // Only a new spend or a new delivery hashes the IMEI: a finished lookup's
-  // status check answers without the salt (Codex P2).
-  if (!salt && (body.pinProof !== '' || lookup.status === 'pending'))
+  // A finished lookup answers with its own saved result (no new delivery
+  // needs the IMEI), even if the IMEI hash salt rotated since (Codex P1).
+  const finished = lookup.status !== 'pending';
+  // Only a pending lookup (a new spend or a new delivery) hashes the IMEI: a
+  // finished one answers without the salt, PIN proof or not (Codex P2).
+  if (!salt && !finished)
     return refuse(
       'IMEI lookup is temporarily unavailable.',
       'IMEI_HASH_SALT_MISSING',
@@ -163,7 +166,7 @@ export async function payImeiWalletPayment(
       'IMEI_MISMATCH',
       409
     );
-  if (!matches && body.pinProof !== '') return mismatch();
+  if (!matches && body.pinProof !== '' && !finished) return mismatch();
   const scope = walletPayScope(runtime, identity);
   const payment = await deps.check({
     runtime,
@@ -180,20 +183,30 @@ export async function payImeiWalletPayment(
       'PAYMENT_OPERATION_INVALID',
       409
     );
-  // A finished lookup answers with its own saved result (no new delivery
-  // needs the IMEI), even if the IMEI hash salt rotated since (Codex P1).
-  const finished = lookup.status !== 'pending';
-  // ...and never takes a new payment: a replacement issued while an older
+  // A finished lookup never takes a new payment: a replacement issued while an older
   // attempt's refund was being cached is not charged once the lookup has
   // finished; its saved outcome answers instead (Codex P1).
   // An empty-proof re-check still reconciles (it never sends money).
+  let current = lookup;
   if (!finished || body.pinProof === '') {
-    const result = await deps.pay({
-      runtime,
-      scope,
-      operationId: body.operationId,
-      pinProof: body.pinProof,
-    });
+    let result: PayAnswer;
+    try {
+      result = await deps.pay({
+        runtime,
+        scope,
+        operationId: body.operationId,
+        pinProof: body.pinProof,
+      });
+    } catch (error) {
+      // The database refuses to reserve a payment for a lookup that finished
+      // after it was read (serialised with saving the result; nothing was
+      // spent or sent): the saved result answers (Codex P1). Anything else,
+      // or a lookup still pending, is unknown: the route says check again.
+      const fresh = await deps.readLookup(identity, lookupId);
+      if (!fresh || fresh.status === 'pending') throw error;
+      current = fresh;
+      result = { status: 'confirmed' };
+    }
     if (result.status !== 'confirmed')
       return payResponse(result, body.operationId);
   }
@@ -202,13 +215,17 @@ export async function payImeiWalletPayment(
   // outcome, so the lookup never stays pending (Codex P2).
   const refunded =
     payment.fulfilment === 'refund_owed' || payment.fulfilment === 'refunded';
-  if (!finished && !refunded && (!matches || normalizedImei === null))
+  if (
+    current.status === 'pending' &&
+    !refunded &&
+    (!matches || normalizedImei === null)
+  )
     return mismatch();
   try {
     return await deps.deliver({
       runtime,
       identity,
-      lookup,
+      lookup: current,
       operationId: body.operationId,
       normalizedImei: normalizedImei ?? '',
       payment,

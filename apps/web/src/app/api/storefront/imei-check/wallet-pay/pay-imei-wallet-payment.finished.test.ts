@@ -95,4 +95,66 @@ describe('payImeiWalletPayment on a finished lookup', () => {
     expect(d.deliver).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
   });
+  it('bugfix: a finished lookup answers a PIN-proof request even after the salt rotated or went missing (Codex P2)', async () => {
+    const finished = {
+      ...lookup,
+      status: 'completed',
+      imei_hash: 'f'.repeat(64),
+    };
+    const rotated = deps({ readLookup: vi.fn(async () => finished as never) });
+    const response = await payImeiWalletPayment(
+      { lookupId: LOOKUP, body, auth: {} as never },
+      rotated
+    );
+    expect(response.status).toBe(200);
+    expect(rotated.pay).not.toHaveBeenCalled();
+    expect(rotated.deliver).toHaveBeenCalledTimes(1);
+    const noSalt = deps({
+      readLookup: vi.fn(async () => finished as never),
+      hashSalt: vi.fn(() => undefined),
+    });
+    const second = await payImeiWalletPayment(
+      { lookupId: LOOKUP, body, auth: {} as never },
+      noSalt
+    );
+    expect(second.status).toBe(200);
+    expect(noSalt.deliver).toHaveBeenCalledTimes(1);
+  });
+
+  it('bugfix: a lookup that finished while paying answers its saved result, never a new charge (Codex P1)', async () => {
+    // The database refuses the reservation (imei_check_already_finished):
+    // nothing was spent; the re-read lookup answers.
+    const readLookup = vi
+      .fn()
+      .mockResolvedValueOnce(lookup)
+      .mockResolvedValueOnce({ ...lookup, status: 'refunded_error' });
+    const d = deps({
+      readLookup,
+      pay: vi.fn(async () => {
+        throw new Error('imei_check_already_finished');
+      }),
+    });
+    const response = await payImeiWalletPayment(
+      { lookupId: LOOKUP, body, auth: {} as never },
+      d
+    );
+    expect(response.status).toBe(200);
+    expect(d.deliver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lookup: expect.objectContaining({ status: 'refunded_error' }),
+      })
+    );
+  });
+
+  it('rethrows a payment failure while the lookup is still pending (the route answers status unknown)', async () => {
+    const d = deps({
+      pay: vi.fn(async () => {
+        throw new Error('down');
+      }),
+    });
+    await expect(
+      payImeiWalletPayment({ lookupId: LOOKUP, body, auth: {} as never }, d)
+    ).rejects.toThrow('down');
+    expect(d.deliver).not.toHaveBeenCalled();
+  });
 });

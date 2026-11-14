@@ -47,8 +47,17 @@ describe('runWalletPayDrain', () => {
       deliver: [],
     });
     await runWalletPayDrain({ runtime, deliverers: {} }, deps);
-    expect(deps.refund).toHaveBeenCalledWith({ runtime, paymentId: A });
-    expect(deps.refund).toHaveBeenCalledWith({ runtime, paymentId: B });
+    // surfaceErrors: a reconciliation exception fails the run (Codex P2).
+    expect(deps.refund).toHaveBeenCalledWith({
+      runtime,
+      paymentId: A,
+      surfaceErrors: true,
+    });
+    expect(deps.refund).toHaveBeenCalledWith({
+      runtime,
+      paymentId: B,
+      surfaceErrors: true,
+    });
   });
 
   it('hands an uncollected payment to its product, and skips products without a deliverer', async () => {
@@ -107,7 +116,11 @@ describe('runWalletPayDrain', () => {
     });
     deps.reconcilePayment.mockRejectedValue(new Error('down'));
     const summary = await runWalletPayDrain({ runtime, deliverers: {} }, deps);
-    expect(deps.refund).toHaveBeenCalledWith({ runtime, paymentId: B });
+    expect(deps.refund).toHaveBeenCalledWith({
+      runtime,
+      paymentId: B,
+      surfaceErrors: true,
+    });
     expect(summary).toMatchObject({ failed: 1 });
   });
 });

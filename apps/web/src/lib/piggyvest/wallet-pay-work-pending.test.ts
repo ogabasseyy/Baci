@@ -27,11 +27,16 @@ beforeEach(() => {
 });
 
 describe('isWalletPayWorkPending', () => {
-  it('is false when PiggyVest savings was never installed', async () => {
-    await expect(isWalletPayWorkPending({} as NodeJS.ProcessEnv)).resolves.toBe(
-      false
-    );
-    expect(mocks.runtime).not.toHaveBeenCalled();
+  it('bugfix: throws when every savings setting is gone, never "no work" (Codex P1)', async () => {
+    // A rollback that removed every PIGGYVEST_PRIMARY_* setting leaves no
+    // way to read the database, so absence of work cannot be proven.
+    mocks.runtime.mockImplementation(() => {
+      throw new Error('missing');
+    });
+    await expect(
+      isWalletPayWorkPending({} as NodeJS.ProcessEnv)
+    ).rejects.toThrow('missing');
+    expect(mocks.listWork).not.toHaveBeenCalled();
   });
 
   it('bugfix: throws for a broken (partly removed) savings setting, never "no work" (Codex P2)', async () => {

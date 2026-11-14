@@ -326,3 +326,14 @@ describe('deliverPaidImeiLookup', () => {
     });
   });
 });
+
+describe('lookupPriceKobo', () => {
+  it('bugfix: never rounds a price that is not whole kobo, matching the database guard (Muse)', async () => {
+    const { lookupPriceKobo } = await import('./deliver-paid-imei-lookup');
+    expect(lookupPriceKobo({ amount_ngn: 500 })).toBe(50000);
+    expect(lookupPriceKobo({ amount_ngn: 5.01 })).toBe(501);
+    expect(lookupPriceKobo({ amount_ngn: '1500.5' as never })).toBe(150050);
+    expect(lookupPriceKobo({ amount_ngn: 5.005 })).toBeNaN();
+    expect(lookupPriceKobo({ amount_ngn: 'x' as never })).toBeNaN();
+  });
+});

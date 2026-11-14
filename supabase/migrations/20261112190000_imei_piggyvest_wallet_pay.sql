@@ -136,6 +136,41 @@ CREATE TRIGGER wallet_payments_refuse_refund_of_delivered_imei_check
         AND NEW.fulfilment = 'refund_owed')
   EXECUTE FUNCTION piggyvest_primary.refuse_refund_of_delivered_imei_check();
 
+-- A finished IMEI check never takes a new payment (Codex P1): reserving a
+-- payment (the PIN-proof spend, just before money is sent) re-reads its
+-- lookup under a share lock. Saving any result takes the lookup row lock
+-- first (imei_lookup_access below), so the two are serialised: a lookup that
+-- finished meanwhile refuses the reservation (nothing is spent or sent), and
+-- a reservation that won keeps the lookup pending until it commits. NOWAIT:
+-- while a result is being saved the reservation fails at once (the client
+-- re-checks) instead of waiting in the opposite lock order. A payment whose
+-- lookup row does not exist is not an IMEI purchase this guards.
+CREATE FUNCTION piggyvest_primary.refuse_charge_of_finished_imei_check()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_status text;
+BEGIN
+  SELECT lookup.status INTO v_status FROM public.imei_lookups AS lookup
+   WHERE lookup.id::text = NEW.purchase_ref
+     FOR SHARE NOWAIT;
+  IF FOUND AND v_status <> 'pending' THEN
+    RAISE EXCEPTION 'imei_check_already_finished' USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION piggyvest_primary.refuse_charge_of_finished_imei_check()
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
+CREATE TRIGGER wallet_payments_refuse_charge_of_finished_imei_check
+  BEFORE UPDATE OF state ON piggyvest_primary.wallet_payments
+  FOR EACH ROW
+  WHEN (OLD.purpose = 'imei_check' AND OLD.state = 'issued' AND NEW.state = 'reserved')
+  EXECUTE FUNCTION piggyvest_primary.refuse_charge_of_finished_imei_check();
+
 CREATE OR REPLACE FUNCTION public.imei_lookup_access(p_payload text, p_signature text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 #variable_conflict use_variable

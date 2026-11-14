@@ -9,6 +9,7 @@ const webDir = path.resolve(fixtureDir, '../..');
 const platformOrigin = process.env.CHATWOOT_FIXTURE_PLATFORM_ORIGIN;
 const certPath = process.env.CHATWOOT_FIXTURE_CERT;
 const keyPath = process.env.CHATWOOT_FIXTURE_KEY;
+const resetDelayMs = Number(process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS ?? '0');
 
 if (!platformOrigin || !certPath || !keyPath) {
   throw new Error('Missing local fixture origin or temporary TLS certificate');
@@ -25,6 +26,7 @@ export default defineConfig({
     __CHATWOOT_FIXTURE_TOKEN_B__: JSON.stringify(
       process.env.CHATWOOT_SYNTHETIC_TOKEN_B ?? ''
     ),
+    __CHATWOOT_FIXTURE_RESET_DELAY_MS__: JSON.stringify(resetDelayMs),
   },
   resolve: {
     alias: [
@@ -36,6 +38,10 @@ export default defineConfig({
       {
         find: /^\.\/ogabassey\/components\/chat\/chatwoot-inline-cart-bridge$/,
         replacement: path.join(fixtureDir, 'ChatwootBridgeFixture.tsx'),
+      },
+      {
+        find: /^\.\/reload-chatwoot-tenant-document$/,
+        replacement: path.join(fixtureDir, 'reload-tenant-document.ts'),
       },
     ],
     dedupe: ['react', 'react-dom'],

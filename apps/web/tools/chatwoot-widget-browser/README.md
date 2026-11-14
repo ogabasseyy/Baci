@@ -48,3 +48,13 @@ The test should run only against the named disposable Chatwoot runtime. It
 creates one synthetic message in tenant A through the real SDK widget; it does
 not create orders or payments. The SDK's widget-ready flow also creates
 synthetic visitor session cookies used to verify tenant isolation.
+
+For reset-race diagnostics, `CHATWOOT_FIXTURE_RESET_DELAY_MS` accepts an
+integer from 0 to 2000 and delays only the fixture's document reload after
+the SDK reset call. The default is 0, matching the normal lifecycle. The
+fixture records whether a post-reset SDK `loaded` or `setAuthCookie` message
+restores tenant A's cookie, without recording cookie values or message
+payloads. It also sends a harmless synthetic `loaded` message from a sandboxed
+opaque-origin iframe and reports whether the SDK handler accepts it. These
+diagnostics exercise the local SDK and fixture CSP; they do not change
+production code.

@@ -16,6 +16,7 @@ const storefrontAuthority = 'localhost';
 const storefrontPort = Number(
   process.env.CHATWOOT_FIXTURE_STOREFRONT_PORT ?? 43128
 );
+const resetDelayMs = Number(process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS ?? '0');
 const platformPort = Number(
   process.env.CHATWOOT_FIXTURE_PLATFORM_PORT ?? 43129
 );
@@ -39,6 +40,14 @@ if (
 ) {
   throw new Error('Provide two distinct synthetic Chatwoot website tokens');
 }
+if (
+  !Number.isInteger(resetDelayMs) ||
+  resetDelayMs < 0 ||
+  resetDelayMs > 2000
+) {
+  throw new Error('Synthetic reset delay must be an integer from 0 to 2000 ms');
+}
+process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS = String(resetDelayMs);
 
 async function assertPortAvailable(host, port) {
   await new Promise((resolve, reject) => {
@@ -104,6 +113,9 @@ let browser;
 let page;
 let tenantAInboxId;
 let tenantBResult;
+let untrustedFrameProbe;
+let tenantACookieMetadata;
+let tenantBDocumentCookieMetadata;
 const blockedOrigins = new Set();
 const browserSignals = {
   consoleErrors: [],
@@ -337,6 +349,131 @@ https://${storefrontAuthority}:${platformPort} {
     page,
     tenantAWidgetFrame
   );
+  tenantACookieMetadata = (await context.cookies(storefrontOrigin))
+    .filter((cookie) => cookie.name.startsWith('cw_'))
+    .map(({ name, domain, path: cookiePath, sameSite, secure, httpOnly }) => ({
+      name:
+        name === 'cw_conversation'
+          ? 'conversation'
+          : name.startsWith('cw_user_')
+            ? 'user'
+            : 'other',
+      domain,
+      path: cookiePath,
+      sameSite,
+      secure,
+      httpOnly,
+    }));
+  await page.evaluate((resetDelayMs) => {
+    const target = window;
+    const widget = target.$chatwoot;
+    if (!widget?.reset) throw new Error('SDK reset method unavailable');
+    const originalReset = widget.reset.bind(widget);
+    const originalOnMessage = target.onmessage;
+    const matchesPreviousInbox = () => {
+      const rawCookie = document.cookie
+        .split('; ')
+        .find((entry) => entry.startsWith('cw_conversation='))
+        ?.slice('cw_conversation='.length);
+      if (!rawCookie) return false;
+      const payload = rawCookie
+        .split('.')[1]
+        ?.replace(/-/g, '+')
+        .replace(/_/g, '/');
+      if (!payload) return false;
+      try {
+        const claims = JSON.parse(
+          atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '='))
+        );
+        return (
+          String(claims.inbox_id) ===
+          sessionStorage.getItem('__chatwootPreviousInbox')
+        );
+      } catch {
+        return false;
+      }
+    };
+    target.onmessage = (event) => {
+      let cookieWriteEvent = null;
+      if (typeof event.data === 'string') {
+        try {
+          const message = JSON.parse(
+            event.data.replace(/^chatwoot-widget:/, '')
+          );
+          if (message.event === 'loaded' || message.event === 'setAuthCookie') {
+            cookieWriteEvent = message.event;
+          }
+        } catch {
+          cookieWriteEvent = null;
+        }
+      }
+      const trackCookieWriteEvent =
+        cookieWriteEvent !== null &&
+        sessionStorage.getItem('__chatwootFixtureResetRequested') === 'true';
+      const beforeMatchesTenantA = trackCookieWriteEvent
+        ? matchesPreviousInbox()
+        : false;
+      const result = originalOnMessage?.call(target, event);
+      if (trackCookieWriteEvent) {
+        const rawEvents = sessionStorage.getItem(
+          '__chatwootFixturePostResetLoadedEvents'
+        );
+        let events = [];
+        try {
+          events = JSON.parse(rawEvents ?? '[]');
+        } catch {
+          events = [];
+        }
+        events.push({
+          event: cookieWriteEvent,
+          resetTriggered: target.$chatwoot?.resetTriggered === true,
+          sourceMatchesWidgetFrame:
+            event.source ===
+            document.getElementById('chatwoot_live_chat_widget')?.contentWindow,
+          beforeMatchesTenantA,
+          afterMatchesTenantA: matchesPreviousInbox(),
+        });
+        sessionStorage.setItem(
+          '__chatwootFixturePostResetLoadedEvents',
+          JSON.stringify(events.slice(-8))
+        );
+      }
+      return result;
+    };
+    widget.reset = () => {
+      sessionStorage.setItem('__chatwootFixtureResetRequested', 'true');
+      const beforeMatchesTenantA = matchesPreviousInbox();
+      const result = originalReset();
+      target.__chatwootFixtureResetEvidence = {
+        beforeMatchesTenantA,
+        afterMatchesTenantA: matchesPreviousInbox(),
+      };
+      sessionStorage.setItem(
+        '__chatwootFixtureResetEvidence',
+        JSON.stringify(target.__chatwootFixtureResetEvidence)
+      );
+      if (resetDelayMs > 0) {
+        const samples = [];
+        const sampleCookie = () => {
+          const matched = matchesPreviousInbox();
+          if (samples.length === 0 || samples.at(-1) !== matched) {
+            samples.push(matched);
+            sessionStorage.setItem(
+              '__chatwootFixtureResetCookieTransitions',
+              JSON.stringify(samples)
+            );
+          }
+        };
+        sampleCookie();
+        const interval = window.setInterval(sampleCookie, 10);
+        window.setTimeout(
+          () => window.clearInterval(interval),
+          resetDelayMs - 50
+        );
+      }
+      return result;
+    };
+  }, resetDelayMs);
 
   phase = 'defer tenant switch during checkout';
   await page.getByRole('button', { name: 'Switch to tenant B' }).click();
@@ -361,6 +498,21 @@ https://${storefrontAuthority}:${platformPort} {
     page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
     page.getByRole('button', { name: 'Continue outside checkout' }).click(),
   ]);
+  tenantBDocumentCookieMetadata = (await context.cookies(storefrontOrigin))
+    .filter((cookie) => cookie.name.startsWith('cw_'))
+    .map(({ name, domain, path: cookiePath, sameSite, secure, httpOnly }) => ({
+      name:
+        name === 'cw_conversation'
+          ? 'conversation'
+          : name.startsWith('cw_user_')
+            ? 'user'
+            : 'other',
+      domain,
+      path: cookiePath,
+      sameSite,
+      secure,
+      httpOnly,
+    }));
   await page.waitForFunction(
     ({ expectedToken }) => {
       const target = window;
@@ -401,8 +553,84 @@ https://${storefrontAuthority}:${platformPort} {
       currentInbox: current?.inbox_id ?? null,
       bridgeTenant: document.querySelector('[data-testid="bridge-tenant"]')
         ?.textContent,
+      resetEvidence: (() => {
+        try {
+          return JSON.parse(
+            sessionStorage.getItem('__chatwootFixtureResetEvidence') ?? 'null'
+          );
+        } catch {
+          return null;
+        }
+      })(),
+      postResetLoadedEvents: (() => {
+        try {
+          return JSON.parse(
+            sessionStorage.getItem('__chatwootFixturePostResetLoadedEvents') ??
+              '[]'
+          );
+        } catch {
+          return [];
+        }
+      })(),
+      resetCookieTransitions: (() => {
+        try {
+          return JSON.parse(
+            sessionStorage.getItem('__chatwootFixtureResetCookieTransitions') ??
+              '[]'
+          );
+        } catch {
+          return [];
+        }
+      })(),
     };
   });
+  untrustedFrameProbe = await page.evaluate(
+    async ({ marker, widgetMessage }) => {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.style.display = 'none';
+      const result = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener('message', onMessage, true);
+          frame.remove();
+          resolve(value);
+        };
+        const onMessage = (event) => {
+          if (event.source !== frame.contentWindow) return;
+          window.setTimeout(() => {
+            const cookie = document.cookie
+              .split('; ')
+              .find((entry) => entry.startsWith('cw_conversation='));
+            finish({
+              received: true,
+              opaqueOrigin: event.origin === 'null',
+              sourceIsWidgetFrame:
+                event.source ===
+                document.getElementById('chatwoot_live_chat_widget')
+                  ?.contentWindow,
+              cookieWriteAccepted: cookie === `cw_conversation=${marker}`,
+            });
+          }, 0);
+        };
+        window.addEventListener('message', onMessage, true);
+        const script = `parent.postMessage(${JSON.stringify(widgetMessage)}, "*")`;
+        frame.srcdoc = ['<script>', script, '</script>'].join('');
+        document.body.append(frame);
+        window.setTimeout(() => finish({ received: false }), 2_000);
+      });
+      return result;
+    },
+    {
+      marker: 'baci-synthetic-untrusted-iframe-cookie',
+      widgetMessage: `chatwoot-widget:${JSON.stringify({
+        event: 'loaded',
+        config: { authToken: 'baci-synthetic-untrusted-iframe-cookie' },
+      })}`,
+    }
+  );
   phase = 'assert tenant B isolation';
   await page.evaluate(() => window.$chatwoot?.toggle?.('open'));
   const tenantBWidgetFrame = page
@@ -433,10 +661,27 @@ https://${storefrontAuthority}:${platformPort} {
     0,
     'A stale Chatwoot cookie remained at tenant B document start'
   );
+  assert.deepEqual(tenantBResult.resetEvidence, {
+    beforeMatchesTenantA: true,
+    afterMatchesTenantA: false,
+  });
   assert.equal(tenantBResult.previousInbox, String(tenantAClaims.inbox_id));
   assert.notEqual(tenantBResult.currentInbox, tenantAClaims.inbox_id);
   assert.equal(tenantBResult.bridgeTenant, 'synthetic-tenant-b');
   assert.deepEqual([...blockedOrigins], []);
+  console.log(
+    `Sanitized reset cookie evidence: ${JSON.stringify({
+      resetEvidence: tenantBResult.resetEvidence,
+      postResetLoadedEvents: tenantBResult.postResetLoadedEvents,
+      resetCookieTransitions: tenantBResult.resetCookieTransitions,
+      tenantACookieMetadata,
+      tenantBDocumentCookieMetadata,
+      tenantBStartCookiePresent: Boolean(
+        tenantBResult.documentStart?.conversationCookiePresent
+      ),
+      untrustedFrameProbe,
+    })}`
+  );
   await context.close();
   console.log(
     'Synthetic Chatwoot lifecycle passed: tenant A message visible in A and absent in B; no external origins requested.'
@@ -490,6 +735,12 @@ https://${storefrontAuthority}:${platformPort} {
         documentStartCookieMatchesTenantA: Boolean(
           tenantBResult?.documentStart?.conversationCookieMatchesPreviousInbox
         ),
+        resetEvidence: tenantBResult?.resetEvidence ?? null,
+        resetCookieTransitions: tenantBResult?.resetCookieTransitions ?? [],
+        postResetLoadedEvents: tenantBResult?.postResetLoadedEvents ?? [],
+        untrustedFrameProbe,
+        tenantACookieMetadata,
+        tenantBDocumentCookieMetadata,
         previousInboxMatchesTenantA:
           tenantBResult?.previousInbox === String(tenantAInboxId),
         currentInboxMatchesTenantA:

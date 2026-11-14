@@ -132,7 +132,34 @@ it('waits for admitted owner work to settle during shutdown', async () => {
     },
   });
   const port = await listener.listen(0);
-  const requestDone = post(port, '/internal/owner/preview').catch(() => 0);
+  const requestDone = new Promise<{ status: number; body: string }>(
+    (resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/internal/owner/preview',
+          method: 'POST',
+          headers: {
+            host: 'mcp.usebaci.com',
+            'content-type': 'application/json',
+            'x-baci-owner-signature': 'a'.repeat(64),
+          },
+        },
+        (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            body += chunk;
+          });
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+          res.on('error', reject);
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    }
+  ).catch(() => ({ status: 0, body: '' }));
   await started;
   let closed = false;
   const closing = listener.close().then(() => {
@@ -144,6 +171,6 @@ it('waits for admitted owner work to settle during shutdown', async () => {
   } finally {
     release();
     await closing;
-    await requestDone;
+    expect(await requestDone).toEqual({ status: 200, body: '{"ok":true}' });
   }
 });

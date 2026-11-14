@@ -104,7 +104,7 @@ export function createOwnerInternalNodeServer(options: {
             else resolve();
           })
         );
-        server.closeAllConnections();
+        server.closeIdleConnections();
         await stopped;
         await Promise.allSettled([...pending]);
       })();

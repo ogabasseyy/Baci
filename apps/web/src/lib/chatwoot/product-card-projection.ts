@@ -156,6 +156,7 @@ export function projectChatwootProductCard(input: {
     typeof product.name !== 'string' ||
     !product.name.trim() ||
     product.name.length > MAX_NAME_LENGTH ||
+    typeof product.has_variants !== 'boolean' ||
     product.has_condition_offers !== false
   ) {
     return {
@@ -166,7 +167,7 @@ export function projectChatwootProductCard(input: {
           : 'product_unavailable',
     };
   }
-  const hasVariants = product.has_variants === true;
+  const hasVariants = product.has_variants;
   const basePrice = toPrice(product.price);
   if (basePrice === null) return { ok: false, code: 'product_unavailable' };
 

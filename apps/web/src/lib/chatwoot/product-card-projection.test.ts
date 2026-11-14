@@ -286,6 +286,21 @@ describe('projectChatwootProductCard', () => {
     ).toEqual({ ok: false, code: 'product_unavailable' });
   });
 
+  it('fails closed when the canonical variant model is missing or malformed', () => {
+    expect(project(product({ has_variants: undefined }))).toEqual({
+      ok: false,
+      code: 'product_unavailable',
+    });
+    expect(project(product({ has_variants: 'false' }))).toEqual({
+      ok: false,
+      code: 'product_unavailable',
+    });
+    expect(project(product({ has_variants: null }))).toEqual({
+      ok: false,
+      code: 'product_unavailable',
+    });
+  });
+
   it('drops unsafe image URLs and rejects malformed variant options', () => {
     const unsafeImage = project(product({ images: ['javascript:alert(1)'] }));
     expect(unsafeImage.ok && unsafeImage.product).not.toHaveProperty('image');

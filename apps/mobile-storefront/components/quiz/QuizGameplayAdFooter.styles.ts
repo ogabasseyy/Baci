@@ -18,8 +18,13 @@ export function createQuizGameplayAdFooterStyles(colors: {
       minHeight: 250,
       width: '100%',
     },
+    // The inline ad is a fixed 300pt wide. Bleeding through the results
+    // card's 20pt side padding gives it the full screen width, so it fits a
+    // 320pt phone.
     inline: {
       alignItems: 'center',
+      alignSelf: 'stretch',
+      marginHorizontal: -20,
       paddingTop: 8,
     },
     footer: {

@@ -215,9 +215,9 @@ export function QuizResultsPanel({
                 Ties go to the faster finish.
               </Text>
             ) : null}
-            {lifecycle === 'pending_results' && adSlot ? (
-              <View style={styles.resultsAdSlot}>{adSlot}</View>
-            ) : null}
+            {/* No wrapper: when the ad withholds itself the slot renders
+                nothing, so it leaves no empty gap in the card. */}
+            {lifecycle === 'pending_results' ? adSlot : null}
             {v2Result?.availability === 'final' && v2Result.prizeClaim ? (
               <QuizPrizeClaimPanel
                 prizeClaim={v2Result.prizeClaim}

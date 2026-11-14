@@ -40,7 +40,12 @@ export function QuizStandingsPodium({
             <QuizPlayerAvatar
               accentColor={medal}
               displayName={entry.displayName}
-              surfaceColor={styles.finalStandingCurrentRow.backgroundColor}
+              // Only the player's own avatar gets the highlight wash.
+              surfaceColor={
+                entry.isCurrentCustomer
+                  ? styles.finalStandingCurrentRow.backgroundColor
+                  : styles.resultIcon.backgroundColor
+              }
             />
             <Text
               numberOfLines={1}

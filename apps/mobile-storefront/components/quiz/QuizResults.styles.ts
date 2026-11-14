@@ -96,8 +96,5 @@ export function createQuizResultsStyles(colors: QuizThemeColors) {
       fontWeight: '600',
       textAlign: 'center',
     },
-    // The ad is a fixed 300pt wide. Bleeding through the card's 20pt side
-    // padding gives it the full screen width, so it fits a 320pt phone.
-    resultsAdSlot: { alignSelf: 'stretch', marginHorizontal: -20 },
   });
 }

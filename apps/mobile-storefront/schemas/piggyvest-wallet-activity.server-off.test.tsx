@@ -35,4 +35,23 @@ describe('PiggyVest wallet activity page schema with the server keeping PiggyVes
     expect(parse('2026-11-13T10:00:00+00:00')).toBe(true);
     expect(parse('yesterday')).toBe(false);
   });
+
+  it('bugfix: shortens an over-long label instead of failing the whole page', () => {
+    const page = piggyvestWalletActivityPageSchema.parse({
+      items: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          kind: 'savings_contribution',
+          direction: 'out',
+          amountKobo: 5000,
+          feeKobo: 0,
+          label: `Saved to ${'x'.repeat(700)}`,
+          status: 'completed',
+          occurredAt: '2026-11-13T10:00:00+00:00',
+        },
+      ],
+      nextCursor: null,
+    });
+    expect(page.items[0].label).toHaveLength(600);
+  });
 });

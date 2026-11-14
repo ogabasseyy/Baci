@@ -14,7 +14,12 @@ const item = z.strictObject({
   amountKobo: z.number().int().positive(),
   /** PiggyVest's deposit fee (0 for other movements). */
   feeKobo: z.number().int().nonnegative(),
-  label: z.string().min(1).max(600),
+  // Goal titles are not length-bounded where they are created: shorten for
+  // display instead of failing the whole page (the server does the same).
+  label: z
+    .string()
+    .min(1)
+    .transform((value) => value.slice(0, 600)),
   status: z.enum(['completed', 'pending']),
   occurredAt: z.iso.datetime({ offset: true }),
 });

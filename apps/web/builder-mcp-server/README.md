@@ -54,6 +54,12 @@ runner or attestation work already in flight. End-to-end cancellation or a
 separately qualified bounded-work strategy remains required before enabling
 the owner bridge.
 
+`owner-internal-node.ts` is a local candidate for a separate loopback-only
+owner listener. It is not wired into the production stack and does not provide
+TLS, mutual authentication, or a private network path. The current production
+composition still shares the MCP listener; do not treat the candidate's local
+separation test as deployed ingress evidence.
+
 Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the
 web gateway or the isolated runner.

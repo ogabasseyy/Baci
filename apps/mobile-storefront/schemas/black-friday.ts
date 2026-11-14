@@ -6,7 +6,7 @@ export const blackFridayResponseSchema = z.object({
       id: z.string(),
       slug: z.string().regex(/^[a-z0-9-]+$/i),
       name: z.string(),
-      image: z.string(),
+      image: z.string().nullish(),
       price: z.string(),
       compareAtPrice: z.string().optional(),
     })

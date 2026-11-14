@@ -199,7 +199,7 @@ describe('HomeServiceCards', () => {
     mockOrderShortcuts.mockReturnValue({ receipts: true, tracking: true });
     rerender(<HomeServiceCards placement="underSearch" />);
     fireEvent.press(screen.getByRole('button', { name: /^Track Order/ }));
-    expect(mockPush).toHaveBeenCalledWith('/track-order');
+    expect(mockPush).toHaveBeenCalledWith('/orders');
   });
 
   it('routes each shortcut to its service screen', () => {

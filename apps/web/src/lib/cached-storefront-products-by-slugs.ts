@@ -1,5 +1,7 @@
 import { cacheLife, cacheTag } from 'next/cache';
+import { projectAdvertisedPhonePrices } from '@/lib/advertised-phone-price-projection';
 import {
+  getPublicProductVariantsByProductIds,
   getPublicSupabaseClient,
   hydrateAndSanitizeProducts,
   type StorefrontHomeProduct,
@@ -15,7 +17,7 @@ import {
  */
 const PRODUCTS_BY_SLUG_SELECT = `
       id, name, slug, description, price, compare_at_price, created_at,
-      images, category, brand, condition, has_condition_offers, stock, stock_quantity,
+      images, category, brand, condition, has_condition_offers, has_variants, variant_model, stock, stock_quantity,
       manage_stock, low_stock_threshold,
       categories:category_id(id, name, slug, parent_id),
       product_categories(categories(name, slug))
@@ -97,5 +99,9 @@ export async function getCachedStorefrontProductsBySlugs(
     throw error;
   }
 
-  return hydrateAndSanitizeProducts(supabase, merchantId, data ?? []);
+  return projectAdvertisedPhonePrices(
+    merchantId,
+    await hydrateAndSanitizeProducts(supabase, merchantId, data ?? []),
+    getPublicProductVariantsByProductIds
+  );
 }

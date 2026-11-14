@@ -32,7 +32,7 @@ export function selectBlackFridayProducts<T extends StorefrontHomeProduct>(
       product.slug &&
       Number.isFinite(price) &&
       price > 0 &&
-      (!product.manage_stock || stock > 0)
+      (!product.manage_stock || stock > 0 || product.availability === 'InStock')
     ) {
       available.set(product.slug, product);
     }
@@ -78,7 +78,7 @@ const conditionLabels = {
   new: 'New',
   used: 'Used',
   open_box: 'Open Box',
-  refurbished: 'refurbished',
+  refurbished: 'Refurbished',
 } as const;
 
 export const getBlackFridayProducts = cache(async () => {
@@ -109,7 +109,7 @@ export const getBlackFridayProducts = cache(async () => {
         slug: product.slug,
         image: product.image,
         ...getBlackFridayProductSpecs(specsById.get(product.id)),
-        brand: product.brand.trim(),
+        brand: (product.brand ?? '').trim(),
         condition: product.condition
           ? conditionLabels[product.condition]
           : undefined,

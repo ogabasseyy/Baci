@@ -7,7 +7,12 @@ export async function GET() {
     return NextResponse.json(
       { products },
       {
-        headers: { 'Cache-Control': 'no-store' },
+        headers: {
+          'Cache-Control':
+            process.env.NODE_ENV === 'development'
+              ? 'no-store'
+              : 'public, s-maxage=60, stale-while-revalidate=120',
+        },
       }
     );
   } catch {

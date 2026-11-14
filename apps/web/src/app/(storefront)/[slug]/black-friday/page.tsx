@@ -1,9 +1,11 @@
+import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { OgabasseyBlackFridayPage } from '@/app/(storefront)/ogabassey/ogabassey-black-friday-page';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { isPublishedOgabassey } from '@/lib/ogabassey-black-friday';
+import { buildRequestScopedStoreUrl } from '@/lib/store-url';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { isDomainIdentifier } from '@/lib/validation';
 import CategoryPage, {
@@ -27,8 +29,30 @@ function asCategoryProps(props: PageProps) {
   };
 }
 
-export function generateMetadata(props: PageProps) {
-  return generateCategoryMetadata(asCategoryProps(props));
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const { slug } = await props.params;
+  const merchant = await getRequestScopedMerchant(slug);
+  if (!merchant || !isPublishedOgabassey(merchant)) {
+    return generateCategoryMetadata(asCategoryProps(props));
+  }
+
+  const canonical = `${buildRequestScopedStoreUrl(merchant, await headers())}/black-friday`;
+  const title = 'Black Friday 2026 | Ogabassey';
+  const description =
+    'Explore Ogabassey’s curated Black Friday device lineup for 27 November 2026.';
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    robots: { index: false, follow: true },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: 'website',
+      images: ['/campaigns/black-friday-hero-768.webp'],
+    },
+  };
 }
 
 async function BlackFridayRuntime(props: PageProps) {

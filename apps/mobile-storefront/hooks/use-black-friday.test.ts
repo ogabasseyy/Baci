@@ -11,7 +11,7 @@ afterAll(() => fetchMock.mockRestore());
 
 it('reads the shared lineup in the order returned by the server', async () => {
   const products = [
-    { id: '2', slug: 'second', name: 'Second', price: '₦2', image: '' },
+    { id: '2', slug: 'second', name: 'Second', price: '₦2', image: null },
     { id: '1', slug: 'first', name: 'First', price: '₦1', image: '' },
   ];
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ products })));

@@ -100,7 +100,7 @@ const HOME_FEATURES: ServiceShortcut[] = [
   {
     title: 'Track Order',
     subtitle: 'Check your delivery status',
-    href: '/track-order',
+    href: '/orders',
     icon: 'cube-outline',
     accent: '#8a5232',
   },
@@ -148,7 +148,7 @@ export function HomeServiceCards({
     const features = HOME_FEATURES.map((item) => {
       if (item.href === '/receipts' && !orderShortcuts?.receipts)
         return returnsShortcut;
-      if (item.href === '/track-order' && !orderShortcuts?.tracking)
+      if (item.href === '/orders' && !orderShortcuts?.tracking)
         return protectionShortcut;
       return item;
     });

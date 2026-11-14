@@ -145,7 +145,7 @@ export default function CategoryScreen() {
 
   const renderEmpty = () => {
     // BUG-2-004 FIX: Show error for invalid slug
-    if (!isValidSlug) {
+    if (!isValidSlug || (budgetPhones && !categoriesLoading && !categoryId)) {
       return (
         <View style={styles.emptyContainer}>
           <Ionicons

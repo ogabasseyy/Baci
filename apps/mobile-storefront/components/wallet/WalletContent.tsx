@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { RefreshControl, type StyleProp, type ViewStyle } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import type Colors from '@/constants/Colors';
+import { useRefetchOnRefocus } from '@/hooks/use-refetch-on-refocus';
 import { useUserPullRefresh } from '@/hooks/use-user-pull-refresh';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -13,6 +14,7 @@ import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
 import type { SavingsVariantResolveResult } from './resolve-completed-savings-goal-variant';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
+import { useWalletPrimaryUnknown } from './use-wallet-primary-unknown';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
@@ -62,6 +64,8 @@ export interface WalletContentProps {
   needsPhone: boolean;
   primaryReady?: boolean;
   walletPrimaryUnsettled?: boolean;
+  /** The PiggyVest read failed: balance and account can't be checked. */
+  primaryUnreadable?: boolean;
   savingsPrimary?: boolean;
   onCreateFundingAccount: () => void;
   onChangeFundAmount: (value: string) => void;
@@ -166,6 +170,11 @@ export function WalletContent(props: WalletContentProps) {
     activeSavingsGoal?.id
   );
   const pullRefresh = useUserPullRefresh(onRefresh);
+  useRefetchOnRefocus(onRefresh); // re-entry re-reads the wallet once
+  const primaryUnknown = useWalletPrimaryUnknown(
+    props.merchantId,
+    props.primaryUnreadable
+  );
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
   return (
     <WalletPrimaryContext.Provider value={isPrimaryWallet(props)}>
@@ -198,6 +207,7 @@ export function WalletContent(props: WalletContentProps) {
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           primaryBalanceReady={props.primaryReady === true}
+          primaryUnknown={primaryUnknown}
           savingsBalance={savingsBalance}
           savingsWalletBalance={walletBalance}
           storeCreditBalance={props.storeCreditBalance}

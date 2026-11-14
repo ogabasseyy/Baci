@@ -144,6 +144,12 @@ export function deriveWalletDisplayData(
     walletData.owner_unresolved === true
       ? { walletPrimaryUnsettled: true as const }
       : {}),
+    // The PiggyVest read failed (server unreachable): the wallet can't say
+    // what this customer's balance is. Callers gate it to the PiggyVest
+    // merchant and show a "can't check" state, never the goals total.
+    ...(walletData.primary_unavailable === true && !primaryReady
+      ? { primaryUnreadable: true as const }
+      : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),
     walletBalance,

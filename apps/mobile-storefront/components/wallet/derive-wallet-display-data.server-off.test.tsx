@@ -123,3 +123,20 @@ describe('bugfix: malformed PiggyVest balance on a PiggyVest account', () => {
     expect(display.walletBalance).toBe(1_000);
   });
 });
+
+describe('bugfix: unreachable PiggyVest read presented as a known wallet (walk 10)', () => {
+  it('flags the wallet as unreadable when the PiggyVest read failed', () => {
+    const display = deriveWalletDisplayData({
+      balance: 0,
+      primary_unavailable: true,
+      savings_balance: 800_000,
+    });
+    expect(display.primaryUnreadable).toBe(true);
+  });
+
+  it('adds no flag for a wallet the server rules PiggyVest out for', () => {
+    expect(deriveWalletDisplayData({ balance: 0 }).primaryUnreadable).toBe(
+      undefined
+    );
+  });
+});

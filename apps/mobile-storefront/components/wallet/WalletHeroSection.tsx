@@ -42,6 +42,8 @@ type WalletHeroSectionProps = {
   savingsWalletBalance?: number;
   /** PiggyVest balance ready (vs pending); defaults to the context. */
   primaryBalanceReady?: boolean;
+  /** PiggyVest merchant whose PiggyVest read failed: nothing to show yet. */
+  primaryUnknown?: boolean;
   /** PiggyVest only: the legacy balance purchases can spend. */
   storeCreditBalance?: number;
   totalBalance: number;
@@ -72,6 +74,7 @@ export function WalletHeroSection({
   onOpenRedeemPanel,
   onStartSavings,
   primaryBalanceReady,
+  primaryUnknown,
   savingsBalance,
   savingsWalletBalance,
   storeCreditBalance,
@@ -90,8 +93,13 @@ export function WalletHeroSection({
   const pendingPiggyvest =
     (primaryReady && !balanceReady) ||
     (!primaryReady && fundingAccount?.provider === 'piggyvest');
-  const savingsView = primaryReady || pendingPiggyvest;
-  const storeCredit = storeCreditBalance;
+  // The PiggyVest read failed (Fable walk 10): never present the goals
+  // total as the balance; the older balance is still store credit.
+  const balanceUnknown = pendingPiggyvest || primaryUnknown === true;
+  const savingsView = primaryReady || balanceUnknown;
+  const storeCredit = primaryUnknown
+    ? (storeCreditBalance ?? savingsWalletBalance)
+    : storeCreditBalance;
   // A legacy account number from a wallet cached before the merchant's
   // PiggyVest status is known stays hidden until it is (Codex).
   const legacyUnconfirmed = useLegacyFundingUnconfirmed(
@@ -105,7 +113,7 @@ export function WalletHeroSection({
     !savingsView ||
     storeCredit === undefined ||
     hasSpendableBalance({
-      savingsWalletBalance: pendingPiggyvest ? 0 : savingsWalletBalance,
+      savingsWalletBalance: balanceUnknown ? 0 : savingsWalletBalance,
       storeCreditBalance: storeCredit,
       // Utilities' own switch, not IMEI's (Codex): the shortcuts open them.
       savingsWalletCanPay: SAVINGS_WALLET_CAN_PAY_UTILITIES,
@@ -135,7 +143,7 @@ export function WalletHeroSection({
             adjustsFontSizeToFit
             minimumFontScale={0.55}
           >
-            {pendingPiggyvest
+            {balanceUnknown
               ? '—'
               : formatNgnCurrency(
                   // One name for the PiggyVest main wallet: the hero shows
@@ -144,8 +152,18 @@ export function WalletHeroSection({
                 )}
           </Text>
           {savingsView ? <WalletHeroStoreCredit balance={storeCredit} /> : null}
+          {primaryUnknown ? (
+            <Text style={styles.accountUnavailableMessage}>
+              Can’t check your savings balance right now.
+            </Text>
+          ) : null}
         </View>
-        {fundingAccount && legacyUnconfirmed ? (
+        {!fundingAccount && primaryUnknown ? (
+          // The account state is unknown: never offer to create one.
+          <Text style={styles.accountUnavailableMessage}>
+            Can’t check your account right now.
+          </Text>
+        ) : fundingAccount && legacyUnconfirmed ? (
           <Text style={styles.accountUnavailableMessage}>
             Checking your account…
           </Text>
@@ -168,7 +186,9 @@ export function WalletHeroSection({
       {savingsView && fundingAccount ? (
         <WalletHeroAddMoneyButton onPress={onOpenFundPanel} />
       ) : null}
-      {!fundingAccount && createFundingAccountUnavailableMessage ? (
+      {!fundingAccount &&
+      !primaryUnknown &&
+      createFundingAccountUnavailableMessage ? (
         <Text style={styles.accountUnavailableMessage}>
           {createFundingAccountUnavailableMessage}
         </Text>

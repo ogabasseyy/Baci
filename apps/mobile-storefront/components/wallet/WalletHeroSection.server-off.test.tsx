@@ -35,3 +35,46 @@ describe('server keeps PiggyVest off', () => {
     expect(screen.queryByText(SERVER_OFF_ACCOUNT_NUMBER)).toBeNull();
   });
 });
+
+describe('bugfix: server unreachable showed the goals total as the balance (walk 10)', () => {
+  function renderUnknown() {
+    render(
+      <WalletHeroSection
+        canCreateFundingAccount
+        earningsAvailable={false}
+        earningsBalance={null}
+        loyaltyPoints={0}
+        onOpenFundPanel={jest.fn()}
+        onOpenRedeemPanel={jest.fn()}
+        primaryUnknown
+        savingsBalance={800_000}
+        savingsWalletBalance={0}
+        totalBalance={800_000}
+      />
+    );
+  }
+
+  it('shows no balance and says it cannot check, never the goals total', () => {
+    renderUnknown();
+
+    expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText('Can’t check your savings balance right now.')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Total Balance · NGN')).toBeNull();
+    // The goals total stays a goals figure, never the headline balance.
+    expect(screen.getByText('In goals')).toBeOnTheScreen();
+  });
+
+  it('never offers to create an account while the account state is unknown', () => {
+    renderUnknown();
+
+    expect(
+      screen.queryByRole('button', { name: 'Create account number' })
+    ).toBeNull();
+    expect(
+      screen.getByText('Can’t check your account right now.')
+    ).toBeOnTheScreen();
+  });
+});

@@ -98,11 +98,9 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                if (isImeComposing(e)) {
-                  // Cancel the composing Enter so a surrounding form cannot submit.
-                  e.preventDefault();
-                  return;
-                }
+                // Cancel Enter so a surrounding form cannot submit implicitly.
+                e.preventDefault();
+                if (isImeComposing(e)) return;
                 const url = getUrlFromString(value);
                 if (url) {
                   editor.chain().focus().setLink({ href: url }).run();

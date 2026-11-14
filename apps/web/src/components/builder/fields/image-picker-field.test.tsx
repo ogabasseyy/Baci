@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ImagePickerField } from './image-picker-field';
 
@@ -79,5 +80,35 @@ describe('ImagePickerField', () => {
         screen.queryByRole('button', { name: 'Select valid' })
       ).not.toBeInTheDocument();
     });
+  });
+
+  it('ignores Enter that confirms IME composition in the external URL input', async () => {
+    const onChange = vi.fn();
+    render(
+      <ImagePickerField
+        field={{ label: 'Hero image' }}
+        value=""
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Image' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'External URL' }));
+    const input = screen.getByLabelText('Image URL');
+    fireEvent.change(input, {
+      target: { value: 'https://cdn.example.com/a.jpg' },
+    });
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(
+      false
+    );
+    expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(
+      false
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Image URL')).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith('https://cdn.example.com/a.jpg');
   });
 });

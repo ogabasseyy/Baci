@@ -102,11 +102,9 @@ export function ImagePickerField({
                     defaultValue={value}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (isImeComposing(e)) {
-                          // Cancel the composing Enter so a surrounding form cannot submit.
-                          e.preventDefault();
-                          return;
-                        }
+                        // Cancel Enter so a surrounding form cannot submit implicitly.
+                        e.preventDefault();
+                        if (isImeComposing(e)) return;
                         onChange(e.currentTarget.value);
                         setDialogOpen(false);
                       }

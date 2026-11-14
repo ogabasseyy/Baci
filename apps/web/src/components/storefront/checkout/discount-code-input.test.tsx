@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -264,5 +264,47 @@ describe('DiscountCodeInput', () => {
         })
       );
     });
+  });
+
+  it('does not apply the code when Enter confirms IME composition', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          valid: true,
+          code: 'SAVE10',
+          discount_type: 'percentage',
+          discount_value: 10,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const onApply = vi.fn();
+
+    render(
+      <DiscountCodeInput
+        merchantId="merchant-1"
+        cartTotal={5000}
+        onApply={onApply}
+        onRemove={vi.fn()}
+      />
+    );
+
+    const input = screen.getByRole('textbox', { name: 'Discount code' });
+    await userEvent.type(input, 'save10');
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(
+      false
+    );
+    expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(
+      false
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onApply).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

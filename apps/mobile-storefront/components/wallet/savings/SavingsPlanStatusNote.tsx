@@ -3,9 +3,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { usePiggyvestSlowdown } from '@/hooks/use-piggyvest-slowdown';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { lastGoalSetupPhase } from './goal-setup-memory';
 import { openSavingsSupport } from './open-savings-support';
 import { SavingsGoalRetryPrompt } from './SavingsGoalRetryPrompt';
 import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
+import { SavingsPlanCheckFailed } from './SavingsPlanCheckFailed';
 import { SavingsPlanGettingReady } from './SavingsPlanGettingReady';
 import { useAutoRetrySetup } from './use-auto-retry-setup';
 import { useGoalWalletSetupPoll } from './use-goal-wallet-setup-poll';
@@ -29,8 +31,8 @@ type Props = {
   slow?: boolean;
   /** Automatic checks have paused (about an hour on screen). */
   paused?: boolean;
-  /** Reads status now and restarts the quick checks. */
-  onCheckAgain?: () => void;
+  /** Reads status now and restarts the quick checks (settles with the read). */
+  onCheckAgain?: () => Promise<unknown>;
 };
 
 /**
@@ -106,6 +108,8 @@ function StatusNoteView({
   // that finishes loading later must never replace it.
   const [customerChose, setCustomerChose] = useState(false);
   const phase = funding.planFundingPhase;
+  // Same account + merchant + goal key as the poll and setup memory.
+  const scopeKey = JSON.stringify([identityKey, merchantId, goalId]);
   const slowdown = usePiggyvestSlowdown();
   const autoRetry = useAutoRetrySetup({
     active: primary && phase === 'setup_retryable',
@@ -115,8 +119,7 @@ function StatusNoteView({
     // BVN field, and PiggyVest goal setup never needs a BVN, so a stale
     // flag there must not block a retry.
     blocked: bvnGate && funding.planFundingRequiresBvn === true,
-    // Same account + merchant + goal key as the poll and setup memory.
-    scopeKey: JSON.stringify([identityKey, merchantId, goalId]),
+    scopeKey,
     submitting: setup.submitting,
     retry: setup.retry,
   });
@@ -186,11 +189,12 @@ function StatusNoteView({
       />
     );
   if (phase === 'idle' || phase === 'loading' || phase === 'ready') return null;
-  // While PiggyVest is slow, a failed check is not alarming news: keep the
-  // calm card (the shared notice explains) and keep checking.
-  // The same while this note's own checks are still running past their
-  // first minute (its last quick read failed): they have not given up.
-  if (phase === 'error' && (slowdown || slow))
+  // A failed check on a plan this app last saw getting ready is not alarming
+  // news while PiggyVest is slow (the shared notice explains) or while this
+  // note's checks are still running past their first minute: keep the calm
+  // card and keep checking. A failed read says nothing about a plan not seen
+  // waiting (it may well be ready), so that one says it can't check.
+  if (phase === 'error' && (slowdown || slow) && lastSeenWaiting(scopeKey))
     return (
       <SavingsPlanGettingReady
         colors={colors}
@@ -201,29 +205,14 @@ function StatusNoteView({
         }
       />
     );
-  if (phase === 'error') {
+  if (phase === 'error')
     return (
-      <View style={styles.section}>
-        <Text style={[styles.body, { color: colors.textSecondary }]}>
-          We couldn’t check on your plan just now. Check your connection and try
-          again.
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Try again"
-          // Restart the full check cycle when the parent runs one.
-          onPress={
-            onCheckAgain ?? (() => void funding.fetchExistingPlanFunding())
-          }
-          style={styles.retry}
-        >
-          <Text style={[styles.action, { color: colors.primary }]}>
-            Try again
-          </Text>
-        </Pressable>
-      </View>
+      <SavingsPlanCheckFailed
+        colors={colors}
+        // Restart the full check cycle when the parent runs one.
+        onTryAgain={onCheckAgain ?? (() => funding.fetchExistingPlanFunding())}
+      />
     );
-  }
   if (phase === 'unavailable')
     return (
       <View style={styles.section}>
@@ -254,6 +243,12 @@ function StatusNoteView({
       }
     />
   );
+}
+
+/** This app's last settled read of the plan said its setup was waiting. */
+function lastSeenWaiting(scopeKey: string): boolean {
+  const last = lastGoalSetupPhase(scopeKey);
+  return last === 'pending' || last === 'setup_retryable';
 }
 
 const styles = StyleSheet.create({

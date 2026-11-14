@@ -277,21 +277,3 @@ describe('bugfix: paused copy pointed at a Check now that was not there', () => 
     expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
   });
 });
-
-describe('bugfix: a note still checking past its first minute showed a connection error', () => {
-  it('keeps the calm card when its own quick reads failed but checks go on', () => {
-    render(
-      <SavingsPlanStatusNote
-        colors={Colors.light}
-        goalId="goal-1"
-        identityKey="user-1"
-        merchantId="merchant-1"
-        funding={fundingFixture({ planFundingPhase: 'error' })}
-        slow
-        onCheckAgain={jest.fn()}
-      />
-    );
-    expect(screen.getByText('Getting your plan ready')).toBeOnTheScreen();
-    expect(screen.queryByText(/couldn’t check on your plan/)).toBeNull();
-  });
-});

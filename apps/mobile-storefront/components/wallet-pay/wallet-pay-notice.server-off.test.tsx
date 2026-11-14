@@ -111,3 +111,16 @@ describe('bugfix: customer copy named the provider (Fable F7)', () => {
       }
   });
 });
+
+describe('bugfix: one sheet title was spelled two ways (Fable walk 14)', () => {
+  it('words "not completed" and "failed" the same', () => {
+    const notCompleted = walletPayNotice(
+      { kind: 'not_completed' },
+      30_000,
+      'IMEI check'
+    );
+    const failed = walletPayNotice({ kind: 'failed' }, 30_000, 'IMEI check');
+    expect(notCompleted.title).toBe("Payment didn't go through");
+    expect(failed.title).toBe(notCompleted.title);
+  });
+});

@@ -61,6 +61,8 @@ jest.mock('expo-crypto', () => ({
 }));
 
 jest.mock('expo-router', () => ({
+  // The pay sheet closes when the screen loses focus.
+  useNavigation: () => ({ addListener: () => () => undefined }),
   router: { back: jest.fn(), push: jest.fn() },
   Stack: {
     Screen: () => null,

@@ -1,8 +1,12 @@
 import { useState } from 'react';
+import { Alert } from 'react-native';
 import type { Biller } from '@/hooks/use-vtu-billers';
 import { detectNetwork } from '@/lib/network-utils';
 import type { UtilityRepeatRecipient } from '@/lib/utility-repeat';
-import { nextPhoneDigits } from './airtime-form-controller.helpers';
+import {
+  nextPhoneDigits,
+  PHONE_TRIMMED_NOTICE,
+} from './airtime-form-controller.helpers';
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
 import { inferProviderFromDataBillerName } from './data-form.helpers';
 
@@ -70,7 +74,9 @@ export function useDataFormBeneficiaryController({
 
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const digits = nextPhoneDigits(phoneNumber, text);
+    const { digits, trimmed } = nextPhoneDigits(phoneNumber, text);
+    if (trimmed)
+      Alert.alert(PHONE_TRIMMED_NOTICE.title, PHONE_TRIMMED_NOTICE.message);
     setPhoneNumber(digits);
     syncBillerFromDetectedNetwork(digits);
   };

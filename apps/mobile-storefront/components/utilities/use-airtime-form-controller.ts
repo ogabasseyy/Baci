@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
+import {
+  Alert,
+  type LayoutChangeEvent,
+  type ScrollViewInstance,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SPACING } from '@/constants/Colors';
 import { NETWORK_PROVIDERS } from '@/constants/network-providers';
@@ -9,6 +13,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import type { AirtimeFormProps } from './airtime-form.types';
 import {
   nextPhoneDigits,
+  PHONE_TRIMMED_NOTICE,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
   scrollToAirtimePaymentSection,
@@ -59,7 +64,9 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
 
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const digits = nextPhoneDigits(phoneNumber, text);
+    const { digits, trimmed } = nextPhoneDigits(phoneNumber, text);
+    if (trimmed)
+      Alert.alert(PHONE_TRIMMED_NOTICE.title, PHONE_TRIMMED_NOTICE.message);
     setPhoneNumber(digits);
     setSelectedProvider(resolveAirtimeProvider(digits));
     setIsNetworkPickerExpanded(false);

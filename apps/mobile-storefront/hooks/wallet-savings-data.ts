@@ -12,6 +12,7 @@ import type { WalletActiveSavingsGoal } from './wallet-query';
 const SavingsGoalDataSchema = z.object({
   contribution_amount: z.union([z.number(), z.string()]),
   contribution_frequency: z.enum(['daily', 'weekly', 'monthly']),
+  created_at: z.string().nullable().optional(),
   current_amount: z.union([z.number(), z.string()]),
   id: z.string(),
   maturity_date: z.string(),
@@ -267,6 +268,7 @@ export function toActiveSavingsGoal({
   return {
     contribution_amount: contributionAmount,
     contribution_frequency: goal.contribution_frequency,
+    ...(goal.created_at ? { created_at: goal.created_at } : {}),
     current_amount: currentAmount,
     id: goal.id,
     maturity_date: goal.maturity_date,

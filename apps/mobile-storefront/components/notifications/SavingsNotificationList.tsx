@@ -10,6 +10,10 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, RADIUS, SPACING } from '@/constants/Colors';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+} from '@/constants/layout';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
 
 type SavingsNotificationListProps = {
@@ -105,11 +109,9 @@ export function SavingsNotificationList({
             accessibilityRole="button"
             accessibilityLabel="Try again"
             onPress={onRetry}
-            style={({ pressed }) => [
-              styles.retryButton,
-              { backgroundColor: colors.primary },
-              pressed && styles.pressed,
-            ]}
+            // A static style: on device the function form rendered no
+            // button at all in walk 14 (white text with no background).
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -160,8 +162,11 @@ export function SavingsNotificationList({
             style={[
               styles.notification,
               { backgroundColor: colors.card, borderColor: colors.border },
-              item.readAt === null && {
-                borderLeftColor: BRAND.primary,
+              // Every card keeps the same left edge; only unread ones colour
+              // it, so read and unread content line up.
+              {
+                borderLeftColor:
+                  item.readAt === null ? BRAND.primary : colors.border,
                 borderLeftWidth: 3,
               },
             ]}
@@ -181,7 +186,6 @@ export function SavingsNotificationList({
                 {item.title}
               </Text>
               <Text
-                numberOfLines={3}
                 style={[
                   styles.notificationBody,
                   { color: colors.textSecondary },
@@ -201,11 +205,18 @@ export function SavingsNotificationList({
   );
 }
 
+/** Clears the floating AI button: its bottom offset plus its height and a gap. */
+export const NOTIFICATIONS_BOTTOM_INSET =
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET + CHAT_WIDGET_FAB_SIZE + SPACING.sm;
+
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     gap: SPACING.sm,
     padding: SPACING.md,
+    // The footer ("View your orders") must sit above the floating AI
+    // button's whole band, wherever it is snapped (left or right edge).
+    paddingBottom: NOTIFICATIONS_BOTTOM_INSET,
   },
   notification: {
     alignItems: 'center',

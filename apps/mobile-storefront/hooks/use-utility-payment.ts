@@ -98,11 +98,17 @@ export function useUtilityPayment() {
           });
           // No authoritative verdict, or PiggyVest confirmed before the
           // wallet is reclassified (Codex): the wallet kind is unknown.
-          // Ruled out now (Codex): a stale PiggyVest-shaped wallet is not
-          // store credit, so the bank-transfer funding path stays open.
-          if (capabilityNow === false) {
-            return { ...verdict, walletIsStoreCredit: false };
-          }
+          // Ruled out: a stale PiggyVest cache isn't store credit (Codex).
+          // But a PiggyVest-shaped live wallet under that ruling-out means
+          // PiggyVest came back before the cache expired (Codex): hold bank
+          // transfers, as checkout does.
+          if (capabilityNow === false)
+            return {
+              ...verdict,
+              walletIsStoreCredit: false,
+              walletPrimaryUnknown:
+                verdict.walletIsStoreCredit || verdict.walletPrimaryUnknown,
+            };
           return capabilityNow === null ||
             (capabilityNow === true && !verdict.walletIsStoreCredit)
             ? { ...verdict, walletPrimaryUnknown: true }
@@ -189,11 +195,13 @@ export function useUtilityPayment() {
       : {}),
     // PiggyVest check failed, or a refresh may change the verdict (Codex):
     // hold bank-transfer top-ups until the wallet settles.
-    ...(isWalletPrimaryUnknown(wallet.data?.wallet) ||
-    verdictNow === null ||
-    (verdictNow === true && !isWalletStoreCredit(wallet.data?.wallet)) ||
-    (piggyvestPossible &&
-      (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true))
+    // A live ruling-out clears every hold, even an unavailable-shaped wallet.
+    ...(verdictNow !== false &&
+    (isWalletPrimaryUnknown(wallet.data?.wallet) ||
+      verdictNow === null ||
+      (verdictNow === true && !isWalletStoreCredit(wallet.data?.wallet)) ||
+      (piggyvestPossible &&
+        (wallet.isRefetching || wallet.data?.wallet.owner_unresolved === true)))
       ? { walletPrimaryUnknown: true as const }
       : {}),
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

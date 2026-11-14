@@ -1,9 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { SafeImage } from '@/components/ui/SafeImage';
 import { BRAND } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
+import { SavingsProductThumb } from './SavingsProductThumb';
 import { savingsSuggestionStyles as cardStyles } from './savings-suggestion.styles';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type {
@@ -98,7 +98,7 @@ export function StartSavingsProductSuggestions({
   return (
     <View style={cardStyles.results}>
       <Text style={[cardStyles.heading, { color: colors.textSecondary }]}>
-        FIND YOUR NEXT UPGRADE
+        Pick from these
       </Text>
       {rows.map((row) => (
         <Pressable
@@ -114,14 +114,11 @@ export function StartSavingsProductSuggestions({
             },
           ]}
         >
-          <View style={cardStyles.imageFrame}>
-            <SafeImage
-              source={{ uri: row.product.image, width: 156, height: 192 }}
-              style={cardStyles.image}
-              contentFit="contain"
-              accessibilityLabel={row.product.name}
-            />
-          </View>
+          <SavingsProductThumb
+            uri={row.product.image}
+            title={row.product.name}
+            size={64}
+          />
           <View style={cardStyles.details}>
             <Text style={[cardStyles.name, { color: colors.text }]}>
               {row.product.name}

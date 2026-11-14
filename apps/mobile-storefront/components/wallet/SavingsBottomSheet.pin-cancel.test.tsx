@@ -9,6 +9,16 @@ jest.mock('@gorhom/bottom-sheet', () => ({
   useBottomSheet: () => ({ snapToIndex: jest.fn(), snapToPosition: jest.fn() }),
 }));
 
+// The shared mock's snapToIndex outlives a test: clear it so a resnap from
+// an earlier test can never satisfy this file's last-call assertion.
+beforeEach(() => {
+  (
+    jest.requireMock('@gorhom/bottom-sheet') as {
+      mockBottomSheetSnapToIndex: jest.Mock;
+    }
+  ).mockBottomSheetSnapToIndex.mockClear();
+});
+
 function renderSheet(overlay: React.ReactNode) {
   const onClose = jest.fn();
   render(
@@ -64,6 +74,7 @@ describe('bugfix: the PIN step closed the whole savings sheet', () => {
     const { mockBottomSheetSnapToIndex } = jest.requireMock(
       '@gorhom/bottom-sheet'
     ) as { mockBottomSheetSnapToIndex: jest.Mock };
+    expect(mockBottomSheetSnapToIndex).toHaveBeenCalled();
     expect(mockBottomSheetSnapToIndex).toHaveBeenLastCalledWith(0);
     expect(onClose).not.toHaveBeenCalled();
   });

@@ -22,8 +22,14 @@ describe('readPiggyvestCapabilityNow', () => {
     expect(readPiggyvestCapabilityNow('merchant-1')).toBe(true);
   });
 
-  it('is unknown (null) before any verdict', () => {
-    expect(readPiggyvestCapabilityNow('merchant-1')).toBeNull();
+  it('is unknown (null) before any verdict for the Ogabassey pilot', () => {
+    expect(
+      readPiggyvestCapabilityNow('6b5cb8a4-5575-456c-b936-8cdfae30db74')
+    ).toBeNull();
+  });
+
+  it('owner decision: counts an unknown verdict as ruled out for any other merchant', () => {
+    expect(readPiggyvestCapabilityNow('merchant-1')).toBe(false);
   });
 
   it('is false with no merchant at all', () => {

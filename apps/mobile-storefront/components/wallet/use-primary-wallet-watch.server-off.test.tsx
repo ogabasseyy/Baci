@@ -130,3 +130,79 @@ describe('bugfix: rolled-back balance returns when the ruling-out expires', () =
     mockVerdict = null;
   });
 });
+
+describe('bugfix: legacy wallet presented after a positive verdict', () => {
+  it('shows a pending PiggyVest wallet and keeps re-checking after the reload fails', async () => {
+    // Arrange: PiggyVest confirmed, the cached wallet still legacy-shaped,
+    // and every reload fails (rejected refetch).
+    jest.useFakeTimers();
+    mockVerdict = true;
+    const wallet: WalletData = { balance: 900, loyalty_points: 3 };
+    const refetch = jest.fn(async () => {
+      throw new Error('network down');
+    });
+
+    // Act
+    const { result } = renderHook(() =>
+      usePrimaryWalletWatch({
+        wallet,
+        showFundPanel: false,
+        scopeKey: 'u:m',
+        refetch,
+      })
+    );
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    // Assert: never the old Total Balance view; the reload is retried.
+    expect(result.current?.primary_pending).toBe(true);
+    expect(result.current?.balance).toBe(900);
+    expect(refetch).toHaveBeenCalled();
+    mockVerdict = null;
+    jest.useRealTimers();
+  });
+
+  it('leaves a ruled-out legacy wallet exactly as today', () => {
+    mockVerdict = false;
+    const wallet: WalletData = { balance: 900, loyalty_points: 3 };
+    const { result } = renderHook(() =>
+      usePrimaryWalletWatch({
+        wallet,
+        showFundPanel: false,
+        scopeKey: 'u:m',
+        refetch: jest.fn(),
+      })
+    );
+    expect(result.current?.primary_pending).toBeUndefined();
+    mockVerdict = null;
+  });
+});
+
+describe('bugfix: ruled-out suppression carried into a new wallet scope', () => {
+  it('shows the new scope PiggyVest balance while its verdict is unknown', () => {
+    // Arrange: the first scope was ruled out, so PiggyVest is suppressed.
+    mockVerdict = false;
+    const primaryWallet = {
+      balance: 900,
+      loyalty_points: 3,
+      primary_balance_kobo: 500_000,
+    } as WalletData;
+    const { result, rerender } = renderHook(
+      ({ scopeKey }: { scopeKey: string }) =>
+        usePrimaryWalletWatch({
+          wallet: primaryWallet,
+          showFundPanel: false,
+          scopeKey,
+          refetch: jest.fn(),
+        }),
+      { initialProps: { scopeKey: 'u1:legacy' } }
+    );
+    expect(result.current?.primary_balance_kobo).toBeUndefined();
+
+    // Act: switch to a pilot scope whose verdict is still unknown.
+    mockVerdict = null;
+    rerender({ scopeKey: 'u1:pilot' });
+
+    // Assert: its PiggyVest balance is not stripped by the old scope.
+    expect(result.current?.primary_balance_kobo).toBe(500_000);
+  });
+});

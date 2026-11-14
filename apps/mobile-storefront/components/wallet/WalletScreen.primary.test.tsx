@@ -54,6 +54,7 @@ const mockDeriveWalletDisplayData = jest.fn<() => Record<string, unknown>>(
 jest.mock('expo-router', () => ({
   Redirect: () => null,
   router: { push: jest.fn() },
+  useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
 }));
 jest.mock('zustand/react/shallow', () => ({
   useShallow: (selector: unknown) => selector,

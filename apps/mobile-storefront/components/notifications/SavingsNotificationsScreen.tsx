@@ -35,9 +35,12 @@ export function SavingsNotificationsScreen({
       } catch {
         return;
       }
+      // Through the goal link route: it opens this goal's sheet only while
+      // the goal is still the customer's, and the plain wallet otherwise, so
+      // a notice about a cancelled plan never opens a different plan.
       router.push({
-        pathname: '/wallet',
-        params: { action: 'savings', savingsGoalId: notification.goalId },
+        pathname: '/wallet/savings/goal-actions',
+        params: { goalId: notification.goalId },
       });
     })();
   };

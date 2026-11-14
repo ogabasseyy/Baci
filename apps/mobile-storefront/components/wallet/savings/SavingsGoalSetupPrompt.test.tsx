@@ -25,7 +25,7 @@ beforeEach(() => jest.clearAllMocks());
 describe('SavingsGoalSetupPrompt', () => {
   it('disables setup until the status read has finished, even with a choice', () => {
     renderPrompt({ choice: true, statusReady: false });
-    const button = screen.getByRole('button', { name: 'Set up this goal' });
+    const button = screen.getByRole('button', { name: 'Finish setting up' });
     expect(button).toBeDisabled();
     fireEvent.press(button);
     expect(onSubmit).not.toHaveBeenCalled();
@@ -34,11 +34,11 @@ describe('SavingsGoalSetupPrompt', () => {
   it('disables setup without a choice and enables it with one', () => {
     const view = renderPrompt();
     expect(
-      screen.getByRole('button', { name: 'Set up this goal' })
+      screen.getByRole('button', { name: 'Finish setting up' })
     ).toBeDisabled();
     view.unmount();
     renderPrompt({ choice: false });
-    const button = screen.getByRole('button', { name: 'Set up this goal' });
+    const button = screen.getByRole('button', { name: 'Finish setting up' });
     expect(button).not.toBeDisabled();
     fireEvent.press(button);
     expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -69,7 +69,7 @@ describe('SavingsGoalSetupPrompt', () => {
       screen.getByRole('radio', { name: 'Yes, earn interest' })
     ).toBeDisabled();
     expect(
-      screen.getByRole('button', { name: 'Set up this goal' })
+      screen.getByRole('button', { name: 'Finish setting up' })
     ).toBeDisabled();
   });
 

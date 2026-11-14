@@ -180,3 +180,46 @@ describe('goalAwaitingSettlement', () => {
     });
   });
 });
+
+describe('bugfix: completed goal offered "Start another plan" while unreachable (walk 11)', () => {
+  const fundedCompleted = {
+    id: 'goal-1',
+    principal_amount: 500_000,
+    current_amount: 500_000,
+    status: 'completed',
+  } as never;
+
+  it('keeps "Complete goal" on the card while the check failed', () => {
+    mockGate.mockReturnValue('error');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal: fundedCompleted })
+    );
+    expect(
+      result.current.walletContentSavingsProps.goalAwaitingSettlement
+    ).toBe(true);
+    // The sheet's own action still waits for a ready check.
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalAwaitingSettlement: false })
+    );
+  });
+
+  it('keeps it while the check is still running', () => {
+    mockGate.mockReturnValue('checking');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal: fundedCompleted })
+    );
+    expect(
+      result.current.walletContentSavingsProps.goalAwaitingSettlement
+    ).toBe(true);
+  });
+
+  it("keeps today's card where PiggyVest is off", () => {
+    mockGate.mockReturnValue('off');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal: fundedCompleted })
+    );
+    expect(
+      result.current.walletContentSavingsProps.goalAwaitingSettlement
+    ).toBe(false);
+  });
+});

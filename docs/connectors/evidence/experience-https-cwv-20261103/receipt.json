@@ -4,22 +4,12 @@
   "scope": "offline functional HTTPS transport; synthetic data",
   "hostLoadPrecheck": "explicitly bypassed for functional matrix; no clean-host claim",
   "sampleCount": 6,
-  "widths": [
-    390,
-    1440
-  ],
+  "widths": [390, 1440],
   "frameLcpMs": {
     "min": 112.599853515625,
     "max": 221.5
   },
-  "tlsConnectionsPerSample": [
-    4,
-    4,
-    4,
-    4,
-    4,
-    4
-  ],
+  "tlsConnectionsPerSample": [4, 4, 4, 4, 4, 4],
   "consoleErrors": 0,
   "cwvQualified": false,
   "releaseQualified": false,

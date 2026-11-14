@@ -98,7 +98,6 @@ function fillAutoDebitForm() {
     })
   );
   fireEvent.press(getSavingsButton('Continue savings setup'));
-  fireEvent.press(getSavingsButton('Choose savings funding option'));
 }
 
 describe('StartSavingsScreen auto-debit authorization', () => {

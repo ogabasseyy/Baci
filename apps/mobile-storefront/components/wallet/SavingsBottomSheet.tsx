@@ -11,6 +11,7 @@ import { SavingsSheetContext } from './SavingsSheetContext';
 import { SavingsSheetLockContext } from './SavingsSheetLockContext';
 import { SavingsSheetPinCancelContext } from './SavingsSheetPinCancelContext';
 import { SavingsSheetPinHeightContext } from './SavingsSheetPinHeightContext';
+import { useCloseSavingsSheetOnBlur } from './use-close-savings-sheet-on-blur';
 
 /** Height changes smaller than this keep the sheet where it is. */
 const MIN_RESNAP_PX = 4;
@@ -123,6 +124,10 @@ export function SavingsBottomSheet({
     cancel?.();
     onClose();
   };
+  // Leaving the wallet (a deep link, a notification) closes the sheet the
+  // same way: the embedded PIN prompt is cancelled first, and a step that is
+  // saving keeps the sheet until it settles.
+  useCloseSavingsSheetOnBlur(visible, close, locked);
   if (!visible) return null;
   return (
     <Modal

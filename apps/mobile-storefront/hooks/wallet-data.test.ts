@@ -247,7 +247,7 @@ describe('fetchWalletData', () => {
       {
         amount: 2500,
         created_at: '2026-07-13T10:00:00.000Z',
-        description: 'Wallet top-up via paystack',
+        description: 'Wallet top-up', // the provider is never shown
         id: 'tx-topup',
         source_type: 'wallet_topup',
         type: 'credit',
@@ -424,7 +424,7 @@ describe('fetchWalletData', () => {
       {
         amount: 2500,
         created_at: '2026-05-21T10:00:00.000Z',
-        description: '',
+        description: 'Transaction',
         id: 'tx-1',
         type: 'credit',
       },

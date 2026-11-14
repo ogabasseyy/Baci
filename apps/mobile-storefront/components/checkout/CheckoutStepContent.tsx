@@ -155,6 +155,9 @@ export function CheckoutStepContent({
         walletFundedBankTransferOptionEnabled={
           paymentController.walletFundedBankTransferOptionEnabled
         }
+        walletFundedBankTransferChecking={
+          paymentController.walletFundedBankTransferChecking
+        }
         walletIsStoreCredit={paymentController.walletIsStoreCredit}
         walletSelection={paymentController.walletSelection}
       />

@@ -65,12 +65,11 @@ export function useCheckoutSubmit({
   walletBalance,
   walletFundedBankTransferOptionEnabled,
   walletSelection,
+  walletTransferFallbackReason,
 }: UseCheckoutSubmitParams) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
-  // Late completion-tracking resolutions must not erase a newly created
-  // cart or navigate away from the shopper's screen.
-  const isMountedRef = useIsMountedRef();
+  const isMountedRef = useIsMountedRef(); // late tracking never erases a new cart
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
     const {
@@ -255,9 +254,9 @@ export function useCheckoutSubmit({
           isAuthenticated,
           isMountedRef,
           isOrderInFlight,
-          // Finalization observes the same reviewed items the order
-          // was created and bound with, not the pre-review cart.
+          // The reviewed items the order was bound with, not the cart.
           itemsSnapshot: boundItemsSnapshot,
+          merchantId,
           onRedvaultOrder,
           order,
           orderNumber,
@@ -273,6 +272,7 @@ export function useCheckoutSubmit({
           user,
           walletFundedBankTransferOptionEnabled,
           isWalletFundedBankTransferHeld,
+          walletTransferFallbackReason,
         })
       ) {
         return;

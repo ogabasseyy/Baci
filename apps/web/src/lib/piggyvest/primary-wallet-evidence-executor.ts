@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { primaryDbLink } from './primary-db-link';
@@ -16,6 +17,11 @@ const statements = new Set([
   GOAL_CANCEL_STATEMENTS.findByReference,
   GOAL_CANCEL_STATEMENTS.settle,
   GOAL_CANCEL_STATEMENTS.release,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.findByReference,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.settle,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.release,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.ack,
   GOAL_COMPLETE_STATEMENTS.readDispatched,
   GOAL_COMPLETE_STATEMENTS.findByReference,
   GOAL_COMPLETE_STATEMENTS.settle,
@@ -28,12 +34,15 @@ const statements = new Set([
 // Statements whose third parameter is an operation id (not JSON).
 const operationIdStatements = new Set<string>([
   GOAL_CANCEL_STATEMENTS.readDispatched,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.ack,
   GOAL_COMPLETE_STATEMENTS.readDispatched,
   GOAL_COMPLETE_STATEMENTS.readPurchaseAlert,
   GOAL_COMPLETE_STATEMENTS.markPurchaseAlerted,
 ]);
 const referenceStatements = new Set<string>([
   GOAL_CANCEL_STATEMENTS.findByReference,
+  GOAL_CANCEL_FORFEIT_STATEMENTS.findByReference,
   GOAL_COMPLETE_STATEMENTS.findByReference,
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,

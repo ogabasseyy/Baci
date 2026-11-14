@@ -48,8 +48,6 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
   'GOAL_NEEDS_REVIEW',
   'GOAL_NOT_FOUND',
   'GOAL_NOT_SET_UP',
-  // An older app tried to cancel without showing the interest forfeit.
-  'APP_UPDATE_REQUIRED',
   'NOTHING_TO_REFUND',
   'NOTHING_TO_MOVE',
   'AMOUNT_TOO_LARGE',
@@ -59,6 +57,9 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
   'PROFILE_VERIFICATION_REQUIRED',
   'UNAUTHORIZED',
   'CSRF_FAILED',
+  // The server refuses a cancel from an app that never showed the interest
+  // forfeit: "Please update the app to cancel this goal."
+  'APP_UPDATE_REQUIRED',
   ...['CANCEL', 'COMPLETE'].flatMap((K) =>
     [
       'REJECTED',
@@ -68,6 +69,8 @@ const SAFE_SERVER_CODES: ReadonlySet<string> = new Set([
       'BUSY',
       'UNAVAILABLE',
       'NOT_FOUND',
+      // The PIN step's "no longer valid, please start again" answer.
+      'OPERATION_INVALID',
     ].map((suffix) => `${K}_${suffix}`)
   ),
 ]);
@@ -85,13 +88,14 @@ export const messageOf = (error: unknown) => {
 /** Refused before anything moved: the customer cannot fix it by starting again. */
 export const NOT_STARTABLE_CODES: readonly string[] = [
   'GOAL_NOT_FOUND',
-  // The plan's savings wallet was never set up: nothing to cancel yet.
+  // The goal's PiggyVest setup never finished: nothing to cancel yet.
   'GOAL_NOT_SET_UP',
-  'APP_UPDATE_REQUIRED',
   'SAVINGS_NOT_READY',
   'PROFILE_VERIFICATION_REQUIRED',
   'SAVINGS_UNAVAILABLE',
   'UNAUTHORIZED',
+  // Only an app update fixes it, never starting again.
+  'APP_UPDATE_REQUIRED',
 ];
 
 export type GoalLifecycleStep =

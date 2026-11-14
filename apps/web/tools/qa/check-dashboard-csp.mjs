@@ -1,7 +1,12 @@
 // Run against a local production build with an authenticated dashboard cookie.
 import assert from 'node:assert/strict';
 
-const url = new URL(process.argv[2]);
+const target = process.argv[2];
+assert.ok(
+  target && URL.canParse(target),
+  'Usage: node tools/qa/check-dashboard-csp.mjs <local-dashboard-url>'
+);
+const url = new URL(target);
 assert.ok(
   ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname),
   'Use a loopback URL so the local session cookie stays on this machine'
@@ -12,9 +17,15 @@ async function checkDocument() {
     headers: process.env.BACI_LOCAL_DASHBOARD_COOKIE
       ? { cookie: process.env.BACI_LOCAL_DASHBOARD_COOKIE }
       : undefined,
-    redirect: 'error',
+    redirect: 'manual',
   });
-  assert.equal(response.status, 200);
+  assert.ok(
+    !(response.status >= 300 && response.status < 400) &&
+      response.status !== 401 &&
+      response.status !== 403,
+    'Dashboard access failed. Check that the local session cookie is valid.'
+  );
+  assert.equal(response.status, 200, 'Expected a dashboard HTML response');
   const nonce = response.headers
     .get('content-security-policy')
     ?.match(/'nonce-([^']+)'/)?.[1];

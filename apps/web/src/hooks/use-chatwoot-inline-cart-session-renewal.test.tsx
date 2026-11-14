@@ -90,6 +90,7 @@ describe('Chatwoot session renewal after shared-cart edits', () => {
             json: async () => ({
               accepted: true,
               cartVersion: 9,
+              operationId: 'quantity-replay-01',
               replayed: true,
               sessionToken: 'renewed-session-905',
             }),

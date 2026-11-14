@@ -45,7 +45,11 @@ function defaultFetch() {
     if (url.pathname.endsWith('/quantity')) {
       return {
         ok: true,
-        json: async () => ({ accepted: true, cartVersion: 9 }),
+        json: async () => ({
+          accepted: true,
+          cartVersion: 9,
+          operationId: body.requestId,
+        }),
       };
     }
     return authorizedCartResponse(905);
@@ -105,7 +109,11 @@ describe('Chatwoot inline cart quantity mutations', () => {
             ? { ok: false, json: async () => ({}) }
             : {
                 ok: true,
-                json: async () => ({ accepted: true, cartVersion: 9 }),
+                json: async () => ({
+                  accepted: true,
+                  cartVersion: 9,
+                  operationId: body.requestId,
+                }),
               };
         }
         authorizeCalls += 1;
@@ -238,7 +246,11 @@ describe('Chatwoot inline cart quantity mutations', () => {
 
     firstMutation.resolve?.({
       ok: true,
-      json: async () => ({ accepted: true, cartVersion: 9 }),
+      json: async () => ({
+        accepted: true,
+        cartVersion: 9,
+        operationId: 'quantity-overlap-first',
+      }),
     });
     await waitFor(() =>
       expect(mocks.cartState.refreshSharedCart).toHaveBeenCalledOnce()

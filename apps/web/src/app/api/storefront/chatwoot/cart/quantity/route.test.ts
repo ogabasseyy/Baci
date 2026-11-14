@@ -216,6 +216,27 @@ describe('Chatwoot shared-cart quantity route', () => {
     );
   });
 
+  it('binds fresh capability renewal to the mutation snapshot version', async () => {
+    arrange();
+    mocks.mutateCart.mockResolvedValueOnce({
+      ok: true,
+      operationId: body.requestId,
+      replayed: false,
+      currentVersion: 99,
+      cart: { ...cart, version: 13 },
+    });
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(payload.cartVersion).toBe(13);
+    expect(mocks.renewChatwootSessionCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nextState: expect.objectContaining({ cartVersion: 13 }),
+      })
+    );
+  });
+
   it('denies a stale proof when the live grant no longer permits quantity edits', async () => {
     arrange();
     mocks.loadLiveGrantOperations.mockResolvedValueOnce({

@@ -216,16 +216,12 @@ export async function POST(request: NextRequest) {
     console.error('Chatwoot live grant refresh failed after cart mutation');
   }
 
-  const reportedCartVersion = result.currentVersion;
   let liveCartVersion =
-    typeof reportedCartVersion === 'number' &&
-    Number.isSafeInteger(reportedCartVersion) &&
-    reportedCartVersion >= result.cart.version &&
-    reportedCartVersion >= cartContext.state.cartVersion
-      ? reportedCartVersion
-      : !result.replayed && result.cart.version >= cartContext.state.cartVersion
-        ? result.cart.version
-        : null;
+    !result.replayed &&
+    Number.isSafeInteger(result.cart.version) &&
+    result.cart.version >= cartContext.state.cartVersion
+      ? result.cart.version
+      : null;
   let proofCartExpiresAt = result.cart.expiresAt;
   let canRenewProof = true;
   if (result.replayed) {

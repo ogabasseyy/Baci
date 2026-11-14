@@ -51,6 +51,7 @@ describe('handleChatwootInlineCartQuantity', () => {
       async (_input: RequestInfo | URL, _init?: RequestInit) => response({
         accepted: true,
         cartVersion: 9,
+        operationId: 'quantity-0001',
         sessionToken: 'renewed-session-token',
       })
     );
@@ -84,7 +85,13 @@ describe('handleChatwootInlineCartQuantity', () => {
   it('refreshes an accepted commit only in the same cart after context replacement', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => response({ accepted: true, cartVersion: 9 }))
+      vi.fn(async () =>
+        response({
+          accepted: true,
+          cartVersion: 9,
+          operationId: 'quantity-0001',
+        })
+      )
     );
     const value = input({
       isCurrentAction: () => false,
@@ -99,7 +106,12 @@ describe('handleChatwootInlineCartQuantity', () => {
   });
 
   it('refreshes the shared cart when an accepted response omits cartVersion', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response({ accepted: true })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({ accepted: true, operationId: 'quantity-0001' })
+      )
+    );
     const value = input();
 
     await handleChatwootInlineCartQuantity(value);
@@ -114,7 +126,11 @@ describe('handleChatwootInlineCartQuantity', () => {
   it('lets the server verify a newer version against the live cart', async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        response({ accepted: true, cartVersion: 10 })
+        response({
+          accepted: true,
+          cartVersion: 10,
+          operationId: 'quantity-0001',
+        })
     );
     vi.stubGlobal('fetch', fetchMock);
     const value = input({
@@ -237,6 +253,34 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
+  it.each([undefined, 'another-operation'] as const)(
+    'does not accept or rotate a token for a response with operationId %s',
+    async (operationId) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          response({
+            accepted: true,
+            ...(operationId ? { operationId } : {}),
+            sessionToken: 'unrelated-session-token',
+          })
+        )
+      );
+      const onSessionTokenRenewed = vi.fn();
+      const value = input({ onSessionTokenRenewed });
+
+      await handleChatwootInlineCartQuantity(value);
+
+      expect(onSessionTokenRenewed).not.toHaveBeenCalled();
+      expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+      expect(value.post).toHaveBeenCalledWith({
+        requestId: 'quantity-0001',
+        accepted: false,
+        code: 'temporarily_unavailable',
+      });
+    }
+  );
+
   it('preserves invalid-context responses so the widget can re-authorize', async () => {
     vi.stubGlobal(
       'fetch',
@@ -258,7 +302,13 @@ describe('handleChatwootInlineCartQuantity', () => {
     for (const cartVersion of [1.5, Number.MAX_SAFE_INTEGER + 1, 7]) {
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => response({ accepted: true, cartVersion }))
+        vi.fn(async () =>
+          response({
+            accepted: true,
+            cartVersion,
+            operationId: 'quantity-0001',
+          })
+        )
       );
       const value = input();
 

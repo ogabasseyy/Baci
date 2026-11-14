@@ -44,7 +44,11 @@ function defaultFetch() {
     if (url.pathname.endsWith('/quantity')) {
       return {
         ok: true,
-        json: async () => ({ accepted: true, cartVersion: 9 }),
+        json: async () => ({
+          accepted: true,
+          cartVersion: 9,
+          operationId: body.requestId,
+        }),
       };
     }
     return authorizedCartResponse(905);
@@ -242,7 +246,11 @@ describe('Chatwoot inline cart quantity mutations', () => {
         ok: true,
         json: async () => {
           mutationCompleted = true;
-          return { accepted: true, cartVersion: 9 };
+          return {
+            accepted: true,
+            cartVersion: 9,
+            operationId: 'quantity-invalidated',
+          };
         },
       });
       await waitFor(() => expect(mutationCompleted).toBe(true));

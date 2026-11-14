@@ -254,7 +254,7 @@ describe('Chatwoot cart mutation replay', () => {
     expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
   });
 
-  it('omits replay version when live state disagrees with the RPC version', async () => {
+  it('uses the live replay snapshot instead of the RPC-reported version', async () => {
     arrange();
     mocks.getCart.mockResolvedValue({
       ok: true,
@@ -273,9 +273,14 @@ describe('Chatwoot cart mutation replay', () => {
 
     expect(response.status).toBe(200);
     expect(payload).toMatchObject({ accepted: true, replayed: true });
-    expect(payload).not.toHaveProperty('cartVersion');
-    expect(response.headers.get('set-cookie')).toBeNull();
-    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
+    expect(payload).toMatchObject({ cartVersion: 14 });
+    expect(response.headers.get('set-cookie')).toContain(
+      `baci-cart-${principal.merchantId}=proof`
+    );
+    expect(mocks.issueCartSessionProof).toHaveBeenCalledWith(
+      expect.objectContaining({ cartId: principal.cartId }),
+      { environment: 'test' }
+    );
   });
 
   it('fails closed when a replay snapshot belongs to another merchant', async () => {

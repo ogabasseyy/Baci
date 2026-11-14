@@ -140,6 +140,7 @@ describe('Chatwoot session renewal races', () => {
         json: async () => ({
           accepted: true,
           cartVersion: 9,
+          operationId: 'quantity-b',
           sessionToken: 'renewed-b',
         }),
       });
@@ -155,6 +156,7 @@ describe('Chatwoot session renewal races', () => {
           return {
             accepted: true,
             cartVersion: 9,
+            operationId: 'quantity-a',
             sessionToken: 'renewed-a',
           };
         },

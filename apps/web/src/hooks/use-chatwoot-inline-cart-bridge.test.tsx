@@ -155,7 +155,11 @@ describe('ChatwootInlineCartBridge', () => {
         ) {
           return {
             ok: true,
-            json: async () => ({ accepted: true, cartVersion: 9 }),
+            json: async () => ({
+              accepted: true,
+              cartVersion: 9,
+              operationId: body.requestId,
+            }),
           };
         }
         const conversationId = Number(

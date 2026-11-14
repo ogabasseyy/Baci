@@ -1,5 +1,7 @@
 import {
   getAirtimeCustomerName,
+  nextPhoneDigits,
+  phoneLengthError,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
   sanitizePhoneDigits,
@@ -71,13 +73,32 @@ describe('airtime-form-controller.helpers', () => {
 });
 
 describe('bugfix: the phone field took 18 digits (Fable)', () => {
-  it('keeps at most one local number of digits', () => {
-    expect(sanitizePhoneDigits('080123456789999999')).toBe('08012345678');
-    expect(sanitizePhoneDigits('0801 234 5678')).toBe('08012345678');
+  it('ignores typing past a complete 11-digit number', () => {
+    expect(nextPhoneDigits('08012345678', '080123456789')).toBe('08012345678');
+    expect(nextPhoneDigits('0801234567', '08012345678')).toBe('08012345678');
   });
 
   it('turns a pasted +234 number into its local form', () => {
     expect(sanitizePhoneDigits('+234 801 234 5678')).toBe('08012345678');
-    expect(sanitizePhoneDigits('2348012345678')).toBe('08012345678');
+    expect(nextPhoneDigits('', '2348012345678')).toBe('08012345678');
+  });
+});
+
+describe('bugfix: an overlong number was cut and sent to someone else (Muse)', () => {
+  it('keeps an overlong paste as entered, and the purchase check refuses it', () => {
+    const pasted = nextPhoneDigits('', '080123456789999999');
+    expect(pasted).toBe('080123456789999999');
+    expect(phoneLengthError(pasted)).toMatchObject({
+      title: 'Check the phone number',
+    });
+    expect(
+      validateAirtimePurchaseInput({
+        amount: '100',
+        numericAmount: 100,
+        phoneNumber: pasted,
+        selectedProvider: 'mtn',
+      })
+    ).toMatchObject({ title: 'Check the phone number' });
+    expect(phoneLengthError('08012345678')).toBeNull();
   });
 });

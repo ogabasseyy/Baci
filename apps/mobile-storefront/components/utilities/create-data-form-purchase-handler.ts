@@ -18,6 +18,7 @@ import {
   creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
+import { phoneLengthError } from './airtime-form-controller.helpers';
 import {
   awaitUtilitySettlementGate,
   refreshWalletAfterSuppressedVtuResult,
@@ -84,6 +85,11 @@ export function createDataFormPurchaseHandler({
         'Missing Information',
         'Please enter a phone number and choose a data bundle.'
       );
+      return;
+    }
+    const phoneError = phoneLengthError(phoneNumber);
+    if (phoneError) {
+      Alert.alert(phoneError.title, phoneError.message);
       return;
     }
     // Bug #64: Prevent submission when planAmount is 0 or not set

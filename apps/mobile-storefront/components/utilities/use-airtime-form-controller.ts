@@ -8,9 +8,9 @@ import { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { useAuthStore } from '@/stores/auth-store';
 import type { AirtimeFormProps } from './airtime-form.types';
 import {
+  nextPhoneDigits,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
-  sanitizePhoneDigits,
   scrollToAirtimePaymentSection,
 } from './airtime-form-controller.helpers';
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
@@ -59,7 +59,7 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
 
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const digits = sanitizePhoneDigits(text);
+    const digits = nextPhoneDigits(phoneNumber, text);
     setPhoneNumber(digits);
     setSelectedProvider(resolveAirtimeProvider(digits));
     setIsNetworkPickerExpanded(false);

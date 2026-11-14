@@ -17,8 +17,8 @@ import {
   NOT_STARTABLE_CODES,
   type Outcome,
   REVIEW,
-  submitFailure,
 } from './goal-lifecycle-outcomes';
+import { submitFailure } from './goal-submit-failure';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 
 export type { GoalLifecycleStep };
@@ -40,10 +40,13 @@ const sleep = (ms: number) =>
 export function useGoalLifecycle({
   kind,
   goalId,
+  goalTitle,
   resetKey = 0,
 }: {
   kind: GoalActionKind;
   goalId: string;
+  /** Names the goal on the PIN sheet. */
+  goalTitle?: string;
   resetKey?: number; // a new value starts a fresh attempt
 }) {
   const userId = useAuthStore((state) => state.user?.id);
@@ -124,7 +127,13 @@ export function useGoalLifecycle({
     isCurrent: () => boolean
   ) => {
     if (!merchantId) return;
-    const request = { action: kind, merchantId, goalId, operationId } as const;
+    const request = {
+      action: kind,
+      merchantId,
+      goalId,
+      operationId,
+      goalTitle,
+    } as const;
     show('pin');
     const first = await requestProof(request);
     if (!isCurrent()) return;

@@ -40,6 +40,7 @@ export function createWalletSavingsActions({
   savingsContributionAmount,
   walletBalance,
   startWalletTopUp,
+  submittingRef = { current: false },
   walletTopUp,
   setIsAddingSavingsContribution,
   setShowSavingsProgressModal,
@@ -68,6 +69,11 @@ export function createWalletSavingsActions({
   savingsContributionAmount: string;
   walletBalance: number;
   startWalletTopUp?: () => void;
+  /**
+   * True while this screen's own add is in flight: the operation id it just
+   * stored is not an earlier pending contribution (same scope as the id).
+   */
+  submittingRef?: { current: boolean };
   walletTopUp?: Pick<
     Parameters<typeof startSavingsWalletTopUp>[0],
     'customer' | 'user' | 'setIsFundPending'
@@ -257,7 +263,12 @@ export function createWalletSavingsActions({
       goal,
       rawAmount: savingsContributionAmount,
       refetchWallet,
-      setIsAddingSavingsContribution,
+      // Marked in the same call that re-renders the sheet, so the render that
+      // ends the add already knows whether its id is left unresolved.
+      setIsAddingSavingsContribution: (value: boolean) => {
+        submittingRef.current = value;
+        setIsAddingSavingsContribution(value);
+      },
       // An id bound to the legacy rail is validated against the legacy balance.
       walletBalance:
         rail === 'primary' ? walletBalance : (legacyBalance ?? walletBalance),
@@ -267,7 +278,8 @@ export function createWalletSavingsActions({
   return {
     hasPendingSavingsContribution:
       isPiggyvestPrimaryMerchant(activeMerchantId) &&
-      idempotencyKeyRef.current !== null,
+      idempotencyKeyRef.current !== null &&
+      !submittingRef.current,
     handleAddSavingsContribution,
     handleFundSavingsWallet,
     handleOpenSavings,

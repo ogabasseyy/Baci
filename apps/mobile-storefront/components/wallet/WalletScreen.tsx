@@ -1,5 +1,4 @@
 import { Redirect, router } from 'expo-router';
-import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useWalletBalanceContractWarning } from '@/components/wallet/use-wallet-balance-contract-warning';
 import { useWalletFundingAccountController } from '@/components/wallet/use-wallet-funding-account-controller';
@@ -27,6 +26,7 @@ import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { useWalletSavingsRefs } from './use-wallet-savings-refs';
+import { useWalletSavingsSheetState } from './use-wallet-savings-sheet-state';
 import { walletPurchaseProps } from './wallet-purchase-props';
 import {
   deriveWalletDisplayData,
@@ -46,9 +46,6 @@ export function WalletScreen({
 }: WalletScreenProps = {}) {
   const { colors, scrollContentStyle } = useWalletAppearance(presentation);
   const routeAction = Array.isArray(action) ? action[0] : action;
-  const routeSavingsGoalId = Array.isArray(savingsGoalId)
-    ? savingsGoalId[0]
-    : savingsGoalId;
   const routeRequiredAmount = normalizeWalletFundAmountParam(requiredAmount);
   const walletReturnTo = sanitizeWalletReturnTo(returnTo);
   const { isLoading: authLoading, redirectTo } = useRequireAuth();
@@ -101,11 +98,13 @@ export function WalletScreen({
   });
   const [savingsContributionAmount, setSavingsContributionAmount] =
     useWalletSavingsAmount(routeAction, savingsAmount);
-  const [showSavingsProgressModal, setShowSavingsProgressModal] = useState(
-    routeAction === 'savings'
-  );
-  const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
-    useState(false);
+  const {
+    goalPin,
+    isAddingSavingsContribution,
+    setIsAddingSavingsContribution,
+    setShowSavingsProgressModal,
+    showSavingsProgressModal,
+  } = useWalletSavingsSheetState(routeAction, savingsGoalId);
   const savingsRefs = useWalletSavingsRefs();
   const hasSavedCards = useWalletSavedCards(customer?.id, activeMerchantId);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;
@@ -144,7 +143,7 @@ export function WalletScreen({
     },
     customerId: customer?.id,
     routeAction,
-    routeSavingsGoalId,
+    routeSavingsGoalId: goalPin.routeGoalId,
     routeIntentId: Array.isArray(intent) ? intent[0] : intent,
     routeRequiredAmount,
     setFundAmount,
@@ -160,7 +159,8 @@ export function WalletScreen({
     scopeKey: `${user?.id ?? ''}:${activeMerchantId ?? ''}`,
     refetch,
   });
-  const display = wallet && deriveWalletDisplayData(wallet, routeSavingsGoalId);
+  const display = wallet && deriveWalletDisplayData(wallet, goalPin.goalId);
+  goalPin.noteShown(display?.activeSavingsGoal);
   const {
     walletContentSavingsProps,
     handleAddSavingsContribution,
@@ -220,7 +220,7 @@ export function WalletScreen({
     showQuickSave,
     walletBalance,
     totalBalance,
-  } = display ?? deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
+  } = display ?? deriveWalletDisplayData(data.wallet, goalPin.goalId);
   return (
     <>
       <WalletScreenView

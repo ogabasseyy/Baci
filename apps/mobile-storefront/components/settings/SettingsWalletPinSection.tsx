@@ -4,6 +4,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { SettingsCardSection } from './SettingsCardSection';
 import { SettingsSectionRow } from './SettingsSectionRow';
+import { useRefreshOnRefocus } from './use-refresh-on-refocus';
 import {
   useWalletPinSettingsGate,
   type WalletPinStatus,
@@ -20,6 +21,8 @@ function subtitleFor(status: WalletPinStatus | null) {
 export function SettingsWalletPinSection() {
   const colors = Colors[useColorScheme()];
   const gate = useWalletPinSettingsGate();
+  // A PIN saved on the pushed Wallet PIN screen shows here on return.
+  useRefreshOnRefocus(gate.refresh);
   if (gate.state !== 'ready') return null;
 
   return (

@@ -36,6 +36,8 @@ jest.mock('expo-router', () => ({
   Stack: {
     Screen: () => null,
   },
+  // The wallet PIN section refreshes when settings regains focus.
+  useNavigation: () => ({ addListener: () => () => undefined }),
 }));
 
 jest.mock('react-native-reanimated', () => {

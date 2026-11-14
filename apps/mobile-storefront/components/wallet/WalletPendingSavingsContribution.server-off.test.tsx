@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 
@@ -48,5 +48,28 @@ describe('pending contribution card with the server off', () => {
     );
     act(() => jest.advanceTimersByTime(5000));
     expect(onCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it('never runs a tap and the timer check at the same time', () => {
+    let finish: () => void = () => undefined;
+    const onCheck = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { getByRole } = render(
+      <WalletPendingSavingsContribution
+        colors={Colors.light}
+        isChecking={false}
+        onCheck={onCheck}
+      />
+    );
+    fireEvent.press(getByRole('button', { name: 'Check contribution status' }));
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    finish();
   });
 });

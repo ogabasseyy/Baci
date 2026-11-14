@@ -32,6 +32,16 @@ describe('goalCancelBreakdown', () => {
     );
   });
 
+  it('treats a null stored balance as unknown too', () => {
+    expect(
+      goalCancelBreakdown({
+        ...baseGoal,
+        current_amount: 50000,
+        principal_amount: null as unknown as number,
+      })
+    ).toEqual({ known: false, saved: 50000, forfeited: 0, refund: 50000 });
+  });
+
   it('never refunds more than the goal holds', () => {
     expect(
       goalCancelBreakdown({

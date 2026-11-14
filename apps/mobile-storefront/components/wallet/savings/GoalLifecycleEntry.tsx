@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
+import { isFundedUnsettledGoal } from './goal-settlement';
 import { GOAL_LIFECYCLE_COPY } from './use-goal-lifecycle';
 import { usePrimaryGoalGate } from './use-primary-goal-gate';
 
@@ -19,6 +20,9 @@ type Props = {
 };
 
 // The database compares maturity against the UTC date, so the button must too.
+const AUTO_RETRY_MS = 10_000;
+const AUTO_RETRY_LIMIT = 12;
+
 function utcToday() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -26,7 +30,9 @@ function utcToday() {
 // Only an eligible-looking goal gets the button; the server and database make
 // the final call and their message is shown if they disagree.
 function looksCompletable(goal: WalletActiveSavingsGoal) {
-  if (goal.status === 'completed') return true;
+  // A completed goal is only completable while it still holds money: once
+  // settled (purchase requested) there is nothing left to move.
+  if (goal.status === 'completed') return isFundedUnsettledGoal(goal);
   // The database checks saved principal, not principal plus credited
   // interest, so interest alone never makes a goal look complete.
   if ((goal.principal_amount ?? goal.current_amount) >= goal.target_amount)
@@ -52,6 +58,16 @@ export function GoalLifecycleEntry({
   // Complete until something else refreshes the wallet.
   const [retry, setRetry] = useState(0);
   const gate = usePrimaryGoalGate(walletUpdatedAt, retry);
+  // A failed read also retries by itself (every 10 s, up to 12 times), so
+  // the link heals once the server is back without needing a tap.
+  useEffect(() => {
+    if (gate !== 'error' || retry >= AUTO_RETRY_LIMIT) return;
+    const timer = setTimeout(
+      () => setRetry((value) => value + 1),
+      AUTO_RETRY_MS
+    );
+    return () => clearTimeout(timer);
+  }, [gate, retry]);
   if (hasPendingContribution) return null;
   if (gate === 'error')
     return (

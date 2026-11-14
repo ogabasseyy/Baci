@@ -268,7 +268,8 @@ export default function RootLayout() {
   }, [error]);
 
   const timedOutStartupBlocked =
-    timedOut && (!shouldRenderApp || !loaded || !isStorageReady);
+    timedOut &&
+    (!shouldRenderApp || !loaded || !isStorageReady || !isInitialized);
 
   if (
     shouldShowStartupRecovery ||

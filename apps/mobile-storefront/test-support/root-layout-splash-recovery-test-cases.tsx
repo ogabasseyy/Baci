@@ -77,15 +77,12 @@ export function registerRootLayoutSplashRecoveryTests({
       minDuration: 0,
       fade: 220,
     });
-    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
-    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      /resume:false/
-    );
-    fireEvent(screen.getByTestId('root-layout-nav'), 'layout');
-    await finishNativeSplash();
+    expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen();
+    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
 
     authState.isInitialized = true;
     view.rerender(<RootLayout />);
+    await finishNativeSplash();
     await waitFor(() =>
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
         /resume:true/

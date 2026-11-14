@@ -195,6 +195,7 @@ export function OgabasseyV2Blog({
               <Link
                 key={cat}
                 href={asRoute(blogCategoryHref(basePath, cat, publishedCategories))}
+                prefetch={false}
                 className={`whitespace-nowrap rounded-lg border px-4 py-2 font-bold text-sm transition-all ${
                   activeCategory === cat
                     ? 'scale-105 transform border-gray-900 bg-gray-900 text-white shadow-md'
@@ -217,56 +218,63 @@ export function OgabasseyV2Blog({
                 activeCategory !== 'All'
             )
             .map((post) => (
-              <Link key={post.id} href={asRoute(blogHref(basePath, `/${post.slug}`))} className="block h-full">
-                <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-                  <div className="relative h-64 overflow-hidden">
-                    <Image
-                      src={getBlogListingImageSrc(post.featured_image_url)}
-                      alt={post.title}
-                      className="object-cover transition-transform duration-700 group-hover:scale-110"
-                      fill
-                      sizes={BLOG_LISTING_CARD_IMAGE_SIZES}
-                      loading="lazy"
-                      fetchPriority="low"
-                      quality={BLOG_HERO_IMAGE_QUALITY}
-                    />
-                    {post.category && (
-                      <div className="absolute top-4 left-4 rounded border border-gray-100 bg-white/95 px-3 py-1 font-black text-gray-900 text-xs uppercase tracking-wider shadow-sm backdrop-blur-md">
-                        {post.category}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col p-6">
-                    <div className="mb-4 flex items-center gap-4 font-bold text-gray-400 text-xs uppercase tracking-wider">
-                      <span className="flex items-center gap-1">
-                        <Calendar size={12} className="text-red-500" />
-                        <time dateTime={post.published_at}>{formatDate(post.published_at)}</time>
-                      </span>
-                      <span className="size-1 rounded-full bg-gray-300" />
-                      <span>{post.reading_time_minutes || 3} MIN READ</span>
+              <article
+                key={post.id}
+                className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 focus-within:ring-2 focus-within:ring-red-600 hover:-translate-y-1 hover:shadow-xl"
+              >
+                <div className="relative h-64 overflow-hidden">
+                  <Image
+                    src={getBlogListingImageSrc(post.featured_image_url)}
+                    alt={post.title}
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                    fill
+                    sizes={BLOG_LISTING_CARD_IMAGE_SIZES}
+                    loading="lazy"
+                    fetchPriority="low"
+                    quality={BLOG_HERO_IMAGE_QUALITY}
+                  />
+                  {post.category && (
+                    <div className="absolute top-4 left-4 rounded border border-gray-100 bg-white/95 px-3 py-1 font-black text-gray-900 text-xs uppercase tracking-wider shadow-sm backdrop-blur-md">
+                      {post.category}
                     </div>
-                    <h2 className="mb-3 font-black text-gray-900 text-xl leading-tight line-clamp-2 transition-colors group-hover:text-red-600 md:text-2xl">
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col p-6">
+                  <div className="mb-4 flex items-center gap-4 font-bold text-gray-400 text-xs uppercase tracking-wider">
+                    <span className="flex items-center gap-1">
+                      <Calendar size={12} className="text-red-500" />
+                      <time dateTime={post.published_at}>{formatDate(post.published_at)}</time>
+                    </span>
+                    <span className="size-1 rounded-full bg-gray-300" />
+                    <span>{post.reading_time_minutes || 3} MIN READ</span>
+                  </div>
+                  <h2 className="mb-3 font-black text-gray-900 text-xl leading-tight line-clamp-2 transition-colors group-hover:text-red-600 md:text-2xl">
+                    <Link
+                      href={asRoute(blogHref(basePath, `/${post.slug}`))}
+                      prefetch={false}
+                      className="after:absolute after:inset-0 after:z-10 focus-visible:outline-hidden"
+                    >
                       {post.title}
-                    </h2>
-                    <p className="mb-6 flex-1 text-gray-500 text-sm leading-relaxed line-clamp-3 md:text-base">
-                      {post.excerpt}
-                    </p>
-                    <div className="mt-auto flex items-center justify-between border-gray-50 border-t pt-6">
-                      <div className="flex items-center gap-2">
-                        <div className="flex size-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-500">
-                          <User size={14} />
-                        </div>
-                        <span className="font-bold text-gray-700 text-xs">
-                          {post.author_name || 'Ogabassey Team'}
-                        </span>
+                    </Link>
+                  </h2>
+                  <p className="mb-6 flex-1 text-gray-500 text-sm leading-relaxed line-clamp-3 md:text-base">
+                    {post.excerpt}
+                  </p>
+                  <div className="mt-auto flex items-center justify-between border-gray-50 border-t pt-6">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-500">
+                        <User size={14} />
                       </div>
-                      <span className="text-red-600 transition-transform group-hover:translate-x-1 group-hover:text-red-700">
-                        <ArrowRight size={20} />
+                      <span className="font-bold text-gray-700 text-xs">
+                        {post.author_name || 'Ogabassey Team'}
                       </span>
                     </div>
+                    <span className="text-red-600 transition-transform group-hover:translate-x-1 group-hover:text-red-700">
+                      <ArrowRight size={20} />
+                    </span>
                   </div>
-                </article>
-              </Link>
+                </div>
+              </article>
             ))}
         </div>
 
@@ -285,6 +293,7 @@ export function OgabasseyV2Blog({
             href={asRoute(
               blogCategoryHref(basePath, 'Tips and Tricks', publishedCategories)
             )}
+            prefetch={false}
             className="rounded-xl bg-green-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:-translate-y-1 hover:bg-green-700 hover:shadow-2xl active:scale-95"
           >
             View Green Tips

@@ -25,7 +25,6 @@ import {
 } from '@/lib/repairs/repair-status';
 import { shippingService } from '@/lib/shipping';
 import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
-import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import type {
   BookingRequest,
   ShipmentBookingResult,
@@ -260,8 +259,8 @@ export async function bookRepairPickup(
       );
       if (released) {
         return pickupFailure(
-          error instanceof OrderShipmentBookingError &&
-            error.code === 'GIGL_BOOKING_VALIDATION_FAILED'
+          (error as { code?: unknown }).code ===
+            'GIGL_BOOKING_VALIDATION_FAILED'
             ? 'provider_rejected'
             : 'booking_failed'
         );

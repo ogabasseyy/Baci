@@ -12,6 +12,7 @@ import {
   recordOrderShipmentBookingFailure,
   toBookingFailureResponseError,
 } from '@/lib/shipping/order-shipment-booking-failure';
+import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import type { ShipmentBookingResult } from '@/lib/shipping/types';
 import { createClient } from '@/lib/supabase/server';
@@ -174,6 +175,17 @@ export async function POST(request: NextRequest) {
     });
     if (!persisted.ok) {
       retainBookingLock = true;
+      await recordOrderShipmentBookingFailure(
+        supabase,
+        merchantId,
+        data.orderId,
+        new OrderShipmentBookingError(
+          `Provider booked ${persisted.trackingNumber ?? 'a shipment'} but saving it failed: ${persisted.error}`,
+          persisted.status,
+          'BOOKED_SHIPMENT_NOT_SAVED'
+        ),
+        true
+      );
       return NextResponse.json(
         {
           error: persisted.error,
@@ -188,7 +200,10 @@ export async function POST(request: NextRequest) {
   } catch (rawError) {
     console.error('Error booking shipment:', rawError);
     if (bookingSupabase && bookingOrderId && bookingMerchantId) {
-      if (isProviderNeverReachedError(rawError)) {
+      if (
+        isProviderNeverReachedError(rawError) ||
+        shouldReleaseBookingLock(rawError)
+      ) {
         retainBookingLock = false;
       }
       await recordOrderShipmentBookingFailure(

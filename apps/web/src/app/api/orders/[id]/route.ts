@@ -502,7 +502,10 @@ export async function PATCH(
             error,
             !lockReleased
           );
-          throw toBookingFailureResponseError(error);
+          throw toBookingFailureResponseError(error, {
+            walletFunded:
+              existingOrder.shipping_funding_source === 'merchant_wallet',
+          });
         }
       }
     }

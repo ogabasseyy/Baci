@@ -18,6 +18,8 @@ export type ClassifiedBookingFailure = {
 const MAX_MESSAGE_LENGTH = 500;
 /** The message GIG's booking client throws when its own deadline passes. */
 export const GIGL_BOOKING_TIMEOUT_MESSAGE = 'GIGL booking timed out';
+export const GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE =
+  'GIGL international booking timed out';
 
 // Deliberately partial: only dial-level failures that prove nothing was sent.
 // ETIMEDOUT, ECONNRESET and EPIPE can happen after the request left, so those
@@ -32,9 +34,21 @@ const NEVER_REACHED_CODES = new Set([
 
 /** True when the connection to the provider never opened, so nothing was booked. */
 export function isProviderNeverReachedError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const cause = (error as { cause?: { code?: unknown } }).cause;
-  return typeof cause?.code === 'string' && NEVER_REACHED_CODES.has(cause.code);
+  // Node's fetch wraps the system error in `cause`, sometimes one level deeper.
+  let current: unknown = error;
+  for (
+    let depth = 0;
+    depth < 3 && typeof current === 'object' && current !== null;
+    depth += 1
+  ) {
+    const { code, cause } = current as {
+      code?: unknown;
+      cause?: unknown;
+    };
+    if (typeof code === 'string' && NEVER_REACHED_CODES.has(code)) return true;
+    current = cause;
+  }
+  return false;
 }
 
 /** A call that may have reached GIG but never answered. */
@@ -43,7 +57,8 @@ function isProviderTimeoutError(error: unknown): boolean {
   // nothing about whether GIG booked the parcel.
   return (
     error instanceof Error &&
-    error.message.startsWith(GIGL_BOOKING_TIMEOUT_MESSAGE)
+    (error.message.startsWith(GIGL_BOOKING_TIMEOUT_MESSAGE) ||
+      error.message.startsWith(GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE))
   );
 }
 
@@ -126,7 +141,10 @@ export async function recordOrderShipmentBookingFailure(
  * An unconfirmed provider call (timeout) would otherwise surface as a bare 500.
  * Say plainly why the order is paused and that retrying shortly is expected.
  */
-export function toBookingFailureResponseError(error: unknown): unknown {
+export function toBookingFailureResponseError(
+  error: unknown,
+  options: { walletFunded?: boolean } = {}
+): unknown {
   const { outcome } = classifyBookingFailure(error);
   if (outcome === 'not_submitted') {
     return new OrderShipmentBookingError(
@@ -137,6 +155,14 @@ export function toBookingFailureResponseError(error: unknown): unknown {
   }
   if (outcome !== 'provider_unconfirmed') {
     return error;
+  }
+  if (options.walletFunded) {
+    // The wallet charge is held for reconciliation, so waiting will not help.
+    return new OrderShipmentBookingError(
+      'GIG did not confirm this booking in time and your wallet charge is being checked. Please contact support before trying again.',
+      503,
+      'SHIPMENT_BOOKING_UNCONFIRMED'
+    );
   }
   return new OrderShipmentBookingError(
     'GIG did not confirm this booking in time. To avoid booking the parcel twice, this order is paused for up to 15 minutes. Please try again after that.',

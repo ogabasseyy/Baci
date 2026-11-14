@@ -148,3 +148,35 @@ describe('toBookingFailureResponseError', () => {
     expect(toBookingFailureResponseError(own)).toBe(own);
   });
 });
+
+describe('bugfix: review follow-ups', () => {
+  it('treats the international GIG timeout as unconfirmed too', () => {
+    expect(
+      classifyBookingFailure(new Error('GIGL international booking timed out'))
+        .outcome
+    ).toBe('provider_unconfirmed');
+  });
+
+  it('finds a never-reached code one level deeper or on the error itself', () => {
+    const deep = Object.assign(new Error('fetch failed'), {
+      cause: Object.assign(new Error('inner'), {
+        cause: { code: 'ECONNREFUSED' },
+      }),
+    });
+    expect(classifyBookingFailure(deep).outcome).toBe('not_submitted');
+    expect(
+      classifyBookingFailure(
+        Object.assign(new Error('boom'), { code: 'ENOTFOUND' })
+      ).outcome
+    ).toBe('not_submitted');
+  });
+
+  it('sends wallet-funded merchants to support instead of promising a retry', () => {
+    const result = toBookingFailureResponseError(
+      new Error('GIGL booking timed out'),
+      { walletFunded: true }
+    );
+    expect(result).toMatchObject({ code: 'SHIPMENT_BOOKING_UNCONFIRMED' });
+    expect((result as Error).message).toContain('contact support');
+  });
+});

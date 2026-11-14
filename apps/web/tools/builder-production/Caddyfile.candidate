@@ -1,0 +1,66 @@
+# Candidate only: do not install or expose until the release and ingress gates pass.
+# Hostnames, distinct loopback ports and the owner CA are operator-controlled.
+{
+	admin off
+}
+
+{$BACI_AUTH_HOST} {
+	@auth path /.well-known/openid-configuration /.well-known/oauth-authorization-server /auth /auth/* /token /token/revocation /jwks /interaction/* /upstream/callback
+	handle @auth {
+		reverse_proxy 127.0.0.1:{$BACI_AUTH_PORT} {
+			header_up Host builder-auth.usebaci.com
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+{$BACI_MCP_ORIGIN_HOST} {
+	@mcp path /builder/mcp /.well-known/oauth-protected-resource/builder/mcp
+	handle @mcp {
+		reverse_proxy 127.0.0.1:{$BACI_MCP_PORT} {
+			header_up Host mcp.usebaci.com
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+{$BACI_OWNER_HOST} {
+	tls {
+		client_auth {
+			mode require_and_verify
+			trust_pool file {$BACI_OWNER_CA_FILE}
+		}
+	}
+	@owner path /internal/owner/preview /internal/owner/attest /internal/owner/public
+	handle @owner {
+		reverse_proxy 127.0.0.1:{$BACI_OWNER_PORT} {
+			header_up Host mcp.usebaci.com
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+{$BACI_EXECUTION_HOST} {
+	@output {
+		method GET
+		path /resource/* /published/*
+	}
+	handle @output {
+		reverse_proxy 127.0.0.1:{$BACI_DELIVERY_PORT} {
+			header_up Host {$BACI_EXECUTION_HOST}
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		respond 404
+	}
+}

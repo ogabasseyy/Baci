@@ -1,0 +1,52 @@
+# Contabo ingress candidate
+
+`Caddyfile.candidate` is an uninstalled, unreviewed candidate, not a production
+configuration or permission to open ports. Its four hostnames must be distinct,
+operator-reserved, and matched to the private builder configuration. The delivery
+host must also satisfy the existing separate-registrable-domain constraint.
+Use bare DNS hostnames, not URL strings, in the four host variables. The auth
+host must be `builder-auth.usebaci.com`; the MCP origin host is a separately
+reserved upstream name, not the existing public `mcp.usebaci.com` hostname.
+Each port variable must match its corresponding configured loopback listener.
+
+The auth and MCP origin hosts forward only their fixed paths. The owner host
+requires a client certificate trusted by a dedicated owner CA, and forwards only
+the three owner paths. The execution host serves only GET output paths. Caddy
+overwrites forwarded IP information instead of trusting arbitrary client input.
+There is no access-log directive; deployment must independently confirm that
+the proxy and every upstream avoid logging bearer tokens, request bodies and
+private URLs.
+
+Run the disposable HTTPS and client-certificate smoke test with:
+
+```sh
+python3 apps/web/tools/builder-production/ingress-candidate-check.py
+```
+
+It requires locally installed Caddy 2.11, curl and OpenSSL. It uses synthetic
+certificates and temporary loopback listeners. It tests routing and the owner
+TLS client certificate boundary, not the real builder, Vercel, DNS, certificate
+issuance, provider callback, rate limits or rollout. It intentionally disables
+server-certificate verification only for its disposable local Caddy CA.
+
+Before any deployment, independently review and qualify the exact Caddy binary,
+hostnames, certificate lifecycle, source allowlists, firewall and rollback.
+Current Contabo inspection found Caddy absent, only SSH allowed through UFW, and
+the Ubuntu repository offering Caddy 2.6.2; the local smoke used Caddy 2.11.4.
+Do not assume the older package supports this configuration. Confirm automatic
+TLS issuance without interfering with existing services.
+
+The web clients currently target the public MCP host and do not present the
+owner client certificate. They need a fixed, authenticated owner HTTPS client,
+secret provisioning and rotation, and negative tests before this candidate can
+serve owner traffic. Public MCP routing also requires a separately reviewed
+Vercel rule for the exact MCP and protected-resource paths, preserving the
+existing commerce connector. The forwarded IP observed through Vercel may be
+an edge address shared by many users; validate rate-limit behavior rather than
+trusting a spoofable forwarded header. The 600-second verifier path and graceful
+shutdown need qualification against every actual proxy and application deadline.
+
+Do not activate builder OAuth, owner routes, the runner or delivery merely because
+the local smoke passes. Required reviews, CI, private-draft recovery, data and
+grant inventory, production credentials, rollout and negative ingress tests are
+separate release gates.

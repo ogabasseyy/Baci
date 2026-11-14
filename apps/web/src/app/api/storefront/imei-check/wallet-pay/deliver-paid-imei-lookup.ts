@@ -82,8 +82,19 @@ export class WalletPaymentMismatchError extends Error {
 }
 
 /** The lookup's recorded price in kobo (the price the payment must carry). */
-export const lookupPriceKobo = (lookup: Pick<ImeiLookupRow, 'amount_ngn'>) =>
-  Math.round(Number(lookup.amount_ngn) * 100);
+/**
+ * The lookup's price in whole kobo, exactly as the database guards read it
+ * (amount * 100 = trunc(amount * 100)). A price that is not a whole number of
+ * kobo is NaN, so every comparison fails closed instead of rounding one way
+ * here and being refused there (Muse).
+ */
+export const lookupPriceKobo = (lookup: Pick<ImeiLookupRow, 'amount_ngn'>) => {
+  const kobo = Number(lookup.amount_ngn) * 100;
+  const whole = Math.round(kobo);
+  return Number.isFinite(kobo) && Math.abs(kobo - whole) < 1e-6
+    ? whole
+    : Number.NaN;
+};
 
 const pending = (status: string) =>
   NextResponse.json(

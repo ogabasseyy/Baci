@@ -125,10 +125,14 @@ export function formatQuizClockWithDay(
   const dayKey = (date: Date) => getGregorianDateKey(date, timeZone);
   const date = new Date(value);
   if (dayKey(date) === dayKey(new Date(nowMs))) return clock;
+  const yearOf = (target: Date) =>
+    getGregorianDateKey(target, timeZone).slice(0, 4);
   const day = date.toLocaleDateString(resolvedLocale, {
     day: 'numeric',
     month: 'short',
     timeZone,
+    // A quiz from another year would be ambiguous without it.
+    ...(yearOf(date) === yearOf(new Date(nowMs)) ? {} : { year: 'numeric' }),
   });
   return `${day}, ${clock}`;
 }

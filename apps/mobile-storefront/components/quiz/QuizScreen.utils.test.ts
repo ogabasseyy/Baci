@@ -206,6 +206,17 @@ describe('QuizScreen utils', () => {
       ).toBe('Nov 13, 12:34 AM');
     });
 
+    it('adds the year when the quiz closed in another year', () => {
+      expect(
+        formatQuizClockWithDay(
+          '2025-11-12T23:34:00.000Z',
+          'en-US',
+          'Africa/Lagos',
+          now
+        )
+      ).toBe('Nov 13, 2025, 12:34 AM');
+    });
+
     it('keeps the unset-time wording when there is no end time', () => {
       expect(formatQuizClockWithDay(null, 'en-US', 'Africa/Lagos', now)).toBe(
         'Time not set'

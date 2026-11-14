@@ -102,7 +102,9 @@ export default function CartStateView({
             />
           )}
         </Pressable>
-        {hasError ? null : <AdSlot placement="FOOTER_ANCHOR" />}
+        {hasError ? null : (
+          <AdSlot clearance="wide" placement="FOOTER_ANCHOR" />
+        )}
       </View>
     </View>
   );

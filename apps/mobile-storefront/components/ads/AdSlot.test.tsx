@@ -117,6 +117,16 @@ describe('AdSlot', () => {
       setAdsEnabled(ORIGINAL_ENV);
     });
 
+    it('is not announced to screen readers until it is measured', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      expect(screen.queryByLabelText('Sponsored advertisement')).toBeNull();
+      measureSlot('ad-slot-footer-anchor', 320);
+      expect(screen.getByLabelText('Sponsored advertisement')).toBeTruthy();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
     it('shows no Sponsored label until the slot width is measured', () => {
       setAdsEnabled('true');
       render(<AdSlot placement="FOOTER_ANCHOR" />);

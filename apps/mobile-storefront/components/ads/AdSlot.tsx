@@ -16,6 +16,12 @@ type AdSlotProps = {
   placement: MobileAdBannerPlacementKey;
   testID?: string;
   /**
+   * 'wide' keeps extra clear space around the banner for hosts where a
+   * button sits directly next to it (AdMob accidental-click guidance).
+   * Dense scroll content keeps the default, tighter rhythm.
+   */
+  clearance?: 'default' | 'wide';
+  /**
    * Set only by the drawer-owned slot. Every other slot suspends while the
    * navigation drawer is open so a single FOOTER_ANCHOR request stays live
    * and impressions attribute to the visible screen.
@@ -42,6 +48,7 @@ function getAdErrorCode(error: Error): string {
  * navigation cannot request an ad on a hidden stack screen.
  */
 export function AdSlot({
+  clearance = 'default',
   placement,
   testID,
   visibleWhileDrawerOpen = false,
@@ -110,7 +117,11 @@ export function AdSlot({
 
   return (
     <View
-      accessibilityLabel="Sponsored advertisement"
+      // Nothing is announced until a banner can actually be requested.
+      accessibilityLabel={
+        slotWidth === null ? undefined : 'Sponsored advertisement'
+      }
+      accessible={slotWidth !== null}
       onLayout={(event) => {
         const measured = Math.floor(event.nativeEvent.layout.width);
         // Ignore sub-threshold jitter: every accepted change remounts the
@@ -124,7 +135,11 @@ export function AdSlot({
         }
       }}
       // Collapsed until measured so no blank "Sponsored" slot is shown.
-      style={slotWidth === null ? styles.unmeasuredSlot : styles.slot}
+      style={
+        slotWidth === null
+          ? styles.unmeasuredSlot
+          : [styles.slot, clearance === 'wide' ? styles.wideSlot : null]
+      }
       testID={testID ?? `ad-slot-${placement.toLowerCase().replace(/_/g, '-')}`}
     >
       {slotWidth === null ? null : (
@@ -171,10 +186,11 @@ const styles = StyleSheet.create({
   slot: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    // Clear space above and below keeps the banner away from neighbouring
-    // buttons (AdMob accidental-click guidance).
-    marginVertical: 24,
+    marginVertical: 8,
     paddingVertical: 8,
+  },
+  wideSlot: {
+    marginVertical: 24,
   },
   label: {
     color: BRAND.primary,

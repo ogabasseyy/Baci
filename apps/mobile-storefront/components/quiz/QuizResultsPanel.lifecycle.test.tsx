@@ -160,7 +160,10 @@ describe('QuizResultsPanel lifecycle', () => {
     );
 
     expect(screen.getByText("You're all done!")).toBeTruthy();
-    expect(screen.getByText(/You finished at/)).toBeTruthy();
+    // bugfix: with no submission timestamp the server clock was shown as
+    // the finish time; the line now stays generic.
+    expect(screen.getByText(/Your finish time is recorded/)).toBeTruthy();
+    expect(screen.queryByText(/You finished at/)).toBeNull();
     expect(screen.getByText(/Ties go to the faster finish/)).toBeTruthy();
     expect(screen.getByText('Quiz ends in')).toBeTruthy();
     expect(screen.getByRole('timer')).toHaveTextContent('0:30');

@@ -52,11 +52,11 @@ export function getQuizAnswerAccent(index: number): string {
 export const QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH = 22;
 
 /**
- * CJK, Hangul, kana and emoji are about twice as wide as Latin letters, so
- * the character limit above does not protect them from truncation.
+ * The character limit above is tuned for Latin letters, digits and common
+ * punctuation. Every other script (CJK, Thai, Arabic, Devanagari, emoji…)
+ * has wider or stacking glyphs, so those answers always use full rows.
  */
-const WIDE_GLYPH_PATTERN =
-  /[\u1100-\u11FF\u2E80-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]|\p{Extended_Pictographic}/u;
+const TILE_SAFE_TEXT_PATTERN = /^[\u0020-\u024F\u2010-\u2027\u20A0-\u20BF]*$/;
 
 /** Short answers sit in a 2×2 grid; long ones fall back to full-width rows. */
 export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {
@@ -65,7 +65,7 @@ export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {
     labels.every(
       (label) =>
         label.length <= QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH &&
-        !WIDE_GLYPH_PATTERN.test(label)
+        TILE_SAFE_TEXT_PATTERN.test(label)
     )
   );
 }

@@ -23,9 +23,9 @@ function formatCountdown(seconds: number) {
   return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, '0')}`;
 }
 
-function formatFinishTime(serverNow: string | null | undefined) {
-  if (!serverNow) return null;
-  const timestamp = Date.parse(serverNow);
+function formatFinishTime(submittedAt: string | null | undefined) {
+  if (!submittedAt) return null;
+  const timestamp = Date.parse(submittedAt);
   if (Number.isNaN(timestamp)) return null;
   return new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
@@ -102,8 +102,10 @@ export function QuizResultsPanel({
     Number.isFinite(leaderboard.currentPlayer.score)
       ? leaderboard.currentPlayer.score
       : null;
+  // Only a real submission timestamp is shown as the finish time; the server
+  // clock is not one, so without it the line stays generic.
   const finishTime = formatFinishTime(
-    submittedAt ?? currentPlayer?.submittedAt ?? serverNow
+    submittedAt ?? currentPlayer?.submittedAt
   );
   if (lifecycle !== 'idle') {
     const canReturnToQuizList = Boolean(

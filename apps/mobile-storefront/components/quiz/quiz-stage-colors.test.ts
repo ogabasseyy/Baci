@@ -85,6 +85,13 @@ describe('quiz stage colours', () => {
     expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'Fast 🚀'])).toBe(
       false
     );
+    expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'ซัมซุง'])).toBe(false);
+    expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'سامسونج'])).toBe(
+      false
+    );
+    expect(shouldUseQuizAnswerGrid(['₦50,000', 'Café', '5.5”', 'A–Z'])).toBe(
+      true
+    );
   });
 
   it('uses the grid for four short answers only', () => {

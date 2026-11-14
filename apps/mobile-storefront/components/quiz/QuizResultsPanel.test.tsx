@@ -93,6 +93,7 @@ describe('QuizResultsPanel', () => {
         legacyResult={null}
         lifecycle="pending_results"
         serverNow={new Date(0).toISOString()}
+        submittedAt={new Date(0).toISOString()}
         styles={createQuizStyles(colors)}
         v2Result={{
           attemptId: 'a1',

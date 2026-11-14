@@ -37,7 +37,9 @@ async function checkDocument() {
   );
   const bootstrap = scriptTags.filter(
     (attributes) =>
-      !/\bsrc\s*=|\btype\s*=\s*["']application\//i.test(attributes)
+      !/\bsrc\s*=|\btype\s*=\s*["']application\/(?:json|ld\+json)["\x27]/i.test(
+        attributes
+      )
   );
   assert.ok(bootstrap.length, 'Expected inline Next.js bootstrap scripts');
   for (const attributes of bootstrap) {

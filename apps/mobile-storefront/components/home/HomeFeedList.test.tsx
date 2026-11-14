@@ -4,6 +4,7 @@ import type { Block } from '@/types/blocks';
 import {
   feed,
   GRID_BLOCKS,
+  mockBlockRenderer,
   mockBlockRendererModule,
   mockFlashListModule,
   mockScrollToOffset,
@@ -97,6 +98,15 @@ beforeEach(() => {
 });
 
 describe('HomeFeedList', () => {
+  it('pauses carousel autoplay in both feed slices while search is open', () => {
+    mockBlockRenderer.mockClear();
+    renderList({ isSearchOpen: true });
+    expect(mockBlockRenderer.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const [props] of mockBlockRenderer.mock.calls) {
+      expect(props).toEqual(expect.objectContaining({ autoplayPaused: true }));
+    }
+  });
+
   it('renders the FilterBar, section title, and a cell per product when a grid exists', () => {
     renderList();
 

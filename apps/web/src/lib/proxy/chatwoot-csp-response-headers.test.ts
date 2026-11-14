@@ -55,4 +55,45 @@ describe('Chatwoot CSP response wiring', () => {
       'https://support.example.com'
     );
   });
+
+  it('omits Chatwoot sources when tenant bindings are ambiguous', () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    vi.stubEnv('EKAETTE_CHATWOOT_WIDGET_ENABLED', 'true');
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_PLATFORM_ORIGIN',
+      'https://support.example.com'
+    );
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_CONTEXT_BINDINGS',
+      JSON.stringify([
+        {
+          merchantId: '11111111-1111-4111-8111-111111111111',
+          origin: 'https://shop.example.com',
+          websiteToken: 'public-widget-token-shared',
+          inboxId: 41,
+        },
+        {
+          merchantId: '22222222-2222-4222-8222-222222222222',
+          origin: 'https://shop.example.com',
+          websiteToken: 'public-widget-token-shared',
+          inboxId: 42,
+        },
+      ])
+    );
+
+    const response = applySecurityHeaders(
+      NextResponse.next(),
+      '/',
+      'Mozilla',
+      'storefront',
+      false,
+      undefined,
+      new NextRequest('https://shop.example.com/'),
+      'shop.example.com'
+    );
+
+    expect(response.headers.get('Content-Security-Policy')).not.toContain(
+      'https://support.example.com'
+    );
+  });
 });

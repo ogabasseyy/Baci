@@ -200,7 +200,7 @@ it('retains concurrency slots until timed-out work actually settles', async () =
       await gate;
       return Response.json({ ok: true });
     },
-    { timeoutMs: 50 }
+    { timeoutMs: 300 }
   );
   const server = createServer((req, res) => {
     void handler.handle(req, res);

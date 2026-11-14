@@ -65,6 +65,7 @@ function createOwnerHttpHandler(
       return;
     }
     if (readers >= 8) {
+      req.resume();
       respond(res, 429);
       return;
     }
@@ -150,6 +151,13 @@ function createOwnerHttpHandler(
           reader.releaseLock();
         }
       }
+      const allowedStatuses = [
+        200, 204, 400, 401, 403, 404, 409, 413, 429, 503,
+      ];
+      if (!allowedStatuses.includes(result.status)) {
+        respond(res, 502);
+        return;
+      }
       res.writeHead(result.status, {
         'content-type': 'application/json',
         'cache-control': 'private, no-store',
@@ -164,6 +172,7 @@ function createOwnerHttpHandler(
   return {
     async handle(req: IncomingMessage, res: ServerResponse) {
       if (active >= 16) {
+        req.resume();
         respond(res, 429);
         return;
       }

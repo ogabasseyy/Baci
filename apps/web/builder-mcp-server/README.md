@@ -32,6 +32,10 @@ grants, configure and verify the new issuer and callback, and coordinate
 re-authorization and token reissue where needed. This listener accepts only
 the configured builder issuer; it does not accept commerce connector tokens.
 Do not redirect or replace the existing commerce issuer as part of this rollout.
+Do not enable the new issuer until that inventory and cutover are complete;
+if existing builder grants cannot be identified or safely reauthorized, keep
+the builder integration disabled. The issuer change is not a transparent
+dual-issuer migration.
 
 Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the

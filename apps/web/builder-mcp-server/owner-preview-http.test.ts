@@ -143,6 +143,25 @@ it('does not forward an oversized bridge response', async () => {
   }
 });
 
+it('does not expose unexpected inner bridge statuses', async () => {
+  const handler = createOwnerPreviewHttpHandler(
+    async () => new Response(null, { status: 302 })
+  );
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    expect((await send(address.port)).status).toBe(502);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
 it('bounds concurrent admitted owner requests', async () => {
   let release: (() => void) | undefined;
   let ready: (() => void) | undefined;
@@ -153,6 +172,8 @@ it('bounds concurrent admitted owner requests', async () => {
     ready = resolve;
   });
   let count = 0;
+  let incomingCount = 0;
+  let rejectedResume: ReturnType<typeof vi.spyOn> | undefined;
   const handler = createOwnerPreviewHttpHandler(async () => {
     count++;
     if (count === 16) ready?.();
@@ -160,6 +181,7 @@ it('bounds concurrent admitted owner requests', async () => {
     return Response.json({ ok: true });
   });
   const server = createServer((req, res) => {
+    if (++incomingCount === 17) rejectedResume = vi.spyOn(req, 'resume');
     void handler.handle(req, res);
   });
   server.listen(0, '127.0.0.1');
@@ -170,6 +192,7 @@ it('bounds concurrent admitted owner requests', async () => {
     const pending = Array.from({ length: 16 }, () => send(address.port));
     await started;
     expect((await send(address.port)).status).toBe(429);
+    expect(rejectedResume).toHaveBeenCalled();
     release?.();
     expect(
       (await Promise.all(pending)).every((result) => result.status === 200)

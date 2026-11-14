@@ -12,7 +12,6 @@ import {
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import type { SavingsNoticeTone } from './savings-notice-store';
-import { useClearWalletOnlyNoticeOnBlur } from './use-clear-wallet-only-notice-on-blur';
 import { useSavingsNotice } from './use-savings-notice';
 
 type WalletColors = (typeof Colors)['light'];
@@ -46,10 +45,6 @@ export function SavingsNoticeCard({
   style?: StyleProp<ViewStyle>;
 }) {
   const { notice, clear } = useSavingsNotice(goalId);
-  useClearWalletOnlyNoticeOnBlur(
-    !inSheet && notice?.walletOnly === true,
-    clear
-  );
   if (!notice || (inSheet && notice.walletOnly)) return null;
   const tint = toneColor(notice.tone, colors);
   return (

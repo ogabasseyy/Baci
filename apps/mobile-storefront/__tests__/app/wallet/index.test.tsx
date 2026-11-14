@@ -264,6 +264,7 @@ jest.mock('expo-router', () => ({
     Screen: () => null,
   },
   useLocalSearchParams: () => mockSearchParams,
+  useNavigation: () => ({ addListener: () => () => undefined }),
 }));
 
 jest.mock('expo-crypto', () => ({

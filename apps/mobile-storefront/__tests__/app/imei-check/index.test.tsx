@@ -113,15 +113,36 @@ jest.mock('@/stores/auth-store', () => {
 
 import ImeiCheckerScreen from '@/app/imei-check';
 
+// Nothing is preselected (Fable walks 15/16), so these flows pick Full
+// Report first, as a customer would.
+function renderChoosingFullReport() {
+  render(<ImeiCheckerScreen />);
+  fireEvent.press(screen.getByText('Full Report'));
+}
+
 describe('ImeiCheckerScreen', () => {
-  it('renders primary shared service tiers with Full Report selected', () => {
+  it('renders primary shared service tiers and prices Full Report once chosen', () => {
     render(<ImeiCheckerScreen />);
 
     expect(screen.getByText('Full Report')).toBeTruthy();
     expect(screen.getByText('Quick ID')).toBeTruthy();
     expect(screen.getByText('Stolen Check')).toBeTruthy();
     expect(screen.getByText('Network Check')).toBeTruthy();
+    fireEvent.press(screen.getByText('Full Report'));
     expect(screen.getByText(approvedPrice.fullLabel)).toBeTruthy();
+  });
+
+  it('bugfix: a fresh form shows no price before a check is chosen (Fable walks 15/16)', () => {
+    render(<ImeiCheckerScreen />);
+
+    // No card is preselected below the fold, so the button names no price.
+    expect(screen.queryByText(/Verify Now|Pay ₦/)).toBeNull();
+    expect(
+      screen.getByRole('radio', { name: /Full Report/ })
+    ).toHaveAccessibilityState({ selected: false });
+    const button = screen.getByText('Choose a check');
+    fireEvent.press(button);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('updates the CTA price when a different service tier is selected', () => {
@@ -177,7 +198,7 @@ describe('ImeiCheckerScreen', () => {
         ok: true,
         status: 200,
       } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
@@ -215,7 +236,7 @@ describe('ImeiCheckerScreen', () => {
   });
 
   it('alerts the user and skips the request when an invalid IMEI is submitted', () => {
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
     // 15 digits, but the Luhn checksum is invalid so validation returns false.
@@ -230,7 +251,7 @@ describe('ImeiCheckerScreen', () => {
 
   it('waits for wallet balance before enabling verification', () => {
     mockWalletIsLoading = true;
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
     expect(screen.getByText('Loading wallet balance...')).toBeTruthy();
@@ -243,7 +264,7 @@ describe('ImeiCheckerScreen', () => {
 
   it('routes to wallet top-up instead of requesting when keyboard submit has insufficient balance', async () => {
     mockWalletBalance = 500;
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
     fireEvent.changeText(input, '490154203237518');
@@ -267,7 +288,7 @@ describe('ImeiCheckerScreen', () => {
       ok: false,
       status: 401,
     } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
@@ -295,7 +316,7 @@ describe('ImeiCheckerScreen', () => {
       ok: false,
       status: 402,
     } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
@@ -321,7 +342,7 @@ describe('ImeiCheckerScreen', () => {
       ok: false,
       status: 402,
     } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
@@ -347,7 +368,7 @@ describe('ImeiCheckerScreen', () => {
       ok: false,
       status: 502,
     } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
@@ -439,7 +460,7 @@ describe('ImeiCheckerScreen', () => {
         ok: true,
         status: 200,
       } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
@@ -498,7 +519,7 @@ describe('ImeiCheckerScreen', () => {
       ok: true,
       status: 200,
     } as Response);
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     // Form is showing: back should leave the screen normally (not prevented).
     expect(mockPreventRemoveState.prevent).toBe(false);
@@ -515,7 +536,8 @@ describe('ImeiCheckerScreen', () => {
 
     // Firing the intercept returns to the checker form instead of leaving.
     act(() => mockPreventRemoveState.callback?.());
-    await screen.findByText(approvedPrice.fullLabel);
+    // A fresh form again: no check chosen, so no price shown.
+    await screen.findByText('Choose a check');
     expect(screen.queryByText('iPhone 13 Pro')).toBeNull();
   });
 });

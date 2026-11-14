@@ -88,10 +88,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         piggyvest_paid: boolean;
         amount: number | string;
         status: string;
+        merchant_id: string;
+        customer_id: string;
       }> | null
     )?.[0];
     if (
       purchase?.piggyvest_paid !== true ||
+      // The caller's own store and customer, as the pay step checks (Muse).
+      purchase.merchant_id !== identity.merchantId ||
+      purchase.customer_id !== identity.customerId ||
       purchase.status !== 'pending' ||
       Math.round(Number(purchase.amount) * 100) !== issued.binding.amountKobo
     )

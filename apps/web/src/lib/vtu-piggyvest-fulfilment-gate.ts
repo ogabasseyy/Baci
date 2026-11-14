@@ -33,11 +33,12 @@ export function piggyvestFulfilmentGate(
 ) {
   const piggyvestPaid = isPiggyvestWalletPaid(row.metadata);
   const retryFailed = options.retryFailedRequested && !piggyvestPaid;
-  const recovery =
-    row.status === 'processing' ||
-    (row.status === 'pending' &&
-      (row.metadata?.monnifyTransientVendError !== undefined ||
-        row.metadata?.preVendInterruptedAt !== undefined));
+  // Only a processing row (provider-status reconciliation, never a new
+  // vend) goes on without the claim. A pending row marked by an interrupted
+  // or transient vend can be re-driven into a vend, so only the claim holder
+  // re-drives it (the drain's reclaim after a lapse); the reconciliation cron
+  // and plain replays wait (Muse high).
+  const recovery = row.status === 'processing';
   const hold =
     piggyvestPaid &&
     !options.walletPayClaimed &&

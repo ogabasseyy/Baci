@@ -23,14 +23,24 @@ describe('piggyvestFulfilmentGate', () => {
     });
   });
 
-  it('lets reconciliation and the transient re-drive through without the claim', () => {
+  it('lets provider-status reconciliation of a processing row through without the claim', () => {
     expect(
       piggyvestFulfilmentGate(row('processing'), unclaimed).hold
     ).toBeNull();
+  });
+
+  it('bugfix: holds a pending row marked mid-vend without the claim, so the cron never re-drives it (Muse high)', () => {
+    for (const marker of [
+      { monnifyTransientVendError: 'timeout' },
+      { preVendInterruptedAt: '2026-11-14T10:00:00Z' },
+    ])
+      expect(
+        piggyvestFulfilmentGate(row('pending', marker), unclaimed).hold
+      ).toMatchObject({ status: 'processing' });
     expect(
       piggyvestFulfilmentGate(
         row('pending', { monnifyTransientVendError: 'timeout' }),
-        unclaimed
+        { walletPayClaimed: true, retryFailedRequested: false }
       ).hold
     ).toBeNull();
   });

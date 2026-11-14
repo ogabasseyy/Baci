@@ -109,6 +109,21 @@ describe('StartSavingsProductFields', () => {
     expect(search.props.autoCorrect).toBe(false);
   });
 
+  describe('bugfix: search placeholder came back letter-spaced on iOS', () => {
+    it('sets letterSpacing 0 explicitly so a reused native input cannot keep another field’s spacing', () => {
+      render(
+        <StartSavingsProductFields
+          colors={Colors.light}
+          controller={createController()}
+        />
+      );
+
+      expect(
+        screen.getByPlaceholderText('Search for a phone, laptop or gadget')
+      ).toHaveStyle({ letterSpacing: 0 });
+    });
+  });
+
   it('searches and selects product suggestions', () => {
     const controller = createController();
     render(

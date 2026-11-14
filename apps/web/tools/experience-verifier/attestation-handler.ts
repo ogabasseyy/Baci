@@ -32,6 +32,7 @@ export function createVerifierAttestationHandler(settings: {
     const reply = (status: number) =>
       new Response(null, { status, headers: { 'Cache-Control': 'no-store' } });
     try {
+      request.signal.throwIfAborted();
       const url = new URL(request.url);
       if (
         request.method !== 'POST' ||
@@ -42,6 +43,7 @@ export function createVerifierAttestationHandler(settings: {
       )
         return reply(404);
       const body = await readBoundedJsonBody(request, 16384);
+      request.signal.throwIfAborted();
       const parsed = body.ok ? message.safeParse(body.body) : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
@@ -60,10 +62,14 @@ export function createVerifierAttestationHandler(settings: {
         !(await settings.consumeNonce(parsed.data.nonce, parsed.data.expiresAt))
       )
         return reply(409);
+      request.signal.throwIfAborted();
       const client = await settings.resolveUserClient(parsed.data.accessToken);
+      request.signal.throwIfAborted();
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
+      request.signal.throwIfAborted();
       await settings.attest(client, parsed.data.approvalId, parsed.data.kind);
+      request.signal.throwIfAborted();
       return reply(204);
     } catch {
       return reply(403);

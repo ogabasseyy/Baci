@@ -48,6 +48,7 @@ export async function startVerifierListener(
   let drained: (() => void) | undefined;
   const server = createServer(async (req, res) => {
     const reply = (status: number) => {
+      if (res.destroyed) return;
       if (!res.headersSent)
         res.writeHead(status, { 'Cache-Control': 'no-store' });
       if (!res.writableEnded) res.end();
@@ -75,8 +76,14 @@ export async function startVerifierListener(
       return;
     }
     active++;
+    const controller = new AbortController();
+    const onClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.once('close', onClose);
     try {
       const bytes = await readBody(req);
+      controller.signal.throwIfAborted();
       const headers = new Headers({ 'content-type': 'application/json' });
       if (typeof req.headers['x-baci-verifier-signature'] === 'string')
         headers.set(
@@ -97,6 +104,7 @@ export async function startVerifierListener(
           method: 'POST',
           headers,
           body: new Uint8Array(bytes),
+          signal: controller.signal,
         })
       );
       if (req.url === '/v1/capture' && result.status === 200 && result.body) {
@@ -133,6 +141,7 @@ export async function startVerifierListener(
         error instanceof Error && error.message === 'BODY_BUDGET' ? 413 : 403
       );
     } finally {
+      res.off('close', onClose);
       active--;
       if (active === 0) drained?.();
     }

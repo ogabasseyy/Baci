@@ -53,6 +53,7 @@ export function createOwnerPreviewBridge(settings: {
         },
       });
     try {
+      request.signal.throwIfAborted();
       const url = new URL(request.url);
       if (
         request.method !== 'POST' ||
@@ -63,6 +64,7 @@ export function createOwnerPreviewBridge(settings: {
       )
         return reply(404);
       const parsedBody = await readBoundedJsonBody(request, 16384);
+      request.signal.throwIfAborted();
       const parsed = parsedBody.ok ? message.safeParse(parsedBody.body) : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-owner-signature');
@@ -81,12 +83,15 @@ export function createOwnerPreviewBridge(settings: {
         !(await settings.consumeNonce(parsed.data.nonce, parsed.data.expiresAt))
       )
         return reply(409);
+      request.signal.throwIfAborted();
       const client = await settings.resolveUserClient(parsed.data.accessToken);
+      request.signal.throwIfAborted();
       const owner = await requireExperienceOwner(
         { supabase: client, merchantId: parsed.data.input.merchantId },
         'storefront.read'
       ).catch(hideOwnerDenial);
       if (!owner) return reply(404);
+      request.signal.throwIfAborted();
       const result = await settings.launch(
         {
           supabase: owner.supabase,
@@ -100,12 +105,14 @@ export function createOwnerPreviewBridge(settings: {
             : {}),
         }
       );
+      request.signal.throwIfAborted();
       if (
         !(await requireExperienceOwner(owner, 'storefront.read').catch(
           hideOwnerDenial
         ))
       )
         return reply(404);
+      request.signal.throwIfAborted();
       return reply(200, result);
     } catch {
       return reply(503);

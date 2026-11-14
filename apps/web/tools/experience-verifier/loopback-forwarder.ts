@@ -23,6 +23,7 @@ export function createVerifierLoopbackForwarder(port: number) {
             port,
             path: '/v1/attest',
             method: 'POST',
+            signal: input.signal,
             headers: {
               host: 'verifier.baci-internal.invalid',
               'content-type': 'application/json',

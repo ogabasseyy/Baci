@@ -144,6 +144,61 @@ it('fails closed when the durable replay store is unavailable', async () => {
   expect(f.resolve).not.toHaveBeenCalled();
 });
 
+it('does not resolve the user or start a preview after cancellation during nonce consumption', async () => {
+  const f = fixture();
+  let release = () => {};
+  let entered = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.consumeNonce.mockImplementationOnce(async () => {
+    entered();
+    await gate;
+    return true;
+  });
+  const controller = new AbortController();
+  const result = f.handler(
+    new Request(request(body()), { signal: controller.signal })
+  );
+  await started;
+  controller.abort();
+  release();
+  expect((await result).status).toBe(503);
+  expect(f.resolve).not.toHaveBeenCalled();
+  expect(f.launch).not.toHaveBeenCalled();
+});
+
+it('does not return a preview when cancellation occurs during launch', async () => {
+  const f = fixture();
+  let release = () => {};
+  let entered = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.launch.mockImplementationOnce(async () => {
+    entered();
+    await gate;
+    return { previewUrl: 'synthetic' };
+  });
+  const controller = new AbortController();
+  const result = f.handler(
+    new Request(request(body()), { signal: controller.signal })
+  );
+  await started;
+  controller.abort();
+  release();
+  const response = await result;
+  expect(response.status).toBe(503);
+  expect(await response.text()).not.toContain('previewUrl');
+  expect(f.client.auth.getUser).toHaveBeenCalledTimes(1);
+});
+
 it('reports a launch outage without exposing its details', async () => {
   const f = fixture();
   f.launch.mockRejectedValue(Error('private launch failure'));

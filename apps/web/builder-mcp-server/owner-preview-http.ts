@@ -2,12 +2,17 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /** Fixed, bounded transport for the signed server-to-server owner preview route. */
 export function createOwnerPreviewHttpHandler(
-  bridge: (request: Request) => Promise<Response>
+  bridge: (request: Request) => Promise<Response>,
+  options: { timeoutMs?: number } = {}
 ) {
+  const timeoutMs = options.timeoutMs ?? 30000;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000)
+    throw Error('INVALID_OWNER_TIMEOUT');
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/preview',
     target: 'https://mcp.usebaci.com/internal/owner/preview',
     signature: 'x-baci-owner-signature',
+    timeoutMs,
   });
 }
 
@@ -19,16 +24,23 @@ export function createOwnerAttestationHttpHandler(
     path: '/internal/owner/attest',
     target: 'https://verifier.baci-internal.invalid/v1/attest',
     signature: 'x-baci-verifier-signature',
+    timeoutMs: 600000,
   });
 }
 
 function createOwnerHttpHandler(
   bridge: (request: Request) => Promise<Response>,
-  binding: { path: string; target: string; signature: string }
+  binding: {
+    path: string;
+    target: string;
+    signature: string;
+    timeoutMs: number;
+  }
 ) {
   let readers = 0;
   let active = 0;
   const respond = (res: ServerResponse, status: number) => {
+    if (res.destroyed) return;
     if (!res.headersSent)
       res.writeHead(status, {
         'content-type': 'application/json',
@@ -120,6 +132,16 @@ function createOwnerHttpHandler(
     } finally {
       readers--;
     }
+    if (res.destroyed || res.writableEnded) return;
+    const controller = new AbortController();
+    const onClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.once('close', onClose);
+    const deadline = setTimeout(() => {
+      controller.abort();
+      if (!res.destroyed) respond(res, 504);
+    }, binding.timeoutMs);
     try {
       const headers = new Headers({ 'content-type': 'application/json' });
       headers.set(binding.signature, signature);
@@ -128,9 +150,10 @@ function createOwnerHttpHandler(
           method: 'POST',
           headers,
           body: new Uint8Array(bytes),
+          signal: controller.signal,
         })
       );
-      if (res.destroyed) return;
+      if (res.destroyed || res.writableEnded) return;
       const content: Uint8Array[] = [];
       let size = 0;
       const reader = result.body?.getReader();
@@ -167,6 +190,9 @@ function createOwnerHttpHandler(
       res.end(Buffer.concat(content));
     } catch {
       respond(res, 502);
+    } finally {
+      clearTimeout(deadline);
+      res.off('close', onClose);
     }
   }
   return {

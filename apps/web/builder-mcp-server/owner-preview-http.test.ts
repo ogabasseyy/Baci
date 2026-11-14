@@ -162,6 +162,69 @@ it('does not expose unexpected inner bridge statuses', async () => {
   }
 });
 
+it('aborts a timed-out preview bridge before returning a gateway timeout', async () => {
+  let observedAbort = false;
+  const handler = createOwnerPreviewHttpHandler(
+    async (request) =>
+      await new Promise<Response>((_resolve, reject) => {
+        request.signal.addEventListener('abort', () => {
+          observedAbort = true;
+          reject(Error('aborted'));
+        });
+      }),
+    { timeoutMs: 25 }
+  );
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    expect((await send(address.port)).status).toBe(504);
+    expect(observedAbort).toBe(true);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}, 1000);
+
+it('retains concurrency slots until timed-out work actually settles', async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const handler = createOwnerPreviewHttpHandler(
+    async () => {
+      await gate;
+      return Response.json({ ok: true });
+    },
+    { timeoutMs: 50 }
+  );
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    const timedOut = await Promise.all(
+      Array.from({ length: 16 }, () => send(address.port))
+    );
+    expect(timedOut.every((response) => response.status === 504)).toBe(true);
+    expect((await send(address.port)).status).toBe(429);
+    release();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect((await send(address.port)).status).toBe(200);
+  } finally {
+    release();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
 it('bounds concurrent admitted owner requests', async () => {
   let release: (() => void) | undefined;
   let ready: (() => void) | undefined;

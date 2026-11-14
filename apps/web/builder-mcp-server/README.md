@@ -46,10 +46,13 @@ ordering or signing-format change as a coordinated protocol rollout.
 Production ingress is not yet qualified: the internal owner routes share a
 loopback listener with public MCP, and a proxy's loopback address is not proof
 that a request is private. Require an independently verified ingress boundary
-that prevents public access to those routes. The owner bridge also needs an
-end-to-end cancellation or bounded-work strategy before enabling it: timing
-out the HTTP response while releasing its slot would leave underlying work
-running and could bypass the concurrency limit.
+that prevents public access to those routes. Preview transport now signals
+cancellation on timeout or disconnect, and retains its concurrency slot until
+the underlying work actually settles. The preview and verifier attestation
+handlers check cancellation between operations; this does not cancel database,
+runner or attestation work already in flight. End-to-end cancellation or a
+separately qualified bounded-work strategy remains required before enabling
+the owner bridge.
 
 Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the

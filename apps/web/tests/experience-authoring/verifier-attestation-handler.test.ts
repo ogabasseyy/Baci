@@ -84,3 +84,29 @@ it('rejects tampering, wrong path and unauthenticated owners before attestation'
   expect((await f.handler(f.request())).status).toBe(403);
   expect(f.attest).not.toHaveBeenCalled();
 });
+
+it('does not start attestation after cancellation during user verification', async () => {
+  const f = fixture();
+  let release = () => {};
+  let entered = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.user.auth.getUser.mockImplementationOnce(async () => {
+    entered();
+    await gate;
+    return { data: { user: { id } }, error: null };
+  });
+  const controller = new AbortController();
+  const pending = f.handler(
+    new Request(f.request(), { signal: controller.signal })
+  );
+  await started;
+  controller.abort();
+  release();
+  expect((await pending).status).toBe(403);
+  expect(f.attest).not.toHaveBeenCalled();
+});

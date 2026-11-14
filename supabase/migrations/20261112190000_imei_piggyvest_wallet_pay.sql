@@ -119,9 +119,17 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
+  -- Delivered by its OWN lookup only: same customer and store (through the
+  -- payment's onboarding intent) and exactly its price, as the sibling
+  -- guards scope it (Muse).
   IF EXISTS (SELECT 1 FROM public.imei_lookups AS lookup
+               JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = NEW.intent_id
               WHERE lookup.id::text = NEW.purchase_ref
-                AND lookup.status = 'completed') THEN
+                AND lookup.status = 'completed'
+                AND lookup.customer_id = intent.customer_id
+                AND lookup.merchant_id = intent.merchant_id
+                AND lookup.amount_ngn * 100 = trunc(lookup.amount_ngn * 100)
+                AND NEW.amount_kobo = (lookup.amount_ngn * 100)::bigint) THEN
     RAISE EXCEPTION 'imei_wallet_payment_already_delivered' USING ERRCODE = '55000';
   END IF;
   RETURN NEW;

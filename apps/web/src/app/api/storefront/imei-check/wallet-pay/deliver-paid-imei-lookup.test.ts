@@ -166,6 +166,8 @@ describe('deliverPaidImeiLookup', () => {
       d
     );
     expect(response.status).toBe(200);
+    // A saved result names the device: never cached (Muse).
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(d.claim).toHaveBeenCalledWith(OP);
     expect(d.finish).toHaveBeenCalledWith(OP, 'fulfilled', 'tok-1');
     expect(submit).not.toHaveBeenCalled();
@@ -209,6 +211,7 @@ describe('deliverPaidImeiLookup', () => {
     });
     const response = await deliverPaidImeiLookup(base, d);
     expect(response.status).toBe(502);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(order).toEqual(['finish:failed', 'refund', 'cache:refunded_error']);
     expect(submit).not.toHaveBeenCalled();
   });

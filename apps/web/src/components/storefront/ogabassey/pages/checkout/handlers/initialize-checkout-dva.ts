@@ -63,6 +63,7 @@ export async function initializeCheckoutDva({
     customerPhone,
     billingAddress,
     orderCurrency: stampedCurrency,
+    trackingToken: order.tracking_token,
   })
     .then((result) => {
       setDvaData({

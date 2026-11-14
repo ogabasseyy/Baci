@@ -48,7 +48,7 @@ describe('wallet-screen-savings.handlers', () => {
     expect(cancelSavingsReminder).not.toHaveBeenCalled();
     expect(notifySavings).toHaveBeenCalledWith(
       'Contribution pending',
-      expect.stringContaining('PiggyVest confirms'),
+      expect.not.stringMatching(/piggyvest/i),
       'info'
     );
   });
@@ -75,7 +75,7 @@ describe('wallet-screen-savings.handlers', () => {
     expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(notifySavings).toHaveBeenCalledWith(
       'Contribution cancelled',
-      expect.stringContaining('funds were released'),
+      'Nothing was taken from your wallet.',
       'info'
     );
     expect(notifySavings).not.toHaveBeenCalledWith(

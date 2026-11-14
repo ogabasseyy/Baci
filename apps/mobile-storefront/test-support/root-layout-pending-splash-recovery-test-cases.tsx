@@ -15,7 +15,7 @@ export function registerRootLayoutPendingSplashRecoveryTest({
   isSplashVisible: jest.Mock<() => boolean>;
   rootLayoutNavUnmount: jest.Mock;
 }) {
-  it('keeps navigation mounted until a pending hide recovery attempt settles', async () => {
+  it('waits for the native watchdog before showing recovery when visibility is unknown', async () => {
     initializeStorage.mockResolvedValue(undefined);
     isSplashVisible.mockImplementation(() => {
       throw new Error('native visibility unavailable');
@@ -42,6 +42,7 @@ export function registerRootLayoutPendingSplashRecoveryTest({
     expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
 
     await act(async () => rejectRecovery(new Error('bounded recovery failed')));
+    await act(async () => jest.advanceTimersByTimeAsync(15_000));
     await waitFor(() =>
       expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen()
     );

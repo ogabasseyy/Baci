@@ -7,25 +7,29 @@ import { useSavingsNoticeStore } from './savings-notice-store';
 import { useClearWalletOnlyNoticeOnBlur } from './use-clear-wallet-only-notice-on-blur';
 
 type Listener = () => void;
-let blurListeners: Listener[] = [];
+let listeners: { event: string; listener: Listener }[] = [];
 
 beforeEach(() => {
-  blurListeners = [];
+  listeners = [];
   useSavingsNoticeStore.setState({ goalId: null, notice: null });
   jest.mocked(useNavigation).mockReturnValue({
     addListener: jest.fn((event: string, listener: Listener) => {
-      if (event === 'blur') blurListeners.push(listener);
+      const entry = { event, listener };
+      listeners.push(entry);
       return () => {
-        blurListeners = blurListeners.filter((l) => l !== listener);
+        listeners = listeners.filter((l) => l !== entry);
       };
     }),
   } as unknown as ReturnType<typeof useNavigation>);
 });
 
-const leaveWallet = () =>
+const emit = (event: string) =>
   act(() => {
-    for (const listener of blurListeners) listener();
+    for (const entry of listeners.filter((l) => l.event === event)) {
+      entry.listener();
+    }
   });
+const leaveWallet = () => emit('blur');
 
 function notify(walletOnly: boolean) {
   act(() => {
@@ -48,6 +52,13 @@ describe('server keeps PiggyVest off: wallet-only notices', () => {
     notify(true);
     expect(screen.getByText('That savings plan has closed')).toBeOnTheScreen();
     leaveWallet();
+    expect(screen.queryByText('That savings plan has closed')).toBeNull();
+  });
+
+  it('clear when the customer leaves by Back (the wallet is removed, not blurred)', () => {
+    render(<SavingsNoticeCard colors={Colors.light} />);
+    notify(true);
+    emit('beforeRemove');
     expect(screen.queryByText('That savings plan has closed')).toBeNull();
   });
 

@@ -1,5 +1,7 @@
 import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { notifySavings } from './savings/savings-notice';
+import { useSavingsNoticeStore } from './savings/savings-notice-store';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -59,5 +61,25 @@ describe('server keeps PiggyVest off', () => {
     });
     expect(clearedDuringRefresh).toBe(false);
     expect(clearAmount).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the last result notice when the next contribution starts', async () => {
+    notifySavings('Nice! NGN 1,000 added', undefined, 'success');
+    let shownWhileSending: string | undefined;
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => {
+        shownWhileSending = useSavingsNoticeStore.getState().notice?.title;
+        return { goalStatus: 'active' };
+      },
+      clearSavingsContributionAmount: jest.fn(),
+      clearIdempotencyKey: jest.fn(),
+      createIdempotencyKey: () => 'op-3',
+      goal,
+      rawAmount: '1000',
+      refetchWallet: async () => ({}),
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(shownWhileSending).toBeUndefined();
   });
 });

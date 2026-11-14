@@ -86,6 +86,8 @@ export async function addSavingsContributionToGoal({
     return;
   }
 
+  // The last result is about the previous add, not this one in flight.
+  clearSavingsNotice();
   setIsAddingSavingsContribution(true);
   try {
     const contributionResult = await addSavingsContribution({

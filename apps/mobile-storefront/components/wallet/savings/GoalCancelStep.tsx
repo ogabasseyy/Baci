@@ -141,6 +141,9 @@ export function GoalCancelStep({
   }
 
   const showBreakdown = known && !empty && !done;
+  // The split is known and none of it is interest: the notes above stay
+  // silent, so say that any interest is not refunded.
+  const showInterestNote = body === COPY.savedBody;
   // Without the split, still show the goal's balance: a figure, not just a
   // sentence, and never presented as the refund.
   const showSaved = !known && !empty && !done;
@@ -171,6 +174,11 @@ export function GoalCancelStep({
       {body ? (
         <Text style={[styles.body, { color: colors.textSecondary }]}>
           {body}
+        </Text>
+      ) : null}
+      {showInterestNote ? (
+        <Text style={[styles.body, { color: colors.textSecondary }]}>
+          {COPY.interestNote}
         </Text>
       ) : null}
       {showSaved ? (

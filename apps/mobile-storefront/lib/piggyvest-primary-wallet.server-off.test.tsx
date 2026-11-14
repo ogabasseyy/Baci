@@ -31,7 +31,7 @@ describe('PiggyVest primary wallet client with the server off', () => {
   it('rejects an unrecognised answer instead of inventing a balance', async () => {
     mockFetchJson.mockResolvedValue({ unexpected: true });
     await expect(piggyvestPrimaryWalletApi.read(MERCHANT)).rejects.toThrow(
-      'Could not confirm your PiggyVest account'
+      'Could not confirm your wallet account'
     );
   });
 
@@ -49,7 +49,7 @@ describe('PiggyVest primary wallet client with the server off', () => {
         balanceKobo,
       });
       await expect(piggyvestPrimaryWalletApi.read(MERCHANT)).rejects.toThrow(
-        'Could not confirm your PiggyVest account'
+        'Could not confirm your wallet account'
       );
     }
   });

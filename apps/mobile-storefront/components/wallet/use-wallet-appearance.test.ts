@@ -2,7 +2,11 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
-import { getHomeContentBottomPadding } from '@/constants/layout';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+  getHomeContentBottomPadding,
+} from '@/constants/layout';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
 import { useWalletAppearance } from './use-wallet-appearance';
 
@@ -78,9 +82,14 @@ describe('useWalletAppearance', () => {
 
     expect(result.current.colors).toBe(Colors.light);
     expect(result.current.scrollContentStyle).toBe(scrollContentStyle);
+    // Walk 18: the chat button also floats over pushed wallet screens, so the
+    // card's buttons must be able to scroll clear of it.
     expect(getScrollContentStyle).toHaveBeenCalledWith({
       includeBottomInset: false,
-      paddingBottom: SPACING.xl,
+      paddingBottom: Math.max(
+        SPACING.xl,
+        CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET + CHAT_WIDGET_FAB_SIZE + SPACING.sm
+      ),
     });
   });
 });

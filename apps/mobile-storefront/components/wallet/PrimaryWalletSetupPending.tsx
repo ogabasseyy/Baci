@@ -28,10 +28,10 @@ export function PrimaryWalletSetupPending({
   onCheckNow,
 }: Props) {
   const message = checkFailed
-    ? 'We couldn’t reach PiggyVest just now. Tap Check now to try again, or close this and come back later.'
+    ? 'We couldn’t reach the wallet service just now. Tap Check now to try again, or close this and come back later.'
     : stillWaiting
       ? 'This is taking longer than usual. Tap Check now to try again. If you close this and setup asks for your BVN again, re-enter the same number. You won’t get a second wallet.'
-      : 'We’ve sent your details to PiggyVest and are confirming your bank transfer account. This can take a few minutes.';
+      : 'We’ve sent your details and are confirming your bank transfer account. This can take a few minutes.';
 
   return (
     <View style={setupStyles.form} accessibilityLiveRegion="polite">

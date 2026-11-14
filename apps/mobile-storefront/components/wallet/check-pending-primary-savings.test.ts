@@ -66,7 +66,7 @@ it('releases the operation on authoritative not-found so the next tap re-submits
   expect(props.setPending).toHaveBeenLastCalledWith(false);
   expect(notifySavings).toHaveBeenCalledWith(
     'Contribution not received',
-    expect.stringContaining('try again'),
+    'We have no record of this contribution, so you can safely try again.',
     'info'
   );
 });
@@ -110,7 +110,7 @@ it('cheers a confirmation found by the status check without guessing amounts', a
   await checkPendingPrimarySavings({ ...input(), goal: pendingGoal });
   expect(notifySavings).toHaveBeenCalledWith(
     'Savings updated',
-    'Nice! PiggyVest confirmed your savings. Every naira gets you closer to your iPhone 13. Keep it going!',
+    'Nice! Your savings are confirmed. Every naira gets you closer to your iPhone 13. Keep it going!',
     'success'
   );
   expect(notifySavings).not.toHaveBeenCalledWith(
@@ -127,7 +127,7 @@ it('keeps the plain confirmation when the goal is unknown', async () => {
   await checkPendingPrimarySavings(input());
   expect(notifySavings).toHaveBeenCalledWith(
     'Savings updated',
-    'PiggyVest has confirmed your contribution. Your savings balance has been updated.',
+    'Your contribution is confirmed. Your savings balance has been updated.',
     'success'
   );
 });
@@ -185,5 +185,38 @@ it('adds the refresh hint to the status-check cheer when the wallet refresh fail
     'Savings updated',
     expect.stringMatching(/Pull to refresh your latest balance\.$/),
     'success'
+  );
+});
+
+it('never names the provider or uses transport jargon in any notice', async () => {
+  const outcomes: unknown[] = [
+    { status: 'confirmed', operationId: 'operation' },
+    { status: 'cancelled', operationId: 'operation' },
+    { status: 'pending', operationId: 'operation' },
+  ];
+  for (const outcome of outcomes) {
+    jest.clearAllMocks();
+    mockCheck.mockResolvedValue(outcome);
+    await checkPendingPrimarySavings({
+      ...input(),
+      goal: undefined,
+    } as Parameters<typeof checkPendingPrimarySavings>[0]);
+    for (const call of jest.mocked(notifySavings).mock.calls) {
+      expect(`${call[0]} ${call[1]}`).not.toMatch(
+        /piggyvest|reserved|submission/i
+      );
+    }
+  }
+});
+it('tells the customer nothing was taken after a cancelled contribution', async () => {
+  mockCheck.mockResolvedValue({
+    status: 'cancelled',
+    operationId: 'operation',
+  });
+  await checkPendingPrimarySavings(input());
+  expect(notifySavings).toHaveBeenCalledWith(
+    'Contribution cancelled',
+    'Nothing was taken from your wallet.',
+    'info'
   );
 });

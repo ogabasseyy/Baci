@@ -38,7 +38,9 @@ export function SavingsQuickAmounts({
             style={[
               styles.chip,
               {
-                backgroundColor: selected ? colors.primary : colors.card,
+                backgroundColor: selected
+                  ? colors.primaryLowOpacity
+                  : colors.card,
                 borderColor: selected ? colors.primary : colors.border,
               },
               // Dimmed with the rest of the form while an add is in flight.
@@ -49,7 +51,7 @@ export function SavingsQuickAmounts({
               numberOfLines={1}
               style={[
                 styles.text,
-                { color: selected ? colors.primaryForeground : colors.text },
+                { color: selected ? colors.primary : colors.text },
               ]}
             >
               {option.label}

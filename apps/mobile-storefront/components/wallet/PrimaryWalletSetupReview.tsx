@@ -6,7 +6,7 @@ import { setupStyles } from './piggyvest-wallet-setup.styles';
 
 /** The exact sentence support and tests look for. */
 export const PRIMARY_WALLET_REVIEW_COPY =
-  'Your PiggyVest wallet setup needs review. Please contact support before trying again.';
+  'Your wallet setup needs review. Please contact support before trying again.';
 
 /**
  * PiggyVest flagged this setup for review. A calm stop, laid out like the

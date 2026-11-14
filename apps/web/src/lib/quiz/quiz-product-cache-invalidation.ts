@@ -4,11 +4,8 @@ import type { Database } from '@/types/supabase';
 import {
   QUIZ_SWEEP_TABLE_SELECT,
   type QuizSweepWatermarks,
-  type QuizTableSweepWatermark,
-  type QuizWatermarkTable,
-  serializeBoundaryRowState,
-  toCanonicalIsoTimestamp,
-} from './quiz-sweep-watermarks';
+  shouldSkipUnchangedBoundaryRow,
+} from './quiz-sweep-boundary-state';
 
 const QUIZ_CACHE_TARGET_BATCH_LIMIT = 1000;
 /**
@@ -40,31 +37,6 @@ interface QuizReservationCacheRow extends Record<string, unknown> {
   id?: unknown;
   merchant_id?: unknown;
   product_id?: unknown;
-}
-
-function shouldSkipUnchangedBoundaryRow(
-  table: QuizWatermarkTable,
-  timestampColumn: 'expired_at' | 'updated_at',
-  watermark: QuizTableSweepWatermark,
-  row: Record<string, unknown>
-): boolean {
-  if (watermark.boundarySnapshots.size === 0) {
-    return false;
-  }
-  const rowId = typeof row.id === 'string' ? row.id.trim() : '';
-  if (!rowId) {
-    return false;
-  }
-  const rowTimestamp = toCanonicalIsoTimestamp(row[timestampColumn]);
-  const floorTimestamp = toCanonicalIsoTimestamp(watermark.floor);
-  if (!rowTimestamp || !floorTimestamp || rowTimestamp !== floorTimestamp) {
-    return false;
-  }
-  const previousSnapshot = watermark.boundarySnapshots.get(rowId);
-  if (previousSnapshot === undefined) {
-    return false;
-  }
-  return previousSnapshot === serializeBoundaryRowState(table, row);
 }
 
 function getProductPrizeId(settings: unknown): string | null {

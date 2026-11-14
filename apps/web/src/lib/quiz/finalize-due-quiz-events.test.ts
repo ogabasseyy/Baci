@@ -422,4 +422,20 @@ describe('finalizeDueQuizEvents', () => {
     expect(result.status).toBe(200);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
   });
+
+  it('fails closed into cache invalidation when an object RPC includes an unrecognized numeric key alongside zeros', async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({
+        data: { scheduledPromoted: 0, newCounter: 5 },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
 });

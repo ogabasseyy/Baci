@@ -194,4 +194,33 @@ describe('resolveQuizSweepWatermarks', () => {
       boundarySnapshots: new Map(),
     });
   });
+
+  it('fails closed while keeping the DB floor when boundary snapshots exceed the page cap', async () => {
+    const fullPage = Array.from({ length: 1000 }, (_, index) => ({
+      id: `event-${index}`,
+      updated_at: '2026-09-01T00:00:00Z',
+    }));
+    const client = probeClient(
+      {
+        quiz_events: '2026-09-01T00:00:00Z',
+      },
+      {
+        boundaryRows: {
+          quiz_events: fullPage,
+        },
+      }
+    );
+
+    const watermarks = await resolveQuizSweepWatermarks(
+      client as never,
+      '2026-09-01T00:05:00Z'
+    );
+
+    expect(watermarks.hasProbeFailure).toBe(true);
+    expect(watermarks.events).toEqual({
+      status: 'error',
+      floor: '2026-09-01T00:00:00Z',
+      boundarySnapshots: new Map(),
+    });
+  });
 });

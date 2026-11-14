@@ -15,6 +15,7 @@ interface RateLimitMatch {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
+  '/api/storefront/experience': { maxRequests: 240, windowMs: 60_000 },
   // Submission writes have their own budget; typing and result reads do not consume it.
   '/api/search/submissions': { maxRequests: 20, windowMs: 60_000 },
   // Search assistance is an expensive public AI call — keep it at the same
@@ -70,10 +71,32 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
     windowMs: 3_600_000,
     failClosedWithoutRedis: true,
   },
+  // Each wallet PIN set, change or reset runs a 32 MiB scrypt derivation, so
+  // keep one IP address's budget small and never fall back to a per-instance
+  // memory bucket that scaling would multiply. The database owns the wrong-PIN
+  // lockout; this only bounds hashing cost.
+  '/api/storefront/customer/wallet-pin': {
+    maxRequests: 10,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
+  // Status reads do no hashing; keep them out of the mutation budget above.
+  '/api/storefront/customer/wallet-pin/status': {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
   '/api/customers': { maxRequests: 20, windowMs: 60_000 },
   '/api/newsletter': { maxRequests: 5, windowMs: 900_000 },
   '/api/wallet': { maxRequests: 5, windowMs: 60_000 },
   '/api/payments/credit-direct/sign': { maxRequests: 5, windowMs: 60_000 },
+  // GIG status webhooks are unauthenticated until decrypted, and each one
+  // costs a PBKDF2 derivation (10k SHA-1 rounds). Give the carrier's egress
+  // its own per-IP bucket so scan bursts never share the generic default.
+  // Deliberately not failClosedWithoutRedis: one derivation is a few ms of
+  // CPU, so the per-instance fallback's multiplied budget stays cheap, while
+  // 429s during a Redis outage would turn away genuine GIG deliveries.
+  '/api/webhooks/gigl': { maxRequests: 60, windowMs: 60_000 },
   // Quiz: the Gemma generation route is an expensive AI call, and the claim
   // routes mint real prizes/cash — keep both well below the per-IP default.
   '/api/merchant/quiz/generate': { maxRequests: 5, windowMs: 60_000 },

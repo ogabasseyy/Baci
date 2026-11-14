@@ -89,4 +89,99 @@ describe('buildCategoryProductMetadata', () => {
       googleBot: { index: false, follow: true, 'max-snippet': 42 },
     });
   });
+
+  it('emits noindex when searchParams has an invalid variant_id or offer_id', () => {
+    const baseProduct = {
+      name: 'Linen Shirt',
+      slug: 'linen-shirt',
+      status: 'active',
+      category: 'Fashion',
+      categories: { name: 'Fashion', slug: 'fashion' },
+      description: 'A breathable linen shirt.',
+      images: [],
+      variants: [
+        {
+          id: 'variant-1',
+          attributes: { size: 'M' },
+          condition: 'new',
+          stock_quantity: 5,
+        },
+      ],
+      offers: [
+        {
+          id: 'offer-1',
+          condition: 'new',
+          price: 12_000,
+          status: 'active',
+          stock_quantity: 5,
+        },
+      ],
+    } as never;
+
+    const metadataInvalidVariant = buildCategoryProductMetadata({
+      baseUrl: 'https://zorvexa.usebaci.com',
+      merchant: {
+        business_name: 'Zorvexa',
+        slug: 'zorvexa',
+        is_published: true,
+      } as never,
+      product: baseProduct,
+      searchParams: { variant_id: 'nonexistent-variant' },
+      storeSlug: 'zorvexa',
+    });
+
+    expect(metadataInvalidVariant.robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: { index: false, follow: true, 'max-snippet': 42 },
+    });
+
+    const metadataInvalidOffer = buildCategoryProductMetadata({
+      baseUrl: 'https://zorvexa.usebaci.com',
+      merchant: {
+        business_name: 'Zorvexa',
+        slug: 'zorvexa',
+        is_published: true,
+      } as never,
+      product: baseProduct,
+      searchParams: { offer_id: 'nonexistent-offer' },
+      storeSlug: 'zorvexa',
+    });
+
+    expect(metadataInvalidOffer.robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: { index: false, follow: true, 'max-snippet': 42 },
+    });
+  });
+
+  it('keeps a long product title whole instead of cutting "Price in Nigeria" mid-word', () => {
+    const metadata = buildCategoryProductMetadata({
+      baseUrl: 'https://ogabassey.com',
+      merchant: {
+        business_name: 'Ogabassey',
+        country: 'NG',
+        is_published: true,
+        slug: 'ogabassey',
+      } as never,
+      product: {
+        name: 'Sony Alpha a7S III Mirrorless Camera Body',
+        slug: 'sony-alpha-a7s-iii-mirrorless-camera-body',
+        description: 'Full-frame mirrorless camera body.',
+        meta_description: null,
+        meta_title:
+          'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria',
+        category: 'Cameras',
+        categories: { name: 'Cameras', slug: 'cameras' },
+        price: 2_500_000,
+        status: 'active',
+        images: ['https://cdn.example.com/a7s3.jpg'],
+      } as never,
+      storeSlug: 'ogabassey.com',
+    });
+
+    expect(metadata.title).toEqual({
+      absolute: 'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria',
+    });
+  });
 });

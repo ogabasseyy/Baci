@@ -5,8 +5,8 @@ import {
   upgradeLegacySessionPrincipal,
 } from '@/lib/cart/grant-operations';
 import {
+  cachedCartMerchantLookups,
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -17,6 +17,10 @@ import {
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import {
+  type CartServerTimer,
+  createCartServerTimer,
+} from '@/lib/cart/server-timing';
 import { mutateCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
@@ -40,29 +44,43 @@ import { sharedCartMutationRequestSchema } from '@/schemas/cart';
  * instead of overwriting newer state; operation-id retries converge.
  */
 export async function POST(request: NextRequest) {
+  // Every outcome, including errors, reports its step timings.
+  const timer = createCartServerTimer();
+  return timer.apply(await applyCommand(request, timer));
+}
+
+async function applyCommand(
+  request: NextRequest,
+  timer: CartServerTimer
+): Promise<Response> {
   try {
-    const csrf = await checkCsrfProtection(request);
+    const csrf = await timer.measure('csrf', () =>
+      checkCsrfProtection(request)
+    );
     if (!csrf.valid) {
       return cartErrorResponse('forbidden');
     }
 
     // Authenticate before reading the body: protected-route work and
     // response selection must not be driven by unauthenticated payloads.
-    const context = await resolveCartRequestContext(request, {
-      merchant: {
-        resolveAlias: getCurrentSlugForAlias,
-        rpcClient: createAnonClient(),
-        loadMerchantFeatures: createAnonMerchantFeatureLookup(
-          createAnonClient()
-        ),
-      },
-      requireScope: 'session',
-      verify: (proof) =>
-        verifyCartSessionProof(proof, {
-          environment: getCartProofEnvironment(),
-        }),
-      wrongScopeError: 'not_found',
-    });
+    const cached = cachedCartMerchantLookups(createAnonClient());
+    const context = await timer.measure('auth', () =>
+      resolveCartRequestContext(request, {
+        merchant: {
+          resolveAlias: getCurrentSlugForAlias,
+          rpcClient: cached.rpcClient,
+          // `auth-features` runs inside `auth`: the two overlap, never sum them.
+          loadMerchantFeatures: (id) =>
+            timer.measure('auth-features', () => cached.features(id)),
+        },
+        requireScope: 'session',
+        verify: (proof) =>
+          verifyCartSessionProof(proof, {
+            environment: getCartProofEnvironment(),
+          }),
+        wrongScopeError: 'not_found',
+      })
+    );
     if (!context.ok) {
       return cartErrorResponse(context.error);
     }
@@ -81,11 +99,13 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'commands',
-      subject: context.principal.principalId,
-    });
+    const quota = await timer.measure('quota', () =>
+      checkCartQuota({
+        merchantId: context.merchant.id,
+        operation: 'commands',
+        subject: context.principal.principalId,
+      })
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
@@ -94,24 +114,25 @@ export async function POST(request: NextRequest) {
     // authority: load the live grant's verified operations first, or
     // every command would be rejected on an otherwise live cart.
     const client = createCartScopedClient(context.principal);
-    const principal = await upgradeLegacySessionPrincipal(
-      client,
-      context.principal
+    const principal = await timer.measure('grant', () =>
+      upgradeLegacySessionPrincipal(client, context.principal)
     );
     if (!principal) {
       return cartErrorResponse('temporarily_unavailable');
     }
 
-    const result = await mutateCart(
-      {
-        client,
-        principal,
-      },
-      {
-        command: parsedBody.data.command,
-        expectedVersion: parsedBody.data.expectedVersion,
-        operationId: parsedBody.data.operationId,
-      }
+    const result = await timer.measure('cart', () =>
+      mutateCart(
+        {
+          client,
+          principal,
+        },
+        {
+          command: parsedBody.data.command,
+          expectedVersion: parsedBody.data.expectedVersion,
+          operationId: parsedBody.data.operationId,
+        }
+      )
     );
     if (!result.ok) {
       return cartErrorResponse(
@@ -129,7 +150,9 @@ export async function POST(request: NextRequest) {
     // of surfacing the committed change as a 503; the existing proof and
     // cookie govern until they expire, and retries replay by
     // operation id.
-    const liveGrant = await loadLiveGrantOperations(client, principal);
+    const liveGrant = await timer.measure('renew', () =>
+      loadLiveGrantOperations(client, principal)
+    );
     const proofGrantExpiry = liveGrant
       ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)
         ? liveGrant.grantExpiresAt

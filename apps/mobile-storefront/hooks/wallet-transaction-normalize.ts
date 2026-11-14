@@ -1,3 +1,4 @@
+import { customerWalletTransactionLabel } from '@baci/shared/lib';
 import { z } from 'zod';
 import { TransactionRowSchema } from '@/lib/validation';
 import type { Transaction } from './wallet-query';
@@ -42,6 +43,10 @@ export function normalizeWalletTransaction(row: unknown): Transaction | null {
   return {
     ...validation.data,
     amount,
-    description: validation.data.description ?? '',
+    // Customers never see the provider or internal ids behind a transaction.
+    description: customerWalletTransactionLabel({
+      description: validation.data.description,
+      sourceType: validation.data.source_type,
+    }),
   };
 }

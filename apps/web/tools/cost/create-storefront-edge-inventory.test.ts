@@ -176,6 +176,15 @@ describe('createStorefrontEdgeInventory', () => {
     expect(
       entrypoints.find((row) => row.routePattern === '/pages/rewards')?.decision
     ).toBe('origin_dynamic');
+    expect(entrypoints).toContainEqual(
+      expect.objectContaining({
+        decision: 'origin_dynamic',
+        reason: 'request_state_or_origin_action_required',
+        routePattern: '/account/checkout-return',
+        sourcePath:
+          'apps/web/src/app/(storefront)/[slug]/(customer)/account/checkout-return/page.tsx',
+      })
+    );
   });
 
   it('inventories explicit proxy aliases and required runtime families before closed defaults', async () => {

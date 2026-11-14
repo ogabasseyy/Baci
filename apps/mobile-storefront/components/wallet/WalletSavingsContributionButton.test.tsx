@@ -1,14 +1,15 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
-import { palette } from '@/constants/Colors';
+import Colors, { palette } from '@/constants/Colors';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 
 describe('WalletSavingsContributionButton', () => {
-  it('uses a solid readable green action and confirms the contribution', () => {
+  it('uses the brand red action and confirms the contribution', () => {
     const onPress = jest.fn();
     render(
       <WalletSavingsContributionButton
+        colors={Colors.light}
         disabled={false}
         isAdding={false}
         onPress={onPress}
@@ -21,9 +22,11 @@ describe('WalletSavingsContributionButton', () => {
           .style
       )
     ).toEqual(
-      expect.objectContaining({ backgroundColor: palette.emerald[800] })
+      expect.objectContaining({ backgroundColor: Colors.light.primary })
     );
-    expect(screen.getByText('Add to savings')).toBeOnTheScreen();
+    expect(screen.getByText('Add to savings')).toHaveStyle({
+      color: Colors.light.primaryForeground,
+    });
     fireEvent.press(
       screen.getByRole('button', { name: 'Confirm savings top-up' })
     );
@@ -34,6 +37,7 @@ describe('WalletSavingsContributionButton', () => {
     const onPress = jest.fn();
     const { rerender } = render(
       <WalletSavingsContributionButton
+        colors={Colors.light}
         disabled={false}
         isAdding={false}
         onPress={onPress}
@@ -49,6 +53,7 @@ describe('WalletSavingsContributionButton', () => {
 
     rerender(
       <WalletSavingsContributionButton
+        colors={Colors.light}
         disabled={false}
         isAdding
         onPress={onPress}

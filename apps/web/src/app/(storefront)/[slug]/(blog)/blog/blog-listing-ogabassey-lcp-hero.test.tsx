@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BLOG_LISTING_FEATURED_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/blog-media';
+import { preloadBlogListingFeaturedImage } from './blog-listing-featured-image-preload';
 import type { OgabasseyBlogLcpSnapshot } from './load-ogabassey-blog-lcp-snapshot';
 
 vi.mock('next/link', () => ({
@@ -18,6 +20,17 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+// Restore the real next/image getImageProps (global vitest.setup mocks next/image
+// with only a default export) so CdnFormatImage builds its production <picture>.
+vi.mock('next/image', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/image')>();
+  return { ...actual };
+});
+
+vi.mock('./blog-listing-featured-image-preload', () => ({
+  preloadBlogListingFeaturedImage: vi.fn(),
+}));
+
 const SNAPSHOT: OgabasseyBlogLcpSnapshot = {
   basePath: 'https://ogabassey.com',
   featuredPost: {
@@ -28,10 +41,12 @@ const SNAPSHOT: OgabasseyBlogLcpSnapshot = {
     category: 'News',
     author_name: 'Ogabassey',
     published_at: '2026-03-28T10:00:00.000Z',
-    featured_image_url: 'https://cdn.example.com/hero.png',
+    featured_image_url:
+      'https://cdn.ogabassey.com/core-assets/blog/codex/hero/post-landscape_16x9.jpg',
     reading_time_minutes: 4,
   },
-  imageSrc: 'https://cdn.example.com/hero.png',
+  imageSrc:
+    'https://cdn.ogabassey.com/core-assets/blog/codex/hero/post-landscape_16x9.jpg',
   publishedDateLabel: 'Mar 28, 2026',
 };
 
@@ -51,11 +66,12 @@ const { BlogListingOgabasseyLcpHero } = await import(
 
 describe('BlogListingOgabasseyLcpHero', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     snapshot.value = SNAPSHOT;
   });
 
-  it('paints the snapshot title as LCP text without a CDN image', () => {
-    render(<BlogListingOgabasseyLcpHero />);
+  it('renders the snapshot featured story with an optimized CDN image and preloads it', () => {
+    const { container } = render(<BlogListingOgabasseyLcpHero />);
 
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     const featuredLink = screen.getByRole('link', {
@@ -80,27 +96,52 @@ describe('BlogListingOgabasseyLcpHero', () => {
       document.querySelector('.ogabassey-blog-featured-story__media')
     ).toBeInTheDocument();
     expect(
-      document.querySelector('.ogabassey-blog-lcp-hero')
+      document.querySelector('.ogabassey-blog-featured-story__scrim')
     ).toBeInTheDocument();
     expect(
-      document.querySelector('.ogabassey-blog-featured-story__media img')
-    ).not.toBeInTheDocument();
+      document.querySelector('.ogabassey-blog-lcp-hero')
+    ).toBeInTheDocument();
+
+    expect(preloadBlogListingFeaturedImage).toHaveBeenCalledTimes(1);
+    expect(preloadBlogListingFeaturedImage).toHaveBeenCalledWith(
+      SNAPSHOT.imageSrc
+    );
+
+    const source = container.querySelector('picture source[type="image/avif"]');
+    expect(source).not.toBeNull();
+    expect(source?.getAttribute('srcset')).toContain('format=avif');
+    expect(source?.getAttribute('srcset')).toContain('quality=50');
+    expect(source).toHaveAttribute('sizes', BLOG_LISTING_FEATURED_IMAGE_SIZES);
+
+    const image = container.querySelector(
+      '.ogabassey-blog-featured-story__media picture img'
+    );
+    expect(image).not.toBeNull();
+    expect(image).toHaveAttribute('alt', '');
+    expect(image).toHaveAttribute('loading', 'eager');
+    expect(image).toHaveAttribute('fetchpriority', 'high');
+    expect(image).toHaveAttribute('sizes', BLOG_LISTING_FEATURED_IMAGE_SIZES);
+    expect(image?.getAttribute('src')).toContain('format=jpeg');
+    expect(image?.getAttribute('srcset')).toContain('format=jpeg');
     expect(BlogListingOgabasseyLcpHero.constructor.name).toBe('Function');
   });
 
-  it('does not request the untransformed JPEG that 404s on the Ogabassey CDN', () => {
+  it('never emits the untransformed JPEG URL that 404s on the Ogabassey CDN as img src', () => {
+    const rawUrl =
+      'https://cdn.ogabassey.com/core-assets/blog/codex/hero/post-landscape_16x9.jpg';
     snapshot.value = {
       ...SNAPSHOT,
-      imageSrc:
-        'https://cdn.ogabassey.com/core-assets/blog/codex/hero/post-landscape_16x9.jpg',
+      imageSrc: rawUrl,
     };
 
     const { container } = render(<BlogListingOgabasseyLcpHero />);
 
-    expect(container.innerHTML).not.toContain(
-      'core-assets/blog/codex/hero/post-landscape_16x9.jpg'
+    const image = container.querySelector('img');
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute('src')).not.toBe(rawUrl);
+    expect(image?.getAttribute('src')).toContain(
+      '/image/width=3840,quality=50,format=jpeg/core-assets/blog/codex/hero/post-landscape_16x9.jpg'
     );
-    expect(container.querySelector('img')).not.toBeInTheDocument();
   });
 
   it('reserves the featured-story frame when the snapshot is missing', () => {
@@ -112,5 +153,6 @@ describe('BlogListingOgabasseyLcpHero', () => {
     expect(
       container.querySelector('.ogabassey-blog-featured-story__media')
     ).not.toBeInTheDocument();
+    expect(preloadBlogListingFeaturedImage).not.toHaveBeenCalled();
   });
 });

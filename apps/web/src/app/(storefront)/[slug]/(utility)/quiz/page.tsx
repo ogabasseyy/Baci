@@ -2,10 +2,12 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OgabasseyV2Quiz } from '@/components/storefront/ogabassey/pages/quiz';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -18,10 +20,38 @@ import {
 const QUIZ_DESCRIPTION =
   'Play the Ogabassey Super Quiz. Free to enter — no purchase needed.';
 
-export const metadata: Metadata = {
-  description: QUIZ_DESCRIPTION,
-  title: 'Super Quiz | Ogabassey',
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  if (!isValidMerchantIdentifier(slug)) {
+    return {
+      title: 'Store Not Found',
+    };
+  }
+
+  const lookupKey = slug.toLowerCase();
+  const merchant = isDomainIdentifier(slug)
+    ? await getCachedMerchantByDomain(lookupKey)
+    : await getCachedMerchant(lookupKey);
+
+  if (merchant?.template_id !== OGABASSEY_TEMPLATE_ID) {
+    return {
+      title: 'Store Not Found',
+    };
+  }
+
+  const baseUrl = buildStoreUrl(merchant);
+
+  return {
+    description: QUIZ_DESCRIPTION,
+    title: 'Super Quiz',
+    alternates: { canonical: `${baseUrl}/quiz` },
+  };
+}
 
 export default async function QuizPage({
   params,
@@ -39,7 +69,7 @@ export default async function QuizPage({
     ? await getCachedMerchantByDomain(lookupKey)
     : await getCachedMerchant(lookupKey);
 
-  if (merchant?.template_id !== 'ogabassey') {
+  if (merchant?.template_id !== OGABASSEY_TEMPLATE_ID) {
     notFound();
   }
 

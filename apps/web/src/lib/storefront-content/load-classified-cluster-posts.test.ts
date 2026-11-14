@@ -3,14 +3,20 @@ import { buildBlogClusterCollections } from './build-blog-cluster-collections';
 import { inferContentClusterContext } from './infer-content-cluster-context';
 import { loadClassifiedClusterPosts } from './load-classified-cluster-posts';
 
-const { rpc, retry, abortSignal, createPublicClient } = vi.hoisted(() => ({
-  rpc: vi.fn(),
-  retry: vi.fn(),
-  abortSignal: vi.fn(),
-  createPublicClient: vi.fn(),
-}));
+const { rpc, retry, abortSignal, createPublicClient, cacheLife, cacheTag } =
+  vi.hoisted(() => ({
+    rpc: vi.fn(),
+    retry: vi.fn(),
+    abortSignal: vi.fn(),
+    createPublicClient: vi.fn(),
+    cacheLife: vi.fn(),
+    cacheTag: vi.fn(),
+  }));
 vi.mock('@/lib/supabase/public', () => ({ createPublicClient }));
-vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
+vi.mock('next/cache', () => ({
+  cacheLife: (...args: unknown[]) => cacheLife(...args),
+  cacheTag: (...args: unknown[]) => cacheTag(...args),
+}));
 
 const post = {
   id: '1e4fe058-a2ce-4f14-b633-a80d14bfaeb2',
@@ -213,5 +219,15 @@ describe('loadClassifiedClusterPosts', () => {
     );
     expect(rpc).not.toHaveBeenCalled();
     warning.mockRestore();
+  });
+
+  it('tags classifications with blog-posts, blog-content-links, and features tags', async () => {
+    await loadClassifiedClusterPosts('merchant-1', [post]);
+    expect(cacheLife).toHaveBeenCalledWith('merchant');
+    expect(cacheTag).toHaveBeenCalledWith(
+      'blog-posts',
+      'blog-content-links-merchant-1',
+      'features-merchant-1'
+    );
   });
 });

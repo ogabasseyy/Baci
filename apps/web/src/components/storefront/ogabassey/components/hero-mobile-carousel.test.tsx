@@ -102,9 +102,8 @@ describe('HeroMobileCarousel', () => {
   it('renders the first product slide deep-linked to its PDP with prefetch disabled', () => {
     render(<HeroMobileCarousel slides={SLIDES} />);
 
-    expect(
-      screen.getByRole('heading', { name: 'Samsung Galaxy A27 5G' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Samsung Galaxy A27 5G')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.getByText('₦50,000')).toBeInTheDocument();
 
     const link = screen.getByRole('link', {

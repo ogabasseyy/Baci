@@ -77,6 +77,7 @@ describe('getMerchantShippingRates', () => {
     });
     expect(payload.zones).toHaveLength(1);
     expect(payload.rates[0]?.currency).toBe('NGN');
+    expect(payload.shippingConfigRevision).toBeUndefined();
   });
 
   it('surfaces merchant payout currency and country from the RPC payload', async () => {
@@ -107,6 +108,7 @@ describe('getMerchantShippingRates', () => {
         ],
         merchant_payout_currency: 'INR',
         merchant_country: 'IN',
+        shipping_config_revision: '12',
       },
     });
 
@@ -116,6 +118,7 @@ describe('getMerchantShippingRates', () => {
     // Assert
     expect(payload.merchantPayoutCurrency).toBe('INR');
     expect(payload.merchantCountry).toBe('IN');
+    expect(payload.shippingConfigRevision).toBe('12');
   });
 
   it('fails soft when a retryable RPC result is followed by a transport rejection', async () => {

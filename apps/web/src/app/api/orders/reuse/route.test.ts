@@ -203,6 +203,26 @@ describe('POST /api/orders/reuse', () => {
     expect(data).toEqual({ error: 'Order is no longer reusable' });
   });
 
+  it('preserves an Oxygen liability as a distinct recovery error', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'oxygen_payment_in_progress' },
+    });
+    const request = new NextRequest('http://localhost/api/orders/reuse', {
+      method: 'POST',
+      body: JSON.stringify({
+        order_id: '4dc0ee52-d9c4-406a-b6ca-80c84eef6a8f',
+        merchant_id: 'e6e2e46c-5e3c-40c1-b0ae-832d6d20f0a2',
+        tracking_token: 'tracking-token-123',
+        customer_email: 'john@example.com',
+        payment_method: 'card',
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('oxygen_payment_in_progress');
+  });
+
   it('returns 409 when the reuse RPC rejects an approved BNPL order', async () => {
     mockRpc.mockResolvedValue({
       data: null,

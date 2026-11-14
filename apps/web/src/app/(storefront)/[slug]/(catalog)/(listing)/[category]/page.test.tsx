@@ -1,5 +1,6 @@
+import './page.test-support';
 import { render, screen, waitFor } from '@testing-library/react';
-import { type ReactElement, Suspense } from 'react';
+import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
 import {
@@ -12,255 +13,25 @@ import {
 } from '@/lib/cached-data';
 import type { CategoryHubModel } from '@/lib/storefront-category/category-hub-types';
 import { headphoneProducts, smartphoneHubProducts } from './page.test-fixtures';
-
-const NORMALIZED_PLACEHOLDER_IMAGE = '/placeholder.svg';
-const mockGetPublishedClusterPosts = vi.fn();
-const mockGetCachedProductSemanticInventory = vi.fn();
-const mockCategoryPageDeferredCompareLinks = vi.hoisted(() => vi.fn());
-const mockConnection = vi.hoisted(() => vi.fn());
-const { mockCategoryPageContent } = vi.hoisted(() => ({
-  mockCategoryPageContent: vi.fn((_props: unknown) => (
-    <div>Category page content</div>
-  )),
-}));
-
-function defaultCategoryPageImplementation({
-  currentPage,
-  hubContent,
-}: {
-  currentPage?: number;
-  hubContent?: CategoryHubModel;
-}) {
-  return (
-    <div>
-      <div>Current page: {currentPage}</div>
-      <div>Hub heading: {hubContent?.intro.heading ?? 'none'}</div>
-      {hubContent?.bestForCards.map((card) => (
-        <div key={`best-for-${card.title}-${card.href}`}>
-          Best for: {card.title}
-        </div>
-      ))}
-      {hubContent?.brandCards.map((card) => (
-        <div key={`brand-${card.title}-${card.href}`}>
-          <div>Brand: {card.title}</div>
-          {card.secondaryLabel ? (
-            <div>Brand compare: {card.secondaryLabel}</div>
-          ) : null}
-        </div>
-      ))}
-      {hubContent?.priceBandCards.map((card) => (
-        <div key={`price-band-${card.title}-${card.href}`}>
-          Price band: {card.title}
-        </div>
-      ))}
-      {hubContent?.comparisonLinks.map((link) => (
-        <div key={`compare-link-${link.label}-${link.href}`}>
-          Compare link: {link.label}
-        </div>
-      ))}
-      {hubContent?.guideLinks.map((link) => (
-        <div key={`guide-link-${link.title}-${link.href}`}>
-          Guide link: {link.title}
-        </div>
-      ))}
-      {hubContent?.faqItems.map((item) => (
-        <div key={`faq-${item.question}-${item.answer}`}>
-          FAQ: {item.question}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const categoryPageSpy = vi.fn(defaultCategoryPageImplementation);
-const mockBuildStoreUrl = vi.fn();
-const mockBuildRequestScopedStoreUrl = vi.fn();
-const mockGenerateBreadcrumbSchema = vi.fn(() => ({}));
-const mockGenerateCollectionPageSchema = vi.fn(() => ({}));
-const mockGenerateFAQSchema = vi.fn((faqItems) => ({
-  '@type': 'FAQPage',
-  mainEntity: faqItems,
-}));
-
-vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
-  // The route now composes hub content as a server-rendered `hubSections`
-  // ReactNode slot (`<CategoryHubSections hub={…} />`) instead of a raw
-  // `hubContent` prop. Unwrap the element's `hub` prop back into `hubContent`
-  // so the spy-based assertions keep validating what the route composed.
-  CategoryPage: (props: {
-    currentPage?: number;
-    hubSections?: ReactElement<{ hub?: CategoryHubModel }>;
-  }) =>
-    categoryPageSpy({
-      ...props,
-      hubContent: props.hubSections?.props?.hub,
-    }),
-}));
-
-vi.mock('./category-page-deferred-compare-links', () => ({
-  CategoryPageDeferredCompareLinks: (props: { categorySlug: string }) => {
-    mockCategoryPageDeferredCompareLinks(props);
-
-    return <section>Maintained category compare links</section>;
-  },
-}));
-
-vi.mock(
-  '@/components/storefront/ogabassey/seo/commercial-support-links',
-  () => ({
-    CommercialSupportLinks: () => <div>CommercialSupportLinks footer</div>,
-  })
-);
-
-vi.mock('@/lib/cached-data', () => ({
-  getCachedCategoryPageData: vi.fn(),
-  getCachedCategoryPageGraphicsOptions: vi.fn(),
-  getCachedCategoryPageGraphicsOptionsStrict: vi.fn(),
-  getCachedMerchant: vi.fn(),
-  getCachedMerchantByDomain: vi.fn(),
-  getMerchantByIdentifier: vi.fn(),
-}));
-
-vi.mock('@/lib/normalize-product', () => ({
-  normalizeProduct: (product: {
-    id: string;
-    name: string;
-    slug: string;
-    description?: string | null;
-    price: number;
-    image: string;
-    images?: string[];
-    category?: string | null;
-    brand?: string | null;
-    condition?: string | null;
-    stock?: number | null;
-    product_key_specs?: Record<string, unknown> | null;
-    category_slug?: string | null;
-  }) => ({
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
-    description: product.description ?? '',
-    price: product.price,
-    image: product.image || product.images?.[0] || NORMALIZED_PLACEHOLDER_IMAGE,
-    images: product.images ?? [product.image],
-    category: product.category ?? 'Smartphones',
-    brand: product.brand ?? null,
-    condition: product.condition ?? 'new',
-    stock: product.stock ?? 0,
-    product_key_specs: product.product_key_specs ?? null,
-    category_slug: product.category_slug ?? 'smartphones',
-  }),
-}));
-
-vi.mock('next/server', () => ({
-  connection: () => mockConnection(),
-}));
-
-vi.mock('@/lib/sanitize-json-ld', () => ({
-  safeJsonLdStringify: vi.fn((value: unknown) => JSON.stringify(value)),
-}));
-
-const mockHeaders = vi.fn();
-vi.mock('next/headers', () => ({
-  headers: () => mockHeaders(),
-}));
-
-vi.mock('@/lib/seo-utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/seo-utils')>();
-
-  return {
-    ...actual,
-    generateBreadcrumbSchema: (
-      ...args: Parameters<typeof mockGenerateBreadcrumbSchema>
-    ) => mockGenerateBreadcrumbSchema(...args),
-    generateCollectionPageSchema: (
-      ...args: Parameters<typeof mockGenerateCollectionPageSchema>
-    ) => mockGenerateCollectionPageSchema(...args),
-    generateFAQSchema: (...args: Parameters<typeof mockGenerateFAQSchema>) =>
-      mockGenerateFAQSchema(...args),
-    generateMetaDescription: (description: string) =>
-      description.replace(/<[^>]+>/g, '').trim(),
-    getIndexableRobotsMetadata: (
-      ...args: Parameters<typeof actual.getIndexableRobotsMetadata>
-    ) => actual.getIndexableRobotsMetadata(...args),
-  };
-});
-
-vi.mock('@/lib/store-url', () => ({
-  buildStoreUrl: (...args: unknown[]) => mockBuildStoreUrl(...args),
-  buildRequestScopedStoreUrl: (...args: unknown[]) =>
-    mockBuildRequestScopedStoreUrl(...args),
-}));
-
-vi.mock('@/lib/storefront-content/get-published-cluster-posts', () => ({
-  getPublishedClusterPosts: (...args: unknown[]) =>
-    mockGetPublishedClusterPosts(...args),
-}));
-
-vi.mock(
-  '@/lib/storefront-product/get-cached-product-semantic-inventory',
-  () => ({
-    getCachedProductSemanticInventory: (...args: unknown[]) =>
-      mockGetCachedProductSemanticInventory(...args),
-  })
-);
-
-vi.mock('@/lib/storefront-category/get-cached-brand-authority-entries', () => ({
-  getCachedBrandAuthorityEntries: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock('./category-page-content', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./category-page-content')>();
-
-  return {
-    ...actual,
-    CategoryPageContent: (props: unknown) => mockCategoryPageContent(props),
-  };
-});
-
-vi.mock('@/lib/validation', () => ({
-  isDomainIdentifier: (value: string) => value.includes('.'),
-}));
-
-const notFound = vi.fn(() => {
-  throw new Error('NEXT_NOT_FOUND');
-});
-
-vi.mock('next/navigation', () => ({
-  notFound: () => notFound(),
-}));
-
-const merchant = {
-  id: 'merchant-1',
-  business_name: 'Ogabassey',
-  slug: 'test-store',
-  custom_domain: null,
-  payout_currency: 'NGN',
-  site_description: 'Store description',
-  logo_url: null,
-};
-
-const categoryPageData = {
-  category: {
-    id: 'cat-1',
-    name: 'Smartphones',
-    slug: 'smartphones',
-    seo_heading: null,
-    seo_description: null,
-    seo_features: [],
-    seo_faq: [],
-    image_url: null,
-    parent: null,
-  },
-  products: smartphoneHubProducts,
-  isCollection: false,
-  fallbackName: 'Smartphones',
-  fallbackDescription: 'Shop smartphones',
-  seo: null,
-  name: null,
-};
+import {
+  categoryPageData,
+  categoryPageSpy,
+  defaultCategoryPageImplementation,
+  merchant,
+  mockBuildRequestScopedStoreUrl,
+  mockBuildStoreUrl,
+  mockCategoryPageContent,
+  mockCategoryPageDeferredCompareLinks,
+  mockConnection,
+  mockGenerateBreadcrumbSchema,
+  mockGenerateCollectionPageSchema,
+  mockGenerateFAQSchema,
+  mockGetCachedProductSemanticInventory,
+  mockGetPublishedClusterPosts,
+  mockHeaders,
+  NORMALIZED_PLACEHOLDER_IMAGE,
+  notFound,
+} from './page.test-support';
 
 const { default: CategoryPageRoute, generateMetadata } = await import('./page');
 const actualCategoryPageContentModule = await vi.importActual<
@@ -555,7 +326,7 @@ describe('category page route', () => {
   });
 
   it('renders non-priority category intro, features, and faq without hub cards', async () => {
-    vi.mocked(getCachedCategoryPageData).mockResolvedValueOnce({
+    vi.mocked(getCachedCategoryPageData).mockResolvedValue({
       ...categoryPageData,
       category: {
         ...categoryPageData.category,

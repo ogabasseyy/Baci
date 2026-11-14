@@ -131,7 +131,7 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
 
     const response = await proxy(request);
 
-    expect(response.status).toBe(302);
+    expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe(
       `https://${CUSTOM_DOMAIN}/summer-sale`
     );
@@ -149,7 +149,7 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
 
     const response = await proxy(request);
 
-    expect(response.status).toBe(302);
+    expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe(
       `https://${CUSTOM_DOMAIN}/summer-sale`
     );

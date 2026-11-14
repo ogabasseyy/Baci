@@ -17,6 +17,14 @@ import { bookGiglShipment } from './gigl.booking';
 import { GIGL_QUOTE_TIMEOUT_MS, type GiglFetchOptions } from './gigl.constants';
 import { findNearestGiglServiceCentres } from './gigl.directory';
 import {
+  type GiglExternalWaybillLookup,
+  lookupGiglExternalWaybill,
+} from './gigl.external-waybill';
+import {
+  type GiglWaybillCancellation,
+  readGiglWaybillCancellation,
+} from './gigl.preshipment-cancellation';
+import {
   attestGiglWaybillOwnership,
   type GiglWaybillOwnership,
 } from './gigl.preshipment-ownership';
@@ -82,11 +90,27 @@ export class GiglProvider extends BaseShippingProvider {
     );
   }
 
+  /** Read-only lookup of a waybill that may have been booked outside Baci. */
+  lookupExternalWaybill(waybill: string): Promise<GiglExternalWaybillLookup> {
+    return lookupGiglExternalWaybill(this.apiClient, this.providerIo, waybill);
+  }
+
   /** Whether GIG says Baci's own GIG account holds this waybill. */
   attestWaybillOwnership(
     trackingNumber: string
   ): Promise<GiglWaybillOwnership> {
     return attestGiglWaybillOwnership(
+      this.apiClient,
+      this.providerIo,
+      trackingNumber
+    );
+  }
+
+  /** Whether GIG's preshipment record says the waybill was cancelled. */
+  readWaybillCancellation(
+    trackingNumber: string
+  ): Promise<GiglWaybillCancellation> {
+    return readGiglWaybillCancellation(
       this.apiClient,
       this.providerIo,
       trackingNumber

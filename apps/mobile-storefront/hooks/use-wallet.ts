@@ -11,17 +11,14 @@ import { supabase } from '@/lib/supabase';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
-import { fetchWalletDataUnbounded } from './wallet-data';
-import { runWithWalletLoadDeadline } from './wallet-load-deadline';
+import { loadWalletQuery } from './load-wallet-query';
+import { markWalletReadFailed } from './mark-wallet-read-failed';
+import { useWalletRecheckOnPiggyvest } from './use-wallet-recheck-on-piggyvest';
 import { walletKeys } from './wallet-query';
 
 export { useRedeemPoints } from './use-redeem-points';
 export type { WalletQueryData } from './wallet-query';
 export { walletKeys } from './wallet-query';
-
-// ============================================
-// HOOKS
-// ============================================
 
 const SAVINGS_INVALIDATION_DEBOUNCE_MS = 250;
 const WALLET_STRICT_STALE_TIME_MS = 30_000;
@@ -85,7 +82,10 @@ export function useWallet(options: UseWalletOptions = {}) {
   // subscribes to the fields consumers actually use.
   const {
     data,
+    dataUpdatedAt,
     error,
+    errorUpdatedAt,
+    failureCount,
     fetchStatus,
     isError,
     isLoading,
@@ -94,33 +94,33 @@ export function useWallet(options: UseWalletOptions = {}) {
   } = useQuery({
     queryKey: walletQueryKey,
     queryFn: ({ signal }) =>
-      runWithWalletLoadDeadline(
-        () =>
-          fetchWalletDataUnbounded(
-            customer?.id ?? null,
-            activeMerchantId,
-            user?.id ?? null
-          ),
-        signal
-      ),
+      loadWalletQuery({
+        customerId: customer?.id ?? null,
+        merchantId: activeMerchantId,
+        previous: () => queryClient.getQueryData(walletQueryKey),
+        signal,
+        userId: user?.id ?? null,
+      }),
     enabled: !!walletOwnerId && !!activeMerchantId && identityAgreed,
     staleTime: cachePolicy.staleTime,
     gcTime: cachePolicy.gcTime,
   });
-
-  // Real-time sync
-  // 2026 Critical Fix: Prevent channel race condition on rapid mount/unmount
+  useWalletRecheckOnPiggyvest(
+    queryClient,
+    activeMerchantId,
+    walletQueryKey,
+    data?.wallet
+  );
+  // Real-time sync; prevents the channel race on rapid mount/unmount.
   useEffect(() => {
     // Equivalent to the old both-absent guard (the helper returns null
     // exactly then), and narrows the nullable owner for the key below.
     if (!walletOwnerId) return;
-
     // Cleanup any existing channel first (prevent duplicates)
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
-
     let isMounted = true;
     const channelName = `wallet-hook-${customer?.id ?? user?.id}-${Date.now()}`;
     const activeWalletQueryKey = walletKeys.data({
@@ -242,12 +242,15 @@ export function useWallet(options: UseWalletOptions = {}) {
   // identity, not this render's — see lib/live-wallet-query.
   const liveWalletQuery = createLiveWalletQuery(queryClient);
 
+  const read = { dataUpdatedAt, errorUpdatedAt, failureCount };
   return {
-    data,
+    data: markWalletReadFailed(data, read),
+    dataUpdatedAt,
     error,
     fetchStatus,
     getWalletBalance: liveWalletQuery.getBalance,
     getWalletError: liveWalletQuery.getError,
+    getWalletVerdict: liveWalletQuery.getVerdict,
     isError,
     isFetchingNow: liveWalletQuery.isFetching,
     isLoading,

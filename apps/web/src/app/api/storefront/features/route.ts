@@ -235,7 +235,7 @@ export async function GET(request: NextRequest) {
       korapayEnabled: asBoolean(settings.korapay_enabled, false),
       payOnDeliveryEnabled: asBoolean(settings.pay_on_delivery_enabled, false),
       creditDirectEnabled: asBoolean(settings.credit_direct_enabled, false),
-      credpalEnabled: asBoolean(settings.credpal_enabled, false),
+      credpalEnabled: false,
       klumpEnabled: asBoolean(settings.klump_enabled, false),
       creditDirectMinAmount: asNumber(settings.credit_direct_min_amount, 10000),
       creditDirectMaxAmount: asNumber(

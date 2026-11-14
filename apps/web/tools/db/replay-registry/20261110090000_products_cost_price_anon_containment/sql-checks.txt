@@ -1,0 +1,1 @@
+supabase/tests/products_cost_price_anon_containment.sql

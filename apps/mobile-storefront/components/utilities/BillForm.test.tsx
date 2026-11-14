@@ -9,6 +9,11 @@ import {
 import type { Biller, BillItem } from '@/hooks/use-vtu-billers';
 import { BillForm } from './BillForm';
 
+// A merchant the server has ruled out of PiggyVest: today's wallet flows.
+jest.mock('@/lib/read-piggyvest-capability-now', () => ({
+  readPiggyvestCapabilityNow: () => false,
+}));
+
 const mockVerifyMutate = jest.fn();
 const mockVerifyReset = jest.fn();
 const mockUseUtilityPayment = jest.fn();

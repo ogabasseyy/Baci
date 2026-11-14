@@ -21,7 +21,11 @@ async function ready(options: Parameters<typeof makeHarness>[0] = {}) {
   const business = h.mock.sandbox.businessWalletId;
   return { h, owner, business };
 }
-const unset = { slot: 'v/unset', nameSuffix: '-vunset', payoutWalletId: null };
+const unset = {
+  slot: 'v/unset',
+  walletName: 'pvbproof-goal-qa-customer-0001-vunset',
+  payoutWalletId: null,
+};
 
 describe('runGoalVariant: created now', () => {
   it('creates a goal wallet with its own payout unset and reads it back', async () => {
@@ -43,11 +47,31 @@ describe('runGoalVariant: created now', () => {
     const { h, owner, business } = await ready();
     const result = await runGoalVariant(h.ctx, owner, business, {
       slot: 'v/explicit',
-      nameSuffix: '-vexplicit',
+      walletName: 'pvbproof-goal-qa-customer-0001-vexplicit',
       payoutWalletId: business,
     });
     expect(result.accepted).toBe(true);
     expect(result.readback?.matchesTarget).toEqual(['interest_payout_wallet']);
+  });
+
+  it('creates an opted-out variant with accrual off and returns its id and readback record', async () => {
+    const { h, owner, business } = await ready();
+    const result = await runGoalVariant(h.ctx, owner, business, {
+      ...unset,
+      slot: 'v/optout',
+      walletName: `baci-save-${'b'.repeat(32)}`,
+      enableInterestAccrual: false,
+    });
+    const wallet = h.mock.sandbox.wallet(result.walletId);
+    expect(wallet).toMatchObject({
+      interestEnabled: false,
+      name: `bacisave${'b'.repeat(32)}`,
+    });
+    expect(result.readbackRecord).toMatchObject({
+      id: result.walletId,
+      enable_interest_accrual: false,
+      interest_payout_wallet: null,
+    });
   });
 
   it('registers the new wallet id with the redactor', async () => {
@@ -65,7 +89,7 @@ describe('runGoalVariant: rejected, unknown and unreadable', () => {
     });
     const result = await runGoalVariant(h.ctx, owner, business, {
       slot: 'v/explicit',
-      nameSuffix: '-vexplicit',
+      walletName: 'pvbproof-goal-qa-customer-0001-vexplicit',
       payoutWalletId: business,
     });
     expect(result).toMatchObject({

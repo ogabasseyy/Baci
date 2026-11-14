@@ -144,13 +144,11 @@ describe('permanent hero mobile geometry', () => {
       ...SLIDES[0],
       name: 'Redmi Note 17 Pro Max 5G (512GB / 16GB RAM) Global Edition',
     };
-    const { getByAltText, getByRole } = render(
+    const { getByAltText, getByText } = render(
       <HeroMobileCarousel slides={[threeLineSlide]} />
     );
 
-    expect(
-      getByRole('heading', { level: 2, name: threeLineSlide.name })
-    ).toBeTruthy();
+    expect(getByText(threeLineSlide.name)).toBeTruthy();
     const heroImg = getByAltText(threeLineSlide.imageAlt);
     expect(heroImg.getAttribute('fetchpriority')).toBe('high');
 

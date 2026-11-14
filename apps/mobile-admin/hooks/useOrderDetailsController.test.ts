@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -87,6 +89,10 @@ vi.mock('@/hooks/useOrders', () => ({
   useShipOnCredit: () => ({ mutateAsync: vi.fn() }),
   useSendReminder: () => ({ mutateAsync: vi.fn() }),
   useRecordPayment: () => ({ mutateAsync: vi.fn() }),
+}));
+
+vi.mock('@/hooks/orders/refundEvidenceBlocksChoice', () => ({
+  refundEvidenceBlocksChoice: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock('@/hooks/orders/useOrderAuditEvents', () => ({

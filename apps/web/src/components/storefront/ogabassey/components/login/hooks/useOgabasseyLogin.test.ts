@@ -72,10 +72,14 @@ describe('useOgabasseyLogin', () => {
     expect(result.current.verified).toBe(true);
     expect(mockRouterPush).not.toHaveBeenCalled();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(1399);
+    });
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
       await completed;
     });
-    expect(mockRouterPush).toHaveBeenCalledWith('/imei-check');
+    expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith('/imei-check');
     expect(result.current.code).toBe('');
   });
 
@@ -98,10 +102,13 @@ describe('useOgabasseyLogin', () => {
       response.resolve({ success: true });
       await Promise.resolve();
     });
+    expect(result.current.verified).toBe(true);
+    expect(result.current.sentToEmail).toBe('first@example.com');
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(1400);
       await completion;
     });
+    expect(result.current.sentToEmail).toBe('first@example.com');
   });
 
   it('keeps failed and uncertain verification out of the success state', async () => {

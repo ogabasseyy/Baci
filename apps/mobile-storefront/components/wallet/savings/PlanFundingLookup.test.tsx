@@ -39,7 +39,9 @@ it.each([
   expect(
     screen.getByRole('checkbox', { name: 'Earn interest on this plan' })
   ).toBeOnTheScreen();
-  fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
+  expect(screen.queryByText(/reveal its dedicated account/)).toBeNull();
+  expect(screen.queryByText('Show plan account')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Check plan readiness' }));
   expect(onFetch).toHaveBeenCalledTimes(1);
 });
 
@@ -98,7 +100,7 @@ it('keeps primary verified provisioning available even in a hosted staging runti
   expect(
     screen.getByRole('checkbox', { name: 'Earn interest on this plan' })
   ).toBeOnTheScreen();
-  fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Check plan readiness' }));
   expect(onFetch).toHaveBeenCalledTimes(1);
   expect(onCheckStatus).not.toHaveBeenCalled();
 });

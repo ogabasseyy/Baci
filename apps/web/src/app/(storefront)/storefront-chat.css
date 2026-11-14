@@ -22,7 +22,7 @@
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="default"] {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 5.75rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="cart"] {
@@ -30,7 +30,7 @@
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="product"] {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 6.25rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   }
 
   .ogabassey-chat-button {

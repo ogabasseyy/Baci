@@ -6,16 +6,22 @@ import {
   OGABASSEY_SOCIAL_IMAGE_URL,
   OGABASSEY_TITLE,
 } from '@/config/ogabassey';
+import { buildStorefrontEntityId } from '@/lib/storefront-entity-id';
 import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
 
-const ogabasseyStaticHomepageSchema = {
+export const ogabasseyStaticHomepageSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebPage',
+  '@id': buildStorefrontEntityId(OGABASSEY_HOME_URL, 'homepage'),
   name: OGABASSEY_TITLE,
   description: OGABASSEY_DESCRIPTION,
   url: OGABASSEY_HOME_URL,
+  about: {
+    '@id': buildStorefrontEntityId(OGABASSEY_HOME_URL, 'online-store'),
+  },
   isPartOf: {
     '@type': 'WebSite',
+    '@id': buildStorefrontEntityId(OGABASSEY_HOME_URL, 'website'),
     name: 'OgaBassey',
     url: OGABASSEY_HOME_URL,
   },

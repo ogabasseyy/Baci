@@ -95,9 +95,7 @@ it('hides Klump when wallet credit is auto-applied', async () => {
   try {
     renderCheckoutWithStoreRates();
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /pay in installments/i })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
 
     await waitFor(() => {
       expect(

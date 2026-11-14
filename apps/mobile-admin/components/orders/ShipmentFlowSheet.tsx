@@ -9,6 +9,10 @@ import { ShipmentFlowFooter } from './ShipmentFlowFooter';
 import { ShipmentFlowGiglPanel } from './ShipmentFlowGiglPanel';
 import { ShipmentFlowHeader } from './ShipmentFlowHeader';
 import { ShipmentFlowProgress } from './ShipmentFlowProgress';
+import {
+  getShipmentFlowPrimaryActionLabel,
+  isShipmentFlowPrimaryDisabled,
+} from './ShipmentFlowSheet.actions';
 import { styles } from './ShipmentFlowSheet.styles';
 import type { ShipmentFlowSheetProps } from './ShipmentFlowSheet.types';
 import { ShipmentFlowSheetPresence } from './ShipmentFlowSheetPresence';
@@ -25,6 +29,7 @@ export function ShipmentFlowSheet({
   recoveryOrder,
   canUseProvider,
   checkoutPaidShippingLabel,
+  externalWaybill,
   fulfillmentDetails,
   fulfillmentItemIndex,
   giglShipping,
@@ -64,6 +69,11 @@ export function ShipmentFlowSheet({
     step === 'method' &&
     (recoveryRequired ? selectedMode === 'provider' : recoveryBlocking);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const isBusy =
+    isSubmitting ||
+    recoveryBusy ||
+    externalWaybill?.state === 'checking' ||
+    externalWaybill?.state === 'linking';
   const [activeScanField, setActiveScanField] = useState<
     'imei' | 'serialNumber' | null
   >(null);
@@ -88,33 +98,38 @@ export function ShipmentFlowSheet({
       : detailStepCount +
         steps.slice(detailStepCount).findIndex((item) => item.id === step);
   const showBack = currentStepIndex > 0;
-  const primaryActionLabel =
-    step === 'details'
-      ? fulfillmentItemIndex < detailStepCount - 1
-        ? 'Next Item'
-        : 'Continue'
-      : step === 'method'
-        ? selectedMode === 'self_fulfillment'
-          ? 'Continue to Rider'
-          : `Book with ${providerLabel || (giglShipping?.quote ? 'GIG Logistics' : 'Shipping Provider')}`
-        : 'Mark Shipped';
+  const primaryActionLabel = getShipmentFlowPrimaryActionLabel({
+    detailStepCount,
+    externalWaybill,
+    fulfillmentItemIndex,
+    hasGiglQuote: Boolean(giglShipping?.quote),
+    providerLabel,
+    selectedMode,
+    step,
+  });
   useEffect(() => {
     if (!visible) {
       setActiveScanField(null);
     }
   }, [visible]);
   const handleRequestClose = () => {
-    if (isSubmitting || recoveryBusy) return;
+    if (isBusy) return;
     onClose();
   };
   const handleBack = () => {
-    if (isSubmitting || recoveryBusy) return;
+    if (isBusy) return;
     onStepBack();
   };
   const handlePrimaryAction = async () => {
     if (isRecoveryBlocking) return;
     if (step === 'details') return onContinueFromDetails();
     if (step === 'rider') return onConfirmSelfFulfillment();
+    if (selectedMode === 'external_waybill') {
+      if (!externalWaybill) return;
+      return externalWaybill.preview?.linkable
+        ? externalWaybill.link()
+        : externalWaybill.check();
+    }
     if (
       selectedMode === 'provider' &&
       giglShipping &&
@@ -157,8 +172,8 @@ export function ShipmentFlowSheet({
         <Pressable
           accessibilityLabel="Cancel shipment flow"
           accessibilityRole="button"
-          accessibilityState={{ disabled: isSubmitting || recoveryBusy }}
-          disabled={isSubmitting || recoveryBusy}
+          accessibilityState={{ disabled: isBusy }}
+          disabled={isBusy}
           onPress={handleRequestClose}
           style={styles.dismissRegion}
         />
@@ -174,7 +189,7 @@ export function ShipmentFlowSheet({
         >
           <ShipmentFlowHeader
             colors={colors}
-            isSubmitting={isSubmitting || recoveryBusy}
+            isSubmitting={isBusy}
             onClose={handleRequestClose}
             orderNumber={orderNumber}
             step={step}
@@ -203,6 +218,7 @@ export function ShipmentFlowSheet({
               <ShipmentFlowMethodStep
                 canUseProvider={canUseProvider}
                 checkoutPaidShippingLabel={checkoutPaidShippingLabel}
+                externalWaybill={externalWaybill}
                 giglPanel={
                   !giglShipping ? undefined : (
                     <ShipmentFlowGiglPanel
@@ -212,6 +228,7 @@ export function ShipmentFlowSheet({
                       missingFields={giglShipping.missingFields}
                       onAddressFieldChange={giglShipping.updateAddressField}
                       onFundWallet={() => void giglShipping.startFunding()}
+                      onPlaceSelect={giglShipping.selectAddressPlace}
                       onRefreshFundingAccount={() =>
                         void giglShipping.refreshFundingAccount()
                       }
@@ -228,7 +245,7 @@ export function ShipmentFlowSheet({
                   )
                 }
                 onModeChange={(mode) => {
-                  if (!recoveryBusy) onModeChange(mode);
+                  if (!isBusy) onModeChange(mode);
                 }}
                 providerLabel={providerLabel}
                 selectedMode={selectedMode}
@@ -258,19 +275,15 @@ export function ShipmentFlowSheet({
           </ScrollView>
           <ShipmentFlowFooter
             colors={colors}
-            isSubmitting={isSubmitting || recoveryBusy}
-            isPrimaryDisabled={
-              isRecoveryBlocking ||
-              (step === 'method' &&
-                selectedMode === 'provider' &&
-                (giglShipping
-                  ? !giglShipping.wallet?.canBook ||
-                    giglShipping.state === 'loading' ||
-                    giglShipping.state === 'funding' ||
-                    giglShipping.state === 'funding_pending' ||
-                    giglShipping.state === 'polling'
-                  : !canUseProvider))
-            }
+            isSubmitting={isBusy}
+            isPrimaryDisabled={isShipmentFlowPrimaryDisabled({
+              canUseProvider,
+              externalWaybill,
+              giglShipping,
+              isRecoveryBlocking,
+              selectedMode,
+              step,
+            })}
             onBack={handleBack}
             onPrimaryAction={() => void handlePrimaryAction()}
             primaryActionLabel={primaryActionLabel}

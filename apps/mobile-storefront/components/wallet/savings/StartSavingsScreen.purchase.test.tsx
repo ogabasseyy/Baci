@@ -89,7 +89,8 @@ it.each([
       })
   );
   render(<StartSavingsScreen staging={staging} />);
-  expect(screen.getByText('Synthetic bank')).toBeOnTheScreen();
+  expect(screen.getByText('Savings status')).toBeOnTheScreen();
+  expect(screen.queryByText('Synthetic bank')).toBeNull();
   await act(async () =>
     fireEvent.press(
       screen.getByRole('button', { name: 'Review purchase quote' })

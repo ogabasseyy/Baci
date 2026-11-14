@@ -5,19 +5,19 @@ import {
 } from '@baci/shared/lib';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import type { CartItem } from '@/hooks/cart';
 import type { createClient } from '@/lib/supabase/client';
-import { computeCounterOffer } from './negotiation-modal-pricing';
-
-// Module scope: React Compiler cannot lower dynamic import() inside the hook.
-// Lazy so the negotiation modal (reached via footer-chrome -> cart sidebar)
-// never pulls @supabase/ssr into the initial bundle.
-async function loadSupabaseClient(): Promise<ReturnType<typeof createClient>> {
-  const { createClient } = await import('@/lib/supabase/client');
-  return createClient();
-}
+import type { NegotiationControllerOptions } from './negotiation-modal-options';
+import {
+  AI_REVIEW_MESSAGE,
+  COUNTER_OFFER_REPLIES,
+  computeCounterOffer,
+  FINAL_PRICE_MESSAGE,
+} from './negotiation-modal-pricing';
 import { submitNegotiationUpload } from './negotiation-modal-upload';
+
+import { loadNegotiationSupabaseClient } from './negotiation-supabase-client';
 import { getUploadFormValidationError } from './negotiation-upload-validation';
+import { useNegotiationLiveVat } from './use-negotiation-live-vat';
 
 export type NegotiationStatus =
   | 'input'
@@ -28,33 +28,6 @@ export type NegotiationStatus =
   | 'upload'
   | 'submitted';
 
-interface NegotiationControllerOptions {
-  cart?: CartItem[];
-  condition?: string;
-  currentPrice: number;
-  isOpen: boolean;
-  itemId?: string;
-  merchantId: string;
-  onSuccess: (finalPrice: number) => void;
-  productBrand?: string;
-  productName: string;
-  productSlug?: string;
-  type: 'single' | 'total';
-  variantAttributes?: Record<string, string>;
-  variantId?: string;
-  variantName?: string;
-  vatRate: number;
-}
-
-const AI_REVIEW_MESSAGE =
-  'Your offer was accepted by our AI and is subject to human review.';
-const FINAL_PRICE_MESSAGE =
-  "That's the final price for this product. We can't discount it further.";
-const COUNTER_OFFER_REPLIES = [
-  "That's a bit low. But I can do:",
-  "We're getting closer. The best I can do is:",
-  'This is my absolute final offer:',
-] as const;
 export function useNegotiationModalController({
   cart,
   condition,
@@ -62,6 +35,7 @@ export function useNegotiationModalController({
   isOpen,
   itemId,
   merchantId,
+  merchantSlug,
   onSuccess,
   productBrand,
   productName,
@@ -70,7 +44,6 @@ export function useNegotiationModalController({
   variantAttributes,
   variantId,
   variantName,
-  vatRate,
 }: NegotiationControllerOptions) {
   const [offer, setOffer] = useState('');
   const [status, setStatus] = useState<NegotiationStatus>('input');
@@ -81,18 +54,26 @@ export function useNegotiationModalController({
   const [uploadLink, setUploadLink] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  // Lazily resolved: eager createClient() at hook init pulled @supabase/ssr
-  // toward the homepage bundle via footer-chrome -> cart sidebar. The client
-  // is only needed inside submit handlers (user action), where a dynamic
-  // import is invisible. Promise cache so the import stays in module scope.
-  const supabasePromiseRef =
-    useRef<Promise<ReturnType<typeof createClient>> | null>(null);
+  const supabasePromiseRef = useRef<Promise<
+    ReturnType<typeof createClient>
+  > | null>(null);
   const getSupabaseClient = () => {
     if (!supabasePromiseRef.current) {
-      supabasePromiseRef.current = loadSupabaseClient();
+      supabasePromiseRef.current = loadNegotiationSupabaseClient().catch(
+        (error) => {
+          supabasePromiseRef.current = null;
+          throw error;
+        }
+      );
     }
     return supabasePromiseRef.current;
   };
+  const readLiveVat = useNegotiationLiveVat(
+    isOpen,
+    merchantId,
+    merchantSlug,
+    getSupabaseClient
+  );
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(false);
   const isOpenRef = useRef(isOpen);
@@ -106,8 +87,11 @@ export function useNegotiationModalController({
   const canApplyAsyncResult = () => isMountedRef.current && isOpenRef.current;
 
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-  if (isOpen !== prevIsOpen) {
+  const identity = JSON.stringify([merchantId, merchantSlug]);
+  const [prevIdentity, setPrevIdentity] = useState(identity);
+  if (isOpen !== prevIsOpen || identity !== prevIdentity) {
     setPrevIsOpen(isOpen);
+    setPrevIdentity(identity);
     if (isOpen) {
       setOffer('');
       setStatus('input');
@@ -124,7 +108,7 @@ export function useNegotiationModalController({
   useEffect(() => {
     isOpenRef.current = isOpen;
     clearSubmitTimeout();
-  }, [isOpen]);
+  }, [isOpen, merchantId, merchantSlug]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -153,7 +137,7 @@ export function useNegotiationModalController({
     setMessage('');
     setStatus('processing');
     clearSubmitTimeout();
-    submitTimeoutRef.current = setTimeout(() => {
+    submitTimeoutRef.current = setTimeout(async () => {
       submitTimeoutRef.current = null;
       if (!canApplyAsyncResult()) return;
 
@@ -182,6 +166,20 @@ export function useNegotiationModalController({
         attemptCount,
         COUNTER_NEGOTIATION_DISCOUNT_STEPS.length - 1
       );
+      let vatRate = 0;
+      if (step === COUNTER_NEGOTIATION_DISCOUNT_STEPS.length - 1) {
+        try {
+          const freshRate = await readLiveVat();
+          if (freshRate === undefined || !canApplyAsyncResult()) return;
+          vatRate = freshRate;
+        } catch {
+          if (!canApplyAsyncResult()) return;
+          setCounterOffer(null);
+          setMessage('Unable to check tax settings. Please try again.');
+          setStatus('input');
+          return;
+        }
+      }
       setCounterOffer(
         computeCounterOffer(
           currentPrice,

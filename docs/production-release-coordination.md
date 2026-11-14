@@ -72,6 +72,53 @@ in the clean release checkout; do not disable global hooks to make an old checko
 
 ## Safety and evidence
 
+### Shared VPS build resources
+
+The production build and both Android release jobs share the job-level
+`production-prebuilt-deploy` concurrency group with `cancel-in-progress: false`,
+so a web deploy and an Android release never build on the VPS at the same time.
+GitHub keeps one running and one pending job per group: a newer waiting job
+replaces an older pending one. That is intentional for deploys (the exact-main
+guard would refuse the stale one anyway). A superseded Android main build is
+refused before setup by `refuse-superseded-android-build.sh`; re-run a displaced
+tag release manually. `concurrency.queue: max` is deliberately not used: the
+pinned actionlint rejects it and the CWV runner authority pins the lint config
+byte-for-byte. Revisit when actionlint gains support
+(https://github.com/rhysd/actionlint/issues/657).
+
+The VPS deploy runner's CPU budget is two cores (`CPUQuota=200%`,
+`CPUWeight=100`). Apply both runtime and persistent systemd properties without
+restarting the service; verify `cpu.max` is `200000 100000` and the service PID
+and start time remain unchanged. Do not restart an active release runner.
+
+The October 25 interruptions at 17:41 and 18:55 UTC were global kernel OOM
+kills of the native TypeScript compiler. Systemd's `OOMPolicy=stop` then
+stopped the runner, which surfaced as a Ctrl-C cancellation. Preserve that
+containment policy. Production Next.js checks use `tsconfig.build.json`,
+which retains every non-test source and all strict compiler settings but
+omits test roots. The normal `pnpm turbo typecheck` still uses the complete
+application-and-test configuration. The scope regression test enforces this
+separation and the explicit `ignoreBuildErrors: false` setting.
+`next build` regenerates `.next/types/link.d.ts` immediately before its own
+type check, so the typed-route preparation that `pnpm typecheck` applies in
+place cannot survive there. The `build` script therefore runs `next typegen`
+and writes the prepared declaration to `.typed-navigation/link.d.ts`;
+`tsconfig.build.json` lists that copy under `files` and excludes the
+regenerated file, so a build that skipped the preparation fails with TS6053
+instead of silently dropping typed-route checks.
+On a fresh checkout, run `next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts` in `apps/web` (or `pnpm typecheck:build`, which also type checks) before a bare `tsc -p tsconfig.build.json`, which otherwise fails with TS6053.
+`typecheck:build` passes `--incremental false` because a stale `.next/cache/tsconfig.build.tsbuildinfo` let an unprepared declaration pass without being re-checked; do not trust an incremental result when verifying this path by hand.
+`build:ci` compiles without type checking, so only a production build
+exercises this path: a TS2589 in a deploy with green PR checks means the two
+have drifted.
+The production build also supplies `GOMEMLIMIT=6GiB` to the native Go
+compiler. This is a soft garbage-collection budget, not a hard memory cap;
+`NODE_OPTIONS` only budgets Node.js. The host has 24 GiB swap after adding
+an 8 GiB root-owned mode-0600 `/swapfile-baci-build`, registered in
+`/etc/fstab`; `/etc/fstab.baci-build-20261025` preserves the prior file.
+Do not disable the OOM policy or type checking to hide a build failure.
+
+
 - Preserve the worker capability smoke, immutable checkout, cron quiescence,
   promotion records, deployment locks, migration ordering and rollback paths.
 - A successful workflow is insufficient if its publishing job was skipped.

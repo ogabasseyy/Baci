@@ -1,69 +1,51 @@
-import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
-import { addSavingsContribution } from '@/lib/customer-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
-import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import { useAuthStore } from '@/stores/auth-store';
+import { confirmPrimaryHeadStartBalance } from './confirm-primary-head-start-balance';
+import {
+  handOffToWallet,
+  PLAN_ALREADY_CREATED_MESSAGE,
+  PLAN_CREATED_OPEN_WALLET_MESSAGE,
+  SIGN_IN_TO_START_SAVINGS_MESSAGE,
+} from './hand-off-to-wallet';
+import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
-import { formatDateInput } from './start-savings.helpers';
-import type { SavingsProductChoice } from './start-savings.types';
-
-type SavingsInputValidation =
-  | {
-      formattedStartDate: string;
-      ok: true;
-      selectedProduct: SavingsProductChoice;
-    }
-  | { error: string; ok: false };
-
-function validateSavingsInput(
-  input: UseStartSavingsSubmitInput
-): SavingsInputValidation {
-  if (!input.selectedProduct) {
-    return { error: 'Select a product to save for.', ok: false };
-  }
-
-  if (
-    input.selectedProduct.requiresVariantSelection !== false ||
-    (input.selectedProduct.variantId !== null &&
-      (typeof input.selectedProduct.variantId !== 'string' ||
-        !input.selectedProduct.variantId.trim()))
-  ) {
-    return {
-      error: 'Select the exact device variant you want to save for.',
-      ok: false,
-    };
-  }
-
-  if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {
-    return { error: 'Select a saved card for auto debit.', ok: false };
-  }
-
-  const formattedStartDate = formatDateInput(input.startDate);
-  if (!formattedStartDate) {
-    return { error: 'Select a valid start date.', ok: false };
-  }
-
-  return {
-    formattedStartDate,
-    ok: true,
-    selectedProduct: input.selectedProduct,
-  };
-}
+import { wholeNairaHeadStart } from './start-savings-wallet-balance';
+import { useWalletPinPrompt } from './use-wallet-pin-prompt';
+import { validateSavingsInput } from './validate-savings-input';
 
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  // The signed-in account: none blocks a submit, a mid-submit switch cancels.
+  const authUserId = useAuthStore((state) => state.user?.id);
+  const authUserIdRef = useRef(authUserId);
+  // Bumped on every account change, so switching away and back mid-submit
+  // still cancels that submit.
+  const accountGenerationRef = useRef(0);
+  useEffect(() => {
+    authUserIdRef.current = authUserId;
+    accountGenerationRef.current += 1;
+  }, [authUserId]);
+  // A created plan, for its account: one whose wallet hand-off could not
+  // finish (handOff), or one whose submit was cut short by an account switch
+  // before it finished, so the unchanged draft never creates it twice.
+  // Kept per account, so another account's plan never replaces or clears it.
+  const pendingPlansRef = useRef(
+    new Map<string, { goalId: string; contextKey: string; handOff: boolean }>()
+  );
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
+  const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
   const contextKey = JSON.stringify([
     input.activeMerchantId,
     input.activeMerchantSlug,
@@ -77,6 +59,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     input.startDate,
     input.maturityDate,
     input.preferredDebitTime,
+    input.interestChoice ?? null, // fixed once the plan exists
   ]);
   useEffect(() => {
     const context = { active: true, key: contextKey };
@@ -94,6 +77,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
 
   const submitSavingsGoal = async (options?: {
     deferInitialContribution?: boolean;
+    continueInWallet?: boolean;
+    /** Confirm a fresh PiggyVest balance covers the head start first. */
+    confirmPrimaryBalance?: boolean;
   }) => {
     if (submitInFlightRef.current) {
       return;
@@ -104,21 +90,110 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       input.setFormError(validation.error);
       return;
     }
-
+    if (!authUserIdRef.current) {
+      input.setFormError(SIGN_IN_TO_START_SAVINGS_MESSAGE);
+      return;
+    }
     submitInFlightRef.current = true;
     setIsSubmitting(true);
+    const release = () => {
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
+    };
     const context = contextRef.current;
+    const submittingUserId = authUserIdRef.current;
+    const generation = accountGenerationRef.current;
+    const stillCurrent = () =>
+      context.active && accountGenerationRef.current === generation;
+    // A plan already exists for this account but its head start never moved:
+    // only the unchanged wallet hand-off may continue it. Any edit, a dropped
+    // head start or another funding choice must not create a second plan or
+    // fund that plan with different details.
+    const accountKey = submittingUserId ?? '';
+    const pending = pendingPlansRef.current.get(accountKey) ?? null;
+    // A plan created here whose flow was cut short blocks every further
+    // submit from this account, edited or not, until the screen is left.
+    const handOffRetry =
+      pending?.handOff &&
+      options?.continueInWallet &&
+      pending.contextKey === context.key;
+    if (pending && !handOffRetry) {
+      input.setFormError(
+        pending.handOff
+          ? PLAN_ALREADY_CREATED_MESSAGE
+          : PLAN_CREATED_OPEN_WALLET_MESSAGE
+      );
+      release();
+      return;
+    }
+    if (options?.confirmPrimaryBalance) {
+      // Inside the guarded lifecycle: no second submit can start, and an
+      // edit to the plan or another account during the read drops this one.
+      const refusal = await confirmPrimaryHeadStartBalance(input);
+      const current = stillCurrent();
+      if (refusal || !current) {
+        if (refusal && current) input.setFormError(refusal);
+        release();
+        return;
+      }
+    }
+    // The head start moves through PiggyVest from the wallet's Add to
+    // savings sheet, prefilled with the amount the customer chose.
+    const continueInWallet = (goalId: string, amount: number) => {
+      pendingPlansRef.current.delete(accountKey);
+      router.replace({
+        pathname: '/wallet',
+        params: {
+          action: 'savings',
+          savingsGoalId: goalId,
+          savingsAmount: String(wholeNairaHeadStart(amount)),
+        },
+      });
+    };
+    const record = (goalId: string, handOff: boolean) => {
+      pendingPlansRef.current.set(accountKey, {
+        goalId,
+        contextKey: context.key,
+        handOff,
+      });
+    };
+    const onHandOffPending = (goalId: string) => record(goalId, true);
+    const onPlanCreated = (goalId: string) => record(goalId, false);
+    if (pending?.handOff) {
+      // The plan already exists: retry its hand-off, never create another.
+      await handOffToWallet(
+        {
+          ...input,
+          onContinueInWallet: continueInWallet,
+          onHandOffPending,
+        },
+        pending.goalId,
+        stillCurrent
+      ).finally(release);
+      return;
+    }
     await runSavingsGoalSubmission(
       {
         ...input,
         deferInitialContribution:
           options?.deferInitialContribution ?? input.deferInitialContribution,
+        onContinueInWallet: options?.continueInWallet
+          ? continueInWallet
+          : undefined,
+        onHandOffPending,
+        onPlanCreated,
+        submittingUserId,
       },
       validation,
-      () => context.active
+      stillCurrent
     ).finally(() => {
-      submitInFlightRef.current = false;
-      if (mountedRef.current) setIsSubmitting(false);
+      // Finished on screen: the plan is shown, so its record is done with.
+      if (
+        stillCurrent() &&
+        pendingPlansRef.current.get(accountKey)?.handOff === false
+      )
+        pendingPlansRef.current.delete(accountKey);
+      release();
     });
   };
 
@@ -138,50 +213,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
-      const idempotencyKey =
-        input.initialContributionIdempotencyKey ?? Crypto.randomUUID();
-      if (!input.initialContributionIdempotencyKey) {
-        input.setInitialContributionIdempotencyKey(idempotencyKey);
-      }
-      const contributionResult = await addSavingsContribution({
-        amount,
-        goalId,
-        idempotencyKey,
-        merchantId: input.activeMerchantId,
-        merchantSlug: input.activeMerchantSlug,
-      });
-      if (!mountedRef.current) return;
-      // Completion reconciliation for the deferred path: the reminder was
-      // retained at creation because the transfer was unconfirmed — now that
-      // a confirmed contribution completes the goal, cancel it.
-      if (contributionResult.goalStatus === 'completed') {
-        try {
-          await cancelSavingsReminderNotification(goalId);
-        } catch {
-          // Reminder cleanup is best effort after a confirmed contribution.
-        }
-      }
-      input.setInitialContributionIdempotencyKey(null);
-      input.setCreatedGoalId?.(null);
-      input.setShowTransferModal(false);
-      input.setFormError(null);
-      input.setShowSuccessModal(true);
-      try {
-        await input.refetch();
-      } catch {
-        input.setFormError('Plan funded but unable to refresh wallet data.');
-      }
-    } catch (error) {
-      if (!mountedRef.current) return;
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Unable to record the contribution.';
-      input.setFormError(message);
-      showAppAlert({
-        title: 'Contribution not recorded',
-        message,
-        variant: 'error',
+      await runBankTransferContribution(input, goalId, amount, {
+        isMounted: () => mountedRef.current,
+        requestPinProof: requestProof,
       });
     } finally {
       submitInFlightRef.current = false;
@@ -231,6 +265,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     handleCopyFundingAccount,
     isAuthorizingCard,
     isSubmitting,
+    pinSheetProps,
     submitBankTransferContribution,
     openWalletFundingScreen: () => {
       // Fund enough for the first contribution, but never send Paystack below the provider minimum.

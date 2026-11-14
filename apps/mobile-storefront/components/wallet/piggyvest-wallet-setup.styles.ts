@@ -1,0 +1,58 @@
+import { StyleSheet } from 'react-native';
+import { RADIUS } from '@/constants/Colors';
+
+export const setupStyles = StyleSheet.create({
+  form: { gap: 18 },
+  header: { alignItems: 'center', gap: 8 },
+  headerIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  title: { fontSize: 19, fontWeight: '800', textAlign: 'center' },
+  subtitle: { fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  benefits: { borderRadius: 16, padding: 14, gap: 10 },
+  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  benefitText: { flex: 1, fontSize: 13, fontWeight: '500' },
+  field: { gap: 6 },
+  fieldLabel: { fontSize: 13, fontWeight: '600' },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    minHeight: 52,
+  },
+  input: { flex: 1, fontSize: 16, letterSpacing: 2, paddingVertical: 12 },
+  counter: { fontSize: 12, fontVariant: ['tabular-nums'] },
+  hint: { fontSize: 12 },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    minHeight: 44,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  consentText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  error: { fontSize: 13 },
+  submit: {
+    minHeight: 50,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitText: { fontSize: 15, fontWeight: '700' },
+});

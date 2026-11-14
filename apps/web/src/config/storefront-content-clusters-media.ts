@@ -4,7 +4,6 @@ const gamingBrands = {
   playstation: ['playstation', 'ps5', 'ps4', 'sony'],
   nintendo: ['nintendo', 'switch'],
   xbox: ['xbox', 'microsoft'],
-  gaming: ['gaming', 'game'],
 } as const;
 
 const tvBrands = {

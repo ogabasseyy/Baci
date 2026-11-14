@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getPiggyvestApiConfig } from '@/env';
-import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
+import { createPiggyvestIntakeClient } from '@/lib/piggyvest/server-intake-client';
 import { emitPiggyvestWebhookAlert } from '@/lib/piggyvest/webhook-alerts';
 import { markCaptureProcessed } from '@/lib/piggyvest/webhook-capture';
 import { isPiggyvestCaptureDrainScheduled } from '@/lib/piggyvest/webhook-capture-attestation';
@@ -15,7 +15,9 @@ import {
 
 /**
  * Provider delivery contract (17 Sep 2026; durable capture, R5):
- * - At-least-once: up to 10 automatic retries, plus manual resends.
+ * - At-least-once: up to 10 automatic retries with exponential backoff.
+ *   PiggyVest confirmed on 2026-11-11 there is no resend endpoint: once
+ *   retries run out, only the capture drain can replay a stored event.
  * - Signature is hex(HMAC-SHA512(secret, raw_body)) in
  *   `x-pvb-signature`, verified over the exact wire bytes.
  * - Capture is always on. Any request that verifies under a CURRENT key is
@@ -47,6 +49,18 @@ import {
  *   attested: the capture's recorded authority is immutable, so only the
  *   provider's redelivery (verified under the full set) can recover it.
  * - Everything else -> 200.
+ *
+ * Database authority (GL-D): this route never holds the Supabase service-role
+ * key. Every database call (capture, inbox lease, quarantine, ledgers, wallet
+ * restrictions, outbox terminals) goes through the restricted login
+ * `baci_piggyvest_webhook_intake`, which can EXECUTE only the
+ * `piggyvest_webhook_intake` SECURITY DEFINER functions, over verified TLS
+ * (see server-intake-client.ts). The signature is still verified in this
+ * process before any write, and the capture stays durable before the 200.
+ * When the login settings (PIGGYVEST_PRIMARY_DB_HOST/PORT/NAME/CA and
+ * PIGGYVEST_WEBHOOK_INTAKE_DB_PASSWORD) are unset or malformed, client
+ * construction throws and the delivery answers 503 + alert like any other
+ * unavailable capture: there is no fallback to a broader credential.
  */
 
 export function GET(): Response {
@@ -87,15 +101,30 @@ export async function POST(request: NextRequest): Promise<Response> {
   const rawBody: Buffer = bounded.body;
 
   // One intake client per request, created only once a delivery needs it
-  // (a rejected request never constructs service authority).
-  let intakeClient:
-    | ReturnType<typeof createPiggyvestIntakeServiceClient>
-    | undefined;
+  // (a rejected request never opens a database connection). It owns a single
+  // connection shared by every operation of the delivery and is always
+  // disposed, on every return path.
+  let intakeClient: ReturnType<typeof createPiggyvestIntakeClient> | undefined;
   const createClient = () => {
-    intakeClient ??= createPiggyvestIntakeServiceClient();
+    intakeClient ??= createPiggyvestIntakeClient();
     return intakeClient;
   };
+  try {
+    return await handleVerifiedBody(request, rawBody, createClient);
+  } finally {
+    try {
+      await intakeClient?.dispose?.();
+    } catch {
+      // Cleanup must not replace the delivery's processing response.
+    }
+  }
+}
 
+async function handleVerifiedBody(
+  request: NextRequest,
+  rawBody: Buffer,
+  createClient: () => ReturnType<typeof createPiggyvestIntakeClient>
+): Promise<Response> {
   const admission = await admitPiggyvestDelivery({
     request,
     rawBody,

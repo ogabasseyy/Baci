@@ -37,7 +37,7 @@ it('unsubscribes the replaced authenticated controller without hiding the new co
       }}
     />
   );
-  await screen.findByText('Synthetic bank');
+  await screen.findByText('Savings status');
   view.rerender(
     <PiggyvestSavingsScreen
       staging={{
@@ -50,9 +50,10 @@ it('unsubscribes the replaced authenticated controller without hiding the new co
       }}
     />
   );
-  await screen.findByText('Synthetic bank');
+  await screen.findByText('Savings status');
   await act(async () => previous.invalidate());
-  expect(screen.queryByText('Synthetic bank')).not.toBeNull();
+  expect(screen.queryByText('Savings status')).not.toBeNull();
+  expect(screen.queryByText('Synthetic bank')).toBeNull();
   view.unmount();
   await act(async () => replacement.invalidate());
 });
@@ -121,7 +122,7 @@ const quote = {
 it.each([
   'prepared',
   'uncertain',
-] as const)('suppresses cached funding from pending through %s via controller notification', async (outcome) => {
+] as const)('never shows a goal bank account from pending through %s via controller notification', async (outcome) => {
   let finish: ((result: unknown) => void) | undefined;
   let fail: ((error: Error) => void) | undefined;
   const binding = createPiggyvestCancellationController({
@@ -148,7 +149,7 @@ it.each([
       }}
     />
   );
-  await screen.findByText('Synthetic bank');
+  await screen.findByText('Savings status');
   const initial = binding.read(source);
   if (initial?.status !== 'review') throw new Error('fixture');
   let pending: Promise<unknown> | undefined;

@@ -62,4 +62,52 @@ describe('nativeCheckoutSnapshotSchema', () => {
         .success
     ).toBe(false);
   });
+
+  it('accepts missing reviewed names during mixed deployments and caps names', () => {
+    const line = {
+      id: 'line-1',
+      productId: '11111111-1111-4111-8111-111111111111',
+      variantId: null,
+      condition: null,
+      options: {},
+      quantity: 1,
+      negotiatedUnitPriceMinor: null,
+      negotiationStatus: null,
+      negotiationInvalidated: false,
+      voucherToken: null,
+      voucherAwardId: null,
+      hasAssurance: false,
+      assuranceRate: null,
+      lastUnitPriceMinor: null,
+      validatedUnitPriceMinor: 0,
+      effectiveUnitPriceMinor: 0,
+      priceChanged: false,
+      available: true,
+      unavailableReason: null,
+      stockQty: 0,
+      manageStock: false,
+    };
+    expect(
+      nativeCheckoutSnapshotSchema.safeParse({ ...valid, lines: [line] })
+        .success
+    ).toBe(true);
+    expect(
+      nativeCheckoutSnapshotSchema.safeParse({
+        ...valid,
+        lines: [{ ...line, productName: 'x'.repeat(201) }],
+      }).success
+    ).toBe(false);
+    expect(
+      nativeCheckoutSnapshotSchema.safeParse({
+        ...valid,
+        lines: [{ ...line, productName: '😀'.repeat(200) }],
+      }).success
+    ).toBe(true);
+    expect(
+      nativeCheckoutSnapshotSchema.safeParse({
+        ...valid,
+        lines: [{ ...line, productName: '😀'.repeat(201) }],
+      }).success
+    ).toBe(false);
+  });
 });

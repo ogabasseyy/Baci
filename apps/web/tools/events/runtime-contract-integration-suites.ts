@@ -1,5 +1,65 @@
+import { oxygenIntegrationSuites } from './runtime-contract-oxygen-integration-suites';
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  ...oxygenIntegrationSuites,
+  'apps/web/src/lib/proxy/oxygen-payment-surface.ts':
+    'apps/web/src/lib/proxy/response-headers.test.ts',
+  'apps/web/src/app/api/shipping/quotes/load-public-merchant-rates.ts':
+    'apps/web/src/app/api/shipping/quotes/route.public-rates-client.test.ts',
+  'apps/web/src/hooks/cart/use-legacy-cart-instance-adoption.ts':
+    'apps/web/src/hooks/cart/oxygen-legacy-cart-adoption.test.tsx',
+  'apps/web/src/app/(storefront)/[slug]/(commerce)/order-success/order-success-content.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(commerce)/order-success/page.test.tsx',
+  'apps/web/src/app/(storefront)/[slug]/(commerce)/order-success/order-success-request-marker.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(commerce)/order-success/page-request-boundary.test.tsx',
+  'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-details-client.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/page.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-shipping.ts':
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.delivery-and-pay-for-me.test.ts',
+  'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-create.ts':
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.creation.test.ts',
+  'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-payment.ts':
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.standard-payment.test.ts',
+  'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-financing.ts':
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.credit-direct.test.ts',
+  'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-card-payment.ts':
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.creation.test.ts',
+  'apps/web/tools/oxygen-manual-test/ui.ts':
+    'apps/web/tools/oxygen-manual-test/client.test.ts',
+  'apps/web/tools/oxygen-webhook-observer/receipt.ts':
+    'apps/web/tools/oxygen-webhook-observer/register.test.ts',
+  'apps/web/src/schemas/oxygen-chat.ts':
+    'apps/web/src/lib/payments/oxygen/chat-pipeline.test.ts',
+  'apps/web/src/schemas/oxygen-checkout-snapshot.ts':
+    'apps/web/src/components/payments/oxygen/oxygen-checkout-snapshot.test.ts',
+  'apps/web/src/schemas/oxygen-order-plan.ts':
+    'apps/web/src/lib/payments/oxygen/canonical-activation.test.ts',
+  'apps/web/src/schemas/oxygen-provider-diagnostic.ts':
+    'apps/web/src/lib/payments/oxygen/local-validation-diagnostic.test.ts',
+  'apps/web/src/schemas/oxygen-workflow.ts':
+    'apps/web/src/lib/payments/oxygen/chat-pipeline.test.ts',
+  'apps/web/src/schemas/oxygen-approval-code.ts':
+    'apps/web/src/app/api/payments/oxygen/approval-code/route.test.ts',
+  'apps/web/src/schemas/oxygen-bank-details.ts':
+    'apps/web/src/app/api/payments/oxygen/bank-details/route.test.ts',
+  'apps/web/src/schemas/oxygen-eligibility.ts':
+    'apps/web/src/lib/payments/oxygen/eligibility.test.ts',
+  'apps/web/src/schemas/oxygen-eligibility-report.ts':
+    'apps/web/src/lib/payments/oxygen/runtime-eligibility.test.ts',
+  'apps/web/src/schemas/oxygen-order-context.ts':
+    'apps/web/src/lib/payments/oxygen/context.test.ts',
+  'apps/web/src/schemas/oxygen-payment-recovery.ts':
+    'apps/web/src/app/api/payments/oxygen/recovery/route.test.ts',
+  'apps/web/src/schemas/oxygen-phone-handoff.ts':
+    'apps/web/src/app/api/payments/oxygen/phone-handoff/redeem/route.test.ts',
+  'apps/web/src/schemas/oxygen-plan-acceptance.ts':
+    'apps/web/src/app/api/payments/oxygen/plans/accept/route.test.ts',
+  'apps/web/src/schemas/oxygen-plan-quote.ts':
+    'apps/web/src/app/api/payments/oxygen/plans/quote/route.test.ts',
+  'apps/web/src/schemas/oxygen-selfie-status.ts':
+    'apps/web/src/app/api/payments/oxygen/workflows/selfie-status/route.test.ts',
+  'apps/web/src/schemas/oxygen-webhook.ts':
+    'apps/web/src/lib/payments/oxygen/webhook.test.ts',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-login-page.tsx':
     'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-login-page.test.tsx',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-email-form.tsx':
@@ -26,7 +86,58 @@ export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
     'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
   'apps/web/src/lib/imei-providers/petrock/check-catalog-data/types.ts':
     'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
-
+  'apps/web/src/schemas/experience-route-path.ts':
+    'apps/web/src/lib/experience/candidate-performance-qualification.test.ts',
+  'apps/web/src/schemas/experience-performance.ts':
+    'apps/web/src/lib/experience/candidate-performance-qualification.test.ts',
+  'apps/web/src/schemas/experience-performance-worker.ts':
+    'apps/web/tools/experience-runner/performance-harness.test.ts',
+  'apps/web/src/lib/experience/compiled-candidate.ts':
+    'apps/web/src/lib/experience/build-service.test.ts',
+  'apps/web/src/lib/experience/build-performance-retention.ts':
+    'apps/web/src/lib/experience/local-build-supervisor.test.ts',
+  'apps/web/src/app/builder/experience/workspace-content.tsx':
+    'apps/web/src/app/builder/experience/page.test.tsx',
+  'apps/web/src/app/builder/experience/preview/preview-content.tsx':
+    'apps/web/src/app/builder/experience/preview/page.test.tsx',
+  'apps/web/src/app/builder/experience/approve/approval-content.tsx':
+    'apps/web/src/app/builder/experience/approve/page.test.tsx',
+  'apps/web/src/lib/experience/profile-validation.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/page.test.tsx',
+  'apps/web/src/schemas/experience-source-candidate.ts':
+    'apps/web/src/lib/experience/source-candidate.test.ts',
+  'apps/web/src/instrumentation-experience-boot.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/local-profile.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/tool-dispatcher.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/tool-gateway.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/tool-policy.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/src/lib/experience/private-capture-service.ts':
+    'apps/web/tests/experience-lifecycle/mcp-http.test.ts',
+  'apps/web/src/lib/experience/owner-request.ts':
+    'apps/web/src/app/api/builder-experience/request/route.test.ts',
+  'apps/web/src/lib/experience/mode-exit-service.ts':
+    'apps/web/src/lib/experience/publication-service.test.ts',
+  'apps/web/src/lib/experience/rollback-service.ts':
+    'apps/web/src/lib/experience/publication-service.test.ts',
+  'apps/web/src/schemas/experience-mode-exit.ts':
+    'apps/web/src/lib/experience/publication-service.test.ts',
+  'apps/web/src/schemas/experience-publication.ts':
+    'apps/web/src/lib/experience/draft-apply.test.ts',
+  'apps/web/src/schemas/experience-tool-results.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/src/schemas/experience-tools.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/tools/experience-runner/generate-tool-contracts.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/src/app/api/builder/ai-edit/builder-ai-edit-input.ts':
+    'apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.test.ts',
   'apps/web/src/app/dashboard/integrations/chatgpt/actions.ts':
     'apps/web/src/app/dashboard/integrations/chatgpt/page.test.tsx',
   'apps/web/src/components/storefront/portable/footer-presentation.tsx':

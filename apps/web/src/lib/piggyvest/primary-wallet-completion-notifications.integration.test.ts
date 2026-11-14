@@ -20,15 +20,7 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
     try {
       execFileSync(
         'initdb',
-        [
-          '-D',
-          dataDirectory,
-          '-U',
-          'notice_owner',
-          '-A',
-          'trust',
-          '--no-locale',
-        ],
+        ['-D', dataDirectory, '-U', 'postgres', '-A', 'trust', '--no-locale'],
         options
       );
       execFileSync(
@@ -54,7 +46,7 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
           '-p',
           '56484',
           '-U',
-          'notice_owner',
+          'postgres',
           '-d',
           'postgres',
           '-v',

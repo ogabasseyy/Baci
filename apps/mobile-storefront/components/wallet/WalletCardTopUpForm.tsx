@@ -22,6 +22,8 @@ interface WalletCardTopUpFormProps {
   isFundPending: boolean;
   onChangeFundAmount: (value: string) => void;
   onConfirmFund: () => void;
+  /** Line under "Pay with card"; defaults to the wallet top-up copy. */
+  subtitle?: string;
 }
 
 export function WalletCardTopUpForm({
@@ -30,6 +32,7 @@ export function WalletCardTopUpForm({
   isFundPending,
   onChangeFundAmount,
   onConfirmFund,
+  subtitle = 'Add money securely to your wallet',
 }: WalletCardTopUpFormProps) {
   const previewBlocked = isHostedStagingWalletTopUpBlocked();
   const amount = Number(fundAmount);
@@ -51,7 +54,7 @@ export function WalletCardTopUpForm({
             Pay with card
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Add money securely to your wallet
+            {subtitle}
           </Text>
         </View>
       </View>
@@ -138,10 +141,10 @@ const styles = StyleSheet.create({
     width: 46,
   },
   headingCopy: { flex: 1, gap: 3 },
-  title: { fontSize: 17, fontWeight: '700' },
-  subtitle: { fontSize: 13, lineHeight: 18 },
+  title: { fontSize: 15, fontWeight: '700' },
+  subtitle: { fontSize: 12, lineHeight: 18 },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 10,
@@ -151,28 +154,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
-    minHeight: 70,
+    minHeight: 60,
     paddingHorizontal: 18,
   },
-  currency: { fontSize: 27, fontWeight: '700', marginRight: 10 },
+  currency: { fontSize: 24, fontWeight: '700', marginRight: 10 },
   amountInput: {
     flex: 1,
-    fontSize: 27,
+    fontSize: 24,
     fontWeight: '700',
     minWidth: 0,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
-  minimum: { fontSize: 12, marginTop: 9 },
+  minimum: { fontSize: 11, marginTop: 9 },
   continueButton: {
     alignItems: 'center',
     borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
     justifyContent: 'center',
-    minHeight: 56,
+    minHeight: 48,
     marginTop: 24,
     paddingHorizontal: 18,
   },
-  continueText: { fontSize: 16, fontWeight: '700' },
-  notice: { fontSize: 13, lineHeight: 19, marginTop: 12, textAlign: 'center' },
+  continueText: { fontSize: 14, fontWeight: '700' },
+  notice: { fontSize: 12, lineHeight: 19, marginTop: 12, textAlign: 'center' },
 });

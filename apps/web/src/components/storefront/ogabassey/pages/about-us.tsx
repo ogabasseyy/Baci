@@ -140,7 +140,7 @@ export const OgabasseyV2AboutUs: React.FC<AboutProps> = ({ merchant }) => {
                 {[
                   'Certified Pre-Owned Devices',
                   '12-Month Warranty on New Items',
-                  '7-Day Return Policy',
+                  '14-Day Return Policy',
                   'Secure Payment & Wallet System',
                 ].map((item) => (
                   <li

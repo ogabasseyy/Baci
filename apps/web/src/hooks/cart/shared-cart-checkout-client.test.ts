@@ -34,7 +34,10 @@ function _snapshot(overrides: Record<string, unknown> = {}) {
 }
 
 function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), { status });
+  return new Response(JSON.stringify(payload), {
+    headers: { date: new Date().toUTCString() },
+    status,
+  });
 }
 
 describe('shared-cart-client checkout prepare', () => {
@@ -61,6 +64,8 @@ describe('shared-cart-client checkout prepare', () => {
     vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
       jsonResponse({
         replayed: false,
+        databaseNow: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
         sessionReused: false,
         snapshot: REVIEW_SNAPSHOT,
       })
@@ -88,6 +93,8 @@ describe('shared-cart-client checkout prepare', () => {
     expect(result).toEqual({
       ok: true,
       replayed: false,
+      sessionExpiresAtMonotonicMs: expect.any(Number),
+      sessionExpiresAtEpochMs: expect.any(Number),
       review: {
         cartId: '22222222-2222-4222-8222-222222222222',
         cartVersion: 3,

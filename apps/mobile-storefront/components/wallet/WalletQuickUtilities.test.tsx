@@ -17,7 +17,7 @@ describe('WalletQuickUtilities', () => {
   it('renders utility pills and routes each button to its utility screen', () => {
     render(<WalletQuickUtilities accentColor="#2563EB" />);
 
-    expect(screen.getByText('Quick Utilities')).toBeOnTheScreen();
+    expect(screen.queryByText('Quick Utilities')).toBeNull();
 
     fireEvent.press(screen.getByRole('button', { name: 'Buy Airtime' }));
     fireEvent.press(screen.getByRole('button', { name: 'Buy Data' }));

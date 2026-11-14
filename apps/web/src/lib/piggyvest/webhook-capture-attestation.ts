@@ -21,3 +21,28 @@ export function isPiggyvestCaptureDrainScheduled(
 ): boolean {
   return env[PIGGYVEST_CAPTURE_DRAIN_ATTESTATION_ENV] === 'true';
 }
+
+/**
+ * Worker-host switch for the capture drain itself (set in the worker
+ * host's environment, never on the web app). Only the exact string 'true'
+ * enables it; anything else keeps the drain from reading configuration or
+ * opening a database connection.
+ */
+export const PIGGYVEST_CAPTURE_DRAIN_ENABLED_ENV =
+  'PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED';
+
+export function isPiggyvestCaptureDrainEnabled(
+  env: NodeJS.ProcessEnv
+): boolean {
+  return env[PIGGYVEST_CAPTURE_DRAIN_ENABLED_ENV] === 'true';
+}
+
+/** Optional legacy replay; dark unless explicitly enabled on the worker. */
+export const PIGGYVEST_CAPTURE_LEGACY_REPLAY_ENV =
+  'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED';
+
+export function isPiggyvestCaptureLegacyReplayEnabled(
+  env: NodeJS.ProcessEnv
+): boolean {
+  return env[PIGGYVEST_CAPTURE_LEGACY_REPLAY_ENV] === 'true';
+}

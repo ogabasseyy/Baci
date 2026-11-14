@@ -91,6 +91,14 @@ describe('rate-limit route matching', () => {
     });
   });
 
+  it('gives GIG status webhooks their own per-IP bucket', () => {
+    expect(getRateLimitConfig('/api/webhooks/gigl')).toMatchObject({
+      pattern: '/api/webhooks/gigl',
+      config: { maxRequests: 60, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/webhooks/mycover').pattern).toBe('default');
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({
@@ -102,5 +110,38 @@ describe('rate-limit route matching', () => {
       config: { maxRequests: 60, windowMs: 60_000 },
     });
     expect(getRateLimitConfig('/api/places-other').config.maxRequests).toBe(50);
+  });
+
+  it('puts the wallet PIN routes in their own fail-closed bucket', () => {
+    for (const leaf of ['set', 'change', 'reset'])
+      expect(
+        getRateLimitConfig(`/api/storefront/customer/wallet-pin/${leaf}`)
+      ).toMatchObject({
+        pattern: '/api/storefront/customer/wallet-pin',
+        config: {
+          maxRequests: 10,
+          windowMs: 60_000,
+          failClosedWithoutRedis: true,
+        },
+      });
+    // Status polling must not spend the hashing budget of the mutations.
+    expect(
+      getRateLimitConfig('/api/storefront/customer/wallet-pin/status')
+    ).toMatchObject({
+      pattern: '/api/storefront/customer/wallet-pin/status',
+      config: { maxRequests: 60, failClosedWithoutRedis: true },
+    });
+    expect(
+      getRateLimitConfig('/api/storefront/customer/wallet').pattern
+    ).not.toBe('/api/storefront/customer/wallet-pin');
+  });
+});
+
+it('keeps anonymous experience reads in their own public bucket', () => {
+  expect(
+    getRateLimitConfig('/api/storefront/experience/catalog')
+  ).toMatchObject({
+    pattern: '/api/storefront/experience',
+    config: { maxRequests: 240, windowMs: 60000 },
   });
 });

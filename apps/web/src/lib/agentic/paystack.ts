@@ -176,13 +176,9 @@ export async function createDedicatedVirtualAccount(
     subaccount: options.subaccount,
   };
 
-  const tryCreateDva = (bank: string) =>
-    paystackRequest('/dedicated_account', 'POST', {
-      ...baseDvaPayload,
-      preferred_bank: bank,
-    });
-
-  let res: {
+  // An error can arrive after Paystack has created the account. Without a
+  // definitive rejection contract, retrying at another bank may create two.
+  const res: {
     status: boolean;
     message?: string;
     data: {
@@ -192,17 +188,10 @@ export async function createDedicatedVirtualAccount(
       assignment?: { bank_name: string };
       currency?: string;
     };
-  };
-  // Try wema-bank first (more reliable), then titan-paycom as fallback
-  try {
-    res = await tryCreateDva('wema-bank');
-  } catch (error) {
-    logger.warn({
-      message: 'DVA wema-bank failed, trying titan-paycom',
-      error: error instanceof Error ? error.message : String(error),
-    });
-    res = await tryCreateDva('titan-paycom');
-  }
+  } = await paystackRequest('/dedicated_account', 'POST', {
+    ...baseDvaPayload,
+    preferred_bank: 'wema-bank',
+  });
 
   if (!res.status) {
     const safeMessage = sanitizeForLog(res.message || 'Unknown DVA error', 200);

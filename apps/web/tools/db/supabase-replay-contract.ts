@@ -245,13 +245,13 @@ export async function verifySupabaseReplayContract(options: {
     mismatch('tsx-node');
   }
   if (
-    (await stdout(options.runCommand, 'supabase', ['--version'])) !== '2.95.4'
+    (await stdout(options.runCommand, 'supabase', ['--version'])) !== '2.111.0'
   ) {
     mismatch('supabase');
   }
   const psqlBin = options.psqlBin ?? process.env.PSQL_BIN ?? DEFAULT_PSQL_BIN;
   if (
-    !/^psql \(PostgreSQL\) 18\.3(?: \(.+\))?$/.test(
+    !/^psql \(PostgreSQL\) 18\.6(?: \(.+\))?$/.test(
       await stdout(options.runCommand, psqlBin, ['--version'])
     )
   ) {

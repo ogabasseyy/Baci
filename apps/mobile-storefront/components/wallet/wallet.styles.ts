@@ -30,11 +30,11 @@ export const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   tabHeaderTitle: {
-    fontSize: TYPOGRAPHY.size.xl,
+    fontSize: 17,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   emptyTitle: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 14,
     fontWeight: TYPOGRAPHY.weight.semibold,
     marginTop: SPACING.md,
     marginBottom: SPACING.lg,
@@ -53,12 +53,12 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
   },
   redeemPanelTitle: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 14,
     fontWeight: TYPOGRAPHY.weight.bold,
     marginBottom: SPACING.xs,
   },
   redeemPanelSubtitle: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     marginBottom: SPACING.md,
   },
   redeemInput: {
@@ -66,7 +66,7 @@ export const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     paddingHorizontal: SPACING.md,
     paddingVertical: FIELD_PADDING_Y,
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 14,
     marginBottom: SPACING.md,
   },
   redeemPanelActions: {
@@ -101,7 +101,7 @@ export const styles = StyleSheet.create({
     padding: 20,
   },
   sectionTitle: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 14,
     fontWeight: TYPOGRAPHY.weight.bold,
     marginBottom: SPACING.md,
   },
@@ -111,12 +111,12 @@ export const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 12,
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
   },
   transactionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 18,
+    paddingVertical: 14,
     borderBottomWidth: 1,
   },
   txIcon: {
@@ -131,11 +131,11 @@ export const styles = StyleSheet.create({
     marginLeft: 12,
   },
   txDescription: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.medium,
   },
   txDate: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     marginTop: TIGHT_MARGIN,
   },
   txAmount: {
@@ -149,12 +149,12 @@ export const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   infoCardTitle: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.bold,
     marginBottom: SPACING.xs,
   },
   infoSubTitle: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     fontWeight: TYPOGRAPHY.weight.bold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -165,11 +165,11 @@ export const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   infoEmoji: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
   },
   infoText: {
     flex: 1,
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     lineHeight: 16,
   },
   tierRow: {

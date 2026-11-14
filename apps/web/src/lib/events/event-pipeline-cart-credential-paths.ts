@@ -13,6 +13,12 @@ export const eventPipelineCartCredentialPaths = [
     'apps/web/src/env.ts',
   ],
   [
+    'apps/web/src/app/api/storefront/cart/continuity/route.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
     'apps/web/src/lib/cart/realtime-access.ts',
     'apps/web/src/lib/cart/scoped-client.ts',
     'apps/web/src/lib/agentic/jwt-signing-material.ts',

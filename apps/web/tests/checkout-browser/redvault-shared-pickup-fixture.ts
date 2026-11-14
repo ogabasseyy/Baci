@@ -198,7 +198,14 @@ export async function seedRedvaultSharedPickup(
     if (url.pathname === '/api/storefront/cart/checkout') {
       calls.prepareBodies.push(request.postDataJSON());
       return route.fulfill({
-        json: { replayed: false, sessionReused: false, snapshot: review },
+        headers: { date: new Date().toUTCString() },
+        json: {
+          replayed: false,
+          databaseNow: new Date().toISOString(),
+          sessionExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          sessionReused: false,
+          snapshot: review,
+        },
       });
     }
     if (url.pathname === '/api/storefront/cart')

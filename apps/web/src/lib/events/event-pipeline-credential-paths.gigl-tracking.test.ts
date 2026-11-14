@@ -9,7 +9,8 @@ describe('gigl tracking credential paths', () => {
         (path) =>
           path.length > 1 &&
           (path[0].includes('/gigl-tracking/') ||
-            path[0].includes('/gigl-tracking-notifications/')) &&
+            path[0].includes('/gigl-tracking-notifications/') ||
+            path[0].endsWith('/lib/expo-client.ts')) &&
           path.at(-1) === 'apps/web/src/env.ts'
       )
     ).toBe(true);

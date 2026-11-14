@@ -26,6 +26,7 @@ interface QuoteReceiver {
   email: string;
   merchantId?: string;
   deliveryPreference: 'door' | 'pickup_station';
+  merchantRatesOnly?: boolean;
   latitude?: number;
   longitude?: number;
   /** Merchant-country display name (e.g. 'Nigeria', 'India') — no longer hardcoded to Nigeria. */
@@ -140,11 +141,13 @@ export async function loadCheckoutShippingQuotes(
       },
       body: JSON.stringify({
         merchant_rates_only:
-          requestReceiver.countryCode === 'NG' &&
-          !isNigeriaRecoveryPin(
-            requestReceiver.latitude ?? Number.NaN,
-            requestReceiver.longitude ?? Number.NaN
-          ),
+          requestReceiver.merchantRatesOnly ??
+          (requestReceiver.countryCode === 'NG' &&
+            requestReceiver.deliveryPreference !== 'pickup_station' &&
+            !isNigeriaRecoveryPin(
+              requestReceiver.latitude ?? Number.NaN,
+              requestReceiver.longitude ?? Number.NaN
+            )),
         deliveryPreference: requestReceiver.deliveryPreference,
         merchantId: requestReceiver.merchantId || undefined,
         receiver: {

@@ -78,7 +78,12 @@ export async function ComparePageContent({
 
   const sectionsBody =
     sections.length === 0 ? (
-      <section className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
+      <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-xs">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
+          <span aria-hidden="true" className="text-xl font-bold">
+            ⇌
+          </span>
+        </div>
         <h2 className="text-xl font-semibold text-store-background-text">
           {queryFailed
             ? 'Product comparisons temporarily unavailable'
@@ -91,42 +96,87 @@ export async function ComparePageContent({
         </p>
       </section>
     ) : (
-      <div className="mt-10 space-y-8">
+      <div className="mt-6 space-y-8">
+        {sections.length > 1 && (
+          <nav
+            aria-label="Compare categories"
+            className="flex flex-wrap items-center gap-2 pt-1"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider text-store-background-text/50">
+              Jump to:
+            </span>
+            {sections.map((section) => (
+              <a
+                key={section.categorySlug}
+                href={`#${section.categorySlug}-section`}
+                className="inline-flex items-center rounded-full border border-store-background-text/10 bg-store-background px-3 py-1 text-xs font-medium text-store-background-text/80 transition-colors hover:border-store-primary hover:text-store-primary"
+              >
+                {section.categoryName} ({section.links.length})
+              </a>
+            ))}
+          </nav>
+        )}
+
         {sections.map((section) => (
           <section
             key={section.categorySlug}
+            id={`${section.categorySlug}-section`}
             aria-labelledby={`${section.categorySlug}-compare-links`}
-            className="rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm md:p-6"
+            className="rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-xs transition-shadow hover:shadow-sm md:p-6"
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-2 border-b border-store-background-text/5 pb-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2
-                  id={`${section.categorySlug}-compare-links`}
-                  className="text-xl font-semibold text-store-background-text"
-                >
-                  {section.categoryName}
-                </h2>
-                <p className="mt-1 text-sm text-store-background-text/55">
-                  {section.links.length} comparison paths
+                <div className="flex items-center gap-2">
+                  <h2
+                    id={`${section.categorySlug}-compare-links`}
+                    className="text-xl font-bold tracking-tight text-store-background-text md:text-2xl"
+                  >
+                    {section.categoryName}
+                  </h2>
+                  <span className="inline-flex items-center rounded-full bg-store-primary/10 px-2.5 py-0.5 text-xs font-semibold text-store-primary">
+                    {section.links.length}{' '}
+                    {section.links.length === 1 ? 'path' : 'paths'}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-store-background-text/60">
+                  Side-by-side spec and value comparisons across{' '}
+                  {section.categoryName.toLowerCase()}
                 </p>
               </div>
               <Link
                 href={asRoute(`${pathPrefix}/${section.categorySlug}`)}
                 prefetch={false}
-                className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-store-primary underline-offset-4 transition-colors hover:underline"
               >
-                Shop {section.categoryName}
+                <span>Shop {section.categoryName}</span>
+                <span aria-hidden="true">→</span>
               </Link>
             </div>
-            <ul className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {section.links.map((link) => (
                 <li key={link.href}>
                   <Link
                     href={asRoute(link.href)}
                     prefetch={false}
-                    className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
+                    aria-label={link.label}
+                    className="group flex h-full flex-col justify-between rounded-2xl border border-store-background-text/10 bg-store-background p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-store-primary/50 hover:shadow-md"
                   >
-                    {link.label}
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-sm font-semibold text-store-background-text transition-colors group-hover:text-store-primary">
+                        {link.label}
+                      </span>
+                      <span className="inline-flex shrink-0 items-center justify-center rounded-md bg-store-primary/10 px-2 py-0.5 text-[11px] font-bold text-store-primary">
+                        VS
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t border-store-background-text/5 pt-2.5 text-xs text-store-background-text/60">
+                      <span className="font-medium text-store-primary group-hover:underline">
+                        Compare specs →
+                      </span>
+                      <span className="text-[11px] text-store-background-text/40">
+                        Side-by-side
+                      </span>
+                    </div>
                   </Link>
                 </li>
               ))}
@@ -149,7 +199,7 @@ export async function ComparePageContent({
     <>
       <JsonLd data={breadcrumbSchema} />
 
-      <main className="min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
+      <div className="bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
         <div className="mx-auto max-w-[1400px] px-4 md:px-6">
           <nav
             aria-label="Breadcrumb"
@@ -172,7 +222,7 @@ export async function ComparePageContent({
 
           {sectionsBody}
         </div>
-      </main>
+      </div>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { resolveBlogPostKeywords } from '@/lib/resolve-blog-post-keywords';
 import { createPublicClient } from '@/lib/supabase/public';
 import type {
@@ -70,7 +71,11 @@ async function getCurrentClassifications(
   'use cache';
   try {
     cacheLife('merchant');
-    cacheTag('blog-posts', `features-${merchantId}`);
+    cacheTag(
+      'blog-posts',
+      getBlogContentLinksCacheTag(merchantId),
+      `features-${merchantId}`
+    );
   } catch {
     // Unit tests run outside the Next cacheComponents runtime.
   }

@@ -1,20 +1,13 @@
 import {
-  driveFreshBNPLPlaceOrder,
-  paymentStartedCalls,
-  renderFreshBNPLCheckout,
-} from './checkout-page-bnpl.test-support';
-import {
   act,
   continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   openCreditDirectCheckout,
-  openCredPalCheckout,
   readCreditDirectPopupMarker,
   renderCheckoutWithStoreRates,
   screen,
-  toast,
   useCart,
   useMerchantSafe,
   usePersistedForm,
@@ -130,7 +123,7 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
     await continueToPaymentAfterPickupCheck();
     fireEvent.click(
-      await screen.findByRole('button', { name: /pay in installments/i })
+      await screen.findByRole('button', { name: /pay small small/i })
     );
     fireEvent.click(
       await screen.findByRole('radio', { name: /credit direct/i })
@@ -185,31 +178,5 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
   } finally {
     fetchMock.mockRestore();
     consoleErrorSpy.mockRestore();
-  }
-});
-
-it('skips payment_started when fresh CredPal initialization fails', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-fresh-fail',
-  });
-  vi.mocked(openCredPalCheckout).mockRejectedValueOnce(
-    new Error('Failed to load CredPal script')
-  );
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(toast).toHaveBeenCalled();
-    });
-    expect(paymentStartedCalls()).toHaveLength(0);
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
   }
 });

@@ -1,4 +1,5 @@
 import { cacheLife, cacheTag } from 'next/cache';
+import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { createStorefrontReadDeadline } from '@/lib/create-storefront-read-deadline';
 import { prepareStorefrontSingleAttemptQuery } from '@/lib/prepare-storefront-single-attempt-query';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
@@ -84,7 +85,9 @@ async function getCachedPdpProductGuidePostsForValidProduct(
     cacheLife('blog');
     cacheTag(
       'blog-posts',
+      getBlogContentLinksCacheTag(merchantId),
       `products-${merchantId}`,
+      `features-${merchantId}`,
       `published-product-guide-posts-${merchantId}-${productId}`
     );
   } catch {

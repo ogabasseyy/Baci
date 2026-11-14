@@ -29,6 +29,8 @@ const mockColorScheme = jest.fn<() => 'light' | 'dark' | null>();
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => mockColorScheme(),
 }));
+// The PIN sheet has its own tests; here it only has to stay out of the way.
+jest.mock('./WalletPinSheet', () => ({ WalletPinSheet: () => null }));
 jest.mock('./use-start-savings-controller', () => ({
   useStartSavingsController: () => mockController,
 }));

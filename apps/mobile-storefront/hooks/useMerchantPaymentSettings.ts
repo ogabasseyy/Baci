@@ -68,7 +68,7 @@ export function normalizePaymentSettings(
     paystack_enabled: row?.paystack_enabled !== false,
     korapay_enabled: row?.korapay_enabled === true,
     juicyway_enabled: row?.juicyway_enabled === true,
-    credpal_enabled: row?.credpal_enabled === true,
+    credpal_enabled: false,
     credit_direct_enabled: row?.credit_direct_enabled === true,
     klump_enabled: row?.klump_enabled === true,
     klump_min_amount: safeNumber(row?.klump_min_amount, 0),
@@ -152,7 +152,6 @@ export function getEnabledPaymentMethods(
   if (settings.korapay_enabled) methods.push('korapay');
   if (settings.juicyway_enabled) methods.push('juicyway');
   if (settings.pay_on_delivery_enabled) methods.push('pay_on_delivery');
-  if (settings.credpal_enabled) methods.push('credpal');
   if (settings.credit_direct_enabled) methods.push('credit_direct');
   if (settings.klump_enabled) methods.push('klump');
 

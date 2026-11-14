@@ -16,8 +16,8 @@ vi.mock('@/app/(storefront)/[slug]/customer-auth-layout', () => ({
 import AccountLayout, { metadata } from './layout';
 
 describe('AccountLayout', () => {
-  it('marks account routes noindex while preserving follow for internal links', () => {
-    expect(metadata.robots).toMatchObject({ follow: true, index: false });
+  it('marks account routes noindex and nofollow', () => {
+    expect(metadata.robots).toMatchObject({ follow: false, index: false });
   });
 
   it('wraps account routes in CustomerAuthLayout with the resolved slug', async () => {

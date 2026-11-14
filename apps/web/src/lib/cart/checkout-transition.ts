@@ -83,6 +83,15 @@ export async function prepareCartCheckout(
       );
     }
     if (
+      typeof data.databaseNow !== 'string' ||
+      !Number.isFinite(Date.parse(data.databaseNow))
+    ) {
+      throw new CartRepositoryError(
+        'temporarily_unavailable',
+        'Cart RPC commerce_cart_prepare_checkout omitted databaseNow'
+      );
+    }
+    if (
       typeof data.grantExpiresAt !== 'string' ||
       !data.grantExpiresAt ||
       !Number.isFinite(Date.parse(data.grantExpiresAt))
@@ -101,6 +110,7 @@ export async function prepareCartCheckout(
       replayed: data.replayed === true,
       sessionReused: data.sessionReused === true,
       sessionExpiresAt: data.sessionExpiresAt,
+      databaseNow: data.databaseNow,
       snapshot,
     };
   } catch (error) {

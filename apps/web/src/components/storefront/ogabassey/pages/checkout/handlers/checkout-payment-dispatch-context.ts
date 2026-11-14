@@ -10,6 +10,7 @@ import type { CheckoutPaymentOrder } from './submit-checkout-order';
 export interface CheckoutPaymentDispatchContext {
   merchant: { id: string; slug?: string | null };
   order: CheckoutPaymentOrder;
+  freshOrder?: boolean;
   paymentMethod: PaymentMethod;
   total: number;
   paymentAmount: number;
@@ -22,7 +23,13 @@ export interface CheckoutPaymentDispatchContext {
   customerPhone: string;
   billingAddress: JuicywayPendingOrder['billingAddress'];
   checkoutFingerprint: string;
-  checkoutCart: readonly { name: string }[];
+  checkoutCart: readonly {
+    name: string;
+    cartItemId?: string;
+    cartLineInstanceId?: string;
+    quantity?: number;
+    serverLineId?: string | null;
+  }[];
   cart: readonly { name: string }[];
   orderItems: CheckoutOrderItem[];
   walletFundedTransfer: Pick<

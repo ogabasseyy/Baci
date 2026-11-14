@@ -24,6 +24,8 @@ import {
   mockReanimatedModule,
   mockRouterBack,
   mockRouterCanGoBack,
+  mockRouterDismissTo,
+  mockRouterNavigate,
   mockRouterPrefetch,
   mockRouterPush,
   mockRouterReplace,
@@ -68,6 +70,7 @@ jest.mock('@/hooks/use-auth-guard', () => mockAuthGuardModule());
 jest.mock('react-native-safe-area-context', () => mockSafeAreaModule());
 jest.mock('@/stores/ui-store', () => mockUIStoreModule());
 
+import CartTab from '@/app/(tabs)/cart-tab';
 import CartScreen from '@/app/cart';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
@@ -89,6 +92,40 @@ describe('CartScreen state', () => {
     expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
     expect(screen.getByText('Start Shopping')).toBeTruthy();
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();
+
+    fireEvent.press(screen.getByRole('button', { name: 'Start shopping' }));
+    expect(mockRouterDismissTo).toHaveBeenCalledWith('/');
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  // The pushed /cart route hides the tab bar; once emptied, "Start Shopping"
+  // was the only way out. It now keeps the loaded cart's back button.
+  it('offers the back button on the emptied cart', () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    mockRouterCanGoBack.mockReturnValueOnce(true);
+    render(<CartScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Back to home' }));
+
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
+    expect(mockRouterDismissTo).not.toHaveBeenCalled();
+  });
+
+  it('switches to Home from the empty Cart tab', () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    render(<CartTab />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Start shopping' }));
+    expect(mockRouterNavigate).toHaveBeenCalledWith('/');
+    expect(mockRouterDismissTo).not.toHaveBeenCalled();
   });
 
   it('mounts the saved-account loader on the empty cart state', async () => {

@@ -1,0 +1,27 @@
+{
+  "requestedAt": "2026-10-26T22:38:55.071080+00:00",
+  "baseCommit": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "fixture": {
+    "host": "http://localhost:43178",
+    "gateway": "http://127.0.0.1:43179",
+    "apiPort": 50172,
+    "synthetic": true,
+    "preparedRenders": 4,
+    "buildDigest": "cb28b8d0969a31d7fc5b07ac0e3561b7d42e7a87881767a90b61ec31fe008d92",
+    "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a"
+  },
+  "nextBuildId": "hCOoAQctlvfMP6myShYlK",
+  "request": "Run local benchmark now, even if host is busy; retain contention data",
+  "browserProfile": "native connectivity; 390x844 mobile/touch and 1440x900 desktop; three cold contexts per route",
+  "synthetic": true,
+  "normalAuthRls": true,
+  "ordersForbidden": true,
+  "noPayments": true,
+  "noPublishing": true,
+  "harnessFiles": {
+    "run-frame-matrix.mjs": "7be8f2ffac3fa227de3b6365127ffb4985a35ac5af727fe0216f6fdce3aae5a1",
+    "sitespeed-frame.mjs": "cdfebbb16b50664b9e05abc54038cb2842963a243c7c6b381d874259bbfd3ea7",
+    "frame-diagnostics.mjs": "16ad5ae9dcdd9f131ceda60e8f363985d76f00187e614e617824389c54e988b1",
+    "lab-observers.mjs": "f540fd42dfd2de16b9a28be87c8ac8c5bdd390477616fd42fa565b651d2725a7"
+  }
+}

@@ -1,39 +1,51 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { useWalletFundPanelAutoCreate } from './use-wallet-fund-panel-auto-create';
 import { WalletCardTopUpForm } from './WalletCardTopUpForm';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
+import { WalletFundAccountCard } from './WalletFundAccountCard';
 import {
   WalletFundPhonePrompt,
   type WalletFundPhoneSubmitResult,
 } from './WalletFundPhonePrompt';
-import { WalletProviderAttribution } from './WalletProviderAttribution';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 import { styles } from './wallet-fund-panel.styles';
 
 type WalletColors = (typeof Colors)['light'];
 
 const BANK_TRANSFER_TITLE = 'Add Money';
+// The PiggyVest sheet matches its 'Add money' button (sentence case).
+const PIGGYVEST_TITLE = 'Add money';
 const BANK_TRANSFER_SUBTITLE =
   'Transfer to your account number below and your wallet is credited automatically — 1% fee, capped at ₦300.';
 const SETTING_UP_ACCOUNT = 'Setting up your account number...';
 const SETUP_FAILED =
   "We couldn't set up your account number just now. Fund with card below, or try bank transfer again later.";
 const CARD_TOGGLE_LABEL = 'Fund with card instead';
+// PiggyVest account: transfers fund savings only (Codex), never store credit.
+const PIGGYVEST_TRANSFER_SUBTITLE =
+  "Transfer to your account number below to add to your savings wallet. It doesn't add store credit for purchases. PiggyVest may take a small deposit fee; your wallet shows the amount after it.";
+const STORE_CREDIT_TITLE = 'Add store credit';
+const STORE_CREDIT_SUBTITLE =
+  "Your savings wallet can't pay for this yet. Pay by card to add store credit, then finish your purchase.";
+const STORE_CREDIT_CARD_SUBTITLE =
+  'Adds store credit for this purchase. Card top-ups have a minimum; anything extra stays as store credit.';
 
 interface WalletFundPanelProps {
   canCreateFundingAccount: boolean;
   colors: WalletColors;
   createFundingAccountUnavailableMessage?: string;
-  creditWatch: WalletCreditWatch;
+  /** Omitted on the PiggyVest path: its ledger never shows those credits. */
+  creditWatch?: WalletCreditWatch;
   fundAmount: string;
   fundingAccount: WalletDisplayFundingAccount | null;
+  /** A card top-up credits the legacy wallet: hidden for primary-funded flows. */
+  hideCardFunding?: boolean;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   needsPhone: boolean;
@@ -44,7 +56,16 @@ interface WalletFundPanelProps {
   onCreateFundingAccount: () => unknown;
   onResetFund: () => void;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
+  /** Inline notices shown under the header, inside the sheet. */
+  notices?: ReactNode;
   returnToSavings?: boolean;
+  /**
+   * PiggyVest customer topping up for a purchase (e.g. an IMEI check):
+   * purchases spend store credit, which only a card top-up adds. The
+   * PiggyVest account number is hidden because transfers to it land in
+   * the savings wallet, not store credit.
+   */
+  storeCreditTopUp?: boolean;
 }
 
 export function WalletFundPanel({
@@ -54,6 +75,7 @@ export function WalletFundPanel({
   creditWatch,
   fundAmount,
   fundingAccount,
+  hideCardFunding = false,
   isCreatingFundingAccount,
   isFundPending,
   needsPhone,
@@ -62,16 +84,17 @@ export function WalletFundPanel({
   onCreateFundingAccount,
   onResetFund,
   onSubmitPhone,
+  notices,
   returnToSavings = false,
+  storeCreditTopUp = false,
 }: WalletFundPanelProps) {
   const insets = useSafeAreaInsets();
   // Tracks the "Fund with card instead" toggle. Card entry is ALSO shown
   // whenever a prefilled amount is present (see cardEntryVisible), which
   // covers a route change that prefills the amount while the panel is open.
   const [showCardEntry, setShowCardEntry] = useState(false);
-  const { copyToClipboard, feedback: copyFeedback } = useCopyToClipboard();
   const { autoCreateFailed, openedWithPrefill } = useWalletFundPanelAutoCreate({
-    canCreateFundingAccount,
+    canCreateFundingAccount: canCreateFundingAccount && !storeCreditTopUp,
     fundAmount,
     hasFundingAccount: Boolean(fundingAccount),
     isCreatingFundingAccount,
@@ -89,6 +112,7 @@ export function WalletFundPanel({
   // even if it arrives after the panel is already mounted; openedWithPrefill
   // keeps it visible if the customer clears the prefilled input.
   const cardEntryVisible =
+    storeCreditTopUp ||
     showCardEntry ||
     openedWithPrefill ||
     fundAmount !== '' ||
@@ -116,7 +140,11 @@ export function WalletFundPanel({
             accessibilityRole="header"
             style={[styles.title, { color: colors.text }]}
           >
-            {BANK_TRANSFER_TITLE}
+            {storeCreditTopUp
+              ? STORE_CREDIT_TITLE
+              : fundingAccount?.provider === 'piggyvest'
+                ? PIGGYVEST_TITLE
+                : BANK_TRANSFER_TITLE}
           </Text>
         </View>
         <Pressable
@@ -128,6 +156,7 @@ export function WalletFundPanel({
           <Ionicons name="close" size={22} color={colors.text} />
         </Pressable>
       </View>
+      {notices}
 
       {returnToSavings ? (
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -137,64 +166,28 @@ export function WalletFundPanel({
         </Text>
       ) : null}
 
-      {fundingAccount ? (
+      {storeCreditTopUp ? (
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          {STORE_CREDIT_SUBTITLE}
+        </Text>
+      ) : fundingAccount ? (
         <>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {fundingAccount.provider === 'piggyvest'
-              ? 'Transfer to your account number below. Your wallet updates after PiggyVest confirms receipt.'
+              ? PIGGYVEST_TRANSFER_SUBTITLE
               : BANK_TRANSFER_SUBTITLE}
           </Text>
-          <View
-            style={[
-              styles.accountCard,
-              { backgroundColor: colors.muted, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.accountCopy}>
-              <Text
-                style={[styles.accountBank, { color: colors.textSecondary }]}
-              >
-                {fundingAccount.bankName}
-              </Text>
-              <Text style={[styles.accountNumber, { color: colors.text }]}>
-                {fundingAccount.accountNumber}
-              </Text>
-              <Text
-                style={[styles.accountName, { color: colors.textSecondary }]}
-              >
-                {fundingAccount.accountName}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Copy wallet account number"
-              accessibilityHint="Copies your account number"
-              style={[
-                styles.accountCopyButton,
-                { backgroundColor: colors.card },
-              ]}
-              onPress={() => copyToClipboard(fundingAccount.accountNumber)}
-            >
-              <Ionicons name="copy-outline" size={18} color={colors.primary} />
-            </Pressable>
-          </View>
-          <WalletProviderAttribution
-            provider={fundingAccount.provider}
-            color={colors.textSecondary}
+          <WalletFundAccountCard
+            colors={colors}
+            fundingAccount={fundingAccount}
           />
-          {copyFeedback ? (
-            <Text
-              accessibilityRole="text"
-              style={[styles.copyFeedback, { color: colors.textSecondary }]}
-            >
-              {copyFeedback}
-            </Text>
+          {creditWatch ? (
+            <WalletCreditCheckPanel
+              accentColor={colors.primary}
+              textColor={colors.text}
+              watch={creditWatch}
+            />
           ) : null}
-          <WalletCreditCheckPanel
-            accentColor={colors.primary}
-            textColor={colors.text}
-            watch={creditWatch}
-          />
         </>
       ) : needsPhone ? (
         // No account yet and the only blocker is a missing phone — collect it
@@ -222,13 +215,14 @@ export function WalletFundPanel({
         </Text>
       ) : null}
 
-      {cardEntryVisible ? (
+      {hideCardFunding ? null : cardEntryVisible ? (
         <WalletCardTopUpForm
           colors={colors}
           fundAmount={fundAmount}
           isFundPending={isFundPending}
           onChangeFundAmount={onChangeFundAmount}
           onConfirmFund={onConfirmFund}
+          subtitle={storeCreditTopUp ? STORE_CREDIT_CARD_SUBTITLE : undefined}
         />
       ) : (
         <Pressable

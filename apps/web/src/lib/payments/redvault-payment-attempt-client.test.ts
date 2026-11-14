@@ -59,6 +59,7 @@ describe('createRedvaultPaymentAttemptClient', () => {
             paystack_subaccount_code: 'ACCT_reserved',
             platform_fee_kobo: 1900,
             initialization_claimed: true,
+            initialization_fresh: true,
             reference: 'RV-reference-1',
             state: 'initializing',
           },
@@ -124,7 +125,7 @@ describe('createRedvaultPaymentAttemptClient', () => {
     );
     expect(rpc).toHaveBeenNthCalledWith(
       2,
-      'claim_storefront_redvault_payment_attempt_initialization_v3',
+      'claim_storefront_redvault_payment_attempt_initialization_v4',
       { p_attempt_id: 'attempt-1' }
     );
     expect(rpc).toHaveBeenNthCalledWith(
@@ -147,6 +148,39 @@ describe('createRedvaultPaymentAttemptClient', () => {
         p_authorization_url: null,
         p_state: 'void',
       }
+    );
+  });
+  it.each([
+    undefined,
+    false,
+  ])('rejects an absent or contradictory fresh marker: %s', async (fresh) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          amount_kobo: 95000,
+          attempt_id: 'attempt-1',
+          authorization_url: null,
+          bank_code: '033',
+          paystack_subaccount_code: 'ACCT_reserved',
+          platform_fee_kobo: 1900,
+          initialization_claimed: true,
+          initialization_fresh: fresh,
+          reference: 'RV-reference-1',
+          state: 'initializing',
+        },
+      ],
+      error: null,
+    });
+    mocks.signScopedSupabaseJwt.mockReturnValue('scoped-token');
+    mocks.createScopedClient.mockReturnValue({ rpc });
+    const adapter = createRedvaultPaymentAttemptClient({
+      customerEmail: 'customer@example.test',
+      fallbackClient: { rpc } as never,
+      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      userId: null,
+    });
+    await expect(adapter.claimInitialization('attempt-1')).rejects.toThrow(
+      'Unable to claim REDVAULT checkout'
     );
   });
 });

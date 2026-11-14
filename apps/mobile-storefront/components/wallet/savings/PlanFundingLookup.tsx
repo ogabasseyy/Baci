@@ -40,8 +40,8 @@ export function PlanFundingLookup({
         {statusOnly
           ? 'This plan needs an identity check that approved operators complete in the test environment. Ask an operator to continue, then check the account status again.'
           : controller.planFundingRequiresBvn === false
-            ? 'Use your verified PiggyVest profile to prepare this plan account. Choose whether to request interest on this plan.'
-            : 'Enter the 11-digit BVN linked to this plan to reveal its dedicated account. It is used once to prepare the transfer and never stored.'}
+            ? 'Use your verified PiggyVest profile to check that this plan is ready. Choose whether to request interest on this plan.'
+            : 'Enter the 11-digit BVN linked to this plan to check that this plan is ready. It is used once for this check and never stored. Plans are funded from your wallet, so no account number is shown.'}
       </Text>
       {!statusOnly && controller.planFundingRequiresBvn !== false ? (
         <TextInput
@@ -96,7 +96,7 @@ export function PlanFundingLookup({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
-          statusOnly ? 'Check account status' : 'Show plan account'
+          statusOnly ? 'Check account status' : 'Check plan readiness'
         }
         accessibilityState={{ disabled }}
         disabled={disabled}
@@ -112,7 +112,7 @@ export function PlanFundingLookup({
             ? 'Loading…'
             : statusOnly
               ? 'Check account status'
-              : 'Show plan account'}
+              : 'Check plan readiness'}
         </Text>
       </Pressable>
     </View>

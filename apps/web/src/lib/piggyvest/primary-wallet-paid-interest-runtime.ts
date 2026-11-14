@@ -1,5 +1,6 @@
 import 'server-only';
 import { primaryWalletPaidInterestSchemas as schemas } from '@/schemas/primary-wallet-paid-interest';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletPaidInterestRuntime(
   env: NodeJS.ProcessEnv = process.env,
@@ -9,10 +10,7 @@ export function readPrimaryWalletPaidInterestRuntime(
   // ignores it so a rollback cannot strand provider-acknowledged
   // receipts (same rule as the inbox runtime). Credentials, bindings,
   // and environment still fail closed in both modes.
-  if (
-    mode === 'intake' &&
-    env.PIGGYVEST_PRIMARY_PAID_INTEREST_ENABLED !== 'true'
-  )
+  if (mode === 'intake' && !isPiggyvestFeatureOn('paid_interest', env))
     return null;
   if (env.VERCEL_ENV !== 'production')
     throw new Error('Primary paid-interest environment mismatch');

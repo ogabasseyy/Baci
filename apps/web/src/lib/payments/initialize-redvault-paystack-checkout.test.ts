@@ -189,7 +189,7 @@ describe('initializeRedvaultPaystackCheckout', () => {
     {
       name: 'missing provider transaction',
       verification: { success: false, error: 'not found', code: 'HTTP_404' },
-      expected: { status: 'not_found' },
+      expected: { status: 'unknown' },
     },
     {
       name: 'paid provider transaction',

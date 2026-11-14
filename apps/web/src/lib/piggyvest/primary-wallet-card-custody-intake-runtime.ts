@@ -1,5 +1,6 @@
 import 'server-only';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export type PrimaryCardCustodyIntakeSecrets = {
   webhookSecret: unknown;
@@ -55,8 +56,8 @@ export function readPrimaryCardCustodyIntakeRuntime(
   now = Date.now()
 ) {
   if (
-    env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true' ||
-    env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true' ||
+    !isPiggyvestFeatureOn('card_signed_inbox', env) ||
+    !isPiggyvestFeatureOn('card_custody', env) ||
     (env.VERCEL_ENV === 'production') !==
       (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
   )

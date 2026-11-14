@@ -35,7 +35,7 @@ export function acceptSavingsTerms() {
   );
 }
 
+/** Opens the single review step ("Check your plan"). */
 export function openFundingOptions() {
   fireEvent.press(getSavingsButton('Continue savings setup'));
-  fireEvent.press(getSavingsButton('Choose savings funding option'));
 }

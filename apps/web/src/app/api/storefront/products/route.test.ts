@@ -1,3 +1,8 @@
+const listingVariants = vi.hoisted(() => vi.fn(async () => ({})));
+vi.mock('@/lib/cached-data', () => ({
+  getPublicProductVariantsByProductIds: listingVariants,
+}));
+
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storefrontProductsRouteTestHarness } from './route.test-helpers';
@@ -436,5 +441,245 @@ describe('GET /api/storefront/products cached filter execution', () => {
     expect(body.products).toEqual([]);
     expect(queries).toHaveLength(21);
     expect(queries.at(-1)?.range).toHaveBeenCalledWith(960, 1007);
+  });
+});
+
+describe('standard listing cellular phone prices', () => {
+  beforeEach(() => {
+    storefrontProductsRouteTestHarness.reset();
+    listingVariants.mockReset();
+  });
+  it('renders the eligible cellular price and retains the existing options-selection guard', async () => {
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const phone = storefrontProductsRouteTestHarness.createRawProduct({
+      id: 'iphone16',
+      name: 'iPhone 16',
+      category: 'Smartphones',
+      price: 600000,
+      has_variants: true,
+      variant_model: 'sku_matrix',
+      manage_stock: false,
+    });
+    storefrontProductsRouteTestHarness.mockProductsResults.current = [
+      { data: [phone], error: null },
+    ];
+    listingVariants.mockResolvedValue({
+      iphone16: [
+        {
+          id: 'wifi',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Wi-Fi Only' },
+          price_override: 600000,
+          condition: 'used',
+          stock_quantity: 0,
+        },
+        {
+          id: 'cellular',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 900000,
+          condition: 'new',
+          stock_quantity: 0,
+        },
+      ],
+    });
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/storefront/products?merchant_id=${merchantId}&limit=1`
+      )
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(
+      storefrontProductsRouteTestHarness.mockProductsQuery.current?.select
+    ).toHaveBeenCalledWith(
+      expect.stringMatching(/\bhas_variants\b[\s\S]*\bvariant_model\b/)
+    );
+    expect(body.products[0]).toMatchObject({
+      price: 900000,
+      condition: 'new',
+      has_variants: true,
+    });
+    expect(body.products[0]).not.toHaveProperty('variants');
+    expect(listingVariants).toHaveBeenCalledExactlyOnceWith(merchantId, [
+      'iphone16',
+    ]);
+    expect(phone.price).toBe(600000);
+  });
+
+  it('broadens price candidate selection so phone family with parent price below min_price is included when its cellular variant matches', async () => {
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const phone = storefrontProductsRouteTestHarness.createRawProduct({
+      id: 'iphone16',
+      name: 'iPhone 16',
+      category: 'Smartphones',
+      price: 600000,
+      has_variants: true,
+      variant_model: 'sku_matrix',
+      manage_stock: false,
+    });
+    storefrontProductsRouteTestHarness.mockProductsResults.current = [
+      { data: [phone], error: null },
+    ];
+    listingVariants.mockResolvedValue({
+      iphone16: [
+        {
+          id: 'cellular',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 900000,
+          condition: 'new',
+          stock_quantity: 0,
+        },
+      ],
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/storefront/products?merchant_id=${merchantId}&min_price=800000&limit=1`
+      )
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(
+      storefrontProductsRouteTestHarness.mockProductsQuery.current?.or
+    ).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'has_variants.eq.true,variant_model.eq.sku_matrix'
+      )
+    );
+    expect(body.products).toHaveLength(1);
+    expect(body.products[0]).toMatchObject({
+      id: 'iphone16',
+      price: 900000,
+    });
+  });
+
+  it('sorts projected cellular variant prices for price-asc', async () => {
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const phoneCheapParent =
+      storefrontProductsRouteTestHarness.createRawProduct({
+        id: 'phone-cheap',
+        name: 'iPhone Cheap Parent',
+        category: 'Smartphones',
+        price: 400000,
+        has_variants: true,
+        variant_model: 'sku_matrix',
+        manage_stock: false,
+      });
+    const phoneExpensiveParent =
+      storefrontProductsRouteTestHarness.createRawProduct({
+        id: 'phone-expensive',
+        name: 'iPhone Expensive Parent',
+        category: 'Smartphones',
+        price: 900000,
+        has_variants: true,
+        variant_model: 'sku_matrix',
+        manage_stock: false,
+      });
+    storefrontProductsRouteTestHarness.mockProductsResults.current = [
+      { data: [phoneCheapParent, phoneExpensiveParent], error: null },
+    ];
+    listingVariants.mockResolvedValue({
+      'phone-cheap': [
+        {
+          id: 'var-1',
+          product_id: 'phone-cheap',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 750000,
+          condition: 'new',
+          stock_quantity: 2,
+        },
+      ],
+      'phone-expensive': [
+        {
+          id: 'var-2',
+          product_id: 'phone-expensive',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 500000,
+          condition: 'new',
+          stock_quantity: 2,
+        },
+      ],
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/storefront/products?merchant_id=${merchantId}&sort=price-asc&limit=2`
+      )
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.products.map((p: { id: string }) => p.id)).toEqual([
+      'phone-expensive',
+      'phone-cheap',
+    ]);
+    expect(body.products.map((p: { price: number }) => p.price)).toEqual([
+      500000, 750000,
+    ]);
+  });
+
+  it('subtracts dropped phone families from dbCount on ranked search when no in-memory filters are active', async () => {
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const restrictedPhone = storefrontProductsRouteTestHarness.createRawProduct(
+      {
+        id: 'phone-restricted',
+        name: 'iPhone Restricted',
+        category: 'Smartphones',
+        price: 600000,
+        has_variants: true,
+        variant_model: 'sku_matrix',
+        manage_stock: false,
+      }
+    );
+    const regularProduct = storefrontProductsRouteTestHarness.createRawProduct({
+      id: 'product-regular',
+      name: 'iPhone Charger',
+      category: 'Accessories',
+      price: 25000,
+      has_variants: false,
+      manage_stock: false,
+    });
+
+    storefrontProductsRouteTestHarness.mockSearchRpc.current.mockResolvedValueOnce(
+      {
+        data: [
+          { product_id: 'phone-restricted', total_count: 2 },
+          { product_id: 'product-regular', total_count: 2 },
+        ],
+        error: null,
+      }
+    );
+
+    storefrontProductsRouteTestHarness.mockProductsByIdsResult.current = {
+      data: [restrictedPhone, regularProduct],
+      error: null,
+    };
+
+    listingVariants.mockResolvedValue({
+      'phone-restricted': [
+        {
+          id: 'wifi',
+          product_id: 'phone-restricted',
+          attributes: { sim_type: 'Wi-Fi Only' },
+          price_override: 600000,
+          condition: 'used',
+        },
+      ],
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/storefront/products?merchant_id=${merchantId}&q=iphone&limit=2`
+      )
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.products.map((p: { id: string }) => p.id)).toEqual([
+      'product-regular',
+    ]);
+    expect(body.count).toBe(1);
+    expect(body.pagination.totalCount).toBe(1);
+    expect(body.pagination.hasMore).toBe(false);
   });
 });

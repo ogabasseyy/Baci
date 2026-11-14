@@ -6,6 +6,7 @@ const mockGetCachedCompareCategoryInventory = vi.fn();
 const mockGetCachedProductWithDetails = vi.fn();
 const mockGetCachedFeatureSettings = vi.fn();
 const mockGetPublishedClusterPosts = vi.fn();
+const mockGetPublishedComparisonRevision = vi.fn();
 
 vi.mock('@/lib/cached-data', () => ({
   getMerchantByIdentifier: (...args: unknown[]) =>
@@ -25,6 +26,11 @@ vi.mock('./get-cached-compare-category-inventory', () => ({
 vi.mock('@/lib/storefront-content/get-published-cluster-posts', () => ({
   getPublishedClusterPosts: (...args: unknown[]) =>
     mockGetPublishedClusterPosts(...args),
+}));
+
+vi.mock('./get-published-storefront-comparison-revision', () => ({
+  getPublishedStorefrontComparisonRevision: (...args: unknown[]) =>
+    mockGetPublishedComparisonRevision(...args),
 }));
 
 const merchant = {
@@ -81,17 +87,24 @@ describe('loadComparePage guide context', () => {
     mockGetCachedProductWithDetails.mockReset();
     mockGetCachedFeatureSettings.mockReset();
     mockGetPublishedClusterPosts.mockReset();
+    mockGetPublishedComparisonRevision.mockReset();
     mockGetMerchantByIdentifier.mockResolvedValue(merchant);
     mockGetCachedCompareCategoryInventory.mockResolvedValue(inventory);
     mockGetCachedFeatureSettings.mockResolvedValue({ blog_enabled: false });
     mockGetPublishedClusterPosts.mockResolvedValue([]);
+    mockGetPublishedComparisonRevision.mockResolvedValue(null);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it('does not block product detail fetches behind guide post loading', async () => {
+    const unexpectedFetch = vi
+      .fn()
+      .mockRejectedValue(new Error('unexpected network'));
+    vi.stubGlobal('fetch', unexpectedFetch);
     let resolveGuidePosts: ((value: []) => void) | undefined;
     const guidePostsPromise = new Promise<[]>((resolve) => {
       resolveGuidePosts = resolve;
@@ -151,5 +164,9 @@ describe('loadComparePage guide context', () => {
       kind: 'product',
       canonicalSlug: 'iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
     });
+    expect(unexpectedFetch).not.toHaveBeenCalled();
+    expect(mockGetPublishedComparisonRevision).toHaveBeenCalledWith(
+      'merchant-1'
+    );
   });
 });

@@ -6,6 +6,11 @@ const mockCreateServerClient = vi.fn();
 const mockGetMerchantForApiRequest = vi.fn();
 const mockGetQuotes = vi.fn();
 
+// Share rate fixture data across the separate public and admin mock clients.
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => mockCreateAdminClient(),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));
@@ -78,7 +83,7 @@ describe('POST /api/shipping/quotes merchant context', () => {
 
     expect(response.status).toBe(400);
     expect(mockGetMerchantForApiRequest).toHaveBeenCalledWith(
-      adminClient,
+      await mockCreateServerClient.mock.results[0].value,
       'user-without-merchant-context',
       { requestedMerchantId: '11111111-1111-4111-8111-111111111111' }
     );

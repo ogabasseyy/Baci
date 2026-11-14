@@ -335,3 +335,35 @@ describe('CustomerOrderDetailsContent', () => {
     );
   });
 });
+
+it('separates Oxygen-managed customer payments from the merchant funding status', () => {
+  render(
+    <CustomerOrderDetailsContent
+      order={{
+        ...baseOrder,
+        payment_method: 'oxygen',
+        payment_status: 'unpaid',
+      }}
+      basePath="/ogabassey"
+      merchantSlug="ogabassey"
+    />
+  );
+  expect(screen.getByText('Managed by Oxygen')).toBeVisible();
+  expect(screen.queryByText('Unpaid', { exact: true })).toBeNull();
+});
+
+it('retains an authoritative refunded status for Oxygen orders', () => {
+  render(
+    <CustomerOrderDetailsContent
+      order={{
+        ...baseOrder,
+        payment_method: 'oxygen',
+        payment_status: 'refunded',
+      }}
+      basePath="/ogabassey"
+      merchantSlug="ogabassey"
+    />
+  );
+  expect(screen.getByText('Refunded', { exact: true })).toBeVisible();
+  expect(screen.queryByText('Managed by Oxygen')).toBeNull();
+});

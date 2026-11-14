@@ -18,6 +18,7 @@ import { AppFormScreen } from '@/components/ui/AppFormScreen';
 import { isRuntimePlatform } from '@/config/runtime-platform';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useKeyboardShown } from '@/hooks/useKeyboardShown';
 import { useTheme } from '@/hooks/useTheme';
 import { getEmailError } from '@/lib/sanitize';
 
@@ -39,6 +40,11 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<TextInputInstance>(null);
+  const isKeyboardShown = useKeyboardShown();
+  // iOS reports the keyboard before it animates, so the form can move with
+  // it. Android reports it only afterwards, which would add a snap, so its
+  // layout is left as it was.
+  const anchorFormToTop = isKeyboardShown && isRuntimePlatform('ios');
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -90,13 +96,19 @@ export default function LoginScreen() {
   const isAnyLoading = isAuthenticating;
 
   return (
+    // Scrolls so a form taller than the space above the keyboard stays
+    // anchored instead of being re-centred (and clipped) as that space changes.
     <AppFormScreen
       contentContainerStyle={styles.content}
-      scrollEnabled={false}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <View style={styles.contentContainer}>
+      <View
+        style={[
+          styles.contentContainer,
+          anchorFormToTop && styles.contentContainerKeyboardShown,
+        ]}
+      >
         {/* Baci Branding */}
         <View style={styles.header}>
           <BaciLogo size={80} borderRadius={20} />

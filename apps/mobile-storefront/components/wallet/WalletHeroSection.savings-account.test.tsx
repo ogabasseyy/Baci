@@ -1,14 +1,13 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import { fetchExistingSavingsPlanFunding } from '@/lib/customer-savings';
 import { WalletContent } from './WalletContent';
 import { WalletHeroSection } from './WalletHeroSection';
 import { createWalletContentProps } from './wallet-content.test-utils';
+
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
 
 jest.mock('@/lib/customer-savings', () => ({
   fetchExistingSavingsPlanFunding: jest.fn(),
@@ -24,6 +23,7 @@ jest.mock('@/stores/auth-store', () => ({
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
   useNavigation: () => ({ addListener: () => () => undefined }),
+  useFocusEffect: jest.fn(),
 }));
 jest.mock('@/hooks/use-product-search', () => ({
   useProductSearch: () => ({ products: [], isLoading: false }),
@@ -36,11 +36,6 @@ const props = {
   onOpenRedeemPanel: jest.fn(),
   savingsBalance: 100,
   totalBalance: 100,
-  activeSavingsGoal: {
-    id: 'goal-1',
-    source_mode: 'manual' as const,
-    status: 'active' as const,
-  },
 };
 const originalEnv = { ...process.env };
 const environmentKeys = [
@@ -74,48 +69,33 @@ afterEach(() => {
   }
 });
 
-it('replaces Create account with the existing PiggyVest savings number when the wallet has no Paystack account', async () => {
+it('never fetches or shows a savings goal account number when the wallet has no bank account', async () => {
   render(<WalletHeroSection {...props} fundingAccount={null} />);
   await act(async () => {});
 
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
-  expect(
-    screen.queryByRole('button', { name: 'Create account number' })
-  ).toBeNull();
-  expect(screen.getByText('FAAS (SANDBOX)')).toBeOnTheScreen();
+  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
   expect(screen.queryByText('SAVINGS · TEST')).toBeNull();
-  expect(screen.queryByText('Test savings')).toBeNull();
-  expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledWith({
-    goalId: 'goal-1',
-    merchantId: 'merchant-1',
-    merchantSlug: 'savings-synthetic',
-  });
-});
-
-it('connects the actual wallet content to the savings account slot without changing its Add Money action', async () => {
-  const contentProps = createWalletContentProps();
-  render(<WalletContent {...contentProps} fundingAccount={null} />);
-  await act(async () => {});
-
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
   expect(
-    screen.queryByRole('button', { name: 'Create account number' })
+    screen.queryByRole('button', { name: 'Copy savings account number' })
   ).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
-  expect(contentProps.onOpenFundPanel).toHaveBeenCalledTimes(1);
-});
-
-it('leaves the production account slot unchanged and never looks up a sandbox account', () => {
-  process.env.EXPO_PUBLIC_API_URL = 'https://ogabassey.com';
-  render(<WalletHeroSection {...props} fundingAccount={null} />);
-
   expect(
     screen.getByRole('button', { name: 'Create account number' })
   ).toBeOnTheScreen();
   expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
 });
 
-it('does not replace a real wallet top-up account with a goal-specific savings account', () => {
+it('keeps goal account numbers out of the actual wallet content', async () => {
+  render(
+    <WalletContent {...createWalletContentProps()} fundingAccount={null} />
+  );
+  await act(async () => {});
+
+  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
+});
+
+it('still shows the real wallet top-up account', () => {
   render(
     <WalletHeroSection
       {...props}
@@ -130,52 +110,4 @@ it('does not replace a real wallet top-up account with a goal-specific savings a
 
   expect(screen.getByText('1234567890')).toBeOnTheScreen();
   expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
-});
-
-it.each([
-  'paused',
-  'completed',
-] as const)('does not show the savings account for a %s plan', (status) => {
-  render(
-    <WalletHeroSection
-      {...props}
-      activeSavingsGoal={{ ...props.activeSavingsGoal, status }}
-    />
-  );
-
-  expect(
-    screen.getByRole('button', { name: 'Create account number' })
-  ).toBeOnTheScreen();
-  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
-});
-
-it('does not show a savings account for the unsupported auto-debit flow', () => {
-  render(
-    <WalletHeroSection
-      {...props}
-      activeSavingsGoal={{
-        ...props.activeSavingsGoal,
-        source_mode: 'auto_debit',
-      }}
-    />
-  );
-
-  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
-});
-
-it('refreshes the displayed savings account after a wallet pull-to-refresh', async () => {
-  const view = render(<WalletHeroSection {...props} isRefetching={false} />);
-  await act(async () => {});
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
-  jest
-    .mocked(fetchExistingSavingsPlanFunding)
-    .mockResolvedValue({ status: 'pending', code: 'MAPPING_PENDING' });
-
-  view.rerender(<WalletHeroSection {...props} isRefetching />);
-  await act(async () => {
-    view.rerender(<WalletHeroSection {...props} isRefetching={false} />);
-  });
-
-  await waitFor(() => expect(screen.queryByText('0000008907')).toBeNull());
-  expect(screen.getByText('Savings account not ready')).toBeOnTheScreen();
 });

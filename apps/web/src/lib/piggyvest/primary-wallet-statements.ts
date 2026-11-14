@@ -29,4 +29,8 @@ export const PRIMARY_WALLET_STATEMENTS = {
     'SELECT piggyvest_primary.record_onboarding_ownership_hold($1::jsonb, $2::uuid, $3::uuid) AS result',
   readReview:
     'SELECT piggyvest_primary.read_onboarding_review($1::jsonb) AS result',
+  // One customer's onboarding rollout cohort membership, read through the
+  // same scope fence as onboarding (P4 capability gate).
+  readRolloutCohort:
+    'SELECT piggyvest_primary.read_rollout_cohort_membership($1::jsonb) AS result',
 } as const;

@@ -1,0 +1,122 @@
+{
+  "syntheticOnly": true,
+  "ordersAfter": 0,
+  "audits": {
+    "desktop": {
+      "proof": {
+        "syntheticOnly": true,
+        "bag": {
+          "images": [
+            {
+              "complete": true,
+              "width": 240
+            }
+          ],
+          "text": "Your bag 1\n\u00d7\n\nGOOD CHOICES LOOK GOOD ON YOU.\n\nSynthetic QA Device\n\nQuantity 1 \u00b7 synthetic product\n\n\u20a6250\nSubtotal\n\u20a6250\n\nShipping is calculated in Baci checkout. Local preview only; do not place an order.\n\nReview checkout\n\u2197\nRefresh bag\n\nAdded to your bag"
+        },
+        "quoteLabels": ["Synthetic local delivery\nStore"],
+        "review": {
+          "excerpt": "Skip to main content\nReturn to Cart\nSecure Checkout\nEncrypted\nSecure Checkout\nSSL Encrypted\nApply\nContact Information\nSynthetic Buyer \u00b7 +2348000000000\nEdit\nDelivery Method\nBy Road \u00b7 Ikeja\nEdit\n3\nPayment Method\nPay in Full\nGet a Proforma Invoice\n\nChoose how you'd like to pay:\n\nPay on Delivery\nPay when you receive your items\nOrder Summary\n\nSynthetic QA Device\n\nQty: 1\n\u20a6250\nSubtotal\n\u20a6250\nVAT (7.5%)\n\u20a60\nDelivery\n\u20a61,500\nTotal\n\u20a61,750\nEmail me with exclusive offers and new product drops.\nPlace Order\nSecure Encrypted Payment",
+          "hasOrderSummary": true,
+          "hasPlaceOrder": true,
+          "images": [
+            {
+              "complete": false,
+              "width": 0
+            },
+            {
+              "complete": true,
+              "width": 240
+            },
+            {
+              "complete": false,
+              "width": 0
+            },
+            {
+              "complete": false,
+              "width": 0
+            }
+          ],
+          "path": "/qa1/checkout",
+          "title": "Checkout | Baci",
+          "viewport": {
+            "height": 900,
+            "width": 1440
+          }
+        },
+        "placeOrderClicked": false,
+        "paymentSubmitted": false
+      },
+      "harCount": 1,
+      "externalHosts": [],
+      "orderPaymentRequests": [],
+      "httpErrors": [
+        {
+          "path": "/api/storefront/cart",
+          "status": 401
+        },
+        {
+          "path": "/api/places/autocomplete",
+          "status": 500
+        }
+      ],
+      "profile": "new synthetic guest"
+    },
+    "mobile": {
+      "proof": {
+        "syntheticOnly": true,
+        "bag": {
+          "images": [
+            {
+              "complete": true,
+              "width": 240
+            }
+          ],
+          "text": "Your bag 1\n\u00d7\n\nGOOD CHOICES LOOK GOOD ON YOU.\n\nSynthetic QA Device\n\nQuantity 1 \u00b7 synthetic product\n\n\u20a6250\nSubtotal\n\u20a6250\n\nShipping is calculated in Baci checkout. Local preview only; do not place an order.\n\nReview checkout\n\u2197\nRefresh bag\n\nAdded to your bag"
+        },
+        "quoteLabels": ["Synthetic local delivery\nStore"],
+        "review": {
+          "excerpt": "Skip to main content\nSecure Checkout\nSecure Checkout\nSSL Encrypted\nHide order summary\n\u20a61,750\n1\n\nSynthetic QA Device\n\n\u20a6250\n\nSubtotal\n\u20a6250\nDelivery\n\u20a61,500\nTotal\nNGN\u20a61,750\nApply\nContact Information\nSynthetic Buyer \u00b7 +2348000000000\nEdit\nDelivery Method\nBy Road \u00b7 Ikeja\nEdit\n3\nPayment Method\nPay in Full\nGet a Proforma Invoice\n\nChoose how you'd like to pay:\n\nPay on Delivery\nPay when you receive your items\nEmail me with exclusive offers and new product drops.\nPlace Order",
+          "hasOrderSummary": true,
+          "hasPlaceOrder": true,
+          "images": [
+            {
+              "complete": true,
+              "width": 60
+            },
+            {
+              "complete": false,
+              "width": 45
+            },
+            {
+              "complete": false,
+              "width": 0
+            },
+            {
+              "complete": false,
+              "width": 0
+            }
+          ],
+          "path": "/qa1/checkout",
+          "title": "Checkout | Baci",
+          "viewport": {
+            "height": 844,
+            "width": 390
+          }
+        },
+        "placeOrderClicked": false,
+        "paymentSubmitted": false
+      },
+      "harCount": 1,
+      "externalHosts": [],
+      "orderPaymentRequests": [],
+      "httpErrors": [
+        {
+          "path": "/api/places/autocomplete",
+          "status": 500
+        }
+      ],
+      "profile": "existing synthetic guest, normal native cart item removal before journey"
+    }
+  }
+}

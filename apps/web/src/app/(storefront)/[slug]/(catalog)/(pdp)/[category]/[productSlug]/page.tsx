@@ -10,6 +10,7 @@ import { getStorefrontShellSnapshotBase } from '@/app/(storefront)/[slug]/storef
 import { OgabasseyPdpProductLcpSkeleton } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-lcp-skeleton';
 import { preloadOgabasseyPdpProductResources } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-resource-hints';
 import { JsonLd } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { OgabasseyPdpBelowFoldIsland } from '@/components/storefront/ogabassey/pdp/client-islands';
 import { createCriticalCartProduct } from '@/components/storefront/ogabassey/pdp/critical-cart-product';
 import { OgabasseyPdpCriticalCommerce } from '@/components/storefront/ogabassey/pdp/critical-commerce';
@@ -36,6 +37,10 @@ import {
   sanitizeLookupLogValue,
 } from '@/lib/cached-data';
 import type { CurrencyConfig } from '@/lib/currency';
+import { experienceOwnsProductRoute } from '@/lib/experience/product-route-ownership';
+import { loadPublishedExperience } from '@/lib/experience/published-manifest';
+import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
+import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { isKorapayConfigured } from '@/lib/korapay';
 import { getKnownOgaBasseyMerchantId } from '@/lib/ogabassey-route-identity';
 import { isPaystackConfigured } from '@/lib/paystack';
@@ -263,7 +268,8 @@ function startKnownOgaBasseyPdpProductPreload(
 
 async function resolveKnownOgaBasseyPdpProductPreload(
   preload: StartedKnownOgaBasseyPdpProductPreload,
-  routeControlPromise: Promise<CategoryProductRouteControl | null>
+  routeControlPromise: Promise<CategoryProductRouteControl | null>,
+  searchParamsPromise?: PageProps['searchParams']
 ): Promise<string | null> {
   const { isKnownOgaBasseyCustomDomain, knownOgaBasseyImageLcpHintPromise } =
     preload;
@@ -273,11 +279,20 @@ async function resolveKnownOgaBasseyPdpProductPreload(
   }
 
   const earlyPreloadResult = await Promise.race([
-    knownOgaBasseyImageLcpHintPromise
-      .then((cachedProduct) => ({
+    Promise.all([
+      knownOgaBasseyImageLcpHintPromise,
+      searchParamsPromise
+        ? searchParamsPromise.catch(() => undefined)
+        : Promise.resolve(undefined),
+    ])
+      .then(([cachedProduct, resolvedSearchParams]) => ({
         cachedProduct,
         kind: 'lcp-hint' as const,
-        primaryImage: getCachedProductRoutePrimaryImage(cachedProduct),
+        primaryImage: getCachedProductRoutePrimaryImage(
+          cachedProduct,
+          undefined,
+          resolvedSearchParams
+        ),
       }))
       .catch(() => ({
         cachedProduct: null,
@@ -320,6 +335,7 @@ export function generateStaticParams(): Promise<
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps): Promise<Metadata> {
   const { slug, category, productSlug } = await params;
   if (!isValidMerchantIdentifier(slug)) {
@@ -369,11 +385,21 @@ export async function generateMetadata({
     return CANONICAL_PRODUCT_REDIRECT_METADATA;
   }
 
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
+  if (
+    resolvedSearchParams &&
+    shouldRedirectVariantSelectionParams(product, resolvedSearchParams)
+  ) {
+    return CANONICAL_PRODUCT_REDIRECT_METADATA;
+  }
+
   const baseUrl = buildStoreUrl(merchant);
   return buildCategoryProductMetadata({
     baseUrl,
     merchant,
     product,
+    searchParams: resolvedSearchParams,
     storeSlug: slug,
   });
 }
@@ -420,7 +446,7 @@ async function getRenderableCategoryProductResult({
 
   redirectInvalidVariantSelectionParams(slug, product, resolvedSearchParams);
 
-  return { merchant, product };
+  return { merchant, product, resolvedSearchParams };
 }
 
 async function getRequestScopedCategoryProductBasePath(
@@ -584,7 +610,8 @@ export default async function CategoryProductPage({
   const preloadedProductResourceKeyPromise =
     resolveKnownOgaBasseyPdpProductPreload(
       knownOgaBasseyProductPreload,
-      routeControlPromise
+      routeControlPromise,
+      searchParams
     );
   const routeControl = await routeControlPromise;
 
@@ -620,6 +647,36 @@ export default async function CategoryProductPage({
     );
   }
 
+  const experience = getExperienceStorefrontRuntime()
+    ? await loadPublishedExperience(merchant)
+    : null;
+  if (
+    experience &&
+    (await experienceOwnsProductRoute(
+      experience.routes,
+      getProductUrl(product),
+      product.slug ?? productSlug
+    ))
+  )
+    return (
+      <ExperienceServerBoundary
+        merchant={merchant}
+        path={getProductUrl(product)}
+        fallback={
+          <main>
+            <h1>{product.name}</h1>
+            <p>
+              {product.price == null
+                ? 'Contact for price'
+                : formatDisplayCurrency(
+                    product.price,
+                    resolveMerchantCurrencyConfig(merchant).code
+                  )}
+            </p>
+          </main>
+        }
+      />
+    );
   const primaryProductImage = product.imageLarge || product.image || null;
   const criticalFallbackProductImage =
     (product as { baseImage?: string | null }).baseImage || primaryProductImage;

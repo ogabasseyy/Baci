@@ -8,6 +8,7 @@ import { getPostHogBrowserEnv } from '@/lib/posthog/config';
 import {
   capturePublicBlogPageview,
   resetPublicBlogPageviewDedupe,
+  resolvePublicBlogPageviewAttribution,
 } from '@/lib/posthog/public-blog-pageview';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
 
@@ -76,6 +77,18 @@ export function PostHogPageviewTracker() {
           hostname,
         });
 
+        if (isPublicBlog) {
+          const attribution = resolvePublicBlogPageviewAttribution(
+            postHogBrowserEnv,
+            currentUrl
+          );
+          if (!attribution) {
+            return;
+          }
+          capturePostHogPageview(currentUrl, attribution);
+          return;
+        }
+
         capturePostHogPageview(currentUrl);
       } catch (error) {
         if (!cancelled) {
@@ -87,10 +100,24 @@ export function PostHogPageviewTracker() {
       }
     }
 
+    function captureAfterConsentChange() {
+      if (isPublicBlogPathname(currentPathname, { hostname })) {
+        void capturePageview();
+      }
+    }
+
+    window.addEventListener(
+      'cookie-consent-updated',
+      captureAfterConsentChange
+    );
     void capturePageview();
 
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        'cookie-consent-updated',
+        captureAfterConsentChange
+      );
     };
   }, [pathname, searchParamString]);
 

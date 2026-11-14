@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   recordPiggyvestEvent: vi.fn(),
   bankIntake: vi.fn(),
@@ -21,8 +21,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getPiggyvestApiConfig: () => null }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => mocks.createIntakeClient(),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -133,7 +133,7 @@ beforeEach(() => {
     ])
   );
   vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
-  mocks.createServiceClient.mockImplementation(() => store.client());
+  mocks.createIntakeClient.mockImplementation(() => store.client());
   mocks.inflow.mockResolvedValue('ignored');
   mocks.quarantine.mockResolvedValue('recorded');
   mocks.recordPiggyvestEvent.mockResolvedValue('new');
@@ -228,6 +228,7 @@ describe('a transient failure on the corrected delivery, then a drain run', () =
     const client = store.client();
     return drainPiggyvestWebhookCaptures({
       claim: () => Promise.resolve(store.claim(10)),
+      renew: async (id, token) => store.renew(id, token),
       resolve: async (id, token, state, error) => {
         const result = await client.rpc('resolve_piggyvest_webhook_capture', {
           p_id: id,

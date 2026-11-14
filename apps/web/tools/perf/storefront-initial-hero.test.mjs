@@ -45,6 +45,14 @@ test('accepts one visible hero with first-slide content and image while below-fo
   assert.equal(result.pass, true);
   assert.deepEqual(result.hiddenHeroOwners, [null]);
 });
+test('accepts a visible hero when the first-slide title is rendered as a paragraph with .ogabassey-hero-title', () => {
+  const result = inspectInitialHero(
+    '<main><h1>Store</h1><section data-ogabassey-hero><div data-ogabassey-mobile-hero><div role="group"><p class="ogabassey-hero-title">Phone</p><img alt="Phone" fetchpriority="high" loading="eager" src="/phone.avif" /></div></div></section></main>'
+  );
+  assert.equal(result.pass, true);
+  assert.equal(result.visibleHeroCount, 1);
+  assert.deepEqual(result.hiddenHeroOwners, [null]);
+});
 test('rejects duplicate heroes and hidden document headings', () => {
   assert.equal(
     inspectInitialHero(

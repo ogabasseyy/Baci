@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CLI v2.95.4 pins these database/schema-init jobs in:
-# https://github.com/supabase/cli/blob/v2.95.4/pkg/config/templates/Dockerfile
+# CLI v2.111.0 pins these database/schema-init jobs in:
+# https://github.com/supabase/cli/blob/v2.111.0/apps/cli-go/pkg/config/templates/Dockerfile
 # Both official registries publish identical linux/amd64 manifest digests.
 # This covers db start; optional gen-types additionally needs postgres-meta.
-if [[ "$(supabase --version)" != "2.95.4" ]]; then
-  echo "Supabase replay image pins require CLI 2.95.4" >&2
+if [[ "$(supabase --version)" != "2.111.0" ]]; then
+  echo "Supabase replay image pins require CLI 2.111.0" >&2
   exit 1
 fi
 
 images=(
-  'postgres:17.6.1.106@sha256:5e52ca81790ae3aa1c2f8c20df41dd96404c8ab29632dddf113b881de785ee92'
-  'realtime:v2.86.3@sha256:630c1f1e1443762c100147decca9cf87afe52f22a8a96d30fe7d8782741f19fb'
-  'storage-api:v1.54.1@sha256:6395ec6600b89e8133ae65e2b203d04f37a24d3626144ea2cb21973bfaa2471c'
-  'gotrue:v2.188.1@sha256:61f1099e790c4f364b70d6fb92cc07e5f90275abf2cf690ff045c63f1d96ee4b'
+  'postgres:17.6.1.156@sha256:665efa7e234a3c324718fd2b7fbbaaaf7263f2565bc2e8fce8555c4def4c4985'
+  'realtime:v2.120.3@sha256:3b115d5371c88ee76fa0be4823d9f692808113bd659b9cad5b5985f3d00d83bc'
+  'storage-api:v1.67.20@sha256:485a417706a07ae9c5b71a2b4f1e24fdadb84add63ecf30cd54b262fb342fae8'
+  'gotrue:v2.194.0@sha256:916d2a32665b1f511a67b80bb909737db16978d9bffaa2ce50c07c73fe735ab6'
 )
 for entry in "${images[@]}"; do
   versioned="${entry%@*}"

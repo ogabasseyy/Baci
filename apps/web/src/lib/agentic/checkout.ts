@@ -10,6 +10,7 @@ import {
   loadConditionPricesIsolated,
 } from './checkout-condition-prices';
 import { buildCheckoutFulfillment } from './checkout-fulfillment';
+import { addCheckoutSessionTax } from './checkout-session-tax';
 
 export interface GPTLineItem {
   id: string; // "line_item_123"
@@ -226,7 +227,7 @@ export async function calculateCheckoutSession(
       });
     }
 
-    const itemTotal = price * requestedItem.quantity;
+    const itemTotal = Math.round(price * requestedItem.quantity * 100) / 100;
     itemsBaseAmount += itemTotal;
 
     lineItems.push({
@@ -269,8 +270,24 @@ export async function calculateCheckoutSession(
     });
   }
 
-  const { fulfillmentOptions, selectedOptionId, totals } =
-    buildCheckoutFulfillment(fulfillmentOptionId, itemsBaseAmount);
+  const {
+    fulfillmentOptions,
+    selectedOptionId,
+    totals: fulfillmentTotals,
+  } = buildCheckoutFulfillment(fulfillmentOptionId, itemsBaseAmount);
+  const quote = await addCheckoutSessionTax({
+    fulfillmentTotals,
+    lineItems,
+    products: foundProducts,
+    supabase,
+    variants: foundVariants,
+    merchantId,
+  });
 
-  return { lineItems, totals, fulfillmentOptions, selectedOptionId, messages };
+  return {
+    ...quote,
+    fulfillmentOptions,
+    selectedOptionId,
+    messages,
+  };
 }

@@ -121,6 +121,7 @@ describe('primary wallet restricted executor', () => {
     ['review', 6],
     ['ownershipHold', 3],
     ['readReview', 1],
+    ['readRolloutCohort', 1],
   ] as const)('permits the %s RPC only with its %i bound arguments', async (name, arity) => {
     const statement = PRIMARY_WALLET_STATEMENTS[name];
     const parameters = Array.from({ length: arity }, (_unused, index) =>

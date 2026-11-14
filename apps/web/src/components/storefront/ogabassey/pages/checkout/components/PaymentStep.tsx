@@ -67,6 +67,7 @@ interface PaymentStepProps {
     | null
     | undefined;
   user: { id: string } | null | undefined;
+  oxygenAllowed?: boolean;
   remainingAmount: number;
   orderAmount: number;
   currency?: string;
@@ -93,6 +94,7 @@ export function PaymentStep({
   setCurrentStep,
   merchant,
   user,
+  oxygenAllowed = false,
   remainingAmount,
   orderAmount,
   currency = 'NGN',
@@ -118,10 +120,22 @@ export function PaymentStep({
   const redvaultHasEligibleItems = redvaultSummary?.eligibleSubtotalKobo !== 0;
   const hasAvailableSelectedPaymentMethod = isPaymentMethodAvailable({
     paymentMethod,
+    oxygenAllowed,
     paystackCheckoutAvailable,
     korapayCheckoutAvailable,
     bankTransferCheckoutAvailable,
     redvaultAvailable: redvaultCheckoutAvailable && redvaultHasEligibleItems,
+    featureSettings: merchant?.feature_settings,
+    currency,
+    orderAmount,
+    payableAmount: remainingAmount,
+  });
+  const oxygenEligible = isPaymentMethodAvailable({
+    paymentMethod: 'oxygen',
+    oxygenAllowed,
+    paystackCheckoutAvailable,
+    korapayCheckoutAvailable,
+    bankTransferCheckoutAvailable,
     featureSettings: merchant?.feature_settings,
     currency,
     orderAmount,
@@ -134,6 +148,7 @@ export function PaymentStep({
     payableAmount: remainingAmount,
   });
   const hasInstallmentOptions = hasAnyInstallmentOption({
+    oxygenAllowed,
     featureSettings: merchant?.feature_settings,
     currency,
     orderAmount,
@@ -183,6 +198,7 @@ export function PaymentStep({
         bankTransferCheckoutAvailable={bankTransferCheckoutAvailable}
         featureSettings={merchant?.feature_settings}
         klumpEligible={klumpEligible}
+        oxygenEligible={oxygenEligible}
         hasInstallmentOptions={hasInstallmentOptions}
         currency={currency}
         redvaultAvailable={redvaultCheckoutAvailable}
@@ -228,6 +244,8 @@ export function PaymentStep({
         >
           {isProcessing ? (
             <Loader2 className="animate-spin" size={20} />
+          ) : paymentTab === 'installments' ? (
+            'Begin Process'
           ) : paymentMethod === 'invoice' ? (
             'Get a Proforma Invoice'
           ) : paymentMethod === 'payforme' ? (

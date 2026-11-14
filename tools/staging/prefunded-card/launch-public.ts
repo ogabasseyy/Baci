@@ -42,7 +42,8 @@ async function main() {
     configuration,
     readConfiguration('/run/pvb-public/anon.json', 16_384),
     Date.now(),
-    process.env.PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED === 'true'
+    process.env.PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED === 'true',
+    process.env.PIGGYVEST_KILL_SWITCH
   );
   for (const key of Object.keys(process.env)) delete process.env[key];
   Object.assign(process.env, environment);

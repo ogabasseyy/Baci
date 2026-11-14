@@ -1,23 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadOrderConditionPrices } from '@/lib/checkout/order-condition-prices';
+import {
+  calculateAgenticLineTax,
+  roundAgenticCents as roundToCents,
+  TaxComputeError,
+} from './agentic-line-tax';
 import { resolveAgenticTaxLinePrice } from './resolve-agentic-tax-line-price';
 
-// Codex P1 (PR #1622 round 5): agentic checkout dispatch builds its
-// payload from `calculateCheckoutSession`, which currently computes
-// `tax: 0` for every line item and emits no `tax` total. Before
-// B3.5 that was harmless — the trigger silently recomputed
-// `orders.tax_amount` post-insert and the RPC returned the trigger's
-// view. With B3.5's `tax_amount_mismatch` guard, a VAT-registered
-// merchant gets RAISE → 400 → checkout broken.
-//
-// Until `calculateCheckoutSession` learns about VAT (deferred —
-// changing the agentic session calc shape touches every consumer of
-// `GPTLineItem` / `GPTTotal`), the dispatch layer recomputes the
-// expected per-item VAT itself and overrides `p_tax_amount`. The
-// formula MUST mirror the RPC's `v_expected_tax` block byte-for-byte
-// (which in turn mirrors `populate_order_item_tax` +
-// `update_order_tax_totals` triggers) or the dispatch and RPC
-// disagree and we're back to mismatch land:
+export { calculateAgenticLineTax, TaxComputeError } from './agentic-line-tax';
+
+// The quote and dispatch share the same line-level VAT formula. The
+// formula mirrors the RPC's `v_expected_tax` block (which in turn
+// mirrors the order tax triggers) so authorization and insertion use
+// the same per-line basis:
 //
 //   per-line: vat_category 'S' →
 //     ROUND(ROUND(quantity * price, 2) * vat_rate / 100, 2)
@@ -82,15 +77,6 @@ interface ProductVatRow {
 // `TAX_COMPUTE_FAILED` 500, regressing that mapping. Carry the pg
 // code on the thrown error so callers can map 22P02 → 4xx and
 // everything else → 5xx.
-export class TaxComputeError extends Error {
-  readonly pgCode: string | undefined;
-  constructor(message: string, pgCode?: string | null | undefined) {
-    super(message);
-    this.name = 'TaxComputeError';
-    this.pgCode = typeof pgCode === 'string' ? pgCode : undefined;
-  }
-}
-
 /** True if the helper failed due to a Postgres UUID parse error. */
 export function isTaxComputeUuidError(err: unknown): boolean {
   return err instanceof TaxComputeError && err.pgCode === '22P02';
@@ -102,10 +88,6 @@ interface VariantPriceRow {
   // variant_id falls through to the base price instead of an override.
   product_id: string;
   price_override: number | string | null;
-}
-
-function roundToCents(n: number): number {
-  return Math.round(n * 100) / 100;
 }
 
 export async function computeAgenticOrderTax({
@@ -260,28 +242,14 @@ export async function computeAgenticOrderTax({
     });
     if (price === null) continue;
 
-    const quantity = Number(item.quantity);
-    if (!Number.isFinite(quantity) || quantity <= 0) continue;
-
-    const rate = Number(product.vat_rate ?? 7.5);
-    if (!Number.isFinite(rate) || rate < 0) {
-      // CodeRabbit (PR #1622 round 7): silently skipping a line
-      // with a corrupt vat_rate would produce a smaller
-      // expected_tax than the trigger's per-line sum, then the
-      // RPC would RAISE `tax_amount_mismatch` with no breadcrumb
-      // pointing at the bad product. Throw with the product
-      // context so ops can find the row immediately. The dispatch
-      // / route catch maps `TaxComputeError` (non-22P02) to a
-      // 500 with a sanitized log entry — this is genuine bad
-      // data, not a client-correctable input.
-      throw new TaxComputeError(
-        `Invalid vat_rate on product ${product.id}: got ${String(product.vat_rate)}`
-      );
-    }
-
-    const lineExtension = roundToCents(quantity * price);
-    const lineTax = roundToCents((lineExtension * rate) / 100);
-    total += lineTax;
+    total += calculateAgenticLineTax({
+      price,
+      quantity: Number(item.quantity),
+      vatCategoryCode: product.vat_category_code,
+      vatRate: product.vat_rate,
+      vatRegistered: true,
+      productId: product.id,
+    });
   }
 
   return roundToCents(total);

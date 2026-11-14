@@ -116,21 +116,3 @@ export function mergePayoutReadbacks(
     accrualEnabled: next.accrualEnabled ?? prior.accrualEnabled,
   };
 }
-
-/**
- * Does a goal wallet with no payout of its own inherit the business wallet?
- * `no` needs a READABLE destination field (the very field that names the
- * destination on the main wallet) that is empty or differs. An omitted
- * destination, or unrelated interest settings, leave the answer unknown.
- */
-export function inheritanceAnswer(
-  goal: PayoutReadback | null,
-  mainDestinationPaths: readonly string[]
-): Answer {
-  if (!goal) return 'unknown';
-  if (goal.matchesTarget.length > 0) return 'yes';
-  const readable = goal.payoutFieldPaths.some((path) =>
-    mainDestinationPaths.includes(path)
-  );
-  return readable ? 'no' : 'unknown';
-}

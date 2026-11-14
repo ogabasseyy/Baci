@@ -1,3 +1,4 @@
+import { isStablePublicMediaUrl } from '../storefront-release/is-stable-public-media-url';
 import type { BuilderData } from './builder-ai-edit';
 import { builderDesignCapabilityAdapter } from './builder-design-capability-adapter';
 
@@ -23,7 +24,7 @@ function isPreviewAssetPath(value: unknown): boolean {
   } catch {
     return false;
   }
-  return assetPathPattern.test(value);
+  return assetPathPattern.test(value) || isStablePublicMediaUrl(value);
 }
 
 function isPreviewHttpsAsset(value: unknown): boolean {

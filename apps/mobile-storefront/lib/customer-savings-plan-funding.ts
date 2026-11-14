@@ -8,6 +8,9 @@ import {
 } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
+export const PLAN_NOT_SET_UP_MESSAGE =
+  'This plan account has not been set up yet.';
+
 type Selection = {
   goalId: string;
   merchantId?: string | null;
@@ -15,10 +18,16 @@ type Selection = {
   signal?: AbortSignal;
 };
 
+const PRIMARY_PROVISIONING_PATH =
+  '/api/storefront/customer/savings/primary-provisioning';
+export const PLAN_SETUP_UNAVAILABLE_MESSAGE =
+  'Setup is not available for this goal right now.';
+
 async function primaryFunding(
   input: Selection,
   interestAccepted?: boolean,
-  expectedUserId?: string
+  expectedUserId?: string,
+  setup: boolean | 'retry' = false
 ) {
   const selection = schemas.selection.parse({
     merchantId: input.merchantId,
@@ -33,13 +42,18 @@ async function primaryFunding(
   // and fail a legitimate request).
   const response = schemas.response.parse(
     await createStorefrontCustomerApiClient().fetchJson({
-      path: '/api/storefront/customer/savings/primary-provisioning',
-      method: interestAccepted === undefined ? 'PATCH' : 'POST',
+      path: setup
+        ? `${PRIMARY_PROVISIONING_PATH}/setup`
+        : PRIMARY_PROVISIONING_PATH,
+      method: interestAccepted === undefined && !setup ? 'PATCH' : 'POST',
       includeCsrf: true,
       signal: input.signal,
       expectedUserId: expectedUserId ?? undefined,
-      body:
-        interestAccepted === undefined
+      body: setup
+        ? setup === 'retry'
+          ? schemas.setupRetryRequest.parse(selection)
+          : schemas.setupRequest.parse({ ...selection, interestAccepted })
+        : interestAccepted === undefined
           ? selection
           : schemas.request.parse({
               ...selection,
@@ -55,7 +69,10 @@ async function primaryFunding(
       'This plan account needs review. Please contact support before trying again.'
     );
   if (response.status === 'not_found')
-    throw new Error('This plan account has not been set up yet.');
+    // Same code as the legacy 404, so callers read 'never set up' alike.
+    throw Object.assign(new Error(PLAN_NOT_SET_UP_MESSAGE), {
+      code: 'SAVINGS_WALLET_NOT_FOUND',
+    });
   return SavingsPlanFundingResponseSchema.parse(response);
 }
 
@@ -107,6 +124,34 @@ export const customerSavingsPlanFunding = {
         expectedUserId: expectedUserId ?? undefined,
       })
     );
+  },
+  /**
+   * Finishes setup of an existing goal that was never provisioned. Primary
+   * rail only (there is no legacy equivalent), and the interest answer is
+   * required: nothing here supplies a default.
+   */
+  async setup(input: Selection & { interestAccepted: boolean }) {
+    const expectedUserId = useAuthStore.getState().user?.id;
+    if (!(await resolvePrimaryRail(input.merchantId)))
+      throw new Error(PLAN_SETUP_UNAVAILABLE_MESSAGE);
+    return await primaryFunding(
+      input,
+      input.interestAccepted,
+      expectedUserId,
+      true
+    );
+  },
+  /**
+   * Re-runs setup for a goal whose earlier attempt stalled and whose claim
+   * has expired (the status read says setupRetryable). No interest answer is
+   * sent: the server reuses the one stored for the goal, and a live claim is
+   * never replaced.
+   */
+  async retrySetup(input: Selection) {
+    const expectedUserId = useAuthStore.getState().user?.id;
+    if (!(await resolvePrimaryRail(input.merchantId)))
+      throw new Error(PLAN_SETUP_UNAVAILABLE_MESSAGE);
+    return await primaryFunding(input, undefined, expectedUserId, 'retry');
   },
   async recover(input: Selection) {
     // Same entry capture as provision: the status read must not run

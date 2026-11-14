@@ -1,13 +1,16 @@
 'use client';
 
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import {
   prepareSharedCartCheckout,
   reviewedCheckoutItems,
 } from '@/hooks/cart/shared-cart-client';
+import { isSharedCartCheckoutDeadlineExpired } from '@/hooks/cart/shared-cart-checkout-deadline';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { handleSharedRedvaultReview } from '../handlers/handle-shared-redvault-review';
+import { checkOxygenStorefrontAvailability } from '../check-oxygen-storefront-availability';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
 import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
 import type { SharedCartOrderBinding } from '../types';
@@ -28,6 +31,13 @@ export function useCheckoutOrderSubmission(
     const { cart, navigation, payment, processing } = context;
     const { session: paymentSession } = payment;
 
+    if (paymentSession.method === 'oxygen' &&
+      ((!isOxygenStorefrontStagingEnabled() && !(await checkOxygenStorefrontAvailability(merchant.id))) || payment.currencyCode !== 'NGN' ||
+       paymentSession.wallet.amountUsed > 0 || !(await context.account.waitForResolvedCustomerAuth()))) {
+      toast({ title: 'Payment plan unavailable', description: 'Sign in to continue with Oxygen. Wallet credit cannot be combined with this payment plan.', variant: 'destructive' });
+      processing.releaseSubmission();
+      return;
+    }
     const submissionOptions = buildCheckoutOrderSubmissionOptions(
       context,
       merchant.id
@@ -122,11 +132,11 @@ export function useCheckoutOrderSubmission(
     }
 
     if (await handleSharedRedvaultReview(context, merchant, prepared)) return;
-    // Shared carts review the authoritative cart first; the order submit
-    // binds to the returned session and generation. A stale review
-    // refreshes the cart view and stops: the shopper reviews the updated
-    // cart and submits again, never silently resubmitting changed lines.
+    // Review the authoritative version first and bind submission to it; a
+    // stale review stops so the shopper confirms changed lines before retry.
     let sharedCartBinding: SharedCartOrderBinding | null = null;
+    let sharedCartSessionExpiresAtMonotonicMs: number | null = null;
+    let sharedCartSessionExpiresAtEpochMs: number | null = null;
     let reviewedCheckoutItemsResult: ReturnType<
       typeof buildCheckoutOrderItems
     > | null = null;
@@ -141,10 +151,7 @@ export function useCheckoutOrderSubmission(
       return;
     }
     if (cart.sharedCartRef) {
-      // The binding pins the reviewed version, but the order items come
-      // from the display cart: submitting with unconfirmed optimistic
-      // lines would order lines outside the reviewed version. Wait for
-      // a clean sync so display and confirmed lines agree.
+      // Wait for clean sync so order items match the pinned reviewed version.
       if (cart.sharedCartSyncStatus !== 'synced') {
         if (cart.sharedCartSyncStatus === 'error') {
           toast({
@@ -249,6 +256,25 @@ export function useCheckoutOrderSubmission(
         checkout_generation: review.review.generation,
         checkout_session_id: review.review.checkoutSessionId,
       };
+      sharedCartSessionExpiresAtMonotonicMs =
+        review.sessionExpiresAtMonotonicMs;
+      sharedCartSessionExpiresAtEpochMs = review.sessionExpiresAtEpochMs;
+    }
+
+    if (
+      sharedCartBinding &&
+      isSharedCartCheckoutDeadlineExpired(
+        sharedCartSessionExpiresAtMonotonicMs,
+        sharedCartSessionExpiresAtEpochMs
+      )
+    ) {
+      toast({
+        title: 'Checkout Unavailable',
+        description: 'Your checkout review expired. Please review your cart again.',
+        variant: 'destructive',
+      });
+      processing.releaseSubmission();
+      return;
     }
 
     await submitPreparedCheckout(

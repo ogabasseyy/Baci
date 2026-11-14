@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useStorefrontScopedRoute } from '@/components/builder/use-storefront-scoped-route';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { asRoute } from '@/lib/routes';
+import { isSocialPlatform, normalizeSocialUrl } from '@/lib/social';
 
 export interface FooterProps {
   businessName?: string;
@@ -119,18 +119,21 @@ export function Footer({
             <h4 className="font-semibold mb-6 text-lg">Stay Connected</h4>
             <div className="flex gap-4 mb-6">
               {Object.entries(socialLinks).map(([platform, url]) => {
-                if (!url) return null;
                 const Icon = socialIcons[platform];
+                if (!Icon || !url || !isSocialPlatform(platform)) return null;
+                const normalizedUrl = normalizeSocialUrl(url, platform);
+                if (!normalizedUrl) return null;
                 return (
-                  <Link
+                  <a
                     key={platform}
-                    href={asRoute(url)}
-                    className="size-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white hover:text-black transition-all"
+                    href={normalizedUrl}
+                    className="size-10 bg-[var(--store-primary,#ffffff)]/10 rounded-full flex items-center justify-center hover:bg-[var(--store-primary,#ffffff)] hover:text-[var(--store-primary-text,#000000)] transition-all"
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={platform}
                   >
                     <Icon className="size-5" />
-                  </Link>
+                  </a>
                 );
               })}
             </div>

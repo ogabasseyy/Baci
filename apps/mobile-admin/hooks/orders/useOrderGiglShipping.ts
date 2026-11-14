@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import * as addressDraftEdit from '@/lib/order-gigl-address-draft';
 import {
   OrderGiglFundingPoller,
   type OrderGiglPollContext,
@@ -11,6 +12,7 @@ import {
   type OrderGiglMissingField,
   type OrderGiglQuoteResult,
   type OrderGiglReceiver,
+  type OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
 import { bindOrderGiglShippingAppState } from '@/lib/order-gigl-shipping-app-state';
 import {
@@ -124,14 +126,17 @@ export function useOrderGiglShipping({
     return null;
   };
   requestQuoteRef.current = requestQuote;
-  const updateAddressField = (field: OrderGiglMissingField, value: string) => {
-    setAddressDraft((previous) => {
-      const next = { ...previous, [field]: value };
-      addressRef.current = next;
-      return next;
-    });
+  const editDraft = (edit: addressDraftEdit.DraftEdit) => {
+    addressRef.current = edit(addressRef.current);
+    setAddressDraft(addressRef.current);
     invalidateQuote();
   };
+  const updateAddressField = (field: OrderGiglMissingField, value: string) =>
+    editDraft((draft) =>
+      addressDraftEdit.applyAddressField(draft, field, value)
+    );
+  const selectAddressPlace = (place: OrderGiglSelectedPlace) =>
+    editDraft((draft) => addressDraftEdit.applySelectedPlace(draft, place));
   const refreshBalance = async (context?: OrderGiglPollContext) => {
     const isCurrent = () =>
       !context ||
@@ -288,6 +293,7 @@ export function useOrderGiglShipping({
     startFunding,
     startTransferPoll,
     state,
+    selectAddressPlace,
     updateAddressField,
     wallet,
   };

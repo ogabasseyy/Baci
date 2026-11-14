@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { createPublicClient } from '@/lib/supabase/public';
 import type {
   BuildCommercialGuideLinksContext,
@@ -71,7 +72,12 @@ export async function getPublishedClusterPosts(
     // post publish/edit or a blog_enabled toggle busts every cached context
     // for this merchant instead of waiting out the TTL.
     cacheLife('blog');
-    cacheTag('blog-posts', `products-${merchantId}`, `features-${merchantId}`);
+    cacheTag(
+      'blog-posts',
+      getBlogContentLinksCacheTag(merchantId),
+      `products-${merchantId}`,
+      `features-${merchantId}`
+    );
   } catch {
     // Unit tests do not run with Next cacheComponents enabled.
   }

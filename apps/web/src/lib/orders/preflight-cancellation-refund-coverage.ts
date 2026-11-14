@@ -119,7 +119,7 @@ export async function preflightCancellationRefundCoverage({
   // completion — unverifiable Paystack claims still quarantine via the
   // withheld path. Other reference-less legs quarantine: with nothing
   // to track they can never resolve by waiting.
-  const unsupportedLegs = transactions.filter(
+  const uncoveredLegs = transactions.filter(
     (transaction) =>
       !refundedPaymentIds.has(transaction.id) &&
       !manualPendingLegIds.has(transaction.id) &&
@@ -127,6 +127,20 @@ export async function preflightCancellationRefundCoverage({
         (normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' &&
           transaction.status !== 'refund_pending'))
   );
+  // A "cancel only" order is refunded by the merchant outside Baci, so an
+  // uncovered leg the worker cannot refund is not unsupported: it awaits
+  // the merchant's record (the step defers) instead of quarantining and
+  // disabling manual recording. Recorded Paystack claims still verify.
+  const manualRefundOnly = order.cancellation_refund_mode === 'manual';
+  const unsupportedLegs = manualRefundOnly ? [] : uncoveredLegs;
+  // Every leg still uncovered awaits the merchant, Paystack ones included:
+  // otherwise one verified record on a multi-capture order would let the
+  // step complete while the other captures are still unrefunded.
+  const merchantOwnedLegIds = manualRefundOnly
+    ? transactions
+        .filter((transaction) => !refundedPaymentIds.has(transaction.id))
+        .map((transaction) => transaction.id)
+    : [];
   if (unsupportedLegs.length > 0) {
     const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);
     await quarantineRefund({
@@ -191,7 +205,10 @@ export async function preflightCancellationRefundCoverage({
   return {
     linkedPaymentId,
     manualLinkedLegIds,
-    manualPendingLegIds,
+    manualPendingLegIds: new Set([
+      ...manualPendingLegIds,
+      ...merchantOwnedLegIds,
+    ]),
     mismatchedIds,
     mismatchedTransactions,
     refundedPaymentIds,

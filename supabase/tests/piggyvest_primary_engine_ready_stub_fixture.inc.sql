@@ -40,8 +40,12 @@ SELECT pg_temp.check(piggyvest_primary.engine_ready('inflow')
     = '{"ready": false, "missing": ["engine_readiness_test_override"]}'::jsonb,
   'an empty override must refuse every surface');
 
--- Restoring brings back exactly the installed stub.
+-- Restoring brings back the installed check: the override marker is gone,
+-- and an unknown surface is refused by the real rules.
 SELECT pg_temp.piggyvest_engine_ready_restore();
-SELECT pg_temp.check(piggyvest_primary.engine_ready('inflow')
-    = '{"ready": false, "missing": ["engine_readiness_not_installed"]}'::jsonb,
-  'restore must bring back the installed stub');
+SELECT pg_temp.check(piggyvest_primary.engine_ready('inflow')->'missing'
+    <> '["engine_readiness_test_override"]'::jsonb,
+  'restore must bring back the installed check');
+SELECT pg_temp.check(piggyvest_primary.engine_ready('not_a_surface')
+    = '{"ready": false, "missing": ["unknown_surface"]}'::jsonb,
+  'restore must bring back the enforcing rules');

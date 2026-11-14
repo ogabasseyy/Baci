@@ -1,0 +1,138 @@
+import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
+
+type Frequency = 'daily' | 'weekly' | 'monthly';
+
+const PER: Record<Frequency, string> = {
+  daily: 'a day',
+  weekly: 'a week',
+  monthly: 'a month',
+};
+
+export type SavingsPace = {
+  /** Short line for the card, e.g. "₦2,000 a day · until 29 Dec 2026". */
+  short: string;
+  /** Full sentence for screen readers and the progress card. */
+  label: string;
+};
+
+const MS_PER_DAY = 86_400_000;
+
+/** The phone's own calendar day (e.g. Lagos), as YYYY-MM-DD. */
+export function localDay(now: Date): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** Whole days from the customer's today to the end date; null if unusable. */
+export function daysUntil(
+  maturityDate: string | null | undefined,
+  now: Date
+): number | null {
+  const end = /^\d{4}-\d{2}-\d{2}/.exec(maturityDate ?? '')?.[0];
+  if (!end) return null;
+  // Only a real calendar day: Date.parse would roll 2027-02-30 into March.
+  const endMs = Date.parse(`${end}T00:00:00Z`);
+  if (
+    !Number.isFinite(endMs) ||
+    new Date(endMs).toISOString().slice(0, 10) !== end
+  )
+    return null;
+  const days =
+    (Date.parse(`${end}T00:00:00Z`) -
+      Date.parse(`${localDay(now)}T00:00:00Z`)) /
+    MS_PER_DAY;
+  return Number.isFinite(days) && days >= 0 ? days : null;
+}
+
+/**
+ * How many payments fit from today to the end date, today counting as one:
+ * whole days for daily, whole weeks for weekly, calendar months for monthly.
+ */
+export function paymentsThatFit(
+  frequency: Frequency,
+  maturityDate: string | null | undefined,
+  now: Date
+): number {
+  const days = daysUntil(maturityDate, now);
+  if (days === null) return 0;
+  if (frequency === 'daily') return days + 1;
+  if (frequency === 'weekly') return Math.floor(days / 7) + 1;
+  const [ey, em, ed] = (maturityDate ?? '').slice(0, 10).split('-').map(Number);
+  const [ty, tm, td] = localDay(now).split('-').map(Number);
+  // A schedule day past the end of a shorter month rolls to its last day
+  // (31 Jan -> 28 Feb), so an end date on the last day still counts.
+  // Calendar arithmetic only, in UTC like daysUntil: no timezone or DST.
+  const lastDayOfEndMonth = new Date(Date.UTC(ey, em, 0)).getUTCDate();
+  const shortOfDay = ed < td && ed !== lastDayOfEndMonth;
+  const months = (ey - ty) * 12 + (em - tm) - (shortOfDay ? 1 : 0);
+  return Math.max(0, months) + 1;
+}
+
+/**
+ * The pace shown on a savings plan. It is the plan's own contribution and
+ * frequency (what the customer chose), never a recalculated weekly figure,
+ * so the wallet matches the plan. A plan without a usable contribution falls
+ * back to the weekly pace worked out from its end date.
+ */
+export function getSavingsPace({
+  contributionAmount,
+  frequency,
+  maturityDate,
+  now = new Date(),
+  remaining,
+}: {
+  contributionAmount: number | null | undefined;
+  frequency: Frequency | null | undefined;
+  maturityDate: string | null | undefined;
+  now?: Date;
+  remaining: number;
+}): SavingsPace | null {
+  if (!Number.isFinite(remaining) || remaining <= 0) return null;
+  const endDateUsable = daysUntil(maturityDate, now) !== null;
+  const per = frequency ? PER[frequency] : undefined;
+  if (
+    per &&
+    typeof contributionAmount === 'number' &&
+    Number.isFinite(contributionAmount) &&
+    contributionAmount > 0
+  ) {
+    // Always the plan's own pace (the last payment may simply be smaller).
+    const amount = formatNgnCurrency(contributionAmount);
+    // Only a real, future-or-today calendar date can carry an end date or a
+    // "behind" warning (2027-02-30 is no deadline at all).
+    const weekly = endDateUsable
+      ? getWeeklySavingsNudge({ maturityDate, now, remaining })
+      : null;
+    // Only show the end date when this pace can still reach it: a plan that
+    // is behind shows its pace alone rather than a date it cannot meet.
+    const payments = Math.ceil(remaining / contributionAmount);
+    const fits = paymentsThatFit(frequency as Frequency, maturityDate, now);
+    // Labelled, so the line reads on its own under the cheer.
+    const pace = `Your plan: ${amount} ${per}`;
+    if (!endDateUsable) return { short: pace, label: pace };
+    // Behind: this pace cannot reach the end date (including on the end
+    // date itself), so say so calmly instead of showing a date it cannot
+    // meet. Decided from the date and the payments, not the weekly nudge.
+    if (payments > fits) {
+      const behind = `${pace} · add a little more to finish on time`;
+      return { short: behind, label: behind.replace(' · ', ', ') };
+    }
+    if (!weekly) return { short: pace, label: pace };
+    return {
+      short: `${pace} · until ${weekly.endsOn}`,
+      // The plan's own pace and end date, not a promise: a plan that is
+      // behind needs more. One formatted date for line and spoken label.
+      label: `${pace} until ${weekly.endsOn}`,
+    };
+  }
+  const weekly = endDateUsable
+    ? getWeeklySavingsNudge({ maturityDate, now, remaining })
+    : null;
+  if (!weekly) return null;
+  return {
+    short: `${formatNgnCurrency(weekly.amountPerWeek)} ${weekly.due ? 'due' : 'a week'} · ${weekly.due ? 'by' : 'until'} ${weekly.endsOn}`,
+    label: weekly.label,
+  };
+}

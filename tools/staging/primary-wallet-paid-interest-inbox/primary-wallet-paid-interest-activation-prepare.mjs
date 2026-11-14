@@ -14,6 +14,36 @@ const required = ['PIGGYVEST_PRIMARY_INTEGRATION_ID','PIGGYVEST_PRIMARY_PAID_INT
   'PIGGYVEST_PRIMARY_DB_HOST','PIGGYVEST_PRIMARY_DB_PORT','PIGGYVEST_PRIMARY_DB_NAME',
   'PIGGYVEST_PRIMARY_EVIDENCE_DB_PASSWORD','PIGGYVEST_PRIMARY_DB_CA'];
 
+const evidenceRpcs = new Set([
+  'apply_inflow_environment(integration_id uuid, environment text, receipt jsonb)',
+  'apply_paid_interest(p_integration uuid, p_environment text, p_proof jsonb)',
+  'claim_paid_interest_inbox(p_integration uuid, p_environment text, p_command jsonb)',
+  'engine_ready(p_surface text)',
+  'enqueue_paid_interest_inbox(p_integration uuid, p_environment text, p_command jsonb)',
+  'find_dispatched_goal_cancel_by_reference(integration_id uuid, environment text, reference text)',
+  'find_dispatched_goal_complete_by_reference(integration_id uuid, environment text, reference text)',
+  'find_dispatched_savings_by_reference(integration_id uuid, environment text, reference text)',
+  'finish_paid_interest_inbox(p_integration uuid, p_environment text, p_command jsonb)',
+  'lift_wallet_restriction(p_integration_id uuid, p_environment text, p_provider_wallet_id text, p_lift_event_id text, p_provider_restriction_id text, p_provider_kind text, p_lifted_at timestamp with time zone)',
+  'mark_goal_purchase_request_alerted(integration_id uuid, environment text, operation_id uuid)',
+  'paid_interest_event_involved(p_integration uuid, p_environment text, p_selection jsonb)',
+  'paid_interest_inbox_readiness(p_integration uuid, p_environment text, p_command jsonb)',
+  'read_daily_reconciliation(integration_id uuid, environment text, options jsonb)',
+  'read_dispatched_goal_cancel(integration_id uuid, environment text, operation_id uuid)',
+  'read_dispatched_goal_complete(integration_id uuid, environment text, operation_id uuid)',
+  'read_dispatched_savings(integration_id uuid, environment text, operation_id uuid)',
+  'read_goal_purchase_request_alert(integration_id uuid, environment text, operation_id uuid)',
+  'read_paid_interest_crosswalk(p_integration uuid, p_environment text, p_selection jsonb)',
+  'record_wallet_restriction(p_integration_id uuid, p_environment text, p_provider_wallet_id text, p_provider_event_id text, p_provider_restriction_id text, p_provider_kind text, p_amount_kobo bigint, p_available_balance_kobo bigint, p_ledger_balance_kobo bigint, p_occurred_at timestamp with time zone)',
+  'release_failed_goal_cancel(integration_id uuid, environment text, proof jsonb)',
+  'release_failed_goal_complete(integration_id uuid, environment text, proof jsonb)',
+  'release_failed_savings(integration_id uuid, environment text, proof jsonb)',
+  'settle_goal_cancel(integration_id uuid, environment text, proof jsonb)',
+  'settle_goal_complete(integration_id uuid, environment text, proof jsonb)',
+  'settle_savings(integration_id uuid, environment text, proof jsonb)',
+  'wallet_restriction_state(p_provider_wallet_id text)',
+]);
+
 function inspectOperatorProof(proof, context) {
   if (!proof) return false;
   const allowed = ['kind','capturedAt','expiresAt','hostInventorySha256','databaseInventorySha256',
@@ -48,7 +78,7 @@ export async function preparePrimaryInterestActivation(input) {
   const inventoryBytes = `${JSON.stringify(inventory, null, 2)}\n`;
   const database = input.databaseInventory;
   const dbKeys = ['captured_at','session_is_fixed_login','tls','login_restricted','login_valid_until','sole_capability_membership',
-    'capability_restricted','capability_parent_memberships','schema_usage','effective_primary_rpcs','direct_private_table_privileges',
+    'capability_restricted','capability_parent_memberships','readiness_reader_restricted','schema_usage','effective_primary_rpcs','direct_private_table_privileges',
     'public_interest_rpcs','interest_rpcs_present','customer_or_service_interest_execution'];
   if (database && (Object.keys(database).some((key) => !['restricted_inventory','authority_inventory'].includes(key)) ||
     !database.restricted_inventory || !database.authority_inventory ||
@@ -57,15 +87,13 @@ export async function preparePrimaryInterestActivation(input) {
     throw new Error('Unsafe database inventory metadata');
   const db = database?.restricted_inventory;
   const credentialExpiry = Date.parse(db?.login_valid_until);
-  const rpcNames = ['apply_inflow_environment','settle_savings','read_dispatched_savings','read_paid_interest_crosswalk',
-    'apply_paid_interest','enqueue_paid_interest_inbox','claim_paid_interest_inbox','finish_paid_interest_inbox','paid_interest_inbox_readiness'];
-  const databaseReady = !!db && ['session_is_fixed_login','tls','login_restricted','sole_capability_membership','capability_restricted','schema_usage','interest_rpcs_present'].every((key) => db[key]===true) &&
-    ['capability_parent_memberships','direct_private_table_privileges','public_interest_rpcs','customer_or_service_interest_execution'].every((key) => db[key]===0) &&
+  const databaseReady = !!db && ['session_is_fixed_login','tls','login_restricted','sole_capability_membership','capability_restricted','readiness_reader_restricted','schema_usage','interest_rpcs_present'].every((key) => db[key]===true) &&
+    db.capability_parent_memberships===1 && ['direct_private_table_privileges','public_interest_rpcs','customer_or_service_interest_execution'].every((key) => db[key]===0) &&
     Number.isFinite(Date.parse(db.captured_at)) && Date.parse(db.captured_at)<=now+5000 && now-Date.parse(db.captured_at)<=3600000 &&
     Number.isFinite(credentialExpiry) && credentialExpiry>now && credentialExpiry<=expiry &&
-    Array.isArray(db.effective_primary_rpcs) && db.effective_primary_rpcs.length===9 &&
-    new Set(db.effective_primary_rpcs.map((rpc) => typeof rpc==='string' && rpc.slice(0,rpc.indexOf('(')))).size===9 &&
-    db.effective_primary_rpcs.every((rpc) => typeof rpc==='string' && rpcNames.includes(rpc.slice(0,rpc.indexOf('(')))) &&
+    Array.isArray(db.effective_primary_rpcs) && db.effective_primary_rpcs.length===evidenceRpcs.size &&
+    new Set(db.effective_primary_rpcs).size===evidenceRpcs.size &&
+    db.effective_primary_rpcs.every((rpc) => evidenceRpcs.has(rpc)) &&
     database.authority_inventory.exact_enabled_authority_ready===true && database.authority_inventory.financial_actions===false;
   const databaseBytes = `${JSON.stringify(database ?? { status: 'not_supplied' }, null, 2)}\n`;
   const reviewed = inspectOperatorProof(input.operatorProof, { now, expiry, databaseReady, databaseDigest: digest(databaseBytes), inventoryDigest: digest(inventoryBytes), bundleDigest: manifest.artifacts['interest-inbox.cjs'] });

@@ -99,3 +99,11 @@ it('fails closed when dedicated signing or API credentials are unavailable', () 
     })
   ).toThrow('configuration unavailable');
 });
+it('master kill switch stops intake but the drain still settles receipts', () => {
+  expect(readPrimaryWalletPaidInterestRuntime(env)).toEqual(fixture.config);
+  const killed = { ...env, PIGGYVEST_KILL_SWITCH: 'true' };
+  expect(readPrimaryWalletPaidInterestRuntime(killed)).toBeNull();
+  expect(readPrimaryWalletPaidInterestRuntime(killed, 'drain')).toEqual(
+    fixture.config
+  );
+});

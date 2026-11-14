@@ -13,6 +13,11 @@ describe('preview render projection', () => {
       previewRenderProjection.isAssetSource('/avatars/customer.webp')
     ).toBe(true);
     expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'a'.repeat(64)}.webp`
+      )
+    ).toBe(true);
+    expect(
       previewRenderProjection.isAssetSource('/api/storefront/auth/session')
     ).toBe(false);
     expect(
@@ -56,5 +61,46 @@ describe('preview render projection', () => {
         type: 'PreviewPlaceholder',
       },
     ]);
+  });
+
+  it('retains release asset logo URLs when projecting header components', () => {
+    const releaseLogoUrl = `/release-assets/${'a'.repeat(64)}.webp`;
+    const result = previewRenderProjection.projectCandidate({
+      content: [
+        {
+          props: {
+            id: 'header-release',
+            logoUrl: releaseLogoUrl,
+          },
+          type: 'Header',
+        },
+      ],
+      root: { props: { title: 'Home' } },
+    });
+
+    expect(result.content).toEqual([
+      {
+        props: { id: 'header-release', logoUrl: releaseLogoUrl },
+        type: 'Header',
+      },
+    ]);
+  });
+
+  it('rejects noncanonical release asset paths', () => {
+    expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'A'.repeat(64)}.WEBP`
+      )
+    ).toBe(false);
+    expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'a'.repeat(64)}.WEBP`
+      )
+    ).toBe(false);
+    expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'a'.repeat(63)}.webp`
+      )
+    ).toBe(false);
   });
 });

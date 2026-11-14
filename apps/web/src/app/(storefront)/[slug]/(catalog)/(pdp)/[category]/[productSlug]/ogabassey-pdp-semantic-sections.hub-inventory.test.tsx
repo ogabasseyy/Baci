@@ -6,6 +6,7 @@ import {
   mockBuildProductSemanticModel,
   mockGetCachedProductSeoLinkData,
   mockLoadPdpBrandHubEligibilityInventorySafely,
+  mockLoadPriceBandDestinationPoolSafely,
   mockProductSemanticSections,
   product,
 } from './ogabassey-pdp-semantic-sections.test-fixtures';
@@ -14,6 +15,7 @@ describe('OgabasseyPdpSemanticSections', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValue([]);
+    mockLoadPriceBandDestinationPoolSafely.mockResolvedValue([]);
     mockGetCachedProductSeoLinkData.mockResolvedValue({
       inventory: [
         {

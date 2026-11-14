@@ -107,6 +107,8 @@ describe('drainDeps', () => {
       rawBody: Buffer.from(body),
       signature: sign(key, inflow),
       recordedFamilies: ['legacy' as const],
+      keyVersion: 'k-0123456789abcdef',
+      captureId: 'capture-under-test',
     };
 
     expect(deps.verify(input)).toEqual({ status: 'unconfigured' });

@@ -301,6 +301,32 @@ describe('Order API Security', () => {
     user_id: '123e4567-e89b-12d3-a456-426614174001', // Valid UUID
   };
 
+  it('keeps Oxygen order creation and currency read-back on the customer RLS client', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: mockAuthUser(validOrderPayload.user_id),
+      error: null,
+      supabase: mockSupabase,
+    } as unknown as Awaited<ReturnType<typeof authenticateApiRequest>>);
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...validOrderPayload,
+          payment_method: 'oxygen',
+        }),
+      })
+    );
+    expect(response.status).toBe(201);
+    expect(mockCreateAdminClient).not.toHaveBeenCalled();
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_payment_method: 'oxygen',
+        p_user_id: validOrderPayload.user_id,
+      })
+    );
+  });
+
   it('should prevent unauthenticated users from setting user_id', async () => {
     // Mock unauthenticated request (guest checkout)
     vi.mocked(authenticateApiRequest).mockResolvedValue({

@@ -52,11 +52,10 @@ describe('POST /api/shipping/quotes merchant-configured rates', () => {
       })
     );
 
-    // Persistence: only the carrier quote row is upserted.
+    // Only server carrier output enters the attested persistence RPC.
     expect(supabase.shippingQuotesTable.upsert).toHaveBeenCalledTimes(1);
     expect(supabase.shippingQuotesTable.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: GIGL_QUOTE_ID, provider: 'GIGL' }),
-      { onConflict: 'id' }
+      expect.objectContaining({ id: GIGL_QUOTE_ID, provider: 'GIGL' })
     );
   });
 

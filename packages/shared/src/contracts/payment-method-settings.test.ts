@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PAYMENT_METHOD_SETTING_DEFINITIONS,
   getPaymentMethodSettingSelectColumns,
+  PAYMENT_METHOD_SETTING_DEFINITIONS,
 } from './payment-method-settings';
 
 describe('payment method setting definitions', () => {

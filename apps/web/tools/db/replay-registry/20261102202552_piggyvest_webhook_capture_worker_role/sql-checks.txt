@@ -1,0 +1,2 @@
+supabase/tests/piggyvest_webhook_capture_worker_role.sql
+supabase/tests/piggyvest_webhook_capture_drain_session_check.sql

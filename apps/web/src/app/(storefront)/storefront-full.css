@@ -45,4 +45,5 @@
 @source "../../components/repairs/repair-status-timeline.tsx";
 @source "../../hooks/use-loyalty.ts";
 @source "../../lib/repairs/repair-status.ts";
+@source "../../components/payments/oxygen";
 /* stylelint-enable scss/at-rule-no-unknown */

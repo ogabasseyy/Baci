@@ -6,6 +6,7 @@ import {
   Suspense,
 } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 
 // Track the optional/deferred data reads so we can prove the critical shell
 // never awaits them. Hoisted so the vi.mock factories (which are hoisted above
@@ -73,10 +74,20 @@ vi.mock(
   })
 );
 
+vi.mock(
+  '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely',
+  () => ({
+    loadPdpBrandHubEligibilityInventorySafely: vi.fn().mockResolvedValue([]),
+    PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS: 1_000,
+  })
+);
+
 // Pure orchestration helpers stubbed so the test asserts the streaming boundary,
 // not schema content (covered by their own suites).
 vi.mock('@/lib/seo-utils', () => ({
   buildStorefrontAcceptedPaymentMethods: () => [],
+  generateAggregateRating: () => null,
+  generateReviewListSchema: () => [],
   generateBreadcrumbSchema,
   generateFAQSchema: () => ({ '@type': 'FAQPage' }),
   generateProductSchema: () => ({
@@ -146,11 +157,13 @@ describe('ProductPageRuntime critical shell', () => {
   it('renders the core product and offers JSON-LD without awaiting reviews, inventory, guides or repairs', async () => {
     // The optional reads are stubbed to never resolve. If the critical shell
     // awaited any of them, this render would hang instead of resolving.
-    const tree = (await ProductPageRuntime({
+    const boundary = (await ProductPageRuntime({
       merchant,
       product,
       slug: 'ogabassey',
-    })) as ReactElement;
+    })) as ReactElement<{ fallback: ReactElement }>;
+    expect(boundary.type).toBe(ExperienceServerBoundary);
+    const tree = boundary.props.fallback;
 
     // Proof the critical path does not fetch the deferred data.
     expect(getCachedProductRatingStats).not.toHaveBeenCalled();
@@ -191,7 +204,7 @@ describe('ProductPageRuntime critical shell', () => {
   });
 
   it('uses a slug-only camera join before stale phone text for PDP and crawl context', async () => {
-    const tree = (await ProductPageRuntime({
+    const boundary = (await ProductPageRuntime({
       merchant,
       product: {
         // The shared fixture is deliberately cast for the runtime's full
@@ -202,7 +215,8 @@ describe('ProductPageRuntime critical shell', () => {
         categories: { slug: 'action-cameras' },
       },
       slug: 'ogabassey',
-    })) as ReactElement;
+    })) as ReactElement<{ fallback: ReactElement }>;
+    const tree = boundary.props.fallback;
 
     expect(generateBreadcrumbSchema).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -225,7 +239,7 @@ describe('ProductPageRuntime critical shell', () => {
   });
 
   it('ignores whitespace-only joined category slugs before falling back to canonical metadata', async () => {
-    const tree = (await ProductPageRuntime({
+    const boundary = (await ProductPageRuntime({
       merchant,
       product: {
         ...(product as ProductPageRuntimeProduct),
@@ -234,7 +248,8 @@ describe('ProductPageRuntime critical shell', () => {
         categories: { name: 'Action Cameras', slug: '   ' },
       },
       slug: 'ogabassey',
-    })) as ReactElement;
+    })) as ReactElement<{ fallback: ReactElement }>;
+    const tree = boundary.props.fallback;
 
     expect(generateBreadcrumbSchema).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -257,7 +272,7 @@ describe('ProductPageRuntime critical shell', () => {
   });
 
   it('uses /products for an uncategorized product instead of inventing /all-products', async () => {
-    const tree = (await ProductPageRuntime({
+    const boundary = (await ProductPageRuntime({
       merchant,
       product: {
         ...(product as ProductPageRuntimeProduct),
@@ -266,7 +281,8 @@ describe('ProductPageRuntime critical shell', () => {
         categories: null,
       },
       slug: 'ogabassey',
-    })) as ReactElement;
+    })) as ReactElement<{ fallback: ReactElement }>;
+    const tree = boundary.props.fallback;
 
     expect(generateBreadcrumbSchema).toHaveBeenCalledWith(
       expect.arrayContaining([

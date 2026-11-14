@@ -57,6 +57,7 @@ export interface CheckoutScreenModelInput {
     onReturnToCart: CheckoutScreenProps['page']['onReturnToCart'];
   };
   availability: {
+    oxygenAllowed?: boolean;
     redvaultAvailable: boolean;
   };
 }
@@ -160,6 +161,7 @@ export function deriveCheckoutScreenModel({
       merchant,
       user,
       currency: identity.currencyCode,
+      oxygenAllowed: availability.oxygenAllowed,
       redvaultAvailable: availability.redvaultAvailable,
       redvaultOrderReady: Boolean(paymentSession.redvault.orderReady),
     },

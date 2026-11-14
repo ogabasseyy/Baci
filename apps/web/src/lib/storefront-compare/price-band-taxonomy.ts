@@ -1,40 +1,23 @@
+import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
 import type { PriceBandDefinition } from './compare-types';
+import { getConfiguredPriceBands } from './get-configured-price-bands';
+import { isPriceBandCurrencySupported } from './is-price-band-currency-supported';
 
-export const CURATED_PRICE_BANDS = {
-  smartphones: [
-    {
-      slug: 'under-500k',
-      label: 'Best Smartphones Under ₦500,000',
-      ceiling: 500_000,
-    },
-    {
-      slug: 'under-1m',
-      label: 'Best Smartphones Under ₦1,000,000',
-      ceiling: 1_000_000,
-    },
-  ],
-  laptops: [
-    {
-      slug: 'under-1m',
-      label: 'Best Laptops Under ₦1,000,000',
-      ceiling: 1_000_000,
-    },
-  ],
-  'smart-tvs': [
-    {
-      slug: 'under-2m',
-      label: 'Best Smart TVs Under ₦2,000,000',
-      ceiling: 2_000_000,
-    },
-  ],
-} satisfies Record<string, PriceBandDefinition[]>;
-
-export type CuratedPriceBandCategorySlug = keyof typeof CURATED_PRICE_BANDS;
+/**
+ * Standard product pool limit when evaluating commercial support (price bands,
+ * brand comparison) for categories in both sitemap generation and page loaders.
+ */
+export const COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT = 150;
 
 export function getCuratedPriceBands(
-  categorySlug: string
+  categorySlug: string,
+  options?: { merchantCurrency?: string | null }
 ): PriceBandDefinition[] {
-  return (
-    CURATED_PRICE_BANDS[categorySlug as CuratedPriceBandCategorySlug] ?? []
-  );
+  if (
+    !Object.hasOwn(CATEGORY_HUB_DEFAULTS, categorySlug) ||
+    !isPriceBandCurrencySupported(categorySlug, options?.merchantCurrency)
+  ) {
+    return [];
+  }
+  return getConfiguredPriceBands(categorySlug);
 }

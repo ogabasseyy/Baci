@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { buildPrimaryGoalWalletName } from '@/lib/piggyvest/primary-goal-wallet-name';
 import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS as MAX } from '@/lib/piggyvest/provider-wallet-name.constants';
 
 /**
@@ -32,10 +33,18 @@ export function goalWalletName(base: string, suffix = ''): string {
   return name;
 }
 
-/** Proof 7's per-attempt goal variants: payout left unset, or explicit. */
-export function p7GoalSuffix(
-  variant: 'unset' | 'explicit',
+/**
+ * Proof 7's goal-routing variants are named exactly as primary goal wallets
+ * are since #3898 ('baci-save-' plus 32 hex characters, 42 in all), by the
+ * app's own builder over the QA key and a per-variant, per-attempt goal key,
+ * so the sandbox sees the production name shape and length.
+ */
+export function p7RoutingGoalName(
+  qaKey: string,
+  variant: string,
   attempt: number
 ): string {
-  return `-${variant === 'unset' ? 'u' : 'x'}${attempt}`;
+  return goalWalletName(
+    buildPrimaryGoalWalletName(qaKey, `p7-goal-${variant}-attempt-${attempt}`)
+  );
 }

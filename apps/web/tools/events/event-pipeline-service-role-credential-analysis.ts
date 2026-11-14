@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '9781da4be8bcd690fbb0d4feebf53e10c2f33aeaeb92c068f1f66b1ec446420c',
+      'b77e5a0d1024165b8015c3fa015278d8ed39d491bfbe6f74c05b5903cc3dbbb5',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational
@@ -65,9 +65,10 @@ const defaultLedgers: CredentialReaderLedgers = {
       'd86b574dac4cf45c72cc54eb7ad1178af4bbb6064a5a3e73e9309ea73d20a221',
     'apps/web/src/app/api/shipping/webhooks/[provider]/route.ts':
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
-    // Refreshed after adding server-only Places/Redis/KV config; credential readers are unchanged.
+    // Refreshed after adding server-only Places/Redis/KV config and the
+    // optional WALLET_PIN_PEPPER declaration; credential readers are unchanged.
     'apps/web/src/env.ts':
-      '6755cbbfbb4fd310512f5d377aade449d6f0c00c16755369a7d7403710c4b8f3',
+      '6f5c231c1281bfaa7408fec5d9b1e53ccfe4224bba932d6f26f2a697411158c1',
     // Reviewed private-draft input parsing only (8a1c4cd48a); credential reads
     // unchanged. This fingerprint is not a service-role authorization renewal.
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':

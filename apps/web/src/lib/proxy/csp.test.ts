@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
+import { installExperienceExecutionOrigin } from '@/lib/experience/execution-origin-runtime';
 import {
   buildStrictCspResponse,
   generateCSP,
@@ -55,6 +56,38 @@ function directive(policy: string, name: string): string[] {
       .slice(1) ?? []
   );
 }
+it.each([
+  true,
+  false,
+])('does not allow the retired CredPal service on storefronts (local=%s)', (isLocal) => {
+  const policy = generateCSP('storefront', isLocal);
+  for (const name of ['script-src', 'connect-src', 'frame-src']) {
+    expect(directive(policy, name)).not.toContain(
+      'https://checkout.credpal.com'
+    );
+    expect(directive(policy, name)).not.toContain('https://api.credpal.com');
+  }
+  expect(directive(policy, 'frame-src')).toContain(
+    'https://checkout.creditdirect.ng'
+  );
+});
+it.each([
+  false,
+  true,
+])('lets storefronts open the Supabase Realtime socket for shared-cart live updates (local=%s)', (isLocal) => {
+  // Browsers do not treat an https: source as covering wss:, so the cart's
+  // private Realtime channel needs its own source. Without it the browser
+  // blocks the connection and shoppers never receive cart-change notices.
+  const sources = directive(generateCSP('storefront', isLocal), 'connect-src');
+  expect(sources).toContain('wss://*.supabase.co');
+  expect(sources).toContain('https://*.supabase.co');
+  // No blanket WebSocket allowance: only the Supabase project hosts.
+  expect(sources).not.toContain('wss:');
+  expect(sources.filter((source) => source.startsWith('wss:'))).toEqual([
+    'wss://*.supabase.co',
+  ]);
+});
+
 it('permits consent-gated social SDKs and collectors only on storefronts', () => {
   const policy = generateCSP('storefront', false);
   expect(directive(policy, 'script-src')).toEqual(
@@ -99,4 +132,35 @@ it('allows the Snapchat SDK dynamic configuration script only on storefronts', (
     expect(
       directive(generateCSP(route, false, 'nonce'), 'script-src')
     ).not.toContain(configurationScript.origin);
+});
+
+it('limits execution framing to storefronts and the private builder subtree', () => {
+  const uninstall = installExperienceExecutionOrigin(
+    'https://execution.example.net'
+  );
+  try {
+    expect(generateCSP('storefront', false)).toContain(
+      'https://execution.example.net'
+    );
+    for (const type of ['admin', 'auth', 'api'] as const)
+      expect(generateCSP(type, false)).not.toContain(
+        'https://execution.example.net'
+      );
+    expect(
+      buildStrictCspResponse(
+        new NextRequest('https://usebaci.com/builder/experience/preview'),
+        'admin',
+        false
+      ).response.headers.get('x-middleware-request-content-security-policy')
+    ).toContain('https://execution.example.net');
+    expect(
+      buildStrictCspResponse(
+        new NextRequest('https://usebaci.com/dashboard'),
+        'admin',
+        false
+      ).response.headers.get('x-middleware-request-content-security-policy')
+    ).not.toContain('https://execution.example.net');
+  } finally {
+    uninstall();
+  }
 });

@@ -1,0 +1,26 @@
+{
+  "files": {
+    "supabase/migrations/20261024160001_attested_storefront_shipping_quotes.sql": "e75a496af90c009826ea6de507196c258c16c7da38f73bfa37610b5c454a5d63",
+    "apps/web/tools/experience-sql/storefront-quotes.node.test.ts": "cc28a4e9bd32c328fc048ee6fe1c22acd4b258b1dfcb30154d673a2d97522347",
+    "apps/web/tools/db/expected-builder-pending-sources.test-support.ts": "3a1e32c66893fb71a7c21e55435971e4282383e6ea5bef227374a22b8810c07b",
+    "apps/web/tools/db/supabase-history-replay-builder-pending-sources.ts": "5185f81a7599c3fe161f2d16da75680cde2147e38982418c35e3949e523b7d66",
+    "apps/web/tests/experience-commerce/quote-fixture.ts": "778ebb3bf5420987241993f2f4f395b9fd8ab6cee6e373a99135027fca9a532b"
+  },
+  "deletedUnpublishedPath": "supabase/migrations/20261024160000_attested_storefront_shipping_quotes.sql",
+  "sqlBytesUnchanged": true,
+  "review": {
+    "type": "complete",
+    "status": "review_completed",
+    "findings": 0,
+    "reviewedFiles": [
+      "apps/web/tests/experience-commerce/quote-fixture.ts",
+      "apps/web/tools/db/expected-builder-pending-sources.test-support.ts",
+      "apps/web/tools/db/supabase-history-replay-builder-pending-sources.ts",
+      "apps/web/tools/experience-sql/storefront-quotes.node.test.ts",
+      "supabase/migrations/20261024160001_attested_storefront_shipping_quotes.sql"
+    ],
+    "outcome": "completed",
+    "message": "Review completed"
+  },
+  "initialAttempt": "temporary provider identity verification unavailable, HTTP503; free retry succeeded"
+}

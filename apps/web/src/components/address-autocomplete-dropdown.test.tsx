@@ -43,6 +43,29 @@ it('shows provider predictions and forwards the selected address', () => {
   expect(onSelect).toHaveBeenCalledWith(prediction);
   expect(screen.getByRole('img', { name: 'Powered by Google' })).toBeVisible();
 });
+it('keeps input focus on pointer down while preserving suggestion activation', () => {
+  const onSelect = vi.fn();
+  render(
+    <>
+      <input aria-label="Address" />
+      <AddressAutocompleteDropdown
+        isOpen
+        predictions={[prediction]}
+        highlightedIndex={0}
+        dropdownRef={createRef()}
+        onSelect={onSelect}
+      />
+    </>
+  );
+  const input = screen.getByRole('textbox', { name: 'Address' });
+  const option = screen.getByRole('button', { name: /Allen Avenue Ikeja/ });
+  input.focus();
+  const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+  expect(option.dispatchEvent(down)).toBe(false);
+  expect(input).toHaveFocus();
+  fireEvent.click(option);
+  expect(onSelect).toHaveBeenCalledExactlyOnceWith(prediction);
+});
 it('shows Geoapify data source credit for a Geoapify batch', () => {
   render(
     <AddressAutocompleteDropdown
@@ -70,4 +93,21 @@ it.each([
     />
   );
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+
+it('uses the storefront accent for suggestion icons even before highlighting', () => {
+  render(
+    <AddressAutocompleteDropdown
+      isOpen
+      predictions={[prediction]}
+      highlightedIndex={-1}
+      dropdownRef={createRef()}
+      onSelect={vi.fn()}
+    />
+  );
+  const row = screen.getByRole('button', { name: /Allen Avenue Ikeja/ });
+  expect(row.querySelector('svg')?.parentElement).toHaveClass(
+    'text-store-primary',
+    'bg-store-primary/10'
+  );
 });

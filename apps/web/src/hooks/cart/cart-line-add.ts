@@ -21,6 +21,7 @@ export interface StorefrontCartLineAddInput {
   productForCart: Product;
   normalizedOptions?: AddToCartOptions;
   quantity: number;
+  lineInstanceId?: string;
   caps: SimpleLineAddCaps;
   assurance: StorefrontCartLineAddAssurance;
 }
@@ -39,6 +40,7 @@ export function applyStorefrontCartLineAdd({
   productForCart,
   normalizedOptions,
   quantity,
+  lineInstanceId,
   caps,
   assurance,
 }: StorefrontCartLineAddInput): CartItem[] {
@@ -102,6 +104,7 @@ export function applyStorefrontCartLineAdd({
     {
       ...productForCart,
       cartItemId,
+      ...(lineInstanceId ? { cartLineInstanceId: lineInstanceId } : {}),
       quantity: capped.quantity,
       variantId: normalizedOptions?.variantId,
       variantAttributes: normalizedOptions?.variantAttributes,

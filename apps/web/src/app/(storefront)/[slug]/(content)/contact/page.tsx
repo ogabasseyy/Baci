@@ -7,6 +7,8 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
+import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
+import { hasPublishableContactInfo } from '../../has-publishable-contact-info';
 import { ContactPageContent } from './contact-page-content';
 
 interface PageProps {
@@ -24,13 +26,15 @@ export async function generateMetadata({
   }
 
   const baseUrl = buildStoreUrl(merchant);
+  const trustProfile = buildMerchantTrustProfile(merchant, baseUrl);
+  const hasContactInfo = hasPublishableContactInfo(merchant, trustProfile);
   const canonicalUrl = `${baseUrl}/contact`;
   const description = generateMetaDescription(
     `Get in touch with ${merchant.business_name}. We're here to help.`
   );
 
   return {
-    title: `Contact Us | ${merchant.business_name}`,
+    title: 'Contact Us',
     description,
     openGraph: {
       title: `Contact ${merchant.business_name}`,
@@ -42,7 +46,9 @@ export async function generateMetadata({
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: hasContactInfo
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: false },
   };
 }
 

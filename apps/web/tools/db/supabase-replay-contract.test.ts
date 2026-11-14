@@ -14,8 +14,8 @@ import {
 const outputs = {
   node: '24.11.1',
   pnpm: '11.22.0\n',
-  psql: 'psql (PostgreSQL) 18.3\n',
-  supabase: '2.95.4\n',
+  psql: 'psql (PostgreSQL) 18.6\n',
+  supabase: '2.111.0\n',
   tsc: 'Version 7.0.2\n',
   tsx: 'tsx v4.22.4\nnode v24.11.1\n',
 };
@@ -73,23 +73,23 @@ describe('verifySupabaseReplayContract', () => {
   it('accepts only the frozen Task 3 toolchain', async () => {
     const contract = await verifySupabaseReplayContract({
       nodeVersion: outputs.node,
-      psqlBin: '/custom/PostgreSQL-18.3/bin/psql',
+      psqlBin: '/custom/PostgreSQL-18.6/bin/psql',
       runCommand: commandWith(),
     });
 
     expect(contract).toEqual({
       nodeMajor: 24,
-      psqlBin: '/custom/PostgreSQL-18.3/bin/psql',
+      psqlBin: '/custom/PostgreSQL-18.6/bin/psql',
       serverVersionNum: 170006,
     });
   });
 
-  it('accepts the Ubuntu PostgreSQL 18.3 client suffix', async () => {
+  it('accepts the Ubuntu PostgreSQL 18.6 client suffix', async () => {
     const contract = await verifySupabaseReplayContract({
       nodeVersion: outputs.node,
       psqlBin: '/usr/bin/psql',
       runCommand: commandWith({
-        psql: 'psql (PostgreSQL) 18.3 (Ubuntu 18.3-1.pgdg24.04+1)\n',
+        psql: 'psql (PostgreSQL) 18.6 (Ubuntu 18.6-1.pgdg24.04+2)\n',
       }),
     });
 
@@ -108,6 +108,9 @@ describe('verifySupabaseReplayContract', () => {
     ['tsx-node', { tsx: 'tsx v4.22.4\nnode v23.9.0\n' }],
     ['supabase', { supabase: '2.109.1\n' }],
     ['psql', { psql: 'psql (PostgreSQL) 17.6\n' }],
+    // Regression: CI moved to 18.6 while this contract still demanded 18.3, which would
+    // have failed every replay after the toolchain step passed.
+    ['psql', { psql: 'psql (PostgreSQL) 18.3 (Ubuntu 18.3-1.pgdg24.04+1)\n' }],
   ])('fails a %s mismatch without echoing observed output', async (tool, drift) => {
     const nodeVersion = 'node' in drift ? drift.node : outputs.node;
 

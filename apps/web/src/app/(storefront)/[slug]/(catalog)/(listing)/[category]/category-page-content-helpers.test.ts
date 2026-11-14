@@ -71,18 +71,10 @@ describe('buildCategoryPageHubModel', () => {
       data: categoryDataStub({
         isCollection: false,
         category: {
-          description: null,
           id: 'cat-1',
-          is_active: true,
           name: 'Smartphones',
           slug: 'smartphones',
-          seo_heading: null,
-          seo_description: null,
-          seo_features: [],
-          seo_faq: [],
-          image_url: null,
-          parent: null,
-        },
+        } as unknown as CategoryPageData['category'],
       }),
       categorySlug: 'smartphones',
       categoryName: 'Smartphones',
@@ -196,6 +188,38 @@ describe('buildCategoryPageHubModel', () => {
       (card) => card.title
     );
     expect(laptopBestForTitles).toContain('Best for Work and School');
+  });
+
+  it('threads merchantCurrency and preserves stock availability fields for expansion categories', () => {
+    const hub = buildCategoryPageHubModel({
+      data: categoryDataStub({ isCollection: false, category: null }),
+      categorySlug: 'gaming-laptops',
+      categoryName: 'Gaming Laptops',
+      merchantBusinessName: 'Ogabassey',
+      merchantCurrency: 'NGN',
+      storeUrl: 'https://ogabassey.com',
+      products: [
+        {
+          id: 'p1',
+          name: 'ROG RTX 4080',
+          slug: 'rog-rtx-4080',
+          description: 'High end',
+          price: '₦2,500,000',
+          rawPrice: 2_500_000,
+          category: 'Gaming Laptops',
+          category_slug: 'gaming-laptops',
+          brand: 'ASUS',
+          condition: 'New',
+          image: 'https://example.com/laptop.jpg',
+          stock: 5,
+          manage_stock: true,
+          product_key_specs: { ram_gb: 32 },
+        },
+      ],
+    });
+    expect(hub.bestForCards[0]?.href).toBe(
+      'https://ogabassey.com/gaming-laptops/rog-rtx-4080'
+    );
   });
 });
 

@@ -99,3 +99,18 @@ describe('cart scoped signing authority', () => {
     );
   });
 });
+
+it('allows continuity only through the same narrow cart signer; direct service factories remain forbidden', () => {
+  const continuity = 'apps/web/src/app/api/storefront/cart/continuity/route.ts';
+  const graph = sources();
+  graph.set(continuity, "import '@/lib/cart/scoped-client';");
+  expect(serviceAuthorityGraphFindings(graph, [continuity])).toEqual([]);
+  graph.set(continuity, "import '@/lib/supabase/service';");
+  graph.set(
+    'apps/web/src/lib/supabase/service.ts',
+    'export const createServiceClient=()=>null;'
+  );
+  expect(
+    serviceAuthorityGraphFindings(graph, [continuity]).join('\n')
+  ).toContain('unauthorized service factory importer');
+});

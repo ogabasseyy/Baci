@@ -32,6 +32,7 @@ const envelopeObject = z
 const loginData = z
   .object({
     'access-token': z.string().min(1),
+    Id: optionalStringSchema,
     UserChannelCode: z.string().min(1),
     UserChannelType: optionalNumberSchema,
     CustomerType: optionalNumberSchema,
@@ -129,6 +130,36 @@ const internationalBookingData = z
     { message: 'Booking response is missing a waybill or request number' }
   );
 
+const optionalBooleanSchema = z
+  .boolean()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? undefined);
+
+const preShipment = z
+  .object({
+    Waybill: z.string().trim().min(1),
+    UserId: optionalStringSchema,
+    CustomerCode: optionalStringSchema,
+    SenderName: optionalStringSchema,
+    SenderPhoneNumber: optionalStringSchema,
+    SenderAddress: optionalStringSchema,
+    ReceiverName: optionalStringSchema,
+    ReceiverPhoneNumber: optionalStringSchema,
+    ReceiverAddress: optionalStringSchema,
+    ReceiverState: optionalStringSchema,
+    ReceiverCountry: optionalStringSchema,
+    ReceiverStationId: optionalNumberSchema,
+    DestinationServiceCenterId: optionalNumberSchema,
+    IsHomeDelivery: optionalBooleanSchema,
+    IsCancelled: optionalBooleanSchema,
+    IsDeleted: optionalBooleanSchema,
+    IsInternationalShipment: optionalBooleanSchema,
+    GrandTotal: optionalNumberSchema,
+    DateCreated: optionalStringSchema,
+  })
+  .loose();
+
 const invoiceData = z
   .object({
     WaybillLabel: z.string().min(1),
@@ -210,11 +241,13 @@ export const giglSchemas = {
   bookingData,
   internationalBookingData,
   invoiceData,
+  preShipmentData: z.array(preShipment),
   trackingEvent,
   trackingShipment,
   trackingData: z.array(trackingShipment),
 };
 
+export type GiglPreShipment = z.infer<typeof preShipment>;
 export type GiglStation = z.infer<typeof station>;
 export type GiglServiceCentre = z.infer<typeof serviceCentre>;
 export type GiglEnvelopeObject = z.infer<typeof envelopeObject>;

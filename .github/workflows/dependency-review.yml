@@ -18,7 +18,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && toJSON(github.event.repository.private) == 'false'
     permissions:
       contents: read
       # Read-only: the action posts no PR comments
@@ -78,3 +78,14 @@ jobs:
             pkg:npm/@sentry/cli-win32-arm64,
             pkg:npm/@sentry/cli-win32-i686,
             pkg:npm/@sentry/cli-win32-x64
+
+  private-dependency-review-unavailable:
+    name: Dependency review unavailable for private repository
+    if: github.event_name == 'pull_request' && toJSON(github.event.repository.private) == 'true'
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Explain coverage gap
+        run: |
+          echo '## Dependency review unavailable' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GitHub dependency review did not run for this private repository. Dependabot alerts are separate and do not replace pull-request dependency or license review.' >> "$GITHUB_STEP_SUMMARY"

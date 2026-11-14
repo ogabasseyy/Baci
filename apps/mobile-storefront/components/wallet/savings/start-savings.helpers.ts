@@ -162,25 +162,22 @@ export function calculateMaturityDate({
 }
 
 export function getEffectiveInitialContribution({
-  contributionAmount,
-  fundingOption,
   initialContributionAmount,
   initialContributionEnabled,
 }: {
-  contributionAmount: number;
-  fundingOption: SavingsFundingOption;
+  /** Kept for callers; no longer decides the up-front amount. */
+  contributionAmount?: number;
+  /** Kept for callers; a hidden funding choice never adds a payment. */
+  fundingOption?: SavingsFundingOption;
   initialContributionAmount: number;
   initialContributionEnabled: boolean;
 }) {
-  if (initialContributionEnabled && initialContributionAmount > 0) {
-    return initialContributionAmount;
-  }
-
-  if (fundingOption === 'bank_transfer') {
-    return contributionAmount;
-  }
-
-  return 0;
+  // The funding choice only exists for a head start the customer turned on:
+  // with the head start off, nothing moves up front, whatever a stale
+  // (hidden) funding choice says.
+  return initialContributionEnabled && initialContributionAmount > 0
+    ? initialContributionAmount
+    : 0;
 }
 
 export function getRequiredTopUp({

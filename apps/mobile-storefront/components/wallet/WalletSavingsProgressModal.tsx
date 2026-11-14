@@ -1,42 +1,35 @@
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Image } from 'expo-image';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
-import type Colors from '@/constants/Colors';
-import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { BRAND } from '@/constants/Colors';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
-import { formatProductConditionDisplay } from '@/types/product';
-import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
-import { getSavingsProgress } from './get-savings-progress';
+import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
+import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
+import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
+import { SavingsBottomSheet } from './SavingsBottomSheet';
+import { SavingsGoalSummary } from './SavingsGoalSummary';
+import { GoalCancelStep } from './savings/GoalCancelStep';
+import { GoalCompleteStep } from './savings/GoalCompleteStep';
+import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
+import { isFundedUnsettledGoal } from './savings/goal-settlement';
+import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
+import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
+import { usePlanStillSettingUp } from './savings/use-plan-still-setting-up';
+import { WalletPinSheet } from './savings/WalletPinSheet';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
-import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
-import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
+import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
+import type { WalletSavingsProgressModalProps } from './wallet-savings-progress-modal.types';
 
-type WalletColors = (typeof Colors)['light'];
-
-type WalletSavingsProgressModalProps = {
-  addAmount: string;
-  colors: WalletColors;
-  goal: WalletActiveSavingsGoal | null;
-  isAdding: boolean;
-  hasPendingContribution?: boolean;
-  isFundPending?: boolean;
-  onAddAmountChange: (value: string) => void;
-  onAddSavings: () => void;
-  onChangeDevice: () => void;
-  onClose: () => void;
-  onFundWallet: () => void;
-  onRefreshWallet?: () => Promise<unknown>;
-  onResolveVariant?: () => void;
-  visible: boolean;
-  walletBalance: number;
-};
+const COMPACT_SNAP_POINTS = ['64%', '92%'];
+/** The header's bottom margin (SPACING.md), outside its measured height. */
+const HEADER_GAP = 16;
 
 export function WalletSavingsProgressModal({
   addAmount,
-  colors,
+  colors: themeColors,
   goal,
   isAdding,
   hasPendingContribution = false,
@@ -48,248 +41,255 @@ export function WalletSavingsProgressModal({
   onFundWallet,
   onRefreshWallet,
   onResolveVariant,
+  overlay,
+  phoneSwapStep,
   visible,
   walletBalance,
+  walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
-  if (!goal) {
+  const colors = {
+    ...themeColors,
+    primary: BRAND.primary,
+    primaryForeground: BRAND.onPrimary,
+    primaryLowOpacity: BRAND.primaryAlpha12,
+  };
+  // Matches the wallet card: "View plan" there means not "Add to savings" here.
+  const settingUp = usePlanStillSettingUp(goal);
+  const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
+  // Every close, by the customer or by leaving the wallet, drops an unsent
+  // cancel/complete review, declines a funding question still waiting in this
+  // sheet (otherwise its funding never settles) and lets the parent reset.
+  const closeSheet = () => {
+    cancel.closed();
+    answerWalletFundPrompt(false);
+    onClose();
+  };
+  // The sheet is sized to what it shows, so it never ends in empty space.
+  const [cancelHeight, setCancelHeight] = useState(0);
+  const [swapHeight, setSwapHeight] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [bodyHeight, setBodyHeight] = useState(0);
+  if (!goal && !cancel.goal) {
     return null;
   }
+  if (cancel.goal) {
+    const cancelGoal = cancel.goal;
+    // Sign in, then come back to this goal's savings sheet.
+    const signIn = (dismiss: () => void) => {
+      dismiss();
+      // Back through the goal link route: it re-checks the goal is still
+      // this (possibly different) account's before opening its sheet.
+      const back = `/wallet/savings/goal-actions?goalId=${encodeURIComponent(cancelGoal.id)}`;
+      router.push(`/auth/login?returnTo=${encodeURIComponent(back)}`);
+    };
+    return (
+      <SavingsBottomSheet
+        visible={visible}
+        colors={colors}
+        snapPoints={COMPACT_SNAP_POINTS}
+        contentHeight={cancelHeight}
+        onClose={closeSheet}
+        overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
+      >
+        {(dismiss) => (
+          // Scrolls if large text or a small screen makes it taller than the
+          // sheet can grow, so the buttons always stay reachable.
+          <BottomSheetScrollView
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={(_width, height) =>
+              setCancelHeight(Math.ceil(height))
+            }
+          >
+            {cancel.kind === 'complete' ? (
+              <GoalCompleteStep
+                colors={colors}
+                flow={cancel.flow}
+                goal={cancelGoal}
+                onDone={dismiss}
+                onNotNow={cancel.keep}
+                onSignIn={() => signIn(dismiss)}
+              />
+            ) : (
+              <GoalCancelStep
+                colors={colors}
+                flow={cancel.flow}
+                goal={cancelGoal}
+                onDone={dismiss}
+                onKeep={cancel.keep}
+                onSignIn={() => signIn(dismiss)}
+              />
+            )}
+          </BottomSheetScrollView>
+        )}
+      </SavingsBottomSheet>
+    );
+  }
+  if (!goal) return null;
+  if (phoneSwapStep) {
+    return (
+      <SavingsBottomSheet
+        visible={visible}
+        colors={colors}
+        snapPoints={COMPACT_SNAP_POINTS}
+        contentHeight={swapHeight}
+        onClose={closeSheet}
+      >
+        <BottomSheetScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={(_width, height) =>
+            setSwapHeight(Math.ceil(height))
+          }
+        >
+          <SavingsNoticeCard colors={colors} goalId={goal?.id} inSheet />
+          {phoneSwapStep}
+        </BottomSheetScrollView>
+      </SavingsBottomSheet>
+    );
+  }
 
-  const { milestone, percent } = getSavingsProgress(goal);
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
-  const conditionLabel = formatProductConditionDisplay(goal.product_condition);
-  const productImageSource = getSavingsGoalImageSource(goal, 170);
   const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
   const canAddToSavings =
     (goal.source_mode === 'manual' || usesPlanFunding) &&
     goal.status !== 'completed';
+  const addTitle = canAddToSavings && !settingUp;
+  const canChangeDevice =
+    canAddToSavings ||
+    (goal.selection_unresolved &&
+      (goal.status !== 'completed' ||
+        !goal.variant_resolution_options?.length));
   const unavailableContributionMessage =
     goal.status === 'completed'
-      ? 'This savings goal is complete.'
+      ? isFundedUnsettledGoal(goal)
+        ? 'This savings goal is complete.'
+        : 'Purchase requested. Your savings have moved to your order.'
       : 'This goal is funded by scheduled auto-debit.';
 
   return (
-    <ModalSheet
+    <SavingsBottomSheet
       visible={visible}
-      animationType="slide"
-      backdropStyle={styles.backdrop}
-      cardStyle={[styles.card, { backgroundColor: colors.background }]}
-      keyboardAutomaticOffset
-      keyboardSurfaceColor={colors.background}
-      onBackdropPress={onClose}
-      onRequestClose={onClose}
+      colors={colors}
+      // Nothing saved yet means no progress card: open shorter so the sheet
+      // does not end in empty space. It still expands on drag.
+      snapPoints={goal.current_amount > 0 ? undefined : COMPACT_SNAP_POINTS}
+      contentHeight={
+        headerHeight > 0 && bodyHeight > 0
+          ? headerHeight + HEADER_GAP + bodyHeight
+          : undefined
+      }
+      onClose={closeSheet}
+      overlay={overlay}
     >
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close savings progress"
-          onPress={onClose}
-          style={styles.iconButton}
-        >
-          <Ionicons name="close" size={18} color={colors.textSecondary} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.contentRow}>
-          <View style={[styles.devicePane, { backgroundColor: colors.card }]}>
-            {productImageSource ? (
-              <Image
-                accessibilityLabel={goal.title}
-                source={productImageSource}
-                style={styles.deviceImage}
-                contentFit="contain"
-                autoplay={false}
-              />
-            ) : (
-              <View style={styles.devicePlaceholder}>
+      {(dismiss) => (
+        <>
+          <View
+            style={styles.header}
+            onLayout={(event) =>
+              setHeaderHeight(Math.ceil(event.nativeEvent.layout.height))
+            }
+          >
+            <View style={styles.titleRow}>
+              <View
+                style={[
+                  styles.titleIcon,
+                  { backgroundColor: colors.primaryLowOpacity },
+                ]}
+              >
                 <Ionicons
-                  name="phone-portrait-outline"
-                  size={42}
-                  color={colors.textSecondary}
+                  name={addTitle ? 'wallet-outline' : 'flag-outline'}
+                  size={16}
+                  color={colors.primary}
                 />
               </View>
-            )}
+              <Text
+                accessibilityRole="header"
+                style={[styles.title, { color: colors.primary }]}
+              >
+                {addTitle ? 'Add to savings' : 'Your savings plan'}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close savings progress"
+              onPress={dismiss}
+              style={styles.iconButton}
+            >
+              <Ionicons name="close" size={18} color={colors.textSecondary} />
+            </Pressable>
           </View>
 
-          <View style={styles.progressPane}>
-            <View style={styles.milestoneRow}>
-              <Text style={[styles.goalTitle, { color: colors.text }]}>
-                {goal.title}
-              </Text>
-              <Text
-                style={[styles.milestoneText, { color: colors.textSecondary }]}
-              >
-                {milestone}
-              </Text>
-            </View>
-
-            <View style={styles.metaRow}>
-              {conditionLabel ? (
-                <Text
-                  style={[
-                    styles.metaPill,
-                    { backgroundColor: colors.muted, color: colors.text },
-                  ]}
-                >
-                  Condition: {conditionLabel}
-                </Text>
-              ) : null}
-              {goal.product_variant_label ? (
-                <Text
-                  style={[
-                    styles.metaPill,
-                    { backgroundColor: colors.muted, color: colors.text },
-                  ]}
-                >
-                  {goal.product_variant_label}
-                </Text>
-              ) : null}
-            </View>
-            {goal.selection_unresolved ? (
+          <BottomSheetScrollView
+            style={styles.scrollView}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            onContentSizeChange={(_width, height) =>
+              setBodyHeight(Math.ceil(height))
+            }
+          >
+            <PiggyvestSlowdownNotice />
+            <SavingsNoticeCard colors={colors} goalId={goal?.id} inSheet />
+            {/* A top-up started here asks its funding question here. */}
+            <WalletFundPromptCard colors={colors} />
+            <SavingsGoalSummary
+              colors={colors}
+              goal={goal}
+              // Not while an add is in flight: the Change phone step would
+              // replace the sheet and drop the add's PIN prompt.
+              onChangeDevice={
+                canChangeDevice && !isAdding ? onChangeDevice : undefined
+              }
+              onResolveVariant={onResolveVariant}
+            />
+            {hasPendingContribution ? (
+              <WalletPendingSavingsContribution
+                colors={colors}
+                isChecking={isAdding}
+                onCheck={onAddSavings}
+              />
+            ) : canAddToSavings ? (
+              <WalletSavingsFundingSection
+                addAmount={addAmount}
+                colors={colors}
+                goal={goal}
+                isAdding={isAdding}
+                isFundPending={isFundPending}
+                onAddAmountChange={onAddAmountChange}
+                onAddSavings={onAddSavings}
+                onFundWallet={onFundWallet}
+                onRefreshWallet={onRefreshWallet}
+                remainingAmount={amountLeft}
+                usesPlanFunding={usesPlanFunding}
+                visible={visible}
+                walletBalance={walletBalance}
+                walletUpdatedAt={walletUpdatedAt}
+              />
+            ) : (
               <Text
                 style={[styles.autoDebitHint, { color: colors.textSecondary }]}
               >
-                Choose the exact device variant before buying. This plan does
-                not guess a model, storage or colour.
+                {unavailableContributionMessage}
               </Text>
-            ) : null}
-            {goal.status === 'completed' &&
-            goal.selection_unresolved &&
-            goal.variant_resolution_options?.length ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Resolve savings device variant"
-                onPress={onResolveVariant}
-                style={[
-                  styles.changeDeviceButton,
-                  { borderColor: colors.border },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.changeDeviceButtonText,
-                    { color: colors.text },
-                  ]}
-                >
-                  Choose exact variant
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-        <View
-          style={[
-            styles.progressCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.amountRow}>
-            <Text style={[styles.amountLeft, { color: colors.text }]}>
-              {formatNgnCurrency(goal.current_amount)} saved
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(goal.target_amount)} target
-            </Text>
-          </View>
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings plan progress details"
-            accessibilityValue={{ max: 100, min: 0, now: percent }}
-            style={[
-              styles.progressTrack,
-              { backgroundColor: colors.primaryLowOpacity },
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${percent}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
-          <View style={styles.amountRow}>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(amountLeft)} left
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              <Text style={{ color: colors.primary }}>{percent}%</Text> complete
-            </Text>
-          </View>
-        </View>
-        {hasPendingContribution ? (
-          <WalletPendingSavingsContribution
-            colors={colors}
-            isChecking={isAdding}
-            onCheck={onAddSavings}
-          />
-        ) : canAddToSavings && usesPlanFunding ? (
-          visible ? (
-            <WalletSavingsPlanFunding
-              key={goal.id}
-              addAmount={addAmount}
-              colors={colors}
-              goal={goal}
-              onAddAmountChange={onAddAmountChange}
-              onRefreshWallet={onRefreshWallet}
-            />
-          ) : null
-        ) : canAddToSavings ? (
-          <WalletSavingsContributionFlow
-            addAmount={addAmount}
-            colors={colors}
-            isAdding={isAdding}
-            isFundPending={isFundPending}
-            onAddAmountChange={onAddAmountChange}
-            onAddSavings={onAddSavings}
-            onFundWallet={onFundWallet}
-            remainingAmount={amountLeft}
-            walletBalance={walletBalance}
-          />
-        ) : (
-          <Text style={[styles.autoDebitHint, { color: colors.textSecondary }]}>
-            {unavailableContributionMessage}
-          </Text>
-        )}
-        {canAddToSavings ||
-        (goal.selection_unresolved &&
-          (goal.status !== 'completed' ||
-            !goal.variant_resolution_options?.length)) ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Change savings device"
-            onPress={onChangeDevice}
-            style={[styles.changeDeviceButton, { borderColor: colors.border }]}
-          >
-            <Ionicons
-              name="swap-horizontal-outline"
-              size={16}
-              color={colors.text}
-            />
-            <Text
-              style={[styles.changeDeviceButtonText, { color: colors.text }]}
-            >
-              Change device
-            </Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
-    </ModalSheet>
+            )}
+            {/* Cancelling stays available but quiet, under the main button. */}
+            <View style={styles.footerLinks}>
+              <GoalLifecycleEntry
+                colors={colors}
+                goal={goal}
+                // An add in flight also hides Cancel/Complete: Cancel would
+                // take over the sheet and drop the add's PIN prompt.
+                hasPendingContribution={hasPendingContribution || isAdding}
+                onCancel={() => cancel.start('cancel')}
+                onComplete={() => cancel.start('complete')}
+                walletUpdatedAt={walletUpdatedAt}
+              />
+            </View>
+          </BottomSheetScrollView>
+        </>
+      )}
+    </SavingsBottomSheet>
   );
 }

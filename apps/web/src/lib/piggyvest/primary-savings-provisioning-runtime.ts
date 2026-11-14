@@ -1,5 +1,7 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
+import { setupPrimarySavingsGoal } from './primary-savings-goal-setup';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
 import { createPrimarySavingsProvisioningExecutor } from './primary-savings-provisioning-executor';
 import { listPrimarySavingsProvisioningWallets } from './primary-savings-provisioning-pagination';
@@ -14,17 +16,14 @@ import { createPiggyvestWallet, retrievePiggyvestWallet } from './wallets';
 
 export function readPrimarySavingsProvisioningRuntime(
   env: NodeJS.ProcessEnv = process.env,
-  mode: 'provision' | 'recover' = 'provision'
+  mode: 'provision' | 'recover' | 'setup' = 'provision'
 ) {
   // Recover mode ignores only the rollout flag: an interrupted
   // provisioning already holds a verified wallet plus adopted pending
   // intents, and the same preconditions, bindings, and credentials
   // still apply. Rolling back the flag must drain those orphans, not
   // strand them behind a 503 that no flag state can clear.
-  if (
-    mode === 'provision' &&
-    env.PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED !== 'true'
-  )
+  if (mode !== 'recover' && !isPiggyvestFeatureOn('goal_provisioning', env))
     return null;
   const primary =
     mode === 'recover'
@@ -46,7 +45,7 @@ export async function runPrimarySavingsProvisioning(input: {
   configuration: unknown;
   scope: unknown;
   goalId: string;
-  mode: 'provision' | 'recover';
+  mode: 'provision' | 'recover' | 'setup';
   interestAccepted?: boolean;
 }) {
   const configuration = schemas.runtime.parse(input.configuration);
@@ -65,11 +64,12 @@ export async function runPrimarySavingsProvisioning(input: {
       configuration.onboarding.environment
     ),
   };
-  return await provisionPrimarySavingsWallet({
+  const common: Omit<
+    Parameters<typeof provisionPrimarySavingsWallet>[0],
+    'mode' | 'interestAccepted'
+  > = {
     scope,
     goalId,
-    mode: input.mode,
-    interestAccepted: input.interestAccepted,
     store: createPrimarySavingsProvisioningStore({
       scope,
       execute: createPrimarySavingsProvisioningExecutor(configuration),
@@ -86,5 +86,15 @@ export async function runPrimarySavingsProvisioning(input: {
     retrieveWallet: (walletId) => retrievePiggyvestWallet(provider, walletId),
     retrieveAccounts: (walletId) =>
       retrievePiggyvestFundingAccounts(provider, walletId),
-  });
+  };
+  return input.mode === 'setup'
+    ? await setupPrimarySavingsGoal({
+        ...common,
+        requestedInterest: input.interestAccepted,
+      })
+    : await provisionPrimarySavingsWallet({
+        ...common,
+        mode: input.mode,
+        interestAccepted: input.interestAccepted,
+      });
 }

@@ -224,7 +224,9 @@ export function createCheckoutShippingHandlers({
     handleSelectState: (state: string) => {
       setDeliveryCoordinates(null);
       setValue('state', state, { shouldValidate: true });
-      setValue('city', '', { shouldValidate: true });
+      // Reset the city for the new state without validating it: the shopper
+      // has not touched the City picker yet, so an error here is premature.
+      setValue('city', '', { shouldValidate: false });
       setShowStatePicker(false);
     },
   };

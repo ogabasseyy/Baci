@@ -1,4 +1,5 @@
 import type { BookingRequest, QuoteRequest } from '@/lib/shipping/types';
+import { type GiglPreShipment, giglSchemas } from './gigl.schemas';
 
 export const baseUrl = 'https://dev-thirdpartynode.theagilitysystems.com';
 
@@ -282,4 +283,13 @@ export function abortingFetchResponse(_url: unknown, init?: RequestInit) {
 
     signal?.addEventListener('abort', abort, { once: true });
   });
+}
+
+/** Builds a pre-shipment the way GIG's `/get/preshipment` response parses. */
+export function giglPreShipment(
+  fields: Record<string, unknown> & { Waybill: string }
+): GiglPreShipment {
+  const [preShipment] = giglSchemas.preShipmentData.parse([fields]);
+  if (!preShipment) throw new Error('Pre-shipment fixture did not parse');
+  return preShipment;
 }

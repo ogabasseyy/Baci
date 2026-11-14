@@ -6,8 +6,6 @@ import {
   createFileJournal,
   createMemoryJournal,
   type JournalEntry,
-  newReference,
-  referenceInUse,
   slotState,
 } from './mutation-journal';
 import { HarnessRefusal } from './safety-guards';
@@ -95,39 +93,6 @@ describe('slotState', () => {
     expect(slotState(journal, 'p2/w2w', 1, 'qa-customer-1').kind).toBe(
       'executed'
     );
-  });
-});
-
-describe('references', () => {
-  it('generates unique references and never reuses a journaled one', () => {
-    const journal = createMemoryJournal([base]);
-    const fixed = () => 'aaaa1111';
-    const seq = ['aaaa1111', 'bbbb2222'];
-    const reference = newReference(journal, 'wallet_transfer', 'run1', () => {
-      return seq.shift() ?? fixed();
-    });
-    expect(reference).toBe('pvbproof-run1-wallet_transfer-bbbb2222');
-    expect(referenceInUse(journal, base.reference)).toBe(true);
-    expect(referenceInUse(journal, reference)).toBe(false);
-  });
-
-  it('refuses to mint when randomness keeps colliding', () => {
-    const journal = createMemoryJournal([base]);
-    expect(
-      code(() =>
-        newReference(journal, 'wallet_transfer', 'run1', () => 'aaaa1111')
-      )
-    ).toBe('REFERENCE_REUSE');
-  });
-
-  it('keeps references provider-safe (short, no spaces)', () => {
-    const reference = newReference(
-      createMemoryJournal(),
-      'bank_transfer',
-      'r',
-      () => 'cafef00d'
-    );
-    expect(reference).toMatch(/^[A-Za-z0-9_-]{8,100}$/);
   });
 });
 

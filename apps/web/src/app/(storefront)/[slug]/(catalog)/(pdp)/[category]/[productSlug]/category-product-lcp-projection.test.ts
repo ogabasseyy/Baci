@@ -72,6 +72,20 @@ describe('cached category PDP projection', () => {
     );
   });
 
+  it('gives primary canonical category precedence over legacy flat category string', () => {
+    const product = mapCachedProductLcpHintToRouteProduct(
+      cachedHint({
+        category: 'Old Legacy Category',
+        categories: {
+          id: 'cat-canonical',
+          name: 'Canonical Smartphones',
+          slug: 'smartphones',
+        },
+      })
+    );
+    expect(product.category).toBe('Canonical Smartphones');
+  });
+
   it('keeps denormalized price ranges only for unmanaged stock and defaults nullable tracking to managed', () => {
     const unmanaged = mapCachedProductLcpHintToRouteProduct(
       cachedHint({
@@ -152,5 +166,45 @@ describe('cached category PDP projection', () => {
       min_variant_price: undefined,
       price: 0,
     });
+  });
+
+  it('selects cellular variant image by default for phones and respects explicit variant searchParams', () => {
+    const mixedPhoneHint = cachedHint({
+      name: 'iPhone 15',
+      category: 'Phones',
+      categories: { id: 'cat-phones', name: 'Phones', slug: 'phones' },
+      product_variants: [
+        {
+          id: 'variant-wifi',
+          product_id: 'product-1',
+          price_override: 900_000,
+          stock_quantity: 5,
+          primary_image: 'https://cdn.example/wifi.avif',
+          attributes: { connectivity: 'Wi-Fi only', storage: '128GB' },
+        },
+        {
+          id: 'variant-cellular',
+          product_id: 'product-1',
+          price_override: 1_100_000,
+          stock_quantity: 5,
+          primary_image: 'https://cdn.example/cellular.avif',
+          attributes: { connectivity: 'Cellular', storage: '128GB' },
+        },
+      ],
+    });
+
+    expect(getCachedProductRoutePrimaryImage(mixedPhoneHint)).toBe(
+      'https://cdn.example/cellular.avif'
+    );
+
+    expect(
+      getCachedProductRoutePrimaryImage(mixedPhoneHint, undefined, {
+        variantId: 'variant-wifi',
+      })
+    ).toBe('https://cdn.example/wifi.avif');
+
+    const product = mapCachedProductLcpHintToRouteProduct(mixedPhoneHint);
+    expect(product.category).toBe('Phones');
+    expect(product.image).toBe('https://cdn.example/cellular.avif');
   });
 });

@@ -4,11 +4,13 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { CustomerOrderActions } from '@/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-actions';
 import { CustomerOrderPaymentHistory } from '@/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-payment-history';
+import { OxygenOrderPlan } from '@/components/payments/oxygen/OxygenOrderPlan';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { asRoute } from '@/lib/routes';
 import type { StorefrontOrder } from '@/types/storefront-order';
+import { formatOrderStatus as formatStatusLabel } from './format-order-status';
 
 interface CustomerOrderDetailsContentProps {
   order: StorefrontOrder;
@@ -24,18 +26,6 @@ interface CustomerOrderDetailsContentProps {
 
 function formatAccountDate(value: string) {
   return new Date(value).toLocaleDateString('en-US');
-}
-
-function formatStatusLabel(status: string | null | undefined) {
-  if (!status) {
-    return 'Unavailable';
-  }
-
-  return status
-    .split('_')
-    .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(' ');
 }
 
 export function CustomerOrderDetailsContent({
@@ -208,7 +198,10 @@ export function CustomerOrderDetailsContent({
                   <CreditCard className="mt-0.5 size-5 text-muted-foreground" />
                   <div>
                     <p className="font-medium">
-                      {formatStatusLabel(order.payment_status)}
+                      {formatStatusLabel(
+                        order.payment_status,
+                        order.payment_method
+                      )}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {order.payment_method || 'Payment method unavailable'}
@@ -269,6 +262,8 @@ export function CustomerOrderDetailsContent({
               buyAgainHref={buyAgainHref}
               onOrderChanged={onOrderChanged}
             />
+
+            <OxygenOrderPlan orderId={order.id} currency={currency} />
 
             <CustomerOrderPaymentHistory
               transactions={order.transactions}

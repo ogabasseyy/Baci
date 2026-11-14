@@ -11,10 +11,17 @@ describe('sitemap-data', () => {
   registerSitemapDataTests();
 
   it('lists only inventory-qualified curated brand authority hubs', async () => {
-    mockGetBrandAuthorityCategory.mockResolvedValue({
-      id: 'category-1',
-      name: 'Smartphones',
-    });
+    mockGetBrandAuthorityCategory.mockImplementation(
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'smartphones') {
+          return { id: 'category-1', name: 'Smartphones' };
+        }
+        if (categorySlug === 'laptops') {
+          return { id: 'category-2', name: 'Laptops' };
+        }
+        return null;
+      }
+    );
     mockGetCachedBrandAuthorityInventory.mockImplementation(
       async (
         _merchantId: string,
@@ -51,15 +58,27 @@ describe('sitemap-data', () => {
     expect(entries[0]?.lastModified).toEqual(new Date('2026-07-14T00:00:00Z'));
     expect(entries[1]?.lastModified).toBeUndefined();
     // Pin the curated authority set explicitly (9 smartphone brands +
-    // laptops Apple) so taxonomy edits cannot silently expand sitemap fan-out.
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(10);
+    // 4 laptop brands including Apple) so taxonomy edits cannot silently expand sitemap fan-out.
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(13);
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledWith(
+      'merchant-1',
+      'laptops',
+      expect.objectContaining({ brandKey: 'apple' })
+    );
   });
 
   it('keeps successful authority hubs when a single brand query fails', async () => {
-    mockGetBrandAuthorityCategory.mockResolvedValue({
-      id: 'category-1',
-      name: 'Smartphones',
-    });
+    mockGetBrandAuthorityCategory.mockImplementation(
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'smartphones') {
+          return { id: 'category-1', name: 'Smartphones' };
+        }
+        if (categorySlug === 'laptops') {
+          return { id: 'category-2', name: 'Laptops' };
+        }
+        return null;
+      }
+    );
     mockGetCachedBrandAuthorityInventory.mockImplementation(
       async (
         _merchantId: string,

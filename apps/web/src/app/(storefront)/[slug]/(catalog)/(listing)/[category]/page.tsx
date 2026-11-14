@@ -7,6 +7,7 @@ import {
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
   getCanonicalStorefrontFilterSearchParams,
@@ -54,18 +55,10 @@ function buildCategoryNotFoundMetadata(
   return {
     title,
     description,
-    // Replace root metadata alternates so soft-404 pages do not inherit a canonical.
     alternates: null,
     robots: { index: false, follow: true },
-    openGraph: {
-      title,
-      description,
-    },
-    twitter: {
-      card: 'summary',
-      title,
-      description,
-    },
+    openGraph: { title, description },
+    twitter: { card: 'summary', title, description },
   };
 }
 
@@ -185,6 +178,7 @@ export async function generateMetadata({
     categorySlug: category,
     categoryName,
     merchantBusinessName: merchant.business_name,
+    merchantCurrency: resolveMerchantCurrencyConfig(merchant).code,
     storeUrl: baseUrl,
     products: normalizedProducts,
   });

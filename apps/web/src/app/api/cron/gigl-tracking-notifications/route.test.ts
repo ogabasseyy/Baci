@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createWorkerClient: vi.fn(),
   hasValidCronSecret: vi.fn(),
   loggerError: vi.fn(),
   runBatch: vi.fn(),
@@ -14,8 +14,8 @@ vi.mock('@/lib/cron-secret-auth', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { error: mocks.loggerError },
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.createServiceClient,
+vi.mock('@/lib/gigl-notification-worker-client', () => ({
+  createGiglNotificationWorkerClient: mocks.createWorkerClient,
 }));
 vi.mock('@/schemas/cron-batch-size', () => ({
   createCronBatchSizeSchema: () => ({
@@ -29,7 +29,7 @@ vi.mock('./run-gigl-tracking-notification-batch', () => ({
 import { GET } from './route';
 
 const endpoint = 'http://localhost:3000/api/cron/gigl-tracking-notifications';
-const serviceClient = { rpc: vi.fn() };
+const workerClient = { rpc: vi.fn() };
 const summary = {
   claimed: 2,
   failed: 0,
@@ -43,11 +43,11 @@ describe('GET /api/cron/gigl-tracking-notifications', () => {
     vi.clearAllMocks();
     mocks.hasValidCronSecret.mockReturnValue(true);
     mocks.safeParseBatchSize.mockReturnValue({ data: 10, success: true });
-    mocks.createServiceClient.mockReturnValue(serviceClient);
+    mocks.createWorkerClient.mockReturnValue(workerClient);
     mocks.runBatch.mockResolvedValue({ ok: true, summary });
   });
 
-  it('returns 401 without constructing a service client when authentication fails', async () => {
+  it('returns 401 without constructing a worker client when authentication fails', async () => {
     // Arrange
     mocks.hasValidCronSecret.mockReturnValue(false);
 
@@ -57,11 +57,11 @@ describe('GET /api/cron/gigl-tracking-notifications', () => {
     // Assert
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createWorkerClient).not.toHaveBeenCalled();
     expect(mocks.runBatch).not.toHaveBeenCalled();
   });
 
-  it('returns 400 without constructing a service client when batchSize is invalid', async () => {
+  it('returns 400 without constructing a worker client when batchSize is invalid', async () => {
     // Arrange
     mocks.safeParseBatchSize.mockReturnValue({
       error: new Error('invalid'),
@@ -77,7 +77,7 @@ describe('GET /api/cron/gigl-tracking-notifications', () => {
       error: 'Invalid batch size',
     });
     expect(mocks.safeParseBatchSize).toHaveBeenCalledWith('invalid');
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createWorkerClient).not.toHaveBeenCalled();
     expect(mocks.runBatch).not.toHaveBeenCalled();
   });
 
@@ -91,12 +91,40 @@ describe('GET /api/cron/gigl-tracking-notifications', () => {
     // Assert
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(summary);
-    expect(mocks.createServiceClient).toHaveBeenCalledWith('event-pipeline');
+    expect(mocks.createWorkerClient).toHaveBeenCalledWith(process.env);
     expect(mocks.runBatch).toHaveBeenCalledWith({
       batchSize: 7,
-      client: serviceClient,
+      client: workerClient,
       workerId: expect.stringMatching(/^gigl-notifications-/),
     });
+  });
+
+  it('returns 500 without running the batch when the worker token is unusable', async () => {
+    // Arrange
+    mocks.createWorkerClient.mockImplementation(() => {
+      throw new Error('token');
+    });
+
+    // Act
+    const response = await GET(new Request(endpoint));
+
+    // Assert
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'GIGL notification worker unavailable',
+    });
+    expect(mocks.runBatch).not.toHaveBeenCalled();
+  });
+
+  it('never imports a service-role client', async () => {
+    // Arrange
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(`${__dirname}/route.ts`, 'utf8');
+
+    // Assert
+    expect(source).not.toMatch(
+      /createServiceClient|supabase\/service|supabase\/admin/
+    );
   });
 
   it.each([

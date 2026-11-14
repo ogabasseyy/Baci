@@ -6,6 +6,10 @@ vi.mock('./logo', () => ({
   Logo: () => <span>Ogabassey</span>,
 }));
 
+vi.mock('../components/Logo', () => ({
+  Logo: () => <span>Ogabassey</span>,
+}));
+
 vi.mock('next/link', () => ({
   default: ({
     children,

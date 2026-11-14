@@ -53,20 +53,20 @@ export function generateOrderCancellationEmail(
     data.refundAmount > 0
       ? `
     <!-- Refund Info -->
-    <div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #a7f3d0;">
-      <div style="font-size: 14px; font-weight: 600; color: #065f46; margin-bottom: 8px;">💰 Refund Information</div>
+    <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #fde68a;">
+      <div style="font-size: 14px; font-weight: 600; color: #92400e; margin-bottom: 8px;">⏳ Refund Information (pending)</div>
       <table style="width: 100%; font-size: 14px;">
         <tr>
           <td style="padding: 4px 0; color: #6b7280;">Amount Paid</td>
           <td style="padding: 4px 0; text-align: right; color: #1e293b; font-weight: 600;">${formatEmailMoney(data.amountPaid, data.currency)}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; color: #6b7280;">Refund Amount</td>
-          <td style="padding: 4px 0; text-align: right; color: #059669; font-weight: 700;">${formatEmailMoney(data.refundAmount, data.currency)}</td>
+          <td style="padding: 4px 0; color: #6b7280;">Potential refund (pending)</td>
+          <td style="padding: 4px 0; text-align: right; color: #b45309; font-weight: 700;">${formatEmailMoney(data.refundAmount, data.currency)}</td>
         </tr>
       </table>
-      <p style="margin: 12px 0 0 0; font-size: 13px; color: #047857;">
-        Please contact the store for an update on your refund status.
+      <p style="margin: 12px 0 0 0; font-size: 13px; color: #92400e;">
+        The store will review your order to confirm whether a refund of up to this amount is due. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
       </p>
     </div>
     `
@@ -207,10 +207,10 @@ export function generateOrderCancellationText(
   const refundSection =
     data.refundAmount > 0
       ? `
-REFUND INFORMATION
+REFUND INFORMATION (PENDING)
 Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}
-Refund Amount: ${formatEmailMoney(data.refundAmount, data.currency)}
-Please contact the store for an update on your refund status.
+Potential refund (pending): ${formatEmailMoney(data.refundAmount, data.currency)}
+The store will review your order to confirm whether a refund of up to this amount is due. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
 `
       : '';
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DiscountItemSelector } from './DiscountItemSelector';
 
 const mocks = vi.hoisted(() => ({
+  announceForAccessibility: vi.fn(),
   fetchSelectableItems: vi.fn(),
   keyboardContainerProps: {
     align: undefined as 'start' | 'center' | 'end' | undefined,
@@ -89,88 +90,16 @@ vi.mock('react-native-safe-area-context', () => ({
   ),
 }));
 
-vi.mock('react-native', () => {
-  const Text = ({ children }: { children?: ReactNode }) => (
-    <span>{children}</span>
+vi.mock('react-native', async () => {
+  const { createDiscountItemSelectorReactNativeMock } = await import(
+    './DiscountItemSelector.test-mocks'
   );
-
-  return {
-    StatusBar: () => null,
-    ActivityIndicator: () => <Text>loading</Text>,
-    FlatList: ({
-      data,
-      initialNumToRender,
-      maxToRenderPerBatch,
-      removeClippedSubviews,
-      renderItem,
-      windowSize,
-    }: {
-      data: Array<{ id: string; name: string }>;
-      initialNumToRender?: number;
-      maxToRenderPerBatch?: number;
-      removeClippedSubviews?: boolean;
-      renderItem: (props: { item: { id: string; name: string } }) => ReactNode;
-      windowSize?: number;
-    }) => {
-      mocks.listProps.initialNumToRender = initialNumToRender ?? 0;
-      mocks.listProps.maxToRenderPerBatch = maxToRenderPerBatch ?? 0;
-      mocks.listProps.removeClippedSubviews = removeClippedSubviews ?? false;
-      mocks.listProps.windowSize = windowSize ?? 0;
-      return <div>{data.map((item) => renderItem({ item }))}</div>;
-    },
-    Modal: ({
-      children,
-      visible,
-    }: {
-      children?: ReactNode;
-      visible?: boolean;
-    }) => (visible ? <div>{children}</div> : null),
-    Platform: mocks.platform,
-    Pressable: ({
-      accessibilityLabel,
-      children,
-      onPress,
-    }: {
-      accessibilityLabel?: string;
-      children?: ReactNode;
-      onPress?: () => void;
-    }) => (
-      <button
-        aria-label={accessibilityLabel}
-        onClick={() => onPress?.()}
-        type="button"
-      >
-        {children}
-      </button>
-    ),
-    SafeAreaView: ({ children }: { children?: ReactNode }) => (
-      <section>{children}</section>
-    ),
-    StyleSheet: {
-      create: (styles: Record<string, unknown>) => styles,
-    },
-    Text,
-    TextInput: ({
-      onChangeText,
-      placeholder,
-      value,
-    }: {
-      onChangeText?: (value: string) => void;
-      placeholder?: string;
-      value?: string;
-    }) => (
-      <input
-        onChange={(event) => onChangeText?.(event.target.value)}
-        placeholder={placeholder}
-        value={value}
-      />
-    ),
-    View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  };
+  return createDiscountItemSelectorReactNativeMock(mocks);
 });
 
 describe('DiscountItemSelector', () => {
   beforeEach(() => {
+    mocks.announceForAccessibility.mockReset();
     mocks.fetchSelectableItems.mockReset();
     mocks.fetchSelectableItems.mockResolvedValue([
       {
@@ -185,6 +114,7 @@ describe('DiscountItemSelector', () => {
     mocks.listProps.maxToRenderPerBatch = 0;
     mocks.listProps.removeClippedSubviews = false;
     mocks.listProps.windowSize = 0;
+    mocks.platform.OS = 'ios';
   });
 
   afterEach(() => {
@@ -264,7 +194,8 @@ describe('DiscountItemSelector', () => {
     expect(mocks.listProps.removeClippedSubviews).toBe(true);
   });
 
-  it('renders error feedback when selectable items fetch fails', async () => {
+  it('renders error feedback and announces for VoiceOver on iOS when fetch fails', async () => {
+    mocks.platform.OS = 'ios';
     mocks.fetchSelectableItems.mockRejectedValue(new Error('fetch failed'));
 
     render(
@@ -279,6 +210,35 @@ describe('DiscountItemSelector', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load items')).toBeInTheDocument();
+      const alertElement = screen.getByRole('alert');
+      expect(alertElement).toBeInTheDocument();
+      expect(alertElement).toHaveAttribute('aria-live', 'assertive');
+      expect(mocks.announceForAccessibility).toHaveBeenCalledWith(
+        'Failed to load items'
+      );
+    });
+  });
+
+  it('renders error feedback without duplicate announcement on Android when fetch fails', async () => {
+    mocks.platform.OS = 'android';
+    mocks.fetchSelectableItems.mockRejectedValue(new Error('fetch failed'));
+
+    render(
+      <DiscountItemSelector
+        initialIds={[]}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+        type="product"
+        visible={true}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load items')).toBeInTheDocument();
+      const alertElement = screen.getByRole('alert');
+      expect(alertElement).toBeInTheDocument();
+      expect(alertElement).toHaveAttribute('aria-live', 'assertive');
+      expect(mocks.announceForAccessibility).not.toHaveBeenCalled();
     });
   });
 });

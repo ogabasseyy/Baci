@@ -15,6 +15,7 @@ TRIP="$ROOT/.github/workflows/semgrep-tripwire.yml"
 # CODEOWNERS review on .github/** as the backstop; a base-owned
 # gate is tracked in #3622.
 CANONICAL=(
+  '.github/actions/semgrep-sarif-routing/**'
   '.github/scripts/muse-review/**'
   '.github/scripts/muse-pin-update*'
   '.github/scripts/semgrep-sarif*'

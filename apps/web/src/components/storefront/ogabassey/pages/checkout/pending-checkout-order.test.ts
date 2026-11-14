@@ -7,6 +7,15 @@ import {
 } from './pending-checkout-order';
 
 describe('pending-checkout-order', () => {
+  it('does not discard an Oxygen order when the server reports a live liability', async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'order-123', total: 12000, payment_status: 'unpaid', shipping_status: 'pending' }))
+      .mockResolvedValueOnce(Response.json({ code: 'oxygen_payment_in_progress' }, { status: 409 }));
+    await expect(resolvePendingCheckoutOrder({
+      pendingOrder: { orderId: 'order-123', trackingToken: 'tracking-token-123', merchantId: 'merchant-1', customerEmail: 'john@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint-1', amountDueToGateway: 12000, createdAt: '2026-04-09' },
+      merchantId: 'merchant-1', merchantSlug: 'shop', customerEmail: 'john@example.com', checkoutFingerprint: 'fingerprint-1', paymentMethod: 'card', shippingProvider: null, fetchImpl,
+    })).rejects.toThrow('Your Oxygen payment is in progress');
+  });
   it('keeps the REDVAULT order method distinct from generic card orders', () => {
     expect(normalizeOrderPaymentMethod('uba_redvault')).toBe('uba_redvault');
   });

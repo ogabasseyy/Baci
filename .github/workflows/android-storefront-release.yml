@@ -1,18 +1,11 @@
 name: Android Storefront Production Release
 
 on:
+  # Storefront release gate: while .github/storefront-release-gate.json exists,
+  # a store release starts only from an owner tag or a manual dispatch, never
+  # from a push to main. docs/runbooks/storefront-release-gate.md records the
+  # push trigger to restore when the gate ends.
   push:
-    branches:
-      - main
-    paths:
-      - 'apps/mobile-storefront/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
-      # Patch/lockfile changes rebuild ReactAndroid from source.
-      - 'patches/**'
-      - 'pnpm-lock.yaml'
     tags:
       - "v*-storefront"
   workflow_dispatch:
@@ -36,8 +29,7 @@ on:
           - production
 
 concurrency:
-  # Serialize storefront release runs only. Cross-app serialization is avoided
-  # because GitHub preserves only one pending run per concurrency group.
+  # Per-ref serialization only; VPS resource ownership is job-scoped below.
   group: android-storefront-release-${{ github.ref }}
   cancel-in-progress: false
 
@@ -61,7 +53,13 @@ jobs:
   build-and-deploy:
     name: Build Storefront AAB & Upload to Play Store
     runs-on: baci-android
-    # Patched ReactAndroid and Hermes compile from source for all four ABIs.
+    # Both Android releases and production share one four-core VPS.
+    # A shared group is the only mutual exclusion GitHub offers; a waiting run
+    # replaces an older pending one, and refuse-superseded guards stale builds.
+    concurrency:
+      group: production-prebuilt-deploy
+      cancel-in-progress: false
+        # Patched ReactAndroid and Hermes compile from source for all four ABIs.
     # The measured cold source build exceeds a single 330-minute step. Give
     # native libraries and app packaging separate budgets, plus upload/cleanup.
     timeout-minutes: 600
@@ -70,7 +68,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history, so the next step can confirm the commit is on main.
+          fetch-depth: 0
           persist-credentials: false
+
+      # Storefront release gate: a store release ships only a commit that is
+      # already on main, so it passed review and the gate's CI check. This
+      # runs before anything else; docs/runbooks/storefront-release-gate.md.
+      - name: Refuse release sources that are not on main
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then
+            echo '::error::This release commit is not on main. Store releases ship only reviewed commits from main; see docs/runbooks/storefront-release-gate.md.' >&2
+            exit 1
+          fi
 
       - name: Pre-run cleanup of stale secrets
         run: |

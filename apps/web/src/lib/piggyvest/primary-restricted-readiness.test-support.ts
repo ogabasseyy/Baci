@@ -113,6 +113,7 @@ export function primaryReadinessFixture() {
         'piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text,text)',
         'piggyvest_primary.record_onboarding_ownership_hold(jsonb,uuid,uuid)',
         'piggyvest_primary.read_onboarding_review(jsonb)',
+        'piggyvest_primary.read_rollout_cohort_membership(jsonb)',
       ]),
       role(provisioning, 'piggyvest_primary_goal_provisioner', [
         'piggyvest_primary.read_goal_wallet(jsonb,uuid)',

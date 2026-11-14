@@ -1,0 +1,1 @@
+supabase/tests/piggyvest_deposits_ledger_only.sql

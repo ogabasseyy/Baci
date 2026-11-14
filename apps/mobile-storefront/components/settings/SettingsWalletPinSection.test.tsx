@@ -10,7 +10,10 @@ let mockGate: { state: string; status: unknown; refresh: () => void } = {
 jest.mock('./use-wallet-pin-settings-gate', () => ({
   useWalletPinSettingsGate: () => mockGate,
 }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+  useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
+}));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));

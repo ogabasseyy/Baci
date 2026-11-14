@@ -190,6 +190,13 @@ export function WalletContent(props: WalletContentProps) {
         onClose={() => {
           swap.setShowSavingsDeviceSwap(false);
           setShowSavingsVariantResolution(false);
+          // Reopening starts fresh, unless a contribution is still going out
+          // (its amount stays so the pending check can finish it).
+          if (
+            !isAddingSavingsContribution &&
+            !props.hasPendingSavingsContribution
+          )
+            onChangeSavingsContributionAmount('');
           onCloseSavingsProgress();
         }}
         onFundWallet={onFundSavingsWallet}

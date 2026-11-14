@@ -139,6 +139,10 @@ describe('Chatwoot product lookup route', () => {
     const response = await POST(request());
 
     expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      code: 'invalid_request',
+    });
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
   });
 
@@ -205,10 +209,39 @@ describe('Chatwoot product lookup route', () => {
 
     const response = await POST(request());
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(422);
     await expect(response.json()).resolves.toEqual({
       ok: false,
       code: 'unsupported_condition_offers',
+      requestId: body.requestId,
+    });
+  });
+
+  it('returns 404 when the canonical product projection is unavailable', async () => {
+    arrange();
+    mocks.readStorefrontPdpCoreSnapshot.mockResolvedValueOnce({
+      status: 'found',
+      value: {
+        kind: 'product',
+        product: {
+          id: '44444444-4444-4444-8444-444444444444',
+          merchant_id: merchantId,
+          slug: 'phone-15',
+          name: 'Phone 15',
+          status: 'active',
+          price: 300_000,
+          has_condition_offers: false,
+          // Unknown variant model must fail closed instead of treating it as simple.
+        },
+      },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      code: 'product_unavailable',
       requestId: body.requestId,
     });
   });

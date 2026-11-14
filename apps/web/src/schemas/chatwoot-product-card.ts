@@ -44,6 +44,7 @@ export const chatwootProductCardSchema = z
 
 const unavailableCode = z.enum([
   'forbidden',
+  'invalid_request',
   'invalid_context',
   'product_unavailable',
   'quota_exceeded',
@@ -63,7 +64,7 @@ export const chatwootProductLookupResponseSchema = z.discriminatedUnion('ok', [
     .object({
       code: unavailableCode,
       ok: z.literal(false),
-      requestId,
+      requestId: requestId.optional(),
     })
     .strict(),
 ]);

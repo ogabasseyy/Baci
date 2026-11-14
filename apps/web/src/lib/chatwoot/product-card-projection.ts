@@ -244,14 +244,17 @@ export function projectChatwootProductCard(input: {
     }
   }
 
+  const purchasableVariants = variants.filter(
+    (variant) => variant.availability === 'in_stock'
+  );
+  if (hasVariants && purchasableVariants.length === 0) {
+    return { ok: false, code: 'product_unavailable' };
+  }
   const available = hasVariants
-    ? variants.some((variant) => variant.availability === 'in_stock')
+    ? purchasableVariants.length > 0
     : isPurchasableProduct(product);
   const cardPrice = hasVariants
-    ? (variants
-        .filter((variant) => variant.availability === 'in_stock')
-        .map((variant) => variant.price)
-        .sort((left, right) => left - right)[0] ?? basePrice)
+    ? Math.min(...purchasableVariants.map((variant) => variant.price))
     : basePrice;
   const images = Array.isArray(product.images) ? product.images : [];
   const image = images.map(toImage).find(Boolean);

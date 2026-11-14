@@ -117,4 +117,20 @@ describe('handleChatwootInlineProductLookup', () => {
       code: 'product_unavailable',
     });
   });
+
+  it('correlates an invalid-request response without echoing an unsafe request ID', async () => {
+    mocks.postChatwootBridgeJson.mockResolvedValueOnce({
+      ok: false,
+      code: 'invalid_request',
+    });
+    const { post, promise } = run(null);
+
+    await promise;
+
+    expect(post).toHaveBeenCalledWith('baci-product-response:', {
+      requestId: 'product-request-01',
+      status: 'unavailable',
+      code: 'product_unavailable',
+    });
+  });
 });

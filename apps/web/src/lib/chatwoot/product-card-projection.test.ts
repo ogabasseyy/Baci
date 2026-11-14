@@ -78,22 +78,7 @@ describe('projectChatwootProductCard', () => {
           ],
         })
       )
-    ).toMatchObject({
-      ok: true,
-      product: {
-        price: 300_000,
-        currency: 'NGN',
-        availability: 'out_of_stock',
-        variants: [
-          {
-            id: variantId,
-            attributes: { storage: '128 GB' },
-            price: 325_000,
-            availability: 'out_of_stock',
-          },
-        ],
-      },
-    });
+    ).toEqual({ ok: false, code: 'product_unavailable' });
     const result = project(
       product({
         has_variants: true,
@@ -159,6 +144,26 @@ describe('projectChatwootProductCard', () => {
       },
     });
     expect(result).not.toHaveProperty('product.variants.1.internal_cost');
+  });
+
+  it('does not advertise a base price when every variant is unavailable', () => {
+    expect(
+      project(
+        product({
+          has_variants: true,
+          price: 300_000,
+          product_variants: [
+            {
+              id: variantId,
+              product_id: productId,
+              attributes: { storage: '128GB' },
+              price_override: 325_000,
+              stock_quantity: 0,
+            },
+          ],
+        })
+      )
+    ).toEqual({ ok: false, code: 'product_unavailable' });
   });
 
   it('keeps the condition axis distinct when otherwise identical variants are new and used', () => {

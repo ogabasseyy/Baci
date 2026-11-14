@@ -122,13 +122,10 @@ export async function POST(request: NextRequest) {
     requestedSlug: parsed.data.slug,
   });
   if (!projection.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: projection.code,
-        requestId: parsed.data.requestId,
-      },
-      { headers: NO_STORE_HEADERS }
+    return unavailable(
+      projection.code === 'unsupported_condition_offers' ? 422 : 404,
+      projection.code,
+      parsed.data.requestId
     );
   }
 

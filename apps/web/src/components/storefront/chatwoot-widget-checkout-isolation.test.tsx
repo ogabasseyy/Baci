@@ -1,0 +1,134 @@
+// @vitest-environment-options {"url":"https://shop.example.com"}
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChatwootWidget, useChatwootSupportActive } from './chatwoot-widget';
+
+const mocks = vi.hoisted(() => ({
+  bridgeMounts: [] as string[],
+  bridgeUnmounts: [] as string[],
+  outgoingContext: [] as string[],
+  pathname: '/shop',
+  reload: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => mocks.pathname,
+}));
+
+vi.mock('./ogabassey/components/chat/chatwoot-inline-cart-bridge', async () => {
+  const { useEffect } = await import('react');
+  return {
+    ChatwootInlineCartBridge: ({ storeSlug }: { storeSlug: string }) => {
+      useEffect(() => {
+        const onMessage = (event: MessageEvent) => {
+          if (event.data === 'baci-commerce-context-request') {
+            mocks.outgoingContext.push(storeSlug);
+          }
+        };
+        window.addEventListener('message', onMessage);
+        mocks.bridgeMounts.push(storeSlug);
+        return () => {
+          window.removeEventListener('message', onMessage);
+          mocks.bridgeUnmounts.push(storeSlug);
+        };
+      }, [storeSlug]);
+      return null;
+    },
+  };
+});
+
+vi.mock('./reload-chatwoot-tenant-document', () => ({
+  reloadChatwootTenantDocument: mocks.reload,
+}));
+
+const config = {
+  platformOrigin: 'https://support.example.com',
+  storefrontOrigin: 'https://shop.example.com',
+  websiteToken: 'public-widget-token-123456',
+  storeSlug: 'shop',
+};
+
+function SupportStatus() {
+  return (
+    <output data-testid="support-active">
+      {String(useChatwootSupportActive())}
+    </output>
+  );
+}
+
+beforeEach(() => {
+  mocks.pathname = '/shop';
+  mocks.bridgeMounts.length = 0;
+  mocks.bridgeUnmounts.length = 0;
+  mocks.outgoingContext.length = 0;
+  mocks.reload.mockClear();
+  delete (window as Window & { chatwootSDK?: unknown }).chatwootSDK;
+  delete (window as Window & { $chatwoot?: unknown }).$chatwoot;
+  delete (window as Window & { __baciChatwootRunStarted?: boolean })
+    .__baciChatwootRunStarted;
+  delete (window as Window & { __baciChatwootConfigKey?: string })
+    .__baciChatwootConfigKey;
+  delete (window as Window & { __baciChatwootReadyKey?: string })
+    .__baciChatwootReadyKey;
+  document.getElementById('baci-chatwoot-sdk')?.remove();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe('ChatwootWidget checkout tenant isolation', () => {
+  it('hides the prior widget and unmounts its context bridge until checkout ends', async () => {
+    const reset = vi.fn();
+    const toggleBubbleVisibility = vi.fn();
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (window as Window & { $chatwoot?: Record<string, unknown> }).$chatwoot = {
+        reset,
+        toggleBubbleVisibility,
+        websiteToken,
+        baseUrl,
+      };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+
+    const view = render(
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+    fireEvent(window, new Event('chatwoot:ready'));
+    await waitFor(() => expect(mocks.bridgeMounts).toEqual(['shop']));
+
+    mocks.outgoingContext.length = 0;
+    mocks.pathname = '/shop/checkout';
+    view.rerender(
+      <ChatwootWidget
+        config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+      >
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+
+    expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
+    expect(screen.getByTestId('support-active')).toHaveTextContent('false');
+    expect(reset).not.toHaveBeenCalled();
+    expect(mocks.reload).not.toHaveBeenCalled();
+    expect(mocks.bridgeMounts).toEqual(['shop']);
+    expect(mocks.bridgeUnmounts).toEqual(['shop']);
+
+    window.dispatchEvent(
+      new MessageEvent('message', { data: 'baci-commerce-context-request' })
+    );
+    expect(mocks.outgoingContext).toEqual([]);
+  });
+});

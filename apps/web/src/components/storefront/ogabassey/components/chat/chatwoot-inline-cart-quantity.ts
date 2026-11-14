@@ -67,7 +67,8 @@ export async function handleChatwootInlineCartQuantity(input: {
             sessionToken: input.sessionToken,
           },
           input.storeSlug,
-          signal
+          signal,
+          { allowNonOkResponse: true }
         )
     );
   } catch {

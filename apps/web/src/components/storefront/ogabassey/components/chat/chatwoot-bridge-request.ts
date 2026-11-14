@@ -5,7 +5,8 @@ export async function postChatwootBridgeJson(
   path: string,
   body: Record<string, unknown>,
   storeSlug: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: { allowNonOkResponse?: boolean } = {}
 ): Promise<Record<string, unknown> | null> {
   try {
     const response = await fetch(cartRoute(path, storeSlug), {
@@ -16,6 +17,7 @@ export async function postChatwootBridgeJson(
       body: JSON.stringify(body),
       signal,
     });
+    if (!response.ok && !options.allowNonOkResponse) return null;
     let value: unknown;
     try {
       value = await response.json();

@@ -34,10 +34,11 @@ describe('postChatwootBridgeJson', () => {
     );
   });
 
-  it('preserves JSON errors and records status for non-JSON error responses', async () => {
+  it('preserves non-OK JSON only when a caller explicitly opts in', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn()
+        .mockResolvedValueOnce(response({ accepted: false, code: 'refresh_required' }, false))
         .mockResolvedValueOnce(response({ accepted: false, code: 'refresh_required' }, false))
         .mockResolvedValueOnce({
           ok: false,
@@ -50,9 +51,16 @@ describe('postChatwootBridgeJson', () => {
 
     await expect(
       postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toBeNull();
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
     ).resolves.toEqual({ accepted: false, code: 'refresh_required' });
     await expect(
-      postChatwootBridgeJson('/cart', {}, 'store-a')
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
     ).resolves.toEqual({ httpStatus: 502 });
   });
 

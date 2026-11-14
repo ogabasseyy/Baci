@@ -55,4 +55,28 @@ describe('runPiggyvestDailyReconciliation: wallet pay lines', () => {
       })
     );
   });
+
+  it('bugfix: a failed main report still emails and pages stuck wallet payments', async () => {
+    const execute = executeWith(
+      snapshot({ businessId: 'other-business' }),
+      ledger(),
+      {
+        stuckPayments: [{ operationId: 'a' }],
+        undelivered: [],
+        unrefunded: [],
+        needsReview: [],
+      }
+    );
+    const { deps } = makeDeps({
+      createExecutor: vi.fn(() => execute) as never,
+    });
+    const result = await runPiggyvestDailyReconciliation({ env, deps });
+    expect(result).toMatchObject({ report: 'failed', paged: true });
+    expect(deps.emitAlert).toHaveBeenCalledWith(
+      'PIGGYVEST_RECONCILIATION_MISMATCH',
+      expect.objectContaining({
+        reason: expect.stringContaining('wallet_pay stuck=1'),
+      })
+    );
+  });
 });

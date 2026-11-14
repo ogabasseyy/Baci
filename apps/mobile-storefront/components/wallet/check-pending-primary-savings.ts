@@ -34,7 +34,7 @@ export async function checkPendingPrimarySavings(input: {
       if (goal) {
         notify(
           'Savings updated',
-          `Nice! PiggyVest confirmed your savings. Every naira gets you closer to your ${goal.title}. Keep it going!${
+          `Nice! Your savings are confirmed. Every naira gets you closer to your ${goal.title}. Keep it going!${
             refreshFailed ? ' Pull to refresh your latest balance.' : ''
           }`,
           'success'
@@ -42,7 +42,7 @@ export async function checkPendingPrimarySavings(input: {
       } else
         notify(
           'Savings updated',
-          'PiggyVest has confirmed your contribution. Your savings balance has been updated.',
+          'Your contribution is confirmed. Your savings balance has been updated.',
           'success'
         );
     } else if (result.status === 'cancelled') {
@@ -50,13 +50,13 @@ export async function checkPendingPrimarySavings(input: {
       await input.refetchWallet().catch(() => undefined);
       notify(
         'Contribution cancelled',
-        'The transfer was cancelled before submission and your reserved wallet funds were released.',
+        'Nothing was taken from your wallet.',
         'info'
       );
     } else
       notify(
         'Contribution pending',
-        'Still waiting for PiggyVest to confirm. No new payment has been started.',
+        'Still waiting for confirmation. No new payment has been started.',
         'info'
       );
   } catch (error) {
@@ -79,7 +79,7 @@ export async function checkPendingPrimarySavings(input: {
       input.clearOperation();
       notify(
         'Contribution not received',
-        'PiggyVest has no record of this contribution. You can safely try again.',
+        'We have no record of this contribution, so you can safely try again.',
         'info'
       );
       return;

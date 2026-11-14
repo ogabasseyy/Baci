@@ -13,6 +13,7 @@ export const maxDuration = 300;
 // stranded; with no wallet pay configuration it is unavailable (503). The
 // response carries counts only, never ids or amounts.
 export async function GET(request: Request) {
+  const startedAt = Date.now();
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   // Scheduled before switch-on: with no collection wallet configured and no
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
     const summary = await runWalletPayDrain({
       runtime,
       deliverers: WALLET_PAY_DELIVERERS,
+      deadlineMs: startedAt + maxDuration * 1000,
     });
     // Any item that threw fails the run (counts only), so a stuck delivery
     // or refund pages instead of passing every five minutes (Codex P2).

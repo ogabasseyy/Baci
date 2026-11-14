@@ -1,8 +1,58 @@
 // @vitest-environment node
+
+import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer, request } from 'node:http';
 import { expect, it, vi } from 'vitest';
+import { createOwnerAdmission } from './owner-admission';
 import { createOwnerPreviewHttpHandler } from './owner-preview-http';
+
+it('rejects a forged signed request before dispatching bridge work', async () => {
+  const bridge = vi.fn(async () => Response.json({ ok: true }));
+  const handler = createOwnerPreviewHttpHandler(bridge, { admit: () => false });
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    expect((await send(address.port)).status).toBe(401);
+    expect(bridge).not.toHaveBeenCalled();
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it('rejects forged requests without consuming the authenticated work slots', async () => {
+  const key = Buffer.alloc(32, 9);
+  const bridge = vi.fn(async () => Response.json({ ok: true }));
+  const handler = createOwnerPreviewHttpHandler(bridge, {
+    admit: createOwnerAdmission(key, 'owner-preview/v1'),
+  });
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  const body = JSON.stringify({ expiresAt: Date.now() + 30000 });
+  const signature = createHmac('sha256', key)
+    .update(`owner-preview/v1\n${body}`)
+    .digest('hex');
+  try {
+    for (let i = 0; i < 20; i++)
+      expect((await send(address.port, { body })).status).toBe(401);
+    expect((await send(address.port, { body, signature })).status).toBe(200);
+    expect(bridge).toHaveBeenCalledOnce();
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 
 async function send(
   port: number,

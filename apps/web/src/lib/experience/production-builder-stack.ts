@@ -1,6 +1,7 @@
 import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
+import { createOwnerAdmission } from '../../../builder-mcp-server/owner-admission';
 import { createOwnerInternalNodeServer } from '../../../builder-mcp-server/owner-internal-node';
 import { createVerifierLoopbackForwarder } from '../../../tools/experience-verifier/loopback-forwarder';
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
@@ -88,6 +89,8 @@ export async function startProductionBuilderStack(settings: {
     )
       throw Error('INVALID_VERIFIER_CONFIG');
   }
+  if (settings.verifierPort !== undefined && !settings.verifierKey)
+    throw Error('INVALID_VERIFIER_CONFIG');
   let host: Awaited<ReturnType<typeof startProductionBuilderHost>> | undefined;
   let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
   let ownerListener:
@@ -127,12 +130,32 @@ export async function startProductionBuilderStack(settings: {
     if (settings.ownerPort !== undefined) {
       ownerListener = createOwnerInternalNodeServer({
         ownerPreview,
+        ...(settings.ownerBridge
+          ? {
+              ownerPreviewAdmission: createOwnerAdmission(
+                settings.ownerBridge.key,
+                'owner-preview/v1'
+              ),
+            }
+          : {}),
         ownerAttestation: settings.verifierPort
           ? createVerifierLoopbackForwarder(settings.verifierPort)
           : undefined,
         ownerPublicVerification: settings.verifierPort
           ? createVerifierLoopbackForwarder(settings.verifierPort, 'public')
           : undefined,
+        ...(settings.verifierKey
+          ? {
+              ownerAttestationAdmission: createOwnerAdmission(
+                settings.verifierKey,
+                'verifier-attest/v1'
+              ),
+              ownerPublicVerificationAdmission: createOwnerAdmission(
+                settings.verifierKey,
+                'verifier-public/v1'
+              ),
+            }
+          : {}),
       });
       await ownerListener.listen(settings.ownerPort);
     }

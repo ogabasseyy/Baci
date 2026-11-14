@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { createOwnerAdmission } from '../../builder-mcp-server/owner-admission';
 import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { createVerifierPublicClient } from '../../src/lib/experience/verifier-public-client';
 import { startVerifierListener } from '../../tools/experience-verifier/listener';
@@ -46,6 +47,10 @@ it('forwards a signed public-verification request over loopback and reauthentica
   const address = listener.server.address();
   if (!address || typeof address === 'string') throw Error('NO_LISTENER');
   const ownerListener = createOwnerInternalNodeServer({
+    ownerPublicVerificationAdmission: createOwnerAdmission(
+      key,
+      'verifier-public/v1'
+    ),
     ownerPublicVerification: createVerifierLoopbackForwarder(
       address.port,
       'public'

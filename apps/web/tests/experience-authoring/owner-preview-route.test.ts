@@ -32,6 +32,7 @@ import { POST } from '@/app/api/builder-experience/preview/route';
 import { createOwnerPreviewBridge } from '@/lib/experience/owner-preview-bridge';
 import { createOwnerPreviewBridgeClient } from '@/lib/experience/owner-preview-bridge-client';
 import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
+import { createOwnerAdmission } from '../../builder-mcp-server/owner-admission';
 import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import { experienceDataFixture } from './data-fixture.test-support';
@@ -92,7 +93,10 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
         token === f.owner.accessToken ? f.owner.supabase : f.other.supabase,
       launch,
     });
-    listener = createOwnerInternalNodeServer({ ownerPreview: bridge });
+    listener = createOwnerInternalNodeServer({
+      ownerPreview: bridge,
+      ownerPreviewAdmission: createOwnerAdmission(key, 'owner-preview/v1'),
+    });
     const ownerPort = await listener.listen(0);
     const client = createOwnerPreviewBridgeClient({
       key,

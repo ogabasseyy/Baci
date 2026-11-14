@@ -56,7 +56,11 @@ it('installs a fixed verifier relay only when a distinct trusted port is configu
     close: vi.fn(async () => {}),
   });
   const host = {
-    integration: { executionOrigin: 'https://output.runtime.test' },
+    integration: {
+      executionOrigin: 'https://output.runtime.test',
+      runner: { key: new Uint8Array(32).fill(5) },
+      build: { key: new Uint8Array(32).fill(6) },
+    },
   } as never;
   const stack = await startProductionBuilderStack({
     host,
@@ -64,6 +68,7 @@ it('installs a fixed verifier relay only when a distinct trusted port is configu
     deliveryPort: 8791,
     ownerPort: 8793,
     verifierPort: 8792,
+    verifierKey: new Uint8Array(32).fill(7),
   });
   try {
     expect(f.listener).toHaveBeenLastCalledWith({ keys: [] });
@@ -71,6 +76,8 @@ it('installs a fixed verifier relay only when a distinct trusted port is configu
       ownerPreview: undefined,
       ownerAttestation: expect.any(Function),
       ownerPublicVerification: expect.any(Function),
+      ownerAttestationAdmission: expect.any(Function),
+      ownerPublicVerificationAdmission: expect.any(Function),
     });
   } finally {
     await stack.close();
@@ -146,7 +153,9 @@ it('attaches the owner bridge only when a trusted key and durable nonce store ar
     expect(f.listener).toHaveBeenCalledWith({ keys: [] });
     expect(f.owner).toHaveBeenCalledWith({
       ownerPreview: handler,
+      ownerPreviewAdmission: expect.any(Function),
       ownerAttestation: undefined,
+      ownerPublicVerification: undefined,
     });
   } finally {
     await stack.close();
@@ -202,6 +211,15 @@ it('requires a separate verifier key and passes it only to trusted host startup'
     },
     startBroker: vi.fn(),
   } as never;
+  await expect(
+    startProductionBuilderStack({
+      host,
+      port: 8790,
+      deliveryPort: 8791,
+      ownerPort: 8793,
+      verifierPort: 8792,
+    })
+  ).rejects.toThrow('INVALID_VERIFIER_CONFIG');
   await expect(
     startProductionBuilderStack({
       host,

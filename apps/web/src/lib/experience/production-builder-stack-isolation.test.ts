@@ -87,7 +87,9 @@ it('requires and uses a distinct loopback owner listener instead of adding owner
     expect(f.mcp).toHaveBeenCalledWith({ keys: [] });
     expect(f.owner).toHaveBeenCalledWith({
       ownerPreview,
+      ownerPreviewAdmission: expect.any(Function),
       ownerAttestation: undefined,
+      ownerPublicVerification: undefined,
     });
     expect(ownerListener.listen).toHaveBeenCalledWith(8793);
   } finally {

@@ -10,6 +10,12 @@ export function createOwnerInternalNodeServer(options: {
   ownerPreview?: (request: Request) => Promise<Response>;
   ownerAttestation?: (request: Request) => Promise<Response>;
   ownerPublicVerification?: (request: Request) => Promise<Response>;
+  ownerPreviewAdmission?: (body: Uint8Array, signature: string) => boolean;
+  ownerAttestationAdmission?: (body: Uint8Array, signature: string) => boolean;
+  ownerPublicVerificationAdmission?: (
+    body: Uint8Array,
+    signature: string
+  ) => boolean;
 }) {
   if (
     !options.ownerPreview &&
@@ -18,13 +24,21 @@ export function createOwnerInternalNodeServer(options: {
   )
     throw Error('OWNER_TRANSPORT_NOT_CONFIGURED');
   const preview = options.ownerPreview
-    ? createOwnerPreviewHttpHandler(options.ownerPreview)
+    ? createOwnerPreviewHttpHandler(options.ownerPreview, {
+        admit: options.ownerPreviewAdmission,
+      })
     : undefined;
   const attestation = options.ownerAttestation
-    ? createOwnerAttestationHttpHandler(options.ownerAttestation)
+    ? createOwnerAttestationHttpHandler(
+        options.ownerAttestation,
+        options.ownerAttestationAdmission
+      )
     : undefined;
   const publicVerification = options.ownerPublicVerification
-    ? createOwnerPublicVerificationHttpHandler(options.ownerPublicVerification)
+    ? createOwnerPublicVerificationHttpHandler(
+        options.ownerPublicVerification,
+        options.ownerPublicVerificationAdmission
+      )
     : undefined;
   let closing = false;
   let shutdown: Promise<void> | undefined;

@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+type Admission = (body: Uint8Array, signature: string) => boolean;
+
 /** Fixed, bounded transport for the signed server-to-server owner preview route. */
 export function createOwnerPreviewHttpHandler(
   bridge: (request: Request) => Promise<Response>,
-  options: { timeoutMs?: number } = {}
+  options: { timeoutMs?: number; admit?: Admission } = {}
 ) {
   const timeoutMs = options.timeoutMs ?? 30000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000)
@@ -13,30 +15,35 @@ export function createOwnerPreviewHttpHandler(
     target: 'https://mcp.usebaci.com/internal/owner/preview',
     signature: 'x-baci-owner-signature',
     timeoutMs,
+    admit: options.admit,
   });
 }
 
 /** The fixed verifier target is reachable only through the trusted relay. */
 export function createOwnerAttestationHttpHandler(
-  bridge: (request: Request) => Promise<Response>
+  bridge: (request: Request) => Promise<Response>,
+  admit?: Admission
 ) {
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/attest',
     target: 'https://verifier.baci-internal.invalid/v1/attest',
     signature: 'x-baci-verifier-signature',
     timeoutMs: 600000,
+    admit,
   });
 }
 
 /** Public verification remains an authenticated owner-only verifier operation. */
 export function createOwnerPublicVerificationHttpHandler(
-  bridge: (request: Request) => Promise<Response>
+  bridge: (request: Request) => Promise<Response>,
+  admit?: Admission
 ) {
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/public',
     target: 'https://verifier.baci-internal.invalid/v1/public',
     signature: 'x-baci-verifier-signature',
     timeoutMs: 600000,
+    admit,
   });
 }
 
@@ -47,6 +54,7 @@ function createOwnerHttpHandler(
     target: string;
     signature: string;
     timeoutMs: number;
+    admit?: Admission;
   }
 ) {
   let readers = 0;
@@ -145,6 +153,15 @@ function createOwnerHttpHandler(
       readers--;
     }
     if (res.destroyed || res.writableEnded) return;
+    if (binding.admit && !binding.admit(bytes, signature)) {
+      respond(res, 401);
+      return;
+    }
+    if (active >= 16) {
+      respond(res, 429);
+      return;
+    }
+    active++;
     const controller = new AbortController();
     const onClose = () => {
       if (!res.writableEnded) controller.abort();
@@ -205,21 +222,12 @@ function createOwnerHttpHandler(
     } finally {
       clearTimeout(deadline);
       res.off('close', onClose);
+      active--;
     }
   }
   return {
     async handle(req: IncomingMessage, res: ServerResponse) {
-      if (active >= 16) {
-        req.resume();
-        respond(res, 429);
-        return;
-      }
-      active++;
-      try {
-        await dispatch(req, res);
-      } finally {
-        active--;
-      }
+      await dispatch(req, res);
     },
   };
 }

@@ -1090,3 +1090,25 @@ This establishes the wildcard association, not a qualified routing design.
 No DNS, Vercel project or production route was changed. The listener currently places internal owner routes and public MCP on
 one loopback listener, so its network source alone cannot distinguish trusted
 internal traffic from traffic forwarded by a public ingress.
+
+At 18:59 UTC on 14 November, read-only aggregate queries against the connected
+production Supabase project found zero rows in `builder_authorization.connections`,
+zero linked sessions and zero provider records. No token, client or merchant
+values were read. This supports a coordinated cutover with no existing grants
+in that particular store at that time; it does not rule out records held by a
+different issuer or environment, prove OAuth callbacks, or authorize changing
+the separate commerce connector. Recheck these counts immediately before a
+cutover and qualify the deployed issuer and ingress first.
+
+An additional read-only heuristic check found zero undeleted Supabase OAuth
+clients whose names or redirect lists contain `builder`, and zero unexpired
+Supabase authorization records whose resource contains `builder`. These are
+name/resource matches, not an exhaustive inventory of differently named
+clients or tokens. No client IDs, redirects, grants or user data were returned.
+
+A subsequent unauthenticated synthetic negative probe of the current public
+`/internal/owner/preview` returned 404, and a read-only GET to the existing
+commerce `/api` returned 200. These observations describe the current
+deployment only; because the candidate ingress is not installed, they do not
+prove that its internal routes are unreachable or that commerce behavior is
+unchanged after a future routing change.

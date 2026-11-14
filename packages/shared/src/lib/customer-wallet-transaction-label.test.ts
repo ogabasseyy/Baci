@@ -212,4 +212,17 @@ describe('customerWalletTransactionLabel', () => {
       'Transaction'
     );
   });
+
+  it.each([
+    'constructor',
+    'toString',
+    '__proto__',
+  ])('never resolves an inherited name (%s) as a fixed label', (sourceType) => {
+    expect(
+      customerWalletTransactionLabel({
+        description: 'Wallet payment via Kuda',
+        sourceType,
+      })
+    ).toBe('Wallet payment');
+  });
 });

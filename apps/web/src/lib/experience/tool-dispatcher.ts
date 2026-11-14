@@ -39,6 +39,7 @@ import { experienceToolPolicy } from './tool-policy';
 import { beginUpload, finalizeUpload, writeChunk } from './upload-service';
 export interface ExperienceDispatcherDependencies {
   rendering?: 'client' | 'prerender-private';
+  backgroundBuilds?: boolean;
   readPerformance?: PerformanceReader;
   resolveUserClient(identity: BuilderIdentity): Promise<SupabaseClient>;
   finalizeBuild(
@@ -209,6 +210,8 @@ async function execute(
     case 'finalize_experience_build': {
       const { storefrontId: _, ...input } =
         experienceToolInputs.finalize_experience_build.parse(raw);
+      if (deps.backgroundBuilds)
+        return readExperienceOperation(ctx, input.jobId);
       return deps.finalizeBuild(ctx, input);
     }
     case 'preview_experience': {

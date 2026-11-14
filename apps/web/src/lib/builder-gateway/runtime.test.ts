@@ -31,7 +31,7 @@ it('rejects wrong, expired or revoked builder credentials and scope escalation b
     },
   });
   const sign = async (
-    issuer = 'https://auth.usebaci.com',
+    issuer = 'https://mcp.usebaci.com',
     audience = 'https://mcp.usebaci.com/builder/mcp',
     exp: string | number = '5m'
   ) =>
@@ -57,6 +57,7 @@ it('rejects wrong, expired or revoked builder credentials and scope escalation b
     );
   for (const token of [
     await sign('https://wrong.invalid'),
+    await sign('https://auth.usebaci.com'),
     await sign(undefined, 'authenticated'),
     await sign(undefined, undefined, 1),
   ])

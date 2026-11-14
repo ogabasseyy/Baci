@@ -13,6 +13,10 @@
   },
   "include": [
     "tools/experience-sql/**/*.ts",
+    "tools/experience-verifier/public-verification-*.ts",
+    "tools/experience-verifier/public-cart-*.ts",
+    "tools/experience-verifier/public-product-*.ts",
+    "tools/experience-verifier/public-commerce-*.ts",
     "tests/experience-authoring/**/*.ts",
     "tests/builder-chatgpt/experience-upload.test.ts",
     "tests/experience-browser/checkpoint-b-*.ts",

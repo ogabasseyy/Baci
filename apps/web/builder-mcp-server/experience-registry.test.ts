@@ -11,9 +11,26 @@ import {
   listedExperienceSchemas,
 } from './experience-contracts';
 import wire from './experience-contracts.json';
+import { experienceToolDescriptions } from './experience-metadata';
 import { registerBuilderTools } from './registry';
 
 const id = '11111111-1111-4111-8111-111111111111';
+it('guides status reconciliation after an indeterminate finalization response', () => {
+  const description =
+    experienceToolDescriptions.finalize_experience_build.description;
+  expect(description).toContain('get_experience_operation');
+  expect(description).toContain('same jobId');
+  expect(description).toContain('do not assume failure');
+  expect(description).toContain('background processing');
+  expect(description).toContain('may still be queued');
+});
+it('guides localized commerce controls without replacing commerce operations', () => {
+  const description =
+    experienceToolDescriptions.get_experience_capabilities.description;
+  expect(description).toContain('data-baci-commerce="add"');
+  expect(description).toContain('data-baci-commerce="checkout"');
+  expect(description).toContain('do not replace Baci commerce calls');
+});
 function server() {
   const registered = new Map<
     string,

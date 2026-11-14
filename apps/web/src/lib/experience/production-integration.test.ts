@@ -167,7 +167,9 @@ it('resolves each authorized merchant canonical base afresh and accepts the exac
   const directory = mkdtempSync(join(tmpdir(), 'baci-production-tenants-'));
   try {
     const f = fixture(directory);
-    const canonicalBase = vi.fn(f.settings.canonicalBase);
+    const canonicalBase = vi.fn(async (slug: string) =>
+      Promise.resolve(f.settings.canonicalBase(slug))
+    );
     const integration = createProductionExperienceIntegration({
       ...f.settings,
       canonicalBase,

@@ -22,7 +22,7 @@ const allowedOrigins = new Set([
   'https://mcp.usebaci.com',
 ]);
 export function createBuilderMcpHttpHandler(
-  deps: Pick<BuilderMcpDependencies, 'executeBuilderTool'> & {
+  deps: Pick<BuilderMcpDependencies, 'executeBuilderTool' | 'experience'> & {
     verifyAccessToken: (token: string) => Promise<void>;
     trustedProxies?: readonly string[];
   }

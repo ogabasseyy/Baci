@@ -13,6 +13,10 @@ import {
   experienceCatalogSelectionSchema,
 } from '@/schemas/experience-catalog';
 import {
+  type OwnerRequestContext,
+  requireExperienceOwner,
+} from './authorization';
+import {
   experienceCatalogRevision,
   readConsistentCatalog,
 } from './catalog-revision';
@@ -27,8 +31,17 @@ export function projectExperienceCatalog(
   rows: unknown[],
   images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
 ): PublicCatalog {
+  return projectCatalog(merchant, rows, images, false);
+}
+
+function projectCatalog(
+  merchant: ExperienceCatalogMerchant,
+  rows: unknown[],
+  images: ReadonlyMap<string, { assetId: string; alt: string }>,
+  ownerPreview: boolean
+): PublicCatalog {
   const products: PublicProduct[] = [];
-  if (merchant.is_published)
+  if (merchant.is_published || ownerPreview)
     for (const row of rows) {
       const parsed = experienceCatalogRowSchema.safeParse(row);
       if (!parsed.success) throw Error('INVALID_CATALOG');
@@ -76,14 +89,55 @@ export function projectExperienceCatalog(
   };
 }
 /** Client must be the normal public/RLS client; merchant was resolved by the host/page. */
-export async function loadExperienceCatalog(
+export function loadExperienceCatalog(
   client: SupabaseClient,
   merchant: ExperienceCatalogMerchant,
   selection: unknown,
   images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
 ): Promise<PublicCatalog | null> {
+  return readCatalog(client, merchant, selection, images, false);
+}
+
+/** Authenticated owner preview may include an unpublished merchant's active catalog. */
+export async function loadOwnerPreviewCatalog(
+  ctx: OwnerRequestContext,
+  selection: unknown,
+  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
+): Promise<{ catalog: PublicCatalog; currency: string } | null> {
+  experienceCatalogSelectionSchema.parse(selection);
+  const owner = await requireExperienceOwner(ctx, 'storefront.read');
+  const merchant = await owner.supabase
+    .from('merchants')
+    .select('id,payout_currency,is_published')
+    .eq('id', owner.merchantId)
+    .maybeSingle();
+  if (merchant.error || !merchant.data || merchant.data.id !== owner.merchantId)
+    throw Error('NOT_FOUND');
+  const currency = merchant.data.payout_currency ?? 'NGN';
+  const result = await readCatalog(
+    owner.supabase,
+    {
+      id: merchant.data.id,
+      currency,
+      is_published: merchant.data.is_published === true,
+    },
+    selection,
+    images,
+    true
+  );
+  await requireExperienceOwner(owner, 'storefront.read');
+  return result ? { catalog: result, currency } : null;
+}
+
+async function readCatalog(
+  client: SupabaseClient,
+  merchant: ExperienceCatalogMerchant,
+  selection: unknown,
+  images: ReadonlyMap<string, { assetId: string; alt: string }>,
+  ownerPreview: boolean
+): Promise<PublicCatalog | null> {
   const input = experienceCatalogSelectionSchema.parse(selection);
-  if (!merchant.is_published) return null;
+  if (!merchant.is_published && !ownerPreview) return null;
   const generation = async () => {
     const r = await client
       .from('experience_catalog_generations')
@@ -113,7 +167,8 @@ export async function loadExperienceCatalog(
       const r = await query;
       if (r.error) throw Error('CATALOG_UNAVAILABLE');
       const products = r.data ?? [];
-      if (!products.length) return projectExperienceCatalog(merchant, []);
+      if (!products.length)
+        return projectCatalog(merchant, [], images, ownerPreview);
       const ids = products.map((p) => p.id);
       // The public RPC excludes inventory anchors. Anonymous RLS deliberately
       // hides private variant metadata; it must not become a visibility join.
@@ -131,7 +186,7 @@ export async function loadExperienceCatalog(
         variants.data.length > 500
       )
         throw Error('CATALOG_UNAVAILABLE');
-      return projectExperienceCatalog(
+      return projectCatalog(
         merchant,
         products.map((p) => ({
           ...p,
@@ -172,7 +227,8 @@ export async function loadExperienceCatalog(
             available_units: v.available_units,
           })),
         })),
-        images
+        images,
+        ownerPreview
       );
     },
   });

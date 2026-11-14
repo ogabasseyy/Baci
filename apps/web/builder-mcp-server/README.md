@@ -1,8 +1,8 @@
 # Baci merchant builder MCP — inactive source
 
 Separate from Ogabassey buyer MCP and Muse. No existing resource, tool, submission
-or deployment is changed. Only six implemented tools are advertised. Preview and
-publication are not registered yet.
+or deployment is changed by this source. The default listener advertises the
+portable-homepage tools; full-code tools require explicit opt-in.
 
 ## Commands
 
@@ -18,6 +18,45 @@ An explicitly requested local listener can use `pnpm --filter @baci/web mcp:buil
 8790`. It binds loopback only. Public resource/issuer and the fixed Baci execution
 origin are constants, not tool arguments. No listener starts merely by importing
 `server.ts` or `node.ts`.
+
+The builder authorization server's issuer is `https://builder-auth.usebaci.com`; its
+OAuth discovery, authorization, token, JWKS, interaction and callback paths
+must be routed to the separately deployed builder auth service. The MCP path
+and protected-resource metadata route on `https://mcp.usebaci.com` go to the
+MCP listener. The existing
+`auth.usebaci.com` service remains the upstream Supabase identity provider.
+
+The dedicated builder issuer is a breaking change for any previously issued
+builder tokens. Before enabling it, inventory any live builder clients and
+grants, configure and verify the new issuer and callback, and coordinate
+re-authorization and token reissue where needed. This listener accepts only
+the configured builder issuer; it does not accept commerce connector tokens.
+Do not redirect or replace the existing commerce issuer as part of this rollout.
+Do not enable the new issuer until that inventory and cutover are complete;
+if existing builder grants cannot be identified or safely reauthorized, keep
+the builder integration disabled. The issuer change is not a transparent
+dual-issuer migration.
+
+The owner-preview v1 signature covers the schema-normalized message, not raw
+wire JSON. The caller parses its nested input before serializing; the bridge
+parses the complete message using the matching ordered schema before verifying.
+The client/bridge tests cover reordered input and wire fields. Treat a schema
+ordering or signing-format change as a coordinated protocol rollout.
+
+Production ingress is not yet qualified: the internal owner routes share a
+loopback listener with public MCP, and a proxy's loopback address is not proof
+that a request is private. Require an independently verified ingress boundary
+that prevents public access to those routes. Preview transport now signals
+cancellation on timeout or disconnect, and retains its concurrency slot until
+the underlying work actually settles. The preview and verifier attestation
+handlers check cancellation between operations; this does not cancel database,
+runner or attestation work already in flight. End-to-end cancellation or a
+separately qualified bounded-work strategy remains required before enabling
+the owner bridge.
+
+Pass `--experience` before or after the port to advertise the full-code experience tools.
+The default listener keeps those tools disabled. Discovery does not install the
+web gateway or the isolated runner.
 
 The standalone process has only public JWKS verification and an HTTPS forwarder.
 It accepts the dedicated outer builder token, never a normal Supabase token. The

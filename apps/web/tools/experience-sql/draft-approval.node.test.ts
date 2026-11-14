@@ -212,6 +212,27 @@ test('publication: private intent is owner/evidence/version bound, replay-safe a
       [initial.approvalId, initial.effectDigest, hash('render')]
     );
     await c.query('COMMIT');
+    await f.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261111231000_experience_approval_retry_proofs.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
+    await f.pool.query(
+      "UPDATE experience_authorization.approval_checks SET verified_at=clock_timestamp()-interval '30 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE intent_id=$1",
+      [initial.approvalId]
+    );
+    await assert.rejects(confirm(), /PREVIEW_REQUIRED/);
+    await c.query('BEGIN');
+    await c.query('SET LOCAL ROLE baci_experience_verifier');
+    await c.query(
+      "INSERT INTO experience_authorization.approval_checks(intent_id,effect_digest,evidence_digest,expires_at) VALUES($1,$2,$3,clock_timestamp()+interval '8 minutes')",
+      [initial.approvalId, initial.effectDigest, hash('fresh-render')]
+    );
+    await c.query('COMMIT');
     await assert.rejects(confirm(), /LEGACY_EXECUTION_ACTIVE/);
     // Time passage is not worker completion/cancellation acknowledgement.
     await f.pool.query(

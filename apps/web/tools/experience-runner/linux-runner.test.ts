@@ -29,6 +29,26 @@ it('refuses arbitrary host commands and refuses native startup on non-Linux mach
     createDirectOCITransport(command)(['ssh', '--', 'sudo', 'sh', '-c', 'bad'])
   ).rejects.toThrow('INVALID_RUNNER_COMMAND');
   expect(command).not.toHaveBeenCalled();
+  await expect(
+    createDirectOCITransport(command)([
+      'ssh',
+      '--',
+      'sudo',
+      'python3',
+      '-c',
+      'print("arbitrary")',
+    ])
+  ).rejects.toThrow('INVALID_RUNNER_COMMAND');
+  await expect(
+    createDirectOCITransport(command)([
+      'ssh',
+      '--',
+      'sudo',
+      '/usr/local/bin/runsc',
+      'install',
+    ])
+  ).rejects.toThrow('INVALID_RUNNER_COMMAND');
+  expect(command).not.toHaveBeenCalled();
   if (process.platform !== 'linux') {
     const verifyInstallation = vi.fn();
     await expect(

@@ -15,6 +15,7 @@ import {
   ownerRpcArgs,
   requireExperienceOwner,
 } from './authorization';
+import { startBuildLeaseHeartbeat } from './build-lease-heartbeat';
 import { retainBuildPerformanceReport } from './build-performance-retention';
 import { verifyCompiledCandidate } from './build-service';
 import { assertCandidatePerformanceBudget } from './candidate-performance-budget';
@@ -64,6 +65,16 @@ export async function runExperienceBuild(
     p_attempt: job.attempt_nonce,
   });
   if (claim.error) throw Error('BUILD_FAILED');
+  const lease = ctx.identity
+    ? startBuildLeaseHeartbeat(async () => {
+        const renewal = await ctx.supabase.rpc('experience_renew_build_lease', {
+          ...ownerRpcArgs(ctx),
+          p_job: job.id,
+          p_attempt: job.attempt_nonce,
+        });
+        return !renewal.error && renewal.data === true;
+      })
+    : undefined;
   let transientId: string | undefined;
   try {
     const source = await ctx.supabase
@@ -219,14 +230,19 @@ export async function runExperienceBuild(
         proofs,
       })
     );
-    await deps.recordVerifiedEvidence({
-      merchantId: ctx.merchantId,
-      jobId: job.id,
-      attemptNonce: job.attempt_nonce,
-      buildDigest: candidate.digest,
-      receiptDigest,
-      hostOrigin,
-    });
+    await lease?.assertHeld();
+    await deps.recordVerifiedEvidence(
+      {
+        merchantId: ctx.merchantId,
+        jobId: job.id,
+        attemptNonce: job.attempt_nonce,
+        buildDigest: candidate.digest,
+        receiptDigest,
+        hostOrigin,
+      },
+      ctx
+    );
+    await lease?.assertHeld();
     const result = await finalizeExperienceBuild(ctx, input, {
       jobId: job.id,
       attemptNonce: job.attempt_nonce,
@@ -272,6 +288,7 @@ export async function runExperienceBuild(
     });
     throw error;
   } finally {
+    await lease?.stop();
     if (transientId) deps.transient.remove(transientId);
   }
 }

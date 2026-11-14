@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["../../src/*"],
+      "@baci/shared": ["../../../../packages/shared/src/index.ts"],
+      "@baci/shared/*": ["../../../../packages/shared/src/*"],
+      "server-only": ["./server-only-operator.ts"]
+    }
+  }
+}

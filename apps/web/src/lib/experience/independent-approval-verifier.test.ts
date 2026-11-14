@@ -29,6 +29,7 @@ function setup() {
   const deps = {
     capture: vi.fn(async () => ({
       buildId: id,
+      buildDigest: 'e'.repeat(64),
       effectDigest: approval.effectDigest,
       artifactReceipt: 'b'.repeat(64),
       evidenceDigest: 'c'.repeat(64),
@@ -39,17 +40,60 @@ function setup() {
   };
   return { deps, verifier: createIndependentApprovalVerifier(deps) };
 }
+function ownerClient(buildDigest = 'e'.repeat(64)) {
+  const query = {
+    select: vi.fn(() => query),
+    eq: vi.fn(() => query),
+    maybeSingle: vi.fn(async () => ({
+      data: { build_digest: buildDigest },
+      error: null,
+    })),
+  };
+  return { from: vi.fn(() => query), query };
+}
 it('records independent evidence only after owner effect and build match a second current read', async () => {
   const f = setup();
-  await f.verifier.attest({} as never, id, 'draft');
+  const client = ownerClient();
+  await f.verifier.attest(client as never, id, 'draft');
+  expect(client.from).toHaveBeenCalledWith('experience_builds');
+  expect(client.query.eq).toHaveBeenCalledWith('merchant_id', id);
+  expect(client.query.eq).toHaveBeenCalledWith('id', id);
   expect(f.deps.record).toHaveBeenCalledWith({
     approvalId: id,
     kind: 'draft',
     effectDigest: approval.effectDigest,
     markerDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+    expiresAt: approval.expiresAt,
   });
-  await f.verifier.verifyCommitted({} as never, { receiptId: id });
-  expect(f.deps.verifyPublic).toHaveBeenCalledWith({}, { receiptId: id });
+  await f.verifier.verifyCommitted(client as never, { receiptId: id });
+  expect(f.deps.verifyPublic).toHaveBeenCalledWith(client, { receiptId: id });
+});
+it('does not certify when the approval expiry changes during capture', async () => {
+  const f = setup();
+  vi.mocked(loadDraftApproval)
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce({ ...approval, expiresAt: '2098-01-01T00:00:00Z' });
+  await expect(
+    f.verifier.attest(ownerClient() as never, id, 'draft')
+  ).rejects.toThrow('APPROVAL_MISMATCH');
+  expect(f.deps.record).not.toHaveBeenCalled();
+});
+it('rejects evidence for a different build digest and approval ownership changes', async () => {
+  const f = setup();
+  await expect(
+    f.verifier.attest(ownerClient('f'.repeat(64)) as never, id, 'draft')
+  ).rejects.toThrow('APPROVAL_MISMATCH');
+  expect(f.deps.record).not.toHaveBeenCalled();
+  vi.mocked(loadDraftApproval)
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce({
+      ...approval,
+      merchantId: '22222222-2222-4222-8222-222222222222',
+    });
+  await expect(
+    f.verifier.attest(ownerClient() as never, id, 'draft')
+  ).rejects.toThrow('APPROVAL_MISMATCH');
+  expect(f.deps.record).not.toHaveBeenCalled();
 });
 it('rejects forged effects and invalidated approvals without writing proof', async () => {
   const f = setup();
@@ -57,16 +101,16 @@ it('rejects forged effects and invalidated approvals without writing proof', asy
     ...(await f.deps.capture()),
     effectDigest: 'd'.repeat(64),
   });
-  await expect(f.verifier.attest({} as never, id, 'lifecycle')).rejects.toThrow(
-    'APPROVAL_MISMATCH'
-  );
+  await expect(
+    f.verifier.attest(ownerClient() as never, id, 'lifecycle')
+  ).rejects.toThrow('APPROVAL_MISMATCH');
   expect(f.deps.record).not.toHaveBeenCalled();
   vi.mocked(loadDraftApproval)
     .mockResolvedValueOnce(approval)
     .mockResolvedValueOnce({ ...approval, effectDigest: 'd'.repeat(64) });
-  await expect(f.verifier.attest({} as never, id, 'draft')).rejects.toThrow(
-    'APPROVAL_MISMATCH'
-  );
+  await expect(
+    f.verifier.attest(ownerClient() as never, id, 'draft')
+  ).rejects.toThrow('APPROVAL_MISMATCH');
   expect(f.deps.record).not.toHaveBeenCalled();
 });
 it('reconciled receipt does not request or write fresh evidence', async () => {

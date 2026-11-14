@@ -6,7 +6,7 @@ export const experienceToolDescriptions: Record<
   get_experience_capabilities: {
     title: 'Read full-code capabilities',
     description:
-      'Read owner-only full React/TypeScript/CSS authoring capabilities. The fixed local Chromium qualification policy measures host and frame LCP at 390px and 1440px, with a 2s median target for one representative of every declared route family and CLS <= 0.1 on every sample. This local gate does not establish field Core Web Vitals, production performance, or release authorization. Reserve image dimensions, prioritize the real hero and avoid blocking initial content on scripts or fonts. Use read_experience_performance for exact-build diagnostics; not-measured, partial, or contaminated results do not pass publication qualification. Follow runtimeRendering from capabilities: prerender-private enables local private prerender previews; client keeps the legacy path. Baci inference is never invoked.',
+      'Read owner-only full React/TypeScript/CSS authoring capabilities. For accessible product add and checkout buttons, add data-baci-commerce="add" and data-baci-commerce="checkout" respectively so verification can find them regardless of their visible language; these attributes do not replace Baci commerce calls. The fixed local Chromium qualification policy measures host and frame LCP at 390px and 1440px, with a 2s median target for one representative of every declared route family and CLS <= 0.1 on every sample. This local gate does not establish field Core Web Vitals, production performance, or release authorization. Reserve image dimensions, prioritize the real hero and avoid blocking initial content on scripts or fonts. Use read_experience_performance for exact-build diagnostics; not-measured, partial, or contaminated results do not pass publication qualification. Follow runtimeRendering from capabilities: prerender-private enables local private prerender previews; client keeps the legacy path. Baci inference is never invoked.',
   },
   read_experience: {
     title: 'Read, patch or adopt uploaded source',
@@ -41,12 +41,12 @@ export const experienceToolDescriptions: Record<
   get_experience_operation: {
     title: 'Read build operation',
     description:
-      'Read owner-bound operation status without creating a job or running a provider.',
+      'Read owner-bound operation status without creating a job or running a provider. An expired status means the unfinished job can no longer complete; create a new build job for the artifact with a new idempotency key.',
   },
   finalize_experience_build: {
     title: 'Qualify and finalize build',
     description:
-      'Run the queued immutable source through the selected isolated runtime and independent verification. Finalization retains a private candidate and never applies or publishes it.',
+      'Run the queued immutable source through the selected isolated runtime and independent verification. With background processing enabled, this reads the job status and it may still be queued; report a completed build only after its status confirms completion. Finalization retains a private candidate and never applies or publishes it. If the response times out or disconnects, do not assume failure or start another build: use get_experience_operation with the same jobId to inspect its status before deciding what to do.',
   },
   preview_experience: {
     title: 'Capture private experience preview',

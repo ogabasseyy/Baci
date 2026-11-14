@@ -5,7 +5,7 @@ import type {
 import type { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
 import type { LocalPrerenderArtifacts } from '../../../tools/experience-runner/prerender-artifacts';
 import type { TransientOutputStore } from '../../../tools/experience-runner/transient-output-store';
-import type { OwnerRequestContext } from './authorization';
+import type { ExperienceContext, OwnerRequestContext } from './authorization';
 import type { BuildPerformanceDependencies } from './build-performance-types';
 
 export interface VerifierReceipt {
@@ -25,7 +25,10 @@ export type ExperienceBuildDependencies = {
   toolchainDigest: string;
   hostOrigin: string;
   transient: TransientOutputStore;
-  recordVerifiedEvidence: (receipt: VerifierReceipt) => Promise<void>;
+  recordVerifiedEvidence: (
+    receipt: VerifierReceipt,
+    context: ExperienceContext
+  ) => Promise<void>;
   bootstrap:
     | PublicBootstrap
     | ((

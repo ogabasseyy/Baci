@@ -36,6 +36,9 @@ export function experienceSqlCommands(requested = []) {
             ]
           : []),
         ...selected.map((n) => `tools/experience-sql/${n}.node.test.ts`),
+        ...(selected.includes('jobs')
+          ? ['tools/experience-sql/job-connection-binding.node.test.ts']
+          : []),
       ],
     ],
     ...(!requested.length || requested.includes('uploads')

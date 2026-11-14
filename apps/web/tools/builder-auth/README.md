@@ -22,6 +22,41 @@ fixture permits its own self-signed certificate; production uses normal TLS.
 Node may emit a module-type detection warning when loading the existing shared
 HTML escaping utility. No TLS downgrade or global certificate bypass is used.
 
+The runtime's `listenPrivate(socketPath)` exposes the broker only on a private
+owner-only Unix socket. Its parent must be owned by the service user and private;
+the listener rejects untrusted ancestors, validates the expected issuer host,
+and replaces forwarded headers before enabling the provider's proxy mode. A
+separately configured HTTPS ingress must run with access to that socket and
+route only the intended broker endpoints. The listener is not started by
+importing or constructing the runtime and does not provision an ingress.
+
+The candidate's dedicated issuer is `https://builder-auth.usebaci.com`, while
+its protected MCP resource remains `https://mcp.usebaci.com/builder/mcp`.
+The fixed auth loopback presents the builder-auth host to the private broker.
+Do not route the existing commerce issuer or the root discovery routes on
+`mcp.usebaci.com` to this broker. This is source configuration, not evidence
+that DNS, TLS, ingress or the upstream OAuth callback is provisioned.
+
+`startProductionAuthBroker` accepts trusted operator configuration and opens a
+TLS-verified pool using the dedicated `baci_builder_auth_login` login, with
+`baci_builder_auth_storage` as the effective database role. The login must be
+NOINHERIT, non-superuser, non-bypass-RLS, and a member only of that storage
+role. Startup verifies both identities and fails closed on broader privileges.
+Use a direct connection or the Supabase session pooler on port 5432; transaction
+pooling is rejected because this broker relies on session state and locks. The
+login and its secret are not provisioned by this code. It rejects secret
+Supabase keys, mismatched upstream origins, unsafe callback/socket paths and
+reused key material, then starts the private socket only after runtime checks
+pass. It closes the listener and pool on shutdown. The Linux non-root entrypoint
+loads `/var/lib/baci-builder-auth/auth.json` from a private, service-owned
+directory and rejects unsafe files. Credential provisioning, process supervision
+and HTTPS ingress remain separate deployment tasks. The private socket is
+service-owned and requires the ingress to have appropriate access. The direct
+broker disconnect endpoint is disabled; the normal
+owner dashboard/RLS disconnect path is separately gated and must be enabled and
+tested before merchant activation. Never pass configuration from an HTTP or MCP
+request, and do not log configuration or raw upstream/database errors.
+
 ## Authority and storage
 
 - `createBuilderAuthRuntime` requires the private `baci_builder_auth_storage`
@@ -70,6 +105,11 @@ owner inside every mutation. Task 6 must wire the private runtime into the new
 fixed execution gateway, with throttling, redacted audit and protocol challenges.
 Task 9 owns full release replay, real staging/ChatGPT journeys and packaging.
 
-Expired provider/transaction records are ignored on read. Release operations
-must schedule bounded retention cleanup. Owner disconnect immediately stops
-access via the canonical row; encrypted session cleanup may follow separately.
+Expired provider/transaction records are ignored on read. The local production
+broker candidate also schedules bounded cleanup of those two record types every
+15 minutes using the restricted broker role; its expiry indexes and production
+operation still require review and deployment qualification. Monitor the
+`AUTH_RETENTION_BATCH_FAILED` signal and backlog; a batch limit is not a
+guaranteed deletion deadline. This does not clean source artifacts, backups or
+encrypted sessions. Owner disconnect immediately stops access via the canonical
+row; encrypted session cleanup may follow separately.

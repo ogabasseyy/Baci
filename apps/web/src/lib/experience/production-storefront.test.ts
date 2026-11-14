@@ -78,7 +78,7 @@ function fixture() {
     client: {} as never,
     artifactDirectory: '/unused-test-only',
     executionOrigin: 'https://output.baci-runtime.test',
-    canonicalBase: (slug) => `https://merchant.test/${slug}`,
+    canonicalBase: async (slug) => `https://merchant.test/${slug}`,
     execute,
   });
   const request = () =>

@@ -15,6 +15,7 @@ import {
   createProductionPrerenderPipeline,
   type PrerenderPipelineSettings,
 } from './local-prerender-pipeline';
+import { loadOwnerPreviewBootstrap } from './owner-preview-bootstrap';
 import { createPreviewVault } from './preview-service';
 import {
   createPrivateExperienceCapture,
@@ -32,7 +33,7 @@ export function createProductionExperienceIntegration(settings: {
   previewOrigin?: string;
   executionOrigin: string;
   artifactDirectory: string;
-  canonicalBase: (slug: string) => string;
+  canonicalBase: (slug: string) => string | Promise<string>;
   publicClient: SupabaseClient;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   authenticate: ExperienceCompositionSettings['authenticate'];
@@ -44,20 +45,24 @@ export function createProductionExperienceIntegration(settings: {
     PrerenderPipelineSettings['build'],
     'execute' | 'profile' | 'hostOrigin'
   >;
-  bootstrap(
+  bootstrap?(
     ctx: OwnerRequestContext,
     manifest: ExperienceManifest,
     routeId: string
   ): Promise<PublicBootstrap>;
-  recordCapture(capture: RecordedPrivateCapture): Promise<void>;
+  recordCapture?(capture: RecordedPrivateCapture): Promise<void>;
+  remoteCapture?: ReturnType<typeof createPrivateExperienceCapture>;
 }) {
   const previewOrigin = settings.previewOrigin ?? settings.hostOrigin;
+  const bootstrap = settings.bootstrap ?? loadOwnerPreviewBootstrap;
   productionDeliveryOrigins({
     executionOrigin: settings.executionOrigin,
     hostOrigins: [settings.hostOrigin, previewOrigin],
   });
   if (settings.build.toolchainDigest !== settings.runner.toolchainDigest)
     throw Error('TOOLCHAIN_MISMATCH');
+  if (!settings.remoteCapture && !settings.recordCapture)
+    throw Error('VERIFIER_NOT_CONFIGURED');
   let active = true;
   const guarded =
     (
@@ -112,7 +117,7 @@ export function createProductionExperienceIntegration(settings: {
       !/^[a-z0-9][a-z0-9-]{0,99}$/.test(merchant.data.slug)
     )
       throw Error('NOT_FOUND');
-    const canonicalBase = settings.canonicalBase(merchant.data.slug);
+    const canonicalBase = await settings.canonicalBase(merchant.data.slug);
     const canonicalOrigin = new URL(canonicalBase).origin;
     productionDeliveryOrigins({
       executionOrigin: settings.executionOrigin,
@@ -132,16 +137,20 @@ export function createProductionExperienceIntegration(settings: {
           previewOrigin,
           execute,
         },
-        bootstrap: settings.bootstrap,
+        bootstrap,
       });
-      const capture = createPrivateExperienceCapture({
-        profile: 'production',
-        hostOrigin: canonicalOrigin,
-        previewOrigin,
-        bootstrap: settings.bootstrap,
-        record: settings.recordCapture,
-        capture: (input) => captureExperience(input, execute),
-      });
+      const capture =
+        settings.remoteCapture ??
+        createPrivateExperienceCapture({
+          profile: 'production',
+          hostOrigin: canonicalOrigin,
+          previewOrigin,
+          bootstrap,
+          record:
+            settings.recordCapture ??
+            (() => Promise.reject(Error('VERIFIER_NOT_CONFIGURED'))),
+          capture: (input) => captureExperience(input, execute),
+        });
       if (pipelines.size >= 32) {
         const oldest = pipelines.keys().next().value;
         if (oldest) pipelines.delete(oldest);

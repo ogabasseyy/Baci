@@ -23,6 +23,17 @@ import { createLocalPerformanceReports } from './local-performance-reports';
 import { validatePerformanceBootstrap } from './performance-bootstrap';
 import type { PreviewVault } from './preview-service';
 import { productionDeliveryOrigins } from './production-origins';
+/** Prefer a route that does not require an existing catalog item. */
+export function selectInitialExperienceView(
+  routes: ExperienceManifest['routes']
+) {
+  const selected =
+    routes.find((route) => route.view === 'home') ??
+    routes.find((route) => route.view !== 'product') ??
+    routes[0];
+  if (!selected) throw Error('INVALID_ROUTE');
+  return selected.view;
+}
 /** Explicit local composition: the build and owner preview share exact companion output. */
 export interface PrerenderPipelineSettings {
   artifactDirectory?: string;
@@ -127,7 +138,11 @@ function createPrerenderPipeline(
         ...(profile === 'production' ? { profile: 'production' as const } : {}),
         prerenderArtifacts: artifacts,
         bootstrap: (owner, manifest) =>
-          settings.bootstrap(owner, manifest, manifest.routes[0].view),
+          settings.bootstrap(
+            owner,
+            manifest,
+            selectInitialExperienceView(manifest.routes)
+          ),
         performanceMeasurement: ({
           ctx: owner,
           manifest,

@@ -43,6 +43,9 @@ export const startSavingsStyles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 11,
     fontSize: 13,
+    // Explicit, not omitted: on iOS a recycled native TextInput can keep an
+    // earlier field's letter spacing (a code or BVN input) when it is unset.
+    letterSpacing: 0,
   },
   pickerField: {
     borderWidth: 1,

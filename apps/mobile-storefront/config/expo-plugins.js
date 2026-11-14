@@ -10,12 +10,13 @@ function createExpoPlugins({
   const googleMobileAdsPlugin = buildGoogleMobileAdsExpoPlugin(process.env);
   return [
     'expo-router',
-    // Register before Expo adds the storyboard provider; mods execute in reverse.
-    './config/withBackgroundOnlyIosSplash.js',
     [
-      'expo-splash-screen',
+      'react-native-splash-motion',
       {
-        backgroundColor: '#000000',
+        source: './assets/splash-scene/native-splash.json',
+        background: '#20000b',
+        width: 420,
+        loop: false,
       },
     ],
     [
@@ -89,9 +90,9 @@ function createExpoPlugins({
     ...(googleMobileAdsPlugin ? [googleMobileAdsPlugin] : []),
     './config/withFirebaseModularHeaders.js',
     './config/withObjCLinkerFlag.js',
-    './config/withNoSplashImage.js',
     './config/withAdaptiveAndroidManifest.js',
     './config/withAndroidSystemBars.js',
+    './config/withSplashMotionWindowBackground.js',
     './config/withAndroidGradleFixes.js',
     './config/withReactNativeFromSource.js',
     // Expo executes AppDelegate mods in reverse registration order. Register

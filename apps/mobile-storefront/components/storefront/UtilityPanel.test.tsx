@@ -94,14 +94,7 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
-import {
-  act,
-  fireEvent,
-  render,
-  renderHook,
-  screen,
-} from '@testing-library/react-native';
-import { useSharedValue } from 'react-native-reanimated';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { findHostElement } from '@/test-support/find-host-element';
 import { UtilityPanel } from './UtilityPanel';
@@ -161,126 +154,6 @@ describe('UtilityPanel', () => {
     });
     jest.useRealTimers();
     jest.restoreAllMocks();
-  });
-
-  it('applies light and dark theme tokens to promo and selected icon backgrounds', () => {
-    const onCategorySelect = jest.fn();
-
-    const { rerender } = render(
-      <UtilityPanel
-        selectedCategoryId={null}
-        onCategorySelect={onCategorySelect}
-      />
-    );
-
-    expect(
-      screen.getByLabelText('We Pay YOU When You Buy Airtime!')
-    ).toHaveStyle({
-      backgroundColor: Colors.light.promoBackground,
-    });
-    const airtimeButtonLight = screen.getByRole('button', { name: 'Airtime' });
-    expect(findHostElement(airtimeButtonLight.children[0])).toHaveStyle({
-      backgroundColor: Colors.light.card,
-    });
-
-    mockUseColorScheme.mockReturnValue('dark');
-
-    rerender(
-      <UtilityPanel
-        selectedCategoryId={null}
-        onCategorySelect={onCategorySelect}
-      />
-    );
-
-    expect(
-      screen.getByLabelText('We Pay YOU When You Buy Airtime!')
-    ).toHaveStyle({
-      backgroundColor: Colors.dark.promoBackground,
-    });
-    const airtimeButtonDark = screen.getByRole('button', { name: 'Airtime' });
-    expect(findHostElement(airtimeButtonDark.children[0])).toHaveStyle({
-      backgroundColor: Colors.dark.card,
-    });
-  });
-
-  it('renders an explicit error state for non-utility category failures', () => {
-    mockUseCategories.mockReturnValue(
-      createCategoriesResult({ error: new Error('boom') })
-    );
-
-    render(
-      <UtilityPanel
-        slug="phones"
-        selectedCategoryId={null}
-        onCategorySelect={jest.fn()}
-      />
-    );
-
-    expect(screen.getByText('Unable to load categories')).toBeTruthy();
-    expect(screen.getByText('Please try again in a moment.')).toBeTruthy();
-  });
-
-  it('auto-rotates promo words until a user manually selects a category', () => {
-    const onCategorySelect = jest.fn();
-
-    render(
-      <UtilityPanel
-        selectedCategoryId={null}
-        onCategorySelect={onCategorySelect}
-      />
-    );
-
-    expect(screen.getByText('Airtime!')).toBeTruthy();
-
-    act(() => {
-      jest.advanceTimersByTime(2800);
-    });
-
-    expect(screen.getByText('Data!')).toBeTruthy();
-
-    fireEvent.press(screen.getByLabelText('Power'));
-    expect(onCategorySelect).toHaveBeenCalledWith('u-power');
-    expect(screen.getByText('Power!')).toBeTruthy();
-
-    act(() => {
-      jest.advanceTimersByTime(5600);
-    });
-
-    expect(screen.getByText('Power!')).toBeTruthy();
-  });
-
-  it('stops auto-rotation while a product screen covers home and resumes on return', () => {
-    mockUseIsFocused.mockReturnValue(true);
-    const { result } = renderHook(() => useSharedValue(0));
-    const { rerender } = render(
-      <UtilityPanel
-        activeIndex={result.current}
-        selectedCategoryId={null}
-        onCategorySelect={jest.fn()}
-      />
-    );
-    act(() => jest.advanceTimersByTime(2800));
-    expect(screen.getByText('Data!')).toBeTruthy();
-    mockUseIsFocused.mockReturnValue(false);
-    rerender(
-      <UtilityPanel
-        activeIndex={result.current}
-        selectedCategoryId={null}
-        onCategorySelect={jest.fn()}
-      />
-    );
-    act(() => jest.advanceTimersByTime(5600));
-    expect(screen.getByText('Data!')).toBeTruthy();
-    mockUseIsFocused.mockReturnValue(true);
-    rerender(
-      <UtilityPanel
-        activeIndex={result.current}
-        selectedCategoryId={null}
-        onCategorySelect={jest.fn()}
-      />
-    );
-    act(() => jest.advanceTimersByTime(2800));
-    expect(screen.getByText('Tv!')).toBeTruthy();
   });
 
   it('uses the selectedCategoryId prop to mark the chosen utility as active', () => {

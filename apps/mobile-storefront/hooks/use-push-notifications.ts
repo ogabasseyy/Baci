@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
@@ -12,12 +12,32 @@ import { useAuthStore } from '@/stores/auth-store';
 import { clearLastNotificationResponse } from './clear-last-notification-response';
 import { navigateFromPushScreen } from './navigate-from-push-screen';
 import { processPushNotificationResponse } from './process-push-notification-response';
+import { shouldHandleColdStartResponse } from './should-handle-cold-start-response';
 import type { UsePushNotificationsReturn } from './use-push-notifications.types';
 import { useSavingsPushRegistration } from './use-savings-push-registration';
 
 type EventSubscription = {
   remove: () => void;
 };
+type NotificationResponse = import('expo-notifications').NotificationResponse;
+const MAX_QUEUED_NOTIFICATION_RESPONSES = 16;
+
+function getNotificationResponseKey(response: NotificationResponse): string {
+  return `${response.notification.request.identifier}:${response.notification.date}`;
+}
+
+function enqueueNotificationResponse(
+  queue: NotificationResponse[],
+  response: NotificationResponse
+): void {
+  const key = getNotificationResponseKey(response);
+  if (queue.some((pending) => getNotificationResponseKey(pending) === key)) {
+    return;
+  }
+
+  queue.push(response);
+  if (queue.length > MAX_QUEUED_NOTIFICATION_RESPONSES) queue.shift();
+}
 
 const STOREFRONT_MERCHANT_ID = pickMerchantId(CONFIG.MERCHANT_ID);
 const log = createLogger('PushNotifications');
@@ -41,7 +61,11 @@ const loadNativeModules = async () => {
 
 const notificationsReady = loadNativeModules();
 
-export function usePushNotifications(): UsePushNotificationsReturn {
+export function usePushNotifications({
+  navigationReady = true,
+}: {
+  navigationReady?: boolean;
+} = {}): UsePushNotificationsReturn {
   const { customer, user, merchantId } = useAuthStore(
     useShallow((state) => ({
       customer: state.customer,
@@ -51,8 +75,23 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   );
   const notificationListener = useRef<EventSubscription | null>(null);
   const responseListener = useRef<EventSubscription | null>(null);
+  const mountedRef = useRef(false);
+  const pendingResponses = useRef<NotificationResponse[]>([]);
+  const coldStartResponseRequested = useRef(false);
+  const liveResponseReceived = useRef(false);
+  const navigationReadyRef = useRef(navigationReady);
+  useLayoutEffect(() => {
+    navigationReadyRef.current = navigationReady;
+  }, [navigationReady]);
   const registration = useSavingsPushRegistration();
   const activeMerchantId = pickMerchantId(merchantId, STOREFRONT_MERCHANT_ID);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const navigate = useEffectEvent(
     (
@@ -88,6 +127,17 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       ownerId: auth.customer?.id ?? auth.user.id,
     }).catch(() => log.warn('Unable to refresh savings after notification'));
   });
+  const handleNotificationResponse = useEffectEvent(
+    (response: NotificationResponse) => {
+      log.info('Notification tapped');
+      processPushNotificationResponse(
+        response,
+        navigate,
+        () => clearLastNotificationResponse(Notifications),
+        { activeMerchantId, invalidateSavingsWallet }
+      );
+    }
+  );
 
   useEffect(() => {
     const cancelledRef = { current: false };
@@ -96,42 +146,75 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       if (cancelledRef.current || !Notifications) return;
 
       notificationListener.current?.remove();
-      responseListener.current?.remove();
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
           log.info('Notification received');
           receiveSavingsNotification(notification.request.content.data);
         });
-      responseListener.current =
-        Notifications.addNotificationResponseReceivedListener((response) => {
-          log.info('Notification tapped');
-          processPushNotificationResponse(
-            response,
-            navigate,
-            () => clearLastNotificationResponse(Notifications),
-            { activeMerchantId, invalidateSavingsWallet }
-          );
-        });
-
-      Notifications.getLastNotificationResponseAsync().then((response) => {
-        if (response && !cancelledRef.current) {
-          log.info('App launched from notification');
-          processPushNotificationResponse(
-            response,
-            navigate,
-            () => clearLastNotificationResponse(Notifications),
-            { activeMerchantId, invalidateSavingsWallet }
-          );
-        }
-      });
     });
 
     return () => {
       cancelledRef.current = true;
       notificationListener.current?.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const cancelledRef = { current: false };
+
+    notificationsReady.then(() => {
+      if (cancelledRef.current || !Notifications) return;
+      responseListener.current?.remove();
+      responseListener.current =
+        Notifications.addNotificationResponseReceivedListener((response) => {
+          if (cancelledRef.current) return;
+          liveResponseReceived.current = true;
+          if (!navigationReadyRef.current) {
+            enqueueNotificationResponse(pendingResponses.current, response);
+            return;
+          }
+          handleNotificationResponse(response);
+        });
+    });
+
+    return () => {
+      cancelledRef.current = true;
       responseListener.current?.remove();
     };
-  }, [activeMerchantId]);
+  }, []);
+
+  useEffect(() => {
+    if (!navigationReady) return;
+    const cancelledRef = { current: false };
+
+    notificationsReady.then(() => {
+      if (cancelledRef.current || !Notifications) return;
+      const queuedResponses = pendingResponses.current.splice(0);
+      queuedResponses.forEach(handleNotificationResponse);
+
+      if (!coldStartResponseRequested.current) {
+        coldStartResponseRequested.current = true;
+        Notifications.getLastNotificationResponseAsync().then((response) => {
+          if (!mountedRef.current || !response) return;
+          if (
+            !shouldHandleColdStartResponse(true, liveResponseReceived.current)
+          ) {
+            return;
+          }
+          log.info('App launched from notification');
+          if (navigationReadyRef.current) {
+            handleNotificationResponse(response);
+          } else {
+            enqueueNotificationResponse(pendingResponses.current, response);
+          }
+        });
+      }
+    });
+
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [navigationReady]);
 
   return registration;
 }

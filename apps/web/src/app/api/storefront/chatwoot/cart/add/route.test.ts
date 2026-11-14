@@ -213,6 +213,38 @@ describe('Chatwoot shared-cart add route', () => {
     });
   });
 
+  it.each([
+    'version_conflict',
+    'cart_locked',
+  ])('maps %s to a refresh-required conflict', async (code) => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({ data: { ok: false, code } });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'refresh_required',
+    });
+  });
+
+  it.each([
+    'expired',
+    'not_found',
+  ])('maps %s to an expired-cart response', async (code) => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({ data: { ok: false, code } });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'cart_expired',
+    });
+  });
+
   it('preserves an idempotency conflict as a distinct 409 result', async () => {
     arrange();
     mocks.rpc.mockResolvedValueOnce({

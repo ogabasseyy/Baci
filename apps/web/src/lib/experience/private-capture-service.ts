@@ -138,6 +138,7 @@ export function createPrivateExperienceCapture(deps: {
         .select('path,bytes,digest')
         .eq('merchant_id', ctx.merchantId)
         .eq('build_id', input.buildId)
+        .in('path', ['app.js', 'app.css'])
         .limit(2);
       if (files.error || files.data?.length !== 2) throw Error('BUILD_FAILED');
       const read = (path: string) => {

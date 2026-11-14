@@ -39,6 +39,7 @@ function fixture() {
   };
   const eq = vi.fn();
   const from = vi.fn((table: string) => {
+    let allowedPaths: string[] | undefined;
     const q = {
       select: () => q,
       eq: (key: string, value: string) => {
@@ -46,8 +47,21 @@ function fixture() {
         return q;
       },
       like: () => q,
+      in: (_key: string, values: string[]) => {
+        allowedPaths = values;
+        return q;
+      },
       maybeSingle: async () => ({ data: rows[table], error: null }),
-      limit: async () => ({ data: rows[table], error: null }),
+      limit: async (n: number) => ({
+        data: Array.isArray(rows[table])
+          ? (rows[table] as { path?: string }[])
+              .filter(
+                (row) => !allowedPaths || allowedPaths.includes(row.path ?? '')
+              )
+              .slice(0, n)
+          : rows[table],
+        error: null,
+      }),
     };
     return q;
   });
@@ -116,6 +130,13 @@ function fixture() {
     buildDigest,
   };
 }
+
+it('selects the executable files even when another retained file appears first', async () => {
+  const f = fixture();
+  (f.rows.experience_build_files as unknown[]).unshift({ path: 'extra.txt' });
+  await f.run(f.ctx as never, input);
+  expect(f.capture).toHaveBeenCalledOnce();
+});
 
 it('captures merchant/build-bound evidence through the normal owner client and replays idempotently', async () => {
   const f = fixture();

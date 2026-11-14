@@ -124,6 +124,8 @@ export function WalletHeroSection({
   const showUtilities =
     !savingsView ||
     storeCredit === undefined ||
+    // A malformed (NaN) balance is unknown too, not "nothing to pay with".
+    !Number.isFinite(storeCredit) ||
     hasSpendableBalance({
       savingsWalletBalance: balanceUnknown ? 0 : savingsWalletBalance,
       storeCreditBalance: storeCredit,

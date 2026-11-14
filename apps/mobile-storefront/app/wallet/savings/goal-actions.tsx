@@ -41,8 +41,11 @@ export default function WalletGoalActionsRoute() {
   // A goal that is no longer the customer's (settled, cancelled, someone
   // else's) opens the plain wallet: the sheet would otherwise fall back to a
   // different goal and offer to cancel or complete that one.
+  // The goal may come as the active goal alone (partial payload): check both.
   const goals = wallet.data?.wallet?.savings_goals ?? [];
-  const owned = goals.some((goal) => goal.id === goalId);
+  const owned =
+    wallet.data?.wallet?.active_savings_goal?.id === goalId ||
+    goals.some((goal) => goal.id === goalId);
   return (
     <Redirect
       href={

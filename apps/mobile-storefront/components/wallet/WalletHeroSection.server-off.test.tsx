@@ -175,3 +175,23 @@ describe('bugfix: cold launch with the server down stuck on "Checking your accou
     ).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: NaN store credit hid the utility shortcuts', () => {
+  it('keeps the shortcuts when the store credit balance is malformed', () => {
+    render(
+      <WalletHeroSection
+        earningsAvailable={false}
+        earningsBalance={null}
+        loyaltyPoints={0}
+        onOpenFundPanel={jest.fn()}
+        onOpenRedeemPanel={jest.fn()}
+        primaryUnknown
+        savingsBalance={0}
+        savingsWalletBalance={0}
+        storeCreditBalance={Number.NaN}
+        totalBalance={0}
+      />
+    );
+    expect(screen.getByLabelText('Buy Airtime')).toBeOnTheScreen();
+  });
+});

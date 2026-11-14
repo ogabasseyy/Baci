@@ -65,6 +65,20 @@ describe('old goal-actions links', () => {
     expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
   });
 
+  it('bugfix: open the sheet when the goal is only the active goal', () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: {
+        wallet: { active_savings_goal: { id: GOAL }, savings_goals: [] },
+      },
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(
+      screen.getByText(`Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`)
+    ).toBeOnTheScreen();
+  });
+
   it('wait for the wallet before deciding', () => {
     mockWallet.mockReturnValue({ isLoading: true, data: undefined });
     mockParams.mockReturnValue({ goalId: GOAL });

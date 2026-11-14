@@ -6,6 +6,7 @@ describe('walletPurchaseProps', () => {
     expect(
       walletPurchaseProps({ legacyBalance: 1200, walletPrimaryUnsettled: true })
     ).toEqual({
+      primaryStale: false,
       primaryUnreadable: false,
       savingsPrimary: false,
       storeCreditBalance: 1200,
@@ -15,6 +16,7 @@ describe('walletPurchaseProps', () => {
 
   it('keeps a legacy wallet unflagged with no store credit line', () => {
     expect(walletPurchaseProps({})).toEqual({
+      primaryStale: false,
       primaryUnreadable: false,
       savingsPrimary: false,
       storeCreditBalance: undefined,
@@ -29,5 +31,11 @@ describe('bugfix: unreachable PiggyVest read showed the goals total as the balan
     expect(
       walletPurchaseProps({ primaryUnreadable: true }).primaryUnreadable
     ).toBe(true);
+  });
+});
+
+describe('bugfix: a recalled PiggyVest balance showed no staleness hint (walk 14)', () => {
+  it('passes the recalled balance flag through to the wallet card', () => {
+    expect(walletPurchaseProps({ primaryStale: true }).primaryStale).toBe(true);
   });
 });

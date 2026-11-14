@@ -140,3 +140,26 @@ describe('bugfix: unreachable PiggyVest read presented as a known wallet (walk 1
     );
   });
 });
+
+describe('bugfix: a recalled PiggyVest balance showed no staleness hint (walk 14)', () => {
+  it('flags a ready balance recalled from moments ago as stale', () => {
+    const display = deriveWalletDisplayData({
+      balance: 0,
+      funding_account: {
+        account_name: 'OGB / ADA',
+        account_number: '9814644749',
+        bank_name: 'Provider Bank',
+        provider: 'piggyvest',
+      },
+      primary_balance_kobo: 500_000,
+      primary_stale: true,
+    });
+    expect(display.primaryStale).toBe(true);
+  });
+
+  it('adds no flag for a legacy wallet', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 0, primary_stale: true }).primaryStale
+    ).toBeUndefined();
+  });
+});

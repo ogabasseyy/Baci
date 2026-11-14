@@ -1,113 +1,27 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
-import { type ReactNode, useState } from 'react';
-import { RefreshControl, type StyleProp, type ViewStyle } from 'react-native';
+import { useState } from 'react';
+import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
-import type Colors from '@/constants/Colors';
 import { useRefetchOnRefocus } from '@/hooks/use-refetch-on-refocus';
 import { useUserPullRefresh } from '@/hooks/use-user-pull-refresh';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
-import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
-import type { Product } from '@/types/product';
 import { isPrimaryWallet } from './is-primary-wallet';
 import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
-import type { SavingsVariantResolveResult } from './resolve-completed-savings-goal-variant';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { useWalletPrimaryUnknown } from './use-wallet-primary-unknown';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
-import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
 import { WalletInlineNotices } from './WalletInlineNotices';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsPlanCardWithSetup } from './WalletSavingsPlanCardWithSetup';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
-import {
-  type WalletTransaction,
-  WalletTransactionHistory,
-} from './WalletTransactionHistory';
-import type { WalletDisplayFundingAccount } from './wallet.types';
+import { WalletTransactionHistory } from './WalletTransactionHistory';
+import type { WalletContentProps } from './wallet-content-props.types';
 
-type WalletColors = (typeof Colors)['light'];
-
-export interface WalletContentProps {
-  merchantId?: string;
-  hasSavedCards?: boolean;
-  activeSavingsGoal: WalletActiveSavingsGoal | null;
-  canCreateFundingAccount: boolean;
-  /** False while the route's persisted funding session is still being written. */
-  canResolveCreditBaseline?: boolean;
-  colors: WalletColors;
-  contentContainerStyle: StyleProp<ViewStyle>;
-  createFundingAccountUnavailableMessage?: string;
-  /** Scopes the persisted bank-transfer funding session the credit watch reads. */
-  customerId?: string;
-  earningsAvailable?: boolean;
-  earningsBalance: number | null;
-  fundAmount: string;
-  fundingAccount: WalletDisplayFundingAccount | null;
-  /** Sanitized deep-link for the post-credit "Return to your purchase" CTA. */
-  fundReturnTo?: WalletReturnHref;
-  isAddingSavingsContribution: boolean;
-  hasPendingSavingsContribution?: boolean;
-  goalAwaitingSettlement?: boolean;
-  /** The wallet query's last-updated time: re-reads the goal readiness gate. */
-  walletUpdatedAt?: number;
-  isCreatingFundingAccount: boolean;
-  isFundPending: boolean;
-  isRedeemPending: boolean;
-  isRefetching: boolean;
-  loyaltyPoints: number;
-  loyaltyTier?: string | null;
-  needsPhone: boolean;
-  primaryReady?: boolean;
-  walletPrimaryUnsettled?: boolean;
-  /** The PiggyVest read failed: balance and account can't be checked. */
-  primaryUnreadable?: boolean;
-  savingsPrimary?: boolean;
-  onCreateFundingAccount: () => void;
-  onChangeFundAmount: (value: string) => void;
-  onChangeRedeemPoints: (value: string) => void;
-  onConfirmFund: () => void;
-  onConfirmRedeem: () => void;
-  onAddSavingsContribution: () => void;
-  onChangeSavingsDevice: (
-    product: Product,
-    variantId?: string | null
-  ) => Promise<boolean>;
-  onChangeSavingsContributionAmount: (value: string) => void;
-  onResolveSavingsVariant: (
-    variantId: string
-  ) => Promise<SavingsVariantResolveResult>;
-  onCloseSavingsProgress: () => void;
-  onManageCards: () => void;
-  onFundSavingsWallet: () => void;
-  onOpenFundPanel: () => void;
-  onOpenRedeemPanel: () => void;
-  onQuickSave: () => void;
-  onRefresh: () => void;
-  onResetFund: () => void;
-  /** The PIN prompt: inside the open savings sheet (iOS can't stack modals). */
-  pinPrompt?: ReactNode;
-  onResetRedeem: () => void;
-  onStartSavings: () => void;
-  onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
-  redeemPoints: string;
-  savingsContributionAmount: string;
-  savingsBalance: number;
-  walletBalance?: number;
-  showSavingsProgress: boolean;
-  showQuickSave: boolean;
-  showFundPanel: boolean;
-  showRedeemPanel: boolean;
-  /** PiggyVest only: the legacy balance, spendable on purchases. */
-  storeCreditBalance?: number;
-  totalBalance: number;
-  /** Wallet ledger; the credit watch reads bank-transfer top-ups off it. */
-  transactions: WalletTransaction[];
-}
+export type { WalletContentProps } from './wallet-content-props.types';
 
 export function WalletContent(props: WalletContentProps) {
   const {
@@ -207,6 +121,7 @@ export function WalletContent(props: WalletContentProps) {
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           primaryBalanceReady={props.primaryReady === true}
+          primaryStale={props.primaryStale === true}
           primaryUnknown={primaryUnknown}
           savingsBalance={savingsBalance}
           savingsWalletBalance={walletBalance}

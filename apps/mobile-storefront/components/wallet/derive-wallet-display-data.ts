@@ -20,6 +20,7 @@ interface WalletDataLike {
   owner_unresolved?: boolean | null;
   primary_balance_kobo?: number | null;
   primary_pending?: boolean | null;
+  primary_stale?: boolean | null;
   primary_unavailable?: boolean | null;
   savings_balance?: number | null;
   savings_goals?: WalletActiveSavingsGoal[] | null;
@@ -149,6 +150,11 @@ export function deriveWalletDisplayData(
     // merchant and show a "can't check" state, never the goals total.
     ...(walletData.primary_unavailable === true && !primaryReady
       ? { primaryUnreadable: true as const }
+      : {}),
+    // The balance is recalled from moments ago (the fresh read failed): the
+    // account number is shown, marked as possibly out of date (walk 14).
+    ...(walletData.primary_stale === true && primaryReady
+      ? { primaryStale: true as const }
       : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),

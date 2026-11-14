@@ -8,6 +8,7 @@ import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hasSpendableBalance } from '@/lib/has-spendable-balance';
 import { SAVINGS_WALLET_CAN_PAY_UTILITIES } from '@/lib/savings-wallet-can-pay-utilities';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
+import { usePiggyvestAccountUnconfirmed } from './use-piggyvest-account-unconfirmed';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
 import { WalletHeroAddMoneyButton } from './WalletHeroAddMoneyButton';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
@@ -44,6 +45,8 @@ type WalletHeroSectionProps = {
   primaryBalanceReady?: boolean;
   /** PiggyVest merchant whose PiggyVest read failed: nothing to show yet. */
   primaryUnknown?: boolean;
+  /** The PiggyVest balance is recalled from moments ago, not fresh. */
+  primaryStale?: boolean;
   /** PiggyVest only: the legacy balance purchases can spend. */
   storeCreditBalance?: number;
   totalBalance: number;
@@ -74,6 +77,7 @@ export function WalletHeroSection({
   onOpenRedeemPanel,
   onStartSavings,
   primaryBalanceReady,
+  primaryStale,
   primaryUnknown,
   savingsBalance,
   savingsWalletBalance,
@@ -105,6 +109,14 @@ export function WalletHeroSection({
   const legacyUnconfirmed = useLegacyFundingUnconfirmed(
     fundingAccount?.provider
   );
+  // A saved PiggyVest number whose status or balance can't be checked right
+  // now is shown as the last known one (walks 12 and 14).
+  const piggyvestUnconfirmed = usePiggyvestAccountUnconfirmed(
+    fundingAccount?.provider
+  );
+  const lastKnownAccount =
+    fundingAccount?.provider === 'piggyvest' &&
+    (primaryUnknown === true || primaryStale === true || piggyvestUnconfirmed);
   // Utility shortcuts appear only when there is money to pay with; legacy
   // wallets always show them, as before.
   // An unread store credit balance isn't "nothing to pay with" (Muse): the
@@ -163,7 +175,7 @@ export function WalletHeroSection({
           <Text style={styles.accountUnavailableMessage}>
             Can’t check your account right now.
           </Text>
-        ) : primaryUnknown && fundingAccount?.provider === 'piggyvest' ? (
+        ) : lastKnownAccount && fundingAccount ? (
           // The server can't be reached: the last-known PiggyVest account
           // number is shown, marked as possibly out of date (walk 12).
           <View>

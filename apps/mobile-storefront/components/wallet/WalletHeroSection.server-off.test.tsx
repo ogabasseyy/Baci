@@ -115,3 +115,54 @@ describe('bugfix: known PiggyVest customer looked new with the server unreachabl
     expect(screen.queryByText('Total Balance · NGN')).toBeNull();
   });
 });
+
+const mockAccountUnconfirmed = jest.fn(() => false);
+jest.mock('./use-piggyvest-account-unconfirmed', () => ({
+  usePiggyvestAccountUnconfirmed: () => mockAccountUnconfirmed(),
+}));
+
+describe('bugfix: cold launch with the server down stuck on "Checking your account…" (walk 14)', () => {
+  const piggyvestAccount = {
+    accountName: 'OGB / ADA',
+    accountNumber: '9814644749',
+    bankName: 'Provider Bank',
+    provider: 'piggyvest',
+  };
+  function renderSaved(extra: { primaryStale?: boolean } = {}) {
+    render(
+      <WalletHeroSection
+        earningsAvailable={false}
+        earningsBalance={null}
+        fundingAccount={piggyvestAccount}
+        loyaltyPoints={0}
+        onOpenFundPanel={jest.fn()}
+        onOpenRedeemPanel={jest.fn()}
+        savingsBalance={0}
+        savingsWalletBalance={5000}
+        totalBalance={5000}
+        {...extra}
+      />
+    );
+  }
+
+  it('shows the last-known account while the PiggyVest status is unknown', () => {
+    mockAccountUnconfirmed.mockReturnValue(true);
+    renderSaved();
+
+    expect(screen.queryByText('Checking your account…')).toBeNull();
+    expect(screen.getByText('9814644749')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Last known account. It may be out of date.')
+    ).toBeOnTheScreen();
+  });
+
+  it('marks the account as last known while the balance is a recalled one', () => {
+    mockAccountUnconfirmed.mockReturnValue(false);
+    renderSaved({ primaryStale: true });
+
+    expect(screen.getByText('9814644749')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Last known account. It may be out of date.')
+    ).toBeOnTheScreen();
+  });
+});

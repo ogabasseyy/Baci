@@ -65,3 +65,45 @@ describe('bugfix: cold launch with the server unreachable (walk 11)', () => {
     expect(loaded.wallet.funding_account).toEqual(account);
   });
 });
+
+describe('bugfix: cold launch with no cached wallet lost the account (walk 14)', () => {
+  it('shows the account saved on the device when the fresh read failed', async () => {
+    const account = {
+      account_name: 'OGB / ADA',
+      account_number: '9814644749',
+      bank_name: 'Provider Bank',
+      provider: 'piggyvest',
+    };
+    mockFetch.mockResolvedValueOnce({
+      transactions: [],
+      wallet: { balance: 0, funding_account: account, loyalty_points: 0 },
+    });
+    await loadWalletQuery({
+      customerId: 'customer-1',
+      merchantId: 'merchant-9',
+      previous: () => undefined,
+      userId: 'user-9',
+    });
+    mockFetch.mockResolvedValueOnce({
+      transactions: [],
+      wallet: {
+        balance: 0,
+        funding_account: null,
+        loyalty_points: 0,
+        primary_unavailable: true,
+      },
+    });
+
+    // Cold launch: the query cache is empty.
+    const loaded = await loadWalletQuery({
+      customerId: 'customer-1',
+      merchantId: 'merchant-9',
+      previous: () => undefined,
+      userId: 'user-9',
+    });
+
+    expect(loaded.wallet.funding_account).toEqual(account);
+    expect(loaded.wallet.requires_funding_account_consent).toBe(false);
+    expect(loaded.wallet.primary_unavailable).toBe(true);
+  });
+});

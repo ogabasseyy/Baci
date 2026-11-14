@@ -185,11 +185,6 @@ export async function commitChatwootCartAdd(input: {
     } catch {
       // An accepted replay remains accepted; omit renewed credentials.
     }
-  } else if (
-    result.cart.cartId !== principal.cartId ||
-    result.cart.merchantId !== cartContext.state.merchantId
-  ) {
-    liveCartVersion = null;
   }
 
   const renewableOperations = renewalGrant?.allowedOperations.filter(

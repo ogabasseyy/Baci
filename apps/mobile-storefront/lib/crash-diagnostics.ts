@@ -23,6 +23,9 @@ const SAFE_DETAIL_KEYS = new Set([
   'surface',
   'variant',
   'app_state',
+  'errorType',
+  'fallbackErrorType',
+  'updatesEnabled',
 ]);
 
 export const MAX_BREADCRUMBS = 30;

@@ -580,6 +580,23 @@ VALUES ('f3860000-0000-4000-8000-0000000000c1', 'f3860000-0000-4000-8000-0000000
   repeat('a', 64), repeat('b', 64), 'synthetic-goal-cancel-forfeit-fixture',
   'provider_net_is_customer_plan_interest', true);
 SET LOCAL session_replication_role = origin;
+-- A goal whose PiggyVest setup never finished (no savings destination)
+--     answers not_set_up at issue instead of raising. Kept ahead of the
+--     sections that record interest receipts: their crosswalks reference the
+--     destination, so it can not be removed once they exist.
+DO $notsetup$
+BEGIN
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+   WHERE id = 'f3860000-0000-4000-8000-000000000005';
+  PERFORM pg_temp.gc_unbind();
+  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"not_set_up"}'::jsonb,
+    'a goal without a PiggyVest destination did not answer not_set_up');
+  PERFORM pg_temp.gc_bind();
+END
+$notsetup$;
+
 CREATE FUNCTION pg_temp.gf_receipt(p_payout text, p_net bigint,
   p_paid_at timestamptz DEFAULT pg_catalog.clock_timestamp()) RETURNS void LANGUAGE sql AS $$
   INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
@@ -938,21 +955,6 @@ BEGIN
   END;
 END
 $unclaim$;
-
--- 17. A goal whose PiggyVest setup never finished (no savings destination)
---     answers not_set_up at issue instead of raising.
-DO $notsetup$
-BEGIN
-  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
-   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
-  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
-   WHERE id = 'f3860000-0000-4000-8000-000000000005';
-  PERFORM pg_temp.gc_unbind();
-  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"not_set_up"}'::jsonb,
-    'a goal without a PiggyVest destination did not answer not_set_up');
-  PERFORM pg_temp.gc_bind();
-END
-$notsetup$;
 
 -- 18. The per-transfer ceiling applies to each leg, not the goal balance.
 DO $ceiling$

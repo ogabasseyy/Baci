@@ -182,21 +182,34 @@ export function useChatwootInlineCartBridge(
         actionSessionToken = authorized.sessionToken;
       }
       const currentCartRef = latestState.current.sharedCartRef ?? null;
+      const isProductRequest = message.event === 'baci-product-request';
       const authorizedVersionIsCurrent =
         message.event === 'baci-cart-add' ||
         message.event === 'baci-cart-quantity'
           ? (authorized?.snapshot.cartVersion ?? -1) >=
             (currentCartRef?.version ?? Number.POSITIVE_INFINITY)
-          : authorized?.snapshot.cartVersion === currentCartRef?.version;
+          : isProductRequest
+            ? authorized !== null &&
+              requestedCartRef !== null &&
+              currentCartRef !== null &&
+              authorized.snapshot.cartVersion >= requestedCartRef.version &&
+              authorized.snapshot.cartVersion <= currentCartRef.version
+            : authorized?.snapshot.cartVersion === currentCartRef?.version;
       const cartRefIsCurrent =
         requestedCartRef !== null &&
         currentCartRef?.cartId === requestedCartRef.cartId &&
         (message.event === 'baci-cart-add' ||
-          currentCartRef.version === requestedCartRef.version);
+          (isProductRequest
+            ? currentCartRef.version >= requestedCartRef.version
+            : currentCartRef.version === requestedCartRef.version));
+      const merchantIsCurrent =
+        !isProductRequest ||
+        latestState.current.merchantSlug === requestedMerchantSlug;
       const actionStillCurrent =
         actionGeneration === latestActionGeneration &&
         cartRefIsCurrent &&
-        authorizedVersionIsCurrent;
+        authorizedVersionIsCurrent &&
+        merchantIsCurrent;
       if (
         !isCurrentTarget(frame, actionTarget, conversationId) ||
         !authorized ||

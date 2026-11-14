@@ -225,12 +225,16 @@ export function projectChatwootProductCard(input: {
               : parentEffectiveStock(product)),
         }
       );
-      const normalizedVariantCondition = normalizedCondition(
-        candidate.condition
-      );
+      const rawVariantCondition =
+        typeof candidate.condition === 'string'
+          ? candidate.condition.trim()
+          : candidate.condition;
+      const normalizedVariantCondition =
+        normalizedCondition(rawVariantCondition);
       if (
-        candidate.condition !== null &&
-        candidate.condition !== undefined &&
+        rawVariantCondition !== null &&
+        rawVariantCondition !== undefined &&
+        rawVariantCondition !== '' &&
         normalizedVariantCondition === undefined
       ) {
         return { ok: false, code: 'product_unavailable' };

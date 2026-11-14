@@ -359,6 +359,35 @@ describe('projectChatwootProductCard', () => {
     ).toEqual({ ok: false, code: 'product_unavailable' });
   });
 
+  it.each([
+    '',
+    '   ',
+  ])('treats blank variant condition %j as absent and inherits the product condition', (condition) => {
+    expect(
+      project(
+        product({
+          has_variants: true,
+          condition: 'used',
+          product_variants: [
+            {
+              id: variantId,
+              product_id: productId,
+              attributes: { storage: '128GB' },
+              condition,
+              stock_quantity: 1,
+            },
+          ],
+        })
+      )
+    ).toMatchObject({
+      ok: true,
+      product: {
+        condition: 'used',
+        variants: [{ condition: 'used' }],
+      },
+    });
+  });
+
   it('returns the canonical slug from case-insensitive PDP resolution', () => {
     const result = projectChatwootProductCard({
       currency: 'NGN',

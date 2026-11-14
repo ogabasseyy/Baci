@@ -165,25 +165,25 @@ export function useImeiWalletPay({
     /**
      * Whether an earlier PiggyVest attempt for this check is kept (its answer
      * was lost): it replays there, whatever the balances say now (Codex P1).
-     * A key store that can not be read counts as kept (fails closed). Null
-     * while switched off (the verify tap stays synchronous, as today), and a
-     * check already in flight answers null (the tap is ignored).
+     * A key store that can not be read counts as kept (fails closed). Asked
+     * even while paying from PiggyVest is switched off: switching off stops
+     * new payments, never the recovery of one already started (Codex P1).
+     * A check already in flight answers null (that tap is still running, so
+     * this one is ignored).
      */
-    retains: canPay
-      ? async (tier: ImeiServiceTierKey, imei: string) => {
-          if (checkingKept.current) return null;
-          const userId = useAuthStore.getState().user?.id;
-          if (!userId) return false;
-          checkingKept.current = true;
-          try {
-            return await imeiWalletPayPurchase(userId, device, tier, imei)
-              .then((purchase) => walletPayPurchaseKeys.has(purchase))
-              .catch(() => true);
-          } finally {
-            checkingKept.current = false;
-          }
-        }
-      : null,
+    retains: async (tier: ImeiServiceTierKey, imei: string) => {
+      if (checkingKept.current) return null;
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) return false;
+      checkingKept.current = true;
+      try {
+        return await imeiWalletPayPurchase(userId, device, tier, imei)
+          .then((purchase) => walletPayPurchaseKeys.has(purchase))
+          .catch(() => true);
+      } finally {
+        checkingKept.current = false;
+      }
+    },
     open: async (tier: ImeiServiceTierKey, imei: string) => {
       // The build's merchant, never the hydrated one: that can still be
       // null at startup, and the key must match after a restart.
@@ -216,6 +216,7 @@ export function useImeiWalletPay({
           // the new account's token with the old account's key.
           if (useAuthStore.getState().user?.id !== user.id)
             return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
+          let tierRefused = false;
           inner = createImeiWalletPayAdapter({
             // The live token on every call: a refresh while the sheet is
             // open must not leave PIN checks and re-checks on an old one.
@@ -228,13 +229,25 @@ export function useImeiWalletPay({
             tier,
             imei,
             idempotencyKey,
-            onTierRefused: () =>
+            onTierRefused: () => {
+              tierRefused = true;
               setRefusedTiers((tiers) =>
                 tiers.includes(tier) ? tiers : [...tiers, tier]
-              ),
+              );
+            },
           });
           const started = inner;
-          return await startWithReplayCaution(!minted, () => started.start());
+          const answer = await startWithReplayCaution(!minted, () =>
+            started.start()
+          );
+          // A tier refusal comes before any lookup or payment exists. On a
+          // key minted by this tap nothing can be left to recover, so it is
+          // forgotten and the next tap falls back to store credit or a
+          // top-up (Codex P2). A reused key keeps it: its earlier attempt
+          // may have paid before the tier changed.
+          if (tierRefused && minted && purchase)
+            await walletPayPurchaseKeys.forget(purchase).catch(() => undefined);
+          return answer;
         },
         verifyPin: async (operationId, pin) => {
           if (!inner) throw new Error('Wallet payment not started');

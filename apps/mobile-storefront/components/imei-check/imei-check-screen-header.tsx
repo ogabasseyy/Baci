@@ -15,7 +15,8 @@ export function ImeiCheckScreenHeader({ textColor }: { textColor: string }) {
             accessibilityRole="button"
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back" size={24} color={textColor} />
+            {/* The wallet screens' chevron, so back looks the same (Fable). */}
+            <Ionicons name="chevron-back" size={26} color={textColor} />
           </Pressable>
         ),
       }}

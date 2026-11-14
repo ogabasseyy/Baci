@@ -30,7 +30,7 @@ const LOOKUP = '11111111-1111-4111-8111-111111111111';
 const OP = '22222222-2222-4222-8222-222222222222';
 const refetch = jest.fn();
 
-function setup() {
+function setup(canPay = true) {
   return renderHook(() =>
     useImeiWalletPay({
       apiBaseUrl: 'https://api.test',
@@ -40,7 +40,7 @@ function setup() {
         refetch,
       },
       onDelivered: jest.fn(),
-      canPay: true,
+      canPay,
     })
   );
 }
@@ -201,11 +201,64 @@ describe('bugfix: a kept IMEI PiggyVest attempt was not offered for replay (Code
     });
     const hook = setup();
     await openAndClose(hook);
-    await expect(hook.result.current.retains?.('basic', IMEI)).resolves.toBe(
+    await expect(hook.result.current.retains('basic', IMEI)).resolves.toBe(
       true
     );
     await expect(
-      hook.result.current.retains?.('basic', 'C39XK0ABCDE1')
+      hook.result.current.retains('basic', 'C39XK0ABCDE1')
     ).resolves.toBe(false);
+  });
+});
+
+describe('bugfix: a tier refused before payment kept its key forever (Codex P2)', () => {
+  it('forgets a key minted by the refused tap, so the next tap is not forced back to PiggyVest', async () => {
+    start.mockResolvedValue({
+      httpStatus: 409,
+      body: { code: 'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER' },
+    });
+    const hook = setup();
+    await openAndClose(hook);
+    await expect(hook.result.current.retains('basic', IMEI)).resolves.toBe(
+      false
+    );
+  });
+
+  it('keeps a reused key: its earlier attempt may have paid before the tier changed', async () => {
+    start.mockResolvedValueOnce({
+      httpStatus: 202,
+      body: {
+        status: 'payment_pending',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 30_000,
+      },
+    });
+    start.mockResolvedValue({
+      httpStatus: 409,
+      body: { code: 'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER' },
+    });
+    const hook = setup();
+    await openAndClose(hook);
+    await openAndClose(hook);
+    await expect(hook.result.current.retains('basic', IMEI)).resolves.toBe(
+      true
+    );
+  });
+});
+
+describe('bugfix: switching wallet pay off hid a kept PiggyVest attempt (Codex P1)', () => {
+  it('still reports the kept key while paying from PiggyVest is switched off', async () => {
+    start.mockResolvedValue({
+      httpStatus: 202,
+      body: {
+        status: 'payment_pending',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 30_000,
+      },
+    });
+    await openAndClose(setup());
+    const off = setup(false);
+    await expect(off.result.current.retains('basic', IMEI)).resolves.toBe(true);
   });
 });

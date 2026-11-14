@@ -76,6 +76,7 @@ export function usePushNotifications({
   const responseListener = useRef<EventSubscription | null>(null);
   const pendingResponses = useRef<NotificationResponse[]>([]);
   const coldStartResponseRequested = useRef(false);
+  const liveResponseReceived = useRef(false);
   const navigationReadyRef = useRef(navigationReady);
   navigationReadyRef.current = navigationReady;
   const registration = useSavingsPushRegistration();
@@ -156,6 +157,7 @@ export function usePushNotifications({
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener((response) => {
           if (cancelledRef.current) return;
+          liveResponseReceived.current = true;
           if (!navigationReadyRef.current) {
             enqueueNotificationResponse(pendingResponses.current, response);
             return;
@@ -182,7 +184,7 @@ export function usePushNotifications({
       if (!coldStartResponseRequested.current) {
         coldStartResponseRequested.current = true;
         Notifications.getLastNotificationResponseAsync().then((response) => {
-          if (!response) return;
+          if (!response || liveResponseReceived.current) return;
           log.info('App launched from notification');
           if (navigationReadyRef.current) {
             handleNotificationResponse(response);

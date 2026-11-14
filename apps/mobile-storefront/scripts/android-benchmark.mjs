@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { chmodSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAndroidBenchmarkGradleInit } from './android-benchmark-gradle.mjs';
 import { resolveBenchmarkIdentity } from './android-benchmark-identity.mjs';
 import { validateBenchmarkApk } from './android-benchmark-native-check.mjs';
-import { redactPrivateValues } from './android-benchmark-redaction.mjs';
+import { redactPrivateValuesAndLimit } from './android-benchmark-redaction.mjs';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -139,15 +139,7 @@ function execute(label, command, commandArgs, cwd) {
   const reader = openSync(rawLog, 'r');
   let contents;
   try {
-    const size = fstatSync(reader).size;
-    const length = Math.min(size, 4 * 1024 * 1024);
-    const bytes = Buffer.alloc(length);
-    const count = readSync(reader, bytes, 0, length, size - length);
-    contents = bytes.subarray(0, count).toString('utf8');
-    if (size > length) {
-      const firstLineEnd = contents.indexOf('\n');
-      contents = firstLineEnd === -1 ? '' : contents.slice(firstLineEnd + 1);
-    }
+    contents = readFileSync(rawLog, 'utf8');
   } finally {
     closeSync(reader);
   }
@@ -160,7 +152,7 @@ function execute(label, command, commandArgs, cwd) {
   ].filter((value) => typeof value === 'string' && value.length > 0));
   let output = `${label}; exit ${result.status ?? 'unavailable'}\n${contents}`;
   if (result.error) output += '\nProcess could not be started or was interrupted.';
-  output = redactPrivateValues(output, privateValues);
+  output = redactPrivateValuesAndLimit(output, privateValues, 4 * 1024 * 1024);
   const logBase = join(homedir(), '.local/state/baci/android-benchmark');
   mkdirSync(logBase, { recursive: true, mode: 0o700 });
   const logDir = mkdtempSync(join(logBase, 'run-'));

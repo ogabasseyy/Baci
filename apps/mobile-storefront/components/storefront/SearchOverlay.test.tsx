@@ -153,6 +153,27 @@ describe('SearchOverlay', () => {
     });
   });
 
+  it('cancels category navigation when the query changes during keyboard dismissal', async () => {
+    mockCategories = [{ slug: 'phones', name: 'Phones' }];
+    let finishKeyboardDismissal!: () => void;
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishKeyboardDismissal = resolve;
+      })
+    );
+    render(<SearchOverlay isVisible onClose={mockOnClose} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Phones' }));
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Search products…'),
+      'new query'
+    );
+    await act(async () => finishKeyboardDismissal());
+
+    expect(mockOnClose).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
   it('cancels category navigation if the app backgrounds while the keyboard closes', async () => {
     mockCategories = [{ slug: 'phones', name: 'Phones' }];
     let finishKeyboardDismissal!: () => void;

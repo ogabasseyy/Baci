@@ -1,9 +1,8 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useNavigation, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type { TextInputInstance } from 'react-native';
 import {
-  AppState,
   Keyboard,
   Pressable,
   StyleSheet,
@@ -18,7 +17,6 @@ import Animated, {
   SlideOutDown,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { dismissKeyboardForNavigation } from '@/components/ui/dismiss-keyboard-for-navigation';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -29,6 +27,7 @@ import { searchOverlayStyles as styles } from './SearchOverlay.styles';
 import { SearchOverlayEmptyState } from './SearchOverlayEmptyState';
 import { SearchOverlayResults } from './SearchOverlayResults';
 import { useProductSearchNavigation } from './search/use-product-search-navigation';
+import { useSearchNavigationGuard } from './search/use-search-navigation-guard';
 
 interface SearchOverlayProps {
   isVisible: boolean;
@@ -45,9 +44,6 @@ export function SearchOverlay({
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const navigation = useNavigation();
-  const categoryNavigationPending = useRef(false);
-  const categoryNavigationGeneration = useRef(0);
   const inputRef = useRef<TextInputInstance>(null);
 
   const [query, setQuery] = useState(initialQuery);
@@ -63,7 +59,6 @@ export function SearchOverlay({
   const { data: categories = [] } = useCategories();
 
   useEffect(() => {
-    if (!isVisible) categoryNavigationGeneration.current += 1;
     if (isVisible) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
@@ -88,46 +83,21 @@ export function SearchOverlay({
     onClose,
     onNavigate: (product) => router.push(`/product/${product.slug}`),
   });
+  const navigateCategorySafely = useSearchNavigationGuard({
+    isVisible,
+    invalidationKey: query,
+  });
 
   const handleSuggestionPress = (suggestion: string) => {
     setQuery(suggestion);
     saveSearch(suggestion);
   };
 
-  const handleCategoryPress = async (slug: string) => {
-    if (
-      !isVisible ||
-      categoryNavigationPending.current ||
-      !navigation.isFocused()
-    ) {
-      return;
-    }
-    categoryNavigationPending.current = true;
-    const generation = categoryNavigationGeneration.current;
-    const unsubscribeBlur = navigation.addListener('blur', () => {
-      categoryNavigationGeneration.current += 1;
-    });
-    const appStateSubscription = AppState.addEventListener(
-      'change',
-      (state) => {
-        if (state !== 'active') categoryNavigationGeneration.current += 1;
-      }
-    );
-    try {
-      await dismissKeyboardForNavigation();
-      if (
-        generation !== categoryNavigationGeneration.current ||
-        !navigation.isFocused()
-      ) {
-        return;
-      }
+  const handleCategoryPress = (slug: string) => {
+    void navigateCategorySafely(() => {
       onClose();
       router.push({ pathname: '/category/[slug]', params: { slug } });
-    } finally {
-      unsubscribeBlur();
-      appStateSubscription.remove();
-      categoryNavigationPending.current = false;
-    }
+    });
   };
 
   if (!isVisible) return null;

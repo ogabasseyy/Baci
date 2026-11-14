@@ -22,6 +22,13 @@ let mockAuthSnapshot: AuthStoreSnapshot = {
 
 const mockNotificationListenerRemove = jest.fn();
 const mockResponseListenerRemove = jest.fn();
+const mockProcessPushNotificationResponse = jest.fn();
+let mockOnNotificationResponse:
+  | ((response: import('expo-notifications').NotificationResponse) => void)
+  | undefined;
+const mockGetLastNotificationResponse = jest
+  .fn<() => Promise<import('expo-notifications').NotificationResponse | null>>()
+  .mockResolvedValue(null);
 const mockRegisterForPushNotifications =
   jest.fn<() => Promise<string | null>>();
 const mockRemovePushTokenFromServer =
@@ -48,12 +55,22 @@ jest.mock('expo-notifications', () => ({
   addNotificationReceivedListener: jest.fn(() => ({
     remove: mockNotificationListenerRemove,
   })),
-  addNotificationResponseReceivedListener: jest.fn(() => ({
-    remove: mockResponseListenerRemove,
-  })),
-  getLastNotificationResponseAsync: jest
-    .fn<() => Promise<null>>()
-    .mockResolvedValue(null),
+  addNotificationResponseReceivedListener: jest.fn(
+    (
+      listener: (
+        response: import('expo-notifications').NotificationResponse
+      ) => void
+    ) => {
+      mockOnNotificationResponse = listener;
+      return { remove: mockResponseListenerRemove };
+    }
+  ),
+  getLastNotificationResponseAsync: mockGetLastNotificationResponse,
+}));
+
+jest.mock('./process-push-notification-response', () => ({
+  processPushNotificationResponse: (...args: unknown[]) =>
+    mockProcessPushNotificationResponse(...args),
 }));
 
 jest.mock('@/services/push-notification-channels', () => ({
@@ -101,6 +118,8 @@ const { usePushNotifications } =
 describe('usePushNotifications', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOnNotificationResponse = undefined;
+    mockGetLastNotificationResponse.mockResolvedValue(null);
     mockAuthSnapshot = {
       merchantId: 'merchant-1',
       user: { id: 'user-1' },
@@ -144,6 +163,37 @@ describe('usePushNotifications', () => {
     expect(result.current.registeredUserId).toBe('user-1');
     expect(result.current.error).toBe(null);
     expect(result.current.pushToken).toBe('ExponentPushToken[fresh]');
+  });
+
+  it('ignores a cold-start response when a newer live response arrives first', async () => {
+    let resolveColdStart!: (
+      response: import('expo-notifications').NotificationResponse | null
+    ) => void;
+    mockGetLastNotificationResponse.mockReturnValue(
+      new Promise((resolve) => {
+        resolveColdStart = resolve;
+      })
+    );
+    renderHook(() => usePushNotifications());
+    await waitFor(() => expect(mockOnNotificationResponse).toBeDefined());
+
+    const newerResponse = {
+      notification: { request: { identifier: 'newer', content: {}, date: 2 } },
+    } as unknown as import('expo-notifications').NotificationResponse;
+    const olderResponse = {
+      notification: { request: { identifier: 'older', content: {}, date: 1 } },
+    } as unknown as import('expo-notifications').NotificationResponse;
+    act(() => mockOnNotificationResponse?.(newerResponse));
+    expect(mockProcessPushNotificationResponse).toHaveBeenCalledTimes(1);
+    expect(mockProcessPushNotificationResponse).toHaveBeenCalledWith(
+      newerResponse,
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Object)
+    );
+
+    await act(async () => resolveColdStart(olderResponse));
+    expect(mockProcessPushNotificationResponse).toHaveBeenCalledTimes(1);
   });
 
   it('ensures Android channels even when a stored token skips full registration', async () => {

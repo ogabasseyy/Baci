@@ -52,3 +52,14 @@ export function redactPrivateValues(output, privateValues) {
 
   return redacted;
 }
+
+export function redactPrivateValuesAndLimit(output, privateValues, maxBytes) {
+  const redacted = Buffer.from(redactPrivateValues(output, privateValues));
+  if (redacted.length <= maxBytes) return redacted.toString('utf8');
+
+  // Redact before truncation so a multiline secret crossing the retained-log
+  // boundary cannot leave an unmatched suffix in the diagnostics.
+  const retained = redacted.subarray(-maxBytes).toString('utf8');
+  const firstLineEnd = retained.indexOf('\n');
+  return firstLineEnd === -1 ? '' : retained.slice(firstLineEnd + 1);
+}

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { redactPrivateValues } from './android-benchmark-redaction.mjs';
+import {
+  redactPrivateValues,
+  redactPrivateValuesAndLimit,
+} from './android-benchmark-redaction.mjs';
 
 test('redacts literal, URL-encoded, base64 and line-wrapped private values', () => {
   const secret = 's3cr3t/value+with spaces';
@@ -26,6 +29,18 @@ test('redacts literal, URL-encoded, base64 and line-wrapped private values', () 
 
 test('leaves output unchanged when no private values are supplied', () => {
   assert.equal(redactPrivateValues('build failed', []), 'build failed');
+});
+
+test('redacts multiline secrets before truncating a diagnostic at the 4 MiB cutoff', () => {
+  const maxBytes = 4 * 1024 * 1024;
+  const secret = 'private-value-across-cutoff';
+  const wrapped = secret.match(/.{1,5}/g)?.join('\n') ?? '';
+  const output = `${'x'.repeat(maxBytes - 8)}\n${wrapped}\ntrailing output`;
+
+  const diagnostic = redactPrivateValuesAndLimit(output, [secret], maxBytes);
+
+  assert.ok(Buffer.byteLength(diagnostic) <= maxBytes);
+  assert.doesNotMatch(diagnostic, /private|value|across|cutoff/);
 });
 
 

@@ -2,6 +2,10 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BUILDER_OWNER_APPROVAL_ENABLED } from '@/config/builder-owner-approval';
 import { confirmDraftApply, loadDraftApproval } from './approval-service';
+import {
+  configuredOwnerMtlsFetch,
+  ownerMtlsEnvironment,
+} from './owner-mtls-config';
 import type { ExperienceOwnerRuntime } from './owner-runtime';
 import { createVerifierAttestationClient } from './verifier-attestation-client';
 
@@ -10,6 +14,9 @@ export function configuredOwnerApproval(settings: {
   enabled: boolean;
   key?: string;
   previewKey?: string;
+  ownerOrigin?: string;
+  ownerCert?: string;
+  ownerKey?: string;
 }): ExperienceOwnerRuntime['approval'] {
   if (
     !settings.enabled ||
@@ -24,7 +31,9 @@ export function configuredOwnerApproval(settings: {
     (settings.previewKey !== undefined && settings.previewKey === settings.key)
   )
     return undefined;
-  const attest = createVerifierAttestationClient({ key });
+  const fetch = configuredOwnerMtlsFetch(settings);
+  if (!fetch) return undefined;
+  const attest = createVerifierAttestationClient({ key, fetch });
   return {
     load: loadDraftApproval,
     confirm: async (client: SupabaseClient, id: string) => {
@@ -42,5 +51,6 @@ export function getConfiguredOwnerApproval() {
     enabled: true,
     key: process.env.BACI_OWNER_VERIFIER_BRIDGE_KEY,
     previewKey: process.env.BACI_OWNER_PREVIEW_BRIDGE_KEY,
+    ...ownerMtlsEnvironment(),
   });
 }

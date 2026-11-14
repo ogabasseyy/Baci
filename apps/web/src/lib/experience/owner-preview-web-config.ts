@@ -1,5 +1,9 @@
 import 'server-only';
 import { BUILDER_OWNER_PREVIEW_ENABLED } from '@/config/builder-owner-preview';
+import {
+  configuredOwnerMtlsFetch,
+  ownerMtlsEnvironment,
+} from './owner-mtls-config';
 import { createOwnerPreviewBridgeClient } from './owner-preview-bridge-client';
 import { productionDeliveryOrigins } from './production-origins';
 
@@ -8,6 +12,9 @@ type Settings = {
   key?: string;
   executionOrigin?: string;
   previewOrigin?: string;
+  ownerOrigin?: string;
+  ownerCert?: string;
+  ownerKey?: string;
 };
 
 /** Invalid or incomplete release configuration never installs a preview client. */
@@ -28,9 +35,12 @@ export function configuredOwnerPreview(settings: Settings) {
       executionOrigin: settings.executionOrigin,
       hostOrigins: [settings.previewOrigin],
     });
+    const fetch = configuredOwnerMtlsFetch(settings);
+    if (!fetch) return undefined;
     return createOwnerPreviewBridgeClient({
       key,
       executionOrigin: settings.executionOrigin,
+      fetch,
     });
   } catch {
     return undefined;
@@ -45,5 +55,6 @@ export function getConfiguredOwnerPreview() {
     key: process.env.BACI_OWNER_PREVIEW_BRIDGE_KEY,
     executionOrigin: process.env.BACI_EXPERIENCE_EXECUTION_ORIGIN,
     previewOrigin: process.env.BACI_OWNER_PREVIEW_ORIGIN,
+    ...ownerMtlsEnvironment(),
   });
 }

@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
+vi.mock('./owner-mtls-fetch', () => ({ createOwnerMtlsFetch: () => vi.fn() }));
 
 import { configuredOwnerPreview } from './owner-preview-web-config';
 
@@ -10,6 +11,9 @@ const valid = {
   key: Buffer.alloc(32, 7).toString('base64url'),
   executionOrigin: 'https://output.runtime.test',
   previewOrigin: 'https://builder.baci.test',
+  ownerOrigin: 'https://builder-owner.usebaci.com',
+  ownerCert: 'synthetic-cert',
+  ownerKey: 'synthetic-key',
 };
 
 describe('owner preview web configuration', () => {
@@ -30,6 +34,10 @@ describe('owner preview web configuration', () => {
     { executionOrigin: 'http://output.runtime.test' },
     { previewOrigin: 'https://other.runtime.test' },
     { previewOrigin: undefined },
+    { ownerOrigin: undefined },
+    { ownerOrigin: 'https://mcp.usebaci.com' },
+    { ownerCert: undefined },
+    { ownerKey: undefined },
   ])('fails closed on invalid configuration: %j', (invalid) => {
     expect(configuredOwnerPreview({ ...valid, ...invalid })).toBeUndefined();
   });

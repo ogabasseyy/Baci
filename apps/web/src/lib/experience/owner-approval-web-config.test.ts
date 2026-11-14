@@ -2,6 +2,7 @@
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
+vi.mock('./owner-mtls-fetch', () => ({ createOwnerMtlsFetch: () => vi.fn() }));
 const f = vi.hoisted(() => ({
   attest: vi.fn(),
   load: vi.fn(),
@@ -19,6 +20,11 @@ import { configuredOwnerApproval } from './owner-approval-web-config';
 
 const key = Buffer.alloc(32, 7).toString('base64url');
 const id = '11111111-1111-4111-8111-111111111111';
+const owner = {
+  ownerOrigin: 'https://builder-owner.usebaci.com',
+  ownerCert: 'synthetic-cert',
+  ownerKey: 'synthetic-key',
+};
 
 it('stays off unless a distinct canonical verifier key is explicitly enabled', () => {
   expect(configuredOwnerApproval({ enabled: false, key })).toBeUndefined();
@@ -28,9 +34,10 @@ it('stays off unless a distinct canonical verifier key is explicitly enabled', (
   expect(
     configuredOwnerApproval({ enabled: true, key, previewKey: key })
   ).toBeUndefined();
+  expect(configuredOwnerApproval({ enabled: true, key })).toBeUndefined();
 });
 it('requires fresh verifier attestation before draft confirmation and exposes no publication operation', async () => {
-  const approval = configuredOwnerApproval({ enabled: true, key });
+  const approval = configuredOwnerApproval({ enabled: true, key, ...owner });
   expect(approval).toBeDefined();
   f.load.mockResolvedValueOnce({ status: 'confirmation-required' });
   f.attest.mockRejectedValueOnce(Error('unavailable'));
@@ -49,7 +56,7 @@ it('requires fresh verifier attestation before draft confirmation and exposes no
   expect(approval).not.toHaveProperty('confirmModeExit');
 });
 it('reconciles an already applied approval without repeating attestation', async () => {
-  const approval = configuredOwnerApproval({ enabled: true, key });
+  const approval = configuredOwnerApproval({ enabled: true, key, ...owner });
   f.attest.mockClear();
   f.load.mockResolvedValueOnce({ status: 'applied' });
   f.confirm.mockResolvedValueOnce({ version: 2 });

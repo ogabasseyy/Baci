@@ -36,10 +36,12 @@ the Ubuntu repository offering Caddy 2.6.2; the local smoke used Caddy 2.11.4.
 Do not assume the older package supports this configuration. Confirm automatic
 TLS issuance without interfering with existing services.
 
-The web clients currently target the public MCP host and do not present the
-owner client certificate. They need a fixed, authenticated owner HTTPS client,
-secret provisioning and rotation, and negative tests before this candidate can
-serve owner traffic. Public MCP routing also requires a separately reviewed
+The candidate web clients can use a fixed, mutually authenticated owner HTTPS
+transport configured by `BACI_OWNER_MTLS_ORIGIN`, `BACI_OWNER_MTLS_CERT` and
+`BACI_OWNER_MTLS_KEY`. Missing or invalid configuration leaves preview and
+approval disabled. These settings are not provisioned or deployed, and their
+production hostname, certificate lifecycle, rotation, trust and live failure
+behavior remain unqualified. Public MCP routing also requires a separately reviewed
 Vercel rule for the exact MCP and protected-resource paths, preserving the
 existing commerce connector. The forwarded IP observed through Vercel may be
 an edge address shared by many users; validate rate-limit behavior rather than

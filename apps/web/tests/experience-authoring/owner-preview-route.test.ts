@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
-import { request as nodeRequest } from 'node:http';
 import { NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
@@ -36,11 +35,15 @@ import { createOwnerAdmission } from '../../builder-mcp-server/owner-admission';
 import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import { experienceDataFixture } from './data-fixture.test-support';
+import { startSyntheticOwnerMtlsRelay } from './owner-mtls-relay.test-support';
 
 it('routes a normal owner web preview through the signed handoff and durable RLS-backed admission', async () => {
   const f = await experienceDataFixture();
   let pool: Pool | undefined;
   let uninstall: (() => void) | undefined;
+  let relay:
+    | Awaited<ReturnType<typeof startSyntheticOwnerMtlsRelay>>
+    | undefined;
   let listener: ReturnType<typeof createOwnerInternalNodeServer> | undefined;
   try {
     const directory = new URL(
@@ -98,43 +101,11 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
       ownerPreviewAdmission: createOwnerAdmission(key, 'owner-preview/v1'),
     });
     const ownerPort = await listener.listen(0);
+    relay = await startSyntheticOwnerMtlsRelay(ownerPort);
     const client = createOwnerPreviewBridgeClient({
       key,
       executionOrigin: 'https://output.runtime.test',
-      fetch: (url, init) => {
-        if (
-          url !== 'https://mcp.usebaci.com/internal/owner/preview' ||
-          typeof init?.body !== 'string'
-        )
-          throw Error('INVALID_FIXTURE_REQUEST');
-        const headers = new Headers(init.headers);
-        headers.set('host', 'mcp.usebaci.com');
-        return new Promise<Response>((resolve, reject) => {
-          const req = nodeRequest(
-            {
-              host: '127.0.0.1',
-              port: ownerPort,
-              path: '/internal/owner/preview',
-              method: 'POST',
-              headers: Object.fromEntries(headers),
-            },
-            (res) => {
-              const chunks: Buffer[] = [];
-              res.on('data', (chunk: Buffer) => chunks.push(chunk));
-              res.on('end', () =>
-                resolve(
-                  new Response(Buffer.concat(chunks), {
-                    status: res.statusCode,
-                    headers: { 'content-type': 'application/json' },
-                  })
-                )
-              );
-            }
-          );
-          req.on('error', reject);
-          req.end(init.body);
-        });
-      },
+      fetch: relay.fetch,
     });
     uninstall = installRemoteOwnerPreview(client);
     state.client = f.owner.supabase;
@@ -168,6 +139,7 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
     state.csrf = true;
     state.client = undefined;
     uninstall?.();
+    await relay?.close();
     await listener?.close();
     await pool?.end();
     await f.close();

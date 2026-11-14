@@ -50,7 +50,9 @@ function getVariantColors(
       return {
         iconColor: theme.error,
         backgroundColor: theme.foreground,
-        textColor: theme.destructiveForeground,
+        // destructiveForeground matches foreground in dark mode, which made
+        // the message invisible. background always contrasts with foreground.
+        textColor: theme.background,
       };
     case 'warning':
       return {
@@ -117,7 +119,9 @@ export function Toast({
       }, duration);
 
       // Announce to screen readers for accessibility
-      AccessibilityInfo.announceForAccessibility(message);
+      if (message.trim()) {
+        AccessibilityInfo.announceForAccessibility(message);
+      }
     }
 
     return () => {
@@ -128,7 +132,8 @@ export function Toast({
     };
   }, [visible, duration, message]);
 
-  if (!visible) return null;
+  // Never show an icon-only bar: a toast without text tells the user nothing.
+  if (!visible || !message.trim()) return null;
 
   const positionStyle =
     position === 'top'

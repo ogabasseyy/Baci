@@ -92,6 +92,27 @@ describe('handleChatwootInlineCartAdd', () => {
     });
   });
 
+  it('does not refresh the cart for a deterministic unavailable item', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 409,
+        json: async () => ({ accepted: false, code: 'not_addable' }),
+      }))
+    );
+    const value = input();
+
+    await handleChatwootInlineCartAdd(value);
+
+    expect(value.refreshSharedCart).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'add-request-01',
+      accepted: false,
+      code: 'not_addable',
+    });
+  });
+
   it('refreshes the cart and reports stale state on a version conflict', async () => {
     vi.stubGlobal(
       'fetch',

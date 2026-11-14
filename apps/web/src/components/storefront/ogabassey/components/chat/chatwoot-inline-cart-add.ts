@@ -67,11 +67,13 @@ export async function handleChatwootInlineCartAdd(input: {
   const acceptedResponseMismatch =
     mutation?.accepted === true && mutation.operationId !== requestId;
   const refreshRequired = mutation?.code === 'refresh_required';
+  const responseStatus = mutation?.httpStatus;
   const outcomeUnavailable =
     mutation === null ||
     acceptedResponseMismatch ||
-    (typeof mutation?.httpStatus === 'number' &&
-      Number.isSafeInteger(mutation.httpStatus));
+    (typeof responseStatus === 'number' &&
+      Number.isSafeInteger(responseStatus) &&
+      (responseStatus === 408 || responseStatus >= 500));
   if (
     accepted &&
     mutation !== null &&

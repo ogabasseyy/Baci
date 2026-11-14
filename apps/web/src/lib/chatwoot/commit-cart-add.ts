@@ -126,11 +126,13 @@ export async function commitChatwootCartAdd(input: {
             : 503;
     return unavailable(
       status,
-      status === 409
-        ? code === 'invalid_item'
-          ? 'not_addable'
-          : 'refresh_required'
-        : 'temporarily_unavailable'
+      status === 403
+        ? 'forbidden'
+        : status === 409
+          ? code === 'invalid_item'
+            ? 'not_addable'
+            : 'refresh_required'
+          : 'temporarily_unavailable'
     );
   }
 

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   loadChatwootCartContext: vi.fn(),
   loadLiveGrantOperations: vi.fn(),
   readCartJsonBody: vi.fn(),
+  rpc: vi.fn(),
   renewChatwootSessionCapability: vi.fn(),
   upgradeLegacySessionPrincipal: vi.fn(),
   verifyChatwootSessionCapability: vi.fn(),
@@ -114,11 +115,10 @@ function arrange(input: unknown = body, cartVersion = 12) {
     conversationId: 905,
     sessionExpiresAt: 1_799_000_000,
   });
-  mocks.createCartScopedClient.mockReturnValue({
-    rpc: vi
-      .fn()
-      .mockResolvedValue({ data: { ok: false, code: 'invalid_item' } }),
+  mocks.rpc.mockReset().mockResolvedValue({
+    data: { ok: false, code: 'invalid_item' },
   });
+  mocks.createCartScopedClient.mockReturnValue({ rpc: mocks.rpc });
   mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principal);
   mocks.loadLiveGrantOperations.mockResolvedValue({
     allowedOperations: ['add'],
@@ -196,6 +196,21 @@ describe('Chatwoot shared-cart add route', () => {
 
     expect(response.status).toBe(429);
     expect(mocks.createCartScopedClient).not.toHaveBeenCalled();
+  });
+
+  it('maps a cart RPC authorization rejection to forbidden', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'unauthorized' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'forbidden',
+    });
   });
 
   it('maps a server-resolved unavailable catalog item to not_addable', async () => {

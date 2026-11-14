@@ -33,6 +33,9 @@ export function useNativeSplashHandoff({
   const firstLayoutRecorded = useRef(false);
   const hidePromiseRef = useRef<Promise<boolean> | null>(null);
   const visibilityUnknownFallbackElapsed = useRef(false);
+  const nativeSplashWatchdogDeadline = useRef(
+    initialVisible ? Date.now() + 15_000 : 0
+  );
   const intro = useNativeSplashIntro(initialVisible);
 
   useEffect(() => {
@@ -151,12 +154,16 @@ export function useNativeSplashHandoff({
         }
         setNativeSplashVisible(true);
         if (!visibilityUnknownFallback) {
-          // SplashMotion removes a stuck overlay after its native 15s watchdog.
-          visibilityUnknownFallback = setTimeout(() => {
-            visibilityUnknownFallbackElapsed.current = true;
-            if (interval) clearInterval(interval);
-            if (active) setNativeSplashVisible(false);
-          }, 15_000);
+          // Match SplashMotion's 15s watchdog from JS startup; do not add
+          // another full watchdog interval after a slow JS handoff.
+          visibilityUnknownFallback = setTimeout(
+            () => {
+              visibilityUnknownFallbackElapsed.current = true;
+              if (interval) clearInterval(interval);
+              if (active) setNativeSplashVisible(false);
+            },
+            Math.max(0, nativeSplashWatchdogDeadline.current - Date.now())
+          );
         }
         return;
       }

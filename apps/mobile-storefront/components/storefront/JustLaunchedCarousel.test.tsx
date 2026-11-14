@@ -71,6 +71,27 @@ describe('JustLaunchedCarousel', () => {
     expect(mockPush).toHaveBeenCalledWith('/product/samsung-galaxy-a27-5g');
   });
 
+  describe('bugfix: heading unreadable on the dark Elite backdrop', () => {
+    it('draws the section on an opaque themed surface', () => {
+      mockUsePinned.mockReturnValue({ data: [a27] });
+      mockUseProducts.mockReturnValue({
+        products: [xiaomi, a27],
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<JustLaunchedCarousel />);
+
+      const surface = screen.getByTestId('just-launched-surface');
+      const style = Object.assign(
+        {},
+        ...[surface.props.style].flat(Number.POSITIVE_INFINITY)
+      ) as { backgroundColor?: string };
+      expect(style.backgroundColor).toBeTruthy();
+      expect(style.backgroundColor).not.toBe('transparent');
+    });
+  });
+
   it('bounds Android decoding and requests iOS early resizing for launch images', () => {
     mockUseProducts.mockReturnValue({
       products: [xiaomi],

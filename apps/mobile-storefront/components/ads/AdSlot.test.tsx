@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { AdSlot } from './AdSlot';
@@ -63,6 +63,12 @@ function setAdsEnabled(value: string | undefined) {
   }
 }
 
+function measureSlot(testID: string, width: number) {
+  fireEvent(screen.getByTestId(testID), 'layout', {
+    nativeEvent: { layout: { height: 60, width, x: 0, y: 0 } },
+  });
+}
+
 describe('AdSlot', () => {
   it('renders nothing while ads are disabled', () => {
     setAdsEnabled(undefined);
@@ -101,13 +107,34 @@ describe('AdSlot', () => {
     setAdsEnabled(ORIGINAL_ENV);
   });
 
+  describe('bugfix: banner cropped inside hosts narrower than the device', () => {
+    it('requests no banner until the slot width is measured', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('sizes the banner to the measured slot width, not the device width', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      measureSlot('ad-slot-footer-anchor', 321.6);
+
+      const banner = screen.UNSAFE_getByType('BannerAd' as never);
+      expect((banner.props as { width: number }).width).toBe(321);
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+  });
+
   it('unmounts the slot when the banner fails to load instead of keeping a blank frame', () => {
     // Regression: a no-fill or load error must remove the whole slot
     // (label and reserved frame), not just record telemetry.
     setAdsEnabled('true');
     render(<AdSlot placement="CART_MPU" />);
 
-    expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
+    measureSlot('ad-slot-cart-mpu', 320);
     const banner = screen.UNSAFE_getByType('BannerAd' as never);
     act(() => {
       (

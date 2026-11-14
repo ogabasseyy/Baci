@@ -50,6 +50,11 @@ export function AdSlot({
   // placements never retain a blank "Sponsored" slot. Declared with the
   // other hooks, above the early returns.
   const [loadFailed, setLoadFailed] = useState(false);
+  // The banner is sized to the slot it sits in, not the device: an adaptive
+  // banner defaults to full device width, which crops it inside narrower
+  // hosts (the navigation drawer, padded cards). A cropped ad breaks AdMob
+  // placement policy, so nothing is requested until the width is measured.
+  const [slotWidth, setSlotWidth] = useState<number | null>(null);
   let config: ReturnType<typeof getMobileAdUnitId> | null = null;
   try {
     config = getMobileAdUnitId(placement);
@@ -106,30 +111,37 @@ export function AdSlot({
   return (
     <View
       accessibilityLabel="Sponsored advertisement"
+      onLayout={(event) => {
+        const measured = Math.floor(event.nativeEvent.layout.width);
+        if (measured > 0 && measured !== slotWidth) setSlotWidth(measured);
+      }}
       style={styles.slot}
       testID={testID ?? `ad-slot-${placement.toLowerCase().replace(/_/g, '-')}`}
     >
       <Text style={styles.label}>Sponsored</Text>
       <View style={styles.frame}>
-        <BannerAd
-          onAdFailedToLoad={(error) => {
-            trackEvent('mobile_ad_failed', {
-              errorCode: getAdErrorCode(error),
-              format: 'banner',
-              placement,
-            });
-            setLoadFailed(true);
-          }}
-          onAdImpression={() =>
-            trackEvent('mobile_ad_impression', {
-              format: 'banner',
-              placement,
-            })
-          }
-          onPaid={handlePaid}
-          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-          unitId={config.unitId}
-        />
+        {slotWidth === null ? null : (
+          <BannerAd
+            onAdFailedToLoad={(error) => {
+              trackEvent('mobile_ad_failed', {
+                errorCode: getAdErrorCode(error),
+                format: 'banner',
+                placement,
+              });
+              setLoadFailed(true);
+            }}
+            onAdImpression={() =>
+              trackEvent('mobile_ad_impression', {
+                format: 'banner',
+                placement,
+              })
+            }
+            onPaid={handlePaid}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            unitId={config.unitId}
+            width={slotWidth}
+          />
+        )}
       </View>
     </View>
   );
@@ -138,6 +150,10 @@ export function AdSlot({
 const styles = StyleSheet.create({
   slot: {
     alignItems: 'center',
+    alignSelf: 'stretch',
+    // Clear space above and below keeps the banner away from neighbouring
+    // buttons (AdMob accidental-click guidance).
+    marginVertical: 24,
     paddingVertical: 8,
   },
   label: {

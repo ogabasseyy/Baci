@@ -28,6 +28,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
 $$;
 
 \ir ../migrations/20261114124820_chatwoot_cart_add_receipts.sql
+\ir ../migrations/20261114160000_chatwoot_variant_schema_parity.sql
 
 INSERT INTO public.commerce_carts(id,merchant_id,expires_at)
 VALUES('aaaaaaaa-ffff-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111',now()+interval '1 day');
@@ -39,8 +40,8 @@ INSERT INTO public.products(id,merchant_id,slug,status,price,stock,stock_quantit
 VALUES('ffffffff-ffff-4fff-8fff-ffffffffffff','22222222-2222-4222-8222-222222222222','foreign-merchant-product','active',42,2,2,true,false,'off',false);
 INSERT INTO public.products(id,merchant_id,slug,status,price,stock,stock_quantity,manage_stock,has_variants,inventory_tracking_policy,has_condition_offers,default_variant_id)
 VALUES('88888888-ffff-4888-8888-888888888888','11111111-1111-4111-8111-111111111111','chatwoot-default-variant','active',42,2,2,true,true,'off',false,'77777777-ffff-4777-8777-777777777777');
-INSERT INTO public.product_variants(id,product_id,merchant_id,price_override,stock_quantity,inventory_tracking_policy,attributes,is_active,status)
-VALUES('77777777-ffff-4777-8777-777777777777','88888888-ffff-4888-8888-888888888888','11111111-1111-4111-8111-111111111111',NULL,2,'off','{"color":"Black"}',true,'active');
+INSERT INTO public.product_variants(id,product_id,merchant_id,price_override,stock_quantity,inventory_tracking_policy,attributes)
+VALUES('77777777-ffff-4777-8777-777777777777','88888888-ffff-4888-8888-888888888888','11111111-1111-4111-8111-111111111111',NULL,2,'off','{"color":"Black"}');
 
 SET ROLE commerce_cart_shopper;
 SET request.jwt.claims='{"role":"commerce_cart_shopper","exp":9999999999,"cart_scope":"session","cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"chatwoot-contract","cart_id":"aaaaaaaa-ffff-4aaa-8aaa-aaaaaaaaaaaa","cart_grant_id":"cccccccc-ffff-4ccc-8ccc-cccccccccccc"}';

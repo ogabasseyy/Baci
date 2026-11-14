@@ -37,12 +37,16 @@ CREATE TABLE public.products(
   effective_policy text NOT NULL DEFAULT 'off'
 );
 CREATE TABLE public.product_variants(
-  id uuid PRIMARY KEY, product_id uuid NOT NULL, merchant_id uuid NOT NULL, status text NOT NULL DEFAULT 'active',
-  is_active boolean DEFAULT true, deleted_at timestamptz, archived_at timestamptz, is_inventory_anchor boolean DEFAULT false,
-  attributes jsonb DEFAULT '{}'::jsonb, condition text,
-  effective_policy text NOT NULL DEFAULT 'off', stock_quantity numeric, available_units numeric
+  id uuid PRIMARY KEY, product_id uuid NOT NULL, merchant_id uuid NOT NULL,
+  is_inventory_anchor boolean DEFAULT false, attributes jsonb DEFAULT '{}'::jsonb, condition text,
+  inventory_tracking_policy text NOT NULL DEFAULT 'inherit', stock_quantity numeric
 );
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.products, public.product_variants, public.commerce_cart_operations, public.commerce_carts TO commerce_cart_shopper;
+-- effective policy and serialized availability are PDP snapshot fields, not
+-- product_variants columns. Keep them in a distinct projection fixture.
+CREATE TABLE public.chatwoot_variant_snapshot(
+  variant_id uuid PRIMARY KEY, effective_policy text, available_units numeric
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.products, public.product_variants, public.chatwoot_variant_snapshot, public.commerce_cart_operations, public.commerce_carts TO commerce_cart_shopper;
 CREATE FUNCTION public.commerce_cart_device_is_active() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT true $$;
 CREATE FUNCTION private.get_storefront_pdp_core_v2(uuid, text, uuid)
 RETURNS TABLE(resolution_status text, product_data jsonb) LANGUAGE sql STABLE AS $$
@@ -52,9 +56,13 @@ RETURNS TABLE(resolution_status text, product_data jsonb) LANGUAGE sql STABLE AS
     'manage_stock', p.manage_stock, 'stock', p.stock, 'stock_quantity', p.stock_quantity,
     'condition', p.condition, 'default_variant_id', p.default_variant_id, 'effective_policy', p.effective_policy,
     'product_variants', coalesce((SELECT jsonb_agg(jsonb_build_object(
-      'id', v.id, 'product_id', v.product_id, 'effective_policy', v.effective_policy,
-      'stock_quantity', v.stock_quantity, 'available_units', v.available_units, 'attributes', v.attributes, 'condition', v.condition
-    )) FROM public.product_variants v WHERE v.product_id=p.id AND v.merchant_id=p.merchant_id), '[]'::jsonb)
+      'id', v.id, 'product_id', v.product_id,
+      'effective_policy', coalesce(snapshot.effective_policy, v.inventory_tracking_policy),
+      'inventory_tracking_policy', v.inventory_tracking_policy,
+      'stock_quantity', v.stock_quantity, 'available_units', snapshot.available_units,
+      'attributes', v.attributes, 'condition', v.condition
+    )) FROM public.product_variants v LEFT JOIN public.chatwoot_variant_snapshot snapshot ON snapshot.variant_id=v.id
+      WHERE v.product_id=p.id AND v.merchant_id=p.merchant_id AND v.is_inventory_anchor IS NOT TRUE), '[]'::jsonb)
   ) FROM public.products p
   WHERE p.merchant_id=$1 AND p.status='active' AND lower(p.slug)=lower(trim($2))
   LIMIT 1
@@ -81,6 +89,7 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_mutate(uuid,text,integer,jsonb) TO commerce_cart_shopper;
 
 \ir ../migrations/20261114124820_chatwoot_cart_add_receipts.sql
+\ir ../migrations/20261114160000_chatwoot_variant_schema_parity.sql
 
 INSERT INTO public.merchants VALUES
   ('11111111-1111-4111-8111-111111111111','["shared_cart"]'),
@@ -102,13 +111,17 @@ INSERT INTO public.products(id,merchant_id,slug,manage_stock,stock,stock_quantit
   ('55555555-5555-4555-8555-555555555555','11111111-1111-4111-8111-111111111111','legacy-stock',true,4,0);
 INSERT INTO public.products(id,merchant_id,slug,has_variants,manage_stock,stock,stock_quantity) VALUES
   ('88888888-8888-4888-8888-888888888888','11111111-1111-4111-8111-111111111111','variant',true,true,4,4);
-INSERT INTO public.product_variants(id,product_id,merchant_id,effective_policy,stock_quantity,available_units,attributes) VALUES
-  ('77777777-7777-4777-8777-777777777777','88888888-8888-4888-8888-888888888888','11111111-1111-4111-8111-111111111111','serialized_strict',5,0,'{"color":"blue"}');
+INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,stock_quantity,attributes) VALUES
+  ('77777777-7777-4777-8777-777777777777','88888888-8888-4888-8888-888888888888','11111111-1111-4111-8111-111111111111','serialized_strict',5,'{"color":"blue"}');
+INSERT INTO public.chatwoot_variant_snapshot(variant_id,effective_policy,available_units)
+VALUES('77777777-7777-4777-8777-777777777777','serialized_strict',0);
 UPDATE public.products SET default_variant_id='77777777-7777-4777-8777-777777777777' WHERE slug='variant';
 INSERT INTO public.products(id,merchant_id,slug,has_variants,manage_stock,stock,stock_quantity)
 VALUES ('12121212-1212-4212-8212-121212121212','11111111-1111-4111-8111-111111111111','variant-parent-legacy',true,true,4,0);
-INSERT INTO public.product_variants(id,product_id,merchant_id,effective_policy,stock_quantity,available_units,attributes)
-VALUES ('13131313-1313-4313-8313-131313131313','12121212-1212-4212-8212-121212121212','11111111-1111-4111-8111-111111111111','standard',NULL,NULL,'{"color":" Blue ","size":"  ","count":3,"enabled":true,"missing":null}');
+INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,stock_quantity,attributes)
+VALUES ('13131313-1313-4313-8313-131313131313','12121212-1212-4212-8212-121212121212','11111111-1111-4111-8111-111111111111','inherit',NULL,'{"color":" Blue ","size":"  ","count":3,"enabled":true,"missing":null}');
+INSERT INTO public.chatwoot_variant_snapshot(variant_id,effective_policy,available_units)
+VALUES('13131313-1313-4313-8313-131313131313','standard',NULL);
 UPDATE public.product_variants SET condition=' UK-Used ' WHERE id='13131313-1313-4313-8313-131313131313';
 
 SET ROLE commerce_cart_shopper;
@@ -145,12 +158,10 @@ END $$;
 DO $$ DECLARE r jsonb; BEGIN
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','strict-empty',2,'variant','77777777-7777-4777-8777-777777777777');
   IF r->>'code' <> 'invalid_item' THEN RAISE EXCEPTION 'strict available_units=0 ignored: %',r; END IF;
-  UPDATE public.product_variants SET available_units=2,stock_quantity=0 WHERE id='77777777-7777-4777-8777-777777777777';
+  UPDATE public.chatwoot_variant_snapshot SET available_units=2 WHERE variant_id='77777777-7777-4777-8777-777777777777';
+  UPDATE public.product_variants SET stock_quantity=0 WHERE id='77777777-7777-4777-8777-777777777777';
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','strict-in-stock',2,'variant','77777777-7777-4777-8777-777777777777');
   IF r->>'ok' <> 'true' THEN RAISE EXCEPTION 'strict default variant available_units positive rejected: %',r; END IF;
-  UPDATE public.product_variants SET deleted_at=now() WHERE id='77777777-7777-4777-8777-777777777777';
-  r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','strict-in-stock',2,'variant','77777777-7777-4777-8777-777777777777');
-  IF r->>'ok' <> 'true' OR r->>'replayed' <> 'true' THEN RAISE EXCEPTION 'inactive variant replay failed: %',r; END IF;
   DELETE FROM public.product_variants WHERE id='77777777-7777-4777-8777-777777777777';
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','strict-in-stock',2,'variant','77777777-7777-4777-8777-777777777777');
   IF r->>'ok' <> 'true' OR r->>'replayed' <> 'true' THEN RAISE EXCEPTION 'deleted variant replay failed: %',r; END IF;

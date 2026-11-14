@@ -104,7 +104,7 @@ END;
 $chatwoot_add$;
 
 RESET ROLE;
-UPDATE public.products SET status='inactive'
+UPDATE public.products SET status='archived'
 WHERE id IN (
   '4d19ab10-0000-4000-8000-000000000003'::uuid,
   '4d19ab10-0000-4000-8000-000000000005'::uuid

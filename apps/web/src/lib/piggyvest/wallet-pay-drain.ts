@@ -24,7 +24,7 @@ const defaultDeps = {
   reconcilePayment: async (runtime: WalletPayRuntime, operationId: string) => {
     const ports = createWalletPayPorts(runtime);
     return await reconcileWalletPayTransfer(
-      { kind: 'payment', operationId },
+      { kind: 'payment', operationId, surfaceErrors: true },
       {
         loadDispatched: ports.evidence.loadDispatched,
         queryProvider: ports.queryProvider,
@@ -99,7 +99,7 @@ export async function runWalletPayDrain(
     });
   for (const id of work.refund)
     await attempt(async () => {
-      await deps.refund({ runtime, paymentId: id });
+      await deps.refund({ runtime, paymentId: id, surfaceErrors: true });
       summary.refunds += 1;
     });
   for (const item of work.deliver)

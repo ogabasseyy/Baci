@@ -54,6 +54,10 @@ export async function reconcileWalletPayTransfer(
     operationId: unknown;
     // A webhook's exact refund attempt (see loadDispatched).
     reference?: string;
+    // The drain rethrows an exception (a provider, schema or database
+    // failure) so the run counts it as failed and pages; customer polls
+    // keep the quiet 'pending' (Codex P2).
+    surfaceErrors?: boolean;
   },
   ports: WalletPayReconciliationPorts
 ): Promise<WalletPayReconciliation> {
@@ -93,6 +97,7 @@ export async function reconcileWalletPayTransfer(
       input.kind,
       error instanceof Error ? error.name : typeof error
     );
+    if (input.surfaceErrors) throw error;
     return 'pending';
   }
 }

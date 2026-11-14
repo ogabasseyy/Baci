@@ -17,10 +17,11 @@ function reconcile(
   ports: WalletPayPorts,
   kind: WalletPayTransferKind,
   operationId: string,
-  reference?: string
+  reference?: string,
+  surfaceErrors?: boolean
 ) {
   return reconcileWalletPayTransfer(
-    { kind, operationId, reference },
+    { kind, operationId, reference, surfaceErrors },
     {
       loadDispatched: ports.evidence.loadDispatched,
       queryProvider: ports.queryProvider,
@@ -131,6 +132,8 @@ export async function checkWalletPayment(input: {
 export async function refundWalletPayment(input: {
   runtime: WalletPayRuntime;
   paymentId: unknown;
+  // The drain: a reconciliation exception throws instead of 'pending'.
+  surfaceErrors?: boolean;
 }) {
   const ports = createWalletPayPorts(input.runtime);
   const paymentId = schemas.operationId.parse(input.paymentId);
@@ -154,7 +157,13 @@ export async function refundWalletPayment(input: {
     (await ports.evidence.loadDispatched('refund', paymentId)) === null
   )
     return 'none';
-  return await reconcile(ports, 'refund', paymentId);
+  return await reconcile(
+    ports,
+    'refund',
+    paymentId,
+    undefined,
+    input.surfaceErrors
+  );
 }
 
 /**

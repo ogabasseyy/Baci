@@ -146,10 +146,11 @@ export function useNativeSplashHandoff({
   }, [showSplash, hideFailed]);
 
   useEffect(() => {
-    if (!showSplash || (!hideFailed && !timedOut)) {
+    if (!showSplash) {
       setNativeSplashVisible(false);
       return;
     }
+    if (!hideFailed && !timedOut) return;
 
     let active = true;
     let visibilityUnknownFallback: ReturnType<typeof setTimeout> | undefined;

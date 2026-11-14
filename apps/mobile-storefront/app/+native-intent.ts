@@ -66,6 +66,7 @@ export function redirectSystemPath({
   try {
     const customSchemeUrl = new URL(path);
     if (customSchemeUrl.protocol.toLowerCase() === 'ogabassey:') {
+      if (customSchemeUrl.username || customSchemeUrl.password) return '/';
       const route = customSchemeUrl.host
         ? `/${customSchemeUrl.host}${customSchemeUrl.pathname === '/' ? '' : customSchemeUrl.pathname}`
         : customSchemeUrl.pathname;

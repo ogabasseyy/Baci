@@ -111,6 +111,16 @@ describe('redirectSystemPath', () => {
     );
   });
 
+  it('rejects custom-scheme pairing routes with URL userinfo', () => {
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://user:pass@cart/#handoff=secret',
+        initial: true,
+      })
+    ).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

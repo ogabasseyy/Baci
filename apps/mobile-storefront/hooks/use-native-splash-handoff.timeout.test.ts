@@ -12,6 +12,9 @@ jest.mock('@/lib/crash-diagnostics', () => ({
 jest.mock('@/lib/startup-timing', () => ({ markStartupTiming: jest.fn() }));
 jest.mock('./splash-constants', () => ({
   SPLASH_TIMEOUT_MS: 8_000,
+  NATIVE_SPLASH_FADE_MS: 220,
+  NATIVE_SPLASH_VISIBILITY_POLL_MS: 1_000,
+  NATIVE_SPLASH_WATCHDOG_MS: 15_000,
 }));
 jest.mock('./use-native-splash-intro', () => ({
   useNativeSplashIntro: () => ({ settled: false, completed: false }),
@@ -29,6 +32,8 @@ it('hides the native splash when the startup deadline expires before intro settl
   const { result } = renderHook(() =>
     useNativeSplashHandoff({ initialVisible: true, ready: false })
   );
+
+  expect(result.current.nativeSplashVisible).toBe(true);
 
   await act(async () => jest.advanceTimersByTime(8_000));
 
@@ -49,6 +54,8 @@ it('waits for the native watchdog to release the overlay before showing recovery
   const { result } = renderHook(() =>
     useNativeSplashHandoff({ initialVisible: true, ready: false })
   );
+
+  expect(result.current.nativeSplashVisible).toBe(true);
 
   await act(async () => jest.advanceTimersByTime(8_000));
 

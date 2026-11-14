@@ -166,11 +166,26 @@ export function shouldSkipUnchangedBoundaryRow(
   return previousSnapshot === serializeBoundaryRowState(table, row);
 }
 
+function hasTableFloorChanged(
+  previousFloor: string,
+  currentFloor: string
+): boolean {
+  const canonicalPrevious = toCanonicalIsoTimestamp(previousFloor);
+  const canonicalCurrent = toCanonicalIsoTimestamp(currentFloor);
+  if (canonicalPrevious !== null && canonicalCurrent !== null) {
+    return canonicalPrevious !== canonicalCurrent;
+  }
+  return previousFloor !== currentFloor;
+}
+
 function hasTableWatermarkChanged(
   previous: QuizTableSweepWatermark,
   current: QuizTableSweepWatermark
 ): boolean {
-  if (previous.status !== current.status || previous.floor !== current.floor) {
+  if (
+    previous.status !== current.status ||
+    hasTableFloorChanged(previous.floor, current.floor)
+  ) {
     return true;
   }
   if (previous.boundarySnapshots.size !== current.boundarySnapshots.size) {

@@ -95,6 +95,7 @@ export function RouteResumeController({
     if (shouldResumeFromHome) {
       hasAttemptedResumeRef.current = true;
       try {
+        console.info('[StartupRoute]', 'navigation_resume_requested');
         router.replace(resumeHref);
       } catch (error) {
         console.warn(

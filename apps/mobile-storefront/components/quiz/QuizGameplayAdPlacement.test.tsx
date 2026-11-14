@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
+import { Dimensions } from 'react-native';
 import { createQuizGameplayAdFooterStyles } from './QuizGameplayAdFooter.styles';
 import { QuizGameplayAdPlacement } from './QuizGameplayAdPlacement';
 
@@ -51,5 +52,26 @@ describe('QuizGameplayAdPlacement', () => {
     expect(screen.getByTestId('quiz-results-ad')).toBeTruthy();
     expect(screen.queryByTestId('quiz-gameplay-ad-footer')).toBeNull();
     expect(JSON.stringify(view.toJSON())).toContain('medium-rectangle');
+  });
+
+  it('leaves the fixed-size finished-screen ad out of a window too narrow for it', () => {
+    const original = Dimensions.get('window');
+    Dimensions.set({ window: { ...original, width: 280 } });
+    const styles = createQuizGameplayAdFooterStyles({
+      background: '#000000',
+      border: '#222222',
+      textSecondary: '#aaaaaa',
+    });
+
+    render(
+      <QuizGameplayAdPlacement
+        bannerUnitId="ca-app-pub-3940256099942544/9214589741"
+        layout="inline"
+        styles={styles}
+      />
+    );
+
+    expect(screen.queryByTestId('quiz-results-ad')).toBeNull();
+    Dimensions.set({ window: original });
   });
 });

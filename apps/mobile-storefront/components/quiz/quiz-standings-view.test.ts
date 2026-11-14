@@ -106,6 +106,34 @@ describe('buildQuizStandingsView', () => {
     ]);
   });
 
+  it('bugfix: a tie that skips rank 10 hid the gap to the top ten', () => {
+    const me = entry(12, { isCurrentCustomer: true, score: 80 });
+    const ranks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 11, 12];
+    const view = buildQuizStandingsView(board(ranks, me));
+    expect(view.pointsBehindTopTen).toBe(11);
+  });
+
+  it("keeps the player's own flagged row when a namesake shares their rank", () => {
+    const me = entry(4, { displayName: 'Ada', isCurrentCustomer: true });
+    const view = buildQuizStandingsView({
+      currentPlayer: me,
+      entries: [
+        entry(1),
+        entry(2),
+        entry(3),
+        entry(4, { displayName: 'Ada' }),
+        me,
+        entry(6),
+      ],
+      participantCount: 6,
+      status: 'live',
+    });
+    expect(view.rows.map((row) => row.isCurrentCustomer)).toEqual([
+      false,
+      true,
+    ]);
+  });
+
   it('never reports a negative gap to the top ten', () => {
     const me = entry(11, { isCurrentCustomer: true, score: 95 });
     const ranks = Array.from({ length: 12 }, (_, index) => index + 1);

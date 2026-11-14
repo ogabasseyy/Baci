@@ -51,6 +51,9 @@ export function getQuizAnswerAccent(index: number): string {
  */
 export const QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH = 22;
 
+/** One tile line holds about this many characters; a longer word cannot wrap. */
+export const QUIZ_ANSWER_GRID_MAX_WORD_LENGTH = 11;
+
 /**
  * The character limit above is tuned for Latin letters, digits and common
  * punctuation. Every other script (CJK, Thai, Arabic, Devanagari, emoji…)
@@ -65,6 +68,9 @@ export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {
     labels.every(
       (label) =>
         label.length <= QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH &&
+        label
+          .split(/\s+/)
+          .every((word) => word.length <= QUIZ_ANSWER_GRID_MAX_WORD_LENGTH) &&
         TILE_SAFE_TEXT_PATTERN.test(label)
     )
   );

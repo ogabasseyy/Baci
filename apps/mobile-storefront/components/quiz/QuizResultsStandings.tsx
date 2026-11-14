@@ -28,6 +28,16 @@ export function QuizResultsStandings({
   const { podium, rows, pointsBehindTopTen } =
     buildQuizStandingsView(leaderboard);
 
+  // Entries carry no id and tied players can share a name, so a repeat
+  // counter keeps every row's key distinct even on an exact tie.
+  const repeats = new Map<string, number>();
+  const keyedRows = rows.map((entry) => {
+    const base = `${entry.rank}-${entry.displayName}`;
+    const repeat = repeats.get(base) ?? 0;
+    repeats.set(base, repeat + 1);
+    return { entry, key: `${base}-${repeat}` };
+  });
+
   return (
     <View style={styles.finalStandings}>
       <View style={styles.finalStandingsHeader}>
@@ -62,13 +72,11 @@ export function QuizResultsStandings({
         />
       ) : null}
       <QuizStandingsPodium entries={podium} styles={styles} />
-      {rows.map((entry) => {
+      {keyedRows.map(({ entry, key }) => {
         const finishTime = formatQuizStandingTime(entry.totalTimeSeconds);
         return (
           <View
-            // Entries carry no id, and tied players can share a name, so the
-            // finish time and submission tell their rows apart.
-            key={`${entry.rank}-${entry.displayName}-${entry.totalTimeSeconds ?? ''}-${entry.submittedAt ?? ''}`}
+            key={key}
             accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
             style={[
               styles.finalStandingRow,

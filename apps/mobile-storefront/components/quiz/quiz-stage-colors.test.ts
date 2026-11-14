@@ -78,6 +78,15 @@ describe('quiz stage colours', () => {
     ).toBe(true);
   });
 
+  it('keeps a long unbroken word out of the narrow tiles', () => {
+    expect(
+      shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'Telecommunications'])
+    ).toBe(false);
+    expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'Marshmallow'])).toBe(
+      true
+    );
+  });
+
   it('keeps wide-script and emoji answers out of the narrow tiles', () => {
     expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', '삼성 갤럭시'])).toBe(
       false

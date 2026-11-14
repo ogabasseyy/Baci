@@ -44,10 +44,16 @@ export function buildQuizStandingsView(
     (entry) => entry.rank <= TOP_ROWS_END_RANK
   );
 
+  // When the board flags the player's own row, trust only that flag: another
+  // person can share their name and rank. The name match is for boards that
+  // do not flag rows at all.
+  const boardFlagsPlayer = entries.some((entry) => entry.isCurrentCustomer);
   const playerIsShown =
     !currentPlayer ||
-    [...podium, ...nextRanks].some(
-      (entry) => entry.isCurrentCustomer || isSameEntry(entry, currentPlayer)
+    [...podium, ...nextRanks].some((entry) =>
+      boardFlagsPlayer
+        ? entry.isCurrentCustomer
+        : isSameEntry(entry, currentPlayer)
     );
   if (playerIsShown || !currentPlayer) {
     return { podium, rows: nextRanks, pointsBehindTopTen: null };
@@ -66,9 +72,11 @@ export function buildQuizStandingsView(
     ...neighbours,
     { ...currentPlayer, isCurrentCustomer: true },
   ].sort((a, b) => a.rank - b.rank);
-  const tenth = entries.find((entry) => entry.rank === TOP_TEN_RANK);
+  // The tenth player on the board, not "rank 10": ties can skip that rank
+  // (two players at 9, then 11) and the gap must still be reported.
+  const tenth = entries[TOP_TEN_RANK - 1];
   const pointsBehindTopTen =
-    tenth && currentPlayer.rank > TOP_TEN_RANK
+    tenth && tenth.rank <= TOP_TEN_RANK && currentPlayer.rank > TOP_TEN_RANK
       ? Math.max(0, tenth.score - currentPlayer.score)
       : null;
   return { podium, rows, pointsBehindTopTen };

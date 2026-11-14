@@ -12,7 +12,7 @@ export const WALLET_TRANSFER_UNCONFIRMED_COPY =
 
 type WalletTransferFallbackNoticeProps = {
   colors: typeof Colors.light;
-  reason?: WalletTransferFallback;
+  reason: WalletTransferFallback;
 };
 
 /**
@@ -21,7 +21,7 @@ type WalletTransferFallbackNoticeProps = {
  */
 export function WalletTransferFallbackNotice({
   colors,
-  reason = 'piggyvest',
+  reason,
 }: WalletTransferFallbackNoticeProps) {
   return (
     <View

@@ -82,3 +82,20 @@ describe('saving the exact option of a completed goal', () => {
     ).resolves.toBe('This goal already has an option.');
   });
 });
+
+describe('bugfix: a failed refresh result closed the picker', () => {
+  it('says the choice is saved when the refresh resolves to an error result', async () => {
+    jest
+      .mocked(resolveSavingsGoalVariant)
+      .mockResolvedValue(undefined as never);
+    const refetchWallet = jest.fn(async () => ({ isError: true }));
+    const result = await resolveCompletedSavingsGoalVariant({
+      goal,
+      refetchWallet,
+      variantId: 'v1',
+    });
+    expect(result).not.toBe(true);
+    expect(result).toEqual({ saved: expect.any(String) });
+    expect(refetchWallet).toHaveBeenCalledTimes(2);
+  });
+});

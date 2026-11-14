@@ -32,10 +32,13 @@ export default function WalletGoalActionsRoute() {
   // No data and no error means the wallet read has not settled yet (still
   // loading, or held while the signed-in identities catch up after an
   // account switch): wait rather than drop a valid goal link.
-  if (!wallet.data && !wallet.isError) return null;
+  if (!wallet.data && !wallet.isError && wallet.fetchStatus !== 'idle')
+    return null;
   // A failed wallet read keeps the link: the customer can retry instead of
-  // landing on the plain wallet without the goal they opened.
-  if (wallet.isError && !wallet.data) {
+  // landing on the plain wallet without the goal they opened. Same when the
+  // read never starts (held query, nothing loading) or errors on stale data:
+  // a cached goal list is never trusted to decide ownership.
+  if (wallet.isError || !wallet.data) {
     return <GoalLinkLoadError onRetry={() => void wallet.refetch()} />;
   }
   // A goal that is no longer the customer's (settled, cancelled, someone

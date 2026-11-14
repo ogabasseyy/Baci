@@ -57,7 +57,7 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
       data: z
         .object({
           slug: productSlug,
-          variantId: z.string().min(1).max(128),
+          variantId: z.string().min(1).max(128).optional(),
           displayedPrice: z.number().finite().nonnegative(),
           requestId,
           conversationId,

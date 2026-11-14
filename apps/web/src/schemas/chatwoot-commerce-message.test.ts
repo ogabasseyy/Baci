@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { chatwootCommerceMessageSchema } from './chatwoot-commerce-message';
 
 describe('Chatwoot commerce message schemas', () => {
+  it('allows simple catalog adds without a variant id', () => {
+    expect(
+      chatwootCommerceMessageSchema.safeParse({
+        event: 'baci-cart-add',
+        data: {
+          slug: 'simple-product',
+          displayedPrice: 10,
+          requestId: 'add-request-1',
+          conversationId: 905,
+          sessionToken: 'signed-session-token',
+        },
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects unsafe cart versions on quantity messages', () => {
     expect(
       chatwootCommerceMessageSchema.safeParse({

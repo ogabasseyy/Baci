@@ -169,7 +169,7 @@ export async function requestDvaInitialization({
       gateway: 'paystack',
       payment_type: 'dva', // Dedicated Virtual Account
       billing_address: billingAddress,
-      ...(trackingToken ? { tracking_token: trackingToken } : {}),
+      ...(trackingToken?.trim() ? { tracking_token: trackingToken } : {}),
     }),
   });
 

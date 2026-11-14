@@ -104,6 +104,29 @@ describe('initializeGatewayAndRoute', () => {
     });
   });
 
+  it('omits the DVA tracking token from card initialization', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-card-1',
+      authorization_url: 'https://pay.example/authorize',
+    });
+
+    await initializeGatewayAndRoute(
+      createParams({ trackingToken: 'track-order-1' })
+    );
+
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
+      unknown,
+      { body?: unknown },
+    ][];
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody.gateway).toBe('paystack');
+    expect(requestBody.payment_type).toBeUndefined();
+    expect(requestBody.tracking_token).toBeUndefined();
+  });
+
   it('records the full order total when credit partially covers the order', async () => {
     mockInitResponse({
       success: true,
@@ -325,6 +348,63 @@ describe('initializeGatewayAndRoute', () => {
         accountName: 'Ada Buyer',
       }),
     });
+  });
+
+  it('omits whitespace-only DVA tracking tokens without trimming opaque tokens', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-dva-blank-token',
+      dva: {
+        bank_name: 'Test Bank',
+        account_number: '0123456789',
+        account_name: 'Ada Buyer',
+      },
+    });
+
+    await initializeGatewayAndRoute(
+      createParams({
+        selectedPayment: 'bank_transfer',
+        trackingToken: '  \t  ',
+      })
+    );
+
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
+      unknown,
+      { body?: unknown },
+    ][];
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody).not.toHaveProperty('tracking_token');
+  });
+
+  it('preserves nonblank DVA tracking token bytes', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-dva-opaque-token',
+      dva: {
+        bank_name: 'Test Bank',
+        account_number: '0123456789',
+        account_name: 'Ada Buyer',
+      },
+    });
+
+    const opaqueToken = ' token-with-space ';
+    await initializeGatewayAndRoute(
+      createParams({
+        selectedPayment: 'bank_transfer',
+        trackingToken: opaqueToken,
+      })
+    );
+
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
+      unknown,
+      { body?: unknown },
+    ][];
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody.tracking_token).toBe(opaqueToken);
   });
 
   it('accepts the legacy virtual_account envelope for bank transfer', async () => {

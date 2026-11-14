@@ -132,6 +132,51 @@ describe('checkout-page data loaders', () => {
     expect(requestBody).not.toHaveProperty('tracking_token');
   });
 
+  it('omits whitespace-only DVA tracking tokens but preserves nonblank token bytes', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ success: true, dva: { account_number: '1234567890' }, reference: 'BAC-3' }),
+        { status: 200 }
+      )
+    );
+
+    const opaqueToken = ' token-with-space ';
+    await requestDvaInitialization({
+      merchantId: 'merchant-1',
+      orderId: 'order-3',
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '+2348012345678',
+      billingAddress: { line1: '12 Station Road', city: 'Osogbo', country: 'NG' },
+      orderCurrency: 'NGN',
+      trackingToken: '  \t  ',
+    });
+
+    const fetchCalls = fetchMock.mock.calls as [string, RequestInit][];
+    const blankTokenBody = JSON.parse(String(fetchCalls[0]?.[1]?.body ?? '{}')) as Record<string, unknown>;
+    expect(blankTokenBody).not.toHaveProperty('tracking_token');
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ success: true, dva: { account_number: '1234567890' }, reference: 'BAC-4' }),
+        { status: 200 }
+      )
+    );
+    await requestDvaInitialization({
+      merchantId: 'merchant-1',
+      orderId: 'order-4',
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '+2348012345678',
+      billingAddress: { line1: '12 Station Road', city: 'Osogbo', country: 'NG' },
+      orderCurrency: 'NGN',
+      trackingToken: opaqueToken,
+    });
+
+    const opaqueBody = JSON.parse(String(fetchCalls[1]?.[1]?.body ?? '{}')) as Record<string, unknown>;
+    expect(opaqueBody.tracking_token).toBe(opaqueToken);
+  });
+
   it('throws when DVA initialization is rejected', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: 'nope' }), { status: 400 })

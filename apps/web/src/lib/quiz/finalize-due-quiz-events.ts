@@ -15,21 +15,21 @@ import {
 } from './quiz-finalization-summary';
 import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
 import {
-  hasQuizSweepWatermarksChanged,
-  type QuizSweepWatermarks,
-} from './quiz-sweep-boundary-state';
+  loadQuizSweepBaseline,
+  resetQuizSweepBaselineForTests,
+  saveQuizSweepBaseline,
+} from './quiz-sweep-baseline-store';
+import { hasQuizSweepWatermarksChanged } from './quiz-sweep-boundary-state';
 import { resolveQuizSweepWatermarks } from './quiz-sweep-watermarks';
 
 type QuizFinalizationClient = SupabaseClient<Database>;
 
 const MISSING_RPC_CODES = new Set(['PGRST202']);
 
-let lastObservedWatermarks: QuizSweepWatermarks | null = null;
-let hasPendingRecoverySweep = false;
+let activeSweepRun: Promise<unknown> = Promise.resolve();
 
 export function resetQuizSweepStateForTests() {
-  lastObservedWatermarks = null;
-  hasPendingRecoverySweep = false;
+  resetQuizSweepBaselineForTests();
 }
 
 function logRpcFailure(name: FinalizationStep['name'], error: PostgrestError) {
@@ -68,7 +68,19 @@ function runStep(client: QuizFinalizationClient, step: FinalizationStep) {
   }
 }
 
-export async function finalizeDueQuizEvents() {
+export function finalizeDueQuizEvents() {
+  const run = activeSweepRun.then(
+    () => runFinalizeDueQuizEvents(),
+    () => runFinalizeDueQuizEvents()
+  );
+  activeSweepRun = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+async function runFinalizeDueQuizEvents() {
   const summary = emptySummary();
   const mutationState: MutationTrackingState = {
     hasUnknownMutationResult: false,
@@ -163,6 +175,10 @@ export async function finalizeDueQuizEvents() {
     summary.skippedLive = summary.liveAwaitingGate;
   }
 
+  const { baseline, requiresColdStartSweep } = await loadQuizSweepBaseline();
+  const lastObservedWatermarks = baseline?.watermarks ?? null;
+  const hasPendingRecoverySweep = baseline?.hasPendingRecoverySweep ?? false;
+
   const hasLocalMutationOrFailure =
     hasQuizMutations(summary, mutationState) ||
     mutationState.hasUnknownMutationResult ||
@@ -174,7 +190,8 @@ export async function finalizeDueQuizEvents() {
   const shouldSweepCaches =
     hasLocalMutationOrFailure ||
     hasExternalMutationSinceLastTick ||
-    hasPendingRecoverySweep;
+    hasPendingRecoverySweep ||
+    requiresColdStartSweep;
 
   if (shouldSweepCaches) {
     const sweepTargetWatermarks =
@@ -187,13 +204,23 @@ export async function finalizeDueQuizEvents() {
       false;
 
     if (sweepWatermarks.hasProbeFailure || !sweepSucceeded) {
-      hasPendingRecoverySweep = true;
+      if (lastObservedWatermarks !== null) {
+        await saveQuizSweepBaseline({
+          watermarks: lastObservedWatermarks,
+          hasPendingRecoverySweep: true,
+        });
+      }
     } else {
-      hasPendingRecoverySweep = false;
-      lastObservedWatermarks = sweepWatermarks;
+      await saveQuizSweepBaseline({
+        watermarks: sweepWatermarks,
+        hasPendingRecoverySweep: false,
+      });
     }
   } else if (!sweepWatermarks.hasProbeFailure) {
-    lastObservedWatermarks = sweepWatermarks;
+    await saveQuizSweepBaseline({
+      watermarks: sweepWatermarks,
+      hasPendingRecoverySweep: false,
+    });
   }
 
   if (summary.failed > 0) {

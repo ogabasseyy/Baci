@@ -116,7 +116,14 @@ export async function runVtuWalletPayStep(
       },
       () => refuse(unavailable())
     );
-  const runtime = live ?? deps.readRecoveryRuntime();
+  // A misconfigured recovery runtime answers unavailable (the app keeps its
+  // key and re-checks later) rather than a 500, like the switched-off path.
+  let runtime: WalletPayRuntime;
+  try {
+    runtime = live ?? deps.readRecoveryRuntime();
+  } catch {
+    return await refuse(unavailable());
+  }
   if (runtime.merchantId !== input.merchantId)
     return await refuse(
       walletPayRefuse(

@@ -2,7 +2,10 @@ import { useState } from 'react';
 import type { Biller } from '@/hooks/use-vtu-billers';
 import { detectNetwork } from '@/lib/network-utils';
 import type { UtilityRepeatRecipient } from '@/lib/utility-repeat';
-import { nextPhoneDigits } from './airtime-form-controller.helpers';
+import {
+  nextPhoneDigits,
+  sanitizePhoneDigits,
+} from './airtime-form-controller.helpers';
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
 import { inferProviderFromDataBillerName } from './data-form.helpers';
 import { usePhoneTrimNotice } from './use-phone-trim-notice';
@@ -28,10 +31,14 @@ export function useDataFormBeneficiaryController({
 }: UseDataFormBeneficiaryControllerProps) {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(
     initialProvider ??
-      (initialPhoneNumber ? detectNetwork(initialPhoneNumber) : null)
+      (initialPhoneNumber
+        ? detectNetwork(sanitizePhoneDigits(initialPhoneNumber))
+        : null)
   );
   const [isBeneficiarySelected, setIsBeneficiarySelected] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber ?? '');
+  const [phoneNumber, setPhoneNumber] = useState(
+    sanitizePhoneDigits(initialPhoneNumber ?? '')
+  );
   const [selectedPlan, setSelectedPlan] = useState<string | null>(
     initialPlan ?? null
   );
@@ -80,7 +87,8 @@ export function useDataFormBeneficiaryController({
   };
 
   const handleSelectRecentRecipient = (recipient: UtilityRepeatRecipient) => {
-    const num = recipient.defaults.phoneNumber ?? '';
+    // A stored +234 number reads like a typed one (Muse).
+    const num = sanitizePhoneDigits(recipient.defaults.phoneNumber ?? '');
     setPhoneNumber(num);
     syncBillerFromDetectedNetwork(num);
     setIsBeneficiarySelected(true);

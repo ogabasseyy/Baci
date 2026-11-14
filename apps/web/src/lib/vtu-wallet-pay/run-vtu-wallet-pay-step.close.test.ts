@@ -229,3 +229,20 @@ describe('a cancel while wallet pay is switched off (Codex P2 4567616052)', () =
     deps.readRuntime.mockReturnValue(runtime as never);
   });
 });
+
+describe('bugfix: a misconfigured recovery runtime failed a re-check with a 500 (Muse)', () => {
+  it('answers unavailable (the key stays) instead of throwing', async () => {
+    deps.readRuntime.mockReturnValue(null as never);
+    deps.readRecoveryRuntime.mockImplementationOnce(() => {
+      throw new Error('misconfigured');
+    });
+    const response = await runVtuWalletPayStep(
+      { ...base, operationId: OP },
+      deps as never
+    );
+    expect(response.status).toBe(503);
+    expect(deps.closeUnissued).not.toHaveBeenCalled();
+    expect(deps.pay).not.toHaveBeenCalled();
+    deps.readRuntime.mockReturnValue(runtime as never);
+  });
+});

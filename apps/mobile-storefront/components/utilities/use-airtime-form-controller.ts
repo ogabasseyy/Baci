@@ -11,6 +11,7 @@ import {
   nextPhoneDigits,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
+  sanitizePhoneDigits,
   scrollToAirtimePaymentSection,
 } from './airtime-form-controller.helpers';
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
@@ -37,10 +38,14 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
   const prevIsRepeatPaymentReadyRef = useRef(isRepeatPaymentReady);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(
     initialProvider ??
-      (initialPhoneNumber ? resolveAirtimeProvider(initialPhoneNumber) : null)
+      (initialPhoneNumber
+        ? resolveAirtimeProvider(sanitizePhoneDigits(initialPhoneNumber))
+        : null)
   );
   const [isBeneficiarySelected, setIsBeneficiarySelected] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber ?? '');
+  const [phoneNumber, setPhoneNumber] = useState(
+    sanitizePhoneDigits(initialPhoneNumber ?? '')
+  );
   const [amount, setAmount] = useState(initialAmount ?? '');
   const [isNetworkPickerExpanded, setIsNetworkPickerExpanded] = useState(false);
   const [shouldScrollToPayment, setShouldScrollToPayment] =

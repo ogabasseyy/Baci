@@ -3,7 +3,9 @@ import { logger } from '@/lib/logger';
 
 const mocks = vi.hoisted(() => ({
   approved: vi.fn(() => false),
+  invalidateQuizProductCaches: vi.fn(),
   phase: vi.fn(() => '1a'),
+  resolveQuizSweepWatermarks: vi.fn(),
   rpc: vi.fn(),
 }));
 vi.mock('@/lib/quiz/quiz-runtime-env', () => ({
@@ -16,14 +18,37 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn() },
 }));
+vi.mock('./quiz-sweep-watermarks', () => ({
+  resolveQuizSweepWatermarks: mocks.resolveQuizSweepWatermarks,
+}));
+vi.mock('./quiz-product-cache-invalidation', () => ({
+  invalidateQuizProductCaches: mocks.invalidateQuizProductCaches,
+}));
 
-import { finalizeDueQuizEvents } from './finalize-due-quiz-events';
+import {
+  finalizeDueQuizEvents,
+  resetQuizSweepStateForTests,
+} from './finalize-due-quiz-events';
+
+function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
+  const floor =
+    status === 'empty' ? '1970-01-01T00:00:00.000Z' : '2026-09-01T00:00:00Z';
+  return {
+    events: { status, floor, boundarySnapshots: new Map() },
+    reservations: { status, floor, boundarySnapshots: new Map() },
+    awards: { status, floor, boundarySnapshots: new Map() },
+    hasProbeFailure: false,
+  };
+}
 
 describe('finalizeDueQuizEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetQuizSweepStateForTests();
     mocks.phase.mockReturnValue('1a');
     mocks.approved.mockReturnValue(false);
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(makeOkWatermarks('ok'));
+    mocks.invalidateQuizProductCaches.mockResolvedValue(undefined);
     mocks.rpc.mockResolvedValue({ data: {}, error: null });
   });
 
@@ -272,5 +297,247 @@ describe('finalizeDueQuizEvents', () => {
       'expire_unclaimed_ranked_quiz_awards_v2',
       'close_due_product_quiz_events',
     ]);
+  });
+
+  it('captures pre-RPC watermarks before RPCs and skips cache invalidation on idle populated tables', async () => {
+    const callOrder: string[] = [];
+    mocks.resolveQuizSweepWatermarks.mockImplementation(async () => {
+      callOrder.push('resolveQuizSweepWatermarks');
+      return makeOkWatermarks('ok');
+    });
+    mocks.rpc.mockImplementation(async (name: string) => {
+      callOrder.push(name);
+      if (name === 'set_quiz_runtime_control_v2') {
+        return { data: { updated: true }, error: null };
+      }
+      if (name === 'process_due_quiz_deadlines_v2') {
+        return { data: { scheduledPromoted: 0, testClosed: 0 }, error: null };
+      }
+      if (name === 'expire_unclaimed_ranked_quiz_awards_v2') {
+        return { data: { expired: 0, released: 0 }, error: null };
+      }
+      return { data: 0, error: null };
+    });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(callOrder[0]).toBe('resolveQuizSweepWatermarks');
+    expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
+  });
+
+  it('skips cache invalidation on idle successfully probed empty tables', async () => {
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(
+      makeOkWatermarks('empty')
+    );
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
+  });
+
+  it('overrides the idle shortcut when a watermark probe failed despite zero RPC mutation counters', async () => {
+    const failedWatermarks = {
+      ...makeOkWatermarks('ok'),
+      awards: {
+        status: 'error' as const,
+        floor: '2026-09-01T00:03:00.000Z',
+        boundarySnapshots: new Map(),
+      },
+      hasProbeFailure: true,
+    };
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(failedWatermarks);
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledWith(
+      expect.anything(),
+      failedWatermarks
+    );
+  });
+
+  it('runs cache invalidation when close_due_product_quiz_events returns a positive scalar count', async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 1, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs cache invalidation when finalize_due_quiz_events returns a positive scalar count', async () => {
+    mocks.phase.mockReturnValue('production');
+    mocks.approved.mockReturnValue(true);
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null })
+      .mockResolvedValueOnce({ data: 1, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['null scalar', null],
+    ['negative scalar', -1],
+  ])('fails closed into cache invalidation when close_due_product_quiz_events returns %s', async (_label, badPayload) => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: badPayload, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed into cache invalidation when an object RPC returns no expected counter keys', async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: {}, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['numeric', { scheduledPromoted: 0, newCounter: 5 }],
+    ['boolean', { scheduledPromoted: 0, mutatedFlag: true }],
+  ])('fails closed into cache invalidation when an object RPC includes an unrecognized %s key alongside zeros', async (_label, payload) => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({
+        data: payload,
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    const result = await finalizeDueQuizEvents();
+
+    expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it('sweeps from the last observed baseline when the DB deadline clock advances a watermark between idle ticks', async () => {
+    const tick1Watermarks = makeOkWatermarks('ok');
+    const tick2Watermarks = {
+      ...makeOkWatermarks('ok'),
+      events: {
+        status: 'ok' as const,
+        floor: '2026-09-01T00:00:05Z',
+        boundarySnapshots: new Map([['evt-1', '{"status":"ended"}']]),
+      },
+    };
+    const idleRpcSequence = () => {
+      mocks.rpc
+        .mockResolvedValueOnce({ data: { updated: true }, error: null })
+        .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+        .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+        .mockResolvedValueOnce({ data: 0, error: null });
+    };
+
+    // Tick 1: cold idle baseline
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
+
+    // Tick 2: DB deadline clock advanced events.floor before pre-RPC probe,
+    // so worker RPCs return 0; must sweep from tick1Watermarks.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 3: unchanged from tick2Watermarks -> idle skip resumes.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the recovery baseline when cache invalidation reports incomplete delivery', async () => {
+    const tick1Watermarks = makeOkWatermarks('ok');
+    const tick2Watermarks = {
+      ...makeOkWatermarks('ok'),
+      events: {
+        status: 'ok' as const,
+        floor: '2026-09-01T00:00:05Z',
+        boundarySnapshots: new Map([['evt-1', '{"status":"ended"}']]),
+      },
+    };
+    const idleRpcSequence = () => {
+      mocks.rpc
+        .mockResolvedValueOnce({ data: { updated: true }, error: null })
+        .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+        .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+        .mockResolvedValueOnce({ data: 0, error: null });
+    };
+
+    // Tick 1: baseline
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
+
+    // Tick 2: external mutation triggers sweep, but sweep reports incomplete (false).
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(false);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 3: watermarks unchanged, but recovery is still pending -> retries from tick1Watermarks.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 4: recovery succeeded -> idle skip resumes.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
   });
 });

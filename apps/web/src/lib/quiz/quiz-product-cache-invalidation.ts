@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { scheduleOrderProductBlogPurge } from '@/lib/schedule-order-product-blog-purge';
 import type { Database } from '@/types/supabase';
-import type { QuizSweepWatermarks } from './quiz-sweep-watermarks';
+import {
+  QUIZ_SWEEP_TABLE_SELECT,
+  type QuizSweepWatermarks,
+  shouldSkipUnchangedBoundaryRow,
+} from './quiz-sweep-boundary-state';
 
 const QUIZ_CACHE_TARGET_BATCH_LIMIT = 1000;
 /**
@@ -16,19 +20,21 @@ const QUIZ_PURGE_MERCHANT_CONCURRENCY = 5;
 
 type QuizClient = SupabaseClient<Database>;
 
-interface QuizEventCacheRow {
+interface QuizEventCacheRow extends Record<string, unknown> {
   id?: unknown;
   merchant_id?: unknown;
   settings?: unknown;
 }
 
-interface QuizAwardCacheRow {
+interface QuizAwardCacheRow extends Record<string, unknown> {
   event_id?: unknown;
+  id?: unknown;
   product_id?: unknown;
   quiz_events?: { merchant_id?: unknown } | null;
 }
 
-interface QuizReservationCacheRow {
+interface QuizReservationCacheRow extends Record<string, unknown> {
+  id?: unknown;
   merchant_id?: unknown;
   product_id?: unknown;
 }
@@ -112,20 +118,21 @@ async function collectQuizCacheTargetRows<T>(
 export async function invalidateQuizProductCaches(
   client: QuizClient,
   watermarks: QuizSweepWatermarks
-): Promise<void> {
-  if (typeof (client as { from?: unknown }).from !== 'function') return;
+): Promise<boolean> {
+  if (typeof (client as { from?: unknown }).from !== 'function') return false;
 
   const productIdsByMerchant = new Map<string, Set<string>>();
   const eventMerchantIds = new Map<string, string>();
   let sweepIncomplete = false;
+  let deliveryFailed = false;
 
   try {
     const eventPage = await collectQuizCacheTargetRows<QuizEventCacheRow>(
       (from, to) =>
         client
           .from('quiz_events')
-          .select('id, merchant_id, settings')
-          .gte('updated_at', watermarks.events)
+          .select(QUIZ_SWEEP_TABLE_SELECT.quiz_events)
+          .gte('updated_at', watermarks.events.floor)
           .order('updated_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, to)
@@ -139,6 +146,16 @@ export async function invalidateQuizProductCaches(
         row.merchant_id.trim().length > 0
       ) {
         eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
+      }
+      if (
+        shouldSkipUnchangedBoundaryRow(
+          'quiz_events',
+          'updated_at',
+          watermarks.events,
+          row
+        )
+      ) {
+        continue;
       }
       addProductId(
         productIdsByMerchant,
@@ -156,14 +173,24 @@ export async function invalidateQuizProductCaches(
       await collectQuizCacheTargetRows<QuizReservationCacheRow>((from, to) =>
         client
           .from('quiz_prize_reservations')
-          .select('merchant_id, product_id')
-          .gte('updated_at', watermarks.reservations)
+          .select(QUIZ_SWEEP_TABLE_SELECT.quiz_prize_reservations)
+          .gte('updated_at', watermarks.reservations.floor)
           .order('updated_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, to)
       );
     sweepIncomplete = sweepIncomplete || reservationPage.incomplete;
     for (const row of reservationPage.rows) {
+      if (
+        shouldSkipUnchangedBoundaryRow(
+          'quiz_prize_reservations',
+          'updated_at',
+          watermarks.reservations,
+          row
+        )
+      ) {
+        continue;
+      }
       addProductId(productIdsByMerchant, row.merchant_id, row.product_id);
     }
   } catch {
@@ -180,9 +207,9 @@ export async function invalidateQuizProductCaches(
       (from, to) =>
         client
           .from('quiz_awards')
-          .select('event_id, product_id, quiz_events!inner(merchant_id)')
+          .select(QUIZ_SWEEP_TABLE_SELECT.quiz_awards)
           .not('expired_at', 'is', null)
-          .gte('expired_at', watermarks.awards)
+          .gte('expired_at', watermarks.awards.floor)
           .order('expired_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, to)
@@ -195,6 +222,16 @@ export async function invalidateQuizProductCaches(
   }
 
   for (const award of awardRows) {
+    if (
+      shouldSkipUnchangedBoundaryRow(
+        'quiz_awards',
+        'expired_at',
+        watermarks.awards,
+        award
+      )
+    ) {
+      continue;
+    }
     const embeddedMerchant =
       award.quiz_events &&
       typeof award.quiz_events === 'object' &&
@@ -219,7 +256,13 @@ export async function invalidateQuizProductCaches(
     // hostname fallback instead of purging a partial product set.
     console.warn(
       'Quiz product cache sweep incomplete; escalating collected merchants to hostname purge',
-      { watermarks }
+      {
+        watermarks: {
+          events: watermarks.events.floor,
+          reservations: watermarks.reservations.floor,
+          awards: watermarks.awards.floor,
+        },
+      }
     );
   }
   // Deliver in bounded-concurrency chunks: the worker has a 50s SIGTERM
@@ -244,9 +287,12 @@ export async function invalidateQuizProductCaches(
               ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
             });
           } catch {
-            // The quiz RPC already completed; edge eviction stays best effort.
+            // The quiz RPC already completed; edge eviction stays best effort,
+            // but report incomplete delivery so the caller retains its baseline.
+            deliveryFailed = true;
           }
         })
     );
   }
+  return !sweepIncomplete && !deliveryFailed;
 }

@@ -3,6 +3,11 @@ import { render, screen } from '@testing-library/react-native';
 import { WalletContent } from './WalletContent';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// The PiggyVest activity list has its own tests (and needs a query client).
+jest.mock('./activity/PiggyvestWalletActivity', () => ({
+  PiggyvestWalletActivity: () => null,
+}));
+
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
     'react-native'

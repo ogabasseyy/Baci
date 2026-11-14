@@ -111,6 +111,34 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
+  it('lets the server verify a newer version against the live cart', async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        response({ accepted: true, cartVersion: 10 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const value = input({
+      message: {
+        ...message,
+        data: { ...message.data, cartVersion: 9 },
+      },
+    });
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      cartVersion: 9,
+      expectedQuantity: 2,
+    });
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: true,
+      cartVersion: 10,
+    });
+  });
+
   it('refreshes the same cart after a transport failure with an unknown commit outcome', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
     const value = input();

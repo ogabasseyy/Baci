@@ -32,7 +32,6 @@ export async function handleChatwootInlineCartQuantity(input: {
   );
   if (
     !lineId ||
-    message.data.cartVersion > input.snapshot.cartVersion ||
     (message.data.cartVersion === input.snapshot.cartVersion &&
       (!reviewedLine ||
         reviewedLine.quantity !== message.data.expectedQuantity))

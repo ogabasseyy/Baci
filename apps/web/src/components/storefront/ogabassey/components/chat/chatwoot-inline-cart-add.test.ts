@@ -92,6 +92,34 @@ describe('handleChatwootInlineCartAdd', () => {
     });
   });
 
+  it('posts the server result when the session expires during the request', async () => {
+    const value = input();
+    value.isCurrentContext = () => value.sessionExpiresAt > Date.now();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        value.sessionExpiresAt = Date.now() - 1;
+        return response({
+          accepted: true,
+          cartVersion: 9,
+          operationId: 'add-request-01',
+          sessionToken: 'renewed-session-token',
+        });
+      })
+    );
+    const onSessionTokenRenewed = vi.fn();
+    value.onSessionTokenRenewed = onSessionTokenRenewed;
+
+    await handleChatwootInlineCartAdd(value);
+
+    expect(onSessionTokenRenewed).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'add-request-01',
+      accepted: true,
+      cartVersion: 9,
+    });
+  });
+
   it.each([Number.MAX_SAFE_INTEGER + 1, 7])(
     'does not forward unsafe or stale cart version %s',
     async (cartVersion) => {

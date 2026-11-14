@@ -95,7 +95,7 @@ export async function handleChatwootInlineCartAdd(input: {
       // The server commit remains authoritative; leave the result unchanged.
     }
   }
-  if (!input.isCurrentAction() || input.sessionExpiresAt <= Date.now()) return;
+  if (!input.isCurrentAction()) return;
   input.post({
     requestId,
     accepted,

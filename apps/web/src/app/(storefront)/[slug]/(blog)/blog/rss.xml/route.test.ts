@@ -8,7 +8,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('../../../sitemap-data', () => ({
-  resolveStorefrontSitemapContext: (...args: unknown[]) =>
+  resolveStorefrontSitemapContextResult: (...args: unknown[]) =>
     mockResolveStorefrontSitemapContext(...args),
 }));
 
@@ -22,11 +22,14 @@ describe('GET /[slug]/blog/rss.xml', () => {
 
   it('permanently redirects to canonical /blog/feed.xml when blog is enabled', async () => {
     mockResolveStorefrontSitemapContext.mockResolvedValue({
-      merchant: {
-        slug: 'ogabassey',
-        feature_settings: { blog_enabled: true },
+      status: 'found',
+      context: {
+        merchant: {
+          slug: 'ogabassey',
+          feature_settings: { blog_enabled: true },
+        },
+        storeUrl: 'https://ogabassey.com',
       },
-      storeUrl: 'https://ogabassey.com',
     });
 
     const response = await GET(
@@ -41,7 +44,9 @@ describe('GET /[slug]/blog/rss.xml', () => {
   });
 
   it('returns 404 when merchant context is missing', async () => {
-    mockResolveStorefrontSitemapContext.mockResolvedValue(null);
+    mockResolveStorefrontSitemapContext.mockResolvedValue({
+      status: 'not-found',
+    });
 
     const response = await GET(
       new Request('https://ogabassey.com/blog/rss.xml'),

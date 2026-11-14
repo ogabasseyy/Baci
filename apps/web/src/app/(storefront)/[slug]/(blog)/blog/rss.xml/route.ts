@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { resolveStorefrontSitemapContext } from '../../../sitemap-data';
+import { resolveStorefrontSitemapContextResult } from '../../../sitemap-data';
 
 export const preferredRegion = 'dub1';
 
@@ -18,15 +18,27 @@ export async function GET(
 ): Promise<Response> {
   const { slug } = await routeContext.params;
   const headersList = await headers();
-  const sitemapContext = await resolveStorefrontSitemapContext(
+  const sitemapResult = await resolveStorefrontSitemapContextResult(
     headersList,
     slug,
     request
   );
 
-  if (!sitemapContext?.merchant.feature_settings?.blog_enabled) {
+  if (sitemapResult.status === 'unavailable') {
+    return new NextResponse('Blog feed temporarily unavailable', {
+      status: 503,
+    });
+  }
+
+  if (
+    sitemapResult.status !== 'found' ||
+    !sitemapResult.context.merchant.feature_settings?.blog_enabled
+  ) {
     return new NextResponse('Blog feed not found', { status: 404 });
   }
 
-  return NextResponse.redirect(`${sitemapContext.storeUrl}/blog/feed.xml`, 308);
+  return NextResponse.redirect(
+    `${sitemapResult.context.storeUrl}/blog/feed.xml`,
+    308
+  );
 }

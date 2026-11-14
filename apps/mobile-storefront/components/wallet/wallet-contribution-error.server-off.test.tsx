@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
-import { reportContributionError } from './wallet-contribution-error';
+import { TimeoutError } from '@/lib/fetch-with-timeout';
+import { notifySavings } from './savings/savings-notice';
+import {
+  reportContributionError,
+  UNCONFIRMED_CONTRIBUTION_MESSAGE,
+} from './wallet-contribution-error';
 
-const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
+const noticeSpy = jest.mocked(notifySavings);
 
 beforeEach(() => {
-  alertSpy.mockClear();
+  noticeSpy.mockClear();
 });
 
 // Legacy wallet failures keep their messages and never lose the stored id
@@ -14,7 +22,11 @@ describe('contribution errors with the server off', () => {
   it('reports a plain failure and keeps the stored operation', () => {
     const release = jest.fn();
     reportContributionError(new Error('boom'), release);
-    expect(alertSpy).toHaveBeenCalledWith('Unable to add savings', 'boom');
+    expect(noticeSpy).toHaveBeenCalledWith(
+      'Unable to add savings',
+      'boom',
+      'warning'
+    );
     expect(release).not.toHaveBeenCalled();
   });
 
@@ -24,9 +36,10 @@ describe('contribution errors with the server off', () => {
       Object.assign(new Error('x'), { code: 'INSUFFICIENT_FUNDS' }),
       release
     );
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(noticeSpy).toHaveBeenCalledWith(
       'Not enough money in your wallet',
-      'Add money to your wallet, then try again.'
+      'Add money to your wallet, then try again.',
+      'warning'
     );
     expect(release).not.toHaveBeenCalled();
   });
@@ -40,11 +53,25 @@ describe('contribution errors with the server off', () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to a generic message for a non-Error rejection', () => {
+  it('treats a non-Error rejection as an unconfirmed outcome', () => {
     reportContributionError('nope');
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Unable to add savings',
-      'Please try again in a moment.'
+    expect(noticeSpy).toHaveBeenCalledWith(
+      'Still confirming your savings',
+      UNCONFIRMED_CONTRIBUTION_MESSAGE,
+      'warning'
     );
+  });
+
+  // Walk 14: "Request timed out after 30000ms" reached the customer.
+  // Walk 15: "Please try again" sat above "don't start another payment".
+  it('says a timed-out contribution is still being confirmed, never "try again"', () => {
+    const release = jest.fn();
+    reportContributionError(new TimeoutError(30000), release);
+    expect(noticeSpy).toHaveBeenCalledWith(
+      'Still confirming your savings',
+      UNCONFIRMED_CONTRIBUTION_MESSAGE,
+      'warning'
+    );
+    expect(release).not.toHaveBeenCalled();
   });
 });

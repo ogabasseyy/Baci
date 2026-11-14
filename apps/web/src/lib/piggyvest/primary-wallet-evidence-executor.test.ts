@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
@@ -142,6 +143,41 @@ it('admits the daily reconciliation read with JSON options only', async () => {
     execute(sql, [config.integrationId, 'production', '{}'])
   ).rejects.toThrow();
 });
+it('admits the goal-wallet setup health read with JSON options only', async () => {
+  mocks.query
+    .mockReset()
+    .mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    })
+    .mockResolvedValueOnce({ rows: [{ result: { stalledGoalWallets: 0 } }] });
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  const sql =
+    'SELECT piggyvest_primary.read_goal_wallet_setup_health($1::uuid,$2::text,$3::jsonb) AS result';
+  await expect(
+    execute(sql, [
+      config.integrationId,
+      'staging',
+      JSON.stringify({ staleAfterSeconds: 600 }),
+    ])
+  ).resolves.toEqual({ rows: [{ result: { stalledGoalWallets: 0 } }] });
+  await expect(
+    execute(sql, [config.integrationId, 'staging', 'not json'])
+  ).rejects.toThrow();
+  await expect(
+    execute(sql, [config.integrationId, 'production', '{}'])
+  ).rejects.toThrow();
+  await expect(
+    execute(`${sql} -- x`, [config.integrationId, 'staging', '{}'])
+  ).rejects.toThrow();
+});
 it('never runs a financial statement after an unsafe session check', async () => {
   mocks.query.mockReset().mockResolvedValue({ rows: [{ safe: false }] });
   await expect(
@@ -172,6 +208,10 @@ it('admits the goal cancel read, settlement and release statements only', async 
     [GOAL_CANCEL_STATEMENTS.findByReference, 'pvb-cancel-reference'],
     [GOAL_CANCEL_STATEMENTS.settle, JSON.stringify({ operationId })],
     [GOAL_CANCEL_STATEMENTS.release, JSON.stringify({ operationId })],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched, operationId],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.findByReference, 'pvb-forfeit-reference'],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.settle, JSON.stringify({ operationId })],
+    [GOAL_CANCEL_FORFEIT_STATEMENTS.release, JSON.stringify({ operationId })],
   ] as const) {
     mocks.query
       .mockResolvedValueOnce(verify)
@@ -188,7 +228,22 @@ it('admits the goal cancel read, settlement and release statements only', async 
       'not-a-uuid',
     ])
   ).rejects.toThrow();
+  await expect(
+    execute(GOAL_CANCEL_FORFEIT_STATEMENTS.readDispatched, [
+      config.integrationId,
+      'staging',
+      'not-a-uuid',
+    ])
+  ).rejects.toThrow();
   // The authorizer-side statements are not evidence statements.
+  for (const text of [
+    GOAL_CANCEL_FORFEIT_STATEMENTS.claim,
+    GOAL_CANCEL_FORFEIT_STATEMENTS.manage,
+    GOAL_CANCEL_STATEMENTS.splitDispatch,
+  ])
+    await expect(
+      execute(text, [config.integrationId, 'staging', operationId])
+    ).rejects.toThrow();
   await expect(
     execute(GOAL_CANCEL_STATEMENTS.checkIssued, [
       config.integrationId,

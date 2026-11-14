@@ -21,10 +21,7 @@
       "frameLcpFromHostMs": 6466.6,
       "hostClsDiagnosticSum": 0.22724609375,
       "frameClsDiagnosticSum": 0,
-      "labEventDurationsMs": [
-        16,
-        48
-      ],
+      "labEventDurationsMs": [16, 48],
       "decodedImages": [
         {
           "complete": true,
@@ -44,16 +41,7 @@
         "401": 1,
         "500": 1
       },
-      "failures": [
-        [
-          "/api/storefront/cart",
-          401
-        ],
-        [
-          "/api/events",
-          500
-        ]
-      ]
+      "failures": [["/api/storefront/cart", 401], ["/api/events", 500]]
     },
     {
       "profile": "desktop",
@@ -62,11 +50,7 @@
       "frameLcpFromHostMs": 6033.8,
       "hostClsDiagnosticSum": 0,
       "frameClsDiagnosticSum": 0,
-      "labEventDurationsMs": [
-        40,
-        40,
-        40
-      ],
+      "labEventDurationsMs": [40, 40, 40],
       "decodedImages": [
         {
           "complete": true,
@@ -86,16 +70,7 @@
         "401": 1,
         "500": 1
       },
-      "failures": [
-        [
-          "/api/storefront/cart",
-          401
-        ],
-        [
-          "/api/events",
-          500
-        ]
-      ]
+      "failures": [["/api/storefront/cart", 401], ["/api/events", 500]]
     }
   ]
 }

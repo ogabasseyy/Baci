@@ -64,15 +64,15 @@ function DateAndAmountInputs({
   return (
     <View style={styles.row}>
       <DateTimePickerField
-        accessibilityLabel="Savings debit time"
-        displayFormattedValue
-        fallbackDisplay="06:20"
+        accessibilityLabel="Savings reminder time"
+        fallbackDisplay="08:00"
         fieldStyle={[styles.pickerField, themedInputStyle(colors)]}
-        label="Preferred debit time"
+        label="Reminder time"
         labelStyle={[styles.sectionLabel, { color: colors.text }]}
         mode="time"
         onChangeText={controller.setPreferredDebitTime}
         textStyle={[styles.pickerFieldText, { color: colors.text }]}
+        use24HourTime
         value={controller.preferredDebitTime}
         wrapperStyle={styles.rowItem}
       />

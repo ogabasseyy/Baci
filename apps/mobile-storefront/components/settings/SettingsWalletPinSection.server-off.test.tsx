@@ -7,7 +7,10 @@ jest.mock('@/lib/piggyvest-primary-wallet', () => ({
   piggyvestPrimaryWalletApi: { read: jest.fn() },
 }));
 jest.mock('@/lib/wallet-pin-api', () => ({ fetchWalletPinStatus: jest.fn() }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+  useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
+}));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));

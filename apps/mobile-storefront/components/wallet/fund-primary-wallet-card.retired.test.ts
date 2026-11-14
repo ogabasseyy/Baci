@@ -1,5 +1,5 @@
-import { beforeEach, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
+import { afterEach, beforeEach, expect, it, jest } from '@jest/globals';
+import { Alert, type AlertButton } from 'react-native';
 
 // Card top-up into the PiggyVest primary wallet is retired server-side
 // (410 PRIMARY_CARD_FUNDING_RETIRED before any reservation). When nothing
@@ -10,6 +10,32 @@ const mockRead = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockStart = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockRecover = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockCapability = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockAlert =
+  jest.fn<
+    (
+      title: string,
+      message?: string,
+      buttons?: AlertButton[],
+      options?: object
+    ) => void
+  >();
+jest.mock('./savings/savings-notifier', () => ({
+  savingsNotifier: () => (title: string, message?: string) =>
+    mockAlert(title, message),
+}));
+jest.mock('./savings/notify-savings', () => ({
+  notifySavings: (title: string, message?: string) => mockAlert(title, message),
+}));
+jest.mock('./fund/ask-wallet-fund', () => ({
+  askWalletFund: (title: string, message: string, label: string) =>
+    (
+      jest.requireActual(
+        './fund/alert-shaped.test-support'
+      ) as typeof import('./fund/alert-shaped.test-support')
+    )
+      .alertShapedTestBridge(mockAlert)
+      .ask(title, message, label),
+}));
 jest.mock('@/lib/primary-wallet-card', () => ({
   createPrimaryWalletCardFundingClient: () => ({
     readPending: mockRead,
@@ -46,7 +72,12 @@ const retired = () =>
   Object.assign(new Error('retired'), {
     code: 'PRIMARY_CARD_FUNDING_RETIRED',
   });
-const alert = jest.spyOn(Alert, 'alert');
+// The notice and funding question are inline now: replay both through one
+// Alert-shaped spy so these cases keep their titles, copy and button
+// presses, while the real iOS alert must stay unused.
+const alert = mockAlert;
+const iosAlert = jest.spyOn(Alert, 'alert');
+afterEach(() => expect(iosAlert).not.toHaveBeenCalled());
 
 beforeEach(() => {
   jest.clearAllMocks();

@@ -40,9 +40,17 @@ describe('chat constants', () => {
     it('contains expected routes', () => {
       expect(HIDDEN_ROUTES).toContain('/checkout');
       expect(HIDDEN_ROUTES).toContain('/cart');
+      // The button covered the Wallet PIN pad; other settings keep chat.
+      expect(HIDDEN_ROUTES).toContain('/settings/wallet-pin');
+      expect(HIDDEN_ROUTES).not.toContain('/settings');
+      expect(HIDDEN_ROUTES).not.toContain('/notifications');
       expect(HIDDEN_ROUTES).toContain('/auth/login');
       expect(HIDDEN_ROUTES).toContain('/order-success');
       expect(HIDDEN_ROUTES).toContain('/quiz');
+    });
+
+    it('hides the AI button on savings setup so it never covers the main button', () => {
+      expect(HIDDEN_ROUTES).toContain('/wallet/savings/start');
     });
   });
 

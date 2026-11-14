@@ -80,6 +80,7 @@ export async function handleChatwootInlineCartQuantity(input: {
   // whenever this same authorized context remains current. A later action can
   // supersede the reply while this mutation still commits successfully.
   const refreshRequired = mutation?.code === 'refresh_required';
+  const cartExpired = mutation?.code === 'cart_expired';
   const outcomeUnavailable =
     mutation === null ||
     (typeof mutation?.httpStatus === 'number' &&
@@ -94,7 +95,9 @@ export async function handleChatwootInlineCartQuantity(input: {
     input.onSessionTokenRenewed?.(mutation.sessionToken);
   }
   if (
-    (mutation?.accepted === true || refreshRequired || outcomeUnavailable) &&
+    (mutation?.accepted === true ||
+      refreshRequired ||
+      (outcomeUnavailable && !cartExpired)) &&
     input.isCurrentCartContext()
   ) {
     try {
@@ -115,7 +118,8 @@ export async function handleChatwootInlineCartQuantity(input: {
             mutation?.code === 'invalid_context' ||
             mutation?.code === 'forbidden' ||
             mutation?.code === 'invalid_request' ||
-            mutation?.code === 'quota_exceeded'
+            mutation?.code === 'quota_exceeded' ||
+            mutation?.code === 'cart_expired'
               ? mutation.code
               : 'temporarily_unavailable',
         }),

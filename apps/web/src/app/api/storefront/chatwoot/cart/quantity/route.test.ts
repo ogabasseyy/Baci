@@ -127,16 +127,16 @@ function request() {
 describe('Chatwoot shared-cart quantity route', () => {
   afterEach(() => vi.clearAllMocks());
 
-  function arrange(input = body, snapshot = cart) {
+  function arrange(input = body, snapshot = cart, principalValue = principal) {
     mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: input });
     mocks.loadChatwootCartContext.mockResolvedValue({
       ok: true,
       binding,
       cart: snapshot,
-      principal,
+      principal: principalValue,
       state: { ...state, cartVersion: snapshot.version },
     });
-    mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principal);
+    mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principalValue);
     mocks.verifyChatwootSessionCapability.mockResolvedValue({
       conversationId: 905,
       sessionExpiresAt: 1_799_000_000,
@@ -214,6 +214,99 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(mocks.cartSessionCookieMaxAge).toHaveBeenCalledWith(
       '2026-11-20T00:00:00.000Z'
     );
+  });
+
+  it('denies a stale proof when the live grant no longer permits quantity edits', async () => {
+    arrange();
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: ['add'],
+      grantExpiresAt: '2026-11-20T00:00:00.000Z',
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'forbidden',
+    });
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+
+  it('reissues a proof with only quantity operations from the live grant', async () => {
+    arrange();
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: ['set_quantity'],
+      grantExpiresAt: '2026-11-20T00:00:00.000Z',
+    });
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: ['add', 'set_quantity', 'clear'],
+      grantExpiresAt: '2026-11-20T00:00:00.000Z',
+    });
+
+    await POST(request());
+
+    expect(mocks.issueCartSessionProof).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedOperations: ['set_quantity'] }),
+      { environment: 'test' }
+    );
+  });
+
+  it('preserves shared-storefront operations that remain in both proof and live grant', async () => {
+    const originalOperations = [
+      'add',
+      'set_quantity',
+      'remove',
+      'clear',
+      'replace',
+      'set_assurance',
+      'set_negotiated_price',
+    ] as const;
+    const liveOperations = [
+      'add',
+      'set_quantity',
+      'remove',
+      'clear',
+      'replace',
+      'set_negotiated_price',
+    ] as const;
+    arrange(body, cart, {
+      ...principal,
+      allowedOperations: [...originalOperations],
+    });
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: [...liveOperations],
+      grantExpiresAt: '2026-11-20T00:00:00.000Z',
+    });
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: [...liveOperations],
+      grantExpiresAt: '2026-11-20T00:00:00.000Z',
+    });
+
+    await POST(request());
+
+    expect(mocks.issueCartSessionProof).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedOperations: [...liveOperations],
+      }),
+      { environment: 'test' }
+    );
+  });
+
+  it('does not renew a proof when the live grant is revoked after mutation', async () => {
+    arrange();
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: ['set_quantity'],
+      grantExpiresAt: '2026-11-20T00:00:00.000Z',
+    });
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce(null as never);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).toBeNull();
+    await expect(response.json()).resolves.not.toHaveProperty('sessionToken');
   });
 
   it('rechecks a version newer than a stale context snapshot before mutation', async () => {

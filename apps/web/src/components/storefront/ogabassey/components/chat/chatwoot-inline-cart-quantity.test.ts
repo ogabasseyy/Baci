@@ -173,6 +173,25 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
+  it('surfaces terminal cart expiry without entering a refresh loop', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({ accepted: false, code: 'cart_expired' }, false)
+      )
+    );
+    const value = input();
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: false,
+      code: 'cart_expired',
+    });
+  });
+
   it('preserves quota errors so the bridge can back off', async () => {
     vi.stubGlobal(
       'fetch',

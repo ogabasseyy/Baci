@@ -178,16 +178,16 @@ describe('Chatwoot cart mutation replay', () => {
   it.each([
     'expired',
     'not_found',
-  ] as const)('returns refresh_required when the cart becomes %s before mutation', async (code) => {
+  ] as const)('returns cart_expired when the cart becomes %s before mutation', async (code) => {
     arrange();
     mocks.mutateCart.mockResolvedValue({ ok: false, code });
 
     const response = await POST(request());
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(410);
     expect(await response.json()).toEqual({
       accepted: false,
-      code: 'refresh_required',
+      code: 'cart_expired',
     });
   });
 
@@ -200,7 +200,11 @@ describe('Chatwoot cart mutation replay', () => {
       expiresAt: '2026-11-18T00:00:00.000Z',
     };
     mocks.getCart.mockResolvedValue({ ok: true, cart: liveCart });
-    mocks.loadLiveGrantOperations.mockRejectedValue(
+    mocks.loadLiveGrantOperations.mockResolvedValueOnce({
+      allowedOperations: ['set_quantity', 'remove'],
+      grantExpiresAt: '2026-11-25T00:00:00.000Z',
+    });
+    mocks.loadLiveGrantOperations.mockRejectedValueOnce(
       new Error('private provider details')
     );
     mocks.mutateCart.mockResolvedValue({

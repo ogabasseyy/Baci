@@ -118,6 +118,21 @@ export async function POST(request: NextRequest) {
   }
   if (!principal) return unavailable(403, 'forbidden');
 
+  let liveGrant: Awaited<ReturnType<typeof loadLiveGrantOperations>>;
+  try {
+    liveGrant = await loadLiveGrantOperations(client, principal);
+  } catch {
+    return unavailable(503, 'temporarily_unavailable');
+  }
+  const requestedOperation =
+    parsed.data.quantity === 0 ? 'remove' : 'set_quantity';
+  if (
+    !liveGrant?.allowedOperations.includes(requestedOperation) ||
+    !principal.allowedOperations.includes(requestedOperation)
+  ) {
+    return unavailable(403, 'forbidden');
+  }
+
   // A newer client version can be current if the context snapshot became
   // stale while the request was in flight. Re-read only that case; older
   // versions still go to the atomic RPC for exact idempotent replay handling.
@@ -170,12 +185,13 @@ export async function POST(request: NextRequest) {
     return unavailable(503, 'temporarily_unavailable');
   }
   if (!result.ok) {
+    if (result.code === 'expired' || result.code === 'not_found') {
+      return unavailable(410, 'cart_expired');
+    }
     const status =
       result.code === 'version_conflict' ||
       result.code === 'idempotency_conflict' ||
-      result.code === 'cart_locked' ||
-      result.code === 'expired' ||
-      result.code === 'not_found'
+      result.code === 'cart_locked'
         ? 409
         : result.code === 'unauthorized'
           ? 403
@@ -193,12 +209,13 @@ export async function POST(request: NextRequest) {
     return unavailable(status, code);
   }
 
-  let liveGrant: Awaited<ReturnType<typeof loadLiveGrantOperations>> = null;
+  let renewalGrant: Awaited<ReturnType<typeof loadLiveGrantOperations>> = null;
   try {
-    liveGrant = await loadLiveGrantOperations(client, principal);
+    renewalGrant = await loadLiveGrantOperations(client, principal);
   } catch {
     console.error('Chatwoot live grant refresh failed after cart mutation');
   }
+
   const reportedCartVersion = result.currentVersion;
   let liveCartVersion =
     typeof reportedCartVersion === 'number' &&
@@ -245,19 +262,28 @@ export async function POST(request: NextRequest) {
   }
 
   const proofGrantExpiry =
-    canRenewProof && liveGrant
+    canRenewProof && renewalGrant
       ? resolveChatwootCartProofExpiry({
           cartExpiresAt: proofCartExpiresAt,
           existingProofExpiresAt: principal.expiresAt,
-          liveGrantExpiresAt: liveGrant.grantExpiresAt,
+          liveGrantExpiresAt: renewalGrant.grantExpiresAt,
         })
       : null;
+  // This response refreshes the storefront's shared cart cookie. Preserve
+  // the verified proof's existing scope, narrowed by the current live grant.
+  const renewableOperations = renewalGrant?.allowedOperations.filter(
+    (operation) => principal.allowedOperations.includes(operation)
+  );
   let proof: string | null = null;
-  if (proofGrantExpiry !== null && liveGrant !== null) {
+  if (
+    proofGrantExpiry !== null &&
+    renewalGrant !== null &&
+    renewableOperations?.length
+  ) {
     try {
       proof = issueCartSessionProof(
         {
-          allowedOperations: liveGrant.allowedOperations,
+          allowedOperations: renewableOperations,
           cartId: principal.cartId,
           grantId: principal.grantId,
           grantExpiresAt: proofGrantExpiry,

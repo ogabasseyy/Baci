@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   createCartScopedClient: vi.fn(() => ({ rpc: vi.fn() })),
   getCart: vi.fn(),
+  loadLiveGrantOperations: vi.fn(async () => ({
+    allowedOperations: ['set_quantity', 'remove'],
+    grantExpiresAt: '2026-11-20T00:00:00.000Z',
+  })),
   loadChatwootCartContext: vi.fn(),
   mutateCart: vi.fn(),
   readCartJsonBody: vi.fn(),
@@ -20,6 +24,7 @@ vi.mock('@/lib/cart/request-quota', () => ({
   checkCartQuota: mocks.checkCartQuota,
 }));
 vi.mock('@/lib/cart/grant-operations', () => ({
+  loadLiveGrantOperations: mocks.loadLiveGrantOperations,
   upgradeLegacySessionPrincipal: mocks.upgradeLegacySessionPrincipal,
 }));
 vi.mock('@/lib/cart/scoped-client', () => ({
@@ -115,7 +120,11 @@ function arrange(input = body) {
     conversationId: body.conversationId,
     sessionExpiresAt: 1_799_000_000,
   });
-  mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principal);
+  mocks.upgradeLegacySessionPrincipal.mockResolvedValue({
+    ...principal,
+    allowedOperations: ['set_quantity', 'remove'],
+    operationsClaimPresent: true,
+  });
   mocks.getCart.mockResolvedValue({ ok: true, cart });
 }
 

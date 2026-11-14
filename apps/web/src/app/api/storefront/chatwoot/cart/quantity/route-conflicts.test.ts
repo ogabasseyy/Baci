@@ -267,6 +267,22 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(JSON.stringify(payload)).not.toContain('secret-line');
   });
 
+  it.each([
+    'expired',
+    'not_found',
+  ] as const)('reports a terminal cart state for %s without suggesting refresh', async (code) => {
+    arrange();
+    mocks.mutateCart.mockResolvedValueOnce({ ok: false, code });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'cart_expired',
+    });
+  });
+
   it('preserves invalid-item and unauthorized error semantics', async () => {
     arrange();
     mocks.mutateCart.mockResolvedValueOnce({ ok: false, code: 'invalid_item' });

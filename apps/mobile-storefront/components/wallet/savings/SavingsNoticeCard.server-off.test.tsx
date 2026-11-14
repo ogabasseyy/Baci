@@ -70,7 +70,7 @@ describe('server keeps PiggyVest off: SavingsNoticeCard', () => {
 
   it.each<[SavingsNoticeTone, string, string]>([
     ['success', 'checkmark-circle', Colors.dark.success],
-    ['info', 'information-circle', Colors.dark.primary],
+    ['info', 'information-circle', Colors.dark.icon],
     ['warning', 'alert-circle', Colors.dark.warning],
   ])('renders the %s tone icon and colour in dark mode', (tone, icon, colour) => {
     render(<SavingsNoticeCard colors={Colors.dark} />);

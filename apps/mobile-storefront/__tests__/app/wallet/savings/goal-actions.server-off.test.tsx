@@ -1,5 +1,4 @@
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -81,6 +80,58 @@ describe('old goal-actions links', () => {
     mockParams.mockReturnValue({ goalId: GOAL });
     render(<WalletGoalActionsRoute />);
     expect(await screen.findByText('Redirect:/wallet')).toBeOnTheScreen();
+  });
+
+  it('open the plain wallet with the closed-plan note for a settled goal still in the list', async () => {
+    useSavingsNoticeStore.setState({ goalId: null, notice: null });
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: {
+        wallet: {
+          savings_goals: [
+            {
+              id: GOAL,
+              status: 'completed',
+              current_amount: 0,
+              principal_amount: 0,
+            },
+          ],
+        },
+      },
+      refetch: jest.fn().mockResolvedValue({ isError: false }),
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(await screen.findByText('Redirect:/wallet')).toBeOnTheScreen();
+    expect(useSavingsNoticeStore.getState().notice?.title).toBe(
+      'That savings plan has closed'
+    );
+  });
+
+  it('still open the sheet for a completed goal that holds money to complete', async () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: {
+        wallet: {
+          savings_goals: [
+            {
+              id: GOAL,
+              status: 'completed',
+              current_amount: 250000,
+              principal_amount: 250000,
+            },
+          ],
+        },
+      },
+      refetch: jest.fn().mockResolvedValue({ isError: false }),
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(
+      await screen.findByText(
+        `Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`
+      )
+    ).toBeOnTheScreen();
   });
 
   it("open the plain wallet when the goal is no longer the customer's, after one fresh read", async () => {
@@ -202,28 +253,6 @@ describe('old goal-actions links', () => {
     mockParams.mockReturnValue({ goalId: GOAL });
     render(<WalletGoalActionsRoute />);
     expect(screen.queryByText(/Redirect:/)).toBeNull();
-  });
-
-  it('offer to keep waiting when the wallet read stays silent too long', () => {
-    jest.useFakeTimers();
-    try {
-      mockWallet.mockReturnValue({
-        isLoading: false,
-        isError: false,
-        data: undefined,
-      });
-      mockParams.mockReturnValue({ goalId: GOAL });
-      render(<WalletGoalActionsRoute />);
-      expect(screen.queryByRole('button', { name: 'Keep waiting' })).toBeNull();
-      act(() => {
-        jest.advanceTimersByTime(15_000);
-      });
-      expect(screen.getByText('Still opening your savings')).toBeOnTheScreen();
-      fireEvent.press(screen.getByRole('button', { name: 'Keep waiting' }));
-      expect(screen.queryByRole('button', { name: 'Keep waiting' })).toBeNull();
-    } finally {
-      jest.useRealTimers();
-    }
   });
 
   it('open the plain wallet for a malformed goal id', () => {

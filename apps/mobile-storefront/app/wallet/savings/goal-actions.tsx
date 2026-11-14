@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import GoalLinkLoadError from '@/components/wallet/savings/GoalLinkLoadError';
+import { isFundedUnsettledGoal } from '@/components/wallet/savings/goal-settlement';
 import { notifySavings } from '@/components/wallet/savings/savings-notice';
 import { useSavingsNoticeStore } from '@/components/wallet/savings/savings-notice-store';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
@@ -15,25 +16,50 @@ const first = (value: string | string[] | undefined) =>
 /** How long the link waits on a silent read before offering a retry. */
 const SLOW_MS = 15_000;
 
+type WaitPhase = 'wait' | 'slow' | 'stuck';
+
 /**
  * What the link shows before it redirects: a spinner, or a retry notice when
  * a read failed (Try again re-reads) or has said nothing for SLOW_MS (Keep
- * waiting restarts the wait; the wallet read keeps going on its own).
+ * waiting restarts the wait; the wallet read keeps going on its own). A read
+ * still silent after that second wait counts as failed: Try again re-reads.
  */
-function GoalLinkShell({ onRetry }: { onRetry?: () => void }) {
-  const [slow, setSlow] = useState(false);
-  // Each quiet spell gets its own timer; Try again starts a new one.
+function GoalLinkShell({
+  onRetry,
+  reread,
+}: {
+  onRetry?: () => void;
+  /** Starts a new wallet read when a hung read is given up on. */
+  reread?: () => void;
+}) {
+  const [phase, setPhase] = useState<WaitPhase>('wait');
+  const [waited, setWaited] = useState(false);
+  // Each quiet spell gets its own timer; Keep waiting starts a new one.
   useEffect(() => {
-    if (onRetry || slow) return;
-    const timer = setTimeout(() => setSlow(true), SLOW_MS);
+    if (onRetry || phase !== 'wait') return;
+    const timer = setTimeout(
+      () => setPhase(waited ? 'stuck' : 'slow'),
+      SLOW_MS
+    );
     return () => clearTimeout(timer);
-  }, [onRetry, slow]);
-  const retry = onRetry ?? (slow ? () => setSlow(false) : undefined);
+  }, [onRetry, phase, waited]);
+  const keepWaiting = () => {
+    setWaited(true);
+    setPhase('wait');
+  };
+  const startOver = () => {
+    reread?.();
+    setWaited(false);
+    setPhase('wait');
+  };
+  const stuck = phase === 'stuck';
+  const retry =
+    onRetry ?? (stuck ? startOver : phase === 'slow' ? keepWaiting : undefined);
   return (
     <StorefrontScreenShell themeBackground>
       <Stack.Screen options={{ title: 'Savings' }} />
       {retry ? (
-        <GoalLinkLoadError onRetry={retry} slow={!onRetry} />
+        <GoalLinkLoadError onRetry={retry} slow={!onRetry && !stuck} />
       ) : (
         <ActivityIndicator
           accessibilityLabel="Opening your savings"
@@ -59,7 +85,13 @@ export default function WalletGoalActionsRoute() {
   const parsed = goalIdParamSchema.safeParse(first(params.goalId));
   const goalId = parsed.success ? parsed.data : undefined;
   const goals = wallet.data?.wallet?.savings_goals ?? [];
-  const owned = goals.some((goal) => goal.id === goalId);
+  // A completed goal with nothing left to move stays in the list but has no
+  // action left: treat it as closed, like a cancelled one.
+  const owned = goals.some(
+    (goal) =>
+      goal.id === goalId &&
+      (goal.status !== 'completed' || isFundedUnsettledGoal(goal))
+  );
   // Every link gets one fresh read before it is followed: a goal missing
   // from the cached wallet may have been created elsewhere, and one present
   // in it may have closed elsewhere since the last read.
@@ -119,19 +151,22 @@ export default function WalletGoalActionsRoute() {
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`
     : '/wallet';
   const login = `/auth/login?returnTo=${encodeURIComponent(back)}` as Href;
+  const reread = () => void wallet.refetch();
   if (auth.isLoading) return <GoalLinkShell />;
   if (auth.redirectTo) return <Redirect href={login} />;
   if (!goalId) return <Redirect href="/wallet" />;
   // No data and no error means the wallet read has not settled yet (still
   // loading, or held while the signed-in identities catch up after an
   // account switch): wait rather than drop a valid goal link.
-  if (!wallet.data && !wallet.isError) return <GoalLinkShell />;
+  if (!wallet.data && !wallet.isError) {
+    return <GoalLinkShell reread={reread} />;
+  }
   // A failed wallet read keeps the link: the customer can retry instead of
   // landing on the plain wallet without the goal they opened.
   if (wallet.isError && !wallet.data) {
     return <GoalLinkShell onRetry={() => void wallet.refetch()} />;
   }
-  if (needsCheck && !recheckedThis) return <GoalLinkShell />;
+  if (needsCheck && !recheckedThis) return <GoalLinkShell reread={reread} />;
   // The fresh read failed: the goal may still be theirs, so keep the link.
   if (needsCheck && recheck?.failed) {
     return <GoalLinkShell onRetry={() => setRecheck(null)} />;

@@ -25,7 +25,8 @@ const ICONS: Record<SavingsNoticeTone, IoniconsIconName> = {
 function toneColor(tone: SavingsNoticeTone, colors: WalletColors) {
   if (tone === 'success') return colors.success;
   if (tone === 'warning') return colors.warning;
-  return colors.primary;
+  // Neutral, not the brand colour: a red brand would make news read as an error.
+  return colors.icon;
 }
 
 /** The latest savings outcome as a calm, dismissible card. */

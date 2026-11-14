@@ -27,7 +27,10 @@ export function usePinnedSavingsGoal(
       const gone = goal === null || goal.id !== pinned;
       const settled =
         goal?.status === 'completed' && !isFundedUnsettledGoal(goal);
-      if (gone || settled) setPinned(null);
+      // A settled goal is released only once its sheet is closed: while the
+      // sheet is open it is pinned again on the next render (an update loop),
+      // and its last step ("Request sent") must not swap to another goal.
+      if (gone || (settled && !sheetOpen)) setPinned(null);
       return;
     }
     if (sheetOpen && goal) setPinned(goal.id);

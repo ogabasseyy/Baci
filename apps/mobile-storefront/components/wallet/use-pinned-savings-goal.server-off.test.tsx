@@ -90,6 +90,39 @@ describe('server keeps PiggyVest off: usePinnedSavingsGoal', () => {
     expect(result.current.goalId).toBe('goal-a');
   });
 
+  it('settles into one pin when the sheet opens on a settled goal (no update loop)', () => {
+    const settled = goal('goal-a', {
+      status: 'completed',
+      current_amount: 0,
+      principal_amount: 0,
+    });
+    const { result, rerender } = render({
+      open: true,
+      route: 'goal-a',
+      shown: settled,
+    });
+    rerender({ open: true, route: 'goal-a', shown: settled });
+    rerender({ open: true, route: 'goal-a', shown: settled });
+    expect(result.current.goalId).toBe('goal-a');
+  });
+
+  it('keeps a goal that settles while its sheet is open until the sheet closes', () => {
+    const settled = goal('goal-a', {
+      status: 'completed',
+      current_amount: 0,
+      principal_amount: 0,
+    });
+    const { result, rerender } = render({ open: true, shown: goal('goal-a') });
+    rerender({ open: true, shown: goal('goal-a') });
+    // Complete goal paid out: the sheet is on its "Request sent" step.
+    rerender({ open: true, shown: settled });
+    rerender({ open: true, shown: settled });
+    expect(result.current.goalId).toBe('goal-a');
+    rerender({ open: false, shown: settled });
+    rerender({ open: false, shown: settled });
+    expect(result.current.goalId).toBeUndefined();
+  });
+
   it('lets a goal named by the route win', () => {
     const { result } = render({
       open: true,

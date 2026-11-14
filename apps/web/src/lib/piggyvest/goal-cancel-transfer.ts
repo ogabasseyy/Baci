@@ -5,6 +5,7 @@ import {
   piggyvestGoalCancelSchemas as schemas,
 } from '@/schemas/piggyvest-goal-cancel';
 import { GOAL_CANCEL_MAX_SPLIT_BALANCE_KOBO } from '@/schemas/piggyvest-goal-cancel-forfeit';
+import { isConsistentGoalCancelSplit } from './goal-cancel-split-consistency';
 import { isDefinitiveNoTransferRejection } from './primary-wallet-savings-transfer';
 import type { TransferReferenceLookup } from './transfer-reference-lookup';
 
@@ -254,12 +255,7 @@ async function claimTransferAmount(
       return { status: 'needs_review' };
     return { status: 'pending' };
   }
-  if (
-    !Number.isSafeInteger(split.principalKobo) ||
-    split.principalKobo < 1 ||
-    split.principalKobo > balanceKobo ||
-    split.principalKobo + split.forfeitedInterestKobo !== balanceKobo
-  )
+  if (!isConsistentGoalCancelSplit(split, balanceKobo))
     // The attempt is already dispatched in the database, so throwing would
     // strand it with nothing sent. Send nothing and hand it to a person (the
     // runtime pages for an inconsistent split before it gets here).

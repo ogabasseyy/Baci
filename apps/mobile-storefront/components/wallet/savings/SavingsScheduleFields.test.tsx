@@ -24,7 +24,9 @@ describe('SavingsScheduleFields', () => {
       />
     );
 
-    expect(screen.getByText('6:20 AM')).toBeOnTheScreen();
+    // The reminder time is 24-hour, like the Notifications quiet hours.
+    expect(screen.getByText('06:20')).toBeOnTheScreen();
+    expect(screen.getByText('Reminder time')).toBeOnTheScreen();
     expect(screen.getByText('22 September 2026')).toBeOnTheScreen();
   });
 });

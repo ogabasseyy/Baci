@@ -2,15 +2,16 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { fetchWalletPinStatus } from '@/lib/wallet-pin-api';
 import { SavingsSheetContext } from '../SavingsSheetContext';
+import { SavingsSheetPinHeightContext } from '../SavingsSheetPinHeightContext';
 import { WalletPinSheet } from './WalletPinSheet';
 
 jest.mock('@/lib/wallet-pin-api');
 const mockSnapToPosition = jest.fn();
-const mockSnapToIndex = jest.fn();
+const mockSetPinHeight = jest.fn();
 jest.mock('@gorhom/bottom-sheet', () => ({
   useBottomSheet: () => ({
     snapToPosition: mockSnapToPosition,
-    snapToIndex: mockSnapToIndex,
+    snapToIndex: jest.fn(),
   }),
 }));
 
@@ -21,17 +22,23 @@ const request = {
   amountKobo: 100000,
 };
 
-function renderInSavingsSheet(open: typeof request | null) {
-  return render(
+function inSheet(open: typeof request | null) {
+  return (
     <SavingsSheetContext.Provider value={true}>
-      <WalletPinSheet
-        colors={Colors.light}
-        request={open}
-        onProof={jest.fn()}
-        onCancel={jest.fn()}
-      />
+      <SavingsSheetPinHeightContext.Provider value={mockSetPinHeight}>
+        <WalletPinSheet
+          colors={Colors.light}
+          request={open}
+          onProof={jest.fn()}
+          onCancel={jest.fn()}
+        />
+      </SavingsSheetPinHeightContext.Provider>
     </SavingsSheetContext.Provider>
   );
+}
+
+function renderInSavingsSheet(open: typeof request | null) {
+  return render(inSheet(open));
 }
 
 // Inside the Add to savings sheet the PIN step takes over that same sheet:
@@ -54,20 +61,12 @@ describe('PIN step inside the savings sheet', () => {
     fireEvent(screen.getByTestId('pin-step-content'), 'layout', {
       nativeEvent: { layout: { height: 600 } },
     });
-    expect(mockSnapToPosition).toHaveBeenLastCalledWith(672);
+    expect(mockSetPinHeight).toHaveBeenLastCalledWith(600);
+    expect(mockSnapToPosition).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeOnTheScreen();
-    view.rerender(
-      <SavingsSheetContext.Provider value={true}>
-        <WalletPinSheet
-          colors={Colors.light}
-          request={null}
-          onProof={jest.fn()}
-          onCancel={jest.fn()}
-        />
-      </SavingsSheetContext.Provider>
-    );
+    view.rerender(inSheet(null));
     expect(screen.queryByText('Enter your wallet PIN')).toBeNull();
-    expect(mockSnapToIndex).toHaveBeenCalledWith(0);
+    expect(mockSetPinHeight).toHaveBeenLastCalledWith(0);
   });
 
   it('renders nothing without a PIN request', () => {

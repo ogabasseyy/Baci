@@ -44,7 +44,7 @@ const mockDeriveWalletDisplayData = jest.fn(() => ({
   fundingAccount: null,
   savingsBalance: 0,
   showQuickSave: false,
-  spendableBalance: 0,
+  walletBalance: 0,
   totalBalance: 0,
 }));
 

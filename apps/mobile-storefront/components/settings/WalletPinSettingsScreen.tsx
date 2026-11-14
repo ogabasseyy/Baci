@@ -1,38 +1,35 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { Redirect, Stack } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import { useColorScheme } from '@/components/useColorScheme';
 import { IdentityConfirmPanel } from '@/components/wallet/identity/IdentityConfirmPanel';
+import { WalletPinDots } from '@/components/wallet/savings/WalletPinDots';
+import { WalletPinPad } from '@/components/wallet/savings/WalletPinPad';
 import Colors from '@/constants/Colors';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
-import {
-  useWalletPinSettings,
-  type WalletPinMode,
-} from './use-wallet-pin-settings';
-import { WalletPinField } from './WalletPinField';
+import { useWalletPinSettings } from './use-wallet-pin-settings';
+import { useWalletPinSteps } from './use-wallet-pin-steps';
+import { WalletPinSavedView } from './WalletPinSavedView';
 import { styles } from './WalletPinSettingsScreen.styles';
-
-const COPY: Record<
-  WalletPinMode,
-  { title: string; body?: string; action: string }
-> = {
-  set: { title: 'Set a wallet PIN', action: 'Save PIN' },
-  change: { title: 'Change your PIN', action: 'Change PIN' },
-  reset: {
-    title: 'Reset your PIN',
-    body: 'Choose a new 4 to 6 digit PIN.',
-    action: 'Reset PIN',
-  },
-};
+import { walletPinStepCopy } from './wallet-pin-step-copy';
 
 export function WalletPinSettingsScreen() {
   const colors = Colors[useColorScheme()];
   const { getScrollContentStyle } = useStorefrontInsets();
   const auth = useRequireAuth();
   const pin = useWalletPinSettings();
-  const copy = COPY[pin.mode];
+  const steps = useWalletPinSteps(pin);
+  // Back from "Choose a new PIN" or "Confirm" returns to the previous step.
+  // Never while signing out: the guard would also block the auth redirect.
+  usePreventRemove(
+    steps.canGoBack && !pin.savedTitle && !auth.redirectTo,
+    steps.back
+  );
 
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
 
@@ -58,8 +55,129 @@ export function WalletPinSettingsScreen() {
 
   if (pin.gateState === 'off') return <Redirect href="/settings" />;
 
-  const confirmLabel =
-    pin.mode === 'change' ? 'Confirm new PIN' : 'Confirm PIN';
+  const copy = walletPinStepCopy(pin.mode, steps.stage);
+  let content: ReactNode;
+  if (pin.savedTitle) {
+    content = (
+      <WalletPinSavedView
+        colors={colors}
+        title={pin.savedTitle}
+        onDone={pin.finish}
+      />
+    );
+  } else if (pin.needsIdentity) {
+    content = (
+      <View style={styles.identity}>
+        <IdentityConfirmPanel
+          colors={colors}
+          expectedUserId={pin.userId ?? undefined}
+          onConfirmed={pin.identityConfirmed}
+        />
+      </View>
+    );
+  } else {
+    content = (
+      <>
+        <View style={styles.top}>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: colors.primaryLowOpacity },
+            ]}
+          >
+            <Ionicons name="lock-closed" size={24} color={colors.primary} />
+          </View>
+          <Text
+            accessibilityRole="header"
+            style={[styles.title, styles.center, { color: colors.text }]}
+          >
+            {copy.title}
+          </Text>
+          {copy.hint ? (
+            <Text
+              style={[
+                styles.body,
+                styles.center,
+                { color: colors.textSecondary },
+              ]}
+            >
+              {copy.hint}
+            </Text>
+          ) : null}
+          <View style={styles.dots}>
+            <WalletPinDots
+              colors={colors}
+              label={copy.title}
+              length={steps.value.length}
+            />
+          </View>
+          {pin.error ? (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.message, styles.center, { color: colors.error }]}
+            >
+              {pin.error}
+            </Text>
+          ) : null}
+          {steps.stage === 'current' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Forgot your PIN?"
+              disabled={pin.busy}
+              onPress={steps.forgot}
+              style={styles.secondary}
+            >
+              <Text style={[styles.secondaryText, { color: colors.primary }]}>
+                Forgot your PIN?
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={styles.bottom}>
+          <WalletPinPad
+            colors={colors}
+            disabled={pin.busy}
+            value={steps.value}
+            onChange={steps.setValue}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={copy.action}
+            accessibilityState={{ disabled: !steps.ready, busy: pin.busy }}
+            disabled={!steps.ready}
+            onPress={steps.advance}
+            style={[
+              styles.primary,
+              {
+                backgroundColor: steps.ready ? colors.primary : colors.muted,
+              },
+            ]}
+          >
+            {pin.busy ? (
+              <ActivityIndicator
+                color={colors.primaryForeground}
+                size="small"
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.primaryText,
+                  {
+                    color: steps.ready
+                      ? colors.primaryForeground
+                      : colors.textSecondary,
+                  },
+                ]}
+              >
+                {copy.action}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </>
+    );
+  }
+
   return (
     <StorefrontScreenShell
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -73,102 +191,7 @@ export function WalletPinSettingsScreen() {
           getScrollContentStyle({ includeBottomInset: false }),
         ]}
       >
-        {pin.needsIdentity ? (
-          <View style={styles.identity}>
-            <IdentityConfirmPanel
-              colors={colors}
-              expectedUserId={pin.userId ?? undefined}
-              onConfirmed={pin.identityConfirmed}
-            />
-          </View>
-        ) : (
-          <>
-            <Text
-              accessibilityRole="header"
-              style={[styles.title, { color: colors.text }]}
-            >
-              {copy.title}
-            </Text>
-            {copy.body ? (
-              <Text style={[styles.body, { color: colors.textSecondary }]}>
-                {copy.body}
-              </Text>
-            ) : null}
-            {pin.mode === 'change' ? (
-              <WalletPinField
-                colors={colors}
-                label="Current PIN"
-                value={pin.currentPin}
-                editable={!pin.busy}
-                onChange={pin.setCurrentPin}
-              />
-            ) : null}
-            <WalletPinField
-              colors={colors}
-              label="New PIN"
-              value={pin.newPin}
-              editable={!pin.busy}
-              onChange={pin.setNewPin}
-            />
-            <WalletPinField
-              colors={colors}
-              label={confirmLabel}
-              value={pin.confirmPin}
-              editable={!pin.busy}
-              onChange={pin.setConfirmPin}
-            />
-            {pin.error ? (
-              <Text
-                accessibilityRole="alert"
-                style={[styles.message, { color: colors.error }]}
-              >
-                {pin.error}
-              </Text>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={copy.action}
-              accessibilityState={{ disabled: pin.busy }}
-              disabled={pin.busy}
-              onPress={pin.submit}
-              style={[styles.primary, { backgroundColor: colors.primary }]}
-            >
-              {pin.busy ? (
-                <ActivityIndicator
-                  color={colors.primaryForeground}
-                  size="small"
-                />
-              ) : (
-                <Text
-                  style={[
-                    styles.primaryText,
-                    { color: colors.primaryForeground },
-                  ]}
-                >
-                  {copy.action}
-                </Text>
-              )}
-            </Pressable>
-            {pin.mode === 'change' ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Forgot your PIN?"
-                disabled={pin.busy}
-                onPress={pin.forgotPin}
-                style={styles.secondary}
-              >
-                <Text
-                  style={[
-                    styles.secondaryText,
-                    { color: colors.textSecondary },
-                  ]}
-                >
-                  Forgot your PIN?
-                </Text>
-              </Pressable>
-            ) : null}
-          </>
-        )}
+        {content}
       </AppKeyboardAwareScrollView>
     </StorefrontScreenShell>
   );

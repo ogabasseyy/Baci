@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
+import { savingsNotifier } from './savings/savings-notice';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('./savings/savings-notice', () => {
+  const notify = jest.fn();
+  return { savingsNotifier: () => notify };
+});
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'synthetic-key' }));
 jest.mock('./check-pending-primary-savings', () => ({
   checkPendingPrimarySavings: jest.fn(),
@@ -45,7 +49,7 @@ function createInput(goal: WalletActiveSavingsGoal | null = activeGoal) {
     operationRailRef: { current: null as 'primary' | 'legacy' | null },
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '2500',
-    spendableBalance: 0,
+    walletBalance: 0,
     startWalletTopUp: jest.fn(),
     setIsFundPending: jest.fn<(value: boolean) => void>(),
     setIsAddingSavingsContribution: jest.fn<(value: boolean) => void>(),
@@ -136,7 +140,7 @@ describe('createWalletSavingsActions', () => {
 
   it('does not open plan transfer when the wallet already covers the amount', () => {
     const input = createInput();
-    input.spendableBalance = 2500;
+    input.walletBalance = 2500;
 
     createWalletSavingsActions(input).handleFundSavingsWallet();
 
@@ -151,7 +155,7 @@ describe('createWalletSavingsActions', () => {
     ] as const) {
       const input = createInput();
       input.savingsContributionAmount = amount;
-      input.spendableBalance = balance;
+      input.walletBalance = balance;
       createWalletSavingsActions(input).handleFundSavingsWallet();
       expect(router.push).not.toHaveBeenCalled();
     }
@@ -264,14 +268,14 @@ describe('createWalletSavingsActions', () => {
     });
 
     it('keeps a stored primary id and submits nothing once the merchant is no longer primary', () => {
-      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
       const input = withRail('primary-op', 'primary', undefined);
       createWalletSavingsActions(input).handleAddSavingsContribution();
       expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
       expect(checkPendingPrimarySavings).not.toHaveBeenCalled();
-      expect(alert).toHaveBeenCalledWith(
+      expect(savingsNotifier()).toHaveBeenCalledWith(
         'Still checking',
-        expect.stringContaining('We are checking your earlier contribution')
+        expect.stringContaining('We are checking your earlier contribution'),
+        'warning'
       );
       expect(input.idempotencyKeyRef.current).toBe('primary-op');
       expect(input.operationRailRef.current).toBe('primary');

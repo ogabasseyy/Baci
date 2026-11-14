@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { type NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { GET as getMerchantBlogFeed } from '@/app/api/blog/feed/[merchantSlug]/route';
 import { xmlSafeFeedUrl } from '@/lib/blog-feed-normalize';
 import { resolveStorefrontSitemapContextResult } from '../../../sitemap-data';
@@ -92,18 +92,23 @@ export async function GET(
     return new NextResponse('Blog feed not found', { status: 404 });
   }
 
-  const response = await getMerchantBlogFeed(request, {
-    params: Promise.resolve({
-      merchantSlug: sitemapResult.context.merchant.slug,
-    }),
-  });
+  const canonicalFeedUrl = `${sitemapResult.context.storeUrl}/blog/feed.xml`;
+  // Delegate with a minimal synthetic request (no inbound storefront headers or
+  // cookies) so the internal merchant feed handler remains request-agnostic.
+  const response = await getMerchantBlogFeed(
+    new NextRequest(canonicalFeedUrl),
+    {
+      params: Promise.resolve({
+        merchantSlug: sitemapResult.context.merchant.slug,
+      }),
+    }
+  );
   const contentType = response.headers.get('content-type') ?? '';
   if (!response.ok || !contentType.includes('xml')) {
     return response;
   }
 
   const xml = await response.text();
-  const canonicalFeedUrl = `${sitemapResult.context.storeUrl}/blog/feed.xml`;
   const rewrittenXml = withCanonicalRssSelfLink(xml, canonicalFeedUrl);
   if (rewrittenXml === xml) {
     return new NextResponse(xml, {

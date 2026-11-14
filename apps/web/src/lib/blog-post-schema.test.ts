@@ -15,7 +15,7 @@ describe('generateBlogPostSchema', () => {
     },
   };
 
-  it('emits Organization author and omits jobTitle when author type is Organization', () => {
+  it('emits Organization author and omits jobTitle and sameAs when author type is Organization', () => {
     const schema = generateBlogPostSchema({
       ...baseInput,
       author: {
@@ -24,6 +24,7 @@ describe('generateBlogPostSchema', () => {
         name: 'Ogabassey',
         url: 'https://ogabassey.com',
         jobTitle: 'Editorial Desk',
+        sameAs: ['https://x.com/ogabassey'],
       },
     });
 
@@ -35,13 +36,14 @@ describe('generateBlogPostSchema', () => {
     });
   });
 
-  it('defaults to Person author and preserves jobTitle when type is omitted', () => {
+  it('defaults to Person author and preserves jobTitle and sameAs when type is omitted', () => {
     const schema = generateBlogPostSchema({
       ...baseInput,
       author: {
         name: 'Jane Doe',
         url: 'https://ogabassey.com/blog/author/jane-doe',
         jobTitle: 'Senior Editor',
+        sameAs: ['https://x.com/janedoe'],
       },
     });
 
@@ -51,6 +53,7 @@ describe('generateBlogPostSchema', () => {
       name: 'Jane Doe',
       url: 'https://ogabassey.com/blog/author/jane-doe',
       jobTitle: 'Senior Editor',
+      sameAs: ['https://x.com/janedoe'],
     });
   });
 });

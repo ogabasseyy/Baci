@@ -49,15 +49,27 @@ describe('GET /[slug]/blog/feed.xml', () => {
       })
     );
 
-    const request = new NextRequest('https://ogabassey.com/blog/feed.xml');
+    const request = new NextRequest('https://ogabassey.com/blog/feed.xml', {
+      headers: {
+        cookie: 'session=secret',
+        'x-forwarded-for': '203.0.113.10',
+      },
+    });
     const response = await GET(request, {
       params: Promise.resolve({ slug: 'ogabassey.com' }),
     });
 
     expect(response.status).toBe(200);
-    expect(mockGetMerchantBlogFeed).toHaveBeenCalledWith(request, {
-      params: expect.any(Promise),
-    });
+    expect(mockGetMerchantBlogFeed).toHaveBeenCalledWith(
+      expect.any(NextRequest),
+      {
+        params: expect.any(Promise),
+      }
+    );
+    const delegatedRequest = mockGetMerchantBlogFeed.mock.calls[0]?.[0];
+    expect(delegatedRequest?.url).toBe('https://ogabassey.com/blog/feed.xml');
+    expect(delegatedRequest?.headers.get('cookie')).toBeNull();
+    expect(delegatedRequest?.headers.get('x-forwarded-for')).toBeNull();
     const delegatedArgs = mockGetMerchantBlogFeed.mock.calls[0]?.[1];
     expect(delegatedArgs).toBeDefined();
     if (delegatedArgs) {

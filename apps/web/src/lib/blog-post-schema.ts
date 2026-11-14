@@ -119,9 +119,10 @@ export function generateBlogPostSchema(
       ...(data.author.description && {
         description: escapeHtml(data.author.description),
       }),
-      ...(authorSameAs.length > 0 && {
-        sameAs: authorSameAs,
-      }),
+      ...(authorType === 'Person' &&
+        authorSameAs.length > 0 && {
+          sameAs: authorSameAs,
+        }),
       ...(authorImage && { image: escapeHtml(authorImage) }),
     },
     publisher: {

@@ -185,7 +185,7 @@ export function usePushNotifications({
       if (!coldStartResponseRequested.current) {
         coldStartResponseRequested.current = true;
         Notifications.getLastNotificationResponseAsync().then((response) => {
-          if (!response) return;
+          if (cancelledRef.current || !response) return;
           if (
             !shouldHandleColdStartResponse(true, liveResponseReceived.current)
           ) {

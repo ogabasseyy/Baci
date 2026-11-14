@@ -77,6 +77,24 @@ it('keeps the error visible and records a failed native hide', async () => {
   );
 });
 
+it('retries native splash dismissal immediately without animation', async () => {
+  jest
+    .mocked(SplashMotion.hide)
+    .mockRejectedValueOnce(new Error('Transient native failure'))
+    .mockResolvedValueOnce();
+
+  render(
+    <RootStartupError error={new Error('Broken startup')} retry={jest.fn()} />
+  );
+
+  await waitFor(() => expect(SplashMotion.hide).toHaveBeenCalledTimes(2));
+  expect(SplashMotion.hide).toHaveBeenNthCalledWith(2, {
+    waitForLoop: false,
+    minDuration: 0,
+    fade: 0,
+  });
+});
+
 it('updates the visible startup error when the system appearance changes', async () => {
   mockSystemScheme = 'light';
   jest.mocked(SplashMotion.waitForIntro).mockResolvedValue(true);

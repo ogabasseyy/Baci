@@ -7,8 +7,8 @@
   },
   "scripts": {
     "start": "expo start --port 8082",
-    "android": "expo run:android --port 8082",
-    "ios": "expo run:ios --port 8082",
+    "android": "expo prebuild --platform android --no-install && expo run:android --port 8082",
+    "ios": "expo prebuild --platform ios --no-install && expo run:ios --port 8082",
     "web": "expo start --web --port 8082",
     "android:emulator": "bash ./scripts/launch-android-emulator.sh",
     "android:install": "bash ./scripts/install-android-debug.sh",

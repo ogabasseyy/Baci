@@ -20,20 +20,24 @@ export function RootStartupError({ error, retry }: RootStartupErrorProps) {
   // A crash fallback should be visible immediately; a fresh intro waiter here
   // would add another timeout after the root screen has already failed.
   useEffect(() => {
-    try {
-      void Promise.resolve(
-        SplashMotion.hide({ waitForLoop: false, minDuration: 0, fade: 220 })
-      ).then(
+    const hide = (fade: number) =>
+      Promise.resolve().then(() =>
+        SplashMotion.hide({ waitForLoop: false, minDuration: 0, fade })
+      );
+
+    void hide(220)
+      .catch(() => {
+        recordCrashBreadcrumb('root_startup_error:native_splash_hide_failed');
+        markStartupTiming('splash_hide_failed');
+        return hide(0);
+      })
+      .then(
         () => markStartupTiming('splash_hide_completed'),
         () => {
           recordCrashBreadcrumb('root_startup_error:native_splash_hide_failed');
           markStartupTiming('splash_hide_failed');
         }
       );
-    } catch {
-      recordCrashBreadcrumb('root_startup_error:native_splash_hide_failed');
-      markStartupTiming('splash_hide_failed');
-    }
   }, []);
   const systemScheme = useColorScheme();
   const colors = Colors[systemScheme === 'dark' ? 'dark' : 'light'];

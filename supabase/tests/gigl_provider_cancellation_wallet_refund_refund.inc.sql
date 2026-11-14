@@ -14,6 +14,7 @@ DECLARE
   v_charge_row record;
   v_refund record;
   v_monitor record;
+  v_order_row record;
 BEGIN
   IF pg_temp.apply_gig_events(
        v_shipment, 'cancelled', pg_temp.fresh_cancel_history(1, 'MSCC')
@@ -58,11 +59,31 @@ BEGIN
      OR v_charge_row.provider_reference IS DISTINCT FROM 'WB-CANCEL-1' THEN
     RAISE EXCEPTION 'T1: charge must be refunded: %', row_to_json(v_charge_row);
   END IF;
+  -- A GIG cancellation cancels only the shipping (20261114183000): the
+  -- order goes back to processing, unlinked, so the merchant can rebook.
   IF (SELECT status FROM public.shipments WHERE id = v_shipment)
-       IS DISTINCT FROM 'cancelled'
-     OR (SELECT shipping_status FROM public.orders WHERE id = v_order)
        IS DISTINCT FROM 'cancelled' THEN
-    RAISE EXCEPTION 'T1: shipment and order must end cancelled';
+    RAISE EXCEPTION 'T1: the shipment must end cancelled';
+  END IF;
+  SELECT o.shipping_status, o.shipment_id, o.tracking_number,
+    o.selected_quote_id, o.shipping_funding_source, o.cancelled_at
+  INTO v_order_row
+  FROM public.orders AS o WHERE o.id = v_order;
+  IF v_order_row.shipping_status IS DISTINCT FROM 'processing'
+     OR v_order_row.shipment_id IS NOT NULL
+     OR v_order_row.tracking_number IS NOT NULL
+     OR v_order_row.selected_quote_id IS NOT NULL
+     OR v_order_row.shipping_funding_source IS NOT NULL
+     OR v_order_row.cancelled_at IS NOT NULL THEN
+    RAISE EXCEPTION 'T1: the order must reopen unlinked for rebooking: %',
+      row_to_json(v_order_row);
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.shipment_tracking_notification_outbox AS outbox
+    WHERE outbox.shipment_id = v_shipment AND outbox.audience = 'customer'
+      AND outbox.notification_kind = 'cancelled' AND outbox.status = 'pending'
+  ) THEN
+    RAISE EXCEPTION 'T1: a shipment-only cancellation must not alert the customer';
   END IF;
   SELECT monitor.state, monitor.next_poll_at, monitor.locked_by INTO v_monitor
   FROM public.shipment_tracking_monitors AS monitor
@@ -167,7 +188,7 @@ END;
 $t3$;
 
 -- T7: no charge, nothing to refund. A customer-checkout GIGL order and an
--- orderless repair pickup still cancel exactly as before.
+-- orderless repair pickup still cancel the shipment; the order reopens.
 DO $t7$
 DECLARE
   v_merchant constant uuid := 'c4ce1100-0000-4000-8000-000000000001';
@@ -180,7 +201,9 @@ BEGIN
   );
   IF v_applied IS DISTINCT FROM true
      OR (SELECT shipping_status FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
-       IS DISTINCT FROM 'cancelled'
+       IS DISTINCT FROM 'processing'
+     OR (SELECT shipment_id FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
+       IS NOT NULL
      OR (SELECT status FROM public.shipments WHERE id = pg_temp.fixture_id(4, 7))
        IS DISTINCT FROM 'cancelled'
      OR (SELECT state FROM public.shipment_tracking_monitors

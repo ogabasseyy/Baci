@@ -35,8 +35,8 @@ function input(overrides: Partial<Parameters<typeof handleChatwootInlineCartAdd>
   };
 }
 
-function response(body: unknown, ok = true) {
-  return { ok, json: async () => body };
+function response(body: unknown, ok = true, status = ok ? 200 : 400) {
+  return { ok, status, json: async () => body };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -162,6 +162,29 @@ describe('handleChatwootInlineCartAdd', () => {
       requestId: 'add-request-01',
       accepted: false,
       code: 'not_addable',
+    });
+  });
+
+  it('refreshes the cart for a JSON 5xx response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response(
+          { accepted: false, code: 'temporarily_unavailable' },
+          false,
+          503
+        )
+      )
+    );
+    const value = input();
+
+    await handleChatwootInlineCartAdd(value);
+
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'add-request-01',
+      accepted: false,
+      code: 'temporarily_unavailable',
     });
   });
 

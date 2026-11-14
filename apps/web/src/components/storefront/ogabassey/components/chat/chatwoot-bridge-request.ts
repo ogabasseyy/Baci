@@ -24,9 +24,11 @@ export async function postChatwootBridgeJson(
     } catch {
       return response.ok ? null : { httpStatus: response.status };
     }
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return {
+      ...(value as Record<string, unknown>),
+      ...(!response.ok ? { httpStatus: response.status } : null),
+    };
   } catch {
     return null;
   }

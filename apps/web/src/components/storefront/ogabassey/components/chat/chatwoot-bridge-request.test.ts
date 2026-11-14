@@ -56,7 +56,11 @@ describe('postChatwootBridgeJson', () => {
       postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
         allowNonOkResponse: true,
       })
-    ).resolves.toEqual({ accepted: false, code: 'refresh_required' });
+    ).resolves.toEqual({
+      accepted: false,
+      code: 'refresh_required',
+      httpStatus: 400,
+    });
     await expect(
       postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
         allowNonOkResponse: true,

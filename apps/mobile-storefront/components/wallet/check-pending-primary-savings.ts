@@ -2,6 +2,7 @@ import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
 import { savingsNotifier } from './savings/savings-notice';
+import { walletRefreshWorked } from './wallet-refresh-worked';
 
 export async function checkPendingPrimarySavings(input: {
   /** The goal as it stood before this confirmation. */
@@ -25,10 +26,7 @@ export async function checkPendingPrimarySavings(input: {
       input.clearOperation();
       input.clearAmount();
       triggerHaptic('success');
-      const refreshFailed = await input.refetchWallet().then(
-        () => false,
-        () => true
-      );
+      const refreshFailed = !(await walletRefreshWorked(input.refetchWallet));
       // The status endpoint returns neither the amount nor the goal balance,
       // and the amount field may have been edited since the transfer began,
       // so the cheer names the goal without an amount or percentage.

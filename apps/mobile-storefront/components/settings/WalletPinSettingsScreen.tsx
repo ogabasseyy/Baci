@@ -34,7 +34,10 @@ export function WalletPinSettingsScreen() {
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
 
   const title = <Stack.Screen options={{ title: 'Wallet PIN' }} />;
-  if (auth.isLoading || pin.gateState === 'checking') {
+  // A confirmed save stays on screen even while (or if) the background
+  // status refresh re-checks or fails: it never bounces to a spinner or out.
+  const keepSaved = Boolean(pin.savedTitle);
+  if (!keepSaved && (auth.isLoading || pin.gateState === 'checking')) {
     return (
       <StorefrontScreenShell
         style={[
@@ -53,7 +56,8 @@ export function WalletPinSettingsScreen() {
     );
   }
 
-  if (pin.gateState === 'off') return <Redirect href="/settings" />;
+  if (!keepSaved && pin.gateState === 'off')
+    return <Redirect href="/settings" />;
 
   const copy = walletPinStepCopy(pin.mode, steps.stage);
   let content: ReactNode;

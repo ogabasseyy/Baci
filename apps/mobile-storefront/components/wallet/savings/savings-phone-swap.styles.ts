@@ -79,10 +79,15 @@ export const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   line: {
+    alignItems: 'flex-start',
+    columnGap: SPACING.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 6,
   },
+  // A long label wraps; the amount keeps its full width and never clips.
+  lineLabel: { flexShrink: 1 },
+  lineValue: { flexShrink: 0, textAlign: 'right' },
   lineTotal: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 2 },
   lineText: { fontSize: 14 },
   bold: { fontWeight: TYPOGRAPHY.weight.bold },

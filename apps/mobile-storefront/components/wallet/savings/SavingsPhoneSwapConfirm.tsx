@@ -8,6 +8,7 @@ import { getWeeklySavingsNudge } from '../get-weekly-savings-nudge';
 import { SavingsPhoneThumb } from './SavingsPhoneThumb';
 import type { SavingsPhoneRow } from './savings-phone-rows';
 import { styles } from './savings-phone-swap.styles';
+import { savingsSwapPace } from './savings-swap-pace';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -32,6 +33,7 @@ function Line({
       <Text
         style={[
           styles.lineText,
+          styles.lineLabel,
           { color: total ? colors.text : colors.textSecondary },
           total && styles.bold,
         ]}
@@ -39,7 +41,12 @@ function Line({
         {label}
       </Text>
       <Text
-        style={[styles.lineText, { color: colors.text }, total && styles.bold]}
+        style={[
+          styles.lineText,
+          styles.lineValue,
+          { color: colors.text },
+          total && styles.bold,
+        ]}
       >
         {value}
       </Text>
@@ -69,6 +76,12 @@ export function SavingsPhoneSwapConfirm({
 }) {
   const saved = goal.current_amount;
   const pace = getWeeklySavingsNudge({
+    maturityDate: goal.maturity_date,
+    remaining: row.price - saved,
+  });
+  // The ongoing pace is quoted in the plan's own frequency.
+  const perPeriod = savingsSwapPace({
+    frequency: goal.contribution_frequency,
     maturityDate: goal.maturity_date,
     remaining: row.price - saved,
   });
@@ -115,12 +128,16 @@ export function SavingsPhoneSwapConfirm({
           <Line
             colors={colors}
             label={
-              pace.due ? `Due by ${pace.endsOn}` : `To finish by ${pace.endsOn}`
+              pace.due
+                ? `Due by ${pace.endsOn}`
+                : `Suggested to finish by ${pace.endsOn}`
             }
             value={
               pace.due
                 ? formatNgnCurrency(pace.amountPerWeek)
-                : `${formatNgnCurrency(pace.amountPerWeek)} a week`
+                : perPeriod
+                  ? `${formatNgnCurrency(perPeriod.amount)} ${perPeriod.unit}`
+                  : `${formatNgnCurrency(pace.amountPerWeek)} a week`
             }
             total
           />

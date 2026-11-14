@@ -41,6 +41,8 @@ export function SavingsQuickAmounts({
                 backgroundColor: selected ? colors.primary : colors.card,
                 borderColor: selected ? colors.primary : colors.border,
               },
+              // Dimmed with the rest of the form while an add is in flight.
+              disabled && styles.disabled,
             ]}
           >
             <Text
@@ -60,6 +62,7 @@ export function SavingsQuickAmounts({
 }
 
 const styles = StyleSheet.create({
+  disabled: { opacity: 0.5 },
   row: { flexDirection: 'row', gap: SPACING.sm },
   chip: {
     alignItems: 'center',

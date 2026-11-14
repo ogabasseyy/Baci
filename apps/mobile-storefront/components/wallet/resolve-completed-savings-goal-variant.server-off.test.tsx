@@ -59,6 +59,23 @@ describe('saving the exact option of a completed goal', () => {
     });
   });
 
+  it('treats a refetch that resolves with isError as a failed refresh', async () => {
+    jest
+      .mocked(resolveSavingsGoalVariant)
+      .mockResolvedValue(undefined as never);
+    const refetchWallet = jest.fn(async () => ({ isError: true }));
+    await expect(
+      resolveCompletedSavingsGoalVariant({
+        goal,
+        refetchWallet,
+        variantId: 'v1',
+      })
+    ).resolves.toEqual({
+      saved: 'Your choice is saved. Pull down on the wallet to refresh it.',
+    });
+    expect(refetchWallet).toHaveBeenCalledTimes(2);
+  });
+
   it('refuses an option the goal does not offer, without calling the server', async () => {
     const result = await resolveCompletedSavingsGoalVariant({
       goal,

@@ -8,8 +8,10 @@ export function goalCancelBreakdown(goal: WalletActiveSavingsGoal) {
   const balance = goal.current_amount;
   // Without the stored balance the split between savings and interest is
   // unknown: say so instead of implying the whole balance comes back.
-  const known = goal.principal_amount !== undefined || balance <= 0;
-  const saved = Math.min(goal.principal_amount ?? balance, balance);
+  // A missing or null principal both mean "unknown" (as in the Complete step).
+  const principal = goal.principal_amount ?? undefined;
+  const known = principal !== undefined || balance <= 0;
+  const saved = Math.min(principal ?? balance, balance);
   return {
     known,
     saved,

@@ -2,7 +2,14 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Text } from 'react-native';
-import { SavingsNotificationList } from './SavingsNotificationList';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+} from '@/constants/layout';
+import {
+  NOTIFICATIONS_BOTTOM_INSET,
+  SavingsNotificationList,
+} from './SavingsNotificationList';
 
 jest.mock('@shopify/flash-list', () => ({
   FlashList: ({
@@ -45,5 +52,12 @@ describe('savings notification list with the server off', () => {
     );
     expect(screen.getByText('orders-footer')).toBeTruthy();
     expect(screen.queryByText('No savings updates yet')).toBeNull();
+  });
+
+  // Walk 14: "View your orders" sat behind the floating AI button.
+  it('keeps the footer above the floating AI button band', () => {
+    expect(NOTIFICATIONS_BOTTOM_INSET).toBeGreaterThan(
+      CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET + CHAT_WIDGET_FAB_SIZE
+    );
   });
 });

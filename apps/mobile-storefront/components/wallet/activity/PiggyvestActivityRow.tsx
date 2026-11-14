@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
@@ -61,7 +61,18 @@ export function PiggyvestActivityRow({
           {detail}
         </Text>
       </View>
-      <Text style={[styles.txAmount, { color: tint }]}>{amount}</Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.txAmount, local.amount, { color: tint }]}
+      >
+        {amount}
+      </Text>
     </View>
   );
 }
+
+const local = StyleSheet.create({
+  // The amount keeps its own width and a gap, so a long subtitle
+  // ("₦50 fee deducted · date") wraps instead of touching it (walk 5).
+  amount: { flexShrink: 0, marginLeft: 12, textAlign: 'right' },
+});

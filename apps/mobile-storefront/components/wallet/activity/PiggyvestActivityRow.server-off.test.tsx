@@ -47,3 +47,22 @@ describe('bugfix: deposits showed the gross transfer, not what was credited', ()
     expect(screen.queryByText(/fee deducted/)).toBeNull();
   });
 });
+
+describe('bugfix: a four-digit amount touched the fee/date subtitle', () => {
+  it('keeps the amount on its own width with a gap from the subtitle', () => {
+    render(
+      <PiggyvestActivityRow
+        colors={Colors.light}
+        item={activityItem({ amountKobo: 245000, feeKobo: 5000 })}
+      />
+    );
+    const amount = screen.getByText('+₦2,450');
+    const style = Object.assign(
+      {},
+      ...[amount.props.style].flat(Number.POSITIVE_INFINITY).filter(Boolean)
+    );
+    expect(style.flexShrink).toBe(0);
+    expect(style.marginLeft).toBeGreaterThanOrEqual(12);
+    expect(amount.props.numberOfLines).toBe(1);
+  });
+});

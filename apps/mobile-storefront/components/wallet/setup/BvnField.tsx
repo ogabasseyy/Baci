@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { BRAND } from '@/constants/Colors';
 import { setupStyles } from '../piggyvest-wallet-setup.styles';
 
 /**
@@ -23,17 +22,27 @@ export function BvnField({
   editable: boolean;
 }) {
   const [visible, setVisible] = useState(false);
+  const [focused, setFocused] = useState(false);
+  // Neutral at rest, ink (2pt) while typing, red only for a real error.
+  // The brand colour is red too, so it is never the focus colour here.
+  const borderColor = error
+    ? colors.error
+    : focused
+      ? colors.text
+      : colors.border;
   return (
     <View style={setupStyles.field}>
       <Text style={[setupStyles.fieldLabel, { color: colors.text }]}>
         Your BVN
       </Text>
       <View
+        testID="bvn-input-wrap"
         style={[
           setupStyles.inputWrap,
           {
             backgroundColor: colors.muted,
-            borderColor: error ? colors.error : BRAND.primary,
+            borderColor,
+            borderWidth: focused || error ? 2 : 1.5,
           },
         ]}
       >
@@ -54,9 +63,15 @@ export function BvnField({
           autoCorrect={false}
           textContentType="none"
           editable={editable}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder="11-digit BVN"
           placeholderTextColor={colors.placeholder}
-          style={[setupStyles.input, { color: colors.text }]}
+          // Space typed digits only: a spaced placeholder reads oddly (#4229).
+          style={[
+            setupStyles.input,
+            { color: colors.text, letterSpacing: value ? 2 : 0 },
+          ]}
         />
         <Text style={[setupStyles.counter, { color: colors.textSecondary }]}>
           {value.length}/11

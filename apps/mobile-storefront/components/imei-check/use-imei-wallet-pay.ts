@@ -164,7 +164,10 @@ export function useImeiWalletPay({
       try {
         return await imeiWalletPayPurchase(userId, device, tier, imei)
           .then((purchase) => walletPayPurchaseKeys.has(purchase))
-          .catch(() => true);
+          // Unreadable: kept (fail closed) while paying from PiggyVest is
+          // on. Switched off, only a key actually read replays, so a broken
+          // store never opens the sheet in a switched-off build (Muse).
+          .catch(() => canPay);
       } finally {
         checkingKept.current = false;
       }

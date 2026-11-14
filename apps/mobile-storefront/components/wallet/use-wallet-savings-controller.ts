@@ -1,6 +1,6 @@
 import { useRef } from 'react';
-import { Alert } from 'react-native';
 import { isFundedUnsettledGoal } from './savings/goal-settlement';
+import { notifySavings } from './savings/savings-notice';
 import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { useWalletPinPrompt } from './savings/use-wallet-pin-prompt';
 import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
@@ -53,9 +53,10 @@ export function useWalletSavingsController(
   });
   const retryRecovery = () => {
     recovery.retry();
-    Alert.alert(
+    notifySavings(
       'Checking contributions',
-      'We need to check for an existing transfer before starting another payment. Please try again after this check.'
+      'We need to check for an existing transfer before starting another payment. Please try again after this check.',
+      'info'
     );
   };
   const hasPendingSavingsContribution =
@@ -68,7 +69,13 @@ export function useWalletSavingsController(
     /** What the wallet content needs to show the savings sheet correctly. */
     walletContentSavingsProps: {
       hasPendingSavingsContribution,
-      goalAwaitingSettlement,
+      // The card keeps "Complete goal" while the check is running or the
+      // server is unreachable (walk 11): the same funded goal never flips to
+      // "Start another plan". The sheet still waits for 'ready' to act.
+      goalAwaitingSettlement:
+        goalAwaitingSettlement ||
+        ((gate === 'checking' || gate === 'error') &&
+          isFundedUnsettledGoal(input.goal)),
       walletUpdatedAt: input.walletUpdatedAt,
     },
     handleAddSavingsContribution: recovery.ready

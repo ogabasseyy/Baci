@@ -53,6 +53,7 @@ export function PaymentMethodSelector({
   methodDisabledReasons = {},
   methodLabelOverrides = {},
   walletFundedBankTransferMode = false,
+  walletIsStoreCredit = false,
   paymentScrollRef,
   paymentScrollOffsetRef,
   initiallyCollapsed = false,
@@ -169,9 +170,6 @@ export function PaymentMethodSelector({
     ? Math.max(walletEffectiveTotal - walletBalance, 0)
     : 0;
   const walletIsActive = walletSelection?.use === true;
-  const walletAccessibilityLabel = walletCoversFully
-    ? `Pay with wallet, ${formatPrice(walletBalance)} available`
-    : `Use wallet credit, ${formatPrice(walletPortion)} of ${formatPrice(walletEffectiveTotal)}`;
 
   // Selecting an intent projects onto the existing (tab, method) state. For the
   // two terminal `pay_later` intents we also pin the specific method, because
@@ -271,9 +269,10 @@ export function PaymentMethodSelector({
                   savingsResidualToGateway={savingsResidualToGateway}
                   savingsShouldRender={savingsShouldRender}
                   savingsTotalBalance={savingsBalance}
-                  walletAccessibilityLabel={walletAccessibilityLabel}
+                  walletEffectiveTotal={walletEffectiveTotal}
                   walletCoversFully={walletCoversFully}
                   walletInfoShouldRender={walletInfoShouldRender}
+                  walletIsStoreCredit={walletIsStoreCredit}
                   walletIsActive={walletIsActive}
                   walletIsLoading={walletIsLoading}
                   walletPortion={walletPortion}

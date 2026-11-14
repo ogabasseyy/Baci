@@ -1,25 +1,12 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { type ComponentProps, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { PiggyvestPrimaryWalletSchemas } from '@/schemas/piggyvest-primary-wallet';
 import { setupStyles } from './piggyvest-wallet-setup.styles';
-
-// Server codes where refreshing cannot help; only waiting can.
-const SETUP_UNAVAILABLE_CODES = new Set([
-  'PROVIDER_UNAVAILABLE',
-  'NOT_CONFIGURED',
-  'PIGGYVEST_NOT_READY',
-  'PIGGYVEST_ONBOARDING_NOT_READY',
-  'PIGGYVEST_UNAVAILABLE',
-]);
+import { BvnField } from './setup/BvnField';
+import { describeSetupError } from './setup/describe-setup-error';
 
 const SETUP_BENEFITS: readonly {
   icon: ComponentProps<typeof Ionicons>['name'];
@@ -47,7 +34,12 @@ export function PiggyvestWalletSetupForm({
 }: Props) {
   const [bvn, setBvn] = useState('');
   const [consent, setConsent] = useState(false);
+  // Each message sits under what it is about: the BVN field, the consent
+  // box, or (for server answers) the form.
+  const [bvnError, setBvnError] = useState<string | null>(null);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const formValid = bvn.length === 11 && consent;
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
 
@@ -59,12 +51,16 @@ export function PiggyvestWalletSetupForm({
       consent,
     });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check your setup details.');
+      const issue = parsed.error.issues[0];
+      const message = issue?.message ?? 'Check your setup details.';
+      if (issue?.path[0] === 'consent') setConsentError(message);
+      else setBvnError(message);
       return;
     }
     submitting.current = true;
     setBusy(true);
     setError(null);
+    setBvnError(null);
     try {
       await onSubmit(parsed.data);
       // Clear only after the setup is confirmed: a failure keeps the BVN
@@ -72,36 +68,11 @@ export function PiggyvestWalletSetupForm({
       // value from state at the earliest safe moment.
       setBvn('');
     } catch (error) {
-      const code =
-        typeof error === 'object' && error !== null
-          ? (error as { code?: unknown }).code
-          : undefined;
-      if (code === 'INVALID_BVN') {
-        // The number itself was rejected: keeping a known-wrong BVN in
-        // state serves no retry (the user must enter a different one),
-        // so drop the sensitive value now instead of widening its
-        // lifetime in memory. Transient failures below keep it for a
-        // correction-free retry of a possibly-right number.
-        setBvn('');
-        setError('That BVN was rejected. Check the number and try again.');
-      } else if (code === 'PROFILE_VERIFICATION_REQUIRED') {
-        setError(
-          'Please verify your email and complete your profile, then try again.'
-        );
-      } else if (
-        typeof code === 'string' &&
-        SETUP_UNAVAILABLE_CODES.has(code)
-      ) {
-        // Nothing to refresh: setup or PiggyVest is not available yet, so
-        // tell the customer plainly to come back later.
-        setError(
-          'Wallet setup is unavailable right now. Please try again later.'
-        );
-      } else {
-        setError(
-          'Wallet setup could not be confirmed. Refresh your account before trying again.'
-        );
-      }
+      const outcome = describeSetupError(error);
+      // A rejected number is dropped: it cannot be retried as it is.
+      if (outcome.clearBvn) setBvn('');
+      if (outcome.field === 'bvn') setBvnError(outcome.message);
+      else setError(outcome.message);
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -126,11 +97,11 @@ export function PiggyvestWalletSetupForm({
           />
         </View>
         <Text style={[setupStyles.title, { color: colors.text }]}>
-          Set up your PiggyVest wallet
+          Set up your savings wallet
         </Text>
         <Text style={[setupStyles.subtitle, { color: colors.textSecondary }]}>
-          PiggyVest requires your BVN to verify your identity and create your
-          bank transfer account.
+          PiggyVest, our savings partner, needs your BVN to verify you and
+          create your account number.
         </Text>
       </View>
       <View style={[setupStyles.benefits, { backgroundColor: colors.muted }]}>
@@ -149,51 +120,25 @@ export function PiggyvestWalletSetupForm({
           </View>
         ))}
       </View>
-      <View style={setupStyles.field}>
-        <Text style={[setupStyles.fieldLabel, { color: colors.text }]}>
-          Your BVN
-        </Text>
-        <View
-          style={[
-            setupStyles.inputWrap,
-            { backgroundColor: colors.muted, borderColor: BRAND.primary },
-          ]}
-        >
-          <Ionicons
-            accessible={false}
-            importantForAccessibility="no"
-            name="lock-closed-outline"
-            size={18}
-            color={colors.textSecondary}
-          />
-          <TextInput
-            accessibilityLabel="BVN"
-            value={bvn}
-            onChangeText={(value) => setBvn(value.replace(/\D/g, ''))}
-            maxLength={11}
-            keyboardType="number-pad"
-            secureTextEntry
-            autoCorrect={false}
-            textContentType="none"
-            editable={!busy}
-            placeholder="11-digit BVN"
-            placeholderTextColor={colors.placeholder}
-            style={[setupStyles.input, { color: colors.text }]}
-          />
-          <Text style={[setupStyles.counter, { color: colors.textSecondary }]}>
-            {bvn.length}/11
-          </Text>
-        </View>
-        <Text style={[setupStyles.hint, { color: colors.textSecondary }]}>
-          Forgot it? Dial *565*0# from the phone number linked to your bank.
-        </Text>
-      </View>
+      <BvnField
+        colors={colors}
+        value={bvn}
+        onChange={(digits) => {
+          setBvn(digits);
+          setBvnError(null);
+        }}
+        error={bvnError}
+        editable={!busy}
+      />
       <Pressable
         accessibilityRole="checkbox"
         accessibilityLabel="Agree to PiggyVest identity verification"
         accessibilityState={{ checked: consent, disabled: busy }}
         disabled={busy}
-        onPress={() => setConsent(!consent)}
+        onPress={() => {
+          setConsent(!consent);
+          setConsentError(null);
+        }}
         style={setupStyles.consentRow}
       >
         <View
@@ -219,6 +164,14 @@ export function PiggyvestWalletSetupForm({
           verification.
         </Text>
       </Pressable>
+      {consentError ? (
+        <Text
+          accessibilityRole="alert"
+          style={[setupStyles.error, { color: colors.error }]}
+        >
+          {consentError}
+        </Text>
+      ) : null}
       {error ? (
         <Text
           accessibilityRole="alert"
@@ -230,10 +183,17 @@ export function PiggyvestWalletSetupForm({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Create account number"
-        accessibilityState={{ disabled: busy }}
-        disabled={busy}
+        accessibilityState={{ disabled: busy || !formValid, busy }}
+        // Disabled (and dimmed) until an 11-digit BVN and consent are given.
+        disabled={busy || !formValid}
         onPress={submit}
-        style={[setupStyles.submit, { backgroundColor: BRAND.primary }]}
+        style={[
+          setupStyles.submit,
+          {
+            backgroundColor: BRAND.primary,
+            opacity: busy || formValid ? 1 : 0.45,
+          },
+        ]}
       >
         {busy ? (
           <ActivityIndicator color={BRAND.onPrimary} />

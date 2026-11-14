@@ -116,3 +116,22 @@ describe('useCopyToClipboard', () => {
     }
   });
 });
+
+describe('bugfix: copy gives no feedback after a dev double-mount', () => {
+  it('still shows feedback when the hook was mounted twice (StrictMode)', async () => {
+    // Arrange: StrictMode runs the mount effect, its cleanup, then again.
+    const { StrictMode } = jest.requireActual<typeof import('react')>('react');
+    mockSetClipboardString.mockResolvedValue(true);
+    const { result } = renderHook(() => useCopyToClipboard(), {
+      wrapper: StrictMode,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.copyToClipboard('3685660013');
+    });
+
+    // Assert
+    expect(result.current.feedback).toBe('Account number copied to clipboard.');
+  });
+});

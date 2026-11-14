@@ -10,6 +10,7 @@ describe('feature flag registry', () => {
         'card_signed_inbox',
         'card_custody',
         'daily_reconciliation',
+        'degraded_alerts',
         'deposit_to_goal',
         'goal_provisioning',
         'inflows',

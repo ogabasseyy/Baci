@@ -27,19 +27,9 @@
       "tests": 2,
       "passed": 2,
       "browserCells": 12,
-      "engines": [
-        "chromium",
-        "firefox",
-        "webkit"
-      ],
-      "widths": [
-        390,
-        1440
-      ],
-      "parentOrigins": [
-        "canonical-merchant",
-        "exact-Baci-preview"
-      ],
+      "engines": ["chromium", "firefox", "webkit"],
+      "widths": [390, 1440],
+      "parentOrigins": ["canonical-merchant", "exact-Baci-preview"],
       "httpsTransport": "intercepted entirely inside offline sandbox; deployed TLS unqualified",
       "normalOwnerRls": true,
       "wrongOwnerDenied": true,
@@ -94,11 +84,7 @@
     "retryWaitReported": "13 minutes and 9 seconds",
     "finalAllClear": false,
     "completedIncludedReviews": 3,
-    "rawIssuesByCompletedReview": [
-      7,
-      4,
-      4
-    ],
+    "rawIssuesByCompletedReview": [7, 4, 4],
     "validIssuesAddressed": true,
     "reason": "Post-review fixes are regression-tested; final immutable commit/candidate-wide CI and review remain pending.",
     "lastCompletedOutcome": "completed",
@@ -131,9 +117,7 @@
   "finalMainRefresh": {
     "commit": "7a2f3cc9b1f610d33b5c6da49147166f814e2404",
     "files": 69,
-    "overlap": [
-      "turbo.json"
-    ],
+    "overlap": ["turbo.json"],
     "resolution": "three-way merge; retained both upstream environment entry and experience qualification task"
   },
   "functionalProofBase": "932a38e053f7b123a5d137298a2e26c0dc87c156",

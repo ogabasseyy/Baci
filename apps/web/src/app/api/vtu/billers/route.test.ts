@@ -276,7 +276,12 @@ describe('GET /api/vtu/billers', () => {
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toBe('Failed to fetch billers: Kuda API unavailable');
+    expect(data.error).toBe(
+      "We couldn't load billers right now. Please try again."
+    );
+    expect(data.code).toBe('BILLERS_UNAVAILABLE');
+    expect(JSON.stringify(data)).not.toMatch(/kuda api|unavailable:/i);
+    expect(data).not.toHaveProperty('kudaError');
   });
 
   it('keeps biller submenu caching short-lived', async () => {
@@ -320,6 +325,66 @@ describe('GET /api/vtu/billers', () => {
       expect(response.status).toBe(200);
       expect(mockGetBillersByCategory).toHaveBeenCalledWith(type);
     }
+  });
+
+  it('never shows the provider in biller or plan names', async () => {
+    const { GET } = await import('./route');
+
+    mockGetBillersByCategory.mockResolvedValue([
+      {
+        billerId: 'kuda-biller-9',
+        billerName: 'Ikeja Electric (Kuda)',
+        billerType: 'electricity',
+        categoryId: 'cat-1',
+        categoryName: 'Electricity',
+        billItems: [
+          {
+            itemCode: 'kuda-item-9',
+            itemName: 'Prepaid (Kuda)',
+            amount: 0,
+            itemCurrencySymbol: 'NGN',
+            isAmountFixed: false,
+            itemFee: 0,
+            billItems: [
+              {
+                itemCode: 'kuda-item-9a',
+                itemName: 'Residential (Kuda)',
+                amount: 0,
+                itemCurrencySymbol: 'NGN',
+                isAmountFixed: false,
+                itemFee: 0,
+              },
+            ],
+          },
+          {
+            itemCode: 'kuda-item-9b',
+            itemName: '(Kuda)',
+            amount: 0,
+            itemCurrencySymbol: 'NGN',
+            isAmountFixed: false,
+            itemFee: 0,
+          },
+        ],
+      },
+    ]);
+
+    const response = await GET(makeRequest({ type: 'electricity' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    type Item = { itemName: string; billItems?: Item[] };
+    const itemNames = (items: Item[] = []): string[] =>
+      items.flatMap((item) => [item.itemName, ...itemNames(item.billItems)]);
+    const names = data.billers.flatMap(
+      (biller: { billerName: string; billItems?: Item[] }) => [
+        biller.billerName,
+        ...itemNames(biller.billItems),
+      ]
+    );
+    expect(names).toContain('Ikeja Electric');
+    // Nested plans are stripped too, and a provider-only name gets a neutral one.
+    expect(names).toEqual(expect.arrayContaining(['Residential', 'Plan']));
+    expect(names.join(' ')).not.toMatch(/kuda|monnify/i);
   });
 
   it('folds Monnify electricity into the Kuda card (Kuda display + Monnify fulfillment)', async () => {
@@ -539,9 +604,10 @@ describe('GET /api/vtu/billers', () => {
         provider: 'kuda',
       }),
     ]);
-    expect(data.monnifyError).toContain(
-      'Failed to fetch Monnify products for IKEDC'
+    expect(data.monnifyError).toBe(
+      "Some billers couldn't be loaded right now. Please try again shortly."
     );
+    expect(data.monnifyError).not.toMatch(/monnify|IKEDC/i);
   });
 
   it('limits concurrent Monnify product lookups for large categories', async () => {
@@ -672,7 +738,9 @@ describe('GET /api/vtu/billers', () => {
     expect(response.status).toBe(200);
     expect(data.billers).toHaveLength(1);
     expect(data.billers[0].provider).toBe('kuda');
-    expect(data.monnifyError).toBe('Monnify API down');
+    expect(data.monnifyError).toBe(
+      "Some billers couldn't be loaded right now. Please try again shortly."
+    );
   });
 
   it('rejects malformed Kuda biller payloads instead of accepting type assertions', async () => {
@@ -707,7 +775,10 @@ describe('GET /api/vtu/billers', () => {
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toContain('Kuda biller payload failed validation');
+    expect(data.error).toBe(
+      "We couldn't load billers right now. Please try again."
+    );
+    expect(JSON.stringify(data)).not.toMatch(/kuda|validation/i);
   });
 
   it('falls back gracefully if Kuda throws but Monnify succeeds', async () => {

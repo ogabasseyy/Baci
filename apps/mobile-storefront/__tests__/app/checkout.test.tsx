@@ -18,6 +18,11 @@ import {
 } from './checkout.test-utils';
 import { fillCheckoutContact } from './checkout-contact.test-utils';
 
+// A merchant the server has ruled out of PiggyVest: today's wallet flows.
+jest.mock('@/lib/read-piggyvest-capability-now', () => ({
+  readPiggyvestCapabilityNow: () => false,
+}));
+
 function fillLagosDeliveryAddress() {
   fireEvent.changeText(
     screen.getByPlaceholderText('Start typing your address…'),

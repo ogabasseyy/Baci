@@ -120,8 +120,7 @@ describe('sibling notes', () => {
   beforeEach(() => {
     mockPrimary = true;
   });
-  const STATUS_COPY =
-    'This goal is still being set up. Please check back shortly.';
+  const STATUS_COPY = 'Getting your plan ready';
 
   it('resets both notes on a goal switch without a duplicate-key warning', async () => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});

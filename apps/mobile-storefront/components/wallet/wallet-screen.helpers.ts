@@ -198,12 +198,15 @@ export function buildWalletTopUpGatewayParams({
   activeMerchantSlug,
   amount,
   result,
+  userId,
   walletReturnTo,
 }: {
   activeMerchantId?: string;
   activeMerchantSlug?: string;
   amount: number;
   result: WalletTopUpResultLike;
+  /** The account that started it: the gateway blocks any other (Codex). */
+  userId?: string | null;
   walletReturnTo?: string;
 }) {
   return {
@@ -215,6 +218,7 @@ export function buildWalletTopUpGatewayParams({
     paymentKind: 'wallet' as const,
     reference: result.reference,
     ...(walletReturnTo ? { returnTo: walletReturnTo } : {}),
+    ...(userId ? { userId } : {}),
   };
 }
 

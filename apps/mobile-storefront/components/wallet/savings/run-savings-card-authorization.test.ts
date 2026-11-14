@@ -101,4 +101,24 @@ describe('card authorization context lifetime', () => {
     if (scenario.startsWith('switch'))
       expect(result.current.isAuthorizingCard).toBe(false);
   });
+
+  describe('bugfix: the review sheet stayed over the Paystack screen', () => {
+    it('closes the whole review sheet before opening card authorization', async () => {
+      mockInitialize.mockResolvedValueOnce({
+        authorization_url: 'https://example.test/authorization',
+        gateway: 'paystack',
+        reference: 'synthetic',
+      });
+      const input = fixture();
+      const { result } = renderHook(() => useStartSavingsSubmit(input));
+      await act(async () => {
+        await result.current.handleAuthorizeSavingsCard();
+      });
+      expect(input.setShowPreviewModal).toHaveBeenCalledWith(false);
+      expect(input.setShowFundingModal).toHaveBeenCalledWith(false);
+      expect(router.push).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: '/payment-gateway' })
+      );
+    });
+  });
 });

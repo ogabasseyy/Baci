@@ -170,6 +170,70 @@ describe('ChatwootInlineCartBridge', () => {
     );
   });
 
+  it('consumes product requests and returns a canonical product response', async () => {
+    const product = {
+      availability: 'in_stock',
+      condition: 'new',
+      currency: 'NGN',
+      image: 'https://cdn.example.test/phone.jpg',
+      name: 'Phone 15',
+      price: 300_000,
+      slug: 'phone-15',
+      variants: [],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        const pathname = new URL(path, 'https://store.test').pathname;
+        if (pathname.endsWith('/challenge')) {
+          return challengeResponse(String(body.requestId));
+        }
+        if (pathname.endsWith('/verify')) {
+          return contextResponse(String(body.contextToken));
+        }
+        if (pathname.endsWith('/products')) {
+          return {
+            ok: true,
+            json: async () => ({
+              ok: true,
+              product,
+              requestId: body.requestId,
+            }),
+          };
+        }
+        return response(905);
+      })
+    );
+    const { target, postMessage } = installFrame();
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
+
+    await act(async () => {
+      await establishWidgetContext(target, postMessage);
+      postMessage.mockClear();
+      sendWidgetMessage(target, 'baci-product-request', {
+        requestId: 'product-0001',
+        conversationId: 905,
+        sessionToken: 'session-905',
+        slug: 'phone-15',
+      });
+      await waitFor(() =>
+        expect(
+          postMessage.mock.calls.some(([payload]) =>
+            String(payload).startsWith('baci-product-response:')
+          )
+        ).toBe(true)
+      );
+    });
+
+    const payload = String(postMessage.mock.calls.at(-1)?.[0]);
+    expect(JSON.parse(payload.slice('baci-product-response:'.length))).toEqual({
+      requestId: 'product-0001',
+      status: 'available',
+      product,
+    });
+  });
+
   it('fails closed instead of presenting an estimated subtotal as exact', async () => {
     vi.stubGlobal(
       'fetch',

@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  type LayoutChangeEvent,
-  type ScrollViewInstance,
-} from 'react-native';
+import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SPACING } from '@/constants/Colors';
 import { NETWORK_PROVIDERS } from '@/constants/network-providers';
@@ -13,7 +9,6 @@ import { useAuthStore } from '@/stores/auth-store';
 import type { AirtimeFormProps } from './airtime-form.types';
 import {
   nextPhoneDigits,
-  PHONE_TRIMMED_NOTICE,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
   scrollToAirtimePaymentSection,
@@ -21,6 +16,7 @@ import {
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
 import { getUtilityFooterOffset } from './get-utility-footer-offset';
 import { useAirtimePurchaseHandler } from './use-airtime-purchase-handler';
+import { usePhoneTrimNotice } from './use-phone-trim-notice';
 import { formatUtilityAmountInput } from './utility-amount-format';
 
 const FOOTER_HEIGHT = 120;
@@ -62,11 +58,12 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     prevIsRepeatPaymentReadyRef.current = isRepeatPaymentReady;
   }, [isRepeatPaymentReady]);
 
+  const noticeTrim = usePhoneTrimNotice();
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const { digits, trimmed } = nextPhoneDigits(phoneNumber, text);
-    if (trimmed)
-      Alert.alert(PHONE_TRIMMED_NOTICE.title, PHONE_TRIMMED_NOTICE.message);
+    const change = nextPhoneDigits(phoneNumber, text);
+    noticeTrim(change);
+    const { digits } = change;
     setPhoneNumber(digits);
     setSelectedProvider(resolveAirtimeProvider(digits));
     setIsNetworkPickerExpanded(false);

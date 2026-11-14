@@ -103,7 +103,7 @@ describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
       />
     );
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
-    expect(screen.queryByText(/from savings/)).toBeNull();
+    expect(screen.queryByText(/^Pay ₦/)).toBeNull();
   });
 
   it('offers to pay from PiggyVest once switched on and covered', () => {
@@ -122,7 +122,10 @@ describe('IMEI check paid from the PiggyVest wallet (dark)', () => {
     const price = IMEI_SERVICE_TIERS.full.price.toLocaleString('en-NG');
     // Customers never see the provider's name (owner 11-13).
     expect(screen.queryByText(/PiggyVest/)).toBeNull();
-    fireEvent.press(screen.getByText(`Pay ₦${price} from savings`));
+    // The check it pays for is named beside the savings badge (Fable walk 15).
+    fireEvent.press(
+      screen.getByText(`Pay ₦${price} for ${IMEI_SERVICE_TIERS.full.name}`)
+    );
     expect(onCheck).toHaveBeenCalledTimes(1);
     expect(onTopUpWallet).not.toHaveBeenCalled();
   });

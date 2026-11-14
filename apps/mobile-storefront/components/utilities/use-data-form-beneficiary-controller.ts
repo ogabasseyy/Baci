@@ -1,14 +1,11 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import type { Biller } from '@/hooks/use-vtu-billers';
 import { detectNetwork } from '@/lib/network-utils';
 import type { UtilityRepeatRecipient } from '@/lib/utility-repeat';
-import {
-  nextPhoneDigits,
-  PHONE_TRIMMED_NOTICE,
-} from './airtime-form-controller.helpers';
+import { nextPhoneDigits } from './airtime-form-controller.helpers';
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
 import { inferProviderFromDataBillerName } from './data-form.helpers';
+import { usePhoneTrimNotice } from './use-phone-trim-notice';
 
 interface UseDataFormBeneficiaryControllerProps {
   initialPhoneNumber?: string;
@@ -72,11 +69,12 @@ export function useDataFormBeneficiaryController({
     }
   };
 
+  const noticeTrim = usePhoneTrimNotice();
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const { digits, trimmed } = nextPhoneDigits(phoneNumber, text);
-    if (trimmed)
-      Alert.alert(PHONE_TRIMMED_NOTICE.title, PHONE_TRIMMED_NOTICE.message);
+    const change = nextPhoneDigits(phoneNumber, text);
+    noticeTrim(change);
+    const { digits } = change;
     setPhoneNumber(digits);
     syncBillerFromDetectedNetwork(digits);
   };

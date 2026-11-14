@@ -35,7 +35,7 @@ describe('a required check name never belongs to a skipped job', () => {
         assert.equal(runs, !scenario.deferred, `job ${jobId} should ${scenario.deferred ? 'be skipped' : 'run'}`);
         if (scenario.deferred) {
           assert.equal(REQUIRED_CONTEXTS.has(name), false, `a skipped job must not carry the required name, got "${name}"`);
-          assert.match(name, /deferred/i);
+          assert.match(name, /deferred until ready and review/i);
         } else {
           assert.equal(name, jobId === 'build' ? 'Build' : 'Quality Gate');
         }
@@ -48,7 +48,7 @@ describe('a required check name never belongs to a skipped job', () => {
   it('keeps the required names for normal runs (branch protection is untouched)', () => {
     assert.equal(evaluateExpression(ci.jobs.build.name, SCENARIOS[0].context), 'Build');
     assert.equal(evaluateExpression(ci.jobs.quality.name, SCENARIOS[0].context), 'Quality Gate');
-    assert.equal(YAML.parse(read('security.yml')).jobs.semgrep?.name ?? 'Semgrep SAST', 'Semgrep SAST');
+    assert.equal(evaluateExpression(YAML.parse(read('security.yml')).jobs.semgrep.name, { 'github.event_name': 'push' }), 'Semgrep SAST');
   });
 
   it('keeps the deferred jobs on the same runners as before', () => {
@@ -57,7 +57,7 @@ describe('a required check name never belongs to a skipped job', () => {
   });
 });
 
-describe('heavy jobs wait for the full stage, quick jobs do not', () => {
+describe('validation jobs wait for the full stage; safeguards remain active', () => {
   const facts = {
     'needs.changes.outputs.web': 'true',
     'needs.changes.outputs.mobile_admin': 'true',
@@ -69,8 +69,8 @@ describe('heavy jobs wait for the full stage, quick jobs do not', () => {
     'needs.changes.outputs.test_plan_mode': 'full-affected',
     'github.event_name': 'pull_request',
   };
-  const HEAVY = ['cwv-runner-contracts', 'quality-test', 'quality-test-web', 'quality-db-replay', 'quality-disposable-sql'];
-  const QUICK = ['quality-lint', 'quality-typecheck', 'quality-misc', 'silent-revert-guard'];
+  const HEAVY = ['cwv-runner-contracts', 'quality-test', 'quality-test-web', 'quality-db-replay', 'quality-disposable-sql', 'quality-lint', 'quality-typecheck', 'quality-misc', 'mobile-quality'];
+  const QUICK = ['silent-revert-guard'];
 
   for (const jobId of HEAVY) {
     it(`${jobId} runs only in the full stage`, () => {
@@ -87,8 +87,8 @@ describe('heavy jobs wait for the full stage, quick jobs do not', () => {
     });
   }
 
-  it('mobile admin guardrails run in every stage (no job-level condition)', () => {
-    assert.equal(ci.jobs['mobile-quality'].if, undefined);
+  it('mobile admin guardrails wait for the validation stage', () => {
+    assert.match(ci.jobs['mobile-quality'].if, /stage == 'full'/);
   });
 
   it('the production approval job stays push / merge_group only', () => {

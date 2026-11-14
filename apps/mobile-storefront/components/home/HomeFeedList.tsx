@@ -134,7 +134,10 @@ export function HomeFeedList({
   );
   const nextDropHero = nextDrop ? heroBlocks[0] : undefined;
   const campaignHero =
-    !isSearchOpen && !blackFridayError && blackFridayProducts?.length
+    CONFIG.MERCHANT_SLUG === 'ogabassey' &&
+    !isSearchOpen &&
+    !blackFridayError &&
+    blackFridayProducts?.length
       ? (nextDropHero ??
         heroBlocks.find((block) => block.props.slides?.length) ??
         heroBlocks[0])

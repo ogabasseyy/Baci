@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle, Scale, ScrollText } from 'lucide-react';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
 import { SafeHtml } from '@/components/ui/safe-html';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 
 import { ContentPageProviders } from '../content-page-providers';
 
@@ -28,6 +29,7 @@ interface TermsPageClientProps {
 }
 
 export function TermsPageClient({ merchant, content }: TermsPageClientProps) {
+  const basePath = useMerchantSafe()?.basePath ?? `/${merchant.slug}`;
   return (
     <ContentPageProviders merchant={merchant}>
       <div className="flex flex-col min-h-screen">
@@ -102,11 +104,11 @@ export function TermsPageClient({ merchant, content }: TermsPageClientProps) {
                   </h2>
                   <p className="mt-2 text-muted-foreground">
                     See our{' '}
-                    <a className="underline" href="/returns">
+                    <a className="underline" href={`${basePath}/returns`}>
                       return policy
                     </a>{' '}
                     for help with a fault after delivery and our{' '}
-                    <a className="underline" href="/warranty">
+                    <a className="underline" href={`${basePath}/warranty`}>
                       warranty page
                     </a>{' '}
                     for device coverage and Ogabassey Assurance. These store

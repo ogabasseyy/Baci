@@ -25,7 +25,7 @@ export async function fetchBlackFridayProducts(signal?: AbortSignal) {
 export function useBlackFriday() {
   return useQuery({
     queryKey: [
-      'ogabassey',
+      CONFIG.MERCHANT_SLUG,
       'black-friday',
       __DEV__ ? process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN : undefined,
     ],

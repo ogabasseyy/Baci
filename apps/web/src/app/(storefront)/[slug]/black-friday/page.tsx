@@ -3,8 +3,12 @@ import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { OgabasseyBlackFridayPage } from '@/app/(storefront)/ogabassey/ogabassey-black-friday-page';
+import { IS_BLACK_FRIDAY_PREVIEW } from '@/config/ogabassey-black-friday';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
-import { isPublishedOgabassey } from '@/lib/ogabassey-black-friday';
+import {
+  getBlackFridayProducts,
+  isPublishedOgabassey,
+} from '@/lib/ogabassey-black-friday';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { isDomainIdentifier } from '@/lib/validation';
@@ -36,6 +40,9 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
     return generateCategoryMetadata(asCategoryProps(props));
   }
 
+  const products = IS_BLACK_FRIDAY_PREVIEW
+    ? []
+    : await getBlackFridayProducts().catch(() => []);
   const canonical = `${buildRequestScopedStoreUrl(merchant, await headers())}/black-friday`;
   const title = 'Black Friday 2026 | Ogabassey';
   const description =
@@ -44,7 +51,7 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
     title,
     description,
     alternates: { canonical },
-    robots: { index: false, follow: true },
+    robots: { index: products.length > 0, follow: true },
     openGraph: {
       title,
       description,

@@ -65,10 +65,9 @@ export default function CategoryScreen() {
   // H10 FIX: Resolve category slug to UUID since Supabase query uses category_id
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
-  const budgetPhones = slug === 'phones' && sort === 'price_asc';
   const categoryId =
     categories.find((category) => category.slug === slug)?.id ??
-    (budgetPhones
+    (slug === 'phones'
       ? categories.find((category) =>
           ['smartphones', 'mobile-phones'].includes(category.slug)
         )?.id

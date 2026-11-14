@@ -11,6 +11,7 @@ import {
   mockStorefrontInsetsModule,
   mockStorefrontScreenShell,
   mockStorefrontScreenShellModule,
+  mockUseCategories,
   mockUseLocalSearchParams,
   mockUseProducts,
   setProductsState,
@@ -70,6 +71,27 @@ describe('CategoryScreen', () => {
       expect.objectContaining({ enabled: false })
     );
     expect(screen.getByText('Invalid Category')).toBeTruthy();
+  });
+
+  it('resolves the phones alias when sorted by newest', () => {
+    mockUseLocalSearchParams.mockReturnValue({
+      slug: 'phones',
+      sort: 'newest',
+    });
+    mockUseCategories.mockReturnValue({
+      data: [{ id: 'smartphone-category', slug: 'smartphones' }],
+      isLoading: false,
+    });
+
+    render(<CategoryScreen />);
+
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'smartphone-category',
+        enabled: true,
+        sortBy: 'newest',
+      })
+    );
   });
 
   it('renders the loading state while category products are being fetched', () => {

@@ -9,7 +9,7 @@ import {
 import type React from 'react';
 import { registerRootLayoutPendingSplashRecoveryTest } from './root-layout-pending-splash-recovery-test-cases';
 
-interface SplashRecoveryTestContext {
+export interface SplashRecoveryTestContext {
   RootLayout: React.ComponentType;
   authState: { isInitialized: boolean };
   initializeStorage: jest.Mock<() => Promise<void>>;
@@ -271,39 +271,6 @@ export function registerRootLayoutSplashRecoveryTests({
     );
     expect(rootLayoutNavMount).toHaveBeenCalledTimes(1);
     expect(rootLayoutNavUnmount).not.toHaveBeenCalled();
-  });
-
-  it('does not replay the animated splash after a completed boot remount', async () => {
-    initializeStorage.mockResolvedValue(undefined);
-
-    const firstRender = render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
-      );
-    });
-
-    await finishNativeSplash();
-
-    await waitFor(() => {
-      expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
-        enabled: true,
-      });
-    });
-    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:true;persistence:true;resume:true'
-    );
-
-    firstRender.unmount();
-    render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:true;resume:true'
-      );
-    });
-    expect(hideSplash).toHaveBeenCalledTimes(1);
   });
 
   registerRootLayoutPendingSplashRecoveryTest({

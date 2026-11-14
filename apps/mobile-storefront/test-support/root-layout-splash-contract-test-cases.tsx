@@ -1,6 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import type React from 'react';
+import { registerRootLayoutSplashRemountTests } from './root-layout-splash-remount-test-cases';
 
 interface SplashContractTestContext {
   RootLayout: React.ComponentType;
@@ -54,5 +55,12 @@ export function registerRootLayoutSplashContractTests({
         navigationReady: true,
       })
     );
+  });
+
+  registerRootLayoutSplashRemountTests({
+    RootLayout,
+    initializeStorage,
+    hideSplash,
+    finishNativeSplash,
   });
 }

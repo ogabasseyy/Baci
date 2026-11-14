@@ -181,18 +181,21 @@ describe('deliverPaidImeiLookup', () => {
         claimToken: 'tok-1',
       })),
     });
-    await deliverPaidImeiLookup(
-      {
-        ...base,
-        lookup: {
-          ...lookup,
-          status: 'completed',
-          cached_response: { status: 'complete' } as never,
-          cached_status: 200,
+    // Refused like every other branch (Muse), never served as its result.
+    await expect(
+      deliverPaidImeiLookup(
+        {
+          ...base,
+          lookup: {
+            ...lookup,
+            status: 'completed',
+            cached_response: { status: 'complete' } as never,
+            cached_status: 200,
+          },
         },
-      },
-      d
-    );
+        d
+      )
+    ).rejects.toBeInstanceOf(WalletPaymentMismatchError);
     expect(d.finish).not.toHaveBeenCalled();
   });
 

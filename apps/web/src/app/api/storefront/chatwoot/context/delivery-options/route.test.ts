@@ -259,6 +259,42 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
     );
   });
 
+  it('accepts legacy quote RPCs without explicit currency projections', async () => {
+    mocks.loadPublicMerchantRates.mockResolvedValueOnce({
+      quotes: [
+        {
+          provider: 'MERCHANT',
+          displayName: 'Store pickup',
+          price: 0,
+          currency: 'NGN',
+          isStationPickup: true,
+          stationName: 'Ikeja collection point',
+          stationAddress: 'Ikeja, Lagos',
+        },
+      ],
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+  });
+
+  it('preserves authorization errors during the post-rate session recheck', async () => {
+    mocks.verifyChatwootSessionCapability
+      .mockResolvedValueOnce({
+        conversationId: 905,
+        sessionExpiresAt: 1_799_000_000,
+      })
+      .mockRejectedValueOnce(
+        new mocks.ChatwootCommerceContextError('invalid_session')
+      );
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'invalid_session' });
+  });
+
   it('rejects stale carts before reading merchant rates', async () => {
     mocks.readCartJsonBody.mockResolvedValueOnce({
       ok: true,

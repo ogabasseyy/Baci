@@ -58,29 +58,28 @@ describe('projectChatwootDeliveryOptions', () => {
     expect(JSON.stringify(result)).not.toContain('pricingVersion');
   });
 
-  it('refuses carrier quotes, currency mismatch, and precision the customer display cannot represent', () => {
+  it('filters invalid quotes while preserving any valid merchant options', () => {
     const input = {
       state: 'Lagos',
       cartVersion: 4,
       currency: 'NGN',
       subtotalMinor: 250_000,
     };
+    const mixed = projectChatwootDeliveryOptions({
+      ...input,
+      quotes: [{ ...baseQuote, provider: 'GIGL' as const }, baseQuote],
+    });
+    expect(mixed?.options).toHaveLength(1);
     expect(
       projectChatwootDeliveryOptions({
         ...input,
-        quotes: [{ ...baseQuote, provider: 'GIGL' as const }],
+        quotes: [{ ...baseQuote, price: 1.001 }],
       })
     ).toBeNull();
     expect(
       projectChatwootDeliveryOptions({
         ...input,
         quotes: [{ ...baseQuote, currency: 'USD' }],
-      })
-    ).toBeNull();
-    expect(
-      projectChatwootDeliveryOptions({
-        ...input,
-        quotes: [{ ...baseQuote, price: 1.001 }],
       })
     ).toBeNull();
   });

@@ -32,6 +32,7 @@ export function projectChatwootDeliveryOptions(input: {
   }
 
   const options: ChatwootDeliveryOptionsResponse['options'] = [];
+  let droppedInvalidQuote = false;
   for (const quote of input.quotes) {
     const displayName = boundedText(quote.displayName, 120);
     if (
@@ -42,7 +43,8 @@ export function projectChatwootDeliveryOptions(input: {
       !isMajorAmountRepresentable(quote.price, input.currency) ||
       quote.currency.trim().toUpperCase() !== input.currency
     ) {
-      return null;
+      droppedInvalidQuote = true;
+      continue;
     }
 
     const pickupLocation = quote.isStationPickup
@@ -71,6 +73,8 @@ export function projectChatwootDeliveryOptions(input: {
       ...(pickupInstructions ? { pickupInstructions } : {}),
     });
   }
+
+  if (droppedInvalidQuote && options.length === 0) return null;
 
   return {
     state: input.state,

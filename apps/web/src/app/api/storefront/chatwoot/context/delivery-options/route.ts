@@ -108,7 +108,8 @@ export async function POST(request: NextRequest) {
     return unavailable(503, 'rate_lookup_unavailable');
   }
   if (
-    merchantRates.resolvedCurrency !== 'NGN' ||
+    (merchantRates.resolvedCurrency !== undefined &&
+      merchantRates.resolvedCurrency !== 'NGN') ||
     (merchantRates.resolvedCountry && merchantRates.resolvedCountry !== 'NG')
   ) {
     return unavailable(409, 'merchant_rate_context_unavailable');
@@ -128,7 +129,13 @@ export async function POST(request: NextRequest) {
     if (verifiedSession.conversationId !== parsed.data.conversationId) {
       return unavailable(403, 'invalid_session');
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ChatwootCommerceContextError) {
+      return unavailable(
+        error.code === 'invalid_config' ? 503 : 403,
+        error.code
+      );
+    }
     return unavailable(409, 'cart_changed');
   }
   if (

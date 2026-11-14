@@ -23,7 +23,10 @@ import { BlogPostBody } from './BlogPostBody';
 import { BlogPostBodyFallback } from './BlogPostBodyFallback';
 import { buildCanonicalBlogPostUrl } from './blog-post-content';
 import { BlogPostShell } from './blog-post-shell';
-import { buildBlogPostStructuredData } from './blog-post-structured-data';
+import {
+  buildBlogPostStructuredData,
+  isOrganizationBlogAuthor,
+} from './blog-post-structured-data';
 import { getResolvedBlogPost } from './get-resolved-blog-post';
 import { ViewCounter } from './view-counter';
 
@@ -107,10 +110,12 @@ async function renderBlogPostContent({
   const hasAuthorHub = Boolean(
     post.author_name && hasBlogAuthorPage(post.author_name, merchant.slug)
   );
-  const isOrganizationAuthor =
-    !post.author_name?.trim() ||
-    (!hasAuthorHub &&
-      authorName.toLowerCase() === merchant.business_name.trim().toLowerCase());
+  const isOrganizationAuthor = isOrganizationBlogAuthor({
+    authorName,
+    hasAuthorHub,
+    merchantBusinessName: merchant.business_name,
+    postAuthorName: post.author_name,
+  });
   const authorSlug =
     hasAuthorHub && post.author_name ? generateSlug(post.author_name) : null;
   const authorHref = authorSlug

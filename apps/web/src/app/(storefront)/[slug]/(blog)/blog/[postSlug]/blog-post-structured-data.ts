@@ -1,4 +1,4 @@
-import { getBlogAuthorSameAs } from '@/lib/blog-authors';
+import { getBlogAuthorSameAs, hasBlogAuthorPage } from '@/lib/blog-authors';
 import {
   extractBlogFaqItems,
   generateFaqPageSchema,
@@ -66,6 +66,27 @@ type BlogPostStructuredDataInput = {
   postUrl: string;
 };
 
+export function isOrganizationBlogAuthor({
+  authorName,
+  hasAuthorHub,
+  merchantBusinessName,
+  postAuthorName,
+}: {
+  authorName: string;
+  hasAuthorHub: boolean;
+  merchantBusinessName: string;
+  postAuthorName?: string | null;
+}): boolean {
+  if (!postAuthorName?.trim()) {
+    return true;
+  }
+  return (
+    !hasAuthorHub &&
+    authorName.trim().toLowerCase() ===
+      merchantBusinessName.trim().toLowerCase()
+  );
+}
+
 export function buildBlogPostStructuredData({
   catalogPrices,
   author,
@@ -97,11 +118,18 @@ export function buildBlogPostStructuredData({
     post.seo_description || post.excerpt || getBlogPostTextPreview(post.content)
   );
   const title = post.seo_title || post.title;
+  const hasAuthorHub = Boolean(
+    post.author_name?.trim() &&
+      hasBlogAuthorPage(post.author_name, merchant.slug)
+  );
   const isOrganizationAuthor = author.type
     ? author.type === 'Organization'
-    : !post.author_name?.trim() ||
-      author.name.trim().toLowerCase() ===
-        merchant.business_name.trim().toLowerCase();
+    : isOrganizationBlogAuthor({
+        authorName: author.name,
+        hasAuthorHub,
+        merchantBusinessName: merchant.business_name,
+        postAuthorName: post.author_name,
+      });
   const videoMetadata = buildBlogVideoMetadata({
     authorName: author.name,
     authorType: isOrganizationAuthor ? 'Organization' : 'Person',

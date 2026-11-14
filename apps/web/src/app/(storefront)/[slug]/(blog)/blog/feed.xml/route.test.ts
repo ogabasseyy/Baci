@@ -101,4 +101,76 @@ describe('GET /[slug]/blog/feed.xml', () => {
     expect(response.status).toBe(503);
     expect(mockGetMerchantBlogFeed).not.toHaveBeenCalled();
   });
+
+  it('rewrites an existing atom:link rel="self" to the storefront canonical /blog/feed.xml URL', async () => {
+    mockResolveStorefrontSitemapContext.mockResolvedValue({
+      status: 'found',
+      context: {
+        merchant: {
+          slug: 'ogabassey',
+          feature_settings: { blog_enabled: true },
+        },
+        storeUrl: 'https://ogabassey.com',
+      },
+    });
+    mockGetMerchantBlogFeed.mockResolvedValue(
+      new NextResponse(
+        '<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><atom:link href="https://ogabassey.com/api/blog/feed/ogabassey" rel="self" type="application/rss+xml"/><title>Ogabassey Blog</title></channel></rss>',
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/rss+xml; charset=utf-8',
+            'content-length': '250',
+          },
+        }
+      )
+    );
+
+    const response = await GET(
+      new NextRequest('https://ogabassey.com/blog/feed.xml'),
+      { params: Promise.resolve({ slug: 'ogabassey.com' }) }
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain(
+      '<atom:link href="https://ogabassey.com/blog/feed.xml" rel="self" type="application/rss+xml"/>'
+    );
+    expect(body).not.toContain('/api/blog/feed/ogabassey');
+    expect(response.headers.get('content-length')).toBeNull();
+  });
+
+  it('injects xmlns:atom and canonical atom:link self-link when missing from delegated RSS XML', async () => {
+    mockResolveStorefrontSitemapContext.mockResolvedValue({
+      status: 'found',
+      context: {
+        merchant: {
+          slug: 'ogabassey',
+          feature_settings: { blog_enabled: true },
+        },
+        storeUrl: 'https://ogabassey.com',
+      },
+    });
+    mockGetMerchantBlogFeed.mockResolvedValue(
+      new NextResponse(
+        '<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel><title>Ogabassey Blog</title></channel></rss>',
+        {
+          status: 200,
+          headers: { 'content-type': 'application/rss+xml; charset=utf-8' },
+        }
+      )
+    );
+
+    const response = await GET(
+      new NextRequest('https://ogabassey.com/blog/feed.xml'),
+      { params: Promise.resolve({ slug: 'ogabassey.com' }) }
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('xmlns:atom="http://www.w3.org/2005/Atom"');
+    expect(body).toContain(
+      '<atom:link href="https://ogabassey.com/blog/feed.xml" rel="self" type="application/rss+xml"/>'
+    );
+  });
 });

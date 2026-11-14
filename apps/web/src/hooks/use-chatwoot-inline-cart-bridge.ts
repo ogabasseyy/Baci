@@ -8,6 +8,7 @@ import { readChatwootCommerceMessage } from '@/components/storefront/ogabassey/c
 import { handleChatwootInlineCartAdd } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-add';
 import { postChatwootCanonicalCartView } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-controls';
 import { handleChatwootInlineCartQuantity } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-quantity';
+import { handleChatwootInlineProductLookup } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-product-lookup';
 import { buildChatwootInlineReviewResponse } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-review-response';
 import { useCart } from '@/hooks/cart';
 import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
@@ -127,6 +128,7 @@ export function useChatwootInlineCartBridge(
         (message.event !== 'baci-cart-request' &&
           message.event !== 'baci-cart-add' &&
           message.event !== 'baci-cart-quantity' &&
+          message.event !== 'baci-product-request' &&
           message.event !== 'baci-checkout-review-request')
       ) {
         return;
@@ -222,6 +224,23 @@ export function useChatwootInlineCartBridge(
           snapshot: authorized.snapshot,
           lineTokens,
           post: (payload) => actionTarget.postMessage(payload, widgetOrigin),
+        });
+        return;
+      }
+      if (message.event === 'baci-product-request') {
+        await handleChatwootInlineProductLookup({
+          conversationId,
+          isCurrentAction: () =>
+            isCurrentTarget(frame, actionTarget, conversationId) &&
+            actionGeneration === latestActionGeneration &&
+            sessionTokenAliases.has(messageSessionToken) &&
+            sessionExpiresAt > Date.now() &&
+            latestState.current.merchantSlug === requestedMerchantSlug,
+          post: (prefix, value) => post(actionTarget, prefix, value),
+          requestId,
+          sessionToken: actionSessionToken,
+          slug: message.data.slug,
+          storeSlug,
         });
         return;
       }

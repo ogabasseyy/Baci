@@ -173,8 +173,9 @@ export function ChatwootWidget({
         });
         const initializedWidget = getCurrentWidget();
         if (
-          initializedWidget?.websiteToken !== websiteToken ||
-          initializedWidget?.baseUrl !== platformOrigin
+          initializedWidget &&
+          (initializedWidget.websiteToken !== websiteToken ||
+            initializedWidget.baseUrl !== platformOrigin)
         ) {
           widgetWindow.__baciChatwootRunStarted = false;
           widgetWindow.__baciChatwootConfigKey = undefined;

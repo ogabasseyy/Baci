@@ -32,6 +32,7 @@ export function getStorefrontChatwootWidgetConfig(
     };
   } catch (error) {
     if (error instanceof ChatwootCommerceContextError) return null;
+    console.warn('Unexpected storefront Chatwoot widget config failure');
     return null;
   }
 }

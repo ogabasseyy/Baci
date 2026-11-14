@@ -1,5 +1,11 @@
 // @vitest-environment-options {"url":"https://shop.example.com"}
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatwootWidget, useChatwootSupportActive } from './chatwoot-widget';
 
@@ -110,6 +116,49 @@ describe('ChatwootWidget', () => {
       widgetOrigin: config.platformOrigin,
     });
     expect(screen.getByTestId('support-active')).toHaveTextContent('true');
+  });
+
+  it('waits for an asynchronously initialized SDK global before accepting ready', async () => {
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      queueMicrotask(() => {
+        (
+          window as Window & {
+            $chatwoot?: { websiteToken: string; baseUrl: string };
+          }
+        ).$chatwoot = { websiteToken, baseUrl };
+      });
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+
+    render(
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+
+    expect(run).toHaveBeenCalledOnce();
+    expect(
+      (window as Window & { __baciChatwootRunStarted?: boolean })
+        .__baciChatwootRunStarted
+    ).toBe(true);
+    expect(screen.getByTestId('support-active')).toHaveTextContent('false');
+    await waitFor(() => {
+      expect(
+        (window as Window & { $chatwoot?: { websiteToken?: string } }).$chatwoot
+          ?.websiteToken
+      ).toBe(config.websiteToken);
+    });
+
+    fireEvent(window, new Event('chatwoot:ready'));
+
+    expect(screen.getByTestId('support-active')).toHaveTextContent('true');
+    expect(mocks.bridge).toHaveBeenCalledWith({
+      storeSlug: config.storeSlug,
+      widgetOrigin: config.platformOrigin,
+    });
   });
 
   it('does not load a tenant widget on a different browser origin', () => {

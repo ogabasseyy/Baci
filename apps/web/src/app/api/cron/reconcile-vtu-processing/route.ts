@@ -4,6 +4,7 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
+import { recoverWalletPaidVtuPurchases } from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
 
 export const maxDuration = 300;
 
@@ -38,17 +39,30 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const supabase = createAdminClient();
     const summary = await reconcileProcessingVtuTransactions({
       deadlineMs: invocationStartedAt + maxDuration * 1000,
-      supabase: createAdminClient(),
+      supabase,
     });
+    // Purchases paid from the PiggyVest wallet whose vend was interrupted:
+    // re-driven here under the payment's delivery claim (never throws).
+    const walletPay = await recoverWalletPaidVtuPurchases({
+      supabase,
+      deadlineMs: invocationStartedAt + maxDuration * 1000,
+    });
+    if (walletPay.errored > 0) {
+      logger.warn({
+        message: 'PiggyVest-paid VTU recovery completed with errors',
+        walletPay,
+      });
+    }
     if (summary.errored > 0) {
       logger.warn({
         message: 'Processing VTU reconciliation cron completed with errors',
         summary,
       });
     }
-    return NextResponse.json(summary);
+    return NextResponse.json({ ...summary, walletPay });
   } catch (error) {
     logger.error({
       message: 'Processing VTU reconciliation cron failed',

@@ -6,6 +6,10 @@ import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { primaryDbLink } from './primary-db-link';
+import {
+  WALLET_PAY_CUSTOMER_STATEMENTS as walletPay,
+  WALLET_PAY_WORKER_STATEMENTS as walletPayWorker,
+} from './wallet-pay-statements';
 
 const reserve =
   'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result';
@@ -47,6 +51,24 @@ const parameterCounts = new Map<string, number>([
   [GOAL_COMPLETE_STATEMENTS.manage, 4],
   [GOAL_COMPLETE_STATEMENTS.status, 2],
   [GOAL_COMPLETE_STATEMENTS.checkIssued, 3],
+  [walletPay.issue, 2],
+  [walletPay.readIssued, 2],
+  [walletPay.reserve, 3],
+  [walletPay.manage, 3],
+  [walletPay.status, 2],
+  [walletPay.forPurchase, 2],
+  [walletPay.attempted, 2],
+]);
+// Wallet pay worker statements: no customer scope; the first two parameters
+// are the configured integration id and environment.
+const workerParameterCounts = new Map<string, number>([
+  [walletPayWorker.claim, 3],
+  [walletPayWorker.finish, 5],
+  [walletPayWorker.readOwedRefund, 3],
+  [walletPayWorker.manageRefund, 4],
+  [walletPayWorker.work, 3],
+  [walletPayWorker.releaseStale, 3],
+  [walletPayWorker.imeiDelivered, 3],
 ]);
 // The goal cancel forfeit sweep (integration id, environment, selection).
 const workerStatements = new Set<string>([
@@ -73,17 +95,20 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
     statement: string,
     parameters: readonly string[]
   ): Promise<{ rows: unknown }> => {
+    const worker = workerParameterCounts.has(statement);
     if (
-      parameterCounts.get(statement) !== parameters.length ||
+      (worker
+        ? workerParameterCounts.get(statement)
+        : parameterCounts.get(statement)) !== parameters.length ||
       parameters.some(
         (parameter) => typeof parameter !== 'string' || parameter.length > 8192
       )
     )
       throw new Error('Savings statement unavailable');
-    if (workerStatements.has(statement)) {
-      // Worker statements carry no customer scope: they are bound to this
-      // integration and environment, and the database checks the login's
-      // savings authority for it.
+    if (worker || workerStatements.has(statement)) {
+      // Worker statements (wallet pay, goal cancel forfeit sweep) carry no
+      // customer scope: they are bound to this integration and environment,
+      // and the database checks the login's authority for it.
       if (
         parameters[0] !== config.integrationId ||
         parameters[1] !== config.environment

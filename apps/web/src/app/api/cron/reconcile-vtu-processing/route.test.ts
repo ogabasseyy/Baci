@@ -20,10 +20,20 @@ vi.mock('@/lib/vtu-processing-reconciliation', () => ({
   reconcileProcessingVtuTransactions: vi.fn(),
 }));
 
+vi.mock('@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases', () => ({
+  recoverWalletPaidVtuPurchases: vi.fn(async () => ({
+    checked: 0,
+    recovered: 0,
+    errored: 0,
+    deferred: 0,
+  })),
+}));
+
 import { getCronSecret } from '@/env';
 import { logger } from '@/lib/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
+import { recoverWalletPaidVtuPurchases } from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
 import { GET, maxDuration } from './route';
 
 function createCronRequest(auth = 'Bearer cron-secret') {
@@ -80,11 +90,42 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
       failed: 0,
       processing: 1,
       successful: 1,
+      walletPay: { checked: 0, recovered: 0, errored: 0, deferred: 0 },
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(reconcileProcessingVtuTransactions).toHaveBeenCalledWith({
       deadlineMs: expect.any(Number),
       supabase: { admin: true },
+    });
+  });
+
+  it('bugfix: re-drives interrupted PiggyVest-paid purchases with the same client, after reconciliation (Codex P1)', async () => {
+    vi.mocked(reconcileProcessingVtuTransactions).mockResolvedValue({
+      checked: 0,
+      errored: 0,
+      errors: [],
+      failed: 0,
+      processing: 0,
+      successful: 0,
+    });
+    vi.mocked(recoverWalletPaidVtuPurchases).mockResolvedValueOnce({
+      checked: 1,
+      recovered: 0,
+      errored: 1,
+      deferred: 0,
+    });
+
+    const response = await GET(createCronRequest());
+
+    expect(response.status).toBe(200);
+    expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith({
+      supabase: { admin: true },
+      deadlineMs: expect.any(Number),
+    });
+    expect(createAdminClient).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith({
+      message: 'PiggyVest-paid VTU recovery completed with errors',
+      walletPay: { checked: 1, recovered: 0, errored: 1, deferred: 0 },
     });
   });
 

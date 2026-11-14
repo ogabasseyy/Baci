@@ -149,11 +149,20 @@ describe('GET piggyvest wallet activity', () => {
     });
   });
 
-  it('returns 500 rather than passing through an unexpected row shape', async () => {
+  it('never passes through an unexpected row shape: the row is left out, the page still loads (Muse)', async () => {
     mocks.rpc.mockResolvedValue({
-      data: [{ ...row(1), provider_transaction_id: 'secret' }],
+      data: [row(2), { ...row(1), provider_transaction_id: 'secret' }],
       error: null,
     });
+    const response = await GET(request(`merchantId=${merchantId}`));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.items).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toContain('secret');
+  });
+
+  it('returns 500 when the reply is not a list of rows', async () => {
+    mocks.rpc.mockResolvedValue({ data: { rows: [] }, error: null });
     const response = await GET(request(`merchantId=${merchantId}`));
     expect(response.status).toBe(500);
   });

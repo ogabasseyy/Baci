@@ -48,9 +48,15 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => '11111111-1111-4111-8111-111111111111'),
+  // Every verify tap first looks for a kept PiggyVest attempt by hash.
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    `sha256(${value.length})`,
 }));
 
 jest.mock('expo-router', () => ({
+  // The pay sheet closes when the screen loses focus.
+  useNavigation: () => ({ addListener: () => () => undefined }),
   router: { back: jest.fn(), push: jest.fn() },
   Stack: {
     Screen: () => null,
@@ -95,16 +101,25 @@ jest.mock('@/hooks/use-wallet', () => ({
   }),
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      customer: { id: 'customer-1' },
-      merchantId: 'merchant-1',
-      session: { access_token: 'token-123' },
-    }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const state = {
+    customer: { id: 'customer-1' },
+    merchantId: 'merchant-1',
+    session: { access_token: 'token-123' },
+  };
+  const useAuthStore = (selector: (s: unknown) => unknown) => selector(state);
+  useAuthStore.getState = () => state;
+  return { useAuthStore };
+});
 
 import ImeiCheckerScreen from '@/app/imei-check';
+
+// Nothing is preselected (Fable walks 15/16), so these flows pick Full
+// Report first, as a customer would.
+function renderChoosingFullReport() {
+  render(<ImeiCheckerScreen />);
+  fireEvent.press(screen.getByText('Full Report'));
+}
 
 // merchant-1 stands in for the Ogabassey pilot: owner decision 2026-11-13,
 // PiggyVest (and its unknown-verdict holds) is only for that merchant.
@@ -120,7 +135,7 @@ jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
 
 describe('IMEI screen with the server keeping PiggyVest off', () => {
   it('shows the wallet balance and wallet top-up as today', () => {
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     expect(screen.getByLabelText('Wallet balance ₦0')).toBeOnTheScreen();
     expect(screen.queryByText(/store credit/i)).toBeNull();
@@ -140,7 +155,7 @@ describe('bugfix: ₦5,000 PiggyVest customer told they can pay for a check', ()
     mockPrimaryBalanceKobo = 500_000;
     mockWalletBalance = 0;
 
-    render(<ImeiCheckerScreen />);
+    renderChoosingFullReport();
 
     // Assert: the check is paid from store credit only.
     expect(screen.getByLabelText('Store credit ₦0')).toBeOnTheScreen();
@@ -148,6 +163,8 @@ describe('bugfix: ₦5,000 PiggyVest customer told they can pay for a check', ()
 
     // Act: the top-up returns here, so the wallet opens "Add store credit".
     fireEvent.press(screen.getByText('Add store credit'));
+    // Paying from the PiggyVest wallet stays switched off: no pay sheet.
+    expect(screen.queryByText('Pay from PiggyVest')).toBeNull();
     expect(router.push).toHaveBeenCalledWith(
       expect.stringMatching(
         /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=%2Fimei-check$/

@@ -20,6 +20,9 @@ export const piggyvestWalletActivityRowSchema = z.strictObject({
     'savings_contribution',
     'goal_refund',
     'goal_completed',
+    // Paid from the wallet (IMEI checks, airtime/data/bills) and refunds.
+    'wallet_spend',
+    'wallet_refund',
   ]),
   direction: z.enum(['in', 'out']),
   /** What reached the wallet: deposits are net of PiggyVest's fee. */

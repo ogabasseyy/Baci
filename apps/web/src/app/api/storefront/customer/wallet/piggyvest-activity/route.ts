@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { parseWalletActivityRows } from '@/lib/piggyvest/parse-wallet-activity-rows';
 import { isPiggyvestFeatureFlagSet } from '@/lib/piggyvest/piggyvest-feature-on';
 import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
@@ -9,10 +9,7 @@ import {
   readPrimaryWalletRuntimeDrain,
 } from '@/lib/piggyvest/primary-wallet-runtime';
 import { walletActivityCursor } from '@/lib/piggyvest/wallet-activity-cursor';
-import {
-  piggyvestWalletActivityQuerySchema,
-  piggyvestWalletActivityRowSchema,
-} from '@/schemas/piggyvest-wallet-activity';
+import { piggyvestWalletActivityQuerySchema } from '@/schemas/piggyvest-wallet-activity';
 
 const fail = (error: string, code: string, status: number) =>
   NextResponse.json({ error, code }, { status });
@@ -75,8 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     );
     if (error) throw error;
-    const rows = z.array(piggyvestWalletActivityRowSchema).parse(data ?? []);
-    const last = rows.at(-1);
+    const { rows, last, count } = parseWalletActivityRows(data);
     return NextResponse.json(
       {
         items: rows.map((row) => ({
@@ -90,7 +86,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           occurredAt: row.occurred_at,
         })),
         nextCursor:
-          last && rows.length === parsed.data.limit
+          last && count === parsed.data.limit
             ? walletActivityCursor.encode(last)
             : null,
       },

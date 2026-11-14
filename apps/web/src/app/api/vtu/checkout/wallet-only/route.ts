@@ -3,7 +3,6 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
-import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
 import {
   admitVtuClaim,
   VtuAdmissionError,
@@ -12,6 +11,7 @@ import {
 import { fulfillJoinedVtuClaim } from '@/lib/vtu-claim-join';
 import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
 import { respondToClaimError } from '@/lib/vtu-claim-rejection';
+import { refuseForeignOrChangedReplay } from '@/lib/vtu-existing-key-guard';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import type { ExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
@@ -19,6 +19,10 @@ import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
+import {
+  createVtuWalletPayFulfiller,
+  refuseUnavailableWalletPayStart,
+} from '@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller';
 
 /**
  * SERVICE-ROLE BOUNDARY (owner-approved narrow exception, PR #3655,
@@ -102,6 +106,12 @@ export async function POST(request: NextRequest) {
     // own tenant isolation here.
     const userSupabase = auth.supabase;
     const adminSupabase = createAdminClient();
+    // Pay from the PiggyVest wallet (dark): replaces "fulfil now" below.
+    const walletPay = createVtuWalletPayFulfiller({
+      charge: input,
+      auth: { supabase: auth.supabase, user: auth.user },
+      fulfillSupabase: adminSupabase,
+    });
     // Admission (Codex R3 P1, R4 P1): key lookup + atomic DB
     // admission proof (stamp + live-scope snapshot) for the claim
     // overlap fence. No proof → fail closed BEFORE preparing
@@ -139,35 +149,14 @@ export async function POST(request: NextRequest) {
     // payload-fingerprint guard (changed intent → 409, else we would
     // charge the wrong recipient/amount).
     if (existing) {
-      const requestingOwnership = await resolveRequestingOwnership(
-        userSupabase,
-        auth.user,
-        input.merchantSlug
-      );
-      if (
-        !requestingOwnership.customerId ||
-        existing.customer_id !== requestingOwnership.customerId
-      ) {
-        return createErrorResponse(
-          'Idempotency-Key does not belong to this customer.',
-          400
-        );
-      }
-      if (
-        !requestingOwnership.merchantId ||
-        existing.merchant_id !== requestingOwnership.merchantId
-      ) {
-        return createErrorResponse(
-          'Idempotency-Key does not belong to this storefront.',
-          400
-        );
-      }
-      if (existing.request_fingerprint !== requestFingerprint) {
-        return createErrorResponse(
-          'Idempotency-Key already used with a different request payload. Generate a fresh key for the new purchase.',
-          409
-        );
-      }
+      const refused = await refuseForeignOrChangedReplay({
+        supabase: userSupabase,
+        user: auth.user,
+        merchantSlug: input.merchantSlug,
+        existing,
+        requestFingerprint,
+      });
+      if (refused) return refused;
       // Shared replay tail: binding → owner claim → overlay →
       // fulfill (Muse R128 extraction; guards above compare against
       // the requesting ownership). Service role reaches only the
@@ -178,9 +167,16 @@ export async function POST(request: NextRequest) {
         keyRow: existing,
         supabase: adminSupabase,
         user: auth.user,
+        fulfillTransaction: walletPay?.(
+          existing.merchant_id,
+          existing.customer_id
+        ),
       });
     }
 
+    // Wallet pay off: refuse a fresh PiggyVest purchase (replays recover above).
+    const walletPayOff = refuseUnavailableWalletPayStart(input);
+    if (walletPayOff) return walletPayOff;
     const prepared = await preparePendingVtuTransaction({
       supabase: userSupabase,
       // Service-role-only insert (Codex P1): the settlement
@@ -270,9 +266,18 @@ export async function POST(request: NextRequest) {
         claim,
         requestFingerprint,
         userId: auth.user.id,
+        fulfillTransaction: walletPay?.(
+          prepared.merchant.id,
+          prepared.customer.id
+        ),
       });
     }
 
+    if (walletPay)
+      return walletPay(
+        prepared.merchant.id,
+        prepared.customer.id
+      )(prepared.transaction.id);
     // Sole service-role use on this route (narrowed exception).
     const fulfillment = await fulfillPendingVtuTransaction({
       supabase: adminSupabase,

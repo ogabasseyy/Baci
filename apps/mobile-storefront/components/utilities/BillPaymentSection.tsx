@@ -3,7 +3,9 @@ import { billFormStyles as styles } from '@/components/utilities/bill-form-style
 import type Colors from '@/constants/Colors';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
+import { useRetainsPiggyvest } from './use-retains-piggyvest';
 import { sanitizeAmountInput } from './utility-amount-sanitize';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
@@ -17,6 +19,8 @@ interface BillPaymentSectionProps {
   payment: PaymentState;
   /** Prefilled bill deep-link the wallet returns to after a bank transfer. */
   returnToHref: WalletReturnHref;
+  /** The exact request the submit builds (its retry identity), or null. */
+  purchaseRequest?: VtuWalletPayRequest | null;
   setAmount: (value: string) => void;
 }
 
@@ -28,8 +32,15 @@ export function BillPaymentSection({
   numericAmount,
   payment,
   returnToHref,
+  purchaseRequest = null,
   setAmount,
 }: BillPaymentSectionProps) {
+  // A kept attempt replays on its own rail: store credit first, else
+  // PiggyVest (the submit decides the same way).
+  const retainedStoreCredit =
+    purchaseRequest !== null &&
+    payment.hasRetainedVtuAttempt?.({ ...purchaseRequest }) === true;
+  const retainedPiggyvest = useRetainsPiggyvest(purchaseRequest);
   return (
     <View onLayout={handlePaymentLayout}>
       <View style={styles.amountSection}>
@@ -71,6 +82,8 @@ export function BillPaymentSection({
         walletIsSettled={payment.isWalletSettled()}
         walletIsStoreCredit={payment.walletIsStoreCredit}
         walletPrimaryUnknown={payment.walletPrimaryUnknown}
+        retainedStoreCredit={retainedStoreCredit}
+        retainedPiggyvest={retainedPiggyvest}
       />
     </View>
   );

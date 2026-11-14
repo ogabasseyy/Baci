@@ -80,4 +80,28 @@ describe('web cron worker PiggyVest reconciliation', () => {
       'https://ogabassey.com/api/cron/piggyvest-goal-cancel-forfeit-sweep'
     );
   });
+
+  it('allows the PiggyVest wallet pay drain cron endpoint', async () => {
+    const calls = [];
+    const result = await runWebCron({
+      path: '/api/cron/piggyvest-wallet-pay-drain',
+      env: {
+        BACI_WEB_BASE_URL: 'https://ogabassey.com',
+        CRON_SECRET: 'secret',
+      },
+      fetchFn: (url, init) => {
+        calls.push({ url, init });
+        return new Response('ok', { status: 200 });
+      },
+      logger: noopLogger,
+    });
+
+    assert.deepEqual(result, { status: 200, body: 'ok' });
+    assert.equal(calls.length, 1);
+    assert.equal(
+      calls[0].url,
+      'https://ogabassey.com/api/cron/piggyvest-wallet-pay-drain'
+    );
+    assert.equal(calls[0].init.method, 'GET');
+  });
 });

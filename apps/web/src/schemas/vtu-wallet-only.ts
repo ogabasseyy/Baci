@@ -38,9 +38,35 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     // pin must match exactly — required would 400 every legacy
     // purchase on backend deploy. Never part of the fingerprint.
     expectedUserId: z.uuid().optional(),
+    // 'piggyvest_wallet' (dark): the purchase is paid from the PiggyVest
+    // main wallet with a PIN-confirmed payment instead of store credit. The
+    // first request issues the payment (nothing is charged); a replay with
+    // the same key carries the operation id and the single-use PIN proof
+    // (empty to check on a payment already sent). None of these fields is
+    // part of the fingerprint: they never change what is bought.
+    paymentMethod: z
+      .enum(['store_credit', 'piggyvest_wallet'])
+      .optional()
+      .default('store_credit'),
+    walletPayOperationId: z.uuid().optional(),
+    walletPayPinProof: z
+      .union([z.literal(''), z.string().regex(/^[0-9a-f]{64}$/)])
+      .optional(),
+    // The pay sheet closed before any PIN: release the issued payment.
+    walletPayCancel: z.literal(true).optional(),
   })
   .omit({ orderId: true, customerId: true })
-  .superRefine(applyPurchaseRequirements);
+  .superRefine(applyPurchaseRequirements)
+  // A cancel names the payment it releases: a bare cancel would otherwise
+  // run as a start and issue a payment nobody asked for (Muse).
+  .refine(
+    (input) =>
+      !input.walletPayCancel || input.walletPayOperationId !== undefined,
+    {
+      message: 'walletPayCancel needs walletPayOperationId',
+      path: ['walletPayCancel'],
+    }
+  );
 
 export type VtuWalletOnlyChargeInput = z.infer<
   typeof vtuWalletOnlyChargeSchema

@@ -40,6 +40,8 @@ import {
   throwVtuPersistenceError,
   VtuPersistenceError,
 } from '@/lib/vtu-persistence-error';
+import { piggyvestFulfilmentGate } from '@/lib/vtu-piggyvest-fulfilment-gate';
+import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 
 export { VtuPersistenceError };
 
@@ -2050,13 +2052,20 @@ async function executeVtuPurchase(
 }
 
 export async function fulfillPendingVtuTransaction({
-  retryFailed = false,
+  retryFailed: retryFailedRequested = false,
   supabase,
   transactionId,
+  walletPayClaimed = false,
 }: {
   retryFailed?: boolean;
   supabase: SupabaseClient;
   transactionId: string;
+  /**
+   * The caller holds the delivery claim of this row's confirmed PiggyVest
+   * payment (vtu-piggyvest-wallet-paid). Only then may a PiggyVest-paid
+   * row be vended.
+   */
+  walletPayClaimed?: boolean;
 }): Promise<FulfilledVtuResult> {
   const { data: existing, error: existingError } = await supabase
     .from('vtu_transactions')
@@ -2071,9 +2080,16 @@ export async function fulfillPendingVtuTransaction({
   }
 
   const row = existing as VtuTransactionRow;
+  // PiggyVest-paid rows: the delivery-claim hold (vtu-piggyvest-fulfilment-gate).
+  const { retryFailed, hold } = piggyvestFulfilmentGate(row, {
+    walletPayClaimed,
+    retryFailedRequested,
+  });
   if (row.status === 'successful') {
     return resolveSuccessfulVtuTransaction({ row, supabase });
   }
+
+  if (hold) return hold;
 
   if (row.status === 'failed' && !retryFailed) {
     // Existing failed row — issue (or confirm) the wallet refund so the
@@ -2385,7 +2401,9 @@ export async function fulfillPendingVtuTransaction({
     paymentSplitForDebit.wallet > 0 &&
     preDebitMetadata.walletDebited !== true &&
     row.customer_id &&
-    row.source === 'checkout'
+    row.source === 'checkout' &&
+    // Paid by the confirmed PiggyVest payment, never by store credit.
+    !isPiggyvestWalletPaid(preDebitMetadata)
   ) {
     const { error: debitError } = await supabase.rpc(
       'redeem_vtu_wallet_payment',

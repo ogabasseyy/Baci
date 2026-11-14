@@ -266,7 +266,7 @@ export function ImeiCheckFormView({
                           : needsTopUp
                             ? walletCopy.topUpButton
                             : paysFromPiggyvest
-                              ? `Pay ${formatServicePrice(currentTier.price)} from PiggyVest`
+                              ? `Pay ${formatServicePrice(currentTier.price)} from savings`
                               : `Verify Now - ${formatServicePrice(currentTier.price)}`}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />

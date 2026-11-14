@@ -11,6 +11,7 @@ export const GIGL_TRACKING_NOTIFICATION_KINDS = [
   'pickup_delayed',
   'picked_up',
   'transit_started',
+  'arrived_in_city',
   'out_for_delivery',
   'delivered',
   'delivery_attempt_failed',
@@ -23,6 +24,8 @@ export const GIGL_TRACKING_NOTIFICATION_KINDS = [
 ] as const;
 
 export const GIGL_PICKUP_EN_ROUTE_RAW_STATUS = 'RIDER EN ROUTE FOR PICKUP';
+/** Synthetic raw status for a parcel arriving at the destination centre/city. */
+export const GIGL_ARRIVED_IN_CITY_RAW_STATUS = 'ARRIVED IN DESTINATION CITY';
 /** GIG raw code for a delayed pickup; normalises to pickup_scheduled. */
 export const GIGL_PICKUP_DELAYED_RAW_STATUS = 'DLP';
 
@@ -68,6 +71,18 @@ export const GIGL_TRACKING_NOTIFICATION_POLICY_MATRIX = [
   {
     audience: 'customer',
     normalizedStatus: 'in_transit',
+    notificationKind: 'transit_started',
+  },
+  {
+    audience: 'customer',
+    rawStatus: GIGL_ARRIVED_IN_CITY_RAW_STATUS,
+    notificationKind: 'arrived_in_city',
+  },
+  {
+    // Raw policies override normalized ones, so an arrival that is the first
+    // in-transit signal must still send transit_started (deduped per shipment).
+    audience: 'customer',
+    rawStatus: GIGL_ARRIVED_IN_CITY_RAW_STATUS,
     notificationKind: 'transit_started',
   },
   {

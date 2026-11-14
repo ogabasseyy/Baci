@@ -45,6 +45,7 @@ const GIGL_STATUS_MAP: Readonly<Record<string, ShipmentTrackingStatus>> = {
   SRC: 'in_transit',
   DASH: 'in_transit',
   CLS: 'in_transit',
+  ARF: 'in_transit',
   MSHC: 'out_for_delivery',
   WC: 'out_for_delivery',
   OFDU: 'out_for_delivery',

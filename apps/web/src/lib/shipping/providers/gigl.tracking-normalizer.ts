@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 // graph to exactly what the poller executes.
 import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import type { z } from 'zod';
-import { GIGL_PICKUP_EN_ROUTE_RAW_STATUS } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
+import {
+  GIGL_ARRIVED_IN_CITY_RAW_STATUS,
+  GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
+} from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent, TrackingResult } from '../types';
 import {
   GIGL_TRACKING_MAX_FUTURE_SKEW_MS,
@@ -53,6 +56,94 @@ function fallbackProviderEventKey(
     scanStatusIncident ?? '',
   ]);
   return `fallback:${createHash('sha256').update(tuple).digest('hex')}`;
+}
+
+const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
+const DEPARTURE_CODES = new Set(['DSC', 'DPC', 'DCC', 'DST', 'DTR', 'DIWN']);
+
+function placeWords(value: string | undefined): string[] {
+  return (value ?? '')
+    .split('(')[0]
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((word) => word.length > 0 && !PLACE_NOISE_WORDS.has(word));
+}
+
+/** Whole-word match: every destination word must appear as a word of the centre name. */
+function matchesDestination(
+  location: string | undefined,
+  destination: string | undefined
+): boolean {
+  const cityWords = placeWords(destination);
+  const centreWords = new Set(placeWords(location));
+  return (
+    cityWords.length > 0 && cityWords.every((word) => centreWords.has(word))
+  );
+}
+
+type Guardable = {
+  event: TrackingEvent;
+  recognizedStatus: TrackingEvent['status'] | null;
+  /** The provider's own status code, before notification-specific rewrites. */
+  providerStatus: string;
+};
+
+function isMshc(candidate: Guardable): number {
+  return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
+}
+
+/**
+ * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
+ * run, and an arrival scan also marks the parcel reaching its destination.
+ * Walk the events oldest-first: MSHC is only out-for-delivery once the parcel
+ * reached the destination or has already moved through GIG centres (centre
+ * names rarely equal the destination city, e.g. IKEJA for LAGOS, so absence
+ * of a name match is not evidence of first-mile); before any movement it is
+ * the pickup rider en route.
+ */
+function applyLifecycleGuards(
+  candidates: Guardable[],
+  destination: string | undefined,
+  origin: string | undefined
+): void {
+  // A same-city shipment's origin centre also matches the destination, so a
+  // name match only counts once the parcel has moved through the network.
+  const sameCity = matchesDestination(origin, destination);
+  // Equal timestamps: process MSHC last so a contemporaneous arrival or
+  // movement scan is seen first, whatever order the payload listed them in.
+  const ordered = [...candidates].sort(
+    (a, b) =>
+      a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
+      isMshc(a) - isMshc(b)
+  );
+  let arrived = false;
+  let movedThroughNetwork = false;
+  for (const candidate of ordered) {
+    const { event } = candidate;
+    const raw = candidate.providerStatus.trim().toUpperCase();
+    const isArrival =
+      raw === 'ARF' ||
+      (candidate.recognizedStatus === 'in_transit' &&
+        !DEPARTURE_CODES.has(raw) &&
+        !/DEPART/i.test(event.description) &&
+        (!sameCity || movedThroughNetwork) &&
+        matchesDestination(event.location, destination));
+    if (isArrival) {
+      arrived = true;
+      event.rawStatus = GIGL_ARRIVED_IN_CITY_RAW_STATUS;
+    } else if (raw === 'MSHC' && !arrived && !movedThroughNetwork) {
+      event.status = 'pickup_scheduled';
+      event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
+      candidate.recognizedStatus = 'pickup_scheduled';
+    }
+    if (
+      candidate.recognizedStatus === 'in_transit' ||
+      candidate.recognizedStatus === 'out_for_delivery' ||
+      candidate.recognizedStatus === 'failed'
+    ) {
+      movedThroughNetwork = true;
+    }
+  }
 }
 
 export function normalizeGiglTrackingShipment(
@@ -142,6 +233,7 @@ export function normalizeGiglTrackingShipment(
               timestamp,
             } satisfies TrackingEvent,
             recognizedStatus,
+            providerStatus: rawStatus,
           },
         ];
       } catch {
@@ -150,9 +242,16 @@ export function normalizeGiglTrackingShipment(
     }
   );
 
+  applyLifecycleGuards(
+    candidates,
+    shipment.Destination ?? undefined,
+    shipment.Origin ?? undefined
+  );
+
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
-      right.event.timestamp.getTime() - left.event.timestamp.getTime()
+      right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
+      isMshc(right) - isMshc(left)
   );
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null

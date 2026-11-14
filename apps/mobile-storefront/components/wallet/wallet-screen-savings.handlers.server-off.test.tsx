@@ -39,4 +39,25 @@ describe('server keeps PiggyVest off', () => {
       /PIN/
     );
   });
+
+  it('keeps the amount on screen until the result is shown (no NGN 0 flash)', async () => {
+    const clearAmount = jest.fn();
+    let clearedDuringRefresh: boolean | undefined;
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => ({ goalStatus: 'active' }),
+      clearSavingsContributionAmount: clearAmount,
+      clearIdempotencyKey: jest.fn(),
+      createIdempotencyKey: () => 'op-2',
+      goal,
+      rawAmount: '1000',
+      refetchWallet: async () => {
+        clearedDuringRefresh = clearAmount.mock.calls.length > 0;
+        return {};
+      },
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(clearedDuringRefresh).toBe(false);
+    expect(clearAmount).toHaveBeenCalledTimes(1);
+  });
 });

@@ -144,10 +144,12 @@ export async function addSavingsContributionToGoal({
         // Reminder cleanup is best effort after a confirmed contribution.
       }
     }
-    clearSavingsContributionAmount();
     clearIdempotencyKey?.();
     triggerHaptic('success');
     const refreshFailed = !(await walletRefreshWorked(refetchWallet));
+    // Cleared after the refresh (it never throws), in the same tick as the
+    // result: clearing first showed NGN 0 while the wallet re-read.
+    clearSavingsContributionAmount();
     const success = buildSavingsSuccessMessage({
       amount,
       goal,

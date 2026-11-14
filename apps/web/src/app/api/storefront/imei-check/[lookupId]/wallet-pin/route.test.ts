@@ -190,6 +190,18 @@ describe('POST /imei-check/[lookupId]/wallet-pin', () => {
     );
     expect(response.status).toBe(400);
     expect(mocks.verify).not.toHaveBeenCalled();
+    // Muse: a URL problem never reads as a PIN error.
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'INVALID_LOOKUP',
+    });
+  });
+
+  it('still answers a malformed PIN as a PIN error', async () => {
+    const response = await call({ operationId: OP, pin: 'abc' });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
   });
 
   it('bugfix: refuses a payment whose amount is not the lookup price, before charging the PIN budget (Muse)', async () => {

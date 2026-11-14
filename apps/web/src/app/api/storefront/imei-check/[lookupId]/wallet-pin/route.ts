@@ -48,7 +48,11 @@ export async function POST(
   const parsed = imeiWalletPaySchemas.pinRequest.safeParse(
     await request.json().catch(() => null)
   );
-  if (!parsed.success || !z.uuid().safeParse(lookupId).success)
+  // A bad lookup id is a URL problem, not a PIN one: it never reads as a PIN
+  // error, so the app does not ask for the PIN again (Muse).
+  if (!z.uuid().safeParse(lookupId).success)
+    return refuse('This check could not be found.', 'INVALID_LOOKUP', 400);
+  if (!parsed.success)
     return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
   try {
     const runtime = readWalletPayRuntime();

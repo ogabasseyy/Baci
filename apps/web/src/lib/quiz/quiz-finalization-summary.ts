@@ -66,6 +66,10 @@ export const MUTATION_COUNT_KEYS = [
 ] as const;
 
 const COUNT_KEY_SET = new Set<string>(COUNT_KEYS);
+const BENIGN_NON_COUNTER_KEYS = new Set<string>([
+  'runtimeGateFresh',
+  'runtimeGateMatches',
+]);
 
 const SCALAR_MUTATION_STEPS = new Set<FinalizationStep['name']>([
   'promote_due_scheduled_quiz_events_service_v2',
@@ -125,10 +129,14 @@ function addPayload(
   }
 
   for (const [key, value] of Object.entries(record)) {
-    if (value === undefined || COUNT_KEY_SET.has(key)) continue;
-    if (typeof value === 'number') {
-      state.hasUnknownMutationResult = true;
+    if (
+      value === undefined ||
+      COUNT_KEY_SET.has(key) ||
+      BENIGN_NON_COUNTER_KEYS.has(key)
+    ) {
+      continue;
     }
+    state.hasUnknownMutationResult = true;
   }
 
   if (!hasRecognizedCounter) {

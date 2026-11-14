@@ -423,11 +423,14 @@ describe('finalizeDueQuizEvents', () => {
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed into cache invalidation when an object RPC includes an unrecognized numeric key alongside zeros', async () => {
+  it.each([
+    ['numeric', { scheduledPromoted: 0, newCounter: 5 }],
+    ['boolean', { scheduledPromoted: 0, mutatedFlag: true }],
+  ])('fails closed into cache invalidation when an object RPC includes an unrecognized %s key alongside zeros', async (_label, payload) => {
     mocks.rpc
       .mockResolvedValueOnce({ data: { updated: true }, error: null })
       .mockResolvedValueOnce({
-        data: { scheduledPromoted: 0, newCounter: 5 },
+        data: payload,
         error: null,
       })
       .mockResolvedValueOnce({ data: { expired: 0 }, error: null })

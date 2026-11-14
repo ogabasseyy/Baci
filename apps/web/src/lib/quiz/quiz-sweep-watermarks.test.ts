@@ -27,18 +27,22 @@ describe('resolveQuizSweepWatermarks', () => {
       errorTable?: 'quiz_awards' | 'quiz_events' | 'quiz_prize_reservations';
     } = {}
   ) {
+    const eqCalls: Array<{ column: string; table: string; value: unknown }> =
+      [];
     return {
+      eqCalls,
       from: vi.fn((table: string) => {
-        let isBoundaryQuery = false;
+        let eqFilter: { column: string; value: unknown } | null = null;
         const builder: Record<string, unknown> = {};
         builder.select = vi.fn(() => builder);
         builder.not = vi.fn(() => builder);
-        builder.eq = vi.fn(() => {
-          isBoundaryQuery = true;
+        builder.eq = vi.fn((column: string, value: unknown) => {
+          eqFilter = { column, value };
+          eqCalls.push({ column, table, value });
           return builder;
         });
         builder.order = vi.fn(() => builder);
-        builder.range = vi.fn(() => {
+        builder.range = vi.fn((from: number, to: number) => {
           if (options.boundaryErrorTable === table) {
             return Promise.resolve({
               data: null,
@@ -49,7 +53,16 @@ describe('resolveQuizSweepWatermarks', () => {
             options.boundaryRows?.[
               table as keyof typeof options.boundaryRows
             ] ?? [];
-          return Promise.resolve({ data: rows, error: null });
+          const activeFilter = eqFilter;
+          const filtered = activeFilter
+            ? rows.filter(
+                (row) => row[activeFilter.column] === activeFilter.value
+              )
+            : rows;
+          return Promise.resolve({
+            data: filtered.slice(from, to + 1),
+            error: null,
+          });
         });
         builder.limit = vi.fn(() => {
           if (options.errorTable === table) {
@@ -72,8 +85,6 @@ describe('resolveQuizSweepWatermarks', () => {
             error: null,
           });
         });
-        // Keep reference to isBoundaryQuery for type clarity
-        void isBoundaryQuery;
         return builder;
       }),
     };
@@ -106,6 +117,11 @@ describe('resolveQuizSweepWatermarks', () => {
     );
 
     expect(watermarks.hasProbeFailure).toBe(false);
+    expect(client.eqCalls).toContainEqual({
+      table: 'quiz_events',
+      column: 'updated_at',
+      value: '2026-09-01T00:00:00Z',
+    });
     expect(watermarks.events.status).toBe('ok');
     expect(watermarks.events.floor).toBe('2026-09-01T00:00:00Z');
     expect(watermarks.events.boundarySnapshots.get('event-1')).toBe(
@@ -196,7 +212,7 @@ describe('resolveQuizSweepWatermarks', () => {
   });
 
   it('fails closed while keeping the DB floor when boundary snapshots exceed the page cap', async () => {
-    const fullPage = Array.from({ length: 1000 }, (_, index) => ({
+    const fivePages = Array.from({ length: 5000 }, (_, index) => ({
       id: `event-${index}`,
       updated_at: '2026-09-01T00:00:00Z',
     }));
@@ -206,7 +222,7 @@ describe('resolveQuizSweepWatermarks', () => {
       },
       {
         boundaryRows: {
-          quiz_events: fullPage,
+          quiz_events: fivePages,
         },
       }
     );

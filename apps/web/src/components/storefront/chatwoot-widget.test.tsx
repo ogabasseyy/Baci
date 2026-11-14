@@ -11,7 +11,12 @@ import { ChatwootWidget, useChatwootSupportActive } from './chatwoot-widget';
 
 const mocks = vi.hoisted(() => ({
   bridge: vi.fn((_props: { storeSlug: string; widgetOrigin: string }) => null),
+  pathname: '/shop',
   reload: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => mocks.pathname,
 }));
 
 vi.mock('./ogabassey/components/chat/chatwoot-inline-cart-bridge', () => ({
@@ -44,6 +49,7 @@ function SupportStatus() {
 }
 
 beforeEach(() => {
+  mocks.pathname = '/shop';
   delete (window as Window & { chatwootSDK?: unknown }).chatwootSDK;
   delete (window as Window & { $chatwoot?: unknown }).$chatwoot;
   delete (window as Window & { __baciChatwootRunStarted?: boolean })
@@ -289,6 +295,61 @@ describe('ChatwootWidget', () => {
     expect(reset.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.reload.mock.invocationCallOrder[0]
     );
+  });
+
+  it.each([
+    '/shop/cart',
+    '/shop/checkout',
+  ])('defers tenant reloads until leaving cart and checkout paths (%s)', (pathname) => {
+    const reset = vi.fn();
+    const toggleBubbleVisibility = vi.fn();
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (
+        window as Window & {
+          $chatwoot?: Record<string, unknown>;
+        }
+      ).$chatwoot = {
+        reset,
+        toggleBubbleVisibility,
+        websiteToken,
+        baseUrl,
+      };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+    const view = render(
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+    fireEvent(window, new Event('chatwoot:ready'));
+    mocks.pathname = pathname;
+    view.rerender(
+      <ChatwootWidget
+        config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+      >
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+
+    expect(screen.getByTestId('support-active')).toHaveTextContent('false');
+    expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
+    expect(reset).not.toHaveBeenCalled();
+    expect(mocks.reload).not.toHaveBeenCalled();
+
+    mocks.pathname = '/shop/product';
+    view.rerender(
+      <ChatwootWidget
+        config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+      >
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+
+    expect(reset).toHaveBeenCalledOnce();
+    expect(mocks.reload).toHaveBeenCalledOnce();
   });
 
   it.each([

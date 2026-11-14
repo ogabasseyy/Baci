@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import {
   createContext,
   type ReactNode,
@@ -57,6 +58,12 @@ function isExactHttpsOrigin(value: string): boolean {
   }
 }
 
+function isCartOrCheckoutPath(pathname: string | null): boolean {
+  return Boolean(
+    pathname?.split('/').some((part) => part === 'cart' || part === 'checkout')
+  );
+}
+
 export function ChatwootWidget({
   config,
   children,
@@ -64,6 +71,7 @@ export function ChatwootWidget({
   config: ChatwootWidgetConfig | null;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
   const [activeWidgetKey, setActiveWidgetKey] = useState<string | null>(null);
   const validConfig =
     config !== null &&
@@ -112,6 +120,13 @@ export function ChatwootWidget({
 
     const activeTenantKey = widgetWindow.__baciChatwootConfigKey;
     if (activeTenantKey && configKey && activeTenantKey !== configKey) {
+      if (isCartOrCheckoutPath(pathname)) {
+        // Keep shopper-entered cart/checkout state intact. The prior widget
+        // stays hidden and tenant switching resumes on the next safe route.
+        widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+        setActiveWidgetKey(null);
+        return;
+      }
       if (clearPreviousTenant()) reloadChatwootTenantDocument();
       return;
     }
@@ -238,6 +253,7 @@ export function ChatwootWidget({
     platformOrigin,
     storefrontOrigin,
     storeSlug,
+    pathname,
     websiteToken,
     validConfig,
   ]);

@@ -94,10 +94,14 @@ export function DeferredChatWidget({
       });
   };
 
-  if (chatwootSupportActive) return null;
+  if (chatwootSupportActive && !ChatRuntime) return null;
 
   if (ChatRuntime) {
-    return <ChatRuntime openOnMount />;
+    return (
+      <div hidden={chatwootSupportActive}>
+        <ChatRuntime openOnMount />
+      </div>
+    );
   }
 
   return (

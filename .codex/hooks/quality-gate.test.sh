@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-HOOK="$SCRIPT_DIR/quality-gate.sh"
+HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/quality-gate.sh"
+PNPM_TURBO='pnpm stub --config.verify-deps-before-run=false exec turbo' # no local turbo: pnpm exec fallback
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -97,9 +97,9 @@ output=$(
     PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off bash "$HOOK"
 )
 [ -z "$output" ] || fail "deleted code file with existing test should allow stop without output"
-grep -q 'pnpm stub turbo lint' "$PNPM_LOG" || fail "deleted code file should run lint"
-grep -q 'pnpm stub turbo typecheck' "$PNPM_LOG" || fail "deleted code file should run typecheck"
-grep -q 'pnpm stub turbo test' "$PNPM_LOG" || fail "deleted code file should run tests"
+grep -q "$PNPM_TURBO lint" "$PNPM_LOG" || fail "deleted code file should run lint"
+grep -q "$PNPM_TURBO typecheck" "$PNPM_LOG" || fail "deleted code file should run typecheck"
+grep -q "$PNPM_TURBO test" "$PNPM_LOG" || fail "deleted code file should run tests"
 git -C "$TMPDIR" checkout -- apps/web/src/lib/existing.ts
 
 rm "$TMPDIR/apps/web/src/lib/legacy-without-test.ts"
@@ -109,9 +109,9 @@ output=$(
     PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off bash "$HOOK"
 )
 [ -z "$output" ] || fail "deleted legacy code file without existing test should allow stop without output"
-grep -q 'pnpm stub turbo lint' "$PNPM_LOG" || fail "deleted legacy code file should run lint"
-grep -q 'pnpm stub turbo typecheck' "$PNPM_LOG" || fail "deleted legacy code file should run typecheck"
-grep -q 'pnpm stub turbo test' "$PNPM_LOG" || fail "deleted legacy code file should run tests"
+grep -q "$PNPM_TURBO lint" "$PNPM_LOG" || fail "deleted legacy code file should run lint"
+grep -q "$PNPM_TURBO typecheck" "$PNPM_LOG" || fail "deleted legacy code file should run typecheck"
+grep -q "$PNPM_TURBO test" "$PNPM_LOG" || fail "deleted legacy code file should run tests"
 git -C "$TMPDIR" checkout -- apps/web/src/lib/legacy-without-test.ts
 
 mkdir -p "$TMPDIR/apps/mobile-admin/services" "$TMPDIR/apps/mobile-storefront/constants"
@@ -130,9 +130,9 @@ output=$(
     PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off bash "$HOOK"
 )
 [ -z "$output" ] || fail "tested app code outside allowlisted folders should allow stop without output"
-grep -q 'pnpm stub turbo lint' "$PNPM_LOG" || fail "app code outside allowlisted folders should run lint"
-grep -q 'pnpm stub turbo typecheck' "$PNPM_LOG" || fail "app code outside allowlisted folders should run typecheck"
-grep -q 'pnpm stub turbo test' "$PNPM_LOG" || fail "app code outside allowlisted folders should run tests"
+grep -q "$PNPM_TURBO lint" "$PNPM_LOG" || fail "app code outside allowlisted folders should run lint"
+grep -q "$PNPM_TURBO typecheck" "$PNPM_LOG" || fail "app code outside allowlisted folders should run typecheck"
+grep -q "$PNPM_TURBO test" "$PNPM_LOG" || fail "app code outside allowlisted folders should run tests"
 rm "$TMPDIR/apps/mobile-admin/services/mobile-admin-service.ts"
 rm "$TMPDIR/apps/mobile-admin/services/mobile-admin-service.test.ts"
 rm "$TMPDIR/apps/mobile-storefront/constants/mobile-storefront-constant.ts"
@@ -144,9 +144,9 @@ output=$(
     PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off bash "$HOOK"
 )
 [ -z "$output" ] || fail "constants-only app code should allow stop without output"
-grep -q 'pnpm stub turbo lint' "$PNPM_LOG" || fail "constants-only app code should run lint"
-grep -q 'pnpm stub turbo typecheck' "$PNPM_LOG" || fail "constants-only app code should run typecheck"
-grep -q 'pnpm stub turbo test' "$PNPM_LOG" || fail "constants-only app code should run tests"
+grep -q "$PNPM_TURBO lint" "$PNPM_LOG" || fail "constants-only app code should run lint"
+grep -q "$PNPM_TURBO typecheck" "$PNPM_LOG" || fail "constants-only app code should run typecheck"
+grep -q "$PNPM_TURBO test" "$PNPM_LOG" || fail "constants-only app code should run tests"
 rm "$TMPDIR/apps/mobile-storefront/constants/mobile-storefront-constant.ts"
 
 printf 'export const shared = 2;\n' > "$TMPDIR/packages/shared/src/index.ts"
@@ -156,9 +156,9 @@ output=$(
     PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off bash "$HOOK"
 )
 [ -z "$output" ] || fail "top-level package src code should allow stop without output when tested"
-grep -q 'pnpm stub turbo lint' "$PNPM_LOG" || fail "top-level package src code should run lint"
-grep -q 'pnpm stub turbo typecheck' "$PNPM_LOG" || fail "top-level package src code should run typecheck"
-grep -q 'pnpm stub turbo test' "$PNPM_LOG" || fail "top-level package src code should run tests"
+grep -q "$PNPM_TURBO lint" "$PNPM_LOG" || fail "top-level package src code should run lint"
+grep -q "$PNPM_TURBO typecheck" "$PNPM_LOG" || fail "top-level package src code should run typecheck"
+grep -q "$PNPM_TURBO test" "$PNPM_LOG" || fail "top-level package src code should run tests"
 git -C "$TMPDIR" checkout -- packages/shared/src/index.ts
 
 printf '{"scripts":{"test":"vitest"}}\n' > "$TMPDIR/apps/web/package.json"
@@ -169,9 +169,9 @@ output=$(
     PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off bash "$HOOK"
 )
 [ -z "$output" ] || fail "workspace manifest and tsconfig changes should allow stop without output"
-grep -q 'pnpm stub turbo lint' "$PNPM_LOG" || fail "workspace manifest and tsconfig changes should run lint"
-grep -q 'pnpm stub turbo typecheck' "$PNPM_LOG" || fail "workspace manifest and tsconfig changes should run typecheck"
-grep -q 'pnpm stub turbo test' "$PNPM_LOG" || fail "workspace manifest and tsconfig changes should run tests"
+grep -q "$PNPM_TURBO lint" "$PNPM_LOG" || fail "workspace manifest and tsconfig changes should run lint"
+grep -q "$PNPM_TURBO typecheck" "$PNPM_LOG" || fail "workspace manifest and tsconfig changes should run typecheck"
+grep -q "$PNPM_TURBO test" "$PNPM_LOG" || fail "workspace manifest and tsconfig changes should run tests"
 rm "$TMPDIR/apps/web/package.json" "$TMPDIR/apps/web/tsconfig.json"
 
 printf 'export const missing = 1;\n' > "$TMPDIR/apps/web/src/lib/missing-test.ts"

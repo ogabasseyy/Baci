@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -o pipefail -u
 
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) # resolved before any cd
 INPUT=$(cat)
 
 json_value() {
@@ -203,9 +204,11 @@ run_check() {
   fi
 }
 
-run_check "Biome lint" "${TURBO_CMD[@]}" lint
-run_check "TypeScript typecheck" "${TURBO_CMD[@]}" typecheck
-run_check "Test suite" "${TURBO_CMD[@]}" test
+source "$HOOK_DIR/quality-gate-affected-scope.sh" # sets AFFECTED_ARGS and TURBO_SCM_BASE
+
+run_check "Biome lint" "${TURBO_CMD[@]}" lint ${AFFECTED_ARGS[@]+"${AFFECTED_ARGS[@]}"}
+run_check "TypeScript typecheck" "${TURBO_CMD[@]}" typecheck ${AFFECTED_ARGS[@]+"${AFFECTED_ARGS[@]}"}
+run_check "Test suite" "${TURBO_CMD[@]}" test ${AFFECTED_ARGS[@]+"${AFFECTED_ARGS[@]}"}
 
 should_run_coderabbit=0
 case "${CODEX_QUALITY_GATE_CODERABBIT:-auto}" in

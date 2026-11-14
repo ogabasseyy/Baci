@@ -37,11 +37,12 @@
 
 ## Quality Gate
 
-Before submitting any changes, ALL must pass:
+Before submitting, lint, typecheck and tests must pass for the packages your change affects; CI's Quality Gate runs them for every PR. Locally, scope them as described in "Local Runs vs CI":
 ```bash
-pnpm turbo lint        # Zero Biome errors
-pnpm turbo typecheck   # Zero TypeScript errors
-pnpm turbo test        # All tests pass
+base=$(sh ci_scripts/quality-gate-affected-base.sh)   # empty output: run the full gate
+TURBO_SCM_BASE=$base pnpm turbo lint ${base:+--affected}        # Zero Biome errors
+TURBO_SCM_BASE=$base pnpm turbo typecheck ${base:+--affected}   # Zero TypeScript errors
+TURBO_SCM_BASE=$base pnpm turbo test ${base:+--affected}        # All tests pass
 ```
 
 ## Code Review (CodeRabbit)

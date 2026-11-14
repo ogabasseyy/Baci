@@ -16,6 +16,7 @@ export type ClassifiedBookingFailure = {
 };
 
 const MAX_MESSAGE_LENGTH = 500;
+const MAX_CODE_LENGTH = 64;
 /** The message GIG's booking client throws when its own deadline passes. */
 export const GIGL_BOOKING_TIMEOUT_MESSAGE = 'GIGL booking timed out';
 export const GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE =
@@ -51,15 +52,21 @@ export function isProviderNeverReachedError(error: unknown): boolean {
   return false;
 }
 
-/** A call that may have reached GIG but never answered. */
+/** A call that may have reached GIG but never answered (also when wrapped). */
 function isProviderTimeoutError(error: unknown): boolean {
-  // Only GIG's own booking timeout: a database or client-abort timeout says
+  // Only GIG's own booking timeouts: a database or client-abort timeout says
   // nothing about whether GIG booked the parcel.
-  return (
-    error instanceof Error &&
-    (error.message.startsWith(GIGL_BOOKING_TIMEOUT_MESSAGE) ||
-      error.message.startsWith(GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE))
-  );
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
+    if (
+      current.message.startsWith(GIGL_BOOKING_TIMEOUT_MESSAGE) ||
+      current.message.startsWith(GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE)
+    ) {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 export function classifyBookingFailure(
@@ -67,7 +74,7 @@ export function classifyBookingFailure(
 ): ClassifiedBookingFailure {
   if (error instanceof OrderShipmentBookingError) {
     return {
-      code: error.code,
+      code: error.code.slice(0, MAX_CODE_LENGTH),
       message: error.message.slice(0, MAX_MESSAGE_LENGTH),
       httpStatus: error.status,
       outcome: 'rejected',

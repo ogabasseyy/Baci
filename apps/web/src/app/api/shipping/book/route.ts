@@ -8,7 +8,6 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import {
-  isProviderNeverReachedError,
   recordOrderShipmentBookingFailure,
   toBookingFailureResponseError,
 } from '@/lib/shipping/order-shipment-booking-failure';
@@ -200,10 +199,7 @@ export async function POST(request: NextRequest) {
   } catch (rawError) {
     console.error('Error booking shipment:', rawError);
     if (bookingSupabase && bookingOrderId && bookingMerchantId) {
-      if (
-        isProviderNeverReachedError(rawError) ||
-        shouldReleaseBookingLock(rawError)
-      ) {
+      if (shouldReleaseBookingLock(rawError)) {
         retainBookingLock = false;
       }
       await recordOrderShipmentBookingFailure(

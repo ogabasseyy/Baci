@@ -180,3 +180,19 @@ describe('bugfix: review follow-ups', () => {
     expect((result as Error).message).toContain('contact support');
   });
 });
+
+describe('bugfix: wrapped timeouts and long codes', () => {
+  it('recognises a GIG timeout wrapped in another error', () => {
+    const wrapped = new Error('booking failed', {
+      cause: new Error('GIGL booking timed out'),
+    });
+    expect(classifyBookingFailure(wrapped).outcome).toBe(
+      'provider_unconfirmed'
+    );
+  });
+
+  it('shortens a very long error code to fit the table limit', () => {
+    const long = new OrderShipmentBookingError('x', 400, 'C'.repeat(100));
+    expect(classifyBookingFailure(long).code).toHaveLength(64);
+  });
+});

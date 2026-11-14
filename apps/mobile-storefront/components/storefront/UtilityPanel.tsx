@@ -21,10 +21,12 @@ import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import { utilityPanelStyles as styles } from './UtilityPanel.styles';
 import { UtilityPanelCategoryItem } from './UtilityPanelCategoryItem';
+import { useUtilityAutoplay } from './use-utility-autoplay';
 
 interface UtilityPanelProps {
   variant?: 'card' | 'circle' | 'pill';
   selectedCategoryId: string | null;
+  autoplayPaused?: boolean;
   onCategorySelect: (id: string | null) => void;
   selectedCategoryName?: string;
   slug?: string;
@@ -37,6 +39,7 @@ const CATEGORY_IDS = ['u-airtime', 'u-data', 'u-tv', 'u-power', 'u-gaming'];
 
 export function UtilityPanel({
   variant = 'circle',
+  autoplayPaused = false,
   selectedCategoryId,
   onCategorySelect,
   slug,
@@ -116,24 +119,13 @@ export function UtilityPanel({
     }
   }, [selectedCategoryId, activeIndexVal]);
 
-  // Auto-rotate effect
-  useEffect(() => {
-    // Home stays mounted under native-stack routes. Pause its timer while
-    // covered so hidden promo animations do not keep updating Fabric.
-    if (isManualUtility || !isFocused) return;
-
-    const interval = setInterval(() => {
-      const currentVal = Math.round(activeIndexVal.get());
-      const next = (currentVal + 1) % UTILITY_WORDS.length;
-      if (next === 0) {
-        activeIndexVal.set(0); // Instant jump back to 0, no backward sweep!
-      } else {
-        activeIndexVal.set(withTiming(next, { duration: 300 }));
-      }
-    }, 2800); // Slightly slower for better readability
-
-    return () => clearInterval(interval);
-  }, [isManualUtility, activeIndexVal, isFocused]);
+  useUtilityAutoplay({
+    activeIndex: activeIndexVal,
+    autoplayPaused,
+    isFocused,
+    isManual: isManualUtility,
+    itemCount: UTILITY_WORDS.length,
+  });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeUtilityIndex intentionally restarts the promo text transition when the selected utility changes.
   useEffect(() => {

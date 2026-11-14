@@ -225,7 +225,11 @@ export function WalletSavingsProgressModal({
             <SavingsGoalSummary
               colors={colors}
               goal={goal}
-              onChangeDevice={canChangeDevice ? onChangeDevice : undefined}
+              // Not while an add is in flight: the Change phone step would
+              // replace the sheet and drop the add's PIN prompt.
+              onChangeDevice={
+                canChangeDevice && !isAdding ? onChangeDevice : undefined
+              }
               onResolveVariant={onResolveVariant}
             />
             {hasPendingContribution ? (

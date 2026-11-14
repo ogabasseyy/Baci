@@ -223,5 +223,9 @@ describe('WalletSavingsProgressModal', () => {
       />
     );
     expect(screen.getByText('lifecycle:goal-1:pending')).toBeOnTheScreen();
+    // Change phone would replace the sheet and drop the add's PIN prompt too.
+    expect(
+      screen.queryByRole('button', { name: 'Change savings device' })
+    ).toBeNull();
   });
 });

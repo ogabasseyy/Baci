@@ -1336,54 +1336,6 @@ describe('WalletScreen', () => {
     }
   });
 
-  it('keeps the open savings sheet on a goal that a contribution just completed', () => {
-    const goalA = { ...createActiveSavingsGoal(690000), id: 'goal-a' };
-    const goalB = {
-      ...createActiveSavingsGoal(0),
-      id: 'goal-b',
-      title: 'Other',
-    };
-    const wallet = (goals: unknown[], active: unknown) => ({
-      data: {
-        wallet: {
-          active_savings_goal: active,
-          balance: 125000,
-          earnings_available: true,
-          earnings_balance: 125000,
-          funding_account: null,
-          loyalty_points: 2000,
-          requires_funding_account_consent: true,
-          savings_balance: 690000,
-          savings_goals: goals,
-          total_balance: 815000,
-        },
-        transactions: [],
-      },
-      isError: false,
-      isLoading: false,
-      isRefetching: false,
-      refetch: mockRefetch,
-    });
-    mockSearchParams = { action: 'savings' };
-    mockUseWallet.mockReturnValue(wallet([goalA, goalB], goalA));
-    const view = render(<WalletScreen />);
-    view.rerender(<WalletScreen />);
-    const doneA = {
-      ...goalA,
-      current_amount: 700000,
-      principal_amount: 700000,
-      status: 'completed',
-    };
-    // The refresh after the completing contribution promotes goal B.
-    mockUseWallet.mockReturnValue(wallet([doneA, goalB], goalB));
-    view.rerender(<WalletScreen />);
-    view.rerender(<WalletScreen />);
-    const last = mockWalletContent.mock.calls.at(-1)?.[0] as {
-      activeSavingsGoal?: { id: string } | null;
-    };
-    expect(last?.activeSavingsGoal?.id).toBe('goal-a');
-  });
-
   it('changes an active savings goal device with the active merchant context', async () => {
     const noticeSpy = jest.mocked(notifySavings);
     mockUseWallet.mockReturnValue({

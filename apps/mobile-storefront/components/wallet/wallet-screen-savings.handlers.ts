@@ -106,7 +106,7 @@ export async function addSavingsContributionToGoal({
       await refetchWallet().catch(() => undefined);
       notify(
         'Contribution pending',
-        'Your savings will update once PiggyVest confirms the transfer.',
+        'Your savings will update once the transfer is confirmed.',
         'info'
       );
       return;
@@ -125,7 +125,7 @@ export async function addSavingsContributionToGoal({
       await refetchWallet().catch(() => undefined);
       notify(
         'Contribution cancelled',
-        'The transfer was cancelled before submission and your reserved wallet funds were released.',
+        'Nothing was taken from your wallet.',
         'info'
       );
       return;

@@ -12,7 +12,7 @@ CodeRabbit are separate reviewers and are not affected.
 | State | Meaning | Job |
 |---|---|---|
 | `success` | Reviewed. No critical or high finding on a file the pull request changes. | green |
-| `failure` | Reviewed. A critical or high finding on a changed file. Fix it, or add the `bypass-ai-gate` label. | red |
+| `failure` | Reviewed. A critical or high finding on a changed file. Fix it, or have a person review the finding and say in the pull request why it does not apply. The `bypass-ai-gate` label only silences Gemini; it satisfies no gate. | red |
 | `error` | Gemini could not review (quota, outage, bad key, unknown model, private repo). Not a vote either way. | green, with a warning |
 
 `error` also covers cases where a clean answer would prove nothing: the pull request diff could not

@@ -164,7 +164,7 @@ export async function post({ env, github, log = console.log, now = () => new Dat
   });
 
   if (state === 'failure') {
-    log("::error::Gemini flagged HIGH/CRITICAL findings on this PR. Address them before merge, or add the 'bypass-ai-gate' label.");
+    log("::error::Gemini flagged HIGH/CRITICAL findings on this PR. Fix them before merge, or have a person review them and record in the PR why they do not apply. The 'bypass-ai-gate' label only silences this reviewer.");
     for (const finding of outcome.review?.findings ?? []) {
       if (finding.severity === 'critical' || finding.severity === 'high') {
         log(`- ${finding.severity}: ${sanitizeText(finding.title, { max: 200 })} in ${sanitizeText(finding.path, { max: 200 })}:${finding.line}`);

@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { once } from 'node:events';
-import { request } from 'node:http';
+import { createServer, request } from 'node:http';
 import { expect, it, vi } from 'vitest';
 import { BUILDER_METADATA_PATH } from './metadata';
 import { createBuilderMcpNodeServer } from './node';
+import { createOwnerInternalNodeServer } from './owner-internal-node';
+import { createOwnerAttestationHttpHandler } from './owner-preview-http';
 
 it('serves discovery on a real loopback listener and shuts down cleanly', async () => {
   const runtime = createBuilderMcpNodeServer();
@@ -111,19 +113,34 @@ it('uses explicitly supplied trusted transport dependencies for a co-located gat
   }
 });
 
+it('rejects owner handler configuration on the public MCP listener', () => {
+  expect(() =>
+    createBuilderMcpNodeServer({
+      ownerPreview: async () => new Response(),
+    } as never)
+  ).toThrow('OWNER_ROUTES_FORBIDDEN');
+  expect(() =>
+    createBuilderMcpNodeServer({
+      ownerAttestation: async () => new Response(),
+    } as never)
+  ).toThrow('OWNER_ROUTES_FORBIDDEN');
+  expect(() =>
+    createBuilderMcpNodeServer({
+      ownerPublicVerification: async () => new Response(),
+    } as never)
+  ).toThrow('OWNER_ROUTES_FORBIDDEN');
+});
+
 it('routes the internal owner preview only when explicitly installed', async () => {
   const ownerPreview = vi.fn(async () => Response.json({ ok: true }));
-  const runtime = createBuilderMcpNodeServer({ ownerPreview });
-  runtime.server.listen(0, '127.0.0.1');
-  await once(runtime.server, 'listening');
-  const address = runtime.server.address();
-  if (!address || typeof address === 'string') throw Error('fixture');
+  const runtime = createOwnerInternalNodeServer({ ownerPreview });
+  const port = await runtime.listen(0);
   try {
     const response = await new Promise<number>((resolve, reject) => {
       const req = request(
         {
           host: '127.0.0.1',
-          port: address.port,
+          port,
           path: '/internal/owner/preview',
           method: 'POST',
           headers: {
@@ -154,17 +171,14 @@ it('routes signed attestation only when explicitly installed', async () => {
     expect(req.headers.get('cookie')).toBeNull();
     return new Response(null, { status: 204 });
   });
-  const runtime = createBuilderMcpNodeServer({ ownerAttestation });
-  runtime.server.listen(0, '127.0.0.1');
-  await once(runtime.server, 'listening');
-  const address = runtime.server.address();
-  if (!address || typeof address === 'string') throw Error('fixture');
+  const runtime = createOwnerInternalNodeServer({ ownerAttestation });
+  const port = await runtime.listen(0);
   try {
     const status = await new Promise<number>((resolve, reject) => {
       const req = request(
         {
           host: '127.0.0.1',
-          port: address.port,
+          port,
           path: '/internal/owner/attest',
           method: 'POST',
           headers: {
@@ -194,7 +208,17 @@ it('does not treat the request-body timeout as a completed attestation response 
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
     return new Response(null, { status: 204 });
   });
-  const runtime = createBuilderMcpNodeServer({ ownerAttestation });
+  const handler = createOwnerAttestationHttpHandler(ownerAttestation);
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  const runtime = {
+    server,
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      ),
+  };
   runtime.server.requestTimeout = 25;
   runtime.server.listen(0, '127.0.0.1');
   await once(runtime.server, 'listening');

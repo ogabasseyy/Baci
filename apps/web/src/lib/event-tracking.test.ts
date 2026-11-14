@@ -6,6 +6,7 @@ const { mockSend, mockAnalytics } = vi.hoisted(() => ({
     viewItem: vi.fn(),
     addToCart: vi.fn(),
     beginCheckout: vi.fn(),
+    pageView: vi.fn(),
   },
 }));
 
@@ -91,5 +92,20 @@ describe('trackEvent', () => {
       })
     );
     expect(mockAnalytics.beginCheckout).toHaveBeenCalledOnce();
+  });
+
+  it('bugfix: page_view events leave out order tokens and shopper details', () => {
+    trackEvent.pageView(
+      'merchant-1',
+      '/track-order?trackingToken=abc&customerPhone=0801&orderId=1#top',
+      'Track'
+    );
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: 'page_view',
+        page_url: '/track-order?orderId=1',
+      })
+    );
   });
 });

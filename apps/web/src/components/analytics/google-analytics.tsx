@@ -3,6 +3,7 @@
 import Script from 'next/script';
 import { useEffect, useState } from 'react';
 import { applyStoredConsent, initializeConsentMode } from '@/lib/consent-mode';
+import { TRACKING_URL_INLINE_SANITIZER } from '@/lib/privacy/tracking-url-inline-sanitizer';
 
 interface GoogleAnalyticsProps {
   measurementId: string;
@@ -70,11 +71,14 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
+          ${TRACKING_URL_INLINE_SANITIZER}
           gtag('js', new Date());
 
-          // Configure GA4 with enhanced measurement
+          // Configure GA4 with enhanced measurement. The page address and
+          // referrer are sent without order tokens or shopper details.
           gtag('config', '${measurementId}', {
-            page_location: window.location.href,
+            page_location: baciSanitizeUrl(window.location.href),
+            page_referrer: baciSanitizeUrl(document.referrer) || undefined,
             page_title: document.title,
             // Enable URL passthrough for better attribution without cookies
             url_passthrough: true,

@@ -2,12 +2,12 @@
 
 import { Loader2, Star } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { GoogleCustomerReviews } from '@/components/analytics/google-customer-reviews';
 import { useStorefrontCustomerSession } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-storefront-customer-session';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
 import {
@@ -33,7 +33,7 @@ import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
 
 export function OrderSuccessContent() {
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const orderId = searchParams.get('orderId');
   const orderToken =
     searchParams.get('trackingToken') || searchParams.get('token');

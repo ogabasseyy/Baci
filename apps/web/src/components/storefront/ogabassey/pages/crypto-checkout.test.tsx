@@ -13,6 +13,7 @@ const mockUseRouter = vi.fn(() => mockRouter);
 
 vi.mock('next/navigation', () => ({
   useRouter: () => mockUseRouter(),
+  usePathname: () => '/checkout/crypto',
   useSearchParams: () => mockUseSearchParams(),
 }));
 

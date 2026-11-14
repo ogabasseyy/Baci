@@ -17,11 +17,12 @@ import {
   Truck,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
 import { CheckoutReconciliationView } from './checkout-reconciliation-view';
@@ -63,7 +64,7 @@ function CheckoutSuccessLoading() {
 }
 
 function CheckoutSuccessContent() {
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const router = useRouter();
   const reference = searchParams.get('reference');
   const orderId = searchParams.get('orderId');

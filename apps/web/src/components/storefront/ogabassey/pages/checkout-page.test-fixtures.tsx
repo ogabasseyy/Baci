@@ -12,6 +12,7 @@ const addressAutocompleteMock = vi.hoisted(() => ({
 // Mock all heavy dependencies before importing the component
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() })),
+  usePathname: vi.fn(() => '/checkout'),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 

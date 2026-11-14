@@ -15,7 +15,7 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   ThemedBadge,
@@ -25,6 +25,7 @@ import {
 } from '@/components/themed';
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { formatCurrency as formatCurrencyByCountry } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import { OrderItemRow, type TrackOrderItem } from './order-item-row';
@@ -306,7 +307,7 @@ function OrderTrackContent() {
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const params = useParams();
   const slugParam = params?.slug;
   const merchantSlug = Array.isArray(slugParam) ? slugParam[0] : slugParam;

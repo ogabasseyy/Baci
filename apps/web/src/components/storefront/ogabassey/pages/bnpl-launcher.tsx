@@ -2,7 +2,8 @@
 
 import type { Route } from 'next';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { apiPost } from '@/lib/api-client';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -372,7 +373,7 @@ interface BnplLauncherProps {
 
 export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) {
     const router = useRouter();
-    const searchParams = useSearchParams();
+    const searchParams = usePrivateSearchParams();
     const merchantContext = useMerchantSafe();
     const clearCart = useCartSafe()?.clearCart;
 

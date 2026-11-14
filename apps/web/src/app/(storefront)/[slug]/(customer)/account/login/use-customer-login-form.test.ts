@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { scrubPrivateParamsFromAddressBar } from '@/lib/privacy/private-url-param-stash';
 import { useCustomerLoginForm } from './use-customer-login-form';
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/account/login',
   useRouter: () => ({ push: mocks.push }),
   useSearchParams: () => mocks.params,
 }));
@@ -380,4 +382,25 @@ it('clears stale suffix digits when pasting a partial replacement', () => {
   next.remove();
   expect(result.current.code).toEqual(['1', '2', '', '', '', '']);
   expect(mocks.verifyOtp).not.toHaveBeenCalled();
+});
+
+describe('bugfix: login email prefill was lost on reload', () => {
+  it('prefills the email from the stash when the reloaded address is already clean', () => {
+    window.sessionStorage.clear();
+    mocks.params.delete('redirect');
+    mocks.params.delete('email');
+    window.history.replaceState(
+      null,
+      '',
+      '/account/login?email=buyer%40example.com'
+    );
+    scrubPrivateParamsFromAddressBar(); // first visit moves the email out of the URL
+    expect(window.location.search).toBe('');
+    // Reload: the router reports a clean query (mocks.params is empty).
+
+    const { result } = renderHook(() => useCustomerLoginForm());
+
+    expect(result.current.email).toBe('buyer@example.com');
+    window.history.replaceState(null, '', '/');
+  });
 });

@@ -6,6 +6,7 @@ import { trackCartView } from './analytics/track-cart-view';
 import { trackSocialFunnel } from './analytics/track-social-funnel';
 import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
+import { sanitizeTrackingUrl } from './privacy/sanitize-tracking-url';
 import { measureXEvent } from './x-ads/pixel-client';
 
 // Types for analytics events
@@ -95,7 +96,7 @@ export const analytics = {
   pageView: (url: string, title?: string) => {
     // GA4 - page_view is automatic with gtag.js, but can be manual
     sendGA4Event('page_view', {
-      page_location: url,
+      page_location: sanitizeTrackingUrl(url),
       page_title: title,
     });
 

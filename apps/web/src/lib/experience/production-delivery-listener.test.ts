@@ -56,10 +56,11 @@ it('serves a real private vault resource and denies it when its binding is revok
       "connect-src 'none'"
     );
     expect(response.headers['access-control-allow-origin']).toBe('null');
-    expect(
-      (await send(address.port, path, { origin: 'https://evil.example' }))
-        .status
-    ).toBe(404);
+    const foreign = await send(address.port, path, {
+      origin: 'https://evil.example',
+    });
+    expect(foreign.status).toBe(404);
+    expect(foreign.headers['access-control-allow-origin']).toBeUndefined();
     active = false;
     expect((await send(address.port, path, { origin: 'null' })).status).toBe(
       404

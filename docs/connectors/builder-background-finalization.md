@@ -89,6 +89,12 @@ backlogged connections, including the page boundary and wrap. It does not
 establish real-world queue latency, fairness across processes, or capacity.
 Measure and qualify those properties before admitting production traffic or
 raising concurrency.
+
+The worker uses the stable job ID as its finalization retry key. A disposable
+database test against the live-lease finalization function verifies that an
+identical payload and key return the same build, while a changed receipt with
+that key is rejected as an idempotency conflict. That test uses an ordinary
+owner fixture; it does not prove a timed-out linked worker's full recovery.
 Local SQL now supports recovery of stale leases with a fresh attempt nonce,
 three automatic recoveries, a terminal failure after exhaustion, and a
 user-authorized lease-renewal RPC. The linked build supervisor now renews its

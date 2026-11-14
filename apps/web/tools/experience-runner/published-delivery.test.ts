@@ -76,6 +76,18 @@ it('delivers custom prerendered controls with SRI, strict CSP and no writes', as
   f.revoke();
   expect((await f.deliver(new Request(`${f.base}app.js`))).status).toBe(404);
 });
+it('serves public output with a fixed wildcard rather than reflecting the caller origin', async () => {
+  const f = fixture();
+  const response = await f.deliver(
+    new Request(`${f.base}app.js`, {
+      headers: { origin: 'https://evil.example' },
+    })
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  expect(response.headers.has('access-control-allow-credentials')).toBe(false);
+  expect(response.headers.has('set-cookie')).toBe(false);
+});
 it('withdraws output if publication changes while reading static resources or rendering HTML', async () => {
   const f = fixture();
   f.reader.read.mockImplementationOnce(async (_s, _b, path) => {

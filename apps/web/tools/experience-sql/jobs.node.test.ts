@@ -22,6 +22,7 @@ test('jobs: normal owner queue/finalize, evidence role separated, replay converg
       '20261113175836_experience_build_connection_binding.sql',
       '20261113180409_experience_build_bound_lifecycle.sql',
       '20261113181020_experience_finalize_connection_binding.sql',
+      '20261114024007_experience_finalize_live_lease.sql',
     ])
       await f.pool.query(
         readFileSync(
@@ -78,7 +79,7 @@ test('jobs: normal owner queue/finalize, evidence role separated, replay converg
       },
       { path: 'app.css', mime: 'text/css', bytes: '', digest: hash('') },
     ];
-    const finalize = () =>
+    const finalize = (receiptDigest = receipt) =>
       asActor(c, a, () =>
         c.query(
           'SELECT experience_finalize_build($1,null,null,$2,$3,$4,$5,$6,$7,$8,$9) id',
@@ -88,8 +89,8 @@ test('jobs: normal owner queue/finalize, evidence role separated, replay converg
             j.attempt_nonce,
             digest,
             build,
-            receipt,
-            randomUUID(),
+            receiptDigest,
+            job,
             JSON.stringify(files),
             'http://127.0.0.1:4100',
           ]
@@ -124,6 +125,10 @@ test('jobs: normal owner queue/finalize, evidence role separated, replay converg
       'finalizing a private candidate must not implicitly approve/apply it'
     );
     assert.equal((await finalize()).rows[0].id, b);
+    await assert.rejects(
+      finalize(hash('different-receipt')),
+      /IDEMPOTENCY_CONFLICT/
+    );
     assert.equal(
       (
         await asActor(c, a, () =>

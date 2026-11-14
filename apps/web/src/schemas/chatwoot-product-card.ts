@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { postgresUuidSchema } from './postgres-uuid';
 
 const productSlug = z
   .string()
@@ -33,7 +34,7 @@ export const chatwootProductCardSchema = z
             attributes: z.record(z.string().max(40), z.string().max(80)),
             availability,
             condition: productCondition.optional(),
-            id: z.uuid(),
+            id: postgresUuidSchema,
             price: z.number().finite().nonnegative(),
           })
           .strict()

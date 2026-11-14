@@ -105,6 +105,67 @@ describe('projectChatwootProductCard', () => {
     expect(result).not.toHaveProperty('product.variants.0.sku');
   });
 
+  it('honors explicit variant purchasability and stock signals from the snapshot', () => {
+    const result = project(
+      product({
+        has_variants: true,
+        product_variants: [
+          {
+            id: variantId,
+            product_id: productId,
+            attributes: { storage: '128GB' },
+            price_override: 325_000,
+            stock_quantity: 3,
+            is_purchasable: false,
+          },
+        ],
+      })
+    );
+    expect(result).toEqual({ ok: false, code: 'product_unavailable' });
+
+    const outOfStockOverride = project(
+      product({
+        has_variants: true,
+        product_variants: [
+          {
+            id: variantId,
+            product_id: productId,
+            attributes: { storage: '128GB' },
+            price_override: 325_000,
+            in_stock: false,
+          },
+        ],
+      })
+    );
+    expect(outOfStockOverride).toEqual({
+      ok: false,
+      code: 'product_unavailable',
+    });
+  });
+
+  it('rejects price strings instead of coercing them into numbers', () => {
+    expect(project(product({ price: '300000' }))).toEqual({
+      ok: false,
+      code: 'product_unavailable',
+    });
+    expect(
+      project(
+        product({
+          has_variants: true,
+          product_variants: [
+            {
+              id: variantId,
+              product_id: productId,
+              attributes: { storage: '128GB' },
+              price_override: '325000',
+              stock_quantity: 2,
+            },
+          ],
+        })
+      )
+    ).toEqual({ ok: false, code: 'product_unavailable' });
+  });
+
   it('uses product base price for null overrides and the cheapest purchasable card price', () => {
     const result = project(
       product({
@@ -318,6 +379,24 @@ describe('projectChatwootProductCard', () => {
       })
     );
     expect(ambiguous).toEqual({ ok: false, code: 'product_unavailable' });
+  });
+
+  it('rejects collisions after normalizing recognized attribute keys', () => {
+    expect(
+      project(
+        product({
+          has_variants: true,
+          product_variants: [
+            {
+              id: variantId,
+              product_id: productId,
+              attributes: { storage: '128GB', Storage: '256GB' },
+              stock_quantity: 2,
+            },
+          ],
+        })
+      )
+    ).toEqual({ ok: false, code: 'product_unavailable' });
   });
 
   it('fails closed for another merchant, condition offers, or truncated variants', () => {

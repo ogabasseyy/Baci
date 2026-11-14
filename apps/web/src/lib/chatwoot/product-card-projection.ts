@@ -53,14 +53,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function toPrice(value: unknown): number | null {
-  if (
-    typeof value !== 'number' &&
-    (typeof value !== 'string' || value.trim().length === 0)
-  ) {
-    return null;
-  }
-  const price = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(price) && price >= 0 ? price : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function toImage(value: unknown): string | undefined {
@@ -89,6 +84,7 @@ function projectAttributes(value: unknown): Record<string, string> | null {
     if (key.length > MAX_OPTION_KEY_LENGTH) return null;
     const cleanKey = key.trim().toLowerCase().replace(/[_-]+/g, ' ');
     if (!ALLOWED_OPTION_KEYS.has(cleanKey)) continue;
+    if (Object.hasOwn(output, cleanKey)) return null;
     if (
       typeof rawValue !== 'string' ||
       rawValue.length > MAX_OPTION_VALUE_LENGTH
@@ -186,7 +182,8 @@ export function projectChatwootProductCard(input: {
     for (const candidate of rawVariants as unknown[]) {
       if (
         !isRecord(candidate) ||
-        !UUID_PATTERN.test(String(candidate.id ?? '')) ||
+        typeof candidate.id !== 'string' ||
+        !UUID_PATTERN.test(candidate.id) ||
         candidate.product_id !== product.id
       ) {
         return { ok: false, code: 'product_unavailable' };
@@ -199,6 +196,14 @@ export function projectChatwootProductCard(input: {
       const available = isProductVariantPurchasable(
         typeof product.manage_stock === 'boolean' ? product.manage_stock : true,
         {
+          in_stock:
+            typeof candidate.in_stock === 'boolean'
+              ? candidate.in_stock
+              : undefined,
+          is_purchasable:
+            typeof candidate.is_purchasable === 'boolean'
+              ? candidate.is_purchasable
+              : undefined,
           available_units:
             typeof candidate.available_units === 'number'
               ? candidate.available_units
@@ -213,7 +218,9 @@ export function projectChatwootProductCard(input: {
               : undefined,
           stock_quantity:
             numericStock(candidate.stock_quantity) ??
-            parentEffectiveStock(product),
+            (typeof candidate.in_stock === 'boolean'
+              ? undefined
+              : parentEffectiveStock(product)),
         }
       );
       const normalizedVariantCondition = normalizedCondition(

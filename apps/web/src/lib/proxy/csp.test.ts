@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installExperienceExecutionOrigin } from '@/lib/experience/execution-origin-runtime';
 import {
   buildStrictCspResponse,
@@ -8,6 +8,7 @@ import {
 } from './csp';
 
 describe('proxy CSP', () => {
+  afterEach(() => vi.unstubAllEnvs());
   it('uses a nonce only for admin and auth document routes', () => {
     expect(shouldForwardStrictCspNonce('admin')).toBe(true);
     expect(shouldForwardStrictCspNonce('storefront')).toBe(false);
@@ -28,6 +29,47 @@ describe('proxy CSP', () => {
     );
     expect(nonce).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(forwarded).toContain(`'nonce-${nonce}'`);
+  });
+
+  it('allows only an explicitly enabled, normalized Chatwoot platform origin on storefronts', () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    vi.stubEnv('EKAETTE_CHATWOOT_WIDGET_ENABLED', 'true');
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_PLATFORM_ORIGIN',
+      'https://support.example.com:443/'
+    );
+
+    const policy = generateCSP('storefront', false);
+    for (const name of ['script-src', 'connect-src', 'frame-src']) {
+      expect(directive(policy, name)).toContain('https://support.example.com');
+    }
+    for (const route of ['admin', 'auth', 'api'] as const) {
+      expect(generateCSP(route, false, 'test_nonce')).not.toContain(
+        'https://support.example.com'
+      );
+    }
+  });
+
+  it('keeps Chatwoot out of CSP while disabled or configured with an unsafe origin', () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    vi.stubEnv('EKAETTE_CHATWOOT_WIDGET_ENABLED', 'false');
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_PLATFORM_ORIGIN',
+      'https://support.example.com'
+    );
+    expect(generateCSP('storefront', false)).not.toContain(
+      'https://support.example.com'
+    );
+
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    vi.stubEnv('EKAETTE_CHATWOOT_WIDGET_ENABLED', 'true');
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_PLATFORM_ORIGIN',
+      'https://support.example.com/path'
+    );
+    expect(generateCSP('storefront', false)).not.toContain(
+      'https://support.example.com'
+    );
   });
 });
 

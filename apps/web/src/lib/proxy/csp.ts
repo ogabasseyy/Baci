@@ -12,6 +12,7 @@ export function generateCSP(
   searchParams?: URLSearchParams,
   oxygenOwned = false
 ): string {
+  const chatwootOrigin = getEnabledChatwootPlatformOrigin();
   const hostedOrigins =
     oxygenOwned &&
     routeType === 'storefront' &&
@@ -61,7 +62,7 @@ export function generateCSP(
       : routeType === 'storefront'
         ? {
             ...baseDirectives,
-            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net`,
+            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net${chatwootOrigin ? ` ${chatwootOrigin}` : ''}`,
             'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
             // wss://*.supabase.co: the shared cart's private Realtime channel.
             // An https: source does not cover wss:, so without it browsers
@@ -84,9 +85,45 @@ export function generateCSP(
           (routeType === 'admin' && builderExperiencePreview))
           ? `${value} ${executionOrigin}`
           : value;
-      return (source ? `${key} ${source}` : key).trim();
+      const withChatwoot =
+        routeType === 'storefront' &&
+        chatwootOrigin &&
+        (key === 'connect-src' || key === 'frame-src')
+          ? `${source} ${chatwootOrigin}`
+          : source;
+      return (withChatwoot ? `${key} ${withChatwoot}` : key).trim();
     })
     .join('; ');
+}
+
+/** Exact HTTPS origin only; malformed environment values never widen CSP. */
+function getEnabledChatwootPlatformOrigin(): string | null {
+  if (
+    process.env.EKAETTE_CHATWOOT_WIDGET_ENABLED !== 'true' ||
+    process.env.EKAETTE_CHATWOOT_CONTEXT_ENABLED !== 'true'
+  ) {
+    return null;
+  }
+  const value = process.env.EKAETTE_CHATWOOT_PLATFORM_ORIGIN?.trim();
+  if (!value || value.length > 512) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      (url.port && url.port !== '443') ||
+      (url.pathname && url.pathname !== '/') ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return `https://${url.hostname.toLowerCase()}`;
+  } catch {
+    return null;
+  }
 }
 
 export function generateCspNonce(): string {

@@ -32,7 +32,9 @@ export function selectBlackFridayProducts<T extends StorefrontHomeProduct>(
       product.slug &&
       Number.isFinite(price) &&
       price > 0 &&
-      (!product.manage_stock || stock > 0 || product.availability === 'InStock')
+      (!product.manage_stock ||
+        stock > 0 ||
+        ('availability' in product && product.availability === 'InStock'))
     ) {
       available.set(product.slug, product);
     }

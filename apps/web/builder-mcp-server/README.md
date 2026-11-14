@@ -1,8 +1,8 @@
 # Baci merchant builder MCP — inactive source
 
 Separate from Ogabassey buyer MCP and Muse. No existing resource, tool, submission
-or deployment is changed. Only six implemented tools are advertised. Preview and
-publication are not registered yet.
+or deployment is changed by this source. The default listener advertises the
+portable-homepage tools; full-code tools require explicit opt-in.
 
 ## Commands
 
@@ -19,13 +19,21 @@ An explicitly requested local listener can use `pnpm --filter @baci/web mcp:buil
 origin are constants, not tool arguments. No listener starts merely by importing
 `server.ts` or `node.ts`.
 
-The builder authorization server's issuer is `https://mcp.usebaci.com`; its
+The builder authorization server's issuer is `https://builder-auth.usebaci.com`; its
 OAuth discovery, authorization, token, JWKS, interaction and callback paths
 must be routed to the separately deployed builder auth service. The MCP path
-and protected-resource metadata route go to the MCP listener. The existing
+and protected-resource metadata route on `https://mcp.usebaci.com` go to the
+MCP listener. The existing
 `auth.usebaci.com` service remains the upstream Supabase identity provider.
 
-Pass `--experience` after the port to advertise the full-code experience tools.
+The dedicated builder issuer is a breaking change for any previously issued
+builder tokens. Before enabling it, inventory any live builder clients and
+grants, configure and verify the new issuer and callback, and coordinate
+re-authorization and token reissue where needed. This listener accepts only
+the configured builder issuer; it does not accept commerce connector tokens.
+Do not redirect or replace the existing commerce issuer as part of this rollout.
+
+Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the
 web gateway or the isolated runner.
 

@@ -51,6 +51,19 @@ function createOwnerHttpHandler(
       respond(res, 404);
       return;
     }
+    const signature = req.headers[binding.signature];
+    if (
+      typeof signature !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(signature) ||
+      req.rawHeaders.filter(
+        (_, i) =>
+          i % 2 === 0 && req.rawHeaders[i].toLowerCase() === binding.signature
+      ).length !== 1
+    ) {
+      req.resume();
+      respond(res, 401);
+      return;
+    }
     if (readers >= 8) {
       respond(res, 429);
       return;
@@ -107,10 +120,8 @@ function createOwnerHttpHandler(
       readers--;
     }
     try {
-      const signature = req.headers[binding.signature];
       const headers = new Headers({ 'content-type': 'application/json' });
-      if (typeof signature === 'string')
-        headers.set(binding.signature, signature);
+      headers.set(binding.signature, signature);
       const result = await bridge(
         new Request(binding.target, {
           method: 'POST',
@@ -147,7 +158,7 @@ function createOwnerHttpHandler(
       });
       res.end(Buffer.concat(content));
     } catch {
-      respond(res, 404);
+      respond(res, 502);
     }
   }
   return {

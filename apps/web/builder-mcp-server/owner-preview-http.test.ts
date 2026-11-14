@@ -11,7 +11,7 @@ async function send(
     host?: string;
     method?: string;
     body?: string;
-    signature?: string;
+    signature?: string | null;
     cookie?: string;
   } = {}
 ) {
@@ -30,7 +30,11 @@ async function send(
           host: options.host ?? 'mcp.usebaci.com',
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(options.body ?? '{}'),
-          'x-baci-owner-signature': options.signature ?? 'a'.repeat(64),
+          ...(options.signature === null
+            ? {}
+            : {
+                'x-baci-owner-signature': options.signature ?? 'a'.repeat(64),
+              }),
           ...(options.cookie ? { cookie: options.cookie } : {}),
         },
       },
@@ -87,6 +91,31 @@ it('forwards only the fixed owner preview path, signed body and no browser cooki
       413
     );
     expect(bridge).toHaveBeenCalledOnce();
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it('rejects missing and malformed signatures before dispatch and reports bridge failures', async () => {
+  const bridge = vi.fn(async () => {
+    throw Error('bridge unavailable');
+  });
+  const handler = createOwnerPreviewHttpHandler(bridge);
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    expect((await send(address.port, { signature: null })).status).toBe(401);
+    expect((await send(address.port, { signature: 'invalid' })).status).toBe(
+      401
+    );
+    expect(bridge).not.toHaveBeenCalled();
+    expect((await send(address.port)).status).toBe(502);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

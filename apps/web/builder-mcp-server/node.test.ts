@@ -129,6 +129,7 @@ it('routes the internal owner preview only when explicitly installed', async () 
           headers: {
             host: 'mcp.usebaci.com',
             'content-type': 'application/json',
+            'x-baci-owner-signature': 'a'.repeat(64),
           },
         },
         (res) => {
@@ -149,7 +150,7 @@ it('routes the internal owner preview only when explicitly installed', async () 
 it('routes signed attestation only when explicitly installed', async () => {
   const ownerAttestation = vi.fn(async (req: Request) => {
     expect(req.url).toBe('https://verifier.baci-internal.invalid/v1/attest');
-    expect(req.headers.get('x-baci-verifier-signature')).toBe('synthetic');
+    expect(req.headers.get('x-baci-verifier-signature')).toBe('a'.repeat(64));
     expect(req.headers.get('cookie')).toBeNull();
     return new Response(null, { status: 204 });
   });
@@ -169,7 +170,7 @@ it('routes signed attestation only when explicitly installed', async () => {
           headers: {
             host: 'mcp.usebaci.com',
             'content-type': 'application/json',
-            'x-baci-verifier-signature': 'synthetic',
+            'x-baci-verifier-signature': 'a'.repeat(64),
             cookie: 'secret=never-forward',
           },
         },

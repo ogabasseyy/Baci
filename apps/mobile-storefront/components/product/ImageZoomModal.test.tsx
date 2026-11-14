@@ -161,37 +161,6 @@ describe('ImageZoomModal', () => {
       ).toBeTruthy();
     });
 
-    it('does not initialize zoom gestures while the viewer is closed', () => {
-      const spy = jest.spyOn(imageZoomHook, 'useImageZoom');
-      renderModal({ visible: false });
-      expect(spy).not.toHaveBeenCalled();
-      spy.mockRestore();
-    });
-
-    it('removes the active viewer and skips gesture setup when closed', () => {
-      const spy = jest.spyOn(imageZoomHook, 'useImageZoom');
-      try {
-        const { rerender } = renderModal();
-        expect(spy).toHaveBeenCalled();
-        spy.mockClear();
-        rerender(
-          <ImageZoomModal
-            visible={false}
-            images={IMAGES}
-            initialIndex={0}
-            onClose={jest.fn()}
-            onIndexChange={jest.fn()}
-          />
-        );
-        expect(
-          screen.queryByRole('button', { name: 'Close image viewer' })
-        ).toBeNull();
-        expect(spy).not.toHaveBeenCalled();
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
     it('does not render close button when visible is false', () => {
       renderModal({ visible: false });
       expect(

@@ -132,7 +132,7 @@ export function useNativeSplashHandoff({
   }, [showSplash, hideFailed]);
 
   useEffect(() => {
-    if (!hideFailed) {
+    if (!hideFailed && !timedOut) {
       setNativeSplashVisible(false);
       return;
     }
@@ -144,12 +144,12 @@ export function useNativeSplashHandoff({
     };
 
     syncVisibility();
-    const interval = setInterval(syncVisibility, 250);
+    const interval = setInterval(syncVisibility, 1000);
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [hideFailed]);
+  }, [hideFailed, timedOut]);
 
   const onFirstLayout = () => {
     if (firstLayoutRecorded.current) return;

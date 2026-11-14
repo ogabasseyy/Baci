@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { clearLastNotificationResponse } from './clear-last-notification-response';
 import { navigateFromPushScreen } from './navigate-from-push-screen';
 import { processPushNotificationResponse } from './process-push-notification-response';
+import { shouldHandleColdStartResponse } from './should-handle-cold-start-response';
 import type { UsePushNotificationsReturn } from './use-push-notifications.types';
 import { useSavingsPushRegistration } from './use-savings-push-registration';
 
@@ -184,7 +185,12 @@ export function usePushNotifications({
       if (!coldStartResponseRequested.current) {
         coldStartResponseRequested.current = true;
         Notifications.getLastNotificationResponseAsync().then((response) => {
-          if (!response || liveResponseReceived.current) return;
+          if (!response) return;
+          if (
+            !shouldHandleColdStartResponse(true, liveResponseReceived.current)
+          ) {
+            return;
+          }
           log.info('App launched from notification');
           if (navigationReadyRef.current) {
             handleNotificationResponse(response);

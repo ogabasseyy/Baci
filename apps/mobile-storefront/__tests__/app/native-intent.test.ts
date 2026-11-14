@@ -70,6 +70,16 @@ describe('redirectSystemPath', () => {
     expect(mockCapture).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves a route when only the custom URL scheme is uppercase', () => {
+    expect(
+      redirectSystemPath({ path: 'OGABASSEY:///cart', initial: true })
+    ).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith(
+      'OGABASSEY:///cart',
+      expect.anything()
+    );
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

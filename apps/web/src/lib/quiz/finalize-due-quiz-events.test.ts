@@ -540,4 +540,40 @@ describe('finalizeDueQuizEvents', () => {
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
   });
+
+  it('persists recovery baseline on a failed first-tick sweep when no prior baseline exists', async () => {
+    const tick1Watermarks = makeOkWatermarks('ok');
+
+    // Tick 1: first-ever tick has a local mutation, but sweep fails (false).
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(false);
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { awarded: 1 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 2: idle RPCs, same watermarks -> retries recovery from tick1Watermarks.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+      .mockResolvedValueOnce({ data: 0, error: null });
+
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+  });
 });

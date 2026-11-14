@@ -206,12 +206,10 @@ async function runFinalizeDueQuizEvents() {
       false;
 
     if (sweepWatermarks.hasProbeFailure || !sweepSucceeded) {
-      if (lastObservedWatermarks !== null) {
-        await saveQuizSweepBaseline({
-          watermarks: lastObservedWatermarks,
-          hasPendingRecoverySweep: true,
-        });
-      }
+      await saveQuizSweepBaseline({
+        watermarks: lastObservedWatermarks ?? sweepTargetWatermarks,
+        hasPendingRecoverySweep: true,
+      });
     } else {
       await saveQuizSweepBaseline({
         watermarks: sweepWatermarks,

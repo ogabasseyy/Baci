@@ -5,6 +5,7 @@ import Colors, { SPACING } from '@/constants/Colors';
 import {
   CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
   CHAT_WIDGET_FAB_SIZE,
+  CONTENT_OVERLAY_GAP,
   getHomeContentBottomPadding,
 } from '@/constants/layout';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
@@ -88,8 +89,36 @@ describe('useWalletAppearance', () => {
       includeBottomInset: false,
       paddingBottom: Math.max(
         SPACING.xl,
-        CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET + CHAT_WIDGET_FAB_SIZE + SPACING.sm
+        CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET +
+          CHAT_WIDGET_FAB_SIZE +
+          CONTENT_OVERLAY_GAP
       ),
+    });
+  });
+
+  it('bugfix: a pushed wallet adds the bottom safe area to the chat clearance', () => {
+    const getScrollContentStyle = jest.fn(() => ({}));
+    jest.mocked(useColorScheme).mockReturnValue('light');
+    jest.mocked(useStorefrontInsets).mockReturnValue({
+      getListContentStyle:
+        jest.fn<
+          ReturnType<typeof useStorefrontInsets>['getListContentStyle']
+        >(),
+      getScrollContentStyle,
+      insets: { top: 0, right: 0, bottom: 34, left: 0 },
+    });
+
+    renderHook(() => useWalletAppearance('stack'));
+
+    // The chat button sits 34pt higher on a home-indicator device, so the
+    // clearance must grow by the same 34pt (Muse, #4250).
+    expect(getScrollContentStyle).toHaveBeenCalledWith({
+      includeBottomInset: false,
+      paddingBottom:
+        CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET +
+        34 +
+        CHAT_WIDGET_FAB_SIZE +
+        CONTENT_OVERLAY_GAP,
     });
   });
 });

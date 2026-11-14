@@ -1,6 +1,8 @@
 export const BLACK_FRIDAY_PATH = '/black-friday';
 
-// Add approved catalog slugs in the order shoppers should see them.
+// Add exact canonical catalog slugs in the order shoppers should see them.
+// Keep lowercase, unpadded values: the storefront lineup query and RedVault
+// deliberately use the same exact match, so only listed products qualify.
 export const APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS: readonly string[] = [];
 const previewProductSlugs = [
   'iphone-18-pro-max',

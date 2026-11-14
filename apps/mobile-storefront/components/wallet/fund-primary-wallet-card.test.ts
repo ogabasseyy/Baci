@@ -1,12 +1,38 @@
-import { beforeEach, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, expect, it, jest } from '@jest/globals';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
+import { Alert, type AlertButton } from 'react-native';
 import { primaryWalletCardSchemas } from '@/schemas/primary-wallet-card';
 
 const mockRead = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockStart = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockRecover = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockCapability = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockAlert =
+  jest.fn<
+    (
+      title: string,
+      message?: string,
+      buttons?: AlertButton[],
+      options?: object
+    ) => void
+  >();
+jest.mock('./savings/savings-notifier', () => ({
+  savingsNotifier: () => (title: string, message?: string) =>
+    mockAlert(title, message),
+}));
+jest.mock('./savings/notify-savings', () => ({
+  notifySavings: (title: string, message?: string) => mockAlert(title, message),
+}));
+jest.mock('./fund/ask-wallet-fund', () => ({
+  askWalletFund: (title: string, message: string, label: string) =>
+    (
+      jest.requireActual(
+        './fund/alert-shaped.test-support'
+      ) as typeof import('./fund/alert-shaped.test-support')
+    )
+      .alertShapedTestBridge(mockAlert)
+      .ask(title, message, label),
+}));
 jest.mock('@/lib/primary-wallet-card', () => ({
   createPrimaryWalletCardFundingClient: () => ({
     readPending: mockRead,
@@ -48,7 +74,12 @@ const response = {
   authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
   returnTo: '/wallet',
 };
-const alert = jest.spyOn(Alert, 'alert');
+// The notice and funding question are inline now: replay both through one
+// Alert-shaped spy so these cases keep their titles, copy and button
+// presses, while the real iOS alert must stay unused.
+const alert = mockAlert;
+const iosAlert = jest.spyOn(Alert, 'alert');
+afterEach(() => expect(iosAlert).not.toHaveBeenCalled());
 beforeEach(() => {
   jest.clearAllMocks();
   mockActiveUserId = '11111111-1111-4111-8111-111111111111';
@@ -300,7 +331,7 @@ it('recovers the persisted operation instead of accepting a new amount/choice af
   expect(mockStart).not.toHaveBeenCalled();
   expect(router.push).not.toHaveBeenCalled();
   expect(input.resetFundPanel).not.toHaveBeenCalled();
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(
     'Card funding pending',
     expect.stringContaining('saved')
   );
@@ -334,7 +365,7 @@ it('recovers a saved checkout before trusting an unavailable capability probe', 
     userId: input.user.id,
   });
   expect(mockStart).not.toHaveBeenCalled();
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(
     'Card funding pending',
     expect.stringContaining('saved')
   );
@@ -345,7 +376,7 @@ it('keeps a saved checkout instead of falling back when recovery reports unavail
     Object.assign(new Error('unavailable'), { code: 'PRIMARY_CARD_NOT_READY' })
   );
   await fundPrimaryWalletCard(input);
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(
     'Card funding could not be confirmed',
     expect.stringContaining('retained')
   );
@@ -361,11 +392,8 @@ it.each([
   mockRead.mockResolvedValue({ operationId: 'persisted' });
   mockRecover.mockRejectedValue(Object.assign(new Error('rejected'), { code }));
   await fundPrimaryWalletCard(input);
-  expect(Alert.alert).toHaveBeenCalledWith(
-    title,
-    expect.stringContaining(guidance)
-  );
-  expect(Alert.alert).not.toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(title, expect.stringContaining(guidance));
+  expect(alert).not.toHaveBeenCalledWith(
     'Card funding could not be confirmed',
     expect.anything()
   );
@@ -391,7 +419,7 @@ it('nudges and falls back to legacy top-up when email verification is required',
   await expect(fundPrimaryWalletCard(input)).rejects.toMatchObject({
     code: 'PRIMARY_CARD_NOT_READY',
   });
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(
     'Verify your email for card funding',
     expect.stringContaining('standard top-up')
   );
@@ -402,11 +430,11 @@ it('keeps the nudge-only path when email is required with a retained checkout', 
     Object.assign(new Error('rejected'), { code: 'VERIFIED_EMAIL_REQUIRED' })
   );
   await fundPrimaryWalletCard(input);
-  expect(Alert.alert).toHaveBeenCalledWith(
+  expect(alert).toHaveBeenCalledWith(
     'Verify your email',
     expect.stringContaining('do not start another charge')
   );
-  expect(Alert.alert).not.toHaveBeenCalledWith(
+  expect(alert).not.toHaveBeenCalledWith(
     'Verify your email for card funding',
     expect.anything()
   );

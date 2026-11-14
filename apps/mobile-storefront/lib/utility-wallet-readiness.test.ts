@@ -337,4 +337,85 @@ describe('ensureUtilityWalletReady', () => {
     );
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
+
+  describe('bugfix: Pay button shortfall for PiggyVest customers', () => {
+    const returnToHref = '/utilities/airtime' as WalletReturnHref;
+
+    it('offers a store credit card top-up, never bank transfer funding', () => {
+      const ready = ensureUtilityWalletReady({
+        amount: 1000,
+        payment: paymentState({
+          getWalletBalance: () => 200,
+          walletIsStoreCredit: true,
+        }),
+        returnToHref,
+      });
+
+      expect(ready).toBe(false);
+      expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+      const [title, , buttons] = (Alert.alert as jest.Mock).mock.calls[0];
+      expect(title).toBe('Not enough store credit');
+      buttons[0].onPress();
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        `/wallet?action=fund&requiredAmount=800&returnTo=${encodeURIComponent(returnToHref)}`
+      );
+    });
+
+    it('offers only card store credit or a retry when the PiggyVest check is unknown', () => {
+      const refetchWallet = jest.fn();
+      const ready = ensureUtilityWalletReady({
+        amount: 1000,
+        payment: paymentState({
+          getWalletBalance: () => 200,
+          refetchWallet,
+          walletPrimaryUnknown: true,
+        }),
+        returnToHref,
+      });
+
+      expect(ready).toBe(false);
+      expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+      const [title, , buttons] = (Alert.alert as jest.Mock).mock.calls[0];
+      expect(title).toBe('Wallet not ready');
+      // Card store credit (never bank transfer), then Try Again.
+      expect(buttons.map((b: { text: string }) => b.text)).toEqual([
+        'Add store credit',
+        'Try Again',
+        'Cancel',
+      ]);
+      buttons[0].onPress();
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        `/wallet?action=fund&requiredAmount=800&returnTo=${encodeURIComponent(returnToHref)}`
+      );
+      buttons[1].onPress();
+      expect(refetchWallet).toHaveBeenCalled();
+    });
+
+    it('uses the live verdict when the wallet turns PiggyVest-ready mid-await', () => {
+      const ready = ensureUtilityWalletReady({
+        amount: 1000,
+        payment: paymentState({
+          getWalletBalance: () => 200,
+          getWalletVerdict: () => ({ walletIsStoreCredit: true }),
+        }),
+        returnToHref,
+      });
+
+      expect(ready).toBe(false);
+      expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+      expect((Alert.alert as jest.Mock).mock.calls[0][0]).toBe(
+        'Not enough store credit'
+      );
+    });
+
+    it('still pays from store credit that covers the amount', () => {
+      expect(
+        ensureUtilityWalletReady({
+          amount: 1000,
+          payment: paymentState({ walletIsStoreCredit: true }),
+          returnToHref,
+        })
+      ).toBe(true);
+    });
+  });
 });

@@ -65,7 +65,7 @@ describe('wallet-screen contribution rail after a primary fallback', () => {
       operationRailRef,
       refetchWallet: jest.fn(async () => undefined),
       savingsContributionAmount: '2500',
-      spendableBalance: 5000,
+      walletBalance: 5000,
       startWalletTopUp: jest.fn(),
       setIsAddingSavingsContribution: jest.fn(),
       setShowSavingsProgressModal: jest.fn(),

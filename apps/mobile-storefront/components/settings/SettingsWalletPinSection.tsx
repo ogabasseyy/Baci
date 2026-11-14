@@ -4,6 +4,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { SettingsCardSection } from './SettingsCardSection';
 import { SettingsSectionRow } from './SettingsSectionRow';
+import { useRefreshOnRefocus } from './use-refresh-on-refocus';
 import {
   useWalletPinSettingsGate,
   type WalletPinStatus,
@@ -11,8 +12,8 @@ import {
 
 function subtitleFor(status: WalletPinStatus | null) {
   if (status?.resetRequired) return 'Reset your PIN to continue';
-  if (status?.hasPin) return 'Needed when you move money into a savings goal';
-  return 'Set a PIN to move money into savings goals';
+  if (status?.hasPin) return 'Protects money leaving your wallet';
+  return 'Set a PIN to protect money leaving your wallet';
 }
 
 /** Settings > SECURITY > Wallet PIN. Renders nothing unless the server says
@@ -20,6 +21,8 @@ function subtitleFor(status: WalletPinStatus | null) {
 export function SettingsWalletPinSection() {
   const colors = Colors[useColorScheme()];
   const gate = useWalletPinSettingsGate();
+  // A PIN saved on the pushed Wallet PIN screen shows here on return.
+  useRefreshOnRefocus(gate.refresh);
   if (gate.state !== 'ready') return null;
 
   return (

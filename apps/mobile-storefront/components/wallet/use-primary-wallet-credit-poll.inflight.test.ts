@@ -13,6 +13,7 @@ import {
 } from './use-primary-wallet-credit-poll';
 
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
+jest.mock('./savings/notify-savings', () => ({ notifySavings: jest.fn() }));
 
 describe('usePrimaryWalletCreditPoll with a slow refresh', () => {
   beforeEach(() => {

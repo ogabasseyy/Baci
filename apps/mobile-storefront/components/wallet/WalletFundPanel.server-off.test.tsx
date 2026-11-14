@@ -45,3 +45,47 @@ describe('WalletFundPanel with the server off', () => {
     ).toBeOnTheScreen();
   });
 });
+
+const panelProps = () => ({
+  canCreateFundingAccount: true,
+  colors: Colors.light,
+  fundAmount: '',
+  isCreatingFundingAccount: false,
+  isFundPending: false,
+  needsPhone: false,
+  onChangeFundAmount: jest.fn(),
+  onConfirmFund: jest.fn(),
+  onCreateFundingAccount: jest.fn(),
+  onResetFund: jest.fn(),
+  onSubmitPhone: jest.fn(async () => ({ success: true as const })),
+});
+
+describe('bugfix: the PiggyVest deposit fee appeared nowhere in Add money', () => {
+  it('says a deposit fee may be taken, only for the PiggyVest account', () => {
+    const { rerender } = render(
+      <WalletFundPanel
+        {...panelProps()}
+        fundingAccount={{
+          accountName: 'Default Wallet',
+          accountNumber: '9000002044',
+          bankName: 'FAAS (SANDBOX)',
+          provider: 'piggyvest',
+        }}
+      />
+    );
+    expect(screen.getByText(/small deposit fee/)).toBeOnTheScreen();
+
+    rerender(
+      <WalletFundPanel
+        {...panelProps()}
+        fundingAccount={{
+          accountName: 'OGB / JOHN DOE',
+          accountNumber: '9814644749',
+          bankName: 'Wema Bank',
+          provider: 'paystack',
+        }}
+      />
+    );
+    expect(screen.queryByText(/small deposit fee/)).toBeNull();
+  });
+});

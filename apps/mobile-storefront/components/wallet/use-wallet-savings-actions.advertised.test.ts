@@ -46,7 +46,7 @@ async function submit(primaryReady: boolean) {
     primaryReady,
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '500',
-    spendableBalance: 5000,
+    walletBalance: 5000,
     setIsAddingSavingsContribution: jest.fn(),
     setShowSavingsProgressModal: jest.fn(),
     setSavingsContributionAmount: jest.fn(),
@@ -73,5 +73,46 @@ describe('primary contributions never fall back to legacy funds', () => {
 
   it('keeps today’s fallback when the wallet is not ready', async () => {
     expect((await submit(false)).primaryAdvertised).toBe(false);
+  });
+});
+
+describe('bugfix: contribution debits an unseen PiggyVest balance before the reload', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('holds a new contribution while PiggyVest is confirmed but the wallet is still legacy', () => {
+    // Arrange: the verdict turned positive; the wallet reload hasn't landed.
+    const {
+      clearObservedPiggyvestPrimaryCapability,
+      observePiggyvestPrimaryCapability,
+    } = jest.requireActual<
+      typeof import('@/lib/piggyvest-primary-capability-cache')
+    >('@/lib/piggyvest-primary-capability-cache');
+    observePiggyvestPrimaryCapability(
+      '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      true
+    );
+    const refetchWallet = jest.fn(async () => undefined);
+
+    // Act
+    createWalletSavingsActions({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      goal,
+      idempotencyKeyRef: { current: null },
+      operationRailRef: { current: null },
+      primaryReady: false,
+      refetchWallet,
+      savingsContributionAmount: '500',
+      walletBalance: 5000,
+      setIsAddingSavingsContribution: jest.fn(),
+      setShowSavingsProgressModal: jest.fn(),
+      setSavingsContributionAmount: jest.fn(),
+    }).handleAddSavingsContribution();
+    clearObservedPiggyvestPrimaryCapability();
+
+    // Assert: nothing submitted; the wallet reloads.
+    expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
+    expect(refetchWallet).toHaveBeenCalled();
   });
 });

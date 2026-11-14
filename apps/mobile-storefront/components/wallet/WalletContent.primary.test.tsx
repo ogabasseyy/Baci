@@ -6,6 +6,11 @@ import { WalletContent } from './WalletContent';
 import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// The PiggyVest activity list has its own tests (and needs a query client).
+jest.mock('./activity/PiggyvestWalletActivity', () => ({
+  PiggyvestWalletActivity: () => null,
+}));
+
 let restoreCustomer: () => void;
 beforeEach(() => {
   restoreCustomer = setWalletTestCustomer();

@@ -46,7 +46,12 @@ export async function POST(request: NextRequest) {
   );
   if (!parsed.success) return unavailable(400, 'invalid_request');
 
-  const cartContext = await loadChatwootCartContext(request);
+  let cartContext: Awaited<ReturnType<typeof loadChatwootCartContext>>;
+  try {
+    cartContext = await loadChatwootCartContext(request);
+  } catch {
+    return unavailable(503, 'temporarily_unavailable');
+  }
   if (!cartContext.ok) {
     return unavailable(cartContext.status, cartContext.code);
   }
@@ -116,24 +121,29 @@ export async function POST(request: NextRequest) {
   }
   if (!principal) return unavailable(503, 'temporarily_unavailable');
 
-  const result = await mutateCart(
-    {
-      client,
-      principal,
-    },
-    {
-      command:
-        parsed.data.quantity === 0
-          ? { lineId: parsed.data.lineId, type: 'remove' }
-          : {
-              lineId: parsed.data.lineId,
-              quantity: parsed.data.quantity,
-              type: 'set_quantity',
-            },
-      expectedVersion: parsed.data.cartVersion,
-      operationId: parsed.data.requestId,
-    }
-  );
+  let result: Awaited<ReturnType<typeof mutateCart>>;
+  try {
+    result = await mutateCart(
+      {
+        client,
+        principal,
+      },
+      {
+        command:
+          parsed.data.quantity === 0
+            ? { lineId: parsed.data.lineId, type: 'remove' }
+            : {
+                lineId: parsed.data.lineId,
+                quantity: parsed.data.quantity,
+                type: 'set_quantity',
+              },
+        expectedVersion: parsed.data.cartVersion,
+        operationId: parsed.data.requestId,
+      }
+    );
+  } catch {
+    return unavailable(503, 'temporarily_unavailable');
+  }
   if (!result.ok) {
     const status =
       result.code === 'version_conflict' ||
@@ -187,6 +197,7 @@ export async function POST(request: NextRequest) {
       if (
         !latestCart?.ok ||
         latestCart.cart.cartId !== principal.cartId ||
+        latestCart.cart.merchantId !== cartContext.state.merchantId ||
         latestCart.cart.version < cartContext.state.cartVersion ||
         (liveCartVersion !== null && latestCart.cart.version < liveCartVersion)
       ) {
@@ -196,6 +207,7 @@ export async function POST(request: NextRequest) {
         proofCartExpiresAt = latestCart.cart.expiresAt;
       }
     }
+    if (!canRenewProof) liveCartVersion = null;
   }
   if (liveCartVersion === null) {
     canRenewProof = false;
@@ -224,10 +236,8 @@ export async function POST(request: NextRequest) {
         },
         { environment: getCartProofEnvironment() }
       );
-    } catch (error) {
-      console.error('Chatwoot cart proof reissue failed after commit', {
-        message: error instanceof Error ? error.message : 'unknown',
-      });
+    } catch {
+      console.error('Chatwoot cart proof reissue failed after commit');
     }
   }
   const maxAge = proofGrantExpiry
@@ -251,10 +261,8 @@ export async function POST(request: NextRequest) {
           cartVersion: liveCartVersion,
         },
       });
-    } catch (error) {
-      console.error('Chatwoot session renewal failed after cart commit', {
-        message: error instanceof Error ? error.message : 'unknown',
-      });
+    } catch {
+      console.error('Chatwoot session renewal failed after cart commit');
     }
   }
   // An idempotent replay stays accepted when the live-cart read fails; only

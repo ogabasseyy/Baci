@@ -227,7 +227,7 @@ describe('Chatwoot cart mutation replay', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
-  it('preserves a successful replay when the follow-up snapshot read throws', async () => {
+  it('omits replay version when the follow-up snapshot read throws', async () => {
     arrange();
     mocks.getCart.mockRejectedValue(new Error('private repository details'));
     mocks.mutateCart.mockResolvedValue({
@@ -239,16 +239,62 @@ describe('Chatwoot cart mutation replay', () => {
     });
 
     const response = await POST(request());
+    const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      accepted: true,
-      cartVersion: 15,
-      replayed: true,
-    });
+    expect(payload).toMatchObject({ accepted: true, replayed: true });
+    expect(payload).not.toHaveProperty('cartVersion');
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
     expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
+  });
+
+  it('omits replay version when live state disagrees with the RPC version', async () => {
+    arrange();
+    mocks.getCart.mockResolvedValue({
+      ok: true,
+      cart: { ...cart, version: 14 },
+    });
+    mocks.mutateCart.mockResolvedValue({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      currentVersion: 15,
+      cart: { version: 13, expiresAt: cart.expiresAt },
+    });
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({ accepted: true, replayed: true });
+    expect(payload).not.toHaveProperty('cartVersion');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a replay snapshot belongs to another merchant', async () => {
+    arrange();
+    mocks.getCart.mockResolvedValue({
+      ok: true,
+      cart: { ...cart, merchantId: 'other-merchant', version: 15 },
+    });
+    mocks.mutateCart.mockResolvedValue({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      currentVersion: 15,
+      cart: { version: 13, expiresAt: cart.expiresAt },
+    });
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({ accepted: true, replayed: true });
+    expect(payload).not.toHaveProperty('cartVersion');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
   });
 });

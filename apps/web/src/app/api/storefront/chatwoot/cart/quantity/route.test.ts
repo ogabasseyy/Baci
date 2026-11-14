@@ -214,6 +214,36 @@ describe('Chatwoot shared-cart quantity route', () => {
     );
   });
 
+  it.each([
+    [
+      'context lookup',
+      () =>
+        mocks.loadChatwootCartContext.mockRejectedValueOnce(
+          new Error('private context error')
+        ),
+    ],
+    [
+      'cart mutation',
+      () =>
+        mocks.mutateCart.mockRejectedValueOnce(
+          new Error('private mutation error')
+        ),
+    ],
+  ])('returns a no-store unavailable response when %s throws', async (_label, reject) => {
+    arrange();
+    reject();
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      accepted: false,
+      code: 'temporarily_unavailable',
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('returns the stable unavailable response when scoped proof creation expires', async () => {
     arrange();
     mocks.createCartScopedClient.mockImplementationOnce(() => {
@@ -261,6 +291,12 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(payload).not.toHaveProperty('sessionToken');
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(mocks.mutateCart).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledWith(
+      'Chatwoot session renewal failed after cart commit'
+    );
+    expect(log).not.toHaveBeenCalledWith(
+      expect.stringContaining('synthetic signing failure')
+    );
     log.mockRestore();
   });
 

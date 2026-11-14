@@ -109,7 +109,13 @@ export function verifyChatwootSessionCapability(input: {
   return verifySessionCapability(input, false);
 }
 
-/** Recovers a lost renewal response using the current browser cart proof. */
+/**
+ * Recovers a lost renewal response using the current browser cart proof.
+ * Rebind is available only while the original signed session remains live
+ * within its 600-second TTL; it preserves that original expiry and tenant/cart/
+ * principal bindings. The version floor allows multiple legitimate cart
+ * mutations during that recovery window without extending the capability.
+ */
 export async function rebindChatwootSessionCapability(input: {
   sessionToken: string;
   state: ChatwootCommerceContextState;

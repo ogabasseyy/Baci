@@ -1,7 +1,7 @@
 // Turns what happened into the `Gemini review` commit status (and a PR review when there is one).
 //   success  reviewed, no critical/high finding        failure  reviewed, critical/high finding
-//   error    Gemini could not review (quota, outage, bad config): an ABSTENTION. Diff Guardian
-//            ignores it and the job stays green, so an outage never reads as "Gemini found a problem".
+//   error    Gemini could not review (quota, outage, bad config): an ABSTENTION. The job stays
+//            green, so an outage never reads as "Gemini found a problem".
 // Only `failure` fails the job. This step holds a GitHub token and NO Gemini key.
 // Env in: GH_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, HEAD_SHA, FINGERPRINT, ACTION, CARRY_STATE,
 //   CARRY_SHA, COLLECT_OUTCOME, SHOULD_REVIEW, RESPONSE_FILE, CHANGED_FILES_FILE, RUN_URL,
@@ -124,7 +124,7 @@ async function writeStatus({ github, env, payload, log, sleep }) {
       return true;
     } catch (error) {
       if (attempt === 2) {
-        log(`::warning::Could not write the Gemini review status (${error.message}); Diff Guardian will not see this vote.`);
+        log(`::warning::Could not write the Gemini review status (${error.message}); the commit will not show this verdict.`);
         return false;
       }
       await sleep(2000);
@@ -171,7 +171,7 @@ export async function post({ env, github, log = console.log, now = () => new Dat
       }
     }
   } else if (state === 'error') {
-    log(`::warning::Gemini review not counted (${outcome.why}). The job stays green and Diff Guardian ignores this reviewer for this commit.`);
+    log(`::warning::Gemini review not counted (${outcome.why}). The job stays green and this is not a verdict for this commit.`);
   }
 
   const usage = outcome.response ? `, ${formatUsage(outcome.response.model, outcome.response.usage, now())}` : '';

@@ -4,8 +4,8 @@ Workflow: `.github/workflows/gemini-code-review.yml`. Scripts: `.github/scripts/
 Tests: `.github/scripts/gemini-review/*.test.mjs` and `.github/scripts/gemini-code-review-workflow.test.mjs`.
 
 It sends one request per review to the Gemini API (no agent, no tools, no web access), posts the
-answer as a pull request review, and sets the `Gemini review` commit status that Diff Guardian
-tallies. Muse, Codex and CodeRabbit are separate reviewers and are not affected.
+answer as a pull request review, and sets the `Gemini review` commit status. Muse, Codex and
+CodeRabbit are separate reviewers and are not affected.
 
 ## The status
 
@@ -25,14 +25,13 @@ is still `failure`, and a finding on a path that is not in the list (it may be t
 itself) cannot be verified, so it is no vote either way: the review is still posted, with a note,
 for a person to read.
 
-`error` is an abstention for Diff Guardian and for the job, but GitHub itself treats the `error`
-state like a failure. So **never make `Gemini review` a required check** (a Gemini outage would then
-block every merge). If an AI gate is ever wanted, require `Diff Guardian / quorum` instead. Note
-that this makes the `bypass-ai-gate` label mandatory for every fork pull request (the voters do not
-run for forks, so the check fails until a maintainer adds the label).
+`error` is an abstention for the job, but GitHub itself treats the `error` state like a failure.
+So **never make `Gemini review` a required check** (a Gemini outage would then block every merge).
+Diff Guardian, which used to tally this status with the Jules review, was removed on 2026-11-14
+together with the Jules reviewer (Google's Jules API stopped answering).
 
-`error` is on purpose. Before this rewrite a quota error turned the check red and counted as a
-"Gemini found a problem" vote in Diff Guardian.
+`error` is on purpose. Before this rewrite a quota error turned the check red and read as
+"Gemini found a problem".
 
 ## Before turning it on (`gh workflow enable gemini-code-review.yml`)
 

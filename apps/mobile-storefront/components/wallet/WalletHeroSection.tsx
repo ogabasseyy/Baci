@@ -168,7 +168,7 @@ export function WalletHeroSection({
           {/* A ready PiggyVest wallet shows its own balance only (owner,
               2026-11-14): refunds mirror into the older store credit, so a
               second line would count the same money twice. */}
-          {savingsView && !primaryReady ? (
+          {savingsView && !(primaryReady && balanceReady && !primaryUnknown) ? (
             <WalletHeroStoreCredit balance={storeCredit} />
           ) : null}
           {primaryUnknown ? (

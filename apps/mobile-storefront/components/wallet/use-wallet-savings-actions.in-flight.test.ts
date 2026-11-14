@@ -57,6 +57,9 @@ describe('bugfix: an add in flight is not an earlier pending contribution', () =
       refetchWallet: jest.fn(async () => undefined),
       savingsContributionAmount: '2500',
       spendableBalance: 5000,
+      // #4216 renames the balance input to walletBalance: pass both so this
+      // test compiles before and after that lands.
+      walletBalance: 5000,
       setIsAddingSavingsContribution: jest.fn<(value: boolean) => void>(),
       setShowSavingsProgressModal: jest.fn<(value: boolean) => void>(),
       setSavingsContributionAmount: jest.fn<(value: string) => void>(),

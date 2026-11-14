@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -138,6 +138,110 @@ it('recovers a stale user-scoped job and fences the old worker', async () => {
     releaseSecond();
     await first?.close();
     await second?.close();
+    await f.close();
+  }
+}, 60000);
+
+it('reconciles a lost finalize response for the same linked job under RLS', async () => {
+  const f = await experienceDataFixture({ tokenTtlSeconds: 900 });
+  const hash = (value: string) =>
+    createHash('sha256').update(value).digest('hex');
+  try {
+    const artifact = randomUUID();
+    const source = hash('synthetic-source');
+    await f.db.pool.query(
+      "INSERT INTO experience_artifacts(id,merchant_id,source_digest,manifest) VALUES($1,$2,$3,'{}')",
+      [artifact, f.merchantId, source]
+    );
+    const queued = await f.owner.supabase.rpc('experience_queue_build', {
+      p_merchant: f.merchantId,
+      p_connection: f.connectionId,
+      p_version: 1,
+      p_artifact: artifact,
+      p_retry: randomUUID(),
+    });
+    expect(queued.error).toBeNull();
+    const job = queued.data as string;
+    const row = await f.owner.supabase
+      .from('experience_jobs')
+      .select('attempt_nonce')
+      .eq('id', job)
+      .single();
+    expect(row.error).toBeNull();
+    const attempt = row.data?.attempt_nonce;
+    const binding = {
+      p_merchant: f.merchantId,
+      p_connection: f.connectionId,
+      p_version: 1,
+      p_job: job,
+      p_attempt: attempt,
+    };
+    expect(
+      (await f.owner.supabase.rpc('experience_claim_build', binding)).error
+    ).toBeNull();
+    const javascript = 'export{}';
+    const build = hash(`${javascript}\0`);
+    const receipt = hash('synthetic-receipt');
+    const origin = 'https://merchant.synthetic.test';
+    const verifier = await f.db.pool.connect();
+    try {
+      await verifier.query('BEGIN');
+      await verifier.query('SET LOCAL ROLE baci_experience_verifier');
+      await verifier.query(
+        'INSERT INTO experience_evidence(merchant_id,job_id,attempt_nonce,build_digest,receipt_digest,host_origin) VALUES($1,$2,$3,$4,$5,$6)',
+        [f.merchantId, job, attempt, build, receipt, origin]
+      );
+      await verifier.query('COMMIT');
+    } finally {
+      verifier.release();
+    }
+    const args = {
+      ...binding,
+      p_source: source,
+      p_build: build,
+      p_receipt: receipt,
+      p_retry: job,
+      p_host_origin: origin,
+      p_files: [
+        {
+          path: 'app.js',
+          mime: 'text/javascript',
+          bytes: Buffer.from(javascript).toString('hex'),
+          digest: hash(javascript),
+        },
+        { path: 'app.css', mime: 'text/css', bytes: '', digest: hash('') },
+      ],
+    };
+    const committed = await f.owner.supabase.rpc(
+      'experience_finalize_build',
+      args
+    );
+    expect(committed.error).toBeNull();
+    // Treat the successful response as lost: reconcile through the owner's job read.
+    const status = await f.owner.supabase
+      .from('experience_jobs')
+      .select('status')
+      .eq('id', job)
+      .single();
+    expect(status.data?.status).toBe('finalized');
+    const replay = await f.owner.supabase.rpc(
+      'experience_finalize_build',
+      args
+    );
+    expect(replay.error).toBeNull();
+    expect(replay.data).toBe(committed.data);
+    const foreignReplay = await f.other.supabase.rpc(
+      'experience_finalize_build',
+      args
+    );
+    expect(foreignReplay.error).not.toBeNull();
+    expect(foreignReplay.data).toBeNull();
+    const conflict = await f.owner.supabase.rpc('experience_finalize_build', {
+      ...args,
+      p_receipt: hash('other'),
+    });
+    expect(conflict.error?.message).toContain('IDEMPOTENCY_CONFLICT');
+  } finally {
     await f.close();
   }
 }, 60000);

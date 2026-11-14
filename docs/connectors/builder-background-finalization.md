@@ -93,8 +93,12 @@ raising concurrency.
 The worker uses the stable job ID as its finalization retry key. A disposable
 database test against the live-lease finalization function verifies that an
 identical payload and key return the same build, while a changed receipt with
-that key is rejected as an idempotency conflict. That test uses an ordinary
-owner fixture; it does not prove a timed-out linked worker's full recovery.
+that key is rejected as an idempotency conflict. A separate disposable
+PostgreSQL/PostgREST test uses a linked synthetic merchant and normal RLS,
+treats a successful finalize response as lost, reads the finalized job, replays
+the same result and rejects both a changed payload and another user. The
+response loss is simulated; this does not prove a timed-out real worker's full
+recovery.
 Local SQL now supports recovery of stale leases with a fresh attempt nonce,
 three automatic recoveries, a terminal failure after exhaustion, and a
 user-authorized lease-renewal RPC. The linked build supervisor now renews its

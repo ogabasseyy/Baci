@@ -146,7 +146,9 @@ describe('Chatwoot shared-cart quantity route', () => {
       operationId: input.requestId,
       replayed: false,
       cart: {
+        cartId: principal.cartId,
         expiresAt: snapshot.expiresAt,
+        merchantId: principal.merchantId,
         version: snapshot.version + 1,
       },
     });
@@ -214,6 +216,57 @@ describe('Chatwoot shared-cart quantity route', () => {
     );
   });
 
+  it('rechecks a version newer than a stale context snapshot before mutation', async () => {
+    arrange({ ...body, cartVersion: 13 });
+    mocks.getCart.mockResolvedValueOnce({
+      ok: true,
+      cart: { ...cart, version: 13 },
+    });
+    mocks.mutateCart.mockResolvedValueOnce({
+      ok: true,
+      operationId: body.requestId,
+      replayed: false,
+      cart: { ...cart, version: 14 },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.getCart).toHaveBeenCalledOnce();
+    expect(mocks.mutateCart).toHaveBeenCalledWith(
+      { client: expect.anything(), principal },
+      expect.objectContaining({ expectedVersion: 13 })
+    );
+  });
+
+  it('does not renew proof from a fresh mutation result with mismatched cart binding', async () => {
+    arrange();
+    mocks.mutateCart.mockResolvedValueOnce({
+      ok: true,
+      operationId: body.requestId,
+      replayed: false,
+      currentVersion: 13,
+      cart: {
+        ...cart,
+        cartId: '99999999-9999-4999-8999-999999999999',
+        version: 13,
+      },
+    });
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      accepted: true,
+      operationId: body.requestId,
+      replayed: false,
+    });
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.issueCartSessionProof).not.toHaveBeenCalled();
+    expect(mocks.renewChatwootSessionCapability).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       'context lookup',
@@ -259,6 +312,22 @@ describe('Chatwoot shared-cart quantity route', () => {
     });
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+  it('keeps grant lookup failures retryable without mutating the cart', async () => {
+    arrange();
+    mocks.upgradeLegacySessionPrincipal.mockRejectedValueOnce(
+      new Error('synthetic grant lookup failure')
+    );
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      accepted: false,
+      code: 'temporarily_unavailable',
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(mocks.mutateCart).not.toHaveBeenCalled();
   });
   it('uses upgraded live operations for a legacy cart principal', async () => {

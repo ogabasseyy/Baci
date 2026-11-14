@@ -137,7 +137,9 @@ describe('Chatwoot shared-cart quantity route', () => {
       operationId: input.requestId,
       replayed: false,
       cart: {
+        cartId: principal.cartId,
         expiresAt: snapshot.expiresAt,
+        merchantId: principal.merchantId,
         version: snapshot.version + 1,
       },
     });

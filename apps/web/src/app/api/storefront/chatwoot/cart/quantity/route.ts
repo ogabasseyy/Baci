@@ -80,9 +80,6 @@ export async function POST(request: NextRequest) {
   // A current-version edit must match the canonical line and quantity that
   // the shopper reviewed. Older versions are sent to the atomic mutation RPC
   // so an exact operation replay can succeed; a new stale command conflicts.
-  if (parsed.data.cartVersion > cartContext.cart.version) {
-    return unavailable(409, 'refresh_required');
-  }
   if (parsed.data.cartVersion === cartContext.cart.version) {
     const line = cartContext.cart.lines.find(
       (candidate) => candidate.id === parsed.data.lineId
@@ -119,7 +116,35 @@ export async function POST(request: NextRequest) {
   } catch {
     return unavailable(503, 'temporarily_unavailable');
   }
-  if (!principal) return unavailable(503, 'temporarily_unavailable');
+  if (!principal) return unavailable(403, 'forbidden');
+
+  // A newer client version can be current if the context snapshot became
+  // stale while the request was in flight. Re-read only that case; older
+  // versions still go to the atomic RPC for exact idempotent replay handling.
+  if (parsed.data.cartVersion > cartContext.cart.version) {
+    let latestCart: Awaited<ReturnType<typeof getCart>>;
+    try {
+      latestCart = await getCart({ client, principal });
+    } catch {
+      return unavailable(503, 'temporarily_unavailable');
+    }
+    if (
+      !latestCart.ok ||
+      latestCart.cart.cartId !== principal.cartId ||
+      latestCart.cart.merchantId !== cartContext.state.merchantId ||
+      latestCart.cart.version < parsed.data.cartVersion
+    ) {
+      return unavailable(409, 'refresh_required');
+    }
+    if (latestCart.cart.version === parsed.data.cartVersion) {
+      const line = latestCart.cart.lines.find(
+        (candidate) => candidate.id === parsed.data.lineId
+      );
+      if (!line || line.quantity !== parsed.data.expectedQuantity) {
+        return unavailable(409, 'refresh_required');
+      }
+    }
+  }
 
   let result: Awaited<ReturnType<typeof mutateCart>>;
   try {
@@ -208,6 +233,12 @@ export async function POST(request: NextRequest) {
       }
     }
     if (!canRenewProof) liveCartVersion = null;
+  } else if (
+    result.cart.cartId !== principal.cartId ||
+    result.cart.merchantId !== cartContext.state.merchantId
+  ) {
+    canRenewProof = false;
+    liveCartVersion = null;
   }
   if (liveCartVersion === null) {
     canRenewProof = false;

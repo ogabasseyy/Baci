@@ -1,5 +1,5 @@
 import { postChatwootBridgeJson } from './chatwoot-bridge-request';
-import { runCartSessionCookieWrite } from '@/hooks/cart/cart-session-write-fence';
+import { runCartSessionCookieWrite } from '@/hooks/cart/cart-session-cookie-write';
 import type { chatwootCommerceMessageSchema } from '@/schemas/chatwoot-commerce-message';
 import type { chatwootCartReviewSnapshotSchema } from '@/schemas/chatwoot-cart-review-snapshot';
 import type { z } from 'zod';

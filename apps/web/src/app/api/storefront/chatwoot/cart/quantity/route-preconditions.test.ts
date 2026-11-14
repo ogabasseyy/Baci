@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   checkCartQuota: vi.fn(async () => ({ allowed: true })),
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   createCartScopedClient: vi.fn(() => ({ rpc: vi.fn() })),
+  getCart: vi.fn(),
   loadChatwootCartContext: vi.fn(),
   mutateCart: vi.fn(),
   readCartJsonBody: vi.fn(),
@@ -24,7 +25,10 @@ vi.mock('@/lib/cart/grant-operations', () => ({
 vi.mock('@/lib/cart/scoped-client', () => ({
   createCartScopedClient: mocks.createCartScopedClient,
 }));
-vi.mock('@/lib/cart/service', () => ({ mutateCart: mocks.mutateCart }));
+vi.mock('@/lib/cart/service', () => ({
+  getCart: mocks.getCart,
+  mutateCart: mocks.mutateCart,
+}));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.checkCsrfProtection,
 }));
@@ -112,21 +116,22 @@ function arrange(input = body) {
     sessionExpiresAt: 1_799_000_000,
   });
   mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principal);
+  mocks.getCart.mockResolvedValue({ ok: true, cart });
 }
 
 describe('Chatwoot quantity route preconditions', () => {
   afterEach(() => vi.clearAllMocks());
 
-  it('fails closed when a legacy principal grant cannot be verified', async () => {
+  it('rejects a legacy principal whose grant is explicitly unauthorized', async () => {
     arrange();
     mocks.upgradeLegacySessionPrincipal.mockResolvedValueOnce(null);
 
     const response = await POST(request());
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
       accepted: false,
-      code: 'temporarily_unavailable',
+      code: 'forbidden',
     });
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('set-cookie')).toBeNull();

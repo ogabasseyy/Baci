@@ -32,7 +32,7 @@ afterEach(() => {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 it('drains a quantity response before a cross-tab cart selection', async () => {
-  const writerTab = await import('./cart-session-write-fence');
+  const writerTab = await import('./cart-session-cookie-write');
   let finishResponse!: () => void;
   const order: string[] = [];
   const quantityWrite = writerTab.runCartSessionCookieWrite(
@@ -49,12 +49,12 @@ it('drains a quantity response before a cross-tab cart selection', async () => {
   await tick();
 
   vi.resetModules();
-  const selectingTab = await import('./cart-session-write-fence');
+  const selectingFence = await import('./cart-session-write-fence');
   const selectCart = vi.fn(async () => {
     order.push('account cart selection started');
     return 'selected';
   });
-  const selection = selectingTab.runCartSessionTransition(
+  const selection = selectingFence.runCartSessionTransition(
     'shop',
     'blocked',
     selectCart,
@@ -74,8 +74,9 @@ it('drains a quantity response before a cross-tab cart selection', async () => {
 
 it('fails closed when a secure browser cannot coordinate cookie writes', async () => {
   Reflect.deleteProperty(navigator, 'locks');
+  vi.resetModules();
   const { runCartSessionCookieWrite } = await import(
-    './cart-session-write-fence'
+    './cart-session-cookie-write'
   );
   const request = vi.fn(async () => undefined);
 

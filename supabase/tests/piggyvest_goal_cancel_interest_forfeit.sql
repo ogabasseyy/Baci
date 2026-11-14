@@ -1396,6 +1396,30 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: a late payout reversed while the principal attempt is released
+  -- (before its late success is reconciled) leaves the forfeited total, so the
+  -- revival does not plan the reversed interest again.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('revival-reversal');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'revival split');
+    PERFORM pg_temp.gf_receipt('gf-revival-a', 400);
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0), 'revival release');
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-revival', 'gf-revival-a', 400,
+      repeat('7', 64), 'synthetic-reversal-10');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'revival principal');
+    PERFORM pg_temp.gc_assert(
+      (SELECT COALESCE(pg_catalog.sum(amount_kobo), 0) FROM piggyvest_primary.goal_cancel_interest_forfeits
+        WHERE cancel_operation_id = v_op::uuid AND state = 'reserved') = 12000,
+      'a revived plan carried interest that was reversed while the attempt was released');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- Regression: a delayed receipt (paid before the dispatch) recorded while the
   -- cancel is in flight has its notice voided when the cancel settles.
   BEGIN

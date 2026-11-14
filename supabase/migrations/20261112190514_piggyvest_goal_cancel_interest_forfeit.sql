@@ -1926,6 +1926,7 @@ DECLARE
   v_planned_into uuid;
   v_planned_state text;
   v_unsent boolean;
+  v_cancel_state text;
 BEGIN
   SELECT receipt.goal_id INTO v_goal_id FROM piggyvest_primary.paid_interest_receipts AS receipt
    WHERE receipt.integration_id = NEW.integration_id AND receipt.payout_id = NEW.payout_id;
@@ -1983,7 +1984,14 @@ BEGIN
       INTO v_planned_state, v_unsent
       FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
      WHERE forfeit.id = v_planned_into;
+    SELECT cancel.state INTO v_cancel_state FROM piggyvest_primary.goal_cancel_operations AS cancel
+     WHERE cancel.id = v_cancel_id;
     IF (v_planned_state IS DISTINCT FROM 'released' AND v_unsent)
+       -- Its plan was released together with a released principal attempt and
+       -- never replaced (a rejected plan's contributions follow its
+       -- replacement): nothing was sent, so a revival must not plan the
+       -- reversed interest again.
+       OR (v_planned_state = 'released' AND v_cancel_state NOT IN ('dispatched', 'confirmed'))
        OR ((v_planned_state IS NULL OR v_planned_state = 'released')
            AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS unsent
                         WHERE unsent.cancel_operation_id = v_cancel_id

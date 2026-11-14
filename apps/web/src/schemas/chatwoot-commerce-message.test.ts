@@ -24,4 +24,23 @@ describe('Chatwoot commerce message schemas', () => {
       }).success
     ).toBe(false);
   });
+
+  it('accepts a bound delivery estimate request and rejects extra data', () => {
+    const valid = {
+      event: 'baci-delivery-options-request',
+      data: {
+        requestId: 'delivery-001',
+        conversationId: 905,
+        sessionToken: 'signed-session-capability',
+        state: 'Lagos',
+      },
+    };
+    expect(chatwootCommerceMessageSchema.safeParse(valid).success).toBe(true);
+    expect(
+      chatwootCommerceMessageSchema.safeParse({
+        ...valid,
+        data: { ...valid.data, address: 'Private Street' },
+      }).success
+    ).toBe(false);
+  });
 });

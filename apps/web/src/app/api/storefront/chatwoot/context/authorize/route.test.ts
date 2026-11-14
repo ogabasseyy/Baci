@@ -163,6 +163,7 @@ describe('Chatwoot context authorization route', () => {
       ],
       itemsSubtotalMinor: 250000,
     });
+    expect(body.cartId).toBe(cart.cartId);
     expect(JSON.stringify(body)).not.toContain('must-not-leak');
     expect(JSON.stringify(body)).not.toContain('voucherToken');
   });

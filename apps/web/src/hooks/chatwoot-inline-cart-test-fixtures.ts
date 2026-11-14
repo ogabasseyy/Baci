@@ -78,6 +78,7 @@ export function authorizedCartResponse(
       afterJson?.();
       return Promise.resolve({
         authorized: true,
+        cartId: 'cart-1',
         conversationId,
         sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
         cartSnapshot: snapshot,

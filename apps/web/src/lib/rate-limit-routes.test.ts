@@ -84,6 +84,15 @@ describe('rate-limit route matching', () => {
     }
   });
 
+  it('gives Chatwoot delivery estimates a tighter public IP budget', () => {
+    expect(
+      getRateLimitConfig('/api/storefront/chatwoot/context/delivery-options')
+    ).toMatchObject({
+      pattern: '/api/storefront/chatwoot/context/delivery-options',
+      config: { maxRequests: 30, windowMs: 60_000 },
+    });
+  });
+
   it('bounds unauthenticated legacy bridge traffic per token bucket', () => {
     expect(getRateLimitConfig('/api/storefront/cart/legacy')).toMatchObject({
       pattern: '/api/storefront/cart/legacy',

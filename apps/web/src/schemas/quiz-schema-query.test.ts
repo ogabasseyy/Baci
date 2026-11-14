@@ -17,4 +17,15 @@ describe('quiz query schemas', () => {
       }).success
     ).toBe(false);
   });
+
+  it('accepts current=1 only as the current-events flag', () => {
+    const base = { merchantId: '55555555-5555-4555-8555-555555555555' };
+    expect(
+      quizEventsQuerySchema.parse({ ...base, current: '1' })
+    ).toMatchObject({ current: '1' });
+    expect(quizEventsQuerySchema.parse(base).current).toBeUndefined();
+    expect(
+      quizEventsQuerySchema.safeParse({ ...base, current: 'yes' }).success
+    ).toBe(false);
+  });
 });

@@ -80,6 +80,7 @@ describe('AdSlot', () => {
   it('renders the sponsored banner slot for a placement', () => {
     setAdsEnabled('true');
     render(<AdSlot placement="CART_MPU" />);
+    measureSlot('ad-slot-cart-mpu', 320);
     expect(screen.getByLabelText('Sponsored advertisement')).toBeTruthy();
     expect(screen.getByText('Sponsored')).toBeTruthy();
     expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
@@ -113,6 +114,28 @@ describe('AdSlot', () => {
       render(<AdSlot placement="FOOTER_ANCHOR" />);
 
       expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('shows no Sponsored label until the slot width is measured', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      expect(screen.queryByText('Sponsored')).toBeNull();
+      measureSlot('ad-slot-footer-anchor', 320);
+      expect(screen.getByText('Sponsored')).toBeTruthy();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('keeps the same banner when the width only jitters by a few points', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      measureSlot('ad-slot-footer-anchor', 320);
+      measureSlot('ad-slot-footer-anchor', 323);
+
+      const banner = screen.UNSAFE_getByType('BannerAd' as never);
+      expect((banner.props as { width: number }).width).toBe(320);
       setAdsEnabled(ORIGINAL_ENV);
     });
 

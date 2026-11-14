@@ -113,44 +113,61 @@ export function AdSlot({
       accessibilityLabel="Sponsored advertisement"
       onLayout={(event) => {
         const measured = Math.floor(event.nativeEvent.layout.width);
-        if (measured > 0 && measured !== slotWidth) setSlotWidth(measured);
+        // Ignore sub-threshold jitter: every accepted change remounts the
+        // banner and issues a new ad request.
+        if (
+          measured > 0 &&
+          (slotWidth === null ||
+            Math.abs(measured - slotWidth) >= SLOT_WIDTH_CHANGE_THRESHOLD)
+        ) {
+          setSlotWidth(measured);
+        }
       }}
-      style={styles.slot}
+      // Collapsed until measured so no blank "Sponsored" slot is shown.
+      style={slotWidth === null ? styles.unmeasuredSlot : styles.slot}
       testID={testID ?? `ad-slot-${placement.toLowerCase().replace(/_/g, '-')}`}
     >
-      <Text style={styles.label}>Sponsored</Text>
-      <View style={styles.frame}>
-        {slotWidth === null ? null : (
-          <BannerAd
-            // A new width remounts the banner so it makes a fresh request
-            // for that size instead of relying on a prop-update reload.
-            key={slotWidth}
-            onAdFailedToLoad={(error) => {
-              trackEvent('mobile_ad_failed', {
-                errorCode: getAdErrorCode(error),
-                format: 'banner',
-                placement,
-              });
-              setLoadFailed(true);
-            }}
-            onAdImpression={() =>
-              trackEvent('mobile_ad_impression', {
-                format: 'banner',
-                placement,
-              })
-            }
-            onPaid={handlePaid}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            unitId={config.unitId}
-            width={slotWidth}
-          />
-        )}
-      </View>
+      {slotWidth === null ? null : (
+        <>
+          <Text style={styles.label}>Sponsored</Text>
+          <View style={styles.frame}>
+            <BannerAd
+              // A new width remounts the banner so it makes a fresh request
+              // for that size instead of relying on a prop-update reload.
+              key={slotWidth}
+              onAdFailedToLoad={(error) => {
+                trackEvent('mobile_ad_failed', {
+                  errorCode: getAdErrorCode(error),
+                  format: 'banner',
+                  placement,
+                });
+                setLoadFailed(true);
+              }}
+              onAdImpression={() =>
+                trackEvent('mobile_ad_impression', {
+                  format: 'banner',
+                  placement,
+                })
+              }
+              onPaid={handlePaid}
+              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              unitId={config.unitId}
+              width={slotWidth}
+            />
+          </View>
+        </>
+      )}
     </View>
   );
 }
 
+// Width change (in points) below which the banner keeps its current request.
+const SLOT_WIDTH_CHANGE_THRESHOLD = 8;
+
 const styles = StyleSheet.create({
+  unmeasuredSlot: {
+    alignSelf: 'stretch',
+  },
   slot: {
     alignItems: 'center',
     alignSelf: 'stretch',

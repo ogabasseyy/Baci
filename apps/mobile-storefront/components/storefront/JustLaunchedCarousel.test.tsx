@@ -87,8 +87,8 @@ describe('JustLaunchedCarousel', () => {
         {},
         ...[surface.props.style].flat(Number.POSITIVE_INFINITY)
       ) as { backgroundColor?: string };
-      expect(style.backgroundColor).toBeTruthy();
-      expect(style.backgroundColor).not.toBe('transparent');
+      // The harness theme's opaque background token.
+      expect(style.backgroundColor).toBe('#ffffff');
     });
   });
 

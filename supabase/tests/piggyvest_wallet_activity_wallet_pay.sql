@@ -202,8 +202,15 @@ BEGIN
          provider_transaction_id = 'txn-activity-fee', settled_at = pg_catalog.clock_timestamp()
    WHERE id = v_fee::uuid;
   v_deferred := pg_temp.wp_dispatched('f9a10000-0000-4000-8000-0000000000ab', 100000);
+  -- REGRESSION (Muse): a released row with that reason but no provider proof
+  -- moved no money, so it is not listed; with the proof it is.
   UPDATE piggyvest_primary.wallet_payments
      SET state = 'released', review_reason = 'late_success_deferred'
+   WHERE id = v_deferred::uuid;
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = v_deferred::uuid), 'a released spend without provider proof was listed');
+  UPDATE piggyvest_primary.wallet_payments
+     SET provider_transaction_id = 'txn-activity-deferred'
    WHERE id = v_deferred::uuid;
   PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
       WHERE row.id = v_fee::uuid), 'a fee-only failure was listed as a purchase');

@@ -222,4 +222,40 @@ describe('useOrderDetailsGiglShipping', () => {
       expect.objectContaining({ enabled: true, preview: false })
     );
   });
+
+  it('bugfix: opens the wallet/Baci-pays panel for a paid Credit Direct order with a saved checkout quote and no funding source', () => {
+    shippingHook.mockReturnValue({
+      quote: { id: 'q1' },
+      wallet: { canBook: true, paidByBaci: true },
+    });
+    const { result } = renderHook(() =>
+      useOrderDetailsGiglShipping({
+        giglEligible: true,
+        merchant: { user_id: 'owner-1' } as never,
+        order: {
+          id: '0e3036b3-0e2f-4f6f-a8a6-dd5c22853bd8',
+          payment_method: 'credit_direct',
+          payment_status: 'paid',
+          selected_quote_id: '29048802-checkout-quote',
+          shipment_id: null,
+          shipping_funding_source: null,
+          shipping_provider: 'GIGL',
+          tracking_number: null,
+        } as never,
+        pendingShipmentMode: 'provider',
+        providerLabel: 'GIG Logistics',
+        shipmentFlowStep: 'method',
+        showShipmentFlow: true,
+        userId: 'owner-1',
+      })
+    );
+
+    expect(result.current.providerBookingAvailable).toBe(false);
+    expect(result.current.giglShipping).toMatchObject({
+      wallet: { paidByBaci: true },
+    });
+    expect(shippingHook).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true, preview: false })
+    );
+  });
 });

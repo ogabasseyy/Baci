@@ -140,7 +140,12 @@ export function WalletHeroSection({
                   primaryReady ? (savingsWalletBalance ?? 0) : totalBalance
                 )}
           </Text>
-          {savingsView ? <WalletHeroStoreCredit balance={storeCredit} /> : null}
+          {/* A ready PiggyVest wallet shows its own balance only (owner,
+              2026-11-14): refunds mirror into the older store credit, so a
+              second line would count the same money twice. */}
+          {savingsView && !primaryReady ? (
+            <WalletHeroStoreCredit balance={storeCredit} />
+          ) : null}
         </View>
         {fundingAccount && legacyUnconfirmed ? (
           <Text style={styles.accountUnavailableMessage}>

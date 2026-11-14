@@ -85,7 +85,13 @@ describe('projectChatwootProductCard', () => {
           ],
         })
       )
-    ).toEqual({ ok: false, code: 'product_unavailable' });
+    ).toMatchObject({
+      ok: true,
+      product: {
+        availability: 'out_of_stock',
+        variants: [{ availability: 'out_of_stock' }],
+      },
+    });
     const result = project(
       product({
         has_variants: true,
@@ -121,7 +127,13 @@ describe('projectChatwootProductCard', () => {
         ],
       })
     );
-    expect(result).toEqual({ ok: false, code: 'product_unavailable' });
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        availability: 'out_of_stock',
+        variants: [{ availability: 'out_of_stock' }],
+      },
+    });
 
     const outOfStockOverride = project(
       product({
@@ -137,9 +149,12 @@ describe('projectChatwootProductCard', () => {
         ],
       })
     );
-    expect(outOfStockOverride).toEqual({
-      ok: false,
-      code: 'product_unavailable',
+    expect(outOfStockOverride).toMatchObject({
+      ok: true,
+      product: {
+        availability: 'out_of_stock',
+        variants: [{ availability: 'out_of_stock' }],
+      },
     });
   });
 
@@ -214,21 +229,49 @@ describe('projectChatwootProductCard', () => {
     expect(result).not.toHaveProperty('product.variants.1.internal_cost');
   });
 
-  it('does not advertise a base price when every variant is unavailable', () => {
+  it('returns an out-of-stock card with a listed variant price when none are purchasable', () => {
+    const result = project(
+      product({
+        has_variants: true,
+        price: 300_000,
+        product_variants: [
+          {
+            id: variantId,
+            product_id: productId,
+            attributes: { storage: '128GB' },
+            price_override: 325_000,
+            stock_quantity: 0,
+          },
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            product_id: productId,
+            attributes: { storage: '256GB' },
+            price_override: 350_000,
+            stock_quantity: 0,
+          },
+        ],
+      })
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        price: 325_000,
+        availability: 'out_of_stock',
+        variants: [
+          { price: 325_000, availability: 'out_of_stock' },
+          { price: 350_000, availability: 'out_of_stock' },
+        ],
+      },
+    });
+  });
+
+  it('rejects a variant family with an empty variant array', () => {
     expect(
       project(
         product({
           has_variants: true,
-          price: 300_000,
-          product_variants: [
-            {
-              id: variantId,
-              product_id: productId,
-              attributes: { storage: '128GB' },
-              price_override: 325_000,
-              stock_quantity: 0,
-            },
-          ],
+          product_variants: [],
         })
       )
     ).toEqual({ ok: false, code: 'product_unavailable' });

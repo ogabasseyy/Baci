@@ -171,7 +171,9 @@ export function projectChatwootProductCard(input: {
   if (
     product.variants_truncated === true ||
     (hasVariants &&
-      (!Array.isArray(rawVariants) || rawVariants.length > 128)) ||
+      (!Array.isArray(rawVariants) ||
+        rawVariants.length === 0 ||
+        rawVariants.length > 128)) ||
     (!hasVariants && Array.isArray(rawVariants) && rawVariants.length > 0)
   ) {
     return { ok: false, code: 'product_unavailable' };
@@ -264,14 +266,15 @@ export function projectChatwootProductCard(input: {
   const purchasableVariants = variants.filter(
     (variant) => variant.availability === 'in_stock'
   );
-  if (hasVariants && purchasableVariants.length === 0) {
-    return { ok: false, code: 'product_unavailable' };
-  }
   const available = hasVariants
     ? purchasableVariants.length > 0
     : isPurchasableProduct(product);
+  // The widget hides card-level price for out-of-stock products. Keep this
+  // required numeric field catalog-derived when no variant can be purchased.
+  const priceVariants =
+    purchasableVariants.length > 0 ? purchasableVariants : variants;
   const cardPrice = hasVariants
-    ? Math.min(...purchasableVariants.map((variant) => variant.price))
+    ? Math.min(...priceVariants.map((variant) => variant.price))
     : basePrice;
   const images = Array.isArray(product.images) ? product.images : [];
   const image = images.map(toImage).find(Boolean);

@@ -248,8 +248,7 @@ export async function runPiggyvestDailyReconciliation(
           nowMs: deps.nowMs,
           deadlineMs,
         });
-        // Credits PiggyVest made that our ledgers never recorded (and the
-        // reverse). Shares the read budget; it only reads.
+        // Credits PiggyVest made that our ledgers never recorded: only reads.
         if (report.status !== 'failed') {
           const completed = report;
           const gap = await runCreditGapCheck(
@@ -259,10 +258,6 @@ export async function runPiggyvestDailyReconciliation(
             reason: 'snapshot_unavailable' as const,
           }));
           report = withCreditGap(completed, gap);
-          walletPay = await readWalletPaySummary({
-            execute: ports.execute,
-            ...runtime.configuration,
-          }).catch(() => null);
         }
       } catch {
         // The configuration was fine; the run itself threw.
@@ -272,6 +267,11 @@ export async function runPiggyvestDailyReconciliation(
           generatedAt: deps.now(),
         };
       }
+      // Read on its own: a failed main report must not hide stuck payments.
+      walletPay = await readWalletPaySummary({
+        execute: ports.execute,
+        ...runtime.configuration,
+      }).catch(() => null);
     }
   }
   const emailed = await deliverReconciliationEmail({

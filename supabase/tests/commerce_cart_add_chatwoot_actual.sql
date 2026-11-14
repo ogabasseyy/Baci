@@ -62,8 +62,14 @@ DO $$ DECLARE r jsonb; BEGIN
   r:=public.commerce_cart_add_chatwoot('aaaaaaaa-ffff-4aaa-8aaa-aaaaaaaaaaaa','chatwoot-locked-add',3,'foreign-merchant-product',NULL);
   IF r->>'code' <> 'cart_locked' THEN RAISE EXCEPTION 'locked cart accepted a new add: %',r; END IF;
   r:=public.commerce_cart_add_chatwoot('aaaaaaaa-ffff-4aaa-8aaa-aaaaaaaaaaaa','chatwoot-contract-add',1,'foreign-merchant-product',NULL);
-  IF r->>'code' <> 'idempotency_conflict' OR r->>'state' <> 'null' THEN RAISE EXCEPTION 'changed identity leaked cart or avoided conflict: %',r; END IF;
+  IF r->>'code' IS DISTINCT FROM 'idempotency_conflict'
+    OR NOT (r ? 'state') OR r->'state' IS DISTINCT FROM 'null'::jsonb THEN
+    RAISE EXCEPTION 'changed identity leaked cart or avoided conflict: %',r;
+  END IF;
   r:=public.commerce_cart_add_chatwoot('bbbbbbbb-ffff-4bbb-8bbb-bbbbbbbbbbbb','other-cart',1,'foreign-merchant-product',NULL);
-  IF r->>'code' <> 'unauthorized' OR r->>'state' <> 'null' THEN RAISE EXCEPTION 'cross-cart call disclosed state: %',r; END IF;
+  IF r->>'code' IS DISTINCT FROM 'unauthorized'
+    OR NOT (r ? 'state') OR r->'state' IS DISTINCT FROM 'null'::jsonb THEN
+    RAISE EXCEPTION 'cross-cart call disclosed state: %',r;
+  END IF;
 END $$;
 RESET ROLE;

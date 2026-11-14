@@ -210,6 +210,16 @@ BEGIN
   PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant)),
     'one corrupt amount emptied the page');
 
+  -- REGRESSION (Muse): a purchase row with no type or biller never yields
+  -- an empty label (which would fail the page): it reads as a purchase.
+  ALTER TABLE public.vtu_transactions ALTER COLUMN type DROP NOT NULL;
+  UPDATE public.vtu_transactions SET type = NULL, biller_name = '' WHERE id = c_airtime;
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.kind = 'wallet_spend' AND row.label = 'Airtime, data or bill'),
+    'a purchase with no type lost its label');
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE NULLIF(row.label, '') IS NULL), 'an empty label was listed');
+
   -- Another user sees none of it.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);
   PERFORM pg_catalog.set_config('request.jwt.claims', pg_catalog.jsonb_build_object(

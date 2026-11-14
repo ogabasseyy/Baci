@@ -91,7 +91,9 @@ BEGIN
            -- Set once when the PIN reserved it: a row never moves between
            -- keyset pages as the payment settles.
            COALESCE(payment.reserved_at, payment.issued_at) AS occurred_at,
-           CASE
+           -- Never empty: a purchase row with no type or biller still reads
+           -- as a purchase (Muse).
+           COALESCE(NULLIF(CASE
              WHEN payment.purpose = 'imei_check' THEN 'IMEI check'
              WHEN purchase.id IS NULL THEN 'Airtime, data or bill'
              ELSE CASE purchase.type
@@ -115,7 +117,7 @@ BEGIN
                      -- Too short to show any of it.
                      WHEN pg_catalog.char_length(target.number) > 0 THEN '…'
                      END, '')
-           END AS label
+           END, ''), 'Airtime, data or bill') AS label
       FROM piggyvest_primary.wallet_payments AS payment
       JOIN mine ON mine.intent_id = payment.intent_id
       LEFT JOIN public.vtu_transactions AS purchase
@@ -260,6 +262,7 @@ BEGIN
    -- by every ledger's own checks, so this only guards a corrupt row.
    WHERE movement.amount_kobo > 0
      AND movement.occurred_at IS NOT NULL
+     AND NULLIF(movement.label, '') IS NOT NULL
      AND (p_before_at IS NULL
           OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id))
    ORDER BY movement.occurred_at DESC, movement.id DESC

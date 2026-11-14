@@ -46,7 +46,8 @@ export function QuizTicketBackdrop({ color }: QuizTicketBackdropProps) {
       style={StyleSheet.absoluteFill}
       testID="quiz-ticket-backdrop"
     >
-      <View style={[styles.center, fill]} />
+      {/* Until measured, a plain rounded tile avoids a frame with bare edges. */}
+      <View style={[size ? styles.center : styles.unmeasured, fill]} />
       {(['top', 'bottom'] as const).map((edge) => (
         <View key={edge} style={[styles.horizontal, styles[edge]]}>
           {across.map((scallop) => (
@@ -74,6 +75,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: SCALLOP_RADIUS,
     top: SCALLOP_RADIUS,
+  },
+  unmeasured: {
+    borderRadius: 8,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   horizontal: {
     flexDirection: 'row',

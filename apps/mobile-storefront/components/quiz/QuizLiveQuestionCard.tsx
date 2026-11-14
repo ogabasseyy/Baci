@@ -157,6 +157,8 @@ export function QuizLiveQuestionCard({
                 {String.fromCharCode(65 + index)}
               </Text>
               <Text
+                adjustsFontSizeToFit={useGrid}
+                minimumFontScale={0.8}
                 numberOfLines={useGrid ? 2 : undefined}
                 style={[
                   styles.answerTileText,

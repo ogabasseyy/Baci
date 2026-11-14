@@ -44,8 +44,12 @@ export function getQuizAnswerAccent(index: number): string {
   return QUIZ_ANSWER_ACCENTS[index % QUIZ_ANSWER_ACCENTS.length] as string;
 }
 
-/** Answers longer than this read badly in a half-width tile. */
-export const QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH = 44;
+/**
+ * A half-width tile shows two lines of about a dozen characters each on the
+ * narrowest phones (360pt). Anything longer goes to full-width rows, which
+ * never truncate, so a player always sees the whole answer before tapping.
+ */
+export const QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH = 22;
 
 /** Short answers sit in a 2×2 grid; long ones fall back to full-width rows. */
 export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {

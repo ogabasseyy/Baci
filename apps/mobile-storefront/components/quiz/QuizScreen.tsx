@@ -237,7 +237,7 @@ export function QuizScreen({
         />
       ) : null}
       {(status === 'question' || status === 'submitting') && attempt ? (
-        <QuizGameplayScrollView styles={styles}>
+        <QuizGameplayScrollView topKey={attempt.question.id} styles={styles}>
           <QuizMusicPlayer />
           <QuizQuestionCard
             attempt={attempt}

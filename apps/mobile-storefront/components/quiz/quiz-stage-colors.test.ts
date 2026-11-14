@@ -64,6 +64,20 @@ describe('quiz stage colours', () => {
     }
   });
 
+  it('bugfix: a 30-character answer was cut off in a two-line tile; it now uses rows', () => {
+    expect(
+      shouldUseQuizAnswerGrid([
+        'A14',
+        'A15',
+        'A16',
+        'Snapdragon 8 Gen 3 for Galaxy',
+      ])
+    ).toBe(false);
+    expect(
+      shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'Lollipop (5.0) release'])
+    ).toBe(true);
+  });
+
   it('uses the grid for four short answers only', () => {
     expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'A17'])).toBe(true);
     expect(shouldUseQuizAnswerGrid(['Yes', 'No'])).toBe(false);

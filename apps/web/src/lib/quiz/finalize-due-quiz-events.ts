@@ -14,11 +14,23 @@ import {
   type MutationTrackingState,
 } from './quiz-finalization-summary';
 import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
+import {
+  hasQuizSweepWatermarksChanged,
+  type QuizSweepWatermarks,
+} from './quiz-sweep-boundary-state';
 import { resolveQuizSweepWatermarks } from './quiz-sweep-watermarks';
 
 type QuizFinalizationClient = SupabaseClient<Database>;
 
 const MISSING_RPC_CODES = new Set(['PGRST202']);
+
+let lastObservedWatermarks: QuizSweepWatermarks | null = null;
+let hasPendingRecoverySweep = false;
+
+export function resetQuizSweepStateForTests() {
+  lastObservedWatermarks = null;
+  hasPendingRecoverySweep = false;
+}
 
 function logRpcFailure(name: FinalizationStep['name'], error: PostgrestError) {
   // PostgREST's message, details, and hint may embed a rejected value. Do not
@@ -151,14 +163,35 @@ export async function finalizeDueQuizEvents() {
     summary.skippedLive = summary.liveAwaitingGate;
   }
 
-  const shouldSweepCaches =
+  const hasLocalMutationOrFailure =
     hasQuizMutations(summary, mutationState) ||
     mutationState.hasUnknownMutationResult ||
     summary.failed > 0 ||
     sweepWatermarks.hasProbeFailure;
+  const hasExternalMutationSinceLastTick =
+    lastObservedWatermarks !== null &&
+    hasQuizSweepWatermarksChanged(lastObservedWatermarks, sweepWatermarks);
+  const shouldSweepCaches =
+    hasLocalMutationOrFailure ||
+    hasExternalMutationSinceLastTick ||
+    hasPendingRecoverySweep;
 
   if (shouldSweepCaches) {
-    await invalidateQuizProductCaches(client, sweepWatermarks);
+    const sweepTargetWatermarks =
+      (hasExternalMutationSinceLastTick || hasPendingRecoverySweep) &&
+      lastObservedWatermarks !== null
+        ? lastObservedWatermarks
+        : sweepWatermarks;
+    await invalidateQuizProductCaches(client, sweepTargetWatermarks);
+
+    if (sweepWatermarks.hasProbeFailure) {
+      hasPendingRecoverySweep = true;
+    } else {
+      hasPendingRecoverySweep = false;
+      lastObservedWatermarks = sweepWatermarks;
+    }
+  } else if (!sweepWatermarks.hasProbeFailure) {
+    lastObservedWatermarks = sweepWatermarks;
   }
 
   if (summary.failed > 0) {

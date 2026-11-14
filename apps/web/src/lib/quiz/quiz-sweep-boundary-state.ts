@@ -165,3 +165,37 @@ export function shouldSkipUnchangedBoundaryRow(
   }
   return previousSnapshot === serializeBoundaryRowState(table, row);
 }
+
+function hasTableWatermarkChanged(
+  previous: QuizTableSweepWatermark,
+  current: QuizTableSweepWatermark
+): boolean {
+  if (previous.status !== current.status || previous.floor !== current.floor) {
+    return true;
+  }
+  if (previous.boundarySnapshots.size !== current.boundarySnapshots.size) {
+    return true;
+  }
+  for (const [id, snapshot] of current.boundarySnapshots) {
+    if (previous.boundarySnapshots.get(id) !== snapshot) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Detect whether any table's watermark floor, probe status, or boundary
+ * snapshot changed since the previous tick (for example, due to the
+ * database-side `run_quiz_deadline_clock_v2` pg_cron job or another writer).
+ */
+export function hasQuizSweepWatermarksChanged(
+  previous: QuizSweepWatermarks,
+  current: QuizSweepWatermarks
+): boolean {
+  return (
+    hasTableWatermarkChanged(previous.events, current.events) ||
+    hasTableWatermarkChanged(previous.reservations, current.reservations) ||
+    hasTableWatermarkChanged(previous.awards, current.awards)
+  );
+}

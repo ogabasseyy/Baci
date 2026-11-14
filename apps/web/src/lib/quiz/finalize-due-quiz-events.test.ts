@@ -25,7 +25,10 @@ vi.mock('./quiz-product-cache-invalidation', () => ({
   invalidateQuizProductCaches: mocks.invalidateQuizProductCaches,
 }));
 
-import { finalizeDueQuizEvents } from './finalize-due-quiz-events';
+import {
+  finalizeDueQuizEvents,
+  resetQuizSweepStateForTests,
+} from './finalize-due-quiz-events';
 
 function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
   const floor =
@@ -41,6 +44,7 @@ function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
 describe('finalizeDueQuizEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetQuizSweepStateForTests();
     mocks.phase.mockReturnValue('1a');
     mocks.approved.mockReturnValue(false);
     mocks.resolveQuizSweepWatermarks.mockResolvedValue(makeOkWatermarks('ok'));
@@ -439,6 +443,48 @@ describe('finalizeDueQuizEvents', () => {
     const result = await finalizeDueQuizEvents();
 
     expect(result.status).toBe(200);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it('sweeps from the last observed baseline when the DB deadline clock advances a watermark between idle ticks', async () => {
+    const tick1Watermarks = makeOkWatermarks('ok');
+    const tick2Watermarks = {
+      ...makeOkWatermarks('ok'),
+      events: {
+        status: 'ok' as const,
+        floor: '2026-09-01T00:00:05Z',
+        boundarySnapshots: new Map([['evt-1', '{"status":"ended"}']]),
+      },
+    };
+    const idleRpcSequence = () => {
+      mocks.rpc
+        .mockResolvedValueOnce({ data: { updated: true }, error: null })
+        .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+        .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+        .mockResolvedValueOnce({ data: 0, error: null });
+    };
+
+    // Tick 1: cold idle baseline
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
+
+    // Tick 2: DB deadline clock advanced events.floor before pre-RPC probe,
+    // so worker RPCs return 0; must sweep from tick1Watermarks.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 3: unchanged from tick2Watermarks -> idle skip resumes.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
   });
 });

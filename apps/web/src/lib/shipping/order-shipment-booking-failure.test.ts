@@ -64,6 +64,14 @@ describe('classifyBookingFailure', () => {
     });
   });
 
+  it('does not treat a database timeout as an unconfirmed GIG booking', () => {
+    expect(
+      classifyBookingFailure(
+        new Error('canceling statement due to statement timeout')
+      ).outcome
+    ).toBe('unexpected');
+  });
+
   it('caps very long messages', () => {
     const result = classifyBookingFailure(new Error('x'.repeat(2000)));
     expect(result.message.length).toBeLessThanOrEqual(500);

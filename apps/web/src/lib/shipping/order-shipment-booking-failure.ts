@@ -33,11 +33,10 @@ export function isProviderNeverReachedError(error: unknown): boolean {
 
 /** A call that may have reached GIG but never answered. */
 function isProviderTimeoutError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
+  // Only GIG's own booking timeout: a database or client-abort timeout says
+  // nothing about whether GIG booked the parcel.
   return (
-    error.name === 'TimeoutError' ||
-    error.name === 'AbortError' ||
-    /timed out|timeout|aborted/i.test(error.message)
+    error instanceof Error && /^GIGL booking timed out/i.test(error.message)
   );
 }
 
@@ -133,7 +132,7 @@ export function toBookingFailureResponseError(error: unknown): unknown {
     return error;
   }
   return new OrderShipmentBookingError(
-    'GIG did not confirm this booking in time. To avoid booking the parcel twice, this order is paused for a few minutes. Please try again shortly.',
+    'GIG did not confirm this booking in time. To avoid booking the parcel twice, this order is paused for up to 15 minutes. Please try again after that.',
     503,
     'SHIPMENT_BOOKING_UNCONFIRMED'
   );

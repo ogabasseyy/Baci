@@ -1518,6 +1518,144 @@ describe('PATCH /api/orders/[id]', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('bugfix: pauses the order with a clear 503 when GIG does not answer in time', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: null,
+      shipment_id: null,
+    };
+    const updatedOrder: UpdatedOrder = {
+      id: 'order-1',
+      shipping_status: 'shipped',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: 'TRACK-1',
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(
+      existingOrder,
+      updatedOrder
+    );
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {
+        // Silence expected error logging for this assertion.
+      });
+
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
+      new Error('GIGL booking timed out')
+    );
+
+    const response = await PATCH(
+      createPatchRequest({ shipping_status: 'shipped' }),
+      {
+        params: Promise.resolve({ id: 'order-1' }),
+      }
+    );
+    const payload = await response.json();
+
+    expect(claimOrderShipmentBooking).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'order-1'
+    );
+    expect(runClaimedOrderWalletOrCheckoutBooking).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'order-1',
+      expect.objectContaining({
+        selected_quote_id: 'quote-1',
+      }),
+      expect.any(Object)
+    );
+    expect(response.status).toBe(503);
+    expect(payload).toMatchObject({ code: 'SHIPMENT_BOOKING_UNCONFIRMED' });
+    expect(ordersUpdate).not.toHaveBeenCalled();
+    expect(clearOrderShipmentBookingLock).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('bugfix: releases the lock and answers 503 when GIG cannot be reached at all', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: null,
+      shipment_id: null,
+    };
+    const updatedOrder: UpdatedOrder = {
+      id: 'order-1',
+      shipping_status: 'shipped',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: 'TRACK-1',
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(
+      existingOrder,
+      updatedOrder
+    );
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {
+        // Silence expected error logging for this assertion.
+      });
+
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
+      Object.assign(new Error('fetch failed'), {
+        cause: { code: 'ECONNREFUSED' },
+      })
+    );
+
+    const response = await PATCH(
+      createPatchRequest({ shipping_status: 'shipped' }),
+      {
+        params: Promise.resolve({ id: 'order-1' }),
+      }
+    );
+    const payload = await response.json();
+
+    expect(claimOrderShipmentBooking).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'order-1'
+    );
+    expect(runClaimedOrderWalletOrCheckoutBooking).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'order-1',
+      expect.objectContaining({
+        selected_quote_id: 'quote-1',
+      }),
+      expect.any(Object)
+    );
+    expect(response.status).toBe(503);
+    expect(payload).toMatchObject({ code: 'PROVIDER_UNREACHABLE' });
+    expect(ordersUpdate).not.toHaveBeenCalled();
+    expect(clearOrderShipmentBookingLock).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('returns 409 when another request already owns the shipment booking lock', async () => {
     const existingOrder: ExistingOrder = {
       id: 'order-1',

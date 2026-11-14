@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Biller } from '@/hooks/use-vtu-billers';
 import { detectNetwork } from '@/lib/network-utils';
 import type { UtilityRepeatRecipient } from '@/lib/utility-repeat';
-import { sanitizePhoneDigits } from './airtime-form-controller.helpers';
+import { nextPhoneDigits } from './airtime-form-controller.helpers';
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
 import { inferProviderFromDataBillerName } from './data-form.helpers';
 
@@ -70,7 +70,7 @@ export function useDataFormBeneficiaryController({
 
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const digits = sanitizePhoneDigits(text);
+    const digits = nextPhoneDigits(phoneNumber, text);
     setPhoneNumber(digits);
     syncBillerFromDetectedNetwork(digits);
   };

@@ -10,18 +10,40 @@ const MAX_AIRTIME_AMOUNT = 50_000;
 export const LOCAL_PHONE_DIGITS = 11;
 
 /**
- * The digits of a typed or pasted phone number, at most one local number
- * long (Fable: the field took 18 digits when typed text arrived late). An
- * international +234 number becomes its local 0 form first, so a paste is
- * never cut to the wrong eleven digits.
+ * The digits of a typed or pasted phone number. An international +234
+ * number becomes its local 0 form. Never cut short: a number that is too
+ * long is refused at purchase, never quietly sent to someone else (Muse).
  */
 export function sanitizePhoneDigits(text: string): string {
   const digits = text.replace(/\D/g, '');
-  const local =
-    digits.startsWith('234') && digits.length > LOCAL_PHONE_DIGITS
-      ? `0${digits.slice(3)}`
-      : digits;
-  return local.slice(0, LOCAL_PHONE_DIGITS);
+  return digits.startsWith('234') && digits.length === LOCAL_PHONE_DIGITS + 2
+    ? `0${digits.slice(3)}`
+    : digits;
+}
+
+/**
+ * The field's next value. Typing past a complete 11-digit number is ignored,
+ * like a maximum length (Fable: the field took 18 digits when typed text
+ * arrived late). Anything else, an overlong paste included, is kept as
+ * entered so the purchase check can refuse it.
+ */
+export function nextPhoneDigits(previous: string, text: string): string {
+  const digits = sanitizePhoneDigits(text);
+  return previous.length === LOCAL_PHONE_DIGITS &&
+    digits.length > LOCAL_PHONE_DIGITS &&
+    digits.startsWith(previous)
+    ? previous
+    : digits;
+}
+
+/** The refusal for a number that is not one 11-digit local number. */
+export function phoneLengthError(phoneNumber: string) {
+  return phoneNumber.replace(/\D/g, '').length === LOCAL_PHONE_DIGITS
+    ? null
+    : {
+        title: 'Check the phone number',
+        message: 'Enter an 11-digit phone number, like 08012345678.',
+      };
 }
 
 export function resolveAirtimeProvider(phoneNumber: string): string | null {
@@ -51,6 +73,8 @@ export function validateAirtimePurchaseInput({
       message: 'Please fill in all fields.',
     };
   }
+  const phoneError = phoneLengthError(phoneNumber);
+  if (phoneError) return phoneError;
 
   if (
     numericAmount < MIN_AIRTIME_AMOUNT ||

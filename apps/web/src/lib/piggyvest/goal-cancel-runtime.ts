@@ -10,6 +10,7 @@ import {
 } from './goal-cancel-finish';
 import { HOLD_PAGES } from './goal-cancel-hold-pages';
 import { runGoalCancelReconciliation } from './goal-cancel-reconciliation';
+import { isConsistentGoalCancelSplit } from './goal-cancel-split-consistency';
 import { publicStatus, readGoalCancelStatus } from './goal-cancel-status';
 import { createGoalCancelStore } from './goal-cancel-store';
 import { submitGoalCancel } from './goal-cancel-transfer';
@@ -168,8 +169,7 @@ export async function submitPrimaryWalletGoalCancel(input: {
       // with no transfer) and a person is paged.
       if (
         split.status === 'dispatched' &&
-        (split.principalKobo > balanceKobo ||
-          split.principalKobo + split.forfeitedInterestKobo !== balanceKobo)
+        !isConsistentGoalCancelSplit(split, balanceKobo)
       ) {
         emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
           reason: 'split_inconsistent',

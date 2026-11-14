@@ -352,7 +352,7 @@ describe('ImeiCheckerScreen', () => {
 
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(
-        '/wallet?action=fund&requiredAmount=0&returnTo=/imei-check'
+        '/wallet?action=fund&requiredAmount=0&returnTo=%2Fimei-check'
       );
     });
   });

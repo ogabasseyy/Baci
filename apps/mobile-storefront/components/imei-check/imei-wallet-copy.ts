@@ -33,12 +33,30 @@ const STORE_CREDIT_COPY: ImeiWalletCopy = {
   loadingButton: 'Loading store credit...',
   shortfallHint: (shortfall) =>
     // Card top-ups have a minimum, so quote what the sheet will prefill.
-    `Add ${formatServicePrice(Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall)))} store credit by card to run this check`,
+    `Add ${formatServicePrice(cardMinimum(shortfall))} store credit by card to run this check`,
   topUpButton: 'Add store credit',
   unavailable: 'Store credit unavailable. Refresh your wallet and try again.',
   unavailableButton: 'Store credit unavailable',
 };
 
-export function getImeiWalletCopy(storeCredit: boolean): ImeiWalletCopy {
-  return storeCredit ? STORE_CREDIT_COPY : WALLET_COPY;
+function cardMinimum(shortfall: number): number {
+  return Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall));
+}
+
+/**
+ * cardOnlyTopUp: the top-up opens the card-only sheet even though the wallet
+ * keeps today's wording (Ogabassey, verdict still unknown). The hint quotes
+ * the amount that sheet prefills (Codex), never a lower one.
+ */
+export function getImeiWalletCopy(
+  storeCredit: boolean,
+  cardOnlyTopUp = false
+): ImeiWalletCopy {
+  if (storeCredit) return STORE_CREDIT_COPY;
+  if (!cardOnlyTopUp) return WALLET_COPY;
+  return {
+    ...WALLET_COPY,
+    shortfallHint: (shortfall) =>
+      `Balance low — top up ${formatServicePrice(cardMinimum(shortfall))} to run this check`,
+  };
 }

@@ -1,13 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { primaryWalletCardSchemas } from '@/schemas/primary-wallet-card';
 
 const client = createPrimaryWalletCardFundingClient();
-
-/** The card client's storage key for a funding scope (kept in step by test). */
-function storageKey(scope: { merchantId: string; userId: string }) {
-  return `@baci_primary_card:${scope.merchantId}:${scope.userId}`;
-}
 
 /**
  * True when this device saved a PiggyVest card funding for the customer
@@ -32,7 +26,8 @@ export async function hasRetainedPrimaryCardFunding(
   try {
     // Peek at the raw record first: reading through the client deletes a
     // corrupt one.
-    const raw = await AsyncStorage.getItem(storageKey(scope.data));
+    // In the card client's per-scope queue, after any start() in flight.
+    const raw = await client.peekRaw(scope.data);
     if (raw === null) return false;
     try {
       primaryWalletCardSchemas.pending.parse(JSON.parse(raw));

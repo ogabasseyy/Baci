@@ -149,11 +149,51 @@ printf '%s\n' "$@" > "$GRADLE_CAPTURE"
 exit "${GRADLE_EXIT_CODE:-0}"
 GRADLE
 chmod +x "$fixture_root/gradle/gradlew"
+mkdir -p "$fixture_root/gradle/app/build/outputs/bundle/release"
+python3 - "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab" <<'PYTHON'
+import struct, sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    for abi, machine, elf_class in [('armeabi-v7a', 40, 1), ('arm64-v8a', 183, 2), ('x86', 3, 1), ('x86_64', 62, 2)]:
+        for library in ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libhermestooling.so', 'libsplashmotion.so'):
+            header_size = 64 if elf_class == 2 else 52
+            header_size_offset = 52 if elf_class == 2 else 40
+            program_header_offset_offset, program_header_count_offset, program_header_size_offset = (32, 56, 54) if elf_class == 2 else (28, 44, 42)
+            program_header_size = 56 if elf_class == 2 else 32
+            program_header_offset = header_size
+            dynamic_offset = program_header_offset + program_header_size * 2
+            dynamic_size = 16 if elf_class == 2 else 8
+            file_size = dynamic_offset + dynamic_size
+            header = bytearray(header_size)
+            header[:7] = b'\x7fELF' + bytes((elf_class, 1, 1))
+            header[16:18] = (3).to_bytes(2, 'little')
+            header[20:24] = (1).to_bytes(4, 'little')
+            header[header_size_offset:header_size_offset + 2] = header_size.to_bytes(2, 'little')
+            header[18:20] = machine.to_bytes(2, 'little')
+            header[program_header_offset_offset:program_header_offset_offset + (8 if elf_class == 2 else 4)] = program_header_offset.to_bytes(8 if elf_class == 2 else 4, 'little')
+            header[program_header_size_offset:program_header_size_offset + 2] = program_header_size.to_bytes(2, 'little')
+            header[program_header_count_offset:program_header_count_offset + 2] = (2).to_bytes(2, 'little')
+            if elf_class == 2:
+                load = struct.pack('<IIQQQQQQ', 1, 5, 0, 0, 0, file_size, file_size, 4096)
+                dynamic = struct.pack('<IIQQQQQQ', 2, 6, dynamic_offset, 0, 0, dynamic_size, dynamic_size, 8)
+            else:
+                load = struct.pack('<IIIIIIII', 1, 0, 0, 0, file_size, file_size, 5, 4096)
+                dynamic = struct.pack('<IIIIIIII', 2, dynamic_offset, 0, 0, dynamic_size, dynamic_size, 6, 4)
+            archive.writestr(f'base/lib/{abi}/{library}', header + load + dynamic + bytes(dynamic_size))
+PYTHON
 (
   cd "$fixture_root/gradle"
   GRADLE_CAPTURE="$fixture_root/native-args" bash "$script" build-native
   GRADLE_CAPTURE="$fixture_root/bundle-args" bash "$script" build
 )
+rm "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab"
+if (
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/missing-bundle-args" GITHUB_WORKSPACE="$(dirname "$script_dir")/.." bash "$script" build
+) >"$fixture_root/missing-bundle-log" 2>&1; then
+  echo 'Expected missing bundle to block release' >&2
+  exit 1
+fi
+grep -q 'Expected the release bundle at app/build/outputs/bundle/release/app-release.aab' "$fixture_root/missing-bundle-log"
 grep -qx ':react-native:packages:react-native:ReactAndroid:assembleRelease' "$fixture_root/native-args"
 grep -qx ':react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease' "$fixture_root/native-args"
 if grep -q 'app:bundleRelease' "$fixture_root/native-args"; then exit 1; fi

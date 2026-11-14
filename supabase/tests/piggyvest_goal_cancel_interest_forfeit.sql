@@ -566,6 +566,24 @@ BEGIN
 END
 $worker$;
 
+-- A goal whose PiggyVest setup never finished (no savings destination)
+--     answers not_set_up at issue instead of raising. Kept ahead of the
+--     sections that record interest receipts: the interest crosswalk (created
+--     for section 15) references the destination and can not be deleted, so
+--     the destination can not be removed once it exists.
+DO $notsetup$
+BEGIN
+  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
+   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
+  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+   WHERE id = 'f3860000-0000-4000-8000-000000000005';
+  PERFORM pg_temp.gc_unbind();
+  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"not_set_up"}'::jsonb,
+    'a goal without a PiggyVest destination did not answer not_set_up');
+  PERFORM pg_temp.gc_bind();
+END
+$notsetup$;
+
 -- 15. Interest PiggyVest pays into the goal wallet after the cancel is
 --     forfeited too: it plans (or merges into) an unsent forfeit, and a
 --     payout to a goal with no live cancel plans nothing.
@@ -939,21 +957,6 @@ BEGIN
 END
 $unclaim$;
 
--- 17. A goal whose PiggyVest setup never finished (no savings destination)
---     answers not_set_up at issue instead of raising.
-DO $notsetup$
-BEGIN
-  UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
-   WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
-  UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
-   WHERE id = 'f3860000-0000-4000-8000-000000000005';
-  PERFORM pg_temp.gc_unbind();
-  PERFORM pg_temp.gc_assert(pg_temp.gc_issue_op() = '{"status":"not_set_up"}'::jsonb,
-    'a goal without a PiggyVest destination did not answer not_set_up');
-  PERFORM pg_temp.gc_bind();
-END
-$notsetup$;
-
 -- 18. The per-transfer ceiling applies to each leg, not the goal balance.
 DO $ceiling$
 DECLARE
@@ -972,7 +975,7 @@ BEGIN
   -- Regression: a balance above the ceiling whose legs both fit dispatches
   -- (it was refused outright, stranding a principal below the ceiling).
   BEGIN
-    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 99000000, cancelled_at = NULL
+    UPDATE public.customer_savings_goals SET status = 'active', target_amount = 200000000, current_amount = 99000000, cancelled_at = NULL
      WHERE id = c_goal;
     v_op := pg_temp.gc_reserved('ceiling-both-fit');
     v_result := pg_temp.gf_split(v_op, 10100000000);
@@ -1364,6 +1367,62 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: payout A planned while the principal is dispatched follows
+  -- its interest through a release and the late success that recreates the
+  -- plan; after the recreated plan was sent, reversing A is review work.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('late-lineage');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'late lineage split');
+    PERFORM pg_temp.gf_receipt('gf-latelin-a', 400);
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0), 'late lineage release');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12400}'::jsonb) = 'confirmed', 'late lineage principal');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-latelin-' || id::text
+     WHERE cancel_operation_id = v_op::uuid AND state = 'reserved';
+    PERFORM pg_temp.gf_receipt('gf-latelin-b', 250);
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-latelin', 'gf-latelin-a', 150,
+      repeat('8', 64), 'synthetic-reversal-9');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal of interest sent through a recreated plan was treated as unsent');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a late payout reversed while the principal attempt is released
+  -- (before its late success is reconciled) leaves the forfeited total, so the
+  -- revival does not plan the reversed interest again.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('revival-reversal');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'revival split');
+    PERFORM pg_temp.gf_receipt('gf-revival-a', 400);
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0), 'revival release');
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-revival', 'gf-revival-a', 400,
+      repeat('7', 64), 'synthetic-reversal-10');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'revival principal');
+    PERFORM pg_temp.gc_assert(
+      (SELECT COALESCE(pg_catalog.sum(amount_kobo), 0) FROM piggyvest_primary.goal_cancel_interest_forfeits
+        WHERE cancel_operation_id = v_op::uuid AND state = 'reserved') = 12000,
+      'a revived plan carried interest that was reversed while the attempt was released');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- Regression: a delayed receipt (paid before the dispatch) recorded while the
   -- cancel is in flight has its notice voided when the cancel settles.
   BEGIN
@@ -1418,9 +1477,38 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: a reversal of interest that was inside the balance snapshot,
+  -- arriving after the forfeit was sent, is review work (the reversed amount
+  -- may have reached Ogabassey) while the forfeited total is kept.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    PERFORM pg_temp.gf_receipt('gf-snapshot', 400, pg_catalog.clock_timestamp() - interval '1 hour');
+    v_op := pg_temp.gc_reserved('snapshot-reversal');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'snapshot split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'snapshot principal');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-snapshot-' || id::text
+     WHERE cancel_operation_id = v_op::uuid;
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-snapshot', 'gf-snapshot', 150,
+      repeat('7', 64), 'synthetic-reversal-9');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal of snapshot interest after the forfeit was sent left no review work');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
-    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL
+    UPDATE public.customer_savings_goals SET status = 'active', target_amount = 200000000, current_amount = 100000000, cancelled_at = NULL
      WHERE id = c_goal;
     v_op := pg_temp.gc_reserved('ceiling-principal');
     v_result := pg_temp.gf_split(v_op, 10000000000);

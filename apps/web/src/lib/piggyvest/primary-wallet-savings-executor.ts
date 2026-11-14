@@ -58,8 +58,10 @@ const parameterCounts = new Map<string, number>([
   [walletPay.status, 2],
   [walletPay.forPurchase, 2],
   [walletPay.attempted, 2],
-  [walletPay.closeUnpaidVtu, 2],
-  // Wallet pay worker statements (integration id, environment, values).
+]);
+// Wallet pay worker statements: no customer scope; the first two parameters
+// are the configured integration id and environment.
+const workerParameterCounts = new Map<string, number>([
   [walletPayWorker.claim, 3],
   [walletPayWorker.finish, 5],
   [walletPayWorker.readOwedRefund, 3],
@@ -67,10 +69,8 @@ const parameterCounts = new Map<string, number>([
   [walletPayWorker.work, 3],
   [walletPayWorker.releaseStale, 3],
   [walletPayWorker.imeiDelivered, 3],
-  [walletPayWorker.vtuDeliveryState, 3],
 ]);
-// Worker statements carry no customer scope: the goal cancel forfeit sweep
-// and the wallet pay drain (integration id, environment, values).
+// The goal cancel forfeit sweep (integration id, environment, selection).
 const workerStatements = new Set<string>([
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerList,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerAck,
@@ -80,14 +80,6 @@ const workerStatements = new Set<string>([
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerRelease,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerUnclaim,
   GOAL_CANCEL_FORFEIT_STATEMENTS.workerPosting,
-  walletPayWorker.claim,
-  walletPayWorker.finish,
-  walletPayWorker.readOwedRefund,
-  walletPayWorker.manageRefund,
-  walletPayWorker.work,
-  walletPayWorker.releaseStale,
-  walletPayWorker.imeiDelivered,
-  walletPayWorker.vtuDeliveryState,
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -103,17 +95,20 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
     statement: string,
     parameters: readonly string[]
   ): Promise<{ rows: unknown }> => {
+    const worker = workerParameterCounts.has(statement);
     if (
-      parameterCounts.get(statement) !== parameters.length ||
+      (worker
+        ? workerParameterCounts.get(statement)
+        : parameterCounts.get(statement)) !== parameters.length ||
       parameters.some(
         (parameter) => typeof parameter !== 'string' || parameter.length > 8192
       )
     )
       throw new Error('Savings statement unavailable');
-    if (workerStatements.has(statement)) {
-      // Worker statements carry no customer scope: they are bound to this
-      // integration and environment, and the database checks the login's
-      // savings authority for it.
+    if (worker || workerStatements.has(statement)) {
+      // Worker statements (wallet pay, goal cancel forfeit sweep) carry no
+      // customer scope: they are bound to this integration and environment,
+      // and the database checks the login's authority for it.
       if (
         parameters[0] !== config.integrationId ||
         parameters[1] !== config.environment

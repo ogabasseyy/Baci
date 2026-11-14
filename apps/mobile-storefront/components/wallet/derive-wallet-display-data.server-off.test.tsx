@@ -99,3 +99,67 @@ describe('bugfix: account-less pending PiggyVest wallet shown as legacy', () => 
     expect(display.legacyBalance).toBe(1200);
   });
 });
+
+describe('bugfix: malformed PiggyVest balance on a PiggyVest account', () => {
+  it('marks the wallet unsettled so purchase top-ups stay card-only store credit', () => {
+    // Arrange: a negative balance is no PiggyVest answer.
+    const wallet = {
+      balance: 1_000,
+      funding_account: { provider: 'piggyvest' },
+      primary_balance_kobo: -5,
+    };
+
+    // Act
+    const display = deriveWalletDisplayData(wallet);
+
+    // Assert
+    expect(display.primaryReady).toBeUndefined();
+    expect(display.walletPrimaryUnsettled).toBe(true);
+  });
+
+  it('leaves a ruled-out legacy wallet without a PiggyVest balance untouched', () => {
+    const display = deriveWalletDisplayData({ balance: 1_000 });
+    expect(display.walletPrimaryUnsettled).toBeUndefined();
+    expect(display.walletBalance).toBe(1_000);
+  });
+});
+
+describe('bugfix: unreachable PiggyVest read presented as a known wallet (walk 10)', () => {
+  it('flags the wallet as unreadable when the PiggyVest read failed', () => {
+    const display = deriveWalletDisplayData({
+      balance: 0,
+      primary_unavailable: true,
+      savings_balance: 800_000,
+    });
+    expect(display.primaryUnreadable).toBe(true);
+  });
+
+  it('adds no flag for a wallet the server rules PiggyVest out for', () => {
+    expect(deriveWalletDisplayData({ balance: 0 }).primaryUnreadable).toBe(
+      undefined
+    );
+  });
+});
+
+describe('bugfix: a recalled PiggyVest balance showed no staleness hint (walk 14)', () => {
+  it('flags a ready balance recalled from moments ago as stale', () => {
+    const display = deriveWalletDisplayData({
+      balance: 0,
+      funding_account: {
+        account_name: 'OGB / ADA',
+        account_number: '9814644749',
+        bank_name: 'Provider Bank',
+        provider: 'piggyvest',
+      },
+      primary_balance_kobo: 500_000,
+      primary_stale: true,
+    });
+    expect(display.primaryStale).toBe(true);
+  });
+
+  it('adds no flag for a legacy wallet', () => {
+    expect(
+      deriveWalletDisplayData({ balance: 0, primary_stale: true }).primaryStale
+    ).toBeUndefined();
+  });
+});

@@ -29,6 +29,20 @@ describe('route diagnostics', () => {
     expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(2);
   });
 
+  it('logs only a coarse, non-sensitive route category', () => {
+    const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      mockSegments.mockReturnValue(['cart']);
+      const { rerender } = renderHook(() => useRouteDiagnostics());
+      expect(log).toHaveBeenCalledWith('[StartupRoute]', 'route', 'cart');
+      mockSegments.mockReturnValue(['product', 'private-id']);
+      rerender({});
+      expect(log).toHaveBeenLastCalledWith('[StartupRoute]', 'route', 'other');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('does not interrupt rendering when native telemetry fails', () => {
     mockSegments.mockReturnValue(['checkout']);
     jest.mocked(Sentry.setTag).mockImplementationOnce(() => {

@@ -34,3 +34,22 @@ describe('IMEI wallet copy with the server off', () => {
     );
   });
 });
+
+describe('bugfix: IMEI hint quoted ₦50 while the card-only sheet prefilled ₦100', () => {
+  it('quotes the card minimum when the top-up is card-only under the wallet wording', () => {
+    // Arrange: Ogabassey, verdict still unknown, legacy-shaped wallet.
+    const copy = getImeiWalletCopy(false, true);
+
+    // Act + Assert: the hint matches the sheet's prefill.
+    expect(copy.shortfallHint(50)).toBe(
+      'Balance low — top up ₦100 to run this check'
+    );
+    expect(copy.topUpButton).toBe('Top up to unlock');
+  });
+
+  it("keeps today's exact hint where PiggyVest is ruled out", () => {
+    expect(getImeiWalletCopy(false, false).shortfallHint(50)).toBe(
+      'Balance low — top up ₦50 to run this check'
+    );
+  });
+});

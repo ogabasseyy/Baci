@@ -24,9 +24,7 @@ function createParams(overrides: Partial<HandlerParams>): HandlerParams {
     setSelectedQuoteId: jest.fn(),
     setShowCityPicker: jest.fn(),
     setShowStatePicker: jest.fn(),
-    setValue: jest.fn() as jest.MockedFunction<
-      UseFormSetValue<ShippingAddressInput>
-    >,
+    setValue: jest.fn<UseFormSetValue<ShippingAddressInput>>(),
     shippingQuoteAbortRef: { current: null },
     shippingStates: [],
     stationPickupQuote: undefined,
@@ -40,9 +38,7 @@ function createParams(overrides: Partial<HandlerParams>): HandlerParams {
 describe('Google state-name city validation', () => {
   it('defers a fresh state-name city until the matching city list loads', () => {
     const googleSuggestedCityRef = { current: null as string | null };
-    const setValue = jest.fn() as jest.MockedFunction<
-      UseFormSetValue<ShippingAddressInput>
-    >;
+    const setValue = jest.fn<UseFormSetValue<ShippingAddressInput>>();
 
     createCheckoutShippingHandlers(
       createParams({
@@ -75,9 +71,7 @@ describe('Google state-name city validation', () => {
 
   it('preserves a state-name suggestion when the loaded list belongs to another state', () => {
     const googleSuggestedCityRef = { current: null as string | null };
-    const setValue = jest.fn() as jest.MockedFunction<
-      UseFormSetValue<ShippingAddressInput>
-    >;
+    const setValue = jest.fn<UseFormSetValue<ShippingAddressInput>>();
 
     createCheckoutShippingHandlers(
       createParams({
@@ -106,5 +100,27 @@ describe('Google state-name city validation', () => {
       shouldValidate: false,
     });
     expect(googleSuggestedCityRef.current).toBe('Kano');
+  });
+});
+
+describe('state picker city reset', () => {
+  it('clears the city without validating it before the City picker is touched', () => {
+    const setValue = jest.fn<UseFormSetValue<ShippingAddressInput>>();
+    const setShowStatePicker = jest.fn();
+
+    createCheckoutShippingHandlers(
+      createParams({ setShowStatePicker, setValue })
+    ).handleSelectState('Lagos');
+
+    expect(setValue).toHaveBeenCalledWith('state', 'Lagos', {
+      shouldValidate: true,
+    });
+    expect(setValue).toHaveBeenCalledWith('city', '', {
+      shouldValidate: false,
+    });
+    expect(setValue).not.toHaveBeenCalledWith('city', '', {
+      shouldValidate: true,
+    });
+    expect(setShowStatePicker).toHaveBeenCalledWith(false);
   });
 });

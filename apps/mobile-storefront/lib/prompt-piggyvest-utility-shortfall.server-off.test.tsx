@@ -7,6 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import { Alert } from 'react-native';
+import { formatNgnCurrency } from './format-ngn-currency';
 import { promptPiggyvestUtilityShortfall } from './prompt-piggyvest-utility-shortfall';
 
 // With the server keeping PiggyVest off neither verdict is set, so the
@@ -55,5 +56,22 @@ describe('promptPiggyvestUtilityShortfall (server off)', () => {
     });
     const call = (Alert.alert as unknown as jest.Mock).mock.calls[0];
     expect(call[1]).toContain('add ₦100 store credit by card');
+  });
+
+  it('bugfix: formats fractional and large naira like the rest of the app', () => {
+    // Arrange: koboToNaira can leave a fractional store credit balance.
+    promptPiggyvestUtilityShortfall({
+      amount: 12_500,
+      balance: 369.5,
+      refetchWallet: () => {},
+      verdict: { walletIsStoreCredit: true },
+    });
+
+    // Assert: shared NGN formatter, never the device-locale toLocaleString.
+    const call = (Alert.alert as unknown as jest.Mock).mock.calls[0];
+    expect(call[1]).toContain(formatNgnCurrency(12_500));
+    expect(call[1]).toContain(formatNgnCurrency(369.5));
+    expect(call[1]).toContain('₦369.50');
+    expect(call[1]).toContain(`add ${formatNgnCurrency(12_131)} store credit`);
   });
 });

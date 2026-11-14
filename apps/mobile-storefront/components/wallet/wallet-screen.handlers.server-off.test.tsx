@@ -3,10 +3,18 @@ import { router } from 'expo-router';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { fundWallet } from './wallet-screen.handlers';
 
+// The account that started the top-up is still signed in.
+jest.mock('./is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/lib/wallet-top-up', () => ({ initializeWalletTopUp: jest.fn() }));
 jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({ error: jest.fn() }),
+  createLogger: () => ({
+    debug: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+  }),
 }));
 jest.mock('@/services/analytics', () => ({
   trackError: jest.fn(),

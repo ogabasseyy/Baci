@@ -36,6 +36,15 @@ export function readObservedPiggyvestPrimaryCapability(
 }
 
 /**
+ * True when the last answer for this merchant was a ruling-out, even once it
+ * has expired: until a positive verdict replaces it, the wallet keeps the
+ * PiggyVest balance suppressed, so money actions must not assume PiggyVest.
+ */
+export function wasPiggyvestLastRuledOut(merchantId: string): boolean {
+  return capabilityCache.get(merchantId)?.available === false;
+}
+
+/**
  * Milliseconds until a cached ruling-out expires, or null when there is no
  * current negative verdict. Lets a screen re-render exactly at expiry.
  */

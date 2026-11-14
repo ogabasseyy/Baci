@@ -23,6 +23,7 @@ jest.mock('@/stores/auth-store', () => ({
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
   useNavigation: () => ({ addListener: () => () => undefined }),
+  useFocusEffect: jest.fn(),
 }));
 jest.mock('@/hooks/use-product-search', () => ({
   useProductSearch: () => ({ products: [], isLoading: false }),

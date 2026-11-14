@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 import {
@@ -417,5 +417,60 @@ describe('bugfix: cached wallet out of step with a verdict that changed elsewher
 
     expect(invalidateQueries).toHaveBeenCalledTimes(1);
     clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+describe('bugfix: failed reclassification reload never retried on checkout or utilities', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('reloads again after a failed refetch, and stops after a bounded number', async () => {
+    // Arrange: positive verdict over a legacy cached wallet; every reload fails.
+    jest.useFakeTimers();
+    setVerdict(true);
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = {
+      getQueryData: () => ({ transactions: [], wallet: { balance: 0 } }),
+      getQueryState: () => ({ status: 'error' }),
+      invalidateQueries,
+    } as unknown as QueryClient;
+    renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY, {
+        balance: 0,
+      } as never)
+    );
+    await act(async () => {});
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+
+    // Act: let every retry fire.
+    for (let i = 0; i < 10; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+      });
+    }
+
+    // Assert: the first reload plus the bounded retries, no more.
+    expect(invalidateQueries).toHaveBeenCalledTimes(6);
+  });
+
+  it('does not retry after a successful reload', async () => {
+    jest.useFakeTimers();
+    setVerdict(true);
+    const invalidateQueries = jest.fn(async () => undefined);
+    const queryClient = {
+      getQueryData: () => ({ transactions: [], wallet: { balance: 0 } }),
+      getQueryState: () => ({ status: 'success' }),
+      invalidateQueries,
+    } as unknown as QueryClient;
+    renderHook(() =>
+      useWalletRecheckOnPiggyvest(queryClient, 'merchant-1', KEY, {
+        balance: 0,
+      } as never)
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+    });
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
   });
 });

@@ -143,6 +143,41 @@ it('admits the daily reconciliation read with JSON options only', async () => {
     execute(sql, [config.integrationId, 'production', '{}'])
   ).rejects.toThrow();
 });
+it('admits the goal-wallet setup health read with JSON options only', async () => {
+  mocks.query
+    .mockReset()
+    .mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    })
+    .mockResolvedValueOnce({ rows: [{ result: { stalledGoalWallets: 0 } }] });
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  const sql =
+    'SELECT piggyvest_primary.read_goal_wallet_setup_health($1::uuid,$2::text,$3::jsonb) AS result';
+  await expect(
+    execute(sql, [
+      config.integrationId,
+      'staging',
+      JSON.stringify({ staleAfterSeconds: 600 }),
+    ])
+  ).resolves.toEqual({ rows: [{ result: { stalledGoalWallets: 0 } }] });
+  await expect(
+    execute(sql, [config.integrationId, 'staging', 'not json'])
+  ).rejects.toThrow();
+  await expect(
+    execute(sql, [config.integrationId, 'production', '{}'])
+  ).rejects.toThrow();
+  await expect(
+    execute(`${sql} -- x`, [config.integrationId, 'staging', '{}'])
+  ).rejects.toThrow();
+});
 it('never runs a financial statement after an unsafe session check', async () => {
   mocks.query.mockReset().mockResolvedValue({ rows: [{ safe: false }] });
   await expect(

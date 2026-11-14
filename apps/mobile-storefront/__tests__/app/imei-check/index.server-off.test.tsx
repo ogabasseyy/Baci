@@ -143,7 +143,7 @@ describe('IMEI screen with the server keeping PiggyVest off', () => {
     fireEvent.press(screen.getByText('Top up to unlock'));
     expect(router.push).toHaveBeenCalledWith(
       expect.stringMatching(
-        /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=\/imei-check$/
+        /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=%2Fimei-check$/
       )
     );
   });
@@ -167,7 +167,7 @@ describe('bugfix: ₦5,000 PiggyVest customer told they can pay for a check', ()
     expect(screen.queryByText('Pay from PiggyVest')).toBeNull();
     expect(router.push).toHaveBeenCalledWith(
       expect.stringMatching(
-        /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=\/imei-check$/
+        /^\/wallet\?action=fund&requiredAmount=\d+&returnTo=%2Fimei-check$/
       )
     );
   });

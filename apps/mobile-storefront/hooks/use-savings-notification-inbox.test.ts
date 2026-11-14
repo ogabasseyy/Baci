@@ -181,6 +181,21 @@ describe('useSavingsNotificationInbox', () => {
     expect(mockMarkAvailable).toHaveBeenCalledTimes(1);
   });
 
+  // Walk 14: "fetch failed: Could not connect to the server." was shown.
+  it('shows plain wording, not transport text, when the inbox cannot be reached', async () => {
+    mockFetchInbox.mockRejectedValueOnce(
+      new Error('fetch failed: Could not connect to the server.')
+    );
+    const { result } = renderHook(() =>
+      useSavingsNotificationInbox({ enabled: true, merchantId, userId: 'u' })
+    );
+    await waitFor(() =>
+      expect(result.current.error).toBe(
+        'Unable to update savings notifications. Please try again.'
+      )
+    );
+  });
+
   it('hides the previous account inbox immediately when the account changes', async () => {
     const accountBInbox = {
       ...inbox,

@@ -13,6 +13,7 @@ describe('walletFundedTransferSubmitParams', () => {
     expect(params).toEqual({
       isWalletFundedBankTransferHeld,
       walletFundedBankTransferOptionEnabled: true,
+      walletTransferFallbackReason: undefined,
     });
   });
 

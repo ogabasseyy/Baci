@@ -41,3 +41,31 @@ describe('createLiveWalletQuery (server off)', () => {
     queryClient.clear();
   });
 });
+
+describe('bugfix: malformed PiggyVest balance read as a settled legacy wallet', () => {
+  it('reports the wallet as unknown so Place Order holds the transfer', () => {
+    // Arrange
+    const queryClient = new QueryClient();
+    queryClient.setQueryData<WalletQueryData>(
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
+      {
+        wallet: { balance: 1200, loyalty_points: 0, primary_balance_kobo: -1 },
+        transactions: [],
+      }
+    );
+
+    // Act
+    const verdict = createLiveWalletQuery(queryClient).getVerdict();
+
+    // Assert
+    expect(verdict).toEqual({
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: true,
+    });
+    queryClient.clear();
+  });
+});

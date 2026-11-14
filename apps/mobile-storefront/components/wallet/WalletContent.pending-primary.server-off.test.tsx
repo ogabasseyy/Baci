@@ -41,7 +41,7 @@ describe('bugfix: pending PiggyVest history labelled as the full history', () =>
     );
 
     // Assert
-    expect(screen.getByText('Store credit activity')).toBeOnTheScreen();
+    expect(screen.getByText('Older store credit')).toBeOnTheScreen();
     expect(screen.queryByText('Recent Transactions')).toBeNull();
   });
 });
@@ -80,6 +80,6 @@ describe('bugfix: pending PiggyVest balance shown as an authoritative ₦0', () 
     expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.getByText('Store credit')).toBeOnTheScreen();
-    expect(screen.getByText('Store credit activity')).toBeOnTheScreen();
+    expect(screen.getByText('Older store credit')).toBeOnTheScreen();
   });
 });

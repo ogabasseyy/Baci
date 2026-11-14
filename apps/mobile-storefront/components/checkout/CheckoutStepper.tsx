@@ -95,6 +95,7 @@ export function CheckoutStepper({
               number={index + 1}
               onPress={status === 'completed' ? () => setStep(s) : undefined}
               status={status}
+              stepKey={s}
             />
           );
         })}

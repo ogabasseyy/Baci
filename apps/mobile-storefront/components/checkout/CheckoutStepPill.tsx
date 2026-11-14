@@ -7,17 +7,13 @@ type ColorsScheme = (typeof Colors)['light'];
 
 export type CheckoutStepPillStatus = 'completed' | 'current' | 'upcoming';
 
-const STATUS_SPOKEN: Record<CheckoutStepPillStatus, string> = {
-  completed: 'completed',
-  current: 'current',
-  upcoming: 'not yet available',
-};
-
 interface CheckoutStepPillProps {
   colors: ColorsScheme;
   isDark: boolean;
   label: string;
   number: number;
+  /** Stable step id for testIDs, so they do not shift with the visible steps. */
+  stepKey: string;
   /** Only completed steps navigate, so only they receive a handler. */
   onPress?: () => void;
   status: CheckoutStepPillStatus;
@@ -36,6 +32,7 @@ export function CheckoutStepPill({
   number,
   onPress,
   status,
+  stepKey,
 }: CheckoutStepPillProps) {
   const isCurrent = status === 'current';
   const isCompleted = status === 'completed';
@@ -106,13 +103,21 @@ export function CheckoutStepPill({
     </>
   );
 
-  if (isCompleted && onPress) {
+  if (isCompleted) {
+    // A completed step is always a button; without a handler it is disabled.
     return (
       <Pressable
-        accessibilityLabel={`Go to ${label} step, completed`}
+        accessibilityLabel={
+          onPress
+            ? `Go to ${label} step, completed`
+            : `${label} step, completed`
+        }
         accessibilityRole="button"
+        accessibilityState={{ disabled: !onPress }}
+        disabled={!onPress}
         onPress={onPress}
         style={pillStyle}
+        testID={`checkout-step-pill-${stepKey}`}
       >
         {content}
       </Pressable>
@@ -122,9 +127,9 @@ export function CheckoutStepPill({
   return (
     <View
       accessible
-      accessibilityLabel={`${label} step, ${STATUS_SPOKEN[status]}`}
+      accessibilityLabel={`${label} step, ${isCurrent ? 'current' : 'not yet available'}`}
       style={pillStyle}
-      testID={`checkout-step-pill-${number}`}
+      testID={`checkout-step-pill-${stepKey}`}
     >
       {content}
     </View>

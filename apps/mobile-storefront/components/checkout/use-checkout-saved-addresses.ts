@@ -167,8 +167,11 @@ export function useCheckoutSavedAddresses({
       setIsAddingNewAddress(true);
       // Only a customer's first address defaults on its own. With one saved
       // address (already the default), a new one must not take its place
-      // unless the shopper ticks the box.
-      setSaveAsDefaultAddress(savedAddresses.length === 0);
+      // unless the shopper ticks the box. While the list is still loading the
+      // count is unknown, so leave the box unticked rather than guess.
+      setSaveAsDefaultAddress(
+        !isLoadingSavedAddresses && savedAddresses.length === 0
+      );
     },
     saveAsDefaultAddress,
     savedAddresses,

@@ -9,7 +9,13 @@ const colors = {
   textSecondary: '#6b7280',
 } as Parameters<typeof CheckoutStepPill>[0]['colors'];
 
-const baseProps = { colors, isDark: false, label: 'Address', number: 1 };
+const baseProps = {
+  colors,
+  isDark: false,
+  label: 'Address',
+  number: 1,
+  stepKey: 'address',
+};
 
 describe('CheckoutStepPill', () => {
   it('makes a completed step a button that navigates back', () => {
@@ -40,14 +46,29 @@ describe('CheckoutStepPill', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('still announces a completed step as completed when it has no handler', () => {
+  it('renders a completed step without a handler as a disabled button', () => {
     render(<CheckoutStepPill {...baseProps} status="completed" />);
 
-    expect(screen.getByLabelText('Address step, completed')).toBeTruthy();
+    const pill = screen.getByRole('button', {
+      name: 'Address step, completed',
+    });
+    expect(pill).toBeDisabled();
     expect(screen.queryByLabelText(/not yet available/)).toBeNull();
   });
 
-  it('gives each step its own testID', () => {
+  it('keeps the same testID when a step becomes completed', () => {
+    const { rerender } = render(
+      <CheckoutStepPill {...baseProps} status="current" />
+    );
+    expect(screen.getByTestId('checkout-step-pill-address')).toBeTruthy();
+
+    rerender(
+      <CheckoutStepPill {...baseProps} onPress={jest.fn()} status="completed" />
+    );
+    expect(screen.getByTestId('checkout-step-pill-address')).toBeTruthy();
+  });
+
+  it('keys each testID on the step, not its position', () => {
     render(
       <>
         <CheckoutStepPill
@@ -55,17 +76,19 @@ describe('CheckoutStepPill', () => {
           label="Payment"
           number={2}
           status="upcoming"
+          stepKey="payment"
         />
         <CheckoutStepPill
           {...baseProps}
           label="Review"
-          number={3}
+          number={2}
           status="upcoming"
+          stepKey="review"
         />
       </>
     );
 
-    expect(screen.getByTestId('checkout-step-pill-2')).toBeTruthy();
-    expect(screen.getByTestId('checkout-step-pill-3')).toBeTruthy();
+    expect(screen.getByTestId('checkout-step-pill-payment')).toBeTruthy();
+    expect(screen.getByTestId('checkout-step-pill-review')).toBeTruthy();
   });
 });

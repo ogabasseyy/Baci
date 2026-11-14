@@ -33,7 +33,7 @@ export function QuizStandingsPodium({
         const medal = QUIZ_PODIUM_MEDALS[position] as string;
         return (
           <View
-            key={`${entry.rank}-${entry.displayName}`}
+            key={position}
             accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
             style={styles.podiumColumn}
           >

@@ -78,6 +78,15 @@ describe('quiz stage colours', () => {
     ).toBe(true);
   });
 
+  it('keeps wide-script and emoji answers out of the narrow tiles', () => {
+    expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', '삼성 갤럭시'])).toBe(
+      false
+    );
+    expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'Fast 🚀'])).toBe(
+      false
+    );
+  });
+
   it('uses the grid for four short answers only', () => {
     expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'A17'])).toBe(true);
     expect(shouldUseQuizAnswerGrid(['Yes', 'No'])).toBe(false);

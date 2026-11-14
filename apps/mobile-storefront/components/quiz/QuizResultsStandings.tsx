@@ -66,7 +66,9 @@ export function QuizResultsStandings({
         const finishTime = formatQuizStandingTime(entry.totalTimeSeconds);
         return (
           <View
-            key={`${entry.rank}-${entry.displayName}`}
+            // Entries carry no id, and tied players can share a name, so the
+            // finish time and submission tell their rows apart.
+            key={`${entry.rank}-${entry.displayName}-${entry.totalTimeSeconds ?? ''}-${entry.submittedAt ?? ''}`}
             accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
             style={[
               styles.finalStandingRow,

@@ -59,12 +59,13 @@ export function buildQuizStandingsView(
       !entry.isCurrentCustomer &&
       !podium.includes(entry)
   );
-  const rows = [...neighbours, { ...currentPlayer, isCurrentCustomer: true }]
-    .sort((a, b) => a.rank - b.rank)
-    .filter(
-      (entry, index, all) =>
-        all.findIndex((candidate) => isSameEntry(candidate, entry)) === index
-    );
+  // Neighbours sit exactly one rank away, so none can be the player's own
+  // row. They are never de-duplicated by name: two different players can
+  // share a display name at a tied rank and both must stay visible.
+  const rows = [
+    ...neighbours,
+    { ...currentPlayer, isCurrentCustomer: true },
+  ].sort((a, b) => a.rank - b.rank);
   const tenth = entries.find((entry) => entry.rank === TOP_TEN_RANK);
   const pointsBehindTopTen =
     tenth && currentPlayer.rank > TOP_TEN_RANK

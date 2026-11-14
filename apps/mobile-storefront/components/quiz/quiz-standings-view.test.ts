@@ -84,6 +84,28 @@ describe('buildQuizStandingsView', () => {
     expect(view.pointsBehindTopTen).toBeNull();
   });
 
+  it('bugfix: two tied neighbours sharing a name were merged into one row', () => {
+    const me = entry(37, { displayName: 'me', isCurrentCustomer: true });
+    const view = buildQuizStandingsView({
+      currentPlayer: me,
+      entries: [
+        entry(1),
+        entry(2),
+        entry(3),
+        entry(36, { displayName: 'Ada' }),
+        entry(36, { displayName: 'Ada', totalTimeSeconds: 99 }),
+        me,
+      ],
+      participantCount: 40,
+      status: 'live',
+    });
+    expect(view.rows.map((item) => item.displayName)).toEqual([
+      'Ada',
+      'Ada',
+      'me',
+    ]);
+  });
+
   it('never reports a negative gap to the top ten', () => {
     const me = entry(11, { isCurrentCustomer: true, score: 95 });
     const ranks = Array.from({ length: 12 }, (_, index) => index + 1);

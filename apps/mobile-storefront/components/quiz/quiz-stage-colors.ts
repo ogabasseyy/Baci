@@ -51,11 +51,22 @@ export function getQuizAnswerAccent(index: number): string {
  */
 export const QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH = 22;
 
+/**
+ * CJK, Hangul, kana and emoji are about twice as wide as Latin letters, so
+ * the character limit above does not protect them from truncation.
+ */
+const WIDE_GLYPH_PATTERN =
+  /[\u1100-\u11FF\u2E80-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]|\p{Extended_Pictographic}/u;
+
 /** Short answers sit in a 2×2 grid; long ones fall back to full-width rows. */
 export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {
   return (
     labels.length === 4 &&
-    labels.every((label) => label.length <= QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH)
+    labels.every(
+      (label) =>
+        label.length <= QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH &&
+        !WIDE_GLYPH_PATTERN.test(label)
+    )
   );
 }
 

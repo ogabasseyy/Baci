@@ -3,12 +3,14 @@ import Feather, {
 } from '@react-native-vector-icons/feather';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { palette, withAlpha } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
 import { getFilterBarStyles } from './FilterBar.styles';
 import { FilterBarActiveControls } from './FilterBarActiveControls';
 
 interface FilterBarProps {
   categories: string[];
+  useBrandRed?: boolean;
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   minPrice: number;
@@ -41,6 +43,7 @@ const CATEGORY_ICONS: Record<string, FeatherIconName> = {
 
 export function FilterBar({
   categories,
+  useBrandRed = false,
   selectedCategory,
   onSelectCategory,
   minPrice,
@@ -59,8 +62,17 @@ export function FilterBar({
 }: FilterBarProps) {
   const [activeFilterType, setActiveFilterType] = useState<FilterType>('price');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
-  const { colors } = useTheme();
-  const styles = getFilterBarStyles(colors);
+  const { colors: themeColors, isDark } = useTheme();
+  const colors = useBrandRed
+    ? {
+        ...themeColors,
+        primary: palette.red[600],
+        primaryForeground: palette.white,
+        primaryLowOpacity: withAlpha(palette.red[600], isDark ? 0.18 : 0.08),
+      }
+    : themeColors;
+  const accent = useBrandRed && isDark ? palette.red[400] : colors.primary;
+  const styles = getFilterBarStyles(colors, accent);
 
   const getActiveFilterLabel = () => {
     switch (activeFilterType) {
@@ -135,12 +147,12 @@ export function FilterBar({
               accessibilityLabel="Toggle filter menu"
               accessibilityState={{ expanded: isFilterMenuOpen }}
             >
-              <Feather name="sliders" size={16} color={colors.primary} />
+              <Feather name="sliders" size={16} color={accent} />
               <Text style={styles.filterLabel}>{getActiveFilterLabel()}</Text>
               <Feather
                 name="chevron-down"
                 size={12}
-                color={colors.primary}
+                color={accent}
                 style={[
                   styles.chevron,
                   {
@@ -185,7 +197,7 @@ export function FilterBar({
                       size={16}
                       color={
                         activeFilterType === item.id
-                          ? colors.primary
+                          ? accent
                           : colors.textSecondary
                       }
                     />
@@ -202,7 +214,7 @@ export function FilterBar({
                       <Feather
                         name="check"
                         size={14}
-                        color={colors.primary}
+                        color={accent}
                         style={styles.checkIcon}
                       />
                     )}
@@ -217,6 +229,7 @@ export function FilterBar({
           {/* Dynamic Controls Area */}
           <View style={styles.dynamicArea}>
             <FilterBarActiveControls
+              colorsOverride={colors}
               activeFilterType={activeFilterType}
               minPrice={minPrice}
               maxPrice={maxPrice}
@@ -247,9 +260,7 @@ export function FilterBar({
               <Feather
                 name="grid"
                 size={15}
-                color={
-                  viewMode === 'grid' ? colors.primary : colors.mutedForeground
-                }
+                color={viewMode === 'grid' ? accent : colors.mutedForeground}
               />
             </Pressable>
             <Pressable
@@ -266,9 +277,7 @@ export function FilterBar({
               <Feather
                 name="list"
                 size={15}
-                color={
-                  viewMode === 'list' ? colors.primary : colors.mutedForeground
-                }
+                color={viewMode === 'list' ? accent : colors.mutedForeground}
               />
             </Pressable>
           </View>

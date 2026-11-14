@@ -17,6 +17,7 @@ import { useCartStore } from '@/stores/cart-store';
 import { useDrawerStore } from '@/stores/drawer-store';
 import { useThemeStore } from '@/stores/theme-store';
 import { getHeaderStyles } from './header.styles';
+import { ShortcutTileBackdrop } from './ShortcutTileBackdrop';
 
 interface HeaderProps {
   searchFocusTimer?: RefObject<ReturnType<typeof setTimeout> | undefined>;
@@ -28,6 +29,8 @@ interface HeaderProps {
   onSearchSubmit?: () => void;
   onSearchCancel?: () => void;
   isScrolled?: boolean;
+  useWarmDarkSurface?: boolean;
+  useScallopedSearch?: boolean;
 }
 
 // Background pattern from web (SVG Data URI)
@@ -42,6 +45,8 @@ export function Header({
   onSearchSubmit,
   onSearchCancel,
   isScrolled = false,
+  useWarmDarkSurface = false,
+  useScallopedSearch = false,
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
   const searchInputRef = useRef<TextInputInstance>(null);
@@ -52,6 +57,7 @@ export function Header({
   const { colors } = useTheme();
 
   const styles = getHeaderStyles(colors);
+  const scallopSearch = useScallopedSearch && !isSearchActive;
 
   // Focus the search input when search mode activates (ref-based to avoid autoFocus a11y warning)
   useEffect(() => {
@@ -83,6 +89,7 @@ export function Header({
         style={[
           styles.eliteContainer,
           isScrolled && { backgroundColor: colors.black },
+          useWarmDarkSurface && { backgroundColor: '#181416' },
           { paddingTop: eliteTopPadding },
           isSanta && { backgroundColor: seasonalTokens.holidayBg },
         ]}
@@ -151,15 +158,25 @@ export function Header({
               <View
                 style={[
                   styles.searchPill,
+                  useWarmDarkSurface && { backgroundColor: colors.muted },
                   isSanta && styles.santaSearchPill,
                   isSearchActive && styles.activeSearchPill,
+                  scallopSearch && { backgroundColor: 'transparent' },
                 ]}
               >
+                {scallopSearch && (
+                  <ShortcutTileBackdrop
+                    color={useWarmDarkSurface ? colors.muted : colors.card}
+                    shortEdgesOnly
+                  />
+                )}
                 <Ionicons
                   name="search-outline"
                   size={20}
                   color={
-                    isSearchActive ? colors.textSecondary : colors.placeholder
+                    isSearchActive || scallopSearch
+                      ? colors.textSecondary
+                      : colors.placeholder
                   }
                 />
                 {!isSearchActive ? (

@@ -108,26 +108,34 @@ describe('HomeScreen', () => {
     expect(screen.getByTestId('mock-header')).toHaveTextContent('Header true');
   });
 
-  it('does not restart a header animation until its visibility target changes', () => {
+  it('keeps the header visible until its spacer has scrolled away', () => {
     const withTimingSpy = jest.spyOn(Reanimated, 'withTiming');
     render(<HomeScreen />);
 
     scrollHomeFeed(30);
-    scrollHomeFeed(60);
     scrollHomeFeed(90);
+    scrollHomeFeed(149);
+    expect(withTimingSpy).not.toHaveBeenCalled();
 
+    scrollHomeFeed(160);
+    scrollHomeFeed(200);
     expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([0]);
 
-    scrollHomeFeed(65);
-    scrollHomeFeed(40);
-    scrollHomeFeed(16);
-
+    scrollHomeFeed(180);
     expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([0, 1]);
+
+    scrollHomeFeed(220);
+    scrollHomeFeed(149);
+    expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([
+      0, 1, 0,
+    ]);
 
     fireEvent.press(screen.getByTestId('mock-header-search'));
     scrollHomeFeed(120);
 
-    expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([0, 1]);
+    expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([
+      0, 1, 0,
+    ]);
   });
 
   it('submits the header query to the search screen and closes the dropdown', () => {

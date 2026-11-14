@@ -127,4 +127,25 @@ describe('resolveHomeBlocks', () => {
   it('withholds fallback blocks during the initial loading request', () => {
     expect(resolveHomeBlocks(undefined, false, true)).toEqual([]);
   });
+  it('removes the wallet utility panel from Home but keeps shopping categories', () => {
+    expect(
+      resolveHomeBlocks(undefined, true, false, true).map((block) => block.type)
+    ).not.toContain('CategoryRail');
+
+    const blocks = resolveHomeBlocks(
+      [
+        { type: 'CategoryRail', props: { id: 'utilities', slug: 'utilities' } },
+        { type: 'CategoryRail', props: { id: 'shopping', slug: 'phones' } },
+      ],
+      true,
+      false,
+      true
+    );
+
+    expect(
+      blocks
+        .filter((block) => block.type === 'CategoryRail')
+        .map((block) => block.props.id)
+    ).toEqual(['shopping']);
+  });
 });

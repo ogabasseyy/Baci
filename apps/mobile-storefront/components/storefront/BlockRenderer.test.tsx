@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 import type { Block } from '@/types/blocks';
 import { BlockRenderer } from './BlockRenderer';
+import type { HeroSlide } from './Hero';
 
 const mockHeroProps = jest.fn();
 const mockUtilityProps = jest.fn();
@@ -30,19 +31,22 @@ jest.mock('./Hero', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
     Hero: (props: {
+      slides: HeroSlide[];
       trailingAdPlacement?: string;
       autoplayPaused?: boolean;
     }) => {
       mockHeroProps(props);
+      const { slides, trailingAdPlacement } = props;
       return (
         <MockText
           testID={
-            props.trailingAdPlacement
-              ? 'hero-carousel-with-ad'
-              : 'hero-carousel'
+            trailingAdPlacement ? 'hero-carousel-with-ad' : 'hero-carousel'
           }
         >
           Hero carousel
+          {slides.map((slide) => (
+            <MockText key={slide.title}>{slide.title}</MockText>
+          ))}
         </MockText>
       );
     },
@@ -119,7 +123,17 @@ describe('BlockRenderer', () => {
   it('renders a configured hero carousel when slides are present', () => {
     renderBlocks([configuredHeroBlock]);
 
-    expect(screen.getByText('Hero carousel')).toBeTruthy();
+    expect(screen.getByText(/Hero carousel/)).toBeTruthy();
+  });
+
+  it('puts Black Friday first in the selected carousel and keeps its existing slides', () => {
+    renderBlocks([configuredHeroBlock, emptyHeroBlock], {
+      blackFridayHeroBlockId: configuredHeroBlock.props.id,
+    });
+
+    const carousel = screen.getByTestId('hero-carousel-with-ad');
+    expect(carousel).toHaveTextContent(/Black FridayFeatured phones/);
+    expect(screen.getAllByText('Black Friday')).toHaveLength(1);
   });
 
   it('renders the just-launched carousel for a JustLaunched block', () => {

@@ -44,14 +44,15 @@ export function CookieConsent() {
         // Keep the delayed prompt out of document flow even before route CSS.
         position: 'fixed',
         bottom: '1rem',
-        left: 'max(1rem, calc((100% - 64rem) / 2))',
-        right: 'max(1rem, calc((100% - 64rem) / 2))',
+        left: 'max(1rem, calc((100% - 32rem) / 2))',
+        right: 'max(1rem, calc((100% - 32rem) / 2))',
         width: 'auto',
         // Below the cart drawer (z-60), above the mobile footer (z-40):
         // an open drawer must not be covered by the consent prompt.
         zIndex: 50,
         contain: 'layout style paint',
       }}
+      data-storefront-cookie-consent
       role="dialog"
       aria-label="Cookie consent"
     >
@@ -79,14 +80,11 @@ export function CookieConsent() {
           </p>
         )}
         {!showDetails ? (
-          // Simple View - Horizontal Floating Bar
+          // Compact prompt
           <div
-            className={cn(
-              styles.content,
-              'flex flex-col md:flex-row items-center gap-4 md:gap-6'
-            )}
+            className={cn(styles.content, 'flex flex-col items-start gap-3')}
           >
-            <div className="flex items-center gap-4 flex-1 w-full md:w-auto">
+            <div className="flex w-full items-start gap-3">
               <div className="hidden sm:flex items-center justify-center size-10 rounded-full bg-primary/10 shrink-0">
                 <Cookie className="size-5 text-primary" />
               </div>
@@ -96,7 +94,7 @@ export function CookieConsent() {
                 <div className="space-y-1 text-sm text-muted-foreground leading-snug">
                   <p>We use cookies to improve your experience.</p>
                   <p>
-                    By using our store, you agree to our{' '}
+                    Optional cookies are up to you.{' '}
                     <Link
                       href={asRoute(`${basePath}/privacy`)}
                       prefetch={false}
@@ -109,7 +107,7 @@ export function CookieConsent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"

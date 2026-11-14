@@ -27,7 +27,8 @@ const FilterSection: React.FC<FilterSectionProps> = ({
   );
 
   return (
-    <div className="border-b border-gray-100 py-4 last:border-0">
+    <div data-filter-group
+      className="border-b border-gray-100 py-4 last:border-0">
       <button type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-between w-full text-left mb-2 group"
@@ -130,6 +131,7 @@ interface CategoryFiltersSidebarProps {
   onClearFilters: () => void;
   className?: string;
   showPriceFilter?: boolean;
+  showHeading?: boolean;
 }
 
 export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
@@ -139,27 +141,30 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
   onClearFilters,
   className = '',
   showPriceFilter = true,
+  showHeading = true,
 }) => {
   return (
     <div
       className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 ${className}`}
     >
-      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
-        <h2 className="font-bold text-gray-900 flex items-center gap-2">
-          <Search size={16} className="text-red-600" />
-          Filters
-        </h2>
-        <button type="button"
-          onClick={onClearFilters}
-          className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline"
-        >
-          Clear All
-        </button>
-      </div>
+      {showHeading && (
+        <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <Search size={16} className="text-red-600" />
+            Filters
+          </h2>
+          <button type="button"
+            onClick={onClearFilters}
+            className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline"
+          >
+            Clear All
+          </button>
+        </div>
+      )}
 
       {/* Price Range Filter */}
       {showPriceFilter && (
-        <div className="border-b border-gray-100 pb-6 mb-2">
+        <div data-filter-group className="border-b border-gray-100 pb-6 mb-2">
         <h3 className="font-bold text-sm text-gray-900 mb-3">
           Price Range (₦)
         </h3>

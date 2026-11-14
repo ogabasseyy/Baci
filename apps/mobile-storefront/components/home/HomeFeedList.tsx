@@ -25,14 +25,17 @@ import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
 import { PRODUCT_GRID_LOADING_MORE_LABEL } from '@/constants/product-grid';
+import { useBlackFriday } from '@/hooks/use-black-friday';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
+import { HomeCategoryDiscovery } from './HomeCategoryDiscovery';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
 import { HomeFeedSectionTitle } from './HomeFeedSectionTitle';
+import { HomeImpactCarousel } from './HomeImpactCarousel';
 import { getHomeFeedSlices } from './home-feed-ad-owners';
 import { useHomeProductFeed } from './use-home-product-feed';
 
@@ -46,6 +49,7 @@ const AnimatedFlashList = Animated.createAnimatedComponent(
 
 interface HomeFeedListProps {
   blocks: Block[];
+  nextDrop?: boolean;
   primaryProductGridIndex: number;
   selectedCategoryId: string | null;
   onCategorySelect: (id: string | null) => void;
@@ -61,6 +65,7 @@ interface HomeFeedListProps {
 
 export function HomeFeedList({
   blocks,
+  nextDrop = false,
   primaryProductGridIndex,
   selectedCategoryId,
   onCategorySelect,
@@ -100,6 +105,7 @@ export function HomeFeedList({
     enabled: hasPrimaryGrid,
     selectedCategoryId,
     variant: template.cardVariant,
+    initialViewMode: nextDrop ? 'list' : 'grid',
     limit,
   });
 
@@ -121,8 +127,29 @@ export function HomeFeedList({
     heroAdOwnerBlockId,
     launchAdOwnerBlockId,
   } = getHomeFeedSlices({ blocks, hasPrimaryGrid, primaryProductGridIndex });
-  const renderAfterCategoryRail = (block: Block) =>
-    block.type === 'CategoryRail' ? (
+  const { data: blackFridayProducts, isError: blackFridayError } =
+    useBlackFriday();
+  const heroBlocks = headerBlocks.filter(
+    (block) => block.type === 'HeroCarousel'
+  );
+  const nextDropHero = nextDrop ? heroBlocks[0] : undefined;
+  const campaignHero =
+    !isSearchOpen && !blackFridayError && blackFridayProducts?.length
+      ? (nextDropHero ??
+        heroBlocks.find((block) => block.props.slides?.length) ??
+        heroBlocks[0])
+      : undefined;
+
+  const shoppingStories = !isSearchOpen && (
+    <>
+      <HomeCategoryDiscovery />
+      <HomeImpactCarousel />
+    </>
+  );
+  const renderAfterHomeBlock = (block: Block) =>
+    nextDrop ? (
+      block === nextDropHero && shoppingStories
+    ) : block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />
     ) : null;
 
@@ -147,6 +174,7 @@ export function HomeFeedList({
       index={index}
       target={target}
       currentVariant={currentVariant}
+      neutralPrice={nextDrop}
       onProductDataEndReached={handleProductDataEndReached}
     />
   );
@@ -175,12 +203,18 @@ export function HomeFeedList({
         testID="home-feed-header-spacer"
         style={{ height: resolvedHeaderHeight }}
       />
+      {nextDrop && !isSearchOpen && (
+        <HomeServiceCards placement="underSearch" />
+      )}
+      {nextDrop && !nextDropHero && shoppingStories}
       <BlockRenderer
         blocks={headerBlocks}
+        blackFridayHeroBlockId={campaignHero?.props.id}
+        nextDropHeroBlockId={nextDropHero?.props.id}
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
-        renderAfterBlock={renderAfterCategoryRail}
+        renderAfterBlock={renderAfterHomeBlock}
         // Search covers the feed with a full-screen scrim; withhold the
         // home ad placements so no obscured delivery is requested.
         suppressAds={isSearchOpen}
@@ -193,7 +227,7 @@ export function HomeFeedList({
           {blockTitle ? (
             <HomeFeedSectionTitle colors={colors} title={blockTitle} />
           ) : null}
-          <FilterBar {...filterBarProps} />
+          <FilterBar {...filterBarProps} useBrandRed={nextDrop} />
         </>
       ) : null}
     </View>
@@ -221,7 +255,7 @@ export function HomeFeedList({
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
-        renderAfterBlock={renderAfterCategoryRail}
+        renderAfterBlock={renderAfterHomeBlock}
         suppressAds={isSearchOpen}
         autoplayPaused={isSearchOpen}
         heroAdOwnerBlockId={heroAdOwnerBlockId}
@@ -249,7 +283,9 @@ export function HomeFeedList({
       isFetching={isFetching}
       isRetrying={isRetrying}
       onRetry={handleRetry}
-      skeleton={<ProductGridSkeleton count={4} />}
+      skeleton={
+        <ProductGridSkeleton count={4} fullWidth={currentVariant === 'list'} />
+      }
     />
   ) : null;
 

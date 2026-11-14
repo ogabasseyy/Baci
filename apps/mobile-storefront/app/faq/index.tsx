@@ -1,3 +1,4 @@
+import { OGABASSEY_RETURN_SUMMARY } from '@baci/shared';
 import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import {
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, withAlpha } from '@/constants/Colors';
 import { SUPPORT_PHONE, SUPPORT_WHATSAPP_PHONE } from '@/constants/Support';
+import { CONFIG } from '@/lib/config';
 
 const WHATSAPP_GREEN = '#25D366';
 const storeInfo: StoreInfo = {
@@ -127,7 +129,18 @@ export default function FAQScreen() {
       <FAQView
         colors={colors}
         expandedId={expandedId}
-        faqItems={faqItems}
+        faqItems={
+          CONFIG.MERCHANT_SLUG === 'ogabassey'
+            ? faqItems.map((item) =>
+                item.id === '4'
+                  ? {
+                      ...item,
+                      answer: OGABASSEY_RETURN_SUMMARY,
+                    }
+                  : item
+              )
+            : faqItems
+        }
         onToggleExpand={toggleExpand}
         storeInfo={storeInfo}
         supportOptions={supportOptions}

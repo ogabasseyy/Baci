@@ -13,6 +13,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function GridProductCard({
   product,
+  priceColor = BRAND.primary,
   imageSource,
   imageProps,
   showLocalPlaceholder,
@@ -202,7 +203,7 @@ export default function GridProductCard({
         </Text>
 
         <View style={[styles.priceRow, { borderTopColor: colors.border }]}>
-          <Text style={[styles.gridPrice, { color: BRAND.primary }]}>
+          <Text style={[styles.gridPrice, { color: priceColor }]}>
             {formatSearchCardPrice(product)}
           </Text>
           <Text style={[styles.detailsText, { color: colors.text }]}>

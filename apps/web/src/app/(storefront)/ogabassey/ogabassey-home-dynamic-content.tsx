@@ -2,12 +2,15 @@ import { Suspense } from 'react';
 import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { AnalyticsPixelProvider } from '@/components/analytics/analytics-pixel-provider';
 import { OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY } from '@/components/storefront/ogabassey/components/home-section-reserve-geometry';
+import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
+import { BLACK_FRIDAY_PRODUCT_SLUGS } from '@/config/ogabassey-black-friday';
 import { getStorefrontNavigationCategories } from '@/lib/cached-categories';
 import {
   getCachedStorefrontHomeProducts,
   type getRequestScopedMerchant,
 } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { OgabasseyBlackFridayHomeLink } from './ogabassey-black-friday-home-link';
 import { OgabasseyHomeDiscoverySection } from './ogabassey-home-discovery-section';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 import { OgabasseyHomeProductSection } from './ogabassey-home-product-section';
@@ -60,6 +63,11 @@ export function OgabasseyHomeDynamicContent({
       <AnalyticsPixelProvider
         merchant={buildMerchantAnalyticsSettings(merchant)}
       />
+      {merchant.id === OGABASSEY_MERCHANT_ID &&
+      merchant.is_published &&
+      BLACK_FRIDAY_PRODUCT_SLUGS.length > 0 ? (
+        <OgabasseyBlackFridayHomeLink pathPrefix={pathPrefix} />
+      ) : null}
       <Suspense
         fallback={
           <div

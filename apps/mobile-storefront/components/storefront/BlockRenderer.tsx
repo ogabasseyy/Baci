@@ -1,5 +1,6 @@
 import type React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
+import { homeCampaignSlides } from '@/components/home/home-campaign-slides';
 import { useCategories } from '@/hooks';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
@@ -24,6 +25,8 @@ interface Category {
 
 interface BlockRendererProps {
   blocks: Block[];
+  blackFridayHeroBlockId?: string;
+  nextDropHeroBlockId?: string;
   selectedCategoryId: string | null;
   onCategorySelect: (id: string | null) => void;
   blockWrapperStyle?: StyleProp<ViewStyle>;
@@ -52,6 +55,8 @@ interface BlockRendererProps {
 
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
   blocks,
+  blackFridayHeroBlockId,
+  nextDropHeroBlockId,
   selectedCategoryId,
   onCategorySelect,
   blockWrapperStyle,
@@ -111,13 +116,32 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 ? heroBlock.props.slides
                 : [];
 
-              const slides: HeroSlide[] = configuredSlides.map((slide) => ({
-                title: slide.title,
-                subtitle: slide.subtitle,
-                image: slide.image,
-                ctaText: slide.ctaText,
-                ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
-              }));
+              const useCampaignStyle =
+                nextDropHeroBlockId === heroBlock.props.id;
+
+              const slides: HeroSlide[] = useCampaignStyle
+                ? [...homeCampaignSlides]
+                : configuredSlides.map((slide) => ({
+                    title: slide.title,
+                    subtitle: slide.subtitle,
+                    image: slide.image,
+                    ctaText: slide.ctaText,
+                    ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
+                  }));
+
+              if (
+                blackFridayHeroBlockId &&
+                heroBlock.props.id === blackFridayHeroBlockId
+              ) {
+                slides.unshift({
+                  campaign: 'black-friday',
+                  title: 'Black Friday',
+                  subtitle: '',
+                  image: '',
+                  ctaText: 'Shop the lineup',
+                  ctaLink: '/black-friday',
+                });
+              }
 
               if (slides.length === 0) {
                 return null;

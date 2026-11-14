@@ -49,6 +49,7 @@ export async function ReturnsPageContent({ params }: PageProps) {
       <JsonLd data={jsonLd} />
       <TrustPolicyPageClient
         kind="returns"
+        ogabasseyCare={context.merchant.slug === 'ogabassey'}
         merchantName={context.merchant.business_name}
         contactHref={getContactHref(context.merchant, context.baseUrl)}
         trustProfile={context.trustProfile}

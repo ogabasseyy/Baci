@@ -12,6 +12,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function EditorialProductCard({
   product,
+  priceColor = BRAND.primary,
   imageSource,
   imageProps,
   showLocalPlaceholder,
@@ -64,7 +65,7 @@ export default function EditorialProductCard({
         <Text style={[styles.editorialName, { color: textColor }]}>
           {product.name}
         </Text>
-        <Text style={[styles.editorialPrice, { color: BRAND.primary }]}>
+        <Text style={[styles.editorialPrice, { color: priceColor }]}>
           {formatSearchCardPrice(product)}
         </Text>
       </View>

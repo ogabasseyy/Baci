@@ -73,7 +73,24 @@ export function redirectSystemPath({
       const trimmedRoute = route === '/' ? '' : route.replace(/\/$/, '');
       const routePath =
         trimmedRoute.toLowerCase() === '/cart' ? '/cart' : trimmedRoute;
-      normalizedPath = `${routePath}${customSchemeUrl.search}${customSchemeUrl.hash}`;
+      const searchParams = new URLSearchParams(customSchemeUrl.search);
+      const fragmentParams = new URLSearchParams(customSchemeUrl.hash.slice(1));
+      const hasPairingSecret =
+        searchParams.has('handoff') ||
+        searchParams.has('hid') ||
+        fragmentParams.has('handoff') ||
+        fragmentParams.has('hid');
+      if (hasPairingSecret && routePath !== '/cart') {
+        searchParams.delete('handoff');
+        searchParams.delete('hid');
+        fragmentParams.delete('handoff');
+        fragmentParams.delete('hid');
+      }
+      const searchValue = searchParams.toString();
+      const fragmentValue = fragmentParams.toString();
+      const search = searchValue ? `?${searchValue}` : '';
+      const hash = fragmentValue ? `#${fragmentValue}` : '';
+      normalizedPath = `${routePath}${search}${hash}`;
     }
   } catch {
     // Keep the original path; captureCartPairingLink handles malformed input.

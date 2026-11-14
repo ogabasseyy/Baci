@@ -184,12 +184,12 @@ export default function RootLayout() {
         // Ensure splash screen dismisses even if post-auth init (analytics,
         // offline queue) throws. Auth-store already sets isInitialized on its
         // own errors, but failures after that point were previously unhandled
-        // and could leave Android stuck on the splash screen.
+        // and could leave Android stuck on the splash screen. Storage readiness
+        // is latched only after initializeStorage succeeds above.
         console.error('App initialization error:', err);
         recordCrashBreadcrumb('root_layout:initialize_error', {
           message: err instanceof Error ? err.message : String(err),
         });
-        markStorageReady();
       });
     }
 

@@ -121,6 +121,20 @@ describe('redirectSystemPath', () => {
     expect(mockCapture).not.toHaveBeenCalled();
   });
 
+  it('preserves non-cart custom routes while stripping pairing secrets', () => {
+    mockCapture.mockImplementationOnce((path) => path);
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://product/phone?color=blue&hid=secret#handoff=token&tab=details',
+        initial: true,
+      })
+    ).toBe('/product/phone?color=blue#tab=details');
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/product/phone?color=blue#tab=details',
+      expect.anything()
+    );
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

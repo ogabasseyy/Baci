@@ -231,6 +231,29 @@ export function registerRootLayoutSplashRecoveryTests({
     expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen();
   });
 
+  it('keeps storage gated and enters recovery when storage initialization rejects', async () => {
+    isSplashVisible.mockReturnValue(true);
+    let rejectStorage!: (error: Error) => void;
+    initializeStorage.mockReturnValue(
+      new Promise<void>((_resolve, reject) => {
+        rejectStorage = reject;
+      })
+    );
+
+    render(<RootLayout />);
+    await act(async () => rejectStorage(new Error('storage unavailable')));
+
+    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
+    expect(screen.queryByTestId('startup-placeholder')).toBeNull();
+
+    act(() => jest.advanceTimersByTime(8_000));
+    await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(1));
+    await finishNativeSplash();
+
+    expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen();
+    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
+  });
+
   it('reports layout when the startup recovery screen becomes visible', async () => {
     initializeStorage.mockReturnValue(new Promise(() => undefined));
 

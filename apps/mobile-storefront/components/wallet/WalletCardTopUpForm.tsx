@@ -22,6 +22,8 @@ interface WalletCardTopUpFormProps {
   isFundPending: boolean;
   onChangeFundAmount: (value: string) => void;
   onConfirmFund: () => void;
+  /** Line under "Pay with card"; defaults to the wallet top-up copy. */
+  subtitle?: string;
 }
 
 export function WalletCardTopUpForm({
@@ -30,6 +32,7 @@ export function WalletCardTopUpForm({
   isFundPending,
   onChangeFundAmount,
   onConfirmFund,
+  subtitle = 'Add money securely to your wallet',
 }: WalletCardTopUpFormProps) {
   const previewBlocked = isHostedStagingWalletTopUpBlocked();
   const amount = Number(fundAmount);
@@ -51,7 +54,7 @@ export function WalletCardTopUpForm({
             Pay with card
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Add money securely to your wallet
+            {subtitle}
           </Text>
         </View>
       </View>

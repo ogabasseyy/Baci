@@ -144,7 +144,9 @@ describe('useWalletFundingAccountController', () => {
     expect(result.current.needsPhone).toBe(false);
   });
 
-  it('blocks legacy creation while a non-pilot merchant awaits the first capability verdict', async () => {
+  it('bugfix: lets a non-pilot merchant create its account while the probe is unknown or failing', async () => {
+    // Owner decision 2026-11-13: PiggyVest is Ogabassey-only, so a failed or
+    // pending probe never holds another merchant's Paystack account (Codex).
     mockUseCapability.mockReturnValue(null);
     const params = buildParams({
       activeMerchantId: '00000000-0000-0000-0000-000000000001',
@@ -154,20 +156,16 @@ describe('useWalletFundingAccountController', () => {
       useWalletFundingAccountController(params)
     );
 
-    // Cold start: the probe has not resolved, so creation waits instead of
-    // minting a legacy DVA a primary verdict would orphan.
-    expect(result.current.canCreateFundingAccount).toBe(false);
-    expect(result.current.createFundingAccountUnavailableMessage).toBe(
+    expect(result.current.canCreateFundingAccount).toBe(true);
+    expect(result.current.createFundingAccountUnavailableMessage).not.toBe(
       'Checking account number availability...'
     );
 
-    let outcome: unknown;
     await act(async () => {
-      outcome = await result.current.onCreateFundingAccount();
+      await result.current.onCreateFundingAccount();
     });
 
-    expect(outcome).toBe(false);
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(params.setShowFundPanel).not.toHaveBeenCalled();
   });
 

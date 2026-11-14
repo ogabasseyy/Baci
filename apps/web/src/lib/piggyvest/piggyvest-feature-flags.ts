@@ -20,6 +20,8 @@ export const PIGGYVEST_FEATURE_FLAGS = {
   wallet_pay: 'PIGGYVEST_WALLET_PAY_ENABLED',
   // Read-only daily stuck-transfer reconciliation report.
   daily_reconciliation: 'PIGGYVEST_RECONCILIATION_ENABLED',
+  // Read-only degraded-health alerts (stalled setup, unconfirmed transfers).
+  degraded_alerts: 'PIGGYVEST_DEGRADED_ALERTS_ENABLED',
 } as const;
 
 export type PiggyvestFeature = keyof typeof PIGGYVEST_FEATURE_FLAGS;

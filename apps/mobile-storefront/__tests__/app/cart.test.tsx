@@ -98,6 +98,23 @@ describe('CartScreen state', () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
+  // The pushed /cart route hides the tab bar; once emptied, "Start Shopping"
+  // was the only way out. It now keeps the loaded cart's back button.
+  it('offers the back button on the emptied cart', () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    mockRouterCanGoBack.mockReturnValueOnce(true);
+    render(<CartScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Back to home' }));
+
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
+    expect(mockRouterDismissTo).not.toHaveBeenCalled();
+  });
+
   it('switches to Home from the empty Cart tab', () => {
     mockCartStateHolder.current = createMockCartState({
       items: [],

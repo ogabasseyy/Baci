@@ -7,10 +7,7 @@
       "version": "151.0.7922.169"
     }
   ],
-  "origins": [
-    "http://127.0.0.1:43179",
-    "http://localhost:43178"
-  ],
+  "origins": ["http://127.0.0.1:43179", "http://localhost:43178"],
   "httpErrors": [],
   "orderPaymentWrites": [],
   "externalOrigins": [],

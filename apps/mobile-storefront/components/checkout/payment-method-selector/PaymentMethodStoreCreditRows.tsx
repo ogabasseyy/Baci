@@ -5,6 +5,7 @@ import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { formatPrice } from '@/stores/cart-store';
 import { paymentMethodSelectorStyles as styles } from './styles';
+import { getWalletCreditCopy } from './wallet-credit-copy';
 
 type ThemeColors = (typeof Colors)['light'];
 
@@ -20,10 +21,12 @@ interface PaymentMethodStoreCreditRowsProps {
   savingsResidualToGateway: number;
   savingsShouldRender: boolean;
   savingsTotalBalance: number;
-  walletAccessibilityLabel: string;
+  /** Order total left for wallet money after savings. */
+  walletEffectiveTotal: number;
   walletCoversFully: boolean;
   walletInfoShouldRender: boolean;
   walletIsActive: boolean;
+  walletIsStoreCredit?: boolean;
   walletPortion: number;
   walletResidualToCard: number;
   walletShouldRender: boolean;
@@ -44,17 +47,25 @@ export function PaymentMethodStoreCreditRows({
   savingsResidualToGateway,
   savingsShouldRender,
   savingsTotalBalance,
-  walletAccessibilityLabel,
+  walletEffectiveTotal,
   walletCoversFully,
   walletInfoShouldRender,
   walletIsActive,
   walletIsLoading,
+  walletIsStoreCredit = false,
   walletPortion,
   walletResidualToCard,
   walletShouldRender,
   walletStatusShouldRender,
   walletTotalBalance,
 }: PaymentMethodStoreCreditRowsProps) {
+  const walletCopy = getWalletCreditCopy(walletIsStoreCredit);
+  const walletAccessibilityLabel = walletCopy.accessibilityLabel({
+    balance: walletTotalBalance,
+    coversFully: walletCoversFully,
+    portion: walletPortion,
+    total: walletEffectiveTotal,
+  });
   return (
     <>
       {savingsShouldRender ? (
@@ -130,7 +141,7 @@ export function PaymentMethodStoreCreditRows({
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
           accessibilityRole="text"
-          accessibilityLabel={`Wallet balance applies automatically. ${formatPrice(walletPortion)} available now`}
+          accessibilityLabel={`${walletCopy.autoApplyLabel}. ${formatPrice(walletPortion)} available now`}
         >
           <View
             style={[
@@ -147,7 +158,7 @@ export function PaymentMethodStoreCreditRows({
 
           <View style={styles.creditInfo}>
             <Text style={[styles.creditLabel, { color: colors.text }]}>
-              Wallet balance applies automatically
+              {walletCopy.autoApplyLabel}
             </Text>
             <Text style={[styles.creditDesc, { color: colors.textSecondary }]}>
               {`${formatPrice(walletPortion)} available now · transfer shortfall only`}
@@ -187,12 +198,14 @@ export function PaymentMethodStoreCreditRows({
 
           <View style={styles.creditInfo}>
             <Text style={[styles.creditLabel, { color: colors.text }]}>
-              {walletCoversFully ? 'Pay with wallet' : 'Use wallet credit'}
+              {walletCoversFully
+                ? walletCopy.coversFullyLabel
+                : walletCopy.partialLabel}
             </Text>
             <Text style={[styles.creditDesc, { color: colors.textSecondary }]}>
               {walletCoversFully
                 ? `${formatPrice(walletTotalBalance)} available · covers full order`
-                : `${formatPrice(walletPortion)} from wallet · ${formatPrice(walletResidualToCard)} from card`}
+                : `${formatPrice(walletPortion)} from ${walletCopy.sourceName} · ${formatPrice(walletResidualToCard)} from card`}
             </Text>
           </View>
 

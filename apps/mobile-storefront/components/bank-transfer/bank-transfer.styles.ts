@@ -11,6 +11,10 @@ export const styles = StyleSheet.create({
     flex: 1,
     padding: SPACING.lg,
   },
+  // Scrolls so a fallback notice or large text never pushes the account
+  // details behind the fixed actions (Codex).
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1, padding: SPACING.lg },
   centeredContent: {
     flex: 1,
     justifyContent: 'center',

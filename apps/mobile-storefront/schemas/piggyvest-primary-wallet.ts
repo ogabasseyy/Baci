@@ -5,7 +5,9 @@ export const PiggyvestPrimaryWalletSchemas = {
   create: z.strictObject({
     merchantId: z.uuid(),
     bvn: z.string().regex(/^\d{11}$/, 'Enter a valid 11-digit BVN.'),
-    consent: z.literal(true, { error: 'Please accept wallet setup.' }),
+    consent: z.literal(true, {
+      error: 'Tick the box to agree before continuing.',
+    }),
   }),
   created: z.strictObject({ status: z.enum(['pending', 'ready']) }),
   snapshot: z.discriminatedUnion('status', [

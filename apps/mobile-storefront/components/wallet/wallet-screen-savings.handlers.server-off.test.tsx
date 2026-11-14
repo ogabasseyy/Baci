@@ -1,5 +1,7 @@
 import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { notifySavings } from './savings/savings-notice';
+import { useSavingsNoticeStore } from './savings/savings-notice-store';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -38,5 +40,46 @@ describe('server keeps PiggyVest off', () => {
     expect(JSON.stringify(jest.mocked(Alert.alert).mock.calls)).not.toMatch(
       /PIN/
     );
+  });
+
+  it('keeps the amount on screen until the result is shown (no NGN 0 flash)', async () => {
+    const clearAmount = jest.fn();
+    let clearedDuringRefresh: boolean | undefined;
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => ({ goalStatus: 'active' }),
+      clearSavingsContributionAmount: clearAmount,
+      clearIdempotencyKey: jest.fn(),
+      createIdempotencyKey: () => 'op-2',
+      goal,
+      rawAmount: '1000',
+      refetchWallet: async () => {
+        clearedDuringRefresh = clearAmount.mock.calls.length > 0;
+        return {};
+      },
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(clearedDuringRefresh).toBe(false);
+    expect(clearAmount).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the last result notice when the next contribution starts', async () => {
+    notifySavings('Nice! NGN 1,000 added', undefined, 'success');
+    let shownWhileSending: string | undefined;
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => {
+        shownWhileSending = useSavingsNoticeStore.getState().notice?.title;
+        return { goalStatus: 'active' };
+      },
+      clearSavingsContributionAmount: jest.fn(),
+      clearIdempotencyKey: jest.fn(),
+      createIdempotencyKey: () => 'op-3',
+      goal,
+      rawAmount: '1000',
+      refetchWallet: async () => ({}),
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(shownWhileSending).toBeUndefined();
   });
 });

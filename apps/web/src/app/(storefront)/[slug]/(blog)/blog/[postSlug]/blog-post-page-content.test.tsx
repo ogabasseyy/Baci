@@ -894,7 +894,8 @@ describe('BlogPostPageContent', () => {
       expect.objectContaining({
         author: expect.objectContaining({
           name: 'Ogabassey',
-          id: undefined,
+          id: 'https://ogabassey.com#organization',
+          type: 'Organization',
           url: 'https://ogabassey.com',
         }),
       })

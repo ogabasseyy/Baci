@@ -66,6 +66,18 @@ const WEB_CRON_CONFIG = new Map([
     '/api/cron/piggyvest-wallet-pay-drain',
     { method: 'GET', timeoutMs: 6 * 60_000 },
   ],
+  [
+    // Read-only PiggyVest degraded-health check (counts only); inert until
+    // PIGGYVEST_DEGRADED_ALERTS_ENABLED=true. Two short reads, so 2 minutes.
+    '/api/cron/piggyvest-degraded-health',
+    { method: 'GET', timeoutMs: 2 * 60_000 },
+  ],
+  [
+    // Early-cancel interest forfeit sweep; inert until the PiggyVest savings
+    // credentials exist. 6-min client timeout over the route's 300s maxDuration.
+    '/api/cron/piggyvest-goal-cancel-forfeit-sweep',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
   ['/api/cron/wallet-payouts', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/order-notifications', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/quiz/finalize', { method: 'GET', timeoutMs: 5 * 60_000 }],

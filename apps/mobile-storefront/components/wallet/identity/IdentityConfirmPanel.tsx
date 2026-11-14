@@ -39,7 +39,7 @@ export function IdentityConfirmPanel({
   const where = confirm.maskedEmail ?? 'your email';
   const body = confirm.sent
     ? `Enter the ${IDENTITY_CODE_LENGTH}-digit code we sent to ${where}.`
-    : `For your security, confirm it's you. We'll email a ${IDENTITY_CODE_LENGTH}-digit code to ${where}.`;
+    : `To keep your wallet safe, we'll email a ${IDENTITY_CODE_LENGTH}-digit code to ${where}.`;
   const action = confirm.sent ? 'Confirm' : 'Send code';
   // "Send code" is always ready; "Confirm" stays grey until the code is in.
   const ready = !confirm.sent || confirm.ready;

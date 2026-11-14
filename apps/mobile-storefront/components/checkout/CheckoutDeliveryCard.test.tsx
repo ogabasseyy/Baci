@@ -239,7 +239,7 @@ describe('CheckoutDeliveryCard', () => {
     expect(screen.getByLabelText('Loading states')).toBeTruthy();
   });
 
-  it('displays validation errors for city and state selectors', () => {
+  it('words empty city and state selector errors as choices', () => {
     render(
       <CheckoutDeliveryCardHarness
         errors={{
@@ -249,8 +249,8 @@ describe('CheckoutDeliveryCard', () => {
       />
     );
 
-    expect(screen.getByText('City is required')).toBeTruthy();
-    expect(screen.getByText('State is required')).toBeTruthy();
+    expect(screen.getByText('Choose a city')).toBeTruthy();
+    expect(screen.getByText('Choose a state')).toBeTruthy();
   });
 
   it('hides manual city and state selectors for a complete Google location', () => {

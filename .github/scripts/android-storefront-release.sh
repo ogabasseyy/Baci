@@ -2,6 +2,7 @@
 set -euo pipefail
 
 operation="${1:-}"
+release_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "$operation" in
   configure-gradle-home)
@@ -145,6 +146,14 @@ NODE
     GRADLE_ARGS="$GRADLE_TASKS -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
     # shellcheck disable=SC2086
     ./gradlew $GRADLE_ARGS
+    if [ "$operation" = build ]; then
+      release_bundle="app/build/outputs/bundle/release/app-release.aab"
+      if [ ! -f "$release_bundle" ]; then
+        echo "::error::Expected the release bundle at $release_bundle after app:bundleRelease" >&2
+        exit 1
+      fi
+      node "$release_script_dir/android-native-library-check.mjs" "$release_bundle"
+    fi
     ;;
   upload-guard)
     CURRENT_MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"

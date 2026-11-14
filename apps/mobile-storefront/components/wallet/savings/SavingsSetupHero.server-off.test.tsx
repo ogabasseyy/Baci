@@ -11,4 +11,10 @@ describe('SavingsSetupHero (server off)', () => {
       screen.getByText('Your next device, one little win at a time.')
     ).toBeOnTheScreen();
   });
+
+  it('does not repeat the PiggyVest badge (it shows once, on the wallet card)', () => {
+    render(<SavingsSetupHero />);
+    expect(screen.queryByText(/powered by/i)).toBeNull();
+    expect(screen.queryByLabelText(/piggyvest/i)).toBeNull();
+  });
 });

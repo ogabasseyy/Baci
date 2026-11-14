@@ -53,7 +53,7 @@ function setup(requestPinProof?: (r: unknown) => Promise<string | null>) {
     operationRailRef,
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '2500',
-    spendableBalance: 5000,
+    walletBalance: 5000,
     startWalletTopUp: jest.fn(),
     requestPinProof: requestPinProof as never,
     setIsAddingSavingsContribution: jest.fn(),

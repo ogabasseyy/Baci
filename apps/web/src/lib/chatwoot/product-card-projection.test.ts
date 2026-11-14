@@ -204,6 +204,26 @@ describe('projectChatwootProductCard', () => {
     expect(result).not.toHaveProperty('product.condition');
   });
 
+  it('rejects an unrecognized explicit variant condition instead of inheriting the product condition', () => {
+    expect(
+      project(
+        product({
+          has_variants: true,
+          condition: 'used',
+          product_variants: [
+            {
+              id: variantId,
+              product_id: productId,
+              attributes: { storage: '128GB' },
+              condition: 'premium_used',
+              stock_quantity: 1,
+            },
+          ],
+        })
+      )
+    ).toEqual({ ok: false, code: 'product_unavailable' });
+  });
+
   it('returns the canonical slug from case-insensitive PDP resolution', () => {
     const result = projectChatwootProductCard({
       currency: 'NGN',

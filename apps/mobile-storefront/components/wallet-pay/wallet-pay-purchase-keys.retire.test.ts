@@ -64,3 +64,25 @@ describe('bugfix: closing during retirement lost the key of a delivered check (C
     );
   });
 });
+
+describe('bugfix: an account switch during a payment said nothing was taken (Muse)', () => {
+  it('answers sign in as possibly paid once a PIN or pay call is involved', async () => {
+    const tracked = trackWalletPayPurchase(adapter, 'p', {
+      onSettled: jest.fn(),
+      stillOwner: () => false,
+    });
+    await expect(tracked.verifyPin('op', '1234')).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'sign_in', maybePaid: true },
+    });
+    await expect(tracked.pay('op', 'proof')).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'sign_in', maybePaid: true },
+    });
+    // Nothing was sent yet at the start: plain sign in.
+    await expect(tracked.start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'sign_in' },
+    });
+  });
+});

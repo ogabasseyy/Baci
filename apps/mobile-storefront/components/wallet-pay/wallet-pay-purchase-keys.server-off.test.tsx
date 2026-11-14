@@ -113,10 +113,13 @@ describe('trackWalletPayPurchase', () => {
   it('bugfix: sends nothing once the signed-in account changed (Codex P1)', async () => {
     const inner = adapter({ kind: 'delivered', result: 'ok' });
     const tracked = trackWalletPayPurchase(inner, 'p', options(false));
-    await expect(tracked.verifyPin(OP, '1234')).resolves.toEqual(
-      outcome('sign_in')
-    );
-    await expect(tracked.pay(OP, 'proof')).resolves.toEqual(outcome('sign_in'));
+    // A possibly-paid sign in: the old account's payment may be moving (Muse).
+    const maybePaid = {
+      ...outcome('sign_in'),
+      outcome: { kind: 'sign_in', maybePaid: true },
+    };
+    await expect(tracked.verifyPin(OP, '1234')).resolves.toEqual(maybePaid);
+    await expect(tracked.pay(OP, 'proof')).resolves.toEqual(maybePaid);
     expect(inner.verifyPin).not.toHaveBeenCalled();
     expect(inner.pay).not.toHaveBeenCalled();
   });

@@ -260,6 +260,12 @@ export function trackWalletPayPurchase<Result>(
     kind: 'outcome' as const,
     outcome: { kind: 'sign_in' as const },
   };
+  // Once a PIN step or pay call is involved, the old account's payment may
+  // already be moving: never "nothing was taken" (Muse).
+  const switchedMidPayment = {
+    kind: 'outcome' as const,
+    outcome: { kind: 'sign_in' as const, maybePaid: true },
+  };
   return {
     async start() {
       if (!options.stillOwner()) return switched;
@@ -276,14 +282,14 @@ export function trackWalletPayPurchase<Result>(
       return answer;
     },
     async verifyPin(operationId, pin) {
-      if (!options.stillOwner()) return switched;
+      if (!options.stillOwner()) return switchedMidPayment;
       const answer = await adapter.verifyPin(operationId, pin);
       if (answer.kind === 'outcome' && !KEEP_OUTCOMES.has(answer.outcome.kind))
         await settle();
       return answer;
     },
     async pay(operationId, proof) {
-      if (!options.stillOwner()) return switched;
+      if (!options.stillOwner()) return switchedMidPayment;
       const answer = await adapter.pay(operationId, proof);
       // With a proof, a refusal ('failed', e.g. an IMEI mismatch) comes
       // before the transfer is sent, so it settles too; on an empty-proof

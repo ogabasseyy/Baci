@@ -78,3 +78,35 @@ describe('bugfix: server unreachable showed the goals total as the balance (walk
     ).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: known PiggyVest customer looked new with the server unreachable (walk 11)', () => {
+  it('keeps the last-known account and Add money, with no balance figure', () => {
+    render(
+      <WalletHeroSection
+        canCreateFundingAccount
+        earningsAvailable={false}
+        earningsBalance={null}
+        fundingAccount={{
+          accountName: 'OGB / ADA',
+          accountNumber: '9814644749',
+          bankName: 'Provider Bank',
+          provider: 'piggyvest',
+        }}
+        loyaltyPoints={0}
+        onOpenFundPanel={jest.fn()}
+        onOpenRedeemPanel={jest.fn()}
+        primaryUnknown
+        savingsBalance={800_000}
+        savingsWalletBalance={0}
+        totalBalance={800_000}
+      />
+    );
+
+    expect(screen.getByText('9814644749')).toBeOnTheScreen();
+    expect(
+      screen.queryByRole('button', { name: 'Create account number' })
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: /Add money/ })).toBeOnTheScreen();
+    expect(screen.queryByText('Total Balance · NGN')).toBeNull();
+  });
+});

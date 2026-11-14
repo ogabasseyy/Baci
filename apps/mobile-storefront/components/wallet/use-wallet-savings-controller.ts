@@ -69,7 +69,13 @@ export function useWalletSavingsController(
     /** What the wallet content needs to show the savings sheet correctly. */
     walletContentSavingsProps: {
       hasPendingSavingsContribution,
-      goalAwaitingSettlement,
+      // The card keeps "Complete goal" while the check is running or the
+      // server is unreachable (walk 11): the same funded goal never flips to
+      // "Start another plan". The sheet still waits for 'ready' to act.
+      goalAwaitingSettlement:
+        goalAwaitingSettlement ||
+        ((gate === 'checking' || gate === 'error') &&
+          isFundedUnsettledGoal(input.goal)),
       walletUpdatedAt: input.walletUpdatedAt,
     },
     handleAddSavingsContribution: recovery.ready

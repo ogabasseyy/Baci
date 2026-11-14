@@ -77,6 +77,27 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
 
   const guardIndex = submitLane.indexOf('app_store_version_slot_ready?');
   const changelogIndex = submitLane.indexOf('set_changelog(');
+  const explicitBuildIndex = submitLane.indexOf(
+    'if build_number.empty? || app_version.empty?'
+  );
+  const explicitBuildGuard = extractIndentedBlock(
+    submitLane,
+    /^\s*if build_number\.empty\? \|\| app_version\.empty\?\s*$/,
+    'end'
+  );
+
+  if (
+    explicitBuildIndex === -1 ||
+    !explicitBuildGuard ||
+    !/\bUI\.user_error!\s*\(/.test(explicitBuildGuard) ||
+    submitLane.indexOf('build_number = ENV["SUBMIT_BUILD_NUMBER"]') === -1 ||
+    submitLane.indexOf('app_version = ENV["SUBMIT_APP_VERSION"]') === -1 ||
+    (guardIndex !== -1 && explicitBuildIndex > guardIndex)
+  ) {
+    failures.push(
+      'Fastfile: submit lane must reject an empty build number or app version before slot checks so a concurrent upload cannot change which build is submitted'
+    );
+  }
 
   if (guardIndex === -1) {
     failures.push(
@@ -90,6 +111,25 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
 
   if (changelogIndex === -1) {
     failures.push('Fastfile: submit lane is missing set_changelog');
+  }
+
+  const deliverCall = /\bdeliver\(\s*([A-Za-z_]\w*)/.exec(submitLane);
+  const deliverOptionsName = deliverCall?.[1];
+  const beforeDeliver = deliverCall
+    ? submitLane.slice(0, deliverCall.index)
+    : '';
+  if (
+    !deliverOptionsName ||
+    !new RegExp(
+      `\\b${deliverOptionsName}\\s*\\[\\s*:build_number\\s*\\]\\s*=\\s*build_number\\b`
+    ).test(beforeDeliver) ||
+    !new RegExp(
+      `\\b${deliverOptionsName}\\s*\\[\\s*:app_version\\s*\\]\\s*=\\s*app_version\\b`
+    ).test(beforeDeliver)
+  ) {
+    failures.push(
+      'Fastfile: submit lane must pass the required build_number and app_version values through the options hash passed to deliver'
+    );
   }
 
   // deliver's own reject_if_possible is a SECOND, unguarded cancellation path:

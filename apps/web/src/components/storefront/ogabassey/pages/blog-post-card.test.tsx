@@ -47,16 +47,17 @@ vi.mock('next/link', () => ({
 }));
 
 describe('BlogPostCard', () => {
-  const post = {
+  const post: BlogPostData = {
     id: 'post-2',
     title: 'Regular Post',
     slug: 'regular-post',
     excerpt: 'Helpful review summary.',
     category: 'Reviews',
+    author_name: '',
     published_at: '2026-03-27T00:00:00.000Z',
     reading_time_minutes: 4,
     featured_image_url: 'https://cdn.example.com/regular.jpg',
-  } as BlogPostData;
+  };
 
   it('uses a non-prefetching stretched link on the h2 title instead of wrapping the article', () => {
     render(

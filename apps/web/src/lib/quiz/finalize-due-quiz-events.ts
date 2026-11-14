@@ -26,9 +26,10 @@ type QuizFinalizationClient = SupabaseClient<Database>;
 
 const MISSING_RPC_CODES = new Set(['PGRST202']);
 
-let activeSweepRun: Promise<unknown> = Promise.resolve();
+let activeSweepRun: ReturnType<typeof runFinalizeDueQuizEvents> | null = null;
 
 export function resetQuizSweepStateForTests() {
+  activeSweepRun = null;
   resetQuizSweepBaselineForTests();
 }
 
@@ -69,14 +70,15 @@ function runStep(client: QuizFinalizationClient, step: FinalizationStep) {
 }
 
 export function finalizeDueQuizEvents() {
-  const run = activeSweepRun.then(
-    () => runFinalizeDueQuizEvents(),
-    () => runFinalizeDueQuizEvents()
-  );
-  activeSweepRun = run.then(
-    () => undefined,
-    () => undefined
-  );
+  if (activeSweepRun) {
+    return activeSweepRun;
+  }
+  const run = runFinalizeDueQuizEvents().finally(() => {
+    if (activeSweepRun === run) {
+      activeSweepRun = null;
+    }
+  });
+  activeSweepRun = run;
   return run;
 }
 

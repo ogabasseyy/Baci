@@ -20,6 +20,15 @@ const message = z.strictObject({
   input: experiencePreviewInput,
 });
 
+function hideOwnerDenial(error: unknown) {
+  if (
+    error instanceof Error &&
+    (error.message === 'NOT_FOUND' || error.message === 'INSUFFICIENT_SCOPE')
+  )
+    return null;
+  throw error;
+}
+
 /** Private server-to-server preview boundary. Nonces require atomic durable storage. */
 export function createOwnerPreviewBridge(settings: {
   key: Uint8Array;
@@ -76,7 +85,7 @@ export function createOwnerPreviewBridge(settings: {
       const owner = await requireExperienceOwner(
         { supabase: client, merchantId: parsed.data.input.merchantId },
         'storefront.read'
-      ).catch(() => null);
+      ).catch(hideOwnerDenial);
       if (!owner) return reply(404);
       const result = await settings.launch(
         {
@@ -93,7 +102,7 @@ export function createOwnerPreviewBridge(settings: {
       );
       if (
         !(await requireExperienceOwner(owner, 'storefront.read').catch(
-          () => null
+          hideOwnerDenial
         ))
       )
         return reply(404);

@@ -131,3 +131,12 @@ it('reports a launch outage without exposing its details', async () => {
   expect(response.status).toBe(503);
   expect(await response.text()).not.toContain('private launch failure');
 });
+
+it('reports an unexpected owner authorization outage without exposing its details', async () => {
+  const f = fixture();
+  f.client.rpc.mockRejectedValue(Error('private authorization outage'));
+  const response = await f.handler(request(body()));
+  expect(response.status).toBe(503);
+  expect(await response.text()).not.toContain('private authorization outage');
+  expect(f.launch).not.toHaveBeenCalled();
+});

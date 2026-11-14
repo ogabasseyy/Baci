@@ -263,7 +263,9 @@ export function WalletSavingsProgressModal({
               <GoalLifecycleEntry
                 colors={colors}
                 goal={goal}
-                hasPendingContribution={hasPendingContribution}
+                // An add in flight also hides Cancel/Complete: Cancel would
+                // take over the sheet and drop the add's PIN prompt.
+                hasPendingContribution={hasPendingContribution || isAdding}
                 onCancel={() => cancel.start('cancel')}
                 onComplete={() => cancel.start('complete')}
                 walletUpdatedAt={walletUpdatedAt}

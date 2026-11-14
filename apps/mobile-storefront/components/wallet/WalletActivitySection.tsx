@@ -1,3 +1,4 @@
+import { STORE_CREDIT_ROW_LIMIT } from '@/hooks/wallet-transaction-limits';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { PiggyvestWalletActivity } from './activity/PiggyvestWalletActivity';
 import { withoutPiggyvestActivityRows } from './activity/without-piggyvest-activity-rows';
@@ -39,11 +40,10 @@ export function WalletActivitySection({
       <WalletTransactionHistory
         colors={colors}
         storeCreditBalance={storeCreditBalance}
-        transactions={
-          showActivity
-            ? withoutPiggyvestActivityRows(transactions)
-            : transactions
-        }
+        transactions={(showActivity
+          ? withoutPiggyvestActivityRows(transactions)
+          : transactions
+        ).slice(0, STORE_CREDIT_ROW_LIMIT)}
       />
     </>
   );

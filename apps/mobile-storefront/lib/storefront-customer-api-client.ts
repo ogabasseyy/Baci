@@ -16,6 +16,8 @@ type FetchStorefrontCustomerApiInput = {
   method?: 'GET' | 'POST' | 'PATCH';
   query?: MerchantIdentifiersInput & { goalId?: string };
   signal?: AbortSignal;
+  /** Overrides the default request timeout for this call. */
+  timeoutMs?: number;
   /**
    * Binds the request to the user the caller acted for. The check runs
    * inside the same session read that mints the Bearer [REDACTED], so an
@@ -166,6 +168,7 @@ export function createStorefrontCustomerApiClient() {
     path,
     query,
     signal,
+    timeoutMs,
     expectedUserId,
   }: FetchStorefrontCustomerApiInput) => {
     const accessToken = await getAccessToken(expectedUserId);
@@ -195,7 +198,7 @@ export function createStorefrontCustomerApiClient() {
       },
       method,
       signal,
-      timeout: DEFAULT_TIMEOUT,
+      timeout: timeoutMs ?? DEFAULT_TIMEOUT,
     });
 
     return parseJsonResponse(response);

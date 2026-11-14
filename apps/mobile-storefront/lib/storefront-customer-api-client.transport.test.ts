@@ -20,6 +20,23 @@ describe('storefront customer API client', () => {
     );
   });
 
+  it('uses a caller-chosen timeout, and the default otherwise', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    const client = createStorefrontCustomerApiClient();
+    await client.fetchJson({ path: '/api/x', timeoutMs: 20_000 });
+    await client.fetchJson({ path: '/api/x' });
+    expect(mockFetchWithTimeout.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ timeout: 20_000 })
+    );
+    expect(mockFetchWithTimeout.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ timeout: 30_000 })
+    );
+  });
+
   it('sends authenticated PATCH JSON with the requested CSRF token', async () => {
     mockFetchWithTimeout
       .mockResolvedValueOnce({

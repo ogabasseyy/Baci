@@ -1,0 +1,136 @@
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
+import { activityItem } from '@/components/wallet/activity/activity-test-harness.test-support';
+import { usePiggyvestWalletActivity } from './use-piggyvest-wallet-activity';
+
+const mockFetch = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+jest.mock('@/lib/piggyvest-wallet-activity', () => ({
+  fetchPiggyvestWalletActivity: (...args: unknown[]) => mockFetch(...args),
+}));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: (select: (state: { user: { id: string } }) => unknown) =>
+    select({ user: { id: 'customer-1' } }),
+}));
+const mockFocus: { current: () => void } = { current: () => undefined };
+jest.mock('expo-router', () => ({
+  useFocusEffect: (callback: () => void) => {
+    mockFocus.current = callback;
+  },
+}));
+
+const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const page1 = {
+  items: [activityItem({ id: '00000000-0000-4000-8000-0000000000a1' })],
+  nextCursor: 'c2',
+};
+const page2 = {
+  items: [activityItem({ id: '00000000-0000-4000-8000-0000000000b1' })],
+  nextCursor: null,
+};
+const cursors = () =>
+  mockFetch.mock.calls.map((call) => (call[0] as { cursor: unknown }).cursor);
+
+function setup() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const render = (refreshKey = 1) =>
+    renderHook(
+      ({ key }: { key: number }) =>
+        usePiggyvestWalletActivity({
+          merchantId: MERCHANT,
+          enabled: true,
+          refreshKey: key,
+        }),
+      { wrapper, initialProps: { key: refreshKey } }
+    );
+  return { render };
+}
+
+describe('bugfix: reopening the wallet re-read every loaded page', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('reloads only the first page when the wallet refreshes after "Show more"', async () => {
+    mockFetch.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    mockFetch.mockResolvedValue(page1);
+    const { result, rerender } = setup().render(1);
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    rerender({ key: 2 });
+
+    await waitFor(() => expect(cursors()).toEqual([null, 'c2', null]));
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+  });
+
+  it('keeps only the first page when the wallet is left and reopened', async () => {
+    mockFetch.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    mockFetch.mockResolvedValue(page1);
+    const env = setup();
+    const first = env.render();
+    await waitFor(() => expect(first.result.current.items).toHaveLength(1));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(first.result.current.items).toHaveLength(2));
+    first.unmount();
+
+    const second = env.render();
+
+    await waitFor(() => expect(cursors()).toEqual([null, 'c2', null]));
+    await waitFor(() => expect(second.result.current.items).toHaveLength(1));
+  });
+
+  it('re-reads the first page when the wallet screen regains focus', async () => {
+    mockFetch.mockResolvedValue(page1);
+    const { result } = setup().render();
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    act(() => mockFocus.current()); // the mount focus is skipped
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    act(() => mockFocus.current());
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    expect(cursors()).toEqual([null, null]);
+  });
+});
+
+describe('bugfix: "Show more" spun for about a minute on a hung server', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('gives load-more one short attempt and no retry, keeping the rows', async () => {
+    mockFetch
+      .mockResolvedValueOnce(page1)
+      .mockRejectedValue(new Error('timed out'));
+    const { result } = setup().render();
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    act(() => result.current.loadMore());
+
+    await waitFor(() => expect(result.current.loadMoreFailed).toBe(true));
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const input = mockFetch.mock.calls[1][0] as { timeoutMs?: number };
+    expect(input.timeoutMs).toBeLessThanOrEqual(25_000);
+    expect(result.current.items).toHaveLength(1);
+  });
+
+  it('still retries the first page once', async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error('blip'))
+      .mockResolvedValueOnce(page1);
+    const { result } = setup().render();
+
+    await waitFor(() => expect(result.current.items).toHaveLength(1), {
+      timeout: 4000,
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+});

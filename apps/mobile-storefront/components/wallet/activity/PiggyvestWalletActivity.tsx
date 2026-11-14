@@ -7,9 +7,9 @@ import {
   View,
 } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { CHAT_WIDGET_FAB_SIZE } from '@/constants/layout';
 import { usePiggyvestWalletActivity } from '@/hooks/use-piggyvest-wallet-activity';
 import { styles } from '../wallet.styles';
+import { walletListLayout } from '../wallet-list-layout';
 import { PiggyvestActivityRow } from './PiggyvestActivityRow';
 
 type Props = {
@@ -54,7 +54,7 @@ export function PiggyvestWalletActivity({
       testID="piggyvest-wallet-activity"
       style={[
         styles.historySection,
-        local.aligned,
+        walletListLayout.aligned,
         { backgroundColor: colors.card },
       ]}
     >
@@ -62,21 +62,27 @@ export function PiggyvestWalletActivity({
         Wallet activity
       </Text>
       {activity.isLoading ? (
-        <View style={local.state} accessibilityLiveRegion="polite">
+        <View
+          style={[local.state, walletListLayout.centred]}
+          accessibilityLiveRegion="polite"
+        >
           <ActivityIndicator color={colors.primary} />
           <Text style={[local.stateText, { color: colors.textSecondary }]}>
             Loading your activity…
           </Text>
         </View>
       ) : activity.isError ? (
-        <View style={local.state} accessibilityLiveRegion="polite">
+        <View
+          style={[local.state, walletListLayout.centred]}
+          accessibilityLiveRegion="polite"
+        >
           <Text style={[local.stateText, { color: colors.textSecondary }]}>
             We couldn’t load your wallet activity.
           </Text>
           {button('Try again', activity.retry)}
         </View>
       ) : activity.items.length === 0 ? (
-        <View style={styles.emptyTransactions}>
+        <View style={[styles.emptyTransactions, walletListLayout.centred]}>
           <Ionicons
             accessible={false}
             importantForAccessibility="no"
@@ -115,9 +121,6 @@ export function PiggyvestWalletActivity({
 }
 
 const local = StyleSheet.create({
-  // Same 16pt left edge as the wallet cards; the right side keeps amounts
-  // and buttons clear of the floating AI button (Fable walk).
-  aligned: { paddingLeft: 0, paddingRight: CHAT_WIDGET_FAB_SIZE + 8 },
   moreError: { fontSize: 13, marginTop: 12, textAlign: 'center' },
   state: { alignItems: 'center', gap: 12, paddingVertical: 24 },
   stateText: { fontSize: 13, textAlign: 'center' },

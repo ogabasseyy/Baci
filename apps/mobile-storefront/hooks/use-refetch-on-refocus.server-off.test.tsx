@@ -28,3 +28,44 @@ describe('bugfix: wallet showed a stale balance after re-entry (walk 10)', () =>
     expect(refetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('bugfix: a new refetch callback re-ran the focus effect', () => {
+  it('does not refetch when only the callback changes while focused', () => {
+    // Model useFocusEffect: it runs the effect again whenever its identity changes.
+    let lastEffect: unknown;
+    jest.mocked(useFocusEffect).mockImplementation((effect) => {
+      if (effect !== lastEffect) {
+        lastEffect = effect;
+        (effect as () => void)();
+      }
+    });
+    const first = jest.fn();
+    const second = jest.fn();
+    const { rerender } = renderHook(
+      ({ refetch }: { refetch: () => unknown }) => useRefetchOnRefocus(refetch),
+      { initialProps: { refetch: first } }
+    );
+
+    rerender({ refetch: second });
+    rerender({ refetch: first });
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it('calls the latest refetch on a real refocus', () => {
+    const first = jest.fn();
+    const second = jest.fn();
+    const { rerender } = renderHook(
+      ({ refetch }: { refetch: () => unknown }) => useRefetchOnRefocus(refetch),
+      { initialProps: { refetch: first } }
+    );
+    rerender({ refetch: second });
+
+    focus();
+    focus();
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+});

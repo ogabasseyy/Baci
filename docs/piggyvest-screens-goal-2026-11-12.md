@@ -334,3 +334,27 @@ Walk 8 ran on every open head except #4229 and the pay-from-wallet stack's lates
 | Airtime >11 digits, IMEI arrow | pay-from-wallet stack | Waits on the owner's "Finish and push" |
 
 Still owed: the live staging transfer test in both directions (business → customer, customer → business). Staging accepts a ₦1 transfer (202) but does not settle it.
+
+## Walks 9–16 (2026-11-14, mock PiggyVest)
+
+Each walk ran on a local-only combined build (`e2e/piggyvest-all`, never pushed) with the latest heads of #4224, #4216, #4222, #4223 and the pay-from-wallet stack (#4218, #4220, #4225, #4227, #4234). Each walk's findings went to the PR that owns them, and the next walk rechecked them.
+
+| Walk | Build | What it covered | Outcome |
+|---|---|---|---|
+| 9–10 | 1144822608, d3644d78df | All savings screens on the combined build | A completed goal swapped to another goal, the PIN sheet could be dragged shut mid-check, the closed-plan note leaked into the next goal's sheet, and an offline hero showed the goals total. All fixed. |
+| 11 | 7f849374b9 | Walk-10 fixes | All 5 fixed. New: an update loop on a settled goal (high), settled-goal links, a hung link read, a red info note, a ₦0 flash. Fixed in 630598739e and ce6e0410d2. |
+| 12 | e8aba60ae5 | Walk-11 fixes and #4216's offline fixes | All fixed except the closed note surviving Back. Fixed in f2dc88ed04. |
+| 13 | 0127982eb0 | Back, in-flight notice, sheet scroll, close X | The Back fix did not fire (expo-router has no `beforeRemove`), and an "awaiting confirmation" card flashed on every add. Fixed in 60699bbbf9 and 20859f664d. The close X miss is only the dev-menu button covering it. |
+| 14 | e05b7c097f | Final full walk, including pay-from-wallet | IMEI paid from the wallet end to end, plus wrong PIN, refund on provider failure and no provider names. Found: the orders link behind the AI button, transport error text, the PIN hint not clearing, the last-known account number on cold launch, and four pay-from-wallet items. All fixed: #4224 in c521a3c9a1, #4216 in a88e7e9625, the stack in its next heads. |
+| 15 | 6ebaada040 | Walk-14 fixes | 11 of 13 pass. #4224's "try again" beside the pending card and stale goal options were fixed in 3114b5b63c. #4216's warm hint and three IMEI/airtime items were fixed by their sessions. |
+| 16 | 4183832ee7 | Walk-15 fixes | 6 of 7 pass, and all regressions pass. |
+
+### Left open after walk 16 (all low)
+- The fresh IMEI form shows "Pay ₦1,000 for Full Report", dimmed until an IMEI is typed, with the preselected card below the fold. #4225 chose to name the check rather than preselect nothing.
+- The first Add tap right after the sheet recovers from an outage can meet "Checking contributions… Please try again after this check." This is the safety check for an earlier transfer still finishing; a second tap works.
+- The savings PIN sheet says "That PIN is not right." without a tries-left count. The IMEI and airtime sheets show one, but the savings PIN API doesn't return it.
+- With the server down at cold launch, the plan sheet's status note says "Getting your plan ready" for a ready plan. Sent to #4223.
+
+### Still owed
+- Airtime from the wallet past the start call: the local stack doesn't serve `calculate_vtu`, so this is staging-only.
+- The staging transfer test, business → customer and customer → business, waits for PiggyVest staging to settle transfers. A ₦1 probe on 2026-11-13 was accepted (202) but never settled.

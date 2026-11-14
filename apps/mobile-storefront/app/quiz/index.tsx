@@ -1,20 +1,25 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack, useRouter } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Pressable, StatusBar } from 'react-native';
 import { QuizRouteBackButton } from '@/components/quiz/QuizRouteBackButton';
 import { QuizScreen } from '@/components/quiz/QuizScreen';
+import {
+  QUIZ_STAGE_COLORS,
+  QUIZ_STAGE_HEADER_OPTIONS,
+} from '@/components/quiz/quiz-stage-colors';
 import { useQuizRouteNavigation } from '@/components/quiz/useQuizRouteNavigation';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
-import { useTheme } from '@/hooks/useTheme';
 
 export default function QuizRoute() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const { backHandlerRef, onBack } = useQuizRouteNavigation();
   return (
     <>
+      <StatusBar barStyle="light-content" />
       <Stack.Screen
         options={{
+          ...QUIZ_STAGE_HEADER_OPTIONS,
           title: 'SuperQuiz',
           headerBackVisible: false,
           headerLeft: () => (
@@ -29,14 +34,14 @@ export default function QuizRoute() {
             >
               <Ionicons
                 name="podium-outline"
-                color={colors.primary}
+                color={colors.warning}
                 size={23}
               />
             </Pressable>
           ),
         }}
       />
-      <StorefrontScreenShell>
+      <StorefrontScreenShell style={{ backgroundColor: colors.background }}>
         <QuizScreen
           backHandlerRef={backHandlerRef}
           onSignIn={() => router.push('/auth/login')}

@@ -12,6 +12,16 @@ export function createQuizGameplayAdFooterStyles(colors: {
       minHeight: 72,
       width: '100%',
     },
+    adFrameInline: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 250,
+      width: '100%',
+    },
+    inline: {
+      alignItems: 'center',
+      paddingTop: 8,
+    },
     footer: {
       alignItems: 'center',
       backgroundColor: colors.background,

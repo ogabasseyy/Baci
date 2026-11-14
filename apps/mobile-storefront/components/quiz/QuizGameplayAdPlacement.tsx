@@ -10,6 +10,7 @@ function getAdErrorCode(error: Error): string {
 
 interface QuizGameplayAdPlacementProps {
   bannerUnitId: string;
+  layout?: 'footer' | 'inline';
   styles: ReturnType<typeof createQuizGameplayAdFooterStyles>;
 }
 
@@ -20,8 +21,10 @@ interface QuizGameplayAdPlacementProps {
  */
 export function QuizGameplayAdPlacement({
   bannerUnitId,
+  layout = 'footer',
   styles,
 }: QuizGameplayAdPlacementProps) {
+  const inline = layout === 'inline';
   const { BannerAd, BannerAdSize } =
     require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
 
@@ -36,11 +39,14 @@ export function QuizGameplayAdPlacement({
   return (
     <View
       accessibilityLabel="Sponsored advertisement"
-      style={styles.footer}
-      testID="quiz-gameplay-ad-footer"
+      style={inline ? styles.inline : styles.footer}
+      testID={inline ? 'quiz-results-ad' : 'quiz-gameplay-ad-footer'}
     >
       <Text style={styles.label}>Sponsored</Text>
-      <View style={styles.adFrame} testID="quiz-banner-slot">
+      <View
+        style={inline ? styles.adFrameInline : styles.adFrame}
+        testID="quiz-banner-slot"
+      >
         <BannerAd
           onAdFailedToLoad={(error) => {
             trackQuizAdEvent('quiz_ad_failed', {
@@ -49,7 +55,11 @@ export function QuizGameplayAdPlacement({
           }}
           onAdImpression={() => trackQuizAdEvent('quiz_ad_impression')}
           onPaid={handlePaid}
-          size={BannerAdSize.LARGE_ANCHORED_ADAPTIVE_BANNER}
+          size={
+            inline
+              ? BannerAdSize.MEDIUM_RECTANGLE
+              : BannerAdSize.LARGE_ANCHORED_ADAPTIVE_BANNER
+          }
           unitId={bannerUnitId}
         />
       </View>

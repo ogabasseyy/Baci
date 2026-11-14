@@ -3,6 +3,12 @@ import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { QuizV2Attempt } from '@/services/quiz-types';
 import type { createQuizStyles } from './QuizScreen.styles';
+import { QuizTicketBackdrop } from './QuizTicketBackdrop';
+import {
+  getQuizAnswerAccent,
+  QUIZ_TILE,
+  shouldUseQuizAnswerGrid,
+} from './quiz-stage-colors';
 import { useQuizEventTimer } from './use-quiz-event-timer';
 import { useQuizQuestionTimer } from './use-quiz-question-timer';
 import { useQuizServerClock } from './use-quiz-server-clock';
@@ -70,6 +76,9 @@ export function QuizLiveQuestionCard({
     Math.max(0, (question.index / Math.max(1, question.total)) * 100)
   );
   const isUrgent = questionTimer.remainingSeconds <= 3;
+  const useGrid = shouldUseQuizAnswerGrid(
+    question.options.map((option) => option.label)
+  );
   const timerColor = isUrgent
     ? styles.timerBadgeUrgentText.color
     : styles.timerBadgeText.color;
@@ -112,7 +121,10 @@ export function QuizLiveQuestionCard({
         <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
       </View>
       <Text style={styles.question}>{question.prompt}</Text>
-      <View style={styles.answersList}>
+      <View
+        style={useGrid ? styles.answersGrid : styles.answersList}
+        testID={useGrid ? 'quiz-answers-grid' : 'quiz-answers-list'}
+      >
         {question.options.map((option, index) => {
           const selected = lockedOptionId === option.id;
           const disabled =
@@ -126,29 +138,44 @@ export function QuizLiveQuestionCard({
               disabled={disabled}
               onPress={() => onAnswer(option.id)}
               style={[
-                styles.answerButton,
-                selected ? styles.answerButtonSelected : undefined,
-                disabled && !selected ? styles.answerButtonDisabled : undefined,
+                styles.answerTile,
+                useGrid ? styles.answerTileGrid : styles.answerTileRow,
+                disabled && !selected ? styles.answerTileDisabled : undefined,
               ]}
             >
+              <QuizTicketBackdrop
+                color={
+                  selected ? QUIZ_TILE.selectedBackground : QUIZ_TILE.background
+                }
+              />
               <Text
                 style={[
-                  styles.answerLetter,
-                  selected ? styles.answerLetterSelected : undefined,
+                  styles.answerTileLetter,
+                  { backgroundColor: getQuizAnswerAccent(index) },
                 ]}
               >
                 {String.fromCharCode(65 + index)}
               </Text>
-              <Text style={styles.answerText}>{option.label}</Text>
-              <View style={styles.answerSelectionIcon}>
-                {selected ? (
+              <Text
+                numberOfLines={useGrid ? 2 : undefined}
+                style={[
+                  styles.answerTileText,
+                  useGrid
+                    ? styles.answerTileTextGrid
+                    : styles.answerTileTextRow,
+                ]}
+              >
+                {option.label}
+              </Text>
+              {selected ? (
+                <View style={styles.answerTileCheck}>
                   <Ionicons
                     name="checkmark-circle"
-                    size={23}
-                    color={styles.timerBadgeText.color}
+                    size={22}
+                    color={getQuizAnswerAccent(index)}
                   />
-                ) : null}
-              </View>
+                </View>
+              ) : null}
             </Pressable>
           );
         })}

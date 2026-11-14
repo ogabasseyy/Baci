@@ -6,7 +6,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
 import { fetchQuizEvents } from '@/services/quiz';
 import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import type { QuizEvent, QuizLeaderboard } from '@/services/quiz-types';
@@ -15,6 +14,7 @@ import { QuizLeaderboardParticipantCount } from './QuizLeaderboardParticipantCou
 import { QuizLeaderboardRow } from './QuizLeaderboardRow';
 import { createQuizLeaderboardStyles } from './QuizLeaderboardScreen.styles';
 import { formatQuizClock } from './QuizScreen.utils';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 function getLeaderboardRows(leaderboard: QuizLeaderboard | null) {
   return leaderboard?.entries ?? [];
@@ -34,7 +34,7 @@ function isPastQuizEvent(item: QuizEvent): boolean {
 }
 
 export function QuizLeaderboardScreen() {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizLeaderboardStyles(colors);
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const [events, setEvents] = useState<QuizEvent[]>([]);

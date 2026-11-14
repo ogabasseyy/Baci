@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import type {
   QuizPrizeProduct,
@@ -34,6 +35,8 @@ function formatFinishTime(serverNow: string | null | undefined) {
 }
 
 interface QuizResultsPanelProps {
+  /** Ad shown under the standings while players wait for the quiz to end. */
+  adSlot?: ReactNode;
   eventId?: string | null;
   eventEndsAt?: string | null;
   expectedUserId?: string | null;
@@ -50,6 +53,7 @@ interface QuizResultsPanelProps {
 }
 
 export function QuizResultsPanel({
+  adSlot = null,
   eventId = null,
   eventEndsAt = null,
   expectedUserId = null,
@@ -78,7 +82,7 @@ export function QuizResultsPanel({
         v2Result?.availability === 'pending')) &&
     v2Result?.availability !== 'unavailable' &&
     Boolean(eventId && expectedUserId);
-  const { leaderboard, leaderboardError, participantCount } =
+  const { leaderboard, leaderboardError, liveBoardHidden, participantCount } =
     useQuizResultsLeaderboard({
       enabled: shouldLoadLeaderboard,
       eventHasEnded: eventTimer.hasEnded,
@@ -112,7 +116,9 @@ export function QuizResultsPanel({
           ? 'Quiz access ended'
           : 'Quiz result unavailable'
         : lifecycle === 'pending_results'
-          ? "You're all done!"
+          ? eventTimer.hasEnded
+            ? 'Time is up!'
+            : "You're all done!"
           : lifecycle === 'event_cancelled'
             ? 'Quiz cancelled'
             : v2Result?.availability === 'final'
@@ -161,44 +167,54 @@ export function QuizResultsPanel({
                   ? 'Your tester access was removed before this result was published.'
                   : 'We could not find this quiz attempt. Return to the quiz list and try again.'}
               </Text>
-            ) : lifecycle === 'pending_results' ? (
-              <View style={styles.finishTimeCard}>
-                <Text style={styles.finishTimeLabel}>You finished at</Text>
-                <Text style={styles.finishTimeValue}>
-                  {finishTime ?? 'Recorded'}
-                </Text>
-                <Text style={styles.finishTimeHint}>
-                  Ties consider the finish time of your best attempt
-                </Text>
-              </View>
             ) : null}
-            {lifecycle === 'pending_results' ? (
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability !== 'unavailable' ? (
               eventTimer.hasEnded ? (
-                <ActivityIndicator
-                  accessibilityLabel="Opening final standings"
-                  color={styles.finalStandingsTitle.color}
-                />
+                <View style={styles.countingRow}>
+                  <ActivityIndicator
+                    accessibilityLabel="Opening final standings"
+                    color={styles.stageCountdown.color}
+                  />
+                  <Text style={styles.countingText}>Counting the scores…</Text>
+                </View>
               ) : (
-                <Text style={styles.leaderboardCountdownLabel}>
-                  The leaderboard will appear when the quiz ends in
-                </Text>
+                <View style={styles.stageCountdownBlock}>
+                  <Text style={styles.stageCountdownLabel}>Quiz ends in</Text>
+                  <Text
+                    accessibilityRole="timer"
+                    style={styles.stageCountdown}
+                    testID="quiz-results-countdown"
+                  >
+                    {formatCountdown(eventTimer.remainingSeconds)}
+                  </Text>
+                  <Text style={styles.stageCountdownHint}>
+                    Winners are announced the moment it hits zero
+                  </Text>
+                </View>
               )
             ) : null}
-            {lifecycle === 'pending_results' && !eventTimer.hasEnded ? (
-              <Text
-                accessibilityRole="timer"
-                style={styles.leaderboardCountdown}
-              >
-                {formatCountdown(eventTimer.remainingSeconds)}
-              </Text>
-            ) : null}
-            {lifecycle === 'final' && shouldLoadLeaderboard ? (
+            {(lifecycle === 'final' || lifecycle === 'pending_results') &&
+            shouldLoadLeaderboard ? (
               <QuizResultsStandings
                 leaderboard={leaderboard}
                 leaderboardError={leaderboardError}
+                liveBoardHidden={liveBoardHidden}
                 participantCount={participantCount}
                 styles={styles}
               />
+            ) : null}
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability !== 'unavailable' ? (
+              <Text style={styles.finishTimeLine}>
+                {finishTime
+                  ? `You finished at ${finishTime}. `
+                  : 'Your finish time is recorded. '}
+                Ties go to the faster finish.
+              </Text>
+            ) : null}
+            {lifecycle === 'pending_results' && adSlot ? (
+              <View style={styles.resultsAdSlot}>{adSlot}</View>
             ) : null}
             {v2Result?.availability === 'final' && v2Result.prizeClaim ? (
               <QuizPrizeClaimPanel

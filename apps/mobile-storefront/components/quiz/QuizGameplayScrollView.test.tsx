@@ -1,6 +1,6 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { QuizGameplayScrollView } from './QuizGameplayScrollView';
 import { createQuizStyles } from './QuizScreen.styles';
 import type { QuizThemeColors } from './quiz-theme';
@@ -29,5 +29,27 @@ describe('QuizGameplayScrollView', () => {
     );
 
     expect(screen.getByTestId('quiz-gameplay-scroll')).toBeTruthy();
+  });
+
+  it('bugfix: a new question opened part-way down; it now starts at the top', () => {
+    const scrollTo = jest
+      .spyOn(ScrollView.prototype, 'scrollTo')
+      .mockImplementation(() => undefined);
+    const styles = createQuizStyles(colors);
+    const view = render(
+      <QuizGameplayScrollView topKey="question-1" styles={styles}>
+        <View />
+      </QuizGameplayScrollView>
+    );
+    scrollTo.mockClear();
+
+    view.rerender(
+      <QuizGameplayScrollView topKey="question-2" styles={styles}>
+        <View />
+      </QuizGameplayScrollView>
+    );
+
+    expect(scrollTo).toHaveBeenCalledWith({ animated: false, y: 0 });
+    scrollTo.mockRestore();
   });
 });

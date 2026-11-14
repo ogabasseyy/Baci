@@ -1,0 +1,64 @@
+import type { QuizThemeColors } from './quiz-theme';
+
+/**
+ * SuperQuiz plays on one fixed "stage": the deep maroon of the refreshed
+ * home header, in both light and dark mode, so the quiz reads as a game
+ * rather than another store page. Every quiz style sheet is driven by
+ * `QuizThemeColors`, so swapping the palette restyles all quiz screens.
+ *
+ * Surfaces that sit on the stage as bright tiles (answers, prize tickets)
+ * use `QUIZ_TILE` instead, because stage `text` is white.
+ */
+export const QUIZ_STAGE_COLORS: QuizThemeColors = {
+  background: '#1B0709',
+  border: 'rgba(255,255,255,0.16)',
+  card: 'rgba(255,255,255,0.08)',
+  error: '#FF8A8A',
+  muted: 'rgba(255,255,255,0.14)',
+  primary: '#F04343',
+  primaryForeground: '#FFFFFF',
+  primaryLowOpacity: 'rgba(240,67,67,0.18)',
+  success: '#34D399',
+  text: '#FFFFFF',
+  textSecondary: 'rgba(255,255,255,0.72)',
+  warning: '#F5A524',
+};
+
+/** Bright scalloped tiles that sit on the stage. */
+export const QUIZ_TILE = {
+  background: '#FFFFFF',
+  selectedBackground: '#FFF1D6',
+  text: '#170D0F',
+  textSecondary: '#6D5B5E',
+} as const;
+
+/** One colour per answer position, so answers are told apart at a glance. */
+export const QUIZ_ANSWER_ACCENTS = [
+  '#DC2626',
+  '#2563EB',
+  '#059669',
+  '#D97706',
+] as const;
+
+export function getQuizAnswerAccent(index: number): string {
+  return QUIZ_ANSWER_ACCENTS[index % QUIZ_ANSWER_ACCENTS.length] as string;
+}
+
+/** Answers longer than this read badly in a half-width tile. */
+export const QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH = 44;
+
+/** Short answers sit in a 2×2 grid; long ones fall back to full-width rows. */
+export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {
+  return (
+    labels.length === 4 &&
+    labels.every((label) => label.length <= QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH)
+  );
+}
+
+/** Native-stack header options so the header joins the stage. */
+export const QUIZ_STAGE_HEADER_OPTIONS = {
+  headerShadowVisible: false,
+  headerStyle: { backgroundColor: QUIZ_STAGE_COLORS.background },
+  headerTintColor: QUIZ_STAGE_COLORS.text,
+  headerTitleStyle: { color: QUIZ_STAGE_COLORS.text },
+} as const;

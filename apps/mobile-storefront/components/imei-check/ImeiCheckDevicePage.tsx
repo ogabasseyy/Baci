@@ -52,8 +52,11 @@ export function ImeiCheckDevicePage({
   onTopUpWallet,
 }: ImeiCheckDevicePageProps) {
   const recommendedTier = RECOMMENDED_TIER_BY_DEVICE[device];
+  // Nothing is preselected: the customer picks a check before any price is
+  // shown, since a preselected card can sit below the pay button's fold
+  // (Fable walks 15/16). The recommended check only sets the input format.
   const [selectedTierKey, setSelectedTier] =
-    useState<ImeiServiceTierKey | null>(recommendedTier);
+    useState<ImeiServiceTierKey | null>(null);
   const availability = useImeiRuntimeAvailability(device);
   const [selectedBrand, setSelectedBrand] = useState<ImeiBrandFilter>('apple');
   const [showAllServices, setShowAllServices] = useState(false);
@@ -131,8 +134,10 @@ export function ImeiCheckDevicePage({
       nextExpanded,
       availability.availableTierKeys
     );
-    if (!selectedTier || !nextVisibleTiers.includes(selectedTier)) {
-      applyTier(nextVisibleTiers[0] ?? null);
+    // A chosen check the new view hides is dropped, never swapped for
+    // another one the customer did not pick.
+    if (selectedTier && !nextVisibleTiers.includes(selectedTier)) {
+      applyTier(null);
     }
   };
 
@@ -146,8 +151,10 @@ export function ImeiCheckDevicePage({
       nextExpanded,
       availability.availableTierKeys
     );
-    if (!selectedTier || !nextVisibleTiers.includes(selectedTier)) {
-      applyTier(nextVisibleTiers[0] ?? null);
+    // A chosen check the new view hides is dropped, never swapped for
+    // another one the customer did not pick.
+    if (selectedTier && !nextVisibleTiers.includes(selectedTier)) {
+      applyTier(null);
     }
   };
 

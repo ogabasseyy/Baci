@@ -44,11 +44,34 @@ const baseProps = {
 };
 
 describe('ImeiCheckDevicePage', () => {
-  it('defaults to the recommended check for the given device', () => {
+  it('bugfix: preselects no check, so no price shows before a choice (Fable walks 15/16)', () => {
+    const onVerify = jest.fn();
+    render(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+
+    expect(screen.queryByText(/Verify Now|Pay ₦/)).toBeNull();
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '490154203237518'
+    );
+    fireEvent.press(screen.getByText('Choose a check'));
+    expect(onVerify).not.toHaveBeenCalled();
+    // Switching brand never picks a check on the customer's behalf.
+    fireEvent.press(screen.getByText('Samsung'));
+    expect(screen.getByText('Choose a check')).toBeTruthy();
+  });
+
+  it('shows the recommended checks for the given device', () => {
     render(<ImeiCheckDevicePage {...baseProps} device="laptop" />);
 
     // Mac's recommended flagship is the iCloud lock check.
     expect(screen.getByText('Mac iCloud Lock')).toBeTruthy();
+    fireEvent.press(screen.getByText('Mac iCloud Lock'));
     expect(screen.getByText(/Verify Now/)).toBeTruthy();
   });
 
@@ -73,6 +96,7 @@ describe('ImeiCheckDevicePage', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
+    fireEvent.press(screen.getByText('Full Report'));
     fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
 
     expect(onVerify).toHaveBeenCalledWith('full', '490154203237518');

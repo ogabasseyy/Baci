@@ -11,7 +11,6 @@ const validChallenge = {
   visitorTokenSha256: 'a'.repeat(64),
   websiteToken: 'synthetic-widget-token-123456',
 };
-
 describe('Chatwoot commerce request schemas', () => {
   it('accepts valid challenge input and rejects additional tenant selectors', () => {
     expect(

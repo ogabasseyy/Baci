@@ -142,6 +142,8 @@ export type CartResult =
       operationId: string;
       replayed: boolean;
       warnings: CartWarning[];
+      /** Live version after this operation, including newer state on replays. */
+      currentVersion?: number;
       /**
        * Server-minted grant id, present only on creation outcomes so
        * the route can issue the follow-up session proof. Never accept

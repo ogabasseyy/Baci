@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { chatwootCommerceMessageSchema } from './chatwoot-commerce-message';
 
 describe('Chatwoot commerce message schemas', () => {
+  it('rejects unsafe cart versions on quantity messages', () => {
+    expect(
+      chatwootCommerceMessageSchema.safeParse({
+        event: 'baci-cart-quantity',
+        data: {
+          requestId: 'quantity-0001',
+          conversationId: 905,
+          sessionToken: 'signed-session-token',
+          lineToken: 'opaque-line-token',
+          cartVersion: Number.MAX_SAFE_INTEGER + 1,
+          expectedQuantity: 2,
+          quantity: 3,
+        },
+      }).success
+    ).toBe(false);
+  });
+
   it('keeps commerce messages strict and accepts supported session token sizes', () => {
     const parsed = chatwootCommerceMessageSchema.safeParse({
       event: 'baci-cart-request',

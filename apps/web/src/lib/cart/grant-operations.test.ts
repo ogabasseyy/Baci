@@ -50,9 +50,15 @@ it('upgrades a legacy principal with the verified grant operations', async () =>
   expect(upgraded?.liveGrantExpiresAt).toBe('2099-06-01T00:00:00.000Z');
 });
 
-it('fails closed when the grant is not live or the reply is malformed', async () => {
+it('returns null only when the grant is explicitly unauthorized', async () => {
+  const client = clientReturning({ ok: false, code: 'unauthorized' });
+  await expect(
+    upgradeLegacySessionPrincipal(client as never, basePrincipal)
+  ).resolves.toBeNull();
+});
+
+it('treats malformed or unavailable grant replies as retryable errors', async () => {
   for (const reply of [
-    { ok: false, code: 'unauthorized' },
     { ok: true, allowedOperations: ['teleport'] },
     { ok: true, allowedOperations: 'add' },
     { ok: true, allowedOperations: ['add'] },
@@ -66,12 +72,12 @@ it('fails closed when the grant is not live or the reply is malformed', async ()
     const client = clientReturning(reply);
     await expect(
       upgradeLegacySessionPrincipal(client as never, basePrincipal)
-    ).resolves.toBeNull();
+    ).rejects.toThrow();
   }
   const failing = clientReturning(null, { message: 'db down' });
   await expect(
     upgradeLegacySessionPrincipal(failing as never, basePrincipal)
-  ).resolves.toBeNull();
+  ).rejects.toThrow();
 });
 
 it('passes claimed principals through without an RPC', async () => {

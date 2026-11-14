@@ -30,5 +30,10 @@ export async function authorizeChatwootBridgeSession(
     conversationId: value.conversationId,
     sessionExpiresAt: value.sessionExpiresAt,
     snapshot: snapshot.data,
+    ...(typeof value.sessionToken === 'string' &&
+    value.sessionToken.length > 0 &&
+    value.sessionToken.length <= 12_000
+      ? { sessionToken: value.sessionToken }
+      : {}),
   };
 }

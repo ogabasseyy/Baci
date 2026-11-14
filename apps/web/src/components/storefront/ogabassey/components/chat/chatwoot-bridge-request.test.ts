@@ -6,8 +6,8 @@ vi.mock('@/lib/csrf', () => ({
 
 import { postChatwootBridgeJson } from './chatwoot-bridge-request';
 
-function response(body: unknown, ok = true) {
-  return { ok, json: async () => body };
+function response(body: unknown, ok = true, status = ok ? 200 : 400) {
+  return { ok, status, json: async () => body };
 }
 
 describe('postChatwootBridgeJson', () => {
@@ -31,6 +31,57 @@ describe('postChatwootBridgeJson', () => {
         credentials: 'same-origin',
         cache: 'no-store',
       })
+    );
+  });
+
+  it('preserves non-OK JSON only when a caller explicitly opts in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(response({ accepted: false, code: 'refresh_required' }, false))
+        .mockResolvedValueOnce(response({ accepted: false, code: 'refresh_required' }, false))
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          json: async () => {
+            throw new SyntaxError('not JSON');
+          },
+        })
+    );
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toBeNull();
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
+    ).resolves.toEqual({ accepted: false, code: 'refresh_required' });
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
+    ).resolves.toEqual({ httpStatus: 502 });
+  });
+
+  it('returns null when the request transport fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toBeNull();
+  });
+
+  it('passes the cart-session fence signal to fetch', async () => {
+    const fetchMock = vi.fn(async () => response({ accepted: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+
+    await postChatwootBridgeJson('/cart', {}, 'store-a', controller.signal);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/cart?merchantSlug=store-a',
+      expect.objectContaining({ signal: controller.signal })
     );
   });
 });

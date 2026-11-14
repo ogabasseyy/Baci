@@ -18,6 +18,7 @@ import {
   trackWalletPayPurchase,
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
+import { useRefreshWalletActivity } from '@/hooks/use-refresh-wallet-activity';
 import { CONFIG } from '@/lib/config';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import { useAuthStore } from '@/stores/auth-store';
@@ -97,6 +98,7 @@ export function useImeiWalletPay({
   canPay?: boolean;
 }) {
   const sheet = useWalletPaySheet<ImeiWalletPayResult>({ onDelivered });
+  const refreshActivity = useRefreshWalletActivity();
   const wallet = walletQuery.data?.wallet;
   // A sheet opened for one account never stays open for another.
   const userId = useAuthStore((state) => state.user?.id ?? null);
@@ -259,7 +261,11 @@ export function useImeiWalletPay({
       // whole payment is bound to the account that opened it.
       await sheet.open(
         trackWalletPayPurchase(lazy, () => purchase, {
-          onSettled: () => void walletQuery.refetch?.(),
+          onSettled: () => {
+            void walletQuery.refetch?.();
+            // The new "IMEI check" row shows at once, not after the cache.
+            refreshActivity();
+          },
           stillOwner: () => useAuthStore.getState().user?.id === user?.id,
           stillWanted: sheet.nextSession(),
           key: () => usedKey,

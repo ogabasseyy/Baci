@@ -2,6 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { fetchPiggyvestWalletActivity } from '@/lib/piggyvest-wallet-activity';
 import { useAuthStore } from '@/stores/auth-store';
+import { WALLET_ACTIVITY_QUERY_KEY } from './use-refresh-wallet-activity';
 
 /**
  * The PiggyVest wallet activity list, paged by the server's cursor. Keyed by
@@ -19,7 +20,7 @@ export function usePiggyvestWalletActivity({
 }) {
   const userId = useAuthStore((state) => state.user?.id);
   const query = useInfiniteQuery({
-    queryKey: ['piggyvest-wallet-activity', merchantId, userId],
+    queryKey: [...WALLET_ACTIVITY_QUERY_KEY, merchantId, userId],
     enabled: enabled && Boolean(merchantId && userId),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>

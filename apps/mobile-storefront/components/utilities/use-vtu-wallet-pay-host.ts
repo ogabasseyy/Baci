@@ -13,6 +13,7 @@ import {
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { EXPO_PUBLIC_API_URL } from '@/env';
+import { useRefreshWalletActivity } from '@/hooks/use-refresh-wallet-activity';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
@@ -88,6 +89,7 @@ export function useVtuWalletPayHost({
         deliverTo.current?.(result);
     },
   });
+  const refreshActivity = useRefreshWalletActivity();
 
   // A stale balance during a refresh never chooses PiggyVest over store credit.
   useEffect(() => {
@@ -224,7 +226,11 @@ export function useVtuWalletPayHost({
     };
     void sheet.open(
       trackWalletPayPurchase(lazy, () => purchase, {
-        onSettled: () => void walletQuery.refetch?.(),
+        onSettled: () => {
+          void walletQuery.refetch?.();
+          // The new airtime/data/bill row shows at once, not after the cache.
+          refreshActivity();
+        },
         stillOwner: () => useAuthStore.getState().user?.id === user?.id,
         stillWanted: wanted,
       })

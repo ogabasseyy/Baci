@@ -177,6 +177,23 @@ describe('handleChatwootInlineCartQuantity', () => {
     });
   });
 
+  it('preserves invalid-context responses so the widget can re-authorize', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ accepted: false, code: 'invalid_context' }, false))
+    );
+    const value = input();
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: false,
+      code: 'invalid_context',
+    });
+  });
+
   it('does not echo unsafe or regressing cart versions from a mutation response', async () => {
     for (const cartVersion of [1.5, Number.MAX_SAFE_INTEGER + 1, 7]) {
       vi.stubGlobal(

@@ -104,6 +104,7 @@ export async function handleChatwootInlineCartQuantity(input: {
       : {
           code:
             mutation?.code === 'refresh_required' ||
+            mutation?.code === 'invalid_context' ||
             mutation?.code === 'forbidden' ||
             mutation?.code === 'invalid_request' ||
             mutation?.code === 'quota_exceeded'

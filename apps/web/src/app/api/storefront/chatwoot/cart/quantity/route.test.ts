@@ -276,6 +276,39 @@ describe('Chatwoot shared-cart quantity route', () => {
     expect(mocks.mutateCart).not.toHaveBeenCalled();
   });
 
+  it('maps quantity zero to the scoped remove command', async () => {
+    arrange({ ...body, quantity: 0 });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.mutateCart).toHaveBeenCalledWith(
+      { client: expect.anything(), principal },
+      {
+        command: {
+          lineId: body.lineId,
+          type: 'remove',
+        },
+        expectedVersion: body.cartVersion,
+        operationId: body.requestId,
+      }
+    );
+  });
+
+  it('rejects removal of a missing line without exposing cart data', async () => {
+    arrange(body, { ...cart, lines: [] });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      accepted: false,
+      code: 'refresh_required',
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+
   it('checks CSRF before reading request data', async () => {
     mocks.checkCsrfProtection.mockResolvedValue({ valid: false });
     const response = await POST(request());

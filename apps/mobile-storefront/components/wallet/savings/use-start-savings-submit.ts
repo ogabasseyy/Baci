@@ -8,6 +8,7 @@ import { confirmPrimaryHeadStartBalance } from './confirm-primary-head-start-bal
 import {
   handOffToWallet,
   PLAN_ALREADY_CREATED_MESSAGE,
+  PLAN_CREATED_OPEN_WALLET_MESSAGE,
   SIGN_IN_TO_START_SAVINGS_MESSAGE,
 } from './hand-off-to-wallet';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
@@ -38,12 +39,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   // A created plan, for its account: one whose wallet hand-off could not
   // finish (handOff), or one whose submit was cut short by an account switch
   // before it finished, so the unchanged draft never creates it twice.
-  const pendingHandOffRef = useRef<{
-    goalId: string;
-    userId?: string;
-    contextKey: string;
-    handOff: boolean;
-  } | null>(null);
+  // Kept per account, so another account's plan never replaces or clears it.
+  const pendingPlansRef = useRef(
+    new Map<string, { goalId: string; contextKey: string; handOff: boolean }>()
+  );
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
   const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
@@ -110,16 +109,20 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     // only the unchanged wallet hand-off may continue it. Any edit, a dropped
     // head start or another funding choice must not create a second plan or
     // fund that plan with different details.
-    const pending =
-      pendingHandOffRef.current?.userId === submittingUserId
-        ? pendingHandOffRef.current
-        : null;
-    const sameDraft = pending?.contextKey === context.key;
-    if (
-      pending &&
-      (pending.handOff ? !(options?.continueInWallet && sameDraft) : sameDraft)
-    ) {
-      input.setFormError(PLAN_ALREADY_CREATED_MESSAGE);
+    const accountKey = submittingUserId ?? '';
+    const pending = pendingPlansRef.current.get(accountKey) ?? null;
+    // A plan created here whose flow was cut short blocks every further
+    // submit from this account, edited or not, until the screen is left.
+    const handOffRetry =
+      pending?.handOff &&
+      options?.continueInWallet &&
+      pending.contextKey === context.key;
+    if (pending && !handOffRetry) {
+      input.setFormError(
+        pending.handOff
+          ? PLAN_ALREADY_CREATED_MESSAGE
+          : PLAN_CREATED_OPEN_WALLET_MESSAGE
+      );
       release();
       return;
     }
@@ -137,7 +140,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     // The head start moves through PiggyVest from the wallet's Add to
     // savings sheet, prefilled with the amount the customer chose.
     const continueInWallet = (goalId: string, amount: number) => {
-      pendingHandOffRef.current = null;
+      pendingPlansRef.current.delete(accountKey);
       router.replace({
         pathname: '/wallet',
         params: {
@@ -148,12 +151,11 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       });
     };
     const record = (goalId: string, handOff: boolean) => {
-      pendingHandOffRef.current = {
+      pendingPlansRef.current.set(accountKey, {
         goalId,
-        userId: submittingUserId,
         contextKey: context.key,
         handOff,
-      };
+      });
     };
     const onHandOffPending = (goalId: string) => record(goalId, true);
     const onPlanCreated = (goalId: string) => record(goalId, false);
@@ -186,8 +188,11 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       stillCurrent
     ).finally(() => {
       // Finished on screen: the plan is shown, so its record is done with.
-      if (stillCurrent() && pendingHandOffRef.current?.handOff === false)
-        pendingHandOffRef.current = null;
+      if (
+        stillCurrent() &&
+        pendingPlansRef.current.get(accountKey)?.handOff === false
+      )
+        pendingPlansRef.current.delete(accountKey);
       release();
     });
   };

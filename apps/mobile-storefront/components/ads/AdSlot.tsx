@@ -122,6 +122,9 @@ export function AdSlot({
       <View style={styles.frame}>
         {slotWidth === null ? null : (
           <BannerAd
+            // A new width remounts the banner so it makes a fresh request
+            // for that size instead of relying on a prop-update reload.
+            key={slotWidth}
             onAdFailedToLoad={(error) => {
               trackEvent('mobile_ad_failed', {
                 errorCode: getAdErrorCode(error),

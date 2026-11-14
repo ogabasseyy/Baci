@@ -128,6 +128,20 @@ describe('AdSlot', () => {
     });
   });
 
+  it('remounts the banner with a fresh request when the slot width changes', () => {
+    setAdsEnabled('true');
+    render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+    measureSlot('ad-slot-footer-anchor', 320);
+    const first = screen.UNSAFE_getByType('BannerAd' as never);
+    measureSlot('ad-slot-footer-anchor', 402);
+    const second = screen.UNSAFE_getByType('BannerAd' as never);
+
+    expect(second).not.toBe(first);
+    expect((second.props as { width: number }).width).toBe(402);
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
   it('unmounts the slot when the banner fails to load instead of keeping a blank frame', () => {
     // Regression: a no-fill or load error must remove the whole slot
     // (label and reserved frame), not just record telemetry.

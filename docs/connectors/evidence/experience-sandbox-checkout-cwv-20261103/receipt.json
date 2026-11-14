@@ -134,8 +134,8 @@
         "samples": 3,
         "medianCompositeLcpMs": 1832,
         "nearestRankP75CompositeLcpMs": 2169.2,
-        "maxRawCls": 4.62962962962963e-05,
-        "maxPostPaintCls": 4.62962962962963e-05,
+        "maxRawCls": 4.62962962962963e-5,
+        "maxPostPaintCls": 4.62962962962963e-5,
         "allContaminated": true
       }
     ]

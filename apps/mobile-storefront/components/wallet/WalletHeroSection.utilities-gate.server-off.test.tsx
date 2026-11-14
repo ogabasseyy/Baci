@@ -18,7 +18,10 @@ jest.mock('@/lib/savings-wallet-can-pay', () => ({
   SAVINGS_WALLET_CAN_PAY: true,
 }));
 
-function renderHero(storeCreditBalance: number, savingsWalletBalance: number) {
+function renderHero(
+  storeCreditBalance: number | undefined,
+  savingsWalletBalance: number
+) {
   render(
     <WalletPrimaryContext.Provider value={true}>
       <WalletHeroSection
@@ -45,6 +48,16 @@ describe('bugfix: utility shortcuts shown once IMEI can pay from savings', () =>
 
   it('still shows them when there is store credit to pay with', () => {
     renderHero(500, 5000);
+
+    expect(
+      screen.getByRole('button', { name: 'Buy Airtime' })
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: utility shortcuts hidden while store credit is unread', () => {
+  it('keeps the shortcuts until the store credit balance has loaded', () => {
+    renderHero(undefined, 5000);
 
     expect(
       screen.getByRole('button', { name: 'Buy Airtime' })

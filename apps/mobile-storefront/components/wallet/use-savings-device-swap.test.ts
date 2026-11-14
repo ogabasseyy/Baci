@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import type { Product } from '@/types/product';
+import { notifySavings } from './savings/savings-notice';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 
 jest.mock('@/hooks/use-product-search', () => ({
@@ -10,9 +10,12 @@ jest.mock('@/hooks/use-product-search', () => ({
     resolveProduct: jest.fn(),
   }),
 }));
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
 
-const product = { id: 'p' } as Product;
+const product = { id: 'p', name: 'iPhone 16' } as Product;
 
 describe('useSavingsDeviceSwap', () => {
   it('closes and clears the search after a successful change', async () => {
@@ -29,16 +32,22 @@ describe('useSavingsDeviceSwap', () => {
     expect(result.current.showSavingsDeviceSwap).toBe(false);
     expect(result.current.savingsDeviceSearch).toBe('');
     expect(result.current.isChangingSavingsDevice).toBe(false);
+    // The handler owns the outcome notice (it knows whether the refresh worked).
+    expect(notifySavings).not.toHaveBeenCalled();
   });
 
-  it('alerts and stays open when the change throws', async () => {
+  it('shows a warning notice and stays open when the change throws', async () => {
     const change = jest.fn().mockRejectedValue(new Error('x'));
     const { result } = renderHook(() => useSavingsDeviceSwap(change));
     act(() => result.current.setShowSavingsDeviceSwap(true));
     await act(async () => {
       await result.current.handleSelectSavingsDevice(product);
     });
-    expect(Alert.alert).toHaveBeenCalled();
+    expect(notifySavings).toHaveBeenCalledWith(
+      'Unable to change device',
+      'Please try again in a moment.',
+      'warning'
+    );
     expect(result.current.showSavingsDeviceSwap).toBe(true);
   });
 });

@@ -15,9 +15,7 @@ import {
 import { RedvaultPaymentChoice } from '@/components/checkout/redvault/RedvaultPaymentChoice';
 import type Colors from '@/constants/Colors';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
-
-export const WALLET_TRANSFER_CHECKING_COPY =
-  'Checking whether bank transfer to wallet is available…';
+import { walletTransferDescriptionOverride } from './wallet-transfer-description-override';
 
 type ColorsScheme = (typeof Colors)['light'];
 
@@ -126,7 +124,11 @@ export function CheckoutPaymentStepView({
         orderTotal={total}
         enabledMethods={availablePaymentMethods}
         hiddenMethods={hiddenPaymentMethods}
-        initiallyCollapsed
+        // Coming back from Review remounts the step: keep any chosen method
+        // visible, including a wallet-only or savings-only payment.
+        initiallyCollapsed={
+          !selectedPayment && !walletSelection?.use && !savingsSelection?.use
+        }
         walletMode="orders"
         walletBalance={walletBalance}
         walletIsStoreCredit={walletIsStoreCredit}
@@ -150,16 +152,10 @@ export function CheckoutPaymentStepView({
             ? { bank_transfer: 'Bank transfer to wallet' }
             : undefined
         }
-        methodDescriptionOverrides={
-          walletFundedBankTransferOptionEnabled
-            ? {
-                bank_transfer:
-                  'A permanent account number will be created for you which you can use for future purchases. We apply it to this order automatically.',
-              }
-            : walletFundedBankTransferChecking
-              ? { bank_transfer: WALLET_TRANSFER_CHECKING_COPY }
-              : undefined
-        }
+        methodDescriptionOverrides={walletTransferDescriptionOverride(
+          walletFundedBankTransferOptionEnabled,
+          walletFundedBankTransferChecking
+        )}
         paymentScrollRef={scrollRef}
         paymentScrollOffsetRef={scrollOffsetRef}
       />

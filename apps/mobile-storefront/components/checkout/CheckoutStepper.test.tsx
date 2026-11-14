@@ -54,25 +54,33 @@ describe('CheckoutStepper', () => {
     expect(baseProps.setStep).toHaveBeenCalledWith('address');
   });
 
-  it('does not call setStep when pressing the active pill', () => {
+  it('renders the current step as a non-interactive label', () => {
     render(<CheckoutStepper {...baseProps} step="address" />);
-    fireEvent.press(
-      screen.getByRole('button', { name: /go to delivery step/i })
-    );
+    expect(
+      screen.queryByRole('button', { name: /go to delivery step/i })
+    ).toBeNull();
+    expect(screen.getByLabelText('Delivery step, current')).toBeTruthy();
+  });
+
+  it('marks upcoming steps as not yet available instead of dead buttons', () => {
+    render(<CheckoutStepper {...baseProps} step="address" />);
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    const payment = screen.getByLabelText('Payment step, not yet available');
+    const review = screen.getByLabelText('Review step, not yet available');
+    expect(payment).toHaveStyle({ borderStyle: 'dashed' });
+    expect(review).toHaveStyle({ borderStyle: 'dashed' });
+    fireEvent.press(payment);
     expect(baseProps.setStep).not.toHaveBeenCalled();
   });
 
-  it('renders pills for all three steps', () => {
-    render(<CheckoutStepper {...baseProps} step="address" />);
-    expect(
-      screen.getByRole('button', { name: /go to delivery step/i })
-    ).toBeTruthy();
-    expect(
+  it('only lets completed steps navigate back', () => {
+    render(<CheckoutStepper {...baseProps} step="review" />);
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+    fireEvent.press(
       screen.getByRole('button', { name: /go to payment step/i })
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /go to review step/i })
-    ).toBeTruthy();
+    );
+    expect(baseProps.setStep).toHaveBeenCalledWith('payment');
   });
 
   it('hides payment and uses a two-step flow for prize simulation', () => {
@@ -85,8 +93,6 @@ describe('CheckoutStepper', () => {
     expect(
       screen.getByRole('button', { name: /go to delivery step/i })
     ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /go to review step/i })
-    ).toBeTruthy();
+    expect(screen.getByLabelText('Review step, current')).toBeTruthy();
   });
 });

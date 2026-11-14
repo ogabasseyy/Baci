@@ -99,11 +99,15 @@ export function useUtilityPayment() {
           // No authoritative verdict, or PiggyVest confirmed before the
           // wallet is reclassified (Codex): the wallet kind is unknown.
           // Ruled out: a stale PiggyVest cache isn't store credit (Codex).
+          // But a PiggyVest-shaped live wallet under that ruling-out means
+          // PiggyVest came back before the cache expired (Codex): hold bank
+          // transfers, as checkout does.
           if (capabilityNow === false)
             return {
               ...verdict,
               walletIsStoreCredit: false,
-              walletPrimaryUnknown: false,
+              walletPrimaryUnknown:
+                verdict.walletIsStoreCredit || verdict.walletPrimaryUnknown,
             };
           return capabilityNow === null ||
             (capabilityNow === true && !verdict.walletIsStoreCredit)

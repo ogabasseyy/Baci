@@ -70,7 +70,7 @@ describe('server keeps PiggyVest off', () => {
       />
     );
     expect(
-      screen.getByRole('button', { name: 'Set up this goal' })
+      screen.getByRole('button', { name: 'Finish setting up' })
     ).toBeDisabled();
     expect(setupExistingSavingsGoal).not.toHaveBeenCalled();
     expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();

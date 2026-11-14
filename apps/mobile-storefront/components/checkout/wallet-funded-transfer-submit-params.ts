@@ -2,7 +2,9 @@ import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 type WalletFundedTransferSubmitParams = Pick<
   UseCheckoutSubmitParams,
-  'isWalletFundedBankTransferHeld' | 'walletFundedBankTransferOptionEnabled'
+  | 'isWalletFundedBankTransferHeld'
+  | 'walletFundedBankTransferOptionEnabled'
+  | 'walletTransferFallbackReason'
 >;
 
 /**
@@ -16,5 +18,6 @@ export function walletFundedTransferSubmitParams(
     isWalletFundedBankTransferHeld: controller.isWalletFundedBankTransferHeld,
     walletFundedBankTransferOptionEnabled:
       controller.walletFundedBankTransferOptionEnabled,
+    walletTransferFallbackReason: controller.walletTransferFallbackReason,
   };
 }

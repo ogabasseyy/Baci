@@ -3,7 +3,10 @@ import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant'
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
+import { confirmDiscardUnreadableFunding } from './confirm-discard-unreadable-funding';
+import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
 import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
+import { isSameSignedInUser } from './is-same-signed-in-user';
 
 /**
  * Resolves which rail a wallet funding must use. Known verdicts (and the
@@ -35,12 +38,25 @@ export async function resolveFundWalletRail(
       activeMerchantId,
       options?.userId
     );
-    // A saved funding we can't read may still charge (Codex): block, never
-    // start a second card charge; the wallet's own top-up recovers it.
+    // A saved funding we can't read may still charge (Codex): never start a
+    // second card charge silently. The customer can cancel, or knowingly
+    // clear it and continue; a charged payment still lands in savings.
     if (retained === 'unreadable') {
-      Alert.alert(
-        'Finish your earlier card payment',
-        'We found an unfinished card payment we could not read. Open your wallet and tap Add money to finish it before topping up again.'
+      confirmDiscardUnreadableFunding({
+        merchantId: activeMerchantId,
+        onRetry: options?.onRetry,
+        userId: options?.userId,
+      });
+      return 'blocked';
+    }
+    // The read awaited storage (Codex): an account switch meanwhile must not
+    // release this flow's funding under the new account's token.
+    if (options?.userId && !isSameSignedInUser(options.userId)) {
+      const message =
+        'You switched accounts. Start the top-up again from this account.';
+      walletOutcomeNotifier(activeMerchantId)(
+        { title: 'Signed-in account changed', message, tone: 'warning' },
+        { title: 'Signed-in account changed', message }
       );
       return 'blocked';
     }

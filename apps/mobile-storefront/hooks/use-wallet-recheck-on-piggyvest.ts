@@ -1,5 +1,5 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
@@ -18,6 +18,9 @@ import type { WalletQueryData } from './wallet-query';
  * cached wallet has the plain legacy shape: after a cold restart the query
  * cache can restore a wallet saved while PiggyVest was ruled out (Codex).
  */
+const RECHECK_RETRY_MS = 5_000;
+const RECHECK_MAX_RETRIES = 5;
+
 export function useWalletRecheckOnPiggyvest(
   queryClient: QueryClient,
   merchantId: string | null | undefined,
@@ -66,15 +69,37 @@ export function useWalletRecheckOnPiggyvest(
   // Only a mismatch reloads (Codex): a ruled-out merchant's negative-cache
   // expiry alone never does, since the live verdict stays false for it.
   const previous = useRef<string | null>(null);
+  // A failed reload re-arms the same mismatch (Codex): checkout and
+  // utilities have no other retry, so a transient failure must not leave
+  // the wallet unclassified until a remount. Bounded per mismatch.
+  const [retryNonce, setRetryNonce] = useState(0);
+  const failures = useRef({ key: null as string | null, count: 0 });
   // biome-ignore lint/correctness/useExhaustiveDependencies(walletQueryKey): `scope` (inside mismatchKey) is its serialised form; the key is read at that moment.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(retryNonce): a bump re-runs the reload for the same mismatch.
   useEffect(() => {
     const was = previous.current;
     previous.current = mismatchKey;
-    if (mismatchKey !== null && mismatchKey !== was) {
-      void queryClient.invalidateQueries({
-        queryKey: walletQueryKey,
-        exact: true,
+    if (failures.current.key !== mismatchKey)
+      failures.current = { key: mismatchKey, count: 0 };
+    if (mismatchKey === null || mismatchKey === was) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let active = true;
+    void queryClient
+      .invalidateQueries({ queryKey: walletQueryKey, exact: true })
+      .then(() => {
+        const failed =
+          queryClient.getQueryState?.(walletQueryKey)?.status === 'error';
+        if (!active || !failed || failures.current.count >= RECHECK_MAX_RETRIES)
+          return;
+        failures.current.count += 1;
+        timer = setTimeout(() => {
+          previous.current = null;
+          setRetryNonce((n) => n + 1);
+        }, RECHECK_RETRY_MS);
       });
-    }
-  }, [mismatchKey, queryClient]);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [mismatchKey, queryClient, retryNonce]);
 }

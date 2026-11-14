@@ -8,13 +8,19 @@ import {
 } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { Alert } from 'react-native';
+import { useSavingsNoticeStore } from './savings/savings-notice-store';
 import {
   PRIMARY_CREDIT_POLL_INTERVAL_MS,
   PRIMARY_CREDIT_POLL_MAX_MS,
   usePrimaryWalletCreditPoll,
 } from './use-primary-wallet-credit-poll';
 
-const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+// "Money received" is the inline wallet notice now; an iOS alert is a bug.
+const iosAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+const alertSpy = jest.fn<(title: string, message?: string) => void>();
+useSavingsNoticeStore.subscribe((state) => {
+  if (state.notice) alertSpy(state.notice.title, state.notice.message);
+});
 
 type Props = {
   balanceKobo: number | null | undefined;
@@ -46,6 +52,8 @@ describe('usePrimaryWalletCreditPoll', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     alertSpy.mockClear();
+    iosAlert.mockClear();
+    useSavingsNoticeStore.setState({ notice: null });
   });
   afterEach(() => {
     jest.useRealTimers();
@@ -87,15 +95,17 @@ describe('usePrimaryWalletCreditPoll', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it('alerts once and stops when the balance rises above the value at open', () => {
+  it('announces once with the wallet notice (no iOS alert) and stops when the balance rises above the value at open', () => {
     const { refetch, rerender } = setup(open);
     act(() => jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS));
     rerender({ ...open, balanceKobo: 9000 });
     expect(alertSpy).toHaveBeenCalledTimes(1);
     expect(alertSpy).toHaveBeenCalledWith(
       'Money received',
-      'Your wallet balance has been updated.'
+      'Your savings wallet balance has been updated.'
     );
+    expect(useSavingsNoticeStore.getState().notice?.tone).toBe('success');
+    expect(iosAlert).not.toHaveBeenCalled();
     rerender({ ...open, balanceKobo: 12000 });
     act(() => jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS * 3));
     expect(alertSpy).toHaveBeenCalledTimes(1);

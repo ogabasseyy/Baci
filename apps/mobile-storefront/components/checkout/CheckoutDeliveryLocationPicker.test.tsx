@@ -27,10 +27,12 @@ function LocationPickerHarness({
   city = '',
   error,
   isLoading = false,
+  isDark = false,
   onPress = jest.fn(),
 }: {
   city?: string;
   error?: string;
+  isDark?: boolean;
   isLoading?: boolean;
   onPress?: () => void;
 }) {
@@ -43,7 +45,7 @@ function LocationPickerHarness({
       colors={mockColors}
       control={form.control}
       error={error}
-      isDark={false}
+      isDark={isDark}
       isLoading={isLoading}
       label="City"
       onPress={onPress}
@@ -73,10 +75,42 @@ describe('CheckoutDeliveryLocationPicker', () => {
     expect(screen.getByLabelText('Loading cities')).toBeTruthy();
   });
 
-  it('renders validation errors', () => {
-    render(<LocationPickerHarness error="City is required" />);
+  it('words an empty-picker error as a choice, in the error colour', () => {
+    render(
+      <LocationPickerHarness error="City name must be at least 2 characters" />
+    );
 
-    expect(screen.getByText('City is required')).toBeTruthy();
+    const message = screen.getByText('Choose a city');
+    expect(message).toHaveStyle({ color: '#EF4444' });
+    expect(
+      screen.queryByText('City name must be at least 2 characters')
+    ).toBeNull();
+  });
+
+  it('uses the lighter dark-theme error red in dark mode', () => {
+    render(
+      <LocationPickerHarness
+        error="City name must be at least 2 characters"
+        isDark
+      />
+    );
+
+    expect(screen.getByText('Choose a city')).toHaveStyle({
+      color: '#F87171',
+    });
+  });
+
+  it('keeps the schema message once a city is chosen', () => {
+    render(
+      <LocationPickerHarness
+        city="X"
+        error="City name must be at least 2 characters"
+      />
+    );
+
+    expect(
+      screen.getByText('City name must be at least 2 characters')
+    ).toBeTruthy();
   });
 
   it('renders the selected value instead of the placeholder', () => {

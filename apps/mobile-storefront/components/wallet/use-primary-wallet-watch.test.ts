@@ -22,6 +22,7 @@ jest.mock('@/stores/auth-store', () => ({
     select({ merchantId: null }),
 }));
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
+jest.mock('./savings/notify-savings', () => ({ notifySavings: jest.fn() }));
 // The unknown-answer retry has its own tests; isolate the credit poll here.
 const mockUnknownRetry = jest.fn();
 jest.mock('./use-primary-wallet-unknown-retry', () => ({

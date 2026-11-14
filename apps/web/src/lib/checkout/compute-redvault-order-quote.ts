@@ -4,6 +4,8 @@ import type {
 } from '@baci/shared/contracts';
 import { calculateRedvaultPricing } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
+import { APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS } from '@/config/ogabassey-black-friday';
 import { CanonicalOrderSubtotalLoadError } from './canonical-order-subtotal';
 import { resolveRedvaultQuoteOffer } from './resolve-redvault-quote-offer';
 
@@ -18,6 +20,7 @@ type CheckoutItem = {
 };
 
 type CatalogProduct = {
+  slug: string | null;
   brand: string | null;
   condition: string | null;
   id: string;
@@ -115,7 +118,9 @@ export async function computeRedvaultOrderQuote({
   }
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, name, brand, price, condition, vat_category_code, vat_rate')
+    .select(
+      'id, slug, name, brand, price, condition, vat_category_code, vat_rate'
+    )
     .eq('merchant_id', merchantId)
     .in('id', productIds)
     .overrideTypes<CatalogProduct[], { merge: false }>();
@@ -200,7 +205,23 @@ export async function computeRedvaultOrderQuote({
       };
     }
   );
-  const pricing = calculateRedvaultPricing(authoritativeLines);
+  // Only the approved lineup may extend eligibility. Development display
+  // samples and client-supplied product metadata never enter this set.
+  const campaignProductIds = new Set(
+    merchantId === OGABASSEY_MERCHANT_ID
+      ? products
+          .filter(
+            (product) =>
+              product.slug != null &&
+              APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS.includes(product.slug)
+          )
+          .map((product) => product.id)
+      : []
+  );
+  const pricing = calculateRedvaultPricing(
+    authoritativeLines,
+    campaignProductIds
+  );
   const allocationById = new Map(
     pricing.allocations.map((allocation) => [allocation.itemId, allocation])
   );

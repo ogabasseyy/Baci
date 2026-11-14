@@ -23,6 +23,13 @@ export function createOwnerInternalNodeServer(options: {
     !options.ownerPublicVerification
   )
     throw Error('OWNER_TRANSPORT_NOT_CONFIGURED');
+  if (
+    (options.ownerPreview && !options.ownerPreviewAdmission) ||
+    (options.ownerAttestation && !options.ownerAttestationAdmission) ||
+    (options.ownerPublicVerification &&
+      !options.ownerPublicVerificationAdmission)
+  )
+    throw Error('OWNER_ADMISSION_REQUIRED');
   const preview = options.ownerPreview
     ? createOwnerPreviewHttpHandler(options.ownerPreview, {
         admit: options.ownerPreviewAdmission,

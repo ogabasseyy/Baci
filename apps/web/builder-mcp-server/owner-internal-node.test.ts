@@ -33,6 +33,7 @@ it('separates owner routes when explicitly composed on distinct local listeners'
   const publicListener = createBuilderMcpNodeServer();
   const internalListener = createOwnerInternalNodeServer({
     ownerPreview: owner,
+    ownerPreviewAdmission: () => true,
   });
   publicListener.server.listen(0, '127.0.0.1');
   const publicReady = once(publicListener.server, 'listening');
@@ -59,6 +60,7 @@ it('routes signed public verification only through the owner listener', async ()
   );
   const owner = createOwnerInternalNodeServer({
     ownerPublicVerification: verify,
+    ownerPublicVerificationAdmission: () => true,
   });
   const listener = createBuilderMcpNodeServer();
   listener.server.listen(0, '127.0.0.1');
@@ -107,9 +109,23 @@ it('refuses to start an owner listener without any installed handler', () => {
   );
 });
 
+it('refuses owner handlers when admission is missing', () => {
+  const handler = async () => new Response(null, { status: 204 });
+  expect(() =>
+    createOwnerInternalNodeServer({ ownerPreview: handler })
+  ).toThrow('OWNER_ADMISSION_REQUIRED');
+  expect(() =>
+    createOwnerInternalNodeServer({ ownerAttestation: handler })
+  ).toThrow('OWNER_ADMISSION_REQUIRED');
+  expect(() =>
+    createOwnerInternalNodeServer({ ownerPublicVerification: handler })
+  ).toThrow('OWNER_ADMISSION_REQUIRED');
+});
+
 it('rejects invalid ports without binding', async () => {
   const listener = createOwnerInternalNodeServer({
     ownerPreview: async () => new Response(null, { status: 204 }),
+    ownerPreviewAdmission: () => true,
   });
   await expect(listener.listen(-1)).rejects.toThrow('INVALID_OWNER_PORT');
   await listener.close();
@@ -125,6 +141,7 @@ it('waits for admitted owner work to settle during shutdown', async () => {
     entered = resolve;
   });
   const listener = createOwnerInternalNodeServer({
+    ownerPreviewAdmission: () => true,
     ownerPreview: async () => {
       entered();
       await gate;

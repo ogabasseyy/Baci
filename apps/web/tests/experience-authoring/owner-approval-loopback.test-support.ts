@@ -6,6 +6,7 @@ import { POST } from '@/app/api/builder-experience/approval/route';
 import { createOwnerLifecycleRuntime } from '@/lib/experience/owner-lifecycle-runtime';
 import { installExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { createVerifierAttestationClient } from '@/lib/experience/verifier-attestation-client';
+import { createOwnerAdmission } from '../../builder-mcp-server/owner-admission';
 import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { startVerifierListener } from '../../tools/experience-verifier/listener';
 import { createVerifierLoopbackForwarder } from '../../tools/experience-verifier/loopback-forwarder';
@@ -29,6 +30,10 @@ export async function confirmSyntheticDraft(input: {
     if (!address || typeof address === 'string') throw Error('NO_VERIFIER');
     gateway = createOwnerInternalNodeServer({
       ownerAttestation: createVerifierLoopbackForwarder(address.port),
+      ownerAttestationAdmission: createOwnerAdmission(
+        input.key,
+        'verifier-attest/v1'
+      ),
     });
     const gatewayPort = await gateway.listen(0);
     const attest = createVerifierAttestationClient({

@@ -153,7 +153,7 @@ function createOwnerHttpHandler(
       readers--;
     }
     if (res.destroyed || res.writableEnded) return;
-    if (binding.admit && !binding.admit(bytes, signature)) {
+    if (!binding.admit?.(bytes, signature)) {
       respond(res, 401);
       return;
     }

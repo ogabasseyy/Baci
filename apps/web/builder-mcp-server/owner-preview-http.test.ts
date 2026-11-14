@@ -5,7 +5,34 @@ import { once } from 'node:events';
 import { createServer, request } from 'node:http';
 import { expect, it, vi } from 'vitest';
 import { createOwnerAdmission } from './owner-admission';
-import { createOwnerPreviewHttpHandler } from './owner-preview-http';
+import { createOwnerPreviewHttpHandler as createProductionOwnerPreviewHttpHandler } from './owner-preview-http';
+
+// Transport-only unit tests inject admission; production requires signature verification.
+const createOwnerPreviewHttpHandler: typeof createProductionOwnerPreviewHttpHandler =
+  (bridge, options) =>
+    createProductionOwnerPreviewHttpHandler(bridge, {
+      admit: () => true,
+      ...options,
+    });
+
+it('fails closed when a direct transport has no admission configured', async () => {
+  const bridge = vi.fn(async () => Response.json({ ok: true }));
+  const handler = createProductionOwnerPreviewHttpHandler(bridge);
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    expect((await send(address.port)).status).toBe(401);
+    expect(bridge).not.toHaveBeenCalled();
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 
 it('rejects a forged signed request before dispatching bridge work', async () => {
   const bridge = vi.fn(async () => Response.json({ ok: true }));

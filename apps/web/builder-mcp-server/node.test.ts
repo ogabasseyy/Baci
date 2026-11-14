@@ -133,7 +133,10 @@ it('rejects owner handler configuration on the public MCP listener', () => {
 
 it('routes the internal owner preview only when explicitly installed', async () => {
   const ownerPreview = vi.fn(async () => Response.json({ ok: true }));
-  const runtime = createOwnerInternalNodeServer({ ownerPreview });
+  const runtime = createOwnerInternalNodeServer({
+    ownerPreview,
+    ownerPreviewAdmission: () => true,
+  });
   const port = await runtime.listen(0);
   try {
     const response = await new Promise<number>((resolve, reject) => {
@@ -171,7 +174,10 @@ it('routes signed attestation only when explicitly installed', async () => {
     expect(req.headers.get('cookie')).toBeNull();
     return new Response(null, { status: 204 });
   });
-  const runtime = createOwnerInternalNodeServer({ ownerAttestation });
+  const runtime = createOwnerInternalNodeServer({
+    ownerAttestation,
+    ownerAttestationAdmission: () => true,
+  });
   const port = await runtime.listen(0);
   try {
     const status = await new Promise<number>((resolve, reject) => {
@@ -208,7 +214,10 @@ it('does not treat the request-body timeout as a completed attestation response 
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
     return new Response(null, { status: 204 });
   });
-  const handler = createOwnerAttestationHttpHandler(ownerAttestation);
+  const handler = createOwnerAttestationHttpHandler(
+    ownerAttestation,
+    () => true
+  );
   const server = createServer((req, res) => {
     void handler.handle(req, res);
   });

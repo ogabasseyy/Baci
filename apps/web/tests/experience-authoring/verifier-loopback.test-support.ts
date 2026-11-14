@@ -15,6 +15,8 @@ export async function sendVerifierTwice(
     if (!address || typeof address === 'string') throw Error('NO_LISTENER');
     gateway = createOwnerInternalNodeServer({
       ownerAttestation: createVerifierLoopbackForwarder(address.port),
+      // This helper tests replay at the verifier; signature admission is covered separately.
+      ownerAttestationAdmission: () => true,
     });
     const gatewayPort = await gateway.listen(0);
     const send = () =>

@@ -83,6 +83,10 @@ const audienceCopy: Record<
       title: 'GIG pickup delayed',
       body: 'Your GIG Logistics pickup is taking longer than expected.',
     },
+    cancelled: {
+      title: 'GIG shipment cancelled',
+      body: 'GIG Logistics cancelled the shipment. If the order still needs delivery, book a new shipment.',
+    },
     waybill_changed: {
       title: 'GIG waybill updated',
       body: 'The shipment now uses a new GIG waybill.',

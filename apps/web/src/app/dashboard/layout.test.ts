@@ -13,7 +13,8 @@ describe('dashboard document rendering', () => {
   it('waits for the request before generating a nonce-bearing document', async () => {
     const layout = await import('./layout');
     expect(layout).toHaveProperty('instant', false);
-    await layout.generateViewport();
+    const { documentViewport } = await import('../document-viewport');
+    await expect(layout.generateViewport()).resolves.toEqual(documentViewport);
     expect(connection).toHaveBeenCalledOnce();
   });
 });

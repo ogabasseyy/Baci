@@ -7,11 +7,13 @@ import { PasskeyEnrollmentPrompt } from '@/components/passkey-enrollment-prompt'
 import { DashboardAuthGuard } from './auth-guard';
 import DashboardLoading from './loading';
 
-// The CSP nonce is generated per request. A prerendered dashboard shell
-// would ship Next.js bootstrap scripts without that request's nonce.
+// Allow the dashboard to block until its request-time viewport is ready.
+// This trades the prerendered navigation shell for a document whose bootstrap
+// scripts can all carry the request's CSP nonce.
 export const instant = false;
 
 export async function generateViewport() {
+  // Viewport generation is part of the document head and cannot stream.
   await connection();
   return documentViewport;
 }

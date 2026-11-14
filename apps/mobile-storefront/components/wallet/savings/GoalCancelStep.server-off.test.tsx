@@ -51,6 +51,15 @@ function renderStep(
 }
 
 describe('Cancel goal step inside the savings sheet', () => {
+  // Walk 18: with ₦0 interest reported the sheet said nothing about interest.
+  it('still says interest is not refunded when none is reported yet', () => {
+    renderStep({ ...baseGoal, current_amount: 1000, principal_amount: 1000 });
+    expect(
+      screen.getByText(/Any interest earned isn’t refunded/)
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Back to your wallet')).toBeOnTheScreen();
+  });
+
   it('says no money moves when nothing is saved', () => {
     renderStep(baseGoal);
     expect(screen.getByText('Cancel iPhone 15 Pro?')).toBeOnTheScreen();

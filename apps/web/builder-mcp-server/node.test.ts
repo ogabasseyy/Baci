@@ -189,6 +189,46 @@ it('routes signed attestation only when explicitly installed', async () => {
   }
 });
 
+it('does not treat the request-body timeout as a completed attestation response deadline', async () => {
+  const ownerAttestation = vi.fn(async () => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    return new Response(null, { status: 204 });
+  });
+  const runtime = createBuilderMcpNodeServer({ ownerAttestation });
+  runtime.server.requestTimeout = 25;
+  runtime.server.listen(0, '127.0.0.1');
+  await once(runtime.server, 'listening');
+  const address = runtime.server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/internal/owner/attest',
+          method: 'POST',
+          headers: {
+            host: 'mcp.usebaci.com',
+            'content-type': 'application/json',
+            'x-baci-verifier-signature': 'a'.repeat(64),
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+    expect(status).toBe(204);
+    expect(ownerAttestation).toHaveBeenCalledOnce();
+  } finally {
+    await runtime.close();
+  }
+});
+
 it('does not expose the owner preview route by default', async () => {
   const runtime = createBuilderMcpNodeServer();
   runtime.server.listen(0, '127.0.0.1');

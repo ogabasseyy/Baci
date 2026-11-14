@@ -55,6 +55,8 @@ export function createBuilderMcpNodeServer(
       } else res.end();
     });
   });
+  // This bounds receiving the request, not the time spent producing a response.
+  // The owner transports and their upstream ingress have separate deadlines.
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
   return {

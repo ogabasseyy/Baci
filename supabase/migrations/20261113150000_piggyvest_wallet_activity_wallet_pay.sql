@@ -236,7 +236,11 @@ BEGIN
      -- Only a refund of a listed spend (money that moved), so a refund never
      -- shows without the spend it returns (Muse).
      WHERE paid.listed
-       AND (refund.state IN ('dispatched', 'confirmed', 'needs_review')
+       AND (refund.state IN ('dispatched', 'confirmed')
+            -- A failed transfer that only charged a fee credited nothing:
+            -- never shown as money coming in (Codex P2).
+            OR (refund.state = 'needs_review'
+                AND refund.review_reason IS DISTINCT FROM 'failed_with_fee')
             -- A released attempt later proven successful (it credited the
             -- customer while another attempt was live) is a refund too.
             OR (refund.state = 'released' AND refund.review_reason = 'late_refund_success'

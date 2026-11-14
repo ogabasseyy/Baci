@@ -174,6 +174,16 @@ BEGIN
   PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
       WHERE row.id = v_deferred::uuid AND row.kind = 'wallet_spend' AND row.status = 'pending'),
     'a deferred late success was hidden');
+  -- REGRESSION (Codex P2): a refund that failed and only charged a fee
+  -- credited nothing, so it is not listed as money coming in.
+  UPDATE piggyvest_primary.wallet_payment_refunds
+     SET state = 'needs_review', review_reason = 'failed_with_fee',
+         provider_transaction_id = 'txn-activity-refund-fee', settled_at = pg_catalog.clock_timestamp()
+   WHERE payment_id = v_imei::uuid AND attempt = 0;
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      JOIN piggyvest_primary.wallet_payment_refunds AS refund ON refund.id = row.id
+     WHERE refund.payment_id = v_imei::uuid AND refund.attempt = 0),
+    'a fee-only refund failure was listed as money in');
 
   -- Another user sees none of it.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);

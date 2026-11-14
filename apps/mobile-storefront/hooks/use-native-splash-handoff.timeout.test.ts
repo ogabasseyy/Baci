@@ -58,3 +58,37 @@ it('waits for the native watchdog to release the overlay before showing recovery
   await act(async () => jest.advanceTimersByTime(1000));
   expect(result.current.nativeSplashVisible).toBe(false);
 });
+
+it('stops native visibility polling after a timeout hide succeeds', async () => {
+  const isVisible = jest.mocked(SplashMotion.isVisible);
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: false })
+  );
+
+  await act(async () => jest.advanceTimersByTime(8_000));
+  await waitFor(() => expect(result.current.showSplash).toBe(false));
+  const visibilityReadsAfterHide = isVisible.mock.calls.length;
+
+  await act(async () => jest.advanceTimersByTime(3_000));
+
+  expect(isVisible).toHaveBeenCalledTimes(visibilityReadsAfterHide);
+});
+
+it('clears native visibility polling when the hook unmounts during recovery', async () => {
+  jest
+    .mocked(SplashMotion.hide)
+    .mockRejectedValue(new Error('native hide failed'));
+  const isVisible = jest.mocked(SplashMotion.isVisible);
+  const { unmount } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: false })
+  );
+
+  await act(async () => jest.advanceTimersByTime(8_000));
+  await waitFor(() => expect(isVisible).toHaveBeenCalled());
+  const visibilityReadsBeforeUnmount = isVisible.mock.calls.length;
+  unmount();
+
+  await act(async () => jest.advanceTimersByTime(3_000));
+
+  expect(isVisible).toHaveBeenCalledTimes(visibilityReadsBeforeUnmount);
+});

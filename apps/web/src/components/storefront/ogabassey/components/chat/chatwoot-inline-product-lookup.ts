@@ -26,7 +26,15 @@ export async function handleChatwootInlineProductLookup(input: {
   );
   if (!input.isCurrentAction()) return;
   const result = chatwootProductLookupResponseSchema.safeParse(value);
-  if (!result.success || result.data.requestId !== input.requestId) {
+  const uncorrelatedInvalidRequest =
+    result.success &&
+    !result.data.ok &&
+    result.data.code === 'invalid_request' &&
+    result.data.requestId === undefined;
+  if (
+    !result.success ||
+    (result.data.requestId !== input.requestId && !uncorrelatedInvalidRequest)
+  ) {
     input.post(RESPONSE_EVENT, {
       requestId: input.requestId,
       status: 'unavailable',

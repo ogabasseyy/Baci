@@ -164,10 +164,12 @@ export function useImeiWalletPay({
       try {
         return await imeiWalletPayPurchase(userId, device, tier, imei)
           .then((purchase) => walletPayPurchaseKeys.has(purchase))
-          // Unreadable: kept (fail closed) while paying from PiggyVest is
-          // on. Switched off, only a key actually read replays, so a broken
-          // store never opens the sheet in a switched-off build (Muse).
-          .catch(() => canPay);
+          // Unreadable: while paying from PiggyVest is on it counts as kept
+          // (the sheet opens and says "Try again"). Switched off the sheet
+          // never opens for a key that was not read (Muse), but the tap
+          // still never goes on to another rail either: an unread key may
+          // hide a payment that is settling (Codex P1).
+          .catch(() => (canPay ? true : ('unreadable' as const)));
       } finally {
         checkingKept.current = false;
       }
@@ -180,6 +182,7 @@ export function useImeiWalletPay({
       // null at startup, and the key must match after a restart.
       const { user } = useAuthStore.getState();
       let purchase: string | null = null;
+      let usedKey: string | null = null;
       let inner: WalletPayAdapter<ImeiWalletPayResult> | null = null;
       // The key is read inside the start, so a phone that can't read its
       // saved keys shows "Try again" instead of paying with a new key.
@@ -203,6 +206,7 @@ export function useImeiWalletPay({
               return Crypto.randomUUID();
             }
           );
+          usedKey = idempotencyKey;
           // The account may have changed during the awaits above: never send
           // the new account's token with the old account's key.
           if (useAuthStore.getState().user?.id !== user.id)
@@ -237,7 +241,9 @@ export function useImeiWalletPay({
           // top-up (Codex P2). A reused key keeps it: its earlier attempt
           // may have paid before the tier changed.
           if (tierRefused && minted && purchase)
-            await walletPayPurchaseKeys.forget(purchase).catch(() => undefined);
+            await walletPayPurchaseKeys
+              .forget(purchase, idempotencyKey)
+              .catch(() => undefined);
           return answer;
         },
         verifyPin: async (operationId, pin) => {
@@ -256,6 +262,7 @@ export function useImeiWalletPay({
           onSettled: () => void walletQuery.refetch?.(),
           stillOwner: () => useAuthStore.getState().user?.id === user?.id,
           stillWanted: sheet.nextSession(),
+          key: () => usedKey,
         })
       );
     },

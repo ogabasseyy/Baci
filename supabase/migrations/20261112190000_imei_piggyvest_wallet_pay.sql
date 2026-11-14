@@ -23,6 +23,25 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
+-- A payment's purchase reference as the lookup's uuid (NULL when it is not
+-- uuid-shaped), so guards compare lookup.id = uuid and keep using the
+-- lookup's primary-key index instead of casting the indexed column to text
+-- and scanning the whole lookup history (Codex P2).
+CREATE FUNCTION piggyvest_primary.imei_lookup_uuid(p_ref text)
+RETURNS uuid
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = ''
+AS $$
+  SELECT CASE WHEN p_ref ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN p_ref::pg_catalog.uuid END;
+$$;
+REVOKE ALL ON FUNCTION piggyvest_primary.imei_lookup_uuid(text)
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_evidence;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.imei_lookup_uuid(text)
+  TO piggyvest_primary_authorizer;
+
 -- The PiggyVest payment state of one IMEI lookup, for the money guards above.
 -- NULL when no PiggyVest payment of this lookup exists (or only issued /
 -- released attempts that never moved money).
@@ -82,7 +101,7 @@ BEGIN
     SELECT 1
       FROM piggyvest_primary.wallet_payments AS payment
       JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = payment.intent_id
-      JOIN public.imei_lookups AS lookup ON lookup.id::text = payment.purchase_ref
+      JOIN public.imei_lookups AS lookup ON lookup.id = piggyvest_primary.imei_lookup_uuid(payment.purchase_ref)
      WHERE payment.id = imei_wallet_payment_delivered.operation_id
        AND payment.integration_id = imei_wallet_payment_delivered.integration_id
        AND payment.purpose = 'imei_check'
@@ -124,7 +143,7 @@ BEGIN
   -- guards scope it (Muse).
   IF EXISTS (SELECT 1 FROM public.imei_lookups AS lookup
                JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = NEW.intent_id
-              WHERE lookup.id::text = NEW.purchase_ref
+              WHERE lookup.id = piggyvest_primary.imei_lookup_uuid(NEW.purchase_ref)
                 AND lookup.status = 'completed'
                 AND lookup.customer_id = intent.customer_id
                 AND lookup.merchant_id = intent.merchant_id
@@ -163,7 +182,7 @@ DECLARE
   v_status text;
 BEGIN
   SELECT lookup.status INTO v_status FROM public.imei_lookups AS lookup
-   WHERE lookup.id::text = NEW.purchase_ref
+   WHERE lookup.id = piggyvest_primary.imei_lookup_uuid(NEW.purchase_ref)
      FOR SHARE NOWAIT;
   IF FOUND AND v_status <> 'pending' THEN
     RAISE EXCEPTION 'imei_check_already_finished' USING ERRCODE = '55000';

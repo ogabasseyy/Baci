@@ -276,9 +276,11 @@ describe('bugfix: a broken key store opened the sheet while switched off (Muse)'
     await expect(setup().result.current.retains('basic', IMEI)).resolves.toBe(
       true
     );
+    // Switched off: no sheet for a key that was not read, but the answer is
+    // never "no payment", so the tap can not go on to another rail (Codex P1).
     await expect(
       setup(false).result.current.retains('basic', IMEI)
-    ).resolves.toBe(false);
+    ).resolves.toBe('unreadable');
     has.mockRestore();
   });
 });

@@ -29,6 +29,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stateBackButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 1,
+  },
   headerTitle: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',

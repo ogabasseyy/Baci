@@ -37,6 +37,14 @@ if existing builder grants cannot be identified or safely reauthorized, keep
 the builder integration disabled. The issuer change is not a transparent
 dual-issuer migration.
 
+Production ingress is not yet qualified: the internal owner routes share a
+loopback listener with public MCP, and a proxy's loopback address is not proof
+that a request is private. Require an independently verified ingress boundary
+that prevents public access to those routes. The owner bridge also needs an
+end-to-end cancellation or bounded-work strategy before enabling it: timing
+out the HTTP response while releasing its slot would leave underlying work
+running and could bypass the concurrency limit.
+
 Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the
 web gateway or the isolated runner.

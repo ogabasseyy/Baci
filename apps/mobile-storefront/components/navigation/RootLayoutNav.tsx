@@ -135,6 +135,8 @@ export function RootLayoutNav({
                           <RouteResumeController
                             shouldResume={shouldResumeNavigation}
                           />
+                          {/* The shell mounts to report first layout before the
+                              hide promise resolves; defer update UI until then. */}
                           {persistenceEnabled && <MobileUpdateController />}
                           <SharedCartBridge />
                           <NativeCartPairingPanel />

@@ -269,7 +269,7 @@ export default function RootLayout() {
     shouldShowStartupRecovery ||
     (timedOut && (!shouldRenderApp || !loaded || !isStorageReady))
   ) {
-    return <StartupRecoveryScreen />;
+    return <StartupRecoveryScreen onLayout={onFirstLayout} />;
   }
 
   if (!shouldRenderApp) {

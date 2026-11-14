@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, jest } from '@jest/globals';
-import { act, render, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
 import { registerRootLayoutIntroTests } from '@/test-support/root-layout-intro-test-cases';
 import {
@@ -25,6 +31,7 @@ const mockRootLayoutNavMount = jest.fn();
 const mockRootLayoutNavUnmount = jest.fn();
 const mockUsePushNotifications = jest.fn();
 const mockVerifyBenchmarkTelemetry = jest.fn<() => Promise<void>>();
+const mockMarkStartupTiming = jest.fn();
 let mockFontsLoaded = true;
 let mockTrackingAuthorizationSettled = true;
 let mockAutoLayout = true;
@@ -43,6 +50,9 @@ const mockAuthState = {
 };
 
 jest.mock('../../global.css', () => ({}));
+jest.mock('@/lib/startup-timing', () => ({
+  markStartupTiming: (...args: unknown[]) => mockMarkStartupTiming(...args),
+}));
 
 jest.mock('expo-font', () => ({
   useFonts: () => [mockFontsLoaded, null],
@@ -291,5 +301,19 @@ describe('RootLayout storage boot gate', () => {
     initializeStorage: mockInitializeStorage,
     activateDueSavingsReminderNotification:
       mockActivateDueSavingsReminderNotification,
+  });
+
+  it('reports layout when the startup recovery screen becomes visible', async () => {
+    mockInitializeStorage.mockReturnValue(new Promise(() => undefined));
+
+    render(<RootLayout />);
+    act(() => jest.advanceTimersByTime(8000));
+    await waitFor(() =>
+      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
+    );
+
+    fireEvent(screen.getByTestId('startup-recovery'), 'layout');
+
+    expect(mockMarkStartupTiming).toHaveBeenCalledWith('root_first_layout');
   });
 });

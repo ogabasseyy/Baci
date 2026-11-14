@@ -1,8 +1,10 @@
 import { reloadAppAsync } from 'expo';
+import * as Updates from 'expo-updates';
 import { useRef, useState } from 'react';
 import { Pressable, Text, useColorScheme, View } from 'react-native';
 import { errorBoundaryStyles as styles } from '@/components/error-boundary.styles';
 import Colors from '@/constants/Colors';
+import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 
 interface StartupRecoveryScreenProps {
   onLayout?: () => void;
@@ -24,7 +26,28 @@ export function StartupRecoveryScreen({
     setFailed(false);
     try {
       await reloadAppAsync();
-    } catch {
+      return;
+    } catch (reloadError) {
+      if (Updates.isEnabled) {
+        try {
+          // If the native app reload bridge is unavailable, try the configured
+          // Expo Updates reload path before leaving the user on this screen.
+          await Updates.reloadAsync();
+          return;
+        } catch (updatesError) {
+          recordCrashBreadcrumb('startup_recovery:reload_failed', {
+            isError: true,
+            errorType: errorType(reloadError),
+            fallbackErrorType: errorType(updatesError),
+          });
+        }
+      } else {
+        recordCrashBreadcrumb('startup_recovery:reload_failed', {
+          isError: true,
+          errorType: errorType(reloadError),
+          updatesEnabled: false,
+        });
+      }
       setFailed(true);
     } finally {
       pending.current = false;
@@ -71,10 +94,16 @@ export function StartupRecoveryScreen({
             accessibilityRole="alert"
             style={[styles.message, { color: colors.destructive }]}
           >
-            Could not restart the app. Please try again.
+            Could not restart automatically. Close and reopen the app, then try
+            again.
           </Text>
         )}
       </View>
     </View>
   );
+}
+
+function errorType(error: unknown) {
+  const name = error instanceof Error ? error.name : 'NonError';
+  return /^[A-Za-z0-9_.:-]{1,80}$/.test(name) ? name : 'Other';
 }

@@ -41,6 +41,11 @@ export function derivePlatformRootDomain(
   return PLATFORM_API_ROOTS[apiHostname];
 }
 
+/**
+ * Expo Router supplies `initial` for initial and live links. The launcher-root
+ * rewrite is intentionally the same in both cases, so this handler only reads
+ * `path` while retaining the framework's complete event shape.
+ */
 export function redirectSystemPath({
   path,
 }: {

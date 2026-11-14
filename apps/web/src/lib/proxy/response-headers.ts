@@ -77,7 +77,8 @@ export function applySecurityHeaders(
     nonce,
     pathname,
     request?.nextUrl.searchParams,
-    oxygenOwned
+    oxygenOwned,
+    routeType === 'storefront' ? hostname : undefined
   );
   response.headers.set('Content-Security-Policy', csp);
 

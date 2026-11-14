@@ -10,9 +10,13 @@ export function generateCSP(
   nonce?: string,
   pathname?: string,
   searchParams?: URLSearchParams,
-  oxygenOwned = false
+  oxygenOwned = false,
+  storefrontHostname?: string
 ): string {
-  const chatwootOrigin = getEnabledChatwootPlatformOrigin();
+  const chatwootOrigin =
+    routeType === 'storefront'
+      ? getEnabledChatwootPlatformOrigin(storefrontHostname)
+      : null;
   const hostedOrigins =
     oxygenOwned &&
     routeType === 'storefront' &&
@@ -89,7 +93,7 @@ export function generateCSP(
         routeType === 'storefront' &&
         chatwootOrigin &&
         (key === 'connect-src' || key === 'frame-src')
-          ? `${source} ${chatwootOrigin}`
+          ? `${source} ${chatwootOrigin}${key === 'connect-src' ? ` ${toChatwootSocketOrigin(chatwootOrigin)}` : ''}`
           : source;
       return (withChatwoot ? `${key} ${withChatwoot}` : key).trim();
     })
@@ -97,7 +101,9 @@ export function generateCSP(
 }
 
 /** Exact HTTPS origin only; malformed environment values never widen CSP. */
-function getEnabledChatwootPlatformOrigin(): string | null {
+function getEnabledChatwootPlatformOrigin(
+  storefrontHostname?: string
+): string | null {
   if (
     process.env.EKAETTE_CHATWOOT_WIDGET_ENABLED !== 'true' ||
     process.env.EKAETTE_CHATWOOT_CONTEXT_ENABLED !== 'true'
@@ -106,6 +112,11 @@ function getEnabledChatwootPlatformOrigin(): string | null {
   }
   const value = process.env.EKAETTE_CHATWOOT_PLATFORM_ORIGIN?.trim();
   if (!value || value.length > 512) return null;
+  const bindings = readChatwootCspBindings(
+    process.env.EKAETTE_CHATWOOT_CONTEXT_BINDINGS
+  );
+  const requestHost = normalizeHttpsHost(storefrontHostname);
+  if (!requestHost || !bindings?.includes(requestHost)) return null;
   try {
     const url = new URL(value);
     if (
@@ -121,6 +132,100 @@ function getEnabledChatwootPlatformOrigin(): string | null {
       return null;
     }
     return `https://${url.hostname.toLowerCase()}`;
+  } catch {
+    return null;
+  }
+}
+
+function toChatwootSocketOrigin(origin: string): string {
+  return origin.replace(/^https:/, 'wss:');
+}
+
+function normalizeHttpsHost(hostname?: string): string | null {
+  if (!hostname || hostname.length > 512) return null;
+  try {
+    const url = new URL(`https://${hostname}`);
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function readChatwootCspBindings(raw: string | undefined): string[] | null {
+  if (!raw?.trim() || raw.length > 64_000) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length > 256) return null;
+    const hosts: string[] = [];
+    const merchantIds = new Set<string>();
+    const websiteTokens = new Set<string>();
+    const inboxIds = new Set<number>();
+    for (const binding of parsed) {
+      if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+        return null;
+      }
+      const record = binding as Record<string, unknown>;
+      const origin = normalizeBoundStorefrontOrigin(record.origin);
+      const merchantId =
+        typeof record.merchantId === 'string'
+          ? record.merchantId.toLowerCase()
+          : '';
+      const websiteToken = record.websiteToken;
+      const inboxId = record.inboxId;
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          merchantId
+        ) ||
+        !origin ||
+        typeof websiteToken !== 'string' ||
+        !/^[A-Za-z0-9_-]{16,128}$/.test(websiteToken) ||
+        typeof inboxId !== 'number' ||
+        !Number.isSafeInteger(inboxId) ||
+        inboxId <= 0 ||
+        merchantIds.has(merchantId) ||
+        websiteTokens.has(websiteToken) ||
+        inboxIds.has(inboxId)
+      ) {
+        return null;
+      }
+      merchantIds.add(merchantId);
+      websiteTokens.add(websiteToken);
+      inboxIds.add(inboxId);
+      hosts.push(origin);
+    }
+    return hosts;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeBoundStorefrontOrigin(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 512) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      (url.port && url.port !== '443') ||
+      (url.pathname && url.pathname !== '/') ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.host.toLowerCase();
   } catch {
     return null;
   }

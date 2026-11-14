@@ -1,0 +1,2 @@
+supabase/tests/blog_article_identity_and_release_reservations.sql
+supabase/tests/blog_article_identity_and_release_reservations_concurrency.sql

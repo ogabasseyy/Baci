@@ -81,7 +81,9 @@ export function configurePublishFlow(
     claimedPostIds?: string[];
   } = {}
 ) {
-  mockSupabase.lte.mockResolvedValue({ data: posts, error: null });
+  mockSupabase.lte
+    .mockResolvedValueOnce({ data: posts, error: null })
+    .mockReturnValueOnce(mockSupabase);
   mockSupabase.in
     .mockResolvedValueOnce({
       data:

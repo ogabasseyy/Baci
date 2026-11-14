@@ -126,7 +126,8 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       .update({ status: 'published' })
       .in('id', postIds)
       .eq('status', 'scheduled')
-      .select('id');
+      .lte('published_at', now)
+      .select('id, status');
 
     if (updateError) {
       console.error('Cron Error: Batch update failed:', updateError);
@@ -136,11 +137,51 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
-    const claimedPostIds = new Set(
-      (Array.isArray(claimedRows) ? claimedRows : eligiblePosts).map(
-        (post) => post.id
-      )
+    const eligiblePostsById = new Map(
+      eligiblePosts.map((post) => [post.id, post])
     );
+    const claimedPostIds = new Set<string>();
+
+    if (Array.isArray(claimedRows)) {
+      for (const row of claimedRows as Array<{
+        id: string;
+        status?: string | null;
+      }>) {
+        if (row.status === undefined || row.status === 'published') {
+          claimedPostIds.add(row.id);
+          continue;
+        }
+
+        const originalPost = eligiblePostsById.get(row.id);
+        const code =
+          row.status === 'scheduled'
+            ? 'BLOG_RELEASE_DEFERRED'
+            : row.status === 'draft'
+              ? 'BLOG_RELEASE_HELD_EXPIRED_NEWS'
+              : 'BLOG_RELEASE_NOT_PUBLISHED';
+        const reason =
+          row.status === 'scheduled'
+            ? 'Deferred by database release policy trigger'
+            : row.status === 'draft'
+              ? 'Held as draft because fast-track news expired before publication'
+              : 'Post remained non-published after database release trigger';
+
+        skipped.push({
+          id: row.id,
+          slug: originalPost?.slug ?? null,
+          code,
+          details: {
+            status: row.status,
+            reason,
+          },
+        });
+      }
+    } else {
+      for (const post of eligiblePosts) {
+        claimedPostIds.add(post.id);
+      }
+    }
+
     const claimedPosts = eligiblePosts.filter((post) =>
       claimedPostIds.has(post.id)
     );

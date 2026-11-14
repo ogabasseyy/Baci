@@ -39,6 +39,31 @@ describe('classifyBookingFailure', () => {
     });
   });
 
+  it('does not call an unrelated bug an unconfirmed GIG booking', () => {
+    expect(classifyBookingFailure(new Error('x is undefined'))).toMatchObject({
+      code: 'BOOKING_UNEXPECTED_ERROR',
+      outcome: 'unexpected',
+    });
+    expect(
+      toBookingFailureResponseError(new Error('x is undefined'))
+    ).toBeInstanceOf(Error);
+  });
+
+  it('treats ENETUNREACH as never reached', () => {
+    expect(classifyBookingFailure(connectError('ENETUNREACH')).outcome).toBe(
+      'not_submitted'
+    );
+  });
+
+  it('answers an unreachable provider with a coded 503', () => {
+    expect(
+      toBookingFailureResponseError(connectError('ECONNREFUSED'))
+    ).toMatchObject({
+      status: 503,
+      code: 'PROVIDER_UNREACHABLE',
+    });
+  });
+
   it('caps very long messages', () => {
     const result = classifyBookingFailure(new Error('x'.repeat(2000)));
     expect(result.message.length).toBeLessThanOrEqual(500);

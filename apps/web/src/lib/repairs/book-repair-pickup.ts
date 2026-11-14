@@ -250,10 +250,7 @@ export async function bookRepairPickup(
       bookingRequest
     );
   } catch (error) {
-    if (
-      error instanceof OrderShipmentBookingError &&
-      shouldReleaseBookingLock(error)
-    ) {
+    if (shouldReleaseBookingLock(error)) {
       const released = await releaseRejectedRepairPickupReservation(
         supabase,
         merchantId,
@@ -263,7 +260,8 @@ export async function bookRepairPickup(
       );
       if (released) {
         return pickupFailure(
-          error.code === 'GIGL_BOOKING_VALIDATION_FAILED'
+          error instanceof OrderShipmentBookingError &&
+            error.code === 'GIGL_BOOKING_VALIDATION_FAILED'
             ? 'provider_rejected'
             : 'booking_failed'
         );

@@ -1510,8 +1510,8 @@ describe('PATCH /api/orders/[id]', () => {
       }),
       expect.any(Object)
     );
-    expect(response.status).toBe(503);
-    expect(payload).toMatchObject({ code: 'SHIPMENT_BOOKING_UNCONFIRMED' });
+    expect(response.status).toBe(500);
+    expect(payload).toEqual({ error: 'Internal server error' });
     expect(ordersUpdate).not.toHaveBeenCalled();
     expect(clearOrderShipmentBookingLock).not.toHaveBeenCalled();
 

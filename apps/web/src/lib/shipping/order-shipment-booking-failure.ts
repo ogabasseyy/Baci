@@ -5,7 +5,8 @@ import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 export type BookingFailureOutcome =
   | 'not_submitted'
   | 'provider_unconfirmed'
-  | 'rejected';
+  | 'rejected'
+  | 'unexpected';
 
 export type ClassifiedBookingFailure = {
   code: string;
@@ -15,13 +16,29 @@ export type ClassifiedBookingFailure = {
 };
 
 const MAX_MESSAGE_LENGTH = 500;
-const NEVER_REACHED_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']);
+const NEVER_REACHED_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+]);
 
 /** True when the connection to the provider never opened, so nothing was booked. */
 export function isProviderNeverReachedError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const cause = (error as { cause?: { code?: unknown } }).cause;
   return typeof cause?.code === 'string' && NEVER_REACHED_CODES.has(cause.code);
+}
+
+/** A call that may have reached GIG but never answered. */
+function isProviderTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === 'TimeoutError' ||
+    error.name === 'AbortError' ||
+    /timed out|timeout|aborted/i.test(error.message)
+  );
 }
 
 export function classifyBookingFailure(
@@ -44,6 +61,14 @@ export function classifyBookingFailure(
       message,
       httpStatus: null,
       outcome: 'not_submitted',
+    };
+  }
+  if (!isProviderTimeoutError(error)) {
+    return {
+      code: 'BOOKING_UNEXPECTED_ERROR',
+      message,
+      httpStatus: null,
+      outcome: 'unexpected',
     };
   }
   return {
@@ -96,7 +121,15 @@ export async function recordOrderShipmentBookingFailure(
  * Say plainly why the order is paused and that retrying shortly is expected.
  */
 export function toBookingFailureResponseError(error: unknown): unknown {
-  if (classifyBookingFailure(error).outcome !== 'provider_unconfirmed') {
+  const { outcome } = classifyBookingFailure(error);
+  if (outcome === 'not_submitted') {
+    return new OrderShipmentBookingError(
+      'We could not reach GIG just now. Nothing was booked; please try again.',
+      503,
+      'PROVIDER_UNREACHABLE'
+    );
+  }
+  if (outcome !== 'provider_unconfirmed') {
     return error;
   }
   return new OrderShipmentBookingError(

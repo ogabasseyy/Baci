@@ -78,6 +78,25 @@ describe('authorizeCurrentChatwootInlineAction', () => {
     expect(result.actionStillCurrent).toBe(false);
   });
 
+  it('rejects when the cart disappears during authorization', async () => {
+    mocks.authorize.mockResolvedValue(authorized);
+    const getCurrentCartRef = vi
+      .fn()
+      .mockReturnValueOnce({ cartId: 'cart-1', version: 8 })
+      .mockReturnValueOnce(null);
+
+    const result = await authorizeCurrentChatwootInlineAction({
+      sessionToken: 'session-905',
+      storeSlug: 'store',
+      actionGeneration: 4,
+      getLatestActionGeneration: () => 4,
+      requestedCartRef: { cartId: 'cart-1', version: 8 },
+      getCurrentCartRef,
+    });
+
+    expect(result.actionStillCurrent).toBe(false);
+  });
+
   it('fails closed when authorization throws', async () => {
     mocks.authorize.mockRejectedValue(new Error('private session detail'));
 

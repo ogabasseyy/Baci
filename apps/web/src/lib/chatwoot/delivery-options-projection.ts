@@ -21,7 +21,6 @@ export function projectChatwootDeliveryOptions(input: {
   quotes: ShippingQuote[];
 }): ChatwootDeliveryOptionsResponse | null {
   if (
-    input.quotes.length > MAX_DELIVERY_OPTIONS ||
     input.currency !== 'NGN' ||
     !Number.isSafeInteger(input.cartVersion) ||
     input.cartVersion < 0 ||
@@ -34,6 +33,7 @@ export function projectChatwootDeliveryOptions(input: {
   const options: ChatwootDeliveryOptionsResponse['options'] = [];
   let droppedInvalidQuote = false;
   for (const quote of input.quotes) {
+    if (options.length >= MAX_DELIVERY_OPTIONS) break;
     const displayName = boundedText(quote.displayName, 120);
     if (
       quote.provider !== 'MERCHANT' ||

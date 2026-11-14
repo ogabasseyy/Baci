@@ -15,7 +15,7 @@ export async function authorizeCurrentChatwootInlineAction(input: {
     input.actionGeneration !== input.getLatestActionGeneration() ||
     input.requestedCartRef === null ||
     initialCartRef?.cartId !== input.requestedCartRef.cartId ||
-    initialCartRef.version !== input.requestedCartRef.version
+    initialCartRef?.version !== input.requestedCartRef.version
   ) {
     return { authorized: null, actionStillCurrent: false };
   }
@@ -37,7 +37,7 @@ export async function authorizeCurrentChatwootInlineAction(input: {
     input.actionGeneration === input.getLatestActionGeneration() &&
     input.requestedCartRef !== null &&
     currentCartRef?.cartId === input.requestedCartRef.cartId &&
-    currentCartRef.version === input.requestedCartRef.version &&
+    currentCartRef?.version === input.requestedCartRef.version &&
     authorized?.cartId === currentCartRef.cartId &&
     authorized?.snapshot.cartVersion === currentCartRef.version;
 

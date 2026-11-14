@@ -84,6 +84,24 @@ describe('projectChatwootDeliveryOptions', () => {
     ).toBeNull();
   });
 
+  it('bounds oversized rate sets to the first 20 valid merchant options', () => {
+    const result = projectChatwootDeliveryOptions({
+      state: 'Lagos',
+      cartVersion: 4,
+      currency: 'NGN',
+      subtotalMinor: 250_000,
+      quotes: Array.from({ length: 23 }, (_, index) => ({
+        ...baseQuote,
+        displayName: `Rate ${index + 1}`,
+        price: index + 1,
+      })),
+    });
+
+    expect(result?.options).toHaveLength(20);
+    expect(result?.options[0]?.displayName).toBe('Rate 1');
+    expect(result?.options.at(-1)?.displayName).toBe('Rate 20');
+  });
+
   it('keeps the delivery projection NGN-only', () => {
     const input = {
       state: 'Lagos',

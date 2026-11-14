@@ -3,7 +3,11 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 
-async function runCheck(executableNonce, heading = 'Discount Codes') {
+async function runCheck(
+  executableNonce,
+  heading = 'Discount Codes',
+  expectedHeading = undefined
+) {
   let request = 0;
   const server = createServer((_req, res) => {
     const nonce = `test-${++request}`;
@@ -20,6 +24,7 @@ async function runCheck(executableNonce, heading = 'Discount Codes') {
       const child = spawn(process.execPath, [
         new URL('./check-dashboard-csp.mjs', import.meta.url).pathname,
         `http://127.0.0.1:${server.address().port}`,
+        ...(expectedHeading ? [expectedHeading] : []),
       ]);
       let stderr = '';
       child.stderr.on('data', (chunk) => {
@@ -47,4 +52,8 @@ test('rejects a non-dashboard document even with valid nonces', async () => {
   const result = await runCheck(true, 'Welcome back');
   assert.equal(result.code, 1);
   assert.match(result.stderr, /Expected the Discount Codes dashboard/);
+});
+
+test('accepts a different dashboard heading when explicitly requested', async () => {
+  assert.equal((await runCheck(true, 'Orders', 'Orders')).code, 0);
 });

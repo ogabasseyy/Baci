@@ -4,13 +4,15 @@ import assert from 'node:assert/strict';
 const target = process.argv[2];
 assert.ok(
   target && URL.canParse(target),
-  'Usage: node tools/qa/check-dashboard-csp.mjs <local-dashboard-url>'
+  'Usage: node tools/qa/check-dashboard-csp.mjs <local-dashboard-url> [expected-heading]'
 );
 const url = new URL(target);
 assert.ok(
   ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname),
   'Use a loopback URL so the local session cookie stays on this machine'
 );
+
+const expectedHeading = process.argv[3]?.trim() || 'Discount Codes';
 
 async function checkDocument() {
   const response = await fetch(url, {
@@ -32,10 +34,13 @@ async function checkDocument() {
   assert.ok(nonce, 'The response must send a CSP nonce');
 
   const html = await response.text();
-  assert.match(
-    html,
-    /<h1\b[^>]*>\s*Discount Codes\b[^<]*<\/h1>/i,
-    'Expected the Discount Codes dashboard heading in the HTML response'
+  const headings = [...html.matchAll(/<h1\b[^>]*>([^<]*)<\/h1>/gi)];
+  assert.ok(
+    headings.some(([, heading]) => {
+      const text = heading.trim();
+      return text === expectedHeading || text.startsWith(`${expectedHeading} `);
+    }),
+    `Expected the ${expectedHeading} dashboard heading in the HTML response`
   );
   const scriptTags = [...html.matchAll(/<script\b([^>]*)>/gi)].map(
     ([, attributes]) => attributes

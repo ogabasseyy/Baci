@@ -35,6 +35,7 @@ beforeEach(() => {
     refunds: 0,
     delivered: 0,
     skipped: 0,
+    deferred: 0,
     failed: 0,
   });
 });
@@ -55,11 +56,13 @@ describe('GET /api/cron/piggyvest-wallet-pay-drain', () => {
       refunds: 0,
       delivered: 0,
       skipped: 0,
+      deferred: 0,
       failed: 0,
     });
     expect(mocks.drain).toHaveBeenCalledWith({
       runtime: { tag: 'runtime' },
       deliverers: {},
+      deadlineMs: expect.any(Number),
     });
   });
 
@@ -109,6 +112,7 @@ describe('GET /api/cron/piggyvest-wallet-pay-drain', () => {
       refunds: 0,
       delivered: 0,
       skipped: 0,
+      deferred: 0,
       failed: 1,
     });
     const response = await GET(request());

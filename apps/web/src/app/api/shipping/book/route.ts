@@ -7,6 +7,12 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import {
+  BOOKED_SHIPMENT_NOT_SAVED_CODE,
+  recordOrderShipmentBookingFailure,
+  toBookingFailureResponseError,
+} from '@/lib/shipping/order-shipment-booking-failure';
+import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import type { ShipmentBookingResult } from '@/lib/shipping/types';
 import { createClient } from '@/lib/supabase/server';
@@ -169,9 +175,21 @@ export async function POST(request: NextRequest) {
     });
     if (!persisted.ok) {
       retainBookingLock = true;
+      await recordOrderShipmentBookingFailure(
+        supabase,
+        merchantId,
+        data.orderId,
+        new OrderShipmentBookingError(
+          `Provider booked ${persisted.trackingNumber ?? 'a shipment'} but saving it failed: ${persisted.error}`,
+          persisted.status,
+          BOOKED_SHIPMENT_NOT_SAVED_CODE
+        ),
+        true
+      );
       return NextResponse.json(
         {
           error: persisted.error,
+          code: BOOKED_SHIPMENT_NOT_SAVED_CODE,
           trackingNumber: persisted.trackingNumber,
         },
         { status: persisted.status }
@@ -180,13 +198,26 @@ export async function POST(request: NextRequest) {
 
     bookingLockToken = null;
     return bookingSuccessResponse(persisted.shipmentId, result);
-  } catch (error) {
+  } catch (rawError) {
+    console.error('Error booking shipment:', rawError);
+    if (bookingSupabase && bookingOrderId && bookingMerchantId) {
+      if (shouldReleaseBookingLock(rawError)) {
+        retainBookingLock = false;
+      }
+      await recordOrderShipmentBookingFailure(
+        bookingSupabase,
+        bookingMerchantId,
+        bookingOrderId,
+        rawError,
+        retainBookingLock
+      );
+    }
+    const error = toBookingFailureResponseError(rawError);
     if (error instanceof OrderShipmentBookingError)
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: error.status }
       );
-    console.error('Error booking shipment:', error);
     return NextResponse.json(
       { error: 'Failed to book shipment' },
       { status: 500 }

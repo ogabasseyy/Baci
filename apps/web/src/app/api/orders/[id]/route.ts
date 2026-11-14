@@ -17,6 +17,10 @@ import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/invento
 import { shouldDeferShippedNotificationToGigPickup } from '@/lib/shipping/gigl-shipment-pickup-state';
 import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
 import {
+  recordOrderShipmentBookingFailure,
+  toBookingFailureResponseError,
+} from '@/lib/shipping/order-shipment-booking-failure';
+import {
   claimOrderShipmentBooking,
   clearOrderShipmentBookingLock,
 } from '@/lib/shipping/order-shipment-booking-lock';
@@ -471,6 +475,8 @@ export async function PATCH(
             updates.shipment_booking_started_at = null;
           }
         } catch (error) {
+          console.error('Shipment booking failed:', error);
+          let lockReleased = false;
           if (shipmentBookingLockToken && shouldReleaseBookingLock(error)) {
             try {
               await clearOrderShipmentBookingLock(
@@ -479,6 +485,7 @@ export async function PATCH(
                 id,
                 shipmentBookingLockToken
               );
+              lockReleased = true;
             } catch (lockError) {
               console.error(
                 'Failed to release shipment booking lock after booking error:',
@@ -486,8 +493,19 @@ export async function PATCH(
               );
             }
           }
-
-          throw error;
+          // Keep the reason on the order so a stuck booking can be diagnosed
+          // later; never let this hide the real error below.
+          await recordOrderShipmentBookingFailure(
+            supabase,
+            merchantId,
+            id,
+            error,
+            !lockReleased
+          );
+          throw toBookingFailureResponseError(error, {
+            walletFunded:
+              existingOrder.shipping_funding_source === 'merchant_wallet',
+          });
         }
       }
     }

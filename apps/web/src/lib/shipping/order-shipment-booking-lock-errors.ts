@@ -1,3 +1,4 @@
+import { isProviderNeverReachedError } from './order-shipment-booking-failure';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 
 const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
@@ -49,11 +50,10 @@ const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
   'EXISTING_SHIPMENT_QUOTE_MISMATCH',
 ]);
 
-export function shouldReleaseBookingLock(
-  error: unknown
-): error is OrderShipmentBookingError {
+export function shouldReleaseBookingLock(error: unknown): boolean {
   return (
-    error instanceof OrderShipmentBookingError &&
-    RELEASEABLE_BOOKING_ERROR_CODES.has(error.code)
+    isProviderNeverReachedError(error) ||
+    (error instanceof OrderShipmentBookingError &&
+      RELEASEABLE_BOOKING_ERROR_CODES.has(error.code))
   );
 }

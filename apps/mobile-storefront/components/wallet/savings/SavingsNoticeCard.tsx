@@ -32,16 +32,19 @@ function toneColor(tone: SavingsNoticeTone, colors: WalletColors) {
 export function SavingsNoticeCard({
   colors,
   goalId,
+  inSheet = false,
   style,
 }: {
   colors: WalletColors;
   /** The goal on screen: another goal's notice is never shown here. */
   goalId?: string | null;
+  /** Inside a goal's sheet: wallet-only notices are left to the wallet. */
+  inSheet?: boolean;
   /** Outer spacing: the wallet insets it like its cards; the sheet doesn't. */
   style?: StyleProp<ViewStyle>;
 }) {
   const { notice, clear } = useSavingsNotice(goalId);
-  if (!notice) return null;
+  if (!notice || (inSheet && notice.walletOnly)) return null;
   const tint = toneColor(notice.tone, colors);
   return (
     <View

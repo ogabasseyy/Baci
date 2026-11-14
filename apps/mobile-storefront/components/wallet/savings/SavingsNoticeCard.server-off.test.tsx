@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SavingsNoticeCard } from './SavingsNoticeCard';
 import { notifySavings, type SavingsNoticeTone } from './savings-notice';
+import { useSavingsNoticeStore } from './savings-notice-store';
 
 function iconNames() {
   return screen.UNSAFE_root.findAll(
@@ -32,6 +33,24 @@ describe('server keeps PiggyVest off: SavingsNoticeCard', () => {
     expect(screen.getByText('Nice!')).toBeOnTheScreen();
     expect(screen.queryByText('Contribution pending')).toBeNull();
     expect(screen.getAllByTestId('savings-notice')).toHaveLength(1);
+  });
+
+  it('leaves a wallet-only notice to the wallet, never inside a goal sheet', () => {
+    act(() => notifySavings('That savings plan has closed', undefined, 'info'));
+    act(() => {
+      const { notice } = useSavingsNoticeStore.getState();
+      useSavingsNoticeStore.setState({
+        goalId: null,
+        notice: notice ? { ...notice, walletOnly: true } : notice,
+      });
+    });
+    const sheet = render(
+      <SavingsNoticeCard colors={Colors.light} goalId="goal-b" inSheet />
+    );
+    expect(sheet.queryByTestId('savings-notice')).toBeNull();
+    sheet.unmount();
+    render(<SavingsNoticeCard colors={Colors.light} />);
+    expect(screen.getByText('That savings plan has closed')).toBeOnTheScreen();
   });
 
   it('omits the message line when there is no message', () => {

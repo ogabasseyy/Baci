@@ -20,6 +20,7 @@ jest.mock('expo-router', () => ({
     const { Text } = jest.requireActual('react-native');
     return <Text>{`Redirect:${href}`}</Text>;
   },
+  Stack: { Screen: () => null },
   useLocalSearchParams: () => mockParams(),
 }));
 
@@ -99,6 +100,8 @@ describe('old goal-actions links', () => {
     );
     // Not tied to a goal, so the wallet's next goal keeps it on screen.
     expect(useSavingsNoticeStore.getState().goalId).toBeNull();
+    // Wallet-only: never shown inside another goal's sheet.
+    expect(useSavingsNoticeStore.getState().notice?.walletOnly).toBe(true);
   });
 
   it('treat a fresh read with no result as indeterminate and keep the link', async () => {

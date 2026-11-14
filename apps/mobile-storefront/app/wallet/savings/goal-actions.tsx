@@ -1,4 +1,4 @@
-import { type Href, Redirect, useLocalSearchParams } from 'expo-router';
+import { type Href, Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
@@ -31,6 +31,7 @@ function GoalLinkShell({ onRetry }: { onRetry?: () => void }) {
   const retry = onRetry ?? (slow ? () => setSlow(false) : undefined);
   return (
     <StorefrontScreenShell themeBackground>
+      <Stack.Screen options={{ title: 'Savings' }} />
       {retry ? (
         <GoalLinkLoadError onRetry={retry} slow={!onRetry} />
       ) : (
@@ -105,8 +106,13 @@ export default function WalletGoalActionsRoute() {
       "It's finished or isn't on this account, so here's your wallet.",
       'info'
     );
-    // Not tied to any goal: the wallet's next goal must not clear it.
-    useSavingsNoticeStore.setState({ goalId: null });
+    // Not tied to any goal (the wallet's next goal must not clear it), and
+    // wallet-only, so it never appears inside another goal's sheet.
+    const { notice } = useSavingsNoticeStore.getState();
+    useSavingsNoticeStore.setState({
+      goalId: null,
+      notice: notice ? { ...notice, walletOnly: true } : notice,
+    });
   }, [gone, goalId]);
   // After sign-in the customer comes back here, so the ownership check runs.
   const back = goalId
@@ -134,12 +140,15 @@ export default function WalletGoalActionsRoute() {
   // else's) opens the plain wallet: the sheet would otherwise fall back to a
   // different goal and offer to cancel or complete that one.
   return (
-    <Redirect
-      href={
-        (owned
-          ? `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goalId)}`
-          : '/wallet') as Href
-      }
-    />
+    <>
+      <Stack.Screen options={{ title: 'Savings' }} />
+      <Redirect
+        href={
+          (owned
+            ? `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goalId)}`
+            : '/wallet') as Href
+        }
+      />
+    </>
   );
 }

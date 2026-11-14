@@ -6,6 +6,7 @@ import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { IdentityConfirmPanel } from '../identity/IdentityConfirmPanel';
 import { SavingsSheetContext } from '../SavingsSheetContext';
+import { useSavingsSheetLock } from '../SavingsSheetLock';
 import type { WalletPinSheetBinding } from './use-wallet-pin-prompt';
 import {
   useWalletPinSheet,
@@ -125,6 +126,8 @@ function WalletPinPanel({
     onProof,
     onInvalid,
   });
+  // A PIN check in flight keeps the savings sheet from being dragged closed.
+  useSavingsSheetLock(embedded && sheet.busy);
   // Choosing a PIN is two steps: type it, then type it again to confirm.
   const [confirming, setConfirming] = useState(false);
   const [tooShort, setTooShort] = useState(false);

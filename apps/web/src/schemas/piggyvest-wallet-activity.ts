@@ -29,7 +29,12 @@ export const piggyvestWalletActivityRowSchema = z.strictObject({
   amount_kobo: z.number().int().positive(),
   /** PiggyVest's deposit fee; 0 for every other movement. */
   fee_kobo: z.number().int().nonnegative(),
-  label: z.string().min(1).max(600),
+  // Labels embed the customer's goal title, which is not length-bounded where
+  // it is created: shorten for display instead of failing the whole page.
+  label: z
+    .string()
+    .min(1)
+    .transform((value) => value.slice(0, 600)),
   status: z.enum(['completed', 'pending']),
   occurred_at: z.iso.datetime({ offset: true }),
 });

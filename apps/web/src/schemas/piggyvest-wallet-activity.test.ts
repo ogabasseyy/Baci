@@ -70,6 +70,14 @@ describe('piggyvestWalletActivityRowSchema', () => {
         false
       );
   });
+
+  it('bugfix: shortens a label built from a very long goal title instead of rejecting the row', () => {
+    const parsed = piggyvestWalletActivityRowSchema.parse({
+      ...row,
+      label: `Saved to ${'x'.repeat(700)}`,
+    });
+    expect(parsed.label).toHaveLength(600);
+  });
 });
 
 describe('wallet-pay activity rows', () => {

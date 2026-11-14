@@ -3,8 +3,10 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-internal-node';
 import { createVerifierPublicClient } from '../../src/lib/experience/verifier-public-client';
 import { startVerifierListener } from '../../tools/experience-verifier/listener';
+import { createVerifierLoopbackForwarder } from '../../tools/experience-verifier/loopback-forwarder';
 import { createPublicVerificationHandler } from '../../tools/experience-verifier/public-verification-handler';
 
 it('forwards a signed public-verification request over loopback and reauthenticates the synthetic owner', async () => {
@@ -41,9 +43,16 @@ it('forwards a signed public-verification request over loopback and reauthentica
     undefined,
     handler
   );
+  const address = listener.server.address();
+  if (!address || typeof address === 'string') throw Error('NO_LISTENER');
+  const ownerListener = createOwnerInternalNodeServer({
+    ownerPublicVerification: createVerifierLoopbackForwarder(
+      address.port,
+      'public'
+    ),
+  });
+  const ownerPort = await ownerListener.listen(0);
   try {
-    const address = listener.server.address();
-    if (!address || typeof address === 'string') throw Error('NO_LISTENER');
     const client = createVerifierPublicClient({
       key,
       fetch: async (_url, init) =>
@@ -51,12 +60,12 @@ it('forwards a signed public-verification request over loopback and reauthentica
           const req = request(
             {
               host: '127.0.0.1',
-              port: address.port,
-              path: '/v1/public',
+              port: ownerPort,
+              path: '/internal/owner/public',
               method: 'POST',
               headers: {
                 ...(init?.headers as Record<string, string>),
-                host: 'verifier.baci-internal.invalid',
+                host: 'mcp.usebaci.com',
               },
             },
             (res) => {
@@ -75,6 +84,7 @@ it('forwards a signed public-verification request over loopback and reauthentica
     expect(verify).toHaveBeenCalledWith(owner, approvalId);
     expect(owner.auth.getUser).toHaveBeenCalledTimes(2);
   } finally {
+    await ownerListener.close();
     await listener.close();
   }
 }, 15000);

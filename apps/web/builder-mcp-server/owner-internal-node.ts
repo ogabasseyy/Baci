@@ -2,20 +2,29 @@ import { createServer } from 'node:http';
 import {
   createOwnerAttestationHttpHandler,
   createOwnerPreviewHttpHandler,
+  createOwnerPublicVerificationHttpHandler,
 } from './owner-preview-http';
 
 /** Candidate owner transport. Binding is loopback-only; private ingress must be qualified. */
 export function createOwnerInternalNodeServer(options: {
   ownerPreview?: (request: Request) => Promise<Response>;
   ownerAttestation?: (request: Request) => Promise<Response>;
+  ownerPublicVerification?: (request: Request) => Promise<Response>;
 }) {
-  if (!options.ownerPreview && !options.ownerAttestation)
+  if (
+    !options.ownerPreview &&
+    !options.ownerAttestation &&
+    !options.ownerPublicVerification
+  )
     throw Error('OWNER_TRANSPORT_NOT_CONFIGURED');
   const preview = options.ownerPreview
     ? createOwnerPreviewHttpHandler(options.ownerPreview)
     : undefined;
   const attestation = options.ownerAttestation
     ? createOwnerAttestationHttpHandler(options.ownerAttestation)
+    : undefined;
+  const publicVerification = options.ownerPublicVerification
+    ? createOwnerPublicVerificationHttpHandler(options.ownerPublicVerification)
     : undefined;
   let closing = false;
   let shutdown: Promise<void> | undefined;
@@ -31,7 +40,9 @@ export function createOwnerInternalNodeServer(options: {
         ? preview
         : req.url === '/internal/owner/attest'
           ? attestation
-          : undefined;
+          : req.url === '/internal/owner/public'
+            ? publicVerification
+            : undefined;
     if (!selected) {
       req.resume();
       res.writeHead(404, { 'cache-control': 'no-store' }).end();

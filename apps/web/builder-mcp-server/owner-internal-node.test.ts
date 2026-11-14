@@ -53,6 +53,54 @@ it('separates owner routes when explicitly composed on distinct local listeners'
   }
 });
 
+it('routes signed public verification only through the owner listener', async () => {
+  const verify = vi.fn(
+    async (_request: Request) => new Response(null, { status: 204 })
+  );
+  const owner = createOwnerInternalNodeServer({
+    ownerPublicVerification: verify,
+  });
+  const listener = createBuilderMcpNodeServer();
+  listener.server.listen(0, '127.0.0.1');
+  await once(listener.server, 'listening');
+  const publicAddress = listener.server.address();
+  if (!publicAddress || typeof publicAddress === 'string')
+    throw Error('fixture');
+  const port = await owner.listen(0);
+  const send = (target: number) =>
+    new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: target,
+          path: '/internal/owner/public',
+          method: 'POST',
+          headers: {
+            host: 'mcp.usebaci.com',
+            'content-type': 'application/json',
+            'x-baci-verifier-signature': 'a'.repeat(64),
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+  try {
+    expect(await send(publicAddress.port)).toBe(404);
+    expect(await send(port)).toBe(204);
+    expect(verify).toHaveBeenCalledOnce();
+    expect(verify.mock.calls[0]?.[0].url).toBe(
+      'https://verifier.baci-internal.invalid/v1/public'
+    );
+  } finally {
+    await Promise.all([listener.close(), owner.close()]);
+  }
+});
+
 it('refuses to start an owner listener without any installed handler', () => {
   expect(() => createOwnerInternalNodeServer({})).toThrow(
     'OWNER_TRANSPORT_NOT_CONFIGURED'

@@ -90,7 +90,7 @@ for (const viaBridge of [false, true])
       const address = server.address();
       assert(address && typeof address === 'object');
       const issuer = viaBridge
-        ? 'https://mcp.usebaci.com'
+        ? 'https://builder-auth.usebaci.com'
         : `https://127.0.0.1:${address.port}`;
       const key = await generateKeyPair('ES256', { extractable: true });
       const provider = await createBuilderProvider(

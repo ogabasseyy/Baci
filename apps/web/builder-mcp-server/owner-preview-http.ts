@@ -28,6 +28,18 @@ export function createOwnerAttestationHttpHandler(
   });
 }
 
+/** Public verification remains an authenticated owner-only verifier operation. */
+export function createOwnerPublicVerificationHttpHandler(
+  bridge: (request: Request) => Promise<Response>
+) {
+  return createOwnerHttpHandler(bridge, {
+    path: '/internal/owner/public',
+    target: 'https://verifier.baci-internal.invalid/v1/public',
+    signature: 'x-baci-verifier-signature',
+    timeoutMs: 600000,
+  });
+}
+
 function createOwnerHttpHandler(
   bridge: (request: Request) => Promise<Response>,
   binding: {

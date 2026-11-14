@@ -70,6 +70,7 @@ it('installs a fixed verifier relay only when a distinct trusted port is configu
     expect(f.owner).toHaveBeenLastCalledWith({
       ownerPreview: undefined,
       ownerAttestation: expect.any(Function),
+      ownerPublicVerification: expect.any(Function),
     });
   } finally {
     await stack.close();

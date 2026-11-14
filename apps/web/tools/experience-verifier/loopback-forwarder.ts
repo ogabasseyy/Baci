@@ -2,7 +2,10 @@ import { request as httpRequest } from 'node:http';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 
 /** Trusted MCP process only; the configured target cannot be selected by a request. */
-export function createVerifierLoopbackForwarder(port: number) {
+export function createVerifierLoopbackForwarder(
+  port: number,
+  operation: 'attest' | 'public' = 'attest'
+) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw Error('INVALID_VERIFIER_PORT');
   return async (input: Request): Promise<Response> => {
@@ -10,7 +13,7 @@ export function createVerifierLoopbackForwarder(port: number) {
       const url = new URL(input.url);
       if (
         input.method !== 'POST' ||
-        url.href !== 'https://verifier.baci-internal.invalid/v1/attest'
+        url.href !== `https://verifier.baci-internal.invalid/v1/${operation}`
       )
         return new Response(null, { status: 404 });
       const parsed = await readBoundedJsonBody(input, 16384);
@@ -21,7 +24,7 @@ export function createVerifierLoopbackForwarder(port: number) {
           {
             host: '127.0.0.1',
             port,
-            path: '/v1/attest',
+            path: `/v1/${operation}`,
             method: 'POST',
             signal: input.signal,
             headers: {

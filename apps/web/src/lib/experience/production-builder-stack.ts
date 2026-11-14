@@ -130,6 +130,9 @@ export async function startProductionBuilderStack(settings: {
         ownerAttestation: settings.verifierPort
           ? createVerifierLoopbackForwarder(settings.verifierPort)
           : undefined,
+        ownerPublicVerification: settings.verifierPort
+          ? createVerifierLoopbackForwarder(settings.verifierPort, 'public')
+          : undefined,
       });
       await ownerListener.listen(settings.ownerPort);
     }

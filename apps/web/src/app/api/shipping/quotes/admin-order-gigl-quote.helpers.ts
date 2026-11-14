@@ -15,11 +15,7 @@ export function selectEligibleAdminGiglQuote(quotes: ShippingQuote[]) {
   );
 }
 
-export function calculateAdminWalletFunding(price: number, balance: number) {
-  const availableBalance = Math.max(0, Number.isFinite(balance) ? balance : 0);
-  const shortfall = Math.max(0, price - availableBalance);
-  return { availableBalance, shortfall, canBook: shortfall === 0 };
-}
+export { calculateAdminWalletFunding } from '@/lib/shipping/calculate-admin-wallet-funding';
 
 export function toAdminPublicQuote(quote: ShippingQuote) {
   return toPublicQuoteResponse({

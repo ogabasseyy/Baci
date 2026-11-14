@@ -5,6 +5,7 @@ import {
   isOrderGiglQuoteFresh,
   toCompleteOrderGiglReceiver,
   toOrderGiglAddressDraft,
+  toOrderGiglWalletState,
 } from './order-gigl-shipping-state';
 
 const quote = {
@@ -101,5 +102,28 @@ describe('order GIG shipping state', () => {
       queryKey: ['merchant-wallet'],
     });
     expect(invalidateQueries).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('toOrderGiglWalletState', () => {
+  it('keeps the paidByBaci marker for platform-funded merchants', () => {
+    expect(
+      toOrderGiglWalletState({
+        availableBalance: 0,
+        canBook: true,
+        paidByBaci: true,
+        shortfall: 0,
+      })
+    ).toMatchObject({ canBook: true, paidByBaci: true });
+  });
+
+  it('omits the marker for normal wallet merchants', () => {
+    expect(
+      toOrderGiglWalletState({
+        availableBalance: 5,
+        canBook: false,
+        shortfall: 1,
+      })
+    ).not.toHaveProperty('paidByBaci');
   });
 });

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { resolveAdminGiglQuoteFunding } from '@/lib/shipping/gigl-shipping-funding-mode';
 import { assertQuoteItemsMatchOrder } from '@/lib/shipping/international-quote-items-match';
 import {
   assertQuoteReceiverMatchesOrder,
@@ -11,10 +12,7 @@ import {
   toQuoteComparableOrderItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import type { ShippingQuote } from '@/lib/shipping/types';
-import {
-  calculateAdminWalletFunding,
-  toAdminPublicQuote,
-} from './admin-order-gigl-quote.helpers';
+import { toAdminPublicQuote } from './admin-order-gigl-quote.helpers';
 
 type BoundWalletOrder = {
   selected_quote_id?: string | null;
@@ -113,7 +111,7 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
 
   const { data: latestCharge, error: chargeError } = await supabase
     .from('merchant_shipping_charges')
-    .select('status')
+    .select('status, funding_source')
     .eq('merchant_id', merchantId)
     .eq('shipping_quote_id', quoteId)
     .order('created_at', { ascending: false })
@@ -141,13 +139,6 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
     return null;
   }
 
-  const wallet = await readMerchantShippingWalletBalance(supabase, merchantId);
-  if (!wallet.ok) {
-    return NextResponse.json(
-      { error: 'Unable to load wallet' },
-      { status: 500 }
-    );
-  }
   const shippingQuote: ShippingQuote = {
     id: boundQuote.id,
     provider: 'GIGL',
@@ -166,10 +157,32 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
         : undefined,
     isStationPickup: Boolean(boundQuote.is_station_pickup),
   };
-  const funding = calculateAdminWalletFunding(
+  const funding = await resolveAdminGiglQuoteFunding(
+    supabase,
+    merchantId,
     shippingQuote.price,
-    wallet.availableBalance
+    async () => {
+      const wallet = await readMerchantShippingWalletBalance(
+        supabase,
+        merchantId
+      );
+      return wallet.ok ? wallet.availableBalance : null;
+    },
+    {
+      existingChargeFundingSource:
+        typeof latestCharge?.funding_source === 'string'
+          ? latestCharge.funding_source
+          : null,
+      existingChargeStatus:
+        typeof latestCharge?.status === 'string' ? latestCharge.status : null,
+    }
   );
+  if (!funding.ok) {
+    return NextResponse.json(
+      { error: 'Unable to load wallet' },
+      { status: 500 }
+    );
+  }
   // An active reserved/provider_submitting charge already holds funds for this
   // quote — resume booking without requiring available balance again.
   const canBook = hasActiveCharge || funding.canBook;
@@ -181,6 +194,7 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
     availableBalance: funding.availableBalance,
     shortfall: hasActiveCharge ? 0 : funding.shortfall,
     canBook,
+    ...(funding.paidByBaci ? { paidByBaci: true } : {}),
     ...(boundChargeRecovery ? { boundChargeRecovery: true } : {}),
   });
 }

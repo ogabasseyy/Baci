@@ -22,6 +22,7 @@ const formatPrice = (amount: number) =>
 // The balance only matters when it cannot cover the delivery.
 function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
   if (!wallet) return [];
+  if (wallet.paidByBaci) return [{ text: 'Paid by Baci' }];
   if (wallet.canBook) return [{ text: 'From your wallet' }];
   return [
     { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
@@ -68,6 +69,7 @@ interface Props {
   wallet: {
     availableBalance: number;
     canBook: boolean;
+    paidByBaci?: boolean;
     shortfall: number;
   } | null;
 }
@@ -198,6 +200,7 @@ export function ShipmentFlowGiglPanel({
       {selected &&
       quote &&
       wallet &&
+      !wallet.paidByBaci &&
       !wallet.canBook &&
       !fundingAccount &&
       state !== 'funding_pending' ? (
@@ -207,7 +210,7 @@ export function ShipmentFlowGiglPanel({
           onPress={onFundWallet}
         />
       ) : null}
-      {state === 'funding_pending' && !fundingAccount ? (
+      {state === 'funding_pending' && !fundingAccount && !wallet?.paidByBaci ? (
         <View>
           <Text style={{ color: colors.textSecondary }}>
             Your bank transfer account is being prepared. Check again shortly.
@@ -219,7 +222,9 @@ export function ShipmentFlowGiglPanel({
         </View>
       ) : null}
 
-      {selected && fundingAccount?.status === 'active' ? (
+      {selected &&
+      !wallet?.paidByBaci &&
+      fundingAccount?.status === 'active' ? (
         <View
           style={[
             panelStyles.account,
@@ -258,7 +263,7 @@ export function ShipmentFlowGiglPanel({
         </View>
       ) : null}
 
-      {state === 'polling' ? (
+      {state === 'polling' && !wallet?.paidByBaci ? (
         <Text style={{ color: colors.textSecondary }}>
           Checking your wallet balance…
         </Text>

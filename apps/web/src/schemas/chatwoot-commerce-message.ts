@@ -43,6 +43,19 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
     .strict(),
   z
     .object({
+      event: z.literal('baci-delivery-options-request'),
+      data: z
+        .object({
+          requestId,
+          conversationId,
+          sessionToken,
+          state: z.string().trim().min(2).max(100),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       event: z.literal('baci-product-request'),
       data: z
         .object({ slug: productSlug, requestId, conversationId, sessionToken })

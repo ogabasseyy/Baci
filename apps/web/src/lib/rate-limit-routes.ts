@@ -44,6 +44,13 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Handoff preview is unauthenticated and redemption carries a
   // single-use capability: bound below the storefront ceiling.
   '/api/storefront/cart/handoff': { maxRequests: 20, windowMs: 60_000 },
+  // Each delivery estimate verifies the shared cart and reads merchant rates;
+  // this optional shopper action gets a tighter public IP budget while
+  // retaining the standard bounded memory fallback during Redis outages.
+  '/api/storefront/chatwoot/context/delivery-options': {
+    maxRequests: 30,
+    windowMs: 60_000,
+  },
   // The MCP legacy bridge is a server-to-server capability behind one
   // egress identity. Middleware keys this bucket by a hash of the
   // well-formed legacy token (see checkRateLimit), never by the shared

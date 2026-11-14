@@ -5,11 +5,14 @@ export const GOAL_CANCEL_STEP_COPY = {
   title: (goalTitle: string) => `Cancel ${goalTitle}?`,
   emptyBody: 'You haven’t saved anything yet, so no money moves.',
   savedBody: 'Your savings go back to your main wallet.',
+  // Said even with ₦0 interest so far: interest the server hasn't reported
+  // yet is forfeited too, and the goal carries no interest flag to key on.
+  interestNote: 'Any interest earned isn’t refunded.',
   saved: 'Saved',
   // The goal's balance as it stands; with the split unknown, never labelled
   // as an amount coming back (some of it may be interest).
   inThisGoal: 'In this goal',
-  // "So far": interest PiggyVest hasn't reported yet is forfeited too.
+  // "So far": interest not reported yet is forfeited too.
   interestForfeited: 'Interest so far (not refunded)',
   forfeitNote: 'Cancelling early means you lose the interest on this goal.',
   unknownSplitNote:

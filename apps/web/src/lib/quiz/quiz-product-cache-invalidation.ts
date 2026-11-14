@@ -119,7 +119,7 @@ export async function invalidateQuizProductCaches(
   client: QuizClient,
   watermarks: QuizSweepWatermarks
 ): Promise<boolean> {
-  if (typeof (client as { from?: unknown }).from !== 'function') return true;
+  if (typeof (client as { from?: unknown }).from !== 'function') return false;
 
   const productIdsByMerchant = new Map<string, Set<string>>();
   const eventMerchantIds = new Map<string, string>();

@@ -432,5 +432,11 @@ describe('invalidateQuizProductCaches', () => {
       makeWatermarks()
     );
     expect(completeResult).toBe(true);
+
+    const invalidClientResult = await invalidateQuizProductCaches(
+      {} as never,
+      makeWatermarks()
+    );
+    expect(invalidClientResult).toBe(false);
   });
 });

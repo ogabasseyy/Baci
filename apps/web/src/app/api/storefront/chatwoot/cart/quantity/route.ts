@@ -23,7 +23,7 @@ import {
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { chatwootCartQuantityMutationRequestSchema } from '@/schemas/chatwoot-commerce-context';
+import { chatwootCartQuantityMutationRequestSchema } from '@/schemas/chatwoot-cart-quantity-mutation-request';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
 

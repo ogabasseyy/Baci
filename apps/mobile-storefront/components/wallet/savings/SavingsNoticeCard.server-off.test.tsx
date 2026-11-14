@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SavingsNoticeCard } from './SavingsNoticeCard';
 import { notifySavings, type SavingsNoticeTone } from './savings-notice';
+import { useSavingsNoticeStore } from './savings-notice-store';
 
 function iconNames() {
   return screen.UNSAFE_root.findAll(
@@ -34,6 +35,24 @@ describe('server keeps PiggyVest off: SavingsNoticeCard', () => {
     expect(screen.getAllByTestId('savings-notice')).toHaveLength(1);
   });
 
+  it('leaves a wallet-only notice to the wallet, never inside a goal sheet', () => {
+    act(() => notifySavings('That savings plan has closed', undefined, 'info'));
+    act(() => {
+      const { notice } = useSavingsNoticeStore.getState();
+      useSavingsNoticeStore.setState({
+        goalId: null,
+        notice: notice ? { ...notice, walletOnly: true } : notice,
+      });
+    });
+    const sheet = render(
+      <SavingsNoticeCard colors={Colors.light} goalId="goal-b" inSheet />
+    );
+    expect(sheet.queryByTestId('savings-notice')).toBeNull();
+    sheet.unmount();
+    render(<SavingsNoticeCard colors={Colors.light} />);
+    expect(screen.getByText('That savings plan has closed')).toBeOnTheScreen();
+  });
+
   it('omits the message line when there is no message', () => {
     render(<SavingsNoticeCard colors={Colors.light} />);
     act(() => notifySavings('Checking contributions'));
@@ -51,7 +70,7 @@ describe('server keeps PiggyVest off: SavingsNoticeCard', () => {
 
   it.each<[SavingsNoticeTone, string, string]>([
     ['success', 'checkmark-circle', Colors.dark.success],
-    ['info', 'information-circle', Colors.dark.primary],
+    ['info', 'information-circle', Colors.dark.icon],
     ['warning', 'alert-circle', Colors.dark.warning],
   ])('renders the %s tone icon and colour in dark mode', (tone, icon, colour) => {
     render(<SavingsNoticeCard colors={Colors.dark} />);

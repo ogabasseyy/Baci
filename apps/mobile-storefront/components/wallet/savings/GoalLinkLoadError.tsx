@@ -4,6 +4,8 @@ import Colors from '@/constants/Colors';
 
 interface GoalLinkLoadErrorProps {
   onRetry: () => void;
+  /** A read that is only slow (no error): offer to keep waiting instead. */
+  slow?: boolean;
 }
 
 /**
@@ -11,15 +13,20 @@ interface GoalLinkLoadErrorProps {
  * read. The link is kept: Try again re-reads the wallet and the route then
  * opens the goal (or the plain wallet if the goal is no longer theirs).
  */
-export default function GoalLinkLoadError({ onRetry }: GoalLinkLoadErrorProps) {
+export default function GoalLinkLoadError({
+  onRetry,
+  slow = false,
+}: GoalLinkLoadErrorProps) {
   const colors = Colors[useColorScheme() ?? 'light'];
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Text style={[styles.title, { color: colors.text }]}>
-        Couldn&apos;t open your savings
+        {slow ? 'Still opening your savings' : "Couldn't open your savings"}
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        Check your connection and try again.
+        {slow
+          ? 'This is taking longer than usual.'
+          : 'Check your connection and try again.'}
       </Text>
       <Pressable
         onPress={onRetry}
@@ -27,7 +34,7 @@ export default function GoalLinkLoadError({ onRetry }: GoalLinkLoadErrorProps) {
         style={[styles.button, { backgroundColor: colors.primary }]}
       >
         <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
-          Try again
+          {slow ? 'Keep waiting' : 'Try again'}
         </Text>
       </Pressable>
     </View>

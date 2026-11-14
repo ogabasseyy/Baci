@@ -155,6 +155,22 @@ it('never claims the goal is reached on a late confirmation', async () => {
     expect.anything()
   );
 });
+it('treats a refetch that resolves with isError as a failed refresh', async () => {
+  mockCheck.mockResolvedValue({
+    status: 'confirmed',
+    operationId: 'operation',
+  });
+  await checkPendingPrimarySavings({
+    ...input(),
+    goal: pendingGoal,
+    refetchWallet: jest.fn(async () => ({ isError: true })),
+  });
+  expect(notifySavings).toHaveBeenCalledWith(
+    'Savings updated',
+    expect.stringMatching(/Pull to refresh your latest balance\.$/),
+    'success'
+  );
+});
 it('adds the refresh hint to the status-check cheer when the wallet refresh fails', async () => {
   mockCheck.mockResolvedValue({
     status: 'confirmed',

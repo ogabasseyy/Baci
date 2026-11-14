@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
-import { clearSavingsNotice } from './savings-notice';
+import { walletRefreshWorked } from '../wallet-refresh-worked';
+import { clearSavingsNotice, savingsNotifier } from './savings-notice';
 import { useGoalLifecycle } from './use-goal-lifecycle';
 
-const IN_FLIGHT = new Set(['submitting', 'polling']);
+// Steps whose reply can still settle money (an issue may answer "already
+// pending" or, for Complete, "confirmed"): a closed sheet keeps tracking them.
+const IN_FLIGHT = new Set(['issuing', 'submitting', 'polling']);
 
 /**
  * Cancelling or completing a goal as a step inside the Add to savings sheet.
@@ -47,6 +50,7 @@ export function useInSheetGoalCancel(
   const flow = useGoalLifecycle({
     kind,
     goalId: active?.id ?? goal?.id ?? '',
+    goalTitle: active?.title ?? goal?.title,
     resetKey: attempt,
   });
   // Refresh once an action actually settles (or may have), whether or not
@@ -74,12 +78,42 @@ export function useInSheetGoalCancel(
   useEffect(() => {
     if (!outcomeKey || refreshed.current === outcomeKey) return;
     refreshed.current = outcomeKey;
-    void refreshRef.current?.();
-    if (closedInFlight.current === attempt) {
+    const refresh = refreshRef.current;
+    if (refresh) {
+      // A refetch that resolves with an error counts as failed; one retry,
+      // then the customer is told to pull down for the latest balance.
+      const notify = savingsNotifier();
+      const once = () => Promise.resolve(refresh());
+      void (async () => {
+        for (let tries = 0; tries < 2; tries += 1) {
+          if (await walletRefreshWorked(once)) return;
+        }
+        notify(
+          'Pull to refresh',
+          'Your savings changed. Pull down on the wallet to see the latest.',
+          'info'
+        );
+      })();
+    }
+  }, [outcomeKey]);
+  // Every final outcome, refreshed or not (a definite refusal included),
+  // releases an action whose sheet was closed while it was in flight.
+  const finished =
+    settled || flow.step === 'failed' || flow.step === 'pin_cancelled';
+  useEffect(() => {
+    if (closedInFlight.current !== attempt) return;
+    if (flow.step === 'pin') {
+      // An issue closed mid-flight that now needs the PIN: nothing was sent,
+      // so it is abandoned rather than opening a hidden PIN prompt.
       closedInFlight.current = null;
       setHeld(null);
+      setAttempt((value) => value + 1);
+      return;
     }
-  }, [outcomeKey, attempt]);
+    if (!finished) return;
+    closedInFlight.current = null;
+    setHeld(null);
+  }, [finished, attempt, flow.step]);
 
   return {
     goal: active,
@@ -105,7 +139,7 @@ export function useInSheetGoalCancel(
         return;
       }
       setHeld(null);
-      // Anything not yet sent (e.g. still issuing) is abandoned: a new
+      // Anything not yet sent (a review, a PIN step) is abandoned: a new
       // attempt invalidates it, so a late reply never opens a hidden PIN step.
       setAttempt((value) => value + 1);
     },

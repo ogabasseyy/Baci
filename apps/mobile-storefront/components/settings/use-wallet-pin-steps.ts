@@ -3,7 +3,7 @@ import type {
   useWalletPinSettings,
   WalletPinMode,
 } from './use-wallet-pin-settings';
-import { MISMATCH_ERROR, SAME_PIN_ERROR } from './wallet-pin-errors';
+import { WALLET_PIN_ERRORS } from './wallet-pin-errors';
 
 export type WalletPinStage = 'current' | 'new' | 'confirm';
 
@@ -67,14 +67,14 @@ export function useWalletPinSteps(pin: PinSettings) {
     if (stage === 'new') {
       if (pin.mode === 'change' && pin.newPin === pin.currentPin) {
         pin.setNewPin('');
-        return pin.showError(SAME_PIN_ERROR);
+        return pin.showError(WALLET_PIN_ERRORS.samePin);
       }
       return go('confirm');
     }
     if (pin.confirmPin !== pin.newPin) {
       pin.setNewPin('');
       pin.setConfirmPin('');
-      pin.showError(MISMATCH_ERROR);
+      pin.showError(WALLET_PIN_ERRORS.mismatch);
       return go('new');
     }
     pin.submit();

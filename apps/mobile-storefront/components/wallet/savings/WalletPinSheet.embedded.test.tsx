@@ -1,7 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
-import { fetchWalletPinStatus } from '@/lib/wallet-pin-api';
+import { fetchWalletPinStatus, verifyFundPin } from '@/lib/wallet-pin-api';
 import { SavingsSheetContext } from '../SavingsSheetContext';
+import { SavingsSheetLockContext } from '../SavingsSheetLockContext';
 import { SavingsSheetPinHeightContext } from '../SavingsSheetPinHeightContext';
 import { WalletPinSheet } from './WalletPinSheet';
 
@@ -73,5 +79,22 @@ describe('PIN step inside the savings sheet', () => {
     renderInSavingsSheet(null);
     expect(screen.queryByText(/PIN/)).toBeNull();
     expect(mockSnapToPosition).not.toHaveBeenCalled();
+  });
+
+  it('locks the savings sheet while the PIN check is out', async () => {
+    jest
+      .mocked(verifyFundPin)
+      .mockReturnValue(new Promise(() => undefined) as never);
+    const setLocked = jest.fn();
+    render(
+      <SavingsSheetLockContext.Provider value={setLocked}>
+        {inSheet(request)}
+      </SavingsSheetLockContext.Provider>
+    );
+    await screen.findByText('Enter your wallet PIN');
+    for (const digit of '4821')
+      fireEvent.press(screen.getByRole('button', { name: digit }));
+    fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(setLocked).toHaveBeenLastCalledWith(true));
   });
 });

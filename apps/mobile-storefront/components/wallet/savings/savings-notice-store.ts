@@ -8,6 +8,8 @@ export type SavingsNotice = {
   tone: SavingsNoticeTone;
   /** The signed-in customer and store it was shown for. */
   scope?: string;
+  /** About the wallet as a whole: shown on the wallet, never inside a goal's sheet. */
+  walletOnly?: boolean;
 };
 
 /**

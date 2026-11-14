@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
@@ -106,7 +106,7 @@ describe('WalletPinSettingsScreen', () => {
     ['set', {}, 'PIN set'],
     ['change', { hasPin: true }, 'PIN changed'],
     ['reset', { hasPin: true, resetRequired: true }, 'PIN reset'],
-  ] as const)('%s success confirms, then Done goes back and refreshes in the background', async (mode, over, title) => {
+  ] as const)('%s success confirms and refreshes, then Done goes back', async (mode, over, title) => {
     ready(over);
     set.mockResolvedValue(undefined);
     change.mockResolvedValue(undefined);
@@ -114,12 +114,14 @@ describe('WalletPinSettingsScreen', () => {
     render(<WalletPinSettingsScreen />);
     await saveFlow(mode);
     expect(screen.getByRole('header', { name: title })).toBeTruthy();
-    expect(mockRefresh).not.toHaveBeenCalled();
+    // Refreshed as soon as it saves, so any way out (Back, a swipe) leaves
+    // Settings with the new status; Done refreshes again on the way out.
+    await waitFor(() => expect(mockRefresh).toHaveBeenCalledTimes(1));
     expect(router.back).not.toHaveBeenCalled();
     press('Done');
     expect(router.back).toHaveBeenCalledTimes(1);
     expect(router.replace).not.toHaveBeenCalled();
-    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(mockRefresh).toHaveBeenCalledTimes(2);
   });
 
   it('change sends the current and new PIN together', async () => {

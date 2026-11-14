@@ -127,6 +127,4 @@ export const SHELL_EXEMPT_ROUTES = new Set([
   'savings/funding.tsx',
   'search.tsx',
   'track-order/index.tsx',
-  // Pure <Redirect> to the wallet's savings sheet (no rendered UI).
-  'wallet/savings/goal-actions.tsx',
 ]);

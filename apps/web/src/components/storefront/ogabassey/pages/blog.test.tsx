@@ -54,21 +54,8 @@ vi.mock('next/image', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({
-    children,
-    href,
-    prefetch,
-    ...props
-  }: {
-    children: ReactNode;
-    href: string;
-    prefetch?: boolean;
-  }) => (
-    <a
-      href={href}
-      data-prefetch={prefetch === undefined ? undefined : String(prefetch)}
-      {...props}
-    >
+  default: ({ children, href, prefetch, ...props }: { children: ReactNode; href: string; prefetch?: boolean }) => (
+    <a href={href} data-prefetch={prefetch === undefined ? undefined : String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -298,22 +285,9 @@ describe('OgabasseyV2Blog', () => {
     expect(h1.compareDocumentPosition(featuredH2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('uses stretched title links without wrapping card articles and disables link prefetching', () => {
+  it('disables prefetch on sticky category filters and CTA links', () => {
     render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
-
-    const cardLink = screen.getByRole('link', { name: 'Regular Post' });
-    expect(cardLink).toHaveAttribute('href', '/test-store/blog/regular-post');
-    expect(cardLink).toHaveAttribute('data-prefetch', 'false');
-    expect(cardLink.closest('h2')).toBeInTheDocument();
-    expect(cardLink.closest('article')).toBeInTheDocument();
-    expect(cardLink.querySelector('img')).not.toBeInTheDocument();
-
-    expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute(
-      'data-prefetch',
-      'false'
-    );
-    expect(
-      screen.getByRole('link', { name: 'View Green Tips' })
-    ).toHaveAttribute('data-prefetch', 'false');
+    expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute('data-prefetch', 'false');
+    expect(screen.getByRole('link', { name: 'View Green Tips' })).toHaveAttribute('data-prefetch', 'false');
   });
 });

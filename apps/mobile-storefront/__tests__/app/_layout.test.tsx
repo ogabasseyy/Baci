@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest } from '@jest/globals';
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
+import { createRootLayoutAuthState } from '@/test-support/root-layout-auth-state';
 import { registerRootLayoutIntroTests } from '@/test-support/root-layout-intro-test-cases';
 import {
   mockActivateDueSavingsReminderNotification,
@@ -41,13 +36,10 @@ async function finishNativeSplash() {
   await waitFor(() => expect(mockHideSplash).toHaveBeenCalled());
   await act(async () => mockResolveSplashHide());
 }
-const mockAuthState = {
-  cleanup: mockCleanup,
-  initialize: mockInitializeAuth,
-  isInitialized: true,
-  merchantId: null as string | null,
-  user: null as { id: string } | null,
-};
+const mockAuthState = createRootLayoutAuthState(
+  mockCleanup,
+  mockInitializeAuth
+);
 
 jest.mock('../../global.css', () => ({}));
 jest.mock('@/lib/startup-timing', () => ({
@@ -261,6 +253,7 @@ describe('RootLayout storage boot gate', () => {
     useAppTrackingTransparency: mockUseAppTrackingTransparency,
     usePushNotifications: mockUsePushNotifications,
     verifyBenchmarkTelemetry: mockVerifyBenchmarkTelemetry,
+    markStartupTiming: mockMarkStartupTiming,
     rootLayoutNavMount: mockRootLayoutNavMount,
     rootLayoutNavUnmount: mockRootLayoutNavUnmount,
     setAutoLayout: (enabled) => {
@@ -301,19 +294,5 @@ describe('RootLayout storage boot gate', () => {
     initializeStorage: mockInitializeStorage,
     activateDueSavingsReminderNotification:
       mockActivateDueSavingsReminderNotification,
-  });
-
-  it('reports layout when the startup recovery screen becomes visible', async () => {
-    mockInitializeStorage.mockReturnValue(new Promise(() => undefined));
-
-    render(<RootLayout />);
-    act(() => jest.advanceTimersByTime(8000));
-    await waitFor(() =>
-      expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen()
-    );
-
-    fireEvent(screen.getByTestId('startup-recovery-screen'), 'layout');
-
-    expect(mockMarkStartupTiming).toHaveBeenCalledWith('root_first_layout');
   });
 });

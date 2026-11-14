@@ -19,6 +19,7 @@ interface SplashRecoveryTestContext {
   useAppTrackingTransparency: jest.Mock;
   usePushNotifications: jest.Mock;
   verifyBenchmarkTelemetry: jest.Mock;
+  markStartupTiming: jest.Mock;
   rootLayoutNavMount: jest.Mock;
   rootLayoutNavUnmount: jest.Mock;
   setAutoLayout: (autoLayout: boolean) => void;
@@ -35,6 +36,7 @@ export function registerRootLayoutSplashRecoveryTests({
   useAppTrackingTransparency,
   usePushNotifications,
   verifyBenchmarkTelemetry,
+  markStartupTiming,
   rootLayoutNavMount,
   rootLayoutNavUnmount,
   setAutoLayout,
@@ -229,6 +231,20 @@ export function registerRootLayoutSplashRecoveryTests({
     await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
     expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen();
+  });
+
+  it('reports layout when the startup recovery screen becomes visible', async () => {
+    initializeStorage.mockReturnValue(new Promise(() => undefined));
+
+    render(<RootLayout />);
+    act(() => jest.advanceTimersByTime(8000));
+    await waitFor(() =>
+      expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen()
+    );
+
+    fireEvent(screen.getByTestId('startup-recovery-screen'), 'layout');
+
+    expect(markStartupTiming).toHaveBeenCalledWith('root_first_layout');
   });
 
   it('keeps the navigator mounted when the startup splash finishes', async () => {

@@ -31,6 +31,16 @@ test('leaves output unchanged when no private values are supplied', () => {
   assert.equal(redactPrivateValues('build failed', []), 'build failed');
 });
 
+test('redacts a wrapped longer secret before overlapping shorter values', () => {
+  const host = 'https://example.test';
+  const tokenized = `${host}/?token=private-token-1234`;
+  const wrappedTokenized = `${host}/\n?token=private-token-1234`;
+  const redacted = redactPrivateValues(wrappedTokenized, [host, tokenized]);
+
+  assert.equal(redacted, '[REDACTED]');
+  assert.doesNotMatch(redacted, /example\.test|private-token-1234/);
+});
+
 test('redacts padded and unpadded base64url secrets containing URL-safe symbols', () => {
   const secret = 'ÿÿ';
   const unpadded = Buffer.from(secret).toString('base64url');

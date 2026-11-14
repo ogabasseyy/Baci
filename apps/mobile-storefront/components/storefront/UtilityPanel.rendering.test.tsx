@@ -17,32 +17,50 @@ jest.mock('react-native-reanimated', () => {
     cancelAnimation: jest.fn(),
     useAnimatedStyle: (updater: () => object) => updater(),
     useSharedValue: (initialValue: number) => {
-      let value = initialValue;
-      const listeners: Array<(newValue: number, oldValue: number) => void> = [];
+      const valueRef = ReactInline.useRef(initialValue);
+      const listenersRef = ReactInline.useRef<
+        Array<(newValue: number, oldValue: number) => void>
+      >([]);
+      const listeners = listenersRef.current;
+      const sharedValueRef = ReactInline.useRef<{
+        readonly value: number;
+        get: () => number;
+        set: (newValue: number) => void;
+        addListener: (
+          listener: (newValue: number, oldValue: number) => void
+        ) => () => void;
+      } | null>(null);
       const assign = (newValue: number) => {
-        const oldValue = value;
-        value = newValue;
+        const oldValue = valueRef.current;
+        valueRef.current = newValue;
         for (const listener of listeners) {
           listener(newValue, oldValue);
         }
       };
-      return {
-        get value() {
-          return value;
-        },
-        set value(newValue) {
-          assign(newValue);
-        },
-        get() {
-          return value;
-        },
-        set(newValue: number) {
-          assign(newValue);
-        },
-        addListener(listener: (newValue: number, oldValue: number) => void) {
-          listeners.push(listener);
-        },
-      };
+      if (!sharedValueRef.current) {
+        sharedValueRef.current = {
+          get value() {
+            return valueRef.current;
+          },
+          set value(newValue: number) {
+            assign(newValue);
+          },
+          get() {
+            return valueRef.current;
+          },
+          set(newValue: number) {
+            assign(newValue);
+          },
+          addListener(listener) {
+            listeners.push(listener);
+            return () => {
+              const index = listeners.indexOf(listener);
+              if (index >= 0) listeners.splice(index, 1);
+            };
+          },
+        };
+      }
+      return sharedValueRef.current;
     },
     useDerivedValue: (fn: () => number) => ({
       get value() {
@@ -55,11 +73,13 @@ jest.mock('react-native-reanimated', () => {
       deps: unknown[]
     ) => {
       const lastValue = ReactInline.useRef(prepare());
+      const shared = deps[0] as {
+        addListener?: (
+          cb: (newValue: number, oldValue: number) => void
+        ) => (() => void) | undefined;
+      };
 
       ReactInline.useEffect(() => {
-        const shared = deps[0] as {
-          addListener?: (cb: (v: number) => void) => void;
-        };
         if (shared && typeof shared.addListener === 'function') {
           const listener = (newVal: number) => {
             const roundedVal = Math.round(newVal);
@@ -69,9 +89,9 @@ jest.mock('react-native-reanimated', () => {
               react(roundedVal, oldVal);
             }
           };
-          shared.addListener(listener);
+          return shared.addListener(listener);
         }
-      }, [deps, react]);
+      }, [shared, react]);
     },
     runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
     withTiming: (
@@ -186,10 +206,7 @@ describe('UtilityPanel', () => {
     mockUseColorScheme.mockReturnValue('dark');
 
     rerender(
-      <UtilityPanel
-        selectedCategoryId={null}
-        onCategorySelect={onCategorySelect}
-      />
+      <UtilityPanel selectedCategoryId={null} onCategorySelect={jest.fn()} />
     );
 
     expect(
@@ -232,11 +249,13 @@ describe('UtilityPanel', () => {
 
     expect(screen.getByText('Airtime!')).toBeTruthy();
 
-    act(() => {
-      jest.advanceTimersByTime(2800);
-    });
+    act(() => jest.advanceTimersByTime(2800));
 
     expect(screen.getByText('Data!')).toBeTruthy();
+
+    act(() => jest.advanceTimersByTime(2800));
+
+    expect(screen.getByText('Tv!')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Power'));
     expect(onCategorySelect).toHaveBeenCalledWith('u-power');

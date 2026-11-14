@@ -27,7 +27,6 @@ function getPrivateValueVariants(value) {
 }
 
 export function redactPrivateValues(output, privateValues) {
-  let redacted = output;
   const variants = new Set();
   const wrappedPatterns = [];
 
@@ -46,14 +45,31 @@ export function redactPrivateValues(output, privateValues) {
     }
   }
 
-  for (const variant of [...variants].sort((left, right) => right.length - left.length)) {
-    redacted = redacted.split(variant).join(REDACTED);
+  const matches = [];
+  for (const variant of variants) {
+    for (const match of output.matchAll(new RegExp(escapeRegExp(variant), 'g'))) {
+      matches.push({ start: match.index, end: match.index + match[0].length });
+    }
   }
   for (const pattern of wrappedPatterns) {
-    redacted = redacted.replace(pattern, REDACTED);
+    for (const match of output.matchAll(pattern)) {
+      matches.push({ start: match.index, end: match.index + match[0].length });
+    }
   }
 
-  return redacted;
+  matches.sort((left, right) => left.start - right.start || right.end - left.end);
+  let redacted = '';
+  let cursor = 0;
+  for (const match of matches) {
+    if (match.start < cursor) {
+      // Redact the union when distinct secrets overlap so neither suffix leaks.
+      cursor = Math.max(cursor, match.end);
+      continue;
+    }
+    redacted += `${output.slice(cursor, match.start)}${REDACTED}`;
+    cursor = match.end;
+  }
+  return `${redacted}${output.slice(cursor)}`;
 }
 
 export function redactPrivateValuesAndLimit(output, privateValues, maxBytes) {

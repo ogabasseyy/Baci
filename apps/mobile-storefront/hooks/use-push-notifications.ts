@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
@@ -80,7 +80,9 @@ export function usePushNotifications({
   const coldStartResponseRequested = useRef(false);
   const liveResponseReceived = useRef(false);
   const navigationReadyRef = useRef(navigationReady);
-  navigationReadyRef.current = navigationReady;
+  useLayoutEffect(() => {
+    navigationReadyRef.current = navigationReady;
+  }, [navigationReady]);
   const registration = useSavingsPushRegistration();
   const activeMerchantId = pickMerchantId(merchantId, STOREFRONT_MERCHANT_ID);
 

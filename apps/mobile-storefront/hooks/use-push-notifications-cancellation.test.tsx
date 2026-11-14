@@ -72,10 +72,22 @@ describe('usePushNotifications cancellation', () => {
           date: 1,
           request: {
             identifier: 'stale-response',
-            content: { data: { notification_type: 'promotion' } },
+            content: {
+              title: null,
+              subtitle: null,
+              body: null,
+              categoryIdentifier: null,
+              sound: null,
+              badge: 0,
+              launchImageName: null,
+              attachments: [],
+              threadIdentifier: null,
+              data: { notification_type: 'promotion' },
+            },
+            trigger: { type: 'unknown' },
           },
         },
-      } as unknown as NotificationResponse);
+      } satisfies NotificationResponse);
     });
 
     expect(mockHandleResponse).not.toHaveBeenCalled();

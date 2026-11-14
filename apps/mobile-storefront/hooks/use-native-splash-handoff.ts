@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import SplashMotion from 'react-native-splash-motion';
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { markStartupTiming } from '@/lib/startup-timing';
-import { SPLASH_TIMEOUT_MS } from './splash-constants';
+import {
+  NATIVE_SPLASH_FADE_MS,
+  NATIVE_SPLASH_VISIBILITY_POLL_MS,
+  NATIVE_SPLASH_WATCHDOG_MS,
+  SPLASH_TIMEOUT_MS,
+} from './splash-constants';
 import { useNativeSplashIntro } from './use-native-splash-intro';
 
 interface NativeSplashHandoffOptions {
@@ -33,10 +38,15 @@ export function useNativeSplashHandoff({
   const firstLayoutRecorded = useRef(false);
   const hidePromiseRef = useRef<Promise<boolean> | null>(null);
   const visibilityUnknownFallbackElapsed = useRef(false);
-  const nativeSplashWatchdogDeadline = useRef(
-    initialVisible ? Date.now() + 15_000 : 0
-  );
+  const nativeSplashWatchdogDeadline = useRef(0);
   const intro = useNativeSplashIntro(initialVisible);
+
+  useEffect(() => {
+    if (initialVisible && nativeSplashWatchdogDeadline.current === 0) {
+      nativeSplashWatchdogDeadline.current =
+        Date.now() + NATIVE_SPLASH_WATCHDOG_MS;
+    }
+  }, [initialVisible]);
 
   useEffect(() => {
     if (!showSplash) return;
@@ -62,7 +72,7 @@ export function useNativeSplashHandoff({
           SplashMotion.hide({
             waitForLoop: false,
             minDuration: 0,
-            fade: 220,
+            fade: NATIVE_SPLASH_FADE_MS,
           })
         )
         .catch(() => {
@@ -176,7 +186,7 @@ export function useNativeSplashHandoff({
     };
 
     syncVisibility();
-    interval = setInterval(syncVisibility, 1000);
+    interval = setInterval(syncVisibility, NATIVE_SPLASH_VISIBILITY_POLL_MS);
     return () => {
       active = false;
       clearInterval(interval);

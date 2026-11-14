@@ -201,7 +201,9 @@ export async function updateBlogPost(
         updateData.content as string
       );
     }
-    if (
+    if (existingPost.status === 'published' && targetStatus === 'published') {
+      updateData.published_at = existingPost.published_at;
+    } else if (
       updateData.status === 'published' &&
       existingPost.status !== 'published' &&
       !updateData.published_at

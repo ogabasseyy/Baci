@@ -32,8 +32,10 @@ describe('bugfix: a key still open after seven days was dropped on restart (Code
   });
 });
 
-describe('bugfix: a price refusal forgot the key of an issued payment (Codex P2)', () => {
-  it('keeps the key so a retry replays the issued payment', async () => {
+describe('bugfix: a price refusal kept replaying the old price (Muse)', () => {
+  // The refused payment was only issued (no PIN asked, nothing moved): its
+  // key is forgotten so starting again reaches today's price.
+  it('settles the key, so the next start mints a new one', async () => {
     await walletPayPurchaseKeys.keyFor('p', () => 'issued');
     const refused = {
       kind: 'outcome',
@@ -49,9 +51,9 @@ describe('bugfix: a price refusal forgot the key of an issued payment (Codex P2)
       'p',
       { onSettled, stillOwner: () => true }
     ).start();
-    expect(onSettled).not.toHaveBeenCalled();
+    expect(onSettled).toHaveBeenCalled();
     await expect(walletPayPurchaseKeys.keyFor('p', () => 'new')).resolves.toBe(
-      'issued'
+      'new'
     );
   });
 });

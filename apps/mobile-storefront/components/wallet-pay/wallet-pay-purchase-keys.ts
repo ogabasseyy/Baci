@@ -226,17 +226,13 @@ export function trackWalletPayPurchase<Result>(
     async start() {
       if (!options.stillOwner()) return switched;
       const answer = await adapter.start();
-      // A price refusal comes after the server issued its payment: keep the
-      // key, so a retry replays that one instead of issuing another (Codex).
-      const priceChanged =
-        answer.kind === 'outcome' &&
-        answer.outcome.kind === 'failed' &&
-        answer.outcome.failedReason === 'price_changed';
+      // A price refusal ('failed', price_changed) settles too: it answers a
+      // payment only issued (no PIN was asked, nothing moved, it expires
+      // unpaid). Keeping its key replayed that same old price forever, so
+      // "start again to see the new price" could never reach it (Muse).
       if (
         answer.kind === 'delivered' ||
-        (answer.kind === 'outcome' &&
-          !priceChanged &&
-          !KEEP_OUTCOMES.has(answer.outcome.kind))
+        (answer.kind === 'outcome' && !KEEP_OUTCOMES.has(answer.outcome.kind))
       )
         await settle();
       return answer;

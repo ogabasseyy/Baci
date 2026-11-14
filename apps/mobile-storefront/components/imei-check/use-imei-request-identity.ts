@@ -1,16 +1,17 @@
 import type { ImeiServiceTierKey } from '@baci/shared/imei';
 import { useRef } from 'react';
+import { useAuthStore } from '@/stores/auth-store';
+import { normalizeImeiIdentifier as normalize } from './normalize-imei-identifier';
 
 interface ImeiRequestIdentity {
+  /** The account that made the request: a key never replays for another. */
+  owner: string | null;
   identifier: string;
   key: string;
   tier: ImeiServiceTierKey;
 }
 
-// One device, one identity, however it was typed (spaces, dashes, case):
-// the same rule the wallet pay purchase key uses.
-const normalize = (identifier: string) =>
-  identifier.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+const signedIn = () => useAuthStore.getState().user?.id ?? null;
 
 export function useImeiRequestIdentity(createKey: () => string) {
   const active = useRef<ImeiRequestIdentity | null>(null);
@@ -26,19 +27,23 @@ export function useImeiRequestIdentity(createKey: () => string) {
     retains(tier: ImeiServiceTierKey, identifier: string) {
       return (
         active.current?.identifier === normalize(identifier) &&
-        active.current.tier === tier
+        active.current.tier === tier &&
+        active.current.owner === signedIn()
       );
     },
     get(tier: ImeiServiceTierKey, raw: string) {
       const identifier = normalize(raw);
+      const owner = signedIn();
+      // Another account never replays this one's key (Muse): it mints anew.
       if (
         active.current?.identifier === identifier &&
-        active.current.tier === tier
+        active.current.tier === tier &&
+        active.current.owner === owner
       ) {
         return active.current.key;
       }
       const key = createKey();
-      active.current = { identifier, key, tier };
+      active.current = { owner, identifier, key, tier };
       return key;
     },
   };

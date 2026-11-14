@@ -253,7 +253,7 @@ describe('startImeiWalletPayment', () => {
       expect(deletePending).toHaveBeenCalledWith(LOOKUP);
     });
 
-    it('bugfix: an issue that throws and leaves the lookup asks to start again (Codex P2)', async () => {
+    it('bugfix: an issue that throws and leaves the lookup keeps the key, never a restart that could charge twice (Codex P1)', async () => {
       const response = await startImeiWalletPayment(
         input({
           supabaseAdmin: {
@@ -273,10 +273,10 @@ describe('startImeiWalletPayment', () => {
           }),
         })
       );
-      expect(response.status).toBe(409);
-      await expect(response.json()).resolves.toMatchObject({
-        code: 'PAYMENT_NOT_COMPLETED',
-      });
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: 'PIGGYVEST_PAY_UNAVAILABLE' });
+      expect(body.code).not.toBe('PAYMENT_NOT_COMPLETED');
     });
 
     it('retries a clean-up that throws once, then answers 503', async () => {

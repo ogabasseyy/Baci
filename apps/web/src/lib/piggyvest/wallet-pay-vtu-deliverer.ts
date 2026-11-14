@@ -9,8 +9,11 @@ import { refundWalletPayment, walletPayDelivery } from './wallet-pay-service';
  * (piggyvest_primary.vtu_wallet_payment_delivery_state): vended = fulfilled;
  * failed (or never sent, which the database closes as failed) = failed under
  * this claim, which opens exactly one refund, and the refund is sent. A vend
- * that may still be in flight is left to the VTU requery; the drain asks
- * again once the claim lapses. A payment that matches no purchase is
+ * that may still be in flight (or a pending purchase marked by an
+ * interrupted or transient vend) is left to the VTU reconciliation cron,
+ * which re-drives it under this payment's delivery claim
+ * (recoverWalletPaidVtuPurchases); the drain asks again once the claim
+ * lapses. A payment that matches no purchase is
  * refunded.
  */
 export const settleVtuWalletPayment: WalletPayDeliverer = async ({

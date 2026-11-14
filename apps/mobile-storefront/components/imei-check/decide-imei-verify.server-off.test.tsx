@@ -2,7 +2,7 @@ import { decideImeiVerify } from './decide-imei-verify';
 
 const base = {
   retainedStoreCredit: false,
-  retainsPiggyvest: async () => false as boolean | null,
+  retainsPiggyvest: async () => false as boolean | null | 'unreadable',
   ownerAtTap: 'user-1' as string | null,
   currentOwner: () => 'user-1' as string | null,
   walletLoading: false,
@@ -86,5 +86,20 @@ describe('bugfix: a kept store credit request waited for the wallet read (Muse)'
     await expect(
       decideImeiVerify({ ...kept, walletError: true })
     ).resolves.toEqual({ kind: 'pay', rail: 'store_credit' });
+  });
+});
+
+describe('bugfix: unreadable saved keys allowed a second payment rail (Codex P1)', () => {
+  it('stops the tap instead of choosing store credit or a top-up', async () => {
+    const unreadable = {
+      ...base,
+      retainsPiggyvest: async () => 'unreadable' as const,
+    };
+    await expect(decideImeiVerify(unreadable)).resolves.toEqual({
+      kind: 'unavailable',
+    });
+    await expect(
+      decideImeiVerify({ ...unreadable, walletBalance: 5000 })
+    ).resolves.toEqual({ kind: 'unavailable' });
   });
 });

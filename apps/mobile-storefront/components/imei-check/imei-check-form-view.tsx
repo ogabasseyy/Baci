@@ -127,6 +127,17 @@ export function ImeiCheckFormView({
     displayedTierKeys.includes(selectedTier) &&
     isValidDeviceIdentifier(imei, identifier) &&
     hasEnoughBalance;
+  // A typed, valid IMEI for a chosen check always reaches the verify tap, even
+  // when the balance reads short or the wallet could not be read: the tap
+  // first looks for an earlier payment of this same check (kept, its answer
+  // lost) and replays it, and only then tops up or says the wallet is
+  // unavailable. A paid check is never withheld behind a top-up (Codex P2).
+  const canRecover =
+    selectedTier !== null &&
+    displayedTierKeys.includes(selectedTier) &&
+    isValidDeviceIdentifier(imei, identifier) &&
+    (needsTopUp || isWalletError);
+  const goesThroughVerify = canVerify || canRecover;
   const walletStatusText = isWalletLoading
     ? walletCopy.loading
     : isWalletError
@@ -246,11 +257,15 @@ export function ImeiCheckFormView({
               style={[
                 styles.verifyButton,
                 { backgroundColor: BRAND.primary },
-                (isLoading || (!needsTopUp && !canVerify)) &&
+                (isLoading || (!needsTopUp && !goesThroughVerify)) &&
                   styles.verifyButtonDisabled,
               ]}
-              onPress={needsTopUp ? () => onTopUpWallet(shortfall) : onCheck}
-              disabled={isLoading || (!needsTopUp && !canVerify)}
+              onPress={
+                needsTopUp && !goesThroughVerify
+                  ? () => onTopUpWallet(shortfall)
+                  : onCheck
+              }
+              disabled={isLoading || (!needsTopUp && !goesThroughVerify)}
             >
               {isLoading ? (
                 <ActivityIndicator color={BRAND.onPrimary} />

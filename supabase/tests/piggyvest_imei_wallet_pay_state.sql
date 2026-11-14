@@ -105,6 +105,19 @@ BEGIN
   -- Client roles can not call it.
   PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('authenticated',
     'piggyvest_primary.imei_wallet_payment_state(uuid,uuid,uuid,numeric)', 'EXECUTE'), 'authenticated can read state');
+  -- REGRESSION (Codex P2): guards compare the lookup's uuid, never cast its
+  -- indexed id to text (a scan of the whole lookup history under the payment
+  -- lock). A purchase reference is read as a uuid, or as nothing.
+  PERFORM pg_temp.wp_assert(piggyvest_primary.imei_lookup_uuid(c_lookup) = c_lookup::uuid,
+    'a uuid purchase reference was not read');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.imei_lookup_uuid(pg_catalog.upper(c_lookup)) = c_lookup::uuid,
+    'an upper-case uuid reference was not read');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.imei_lookup_uuid('not-a-uuid') IS NULL
+    AND piggyvest_primary.imei_lookup_uuid('') IS NULL
+    AND piggyvest_primary.imei_lookup_uuid(NULL) IS NULL,
+    'a reference that is no uuid was read as one');
+  PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('authenticated',
+    'piggyvest_primary.imei_lookup_uuid(text)', 'EXECUTE'), 'authenticated can call the reference reader');
 END;
 $behaviour$;
 

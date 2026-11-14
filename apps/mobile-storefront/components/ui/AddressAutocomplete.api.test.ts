@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { FetchImplementation } from '@/types/fetch';
-import { fetchPlaceDetails } from './AddressAutocomplete.api';
+import {
+  fetchAddressPredictions,
+  fetchPlaceDetails,
+} from './AddressAutocomplete.api';
 import type { PlacePrediction } from './AddressAutocomplete.types';
 
 jest.mock('expo-constants', () => ({
@@ -52,5 +55,41 @@ describe('fetchPlaceDetails coordinates', () => {
     await expect(
       fetchPlaceDetails({ prediction, sessionToken: 'session-1' })
     ).resolves.toMatchObject({ latitude: undefined, longitude: undefined });
+  });
+});
+
+describe('address lookup failures', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    global.fetch = fetchMock;
+  });
+
+  // console.error/warn raise a React Native LogBox bar (blank in RN 0.88)
+  // over the checkout footer on every keystroke. Failures are handled, so
+  // they must not reach those channels.
+  it('returns no predictions without raising console errors or warnings', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      text: async () => 'unavailable',
+    } as Response);
+
+    await expect(
+      fetchAddressPredictions({
+        input: '1 Test Street Ikeja',
+        sessionToken: 'session-1',
+      })
+    ).resolves.toEqual([]);
+    fetchMock.mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      fetchPlaceDetails({ prediction, sessionToken: 'session-1' })
+    ).resolves.toBeNull();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });

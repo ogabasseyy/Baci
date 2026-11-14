@@ -124,7 +124,11 @@ export function CheckoutPaymentStepView({
         orderTotal={total}
         enabledMethods={availablePaymentMethods}
         hiddenMethods={hiddenPaymentMethods}
-        initiallyCollapsed
+        // Coming back from Review remounts the step: keep any chosen method
+        // visible, including a wallet-only or savings-only payment.
+        initiallyCollapsed={
+          !selectedPayment && !walletSelection?.use && !savingsSelection?.use
+        }
         walletMode="orders"
         walletBalance={walletBalance}
         walletIsStoreCredit={walletIsStoreCredit}

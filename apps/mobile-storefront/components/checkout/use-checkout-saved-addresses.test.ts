@@ -186,4 +186,46 @@ describe('useCheckoutSavedAddresses', () => {
     // With multiple saved addresses, a new one should not default silently
     expect(result.current.saveAsDefaultAddress).toBe(false);
   });
+
+  it('leaves a new address unticked when the customer already has one saved address', async () => {
+    mockFetchCheckoutSavedAddresses.mockResolvedValue([createSavedAddress()]);
+
+    const { result } = renderSavedAddresses();
+
+    await waitFor(() =>
+      expect(result.current.selectedSavedAddressId).toBe('addr-1')
+    );
+    expect(result.current.saveAsDefaultAddress).toBe(true);
+
+    act(() => {
+      result.current.openNewAddressEditor();
+    });
+
+    await waitFor(() => expect(result.current.isAddingNewAddress).toBe(true));
+    expect(result.current.saveAsDefaultAddress).toBe(false);
+  });
+
+  it('does not pre-tick the default box while saved addresses are still loading', async () => {
+    let resolveFetch: (value: SavedAddress[]) => void = () => undefined;
+    mockFetchCheckoutSavedAddresses.mockReturnValue(
+      new Promise<SavedAddress[]>((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const { result } = renderSavedAddresses();
+    await waitFor(() =>
+      expect(result.current.isLoadingSavedAddresses).toBe(true)
+    );
+
+    act(() => {
+      result.current.openNewAddressEditor();
+    });
+
+    expect(result.current.saveAsDefaultAddress).toBe(false);
+
+    await act(async () => {
+      resolveFetch([createSavedAddress()]);
+    });
+  });
 });

@@ -119,7 +119,15 @@ it('fails closed when the durable replay store is unavailable', async () => {
   const f = fixture();
   f.consumeNonce.mockRejectedValue(Error('private store detail'));
   const response = await f.handler(request(body()));
-  expect(response.status).toBe(404);
+  expect(response.status).toBe(503);
   expect(await response.text()).not.toContain('private store detail');
   expect(f.resolve).not.toHaveBeenCalled();
+});
+
+it('reports a launch outage without exposing its details', async () => {
+  const f = fixture();
+  f.launch.mockRejectedValue(Error('private launch failure'));
+  const response = await f.handler(request(body()));
+  expect(response.status).toBe(503);
+  expect(await response.text()).not.toContain('private launch failure');
 });

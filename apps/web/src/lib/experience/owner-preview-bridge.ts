@@ -76,7 +76,8 @@ export function createOwnerPreviewBridge(settings: {
       const owner = await requireExperienceOwner(
         { supabase: client, merchantId: parsed.data.input.merchantId },
         'storefront.read'
-      );
+      ).catch(() => null);
+      if (!owner) return reply(404);
       const result = await settings.launch(
         {
           supabase: owner.supabase,
@@ -90,10 +91,15 @@ export function createOwnerPreviewBridge(settings: {
             : {}),
         }
       );
-      await requireExperienceOwner(owner, 'storefront.read');
+      if (
+        !(await requireExperienceOwner(owner, 'storefront.read').catch(
+          () => null
+        ))
+      )
+        return reply(404);
       return reply(200, result);
     } catch {
-      return reply(404);
+      return reply(503);
     }
   };
 }

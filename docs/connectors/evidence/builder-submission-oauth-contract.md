@@ -1077,3 +1077,16 @@ contracts. The worktree's shared dependency was unavailable through its
 existing linked modules, so a temporary Vitest alias selected this worktree's
 shared source and was removed after the run. This isolates the SDK contracts;
 it does not reproduce or explain the browser's intermittent failure.
+
+On 14 November, read-only checks still found `/builder/mcp` redirecting from
+`mcp.usebaci.com` to the marketing host (HTTP 307), while the corresponding
+protected-resource metadata returned HTTP 404. The Vercel connector's apex
+domain/project inventory request returned 403, as did the mapped CLI fallback;
+therefore project ownership and a safe path-specific ingress change were not
+established by those checks. A subsequent explicitly scoped team lookup found
+the verified `*.usebaci.com` wildcard attached to the `baci` project, with no
+individual builder-auth or MCP project-domain entries in that apex inventory.
+This establishes the wildcard association, not a qualified routing design.
+No DNS, Vercel project or production route was changed. The listener currently places internal owner routes and public MCP on
+one loopback listener, so its network source alone cannot distinguish trusted
+internal traffic from traffic forwarded by a public ingress.

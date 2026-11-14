@@ -10,13 +10,14 @@ const MAX_AIRTIME_AMOUNT = 50_000;
 export const LOCAL_PHONE_DIGITS = 11;
 
 /**
- * The digits of a typed or pasted phone number. An international +234
- * number becomes its local 0 form. Never cut short: a number that is too
- * long is refused at purchase, never quietly sent to someone else (Muse).
+ * The digits of a typed or pasted phone number. A number written with the
+ * +234 country code becomes its local 0 form whatever its length, so cutting
+ * it to 11 digits later never leaves a 234-prefixed number that looks local
+ * (Muse).
  */
 export function sanitizePhoneDigits(text: string): string {
   const digits = text.replace(/\D/g, '');
-  return digits.startsWith('234') && digits.length === LOCAL_PHONE_DIGITS + 2
+  return digits.startsWith('234') && digits.length > LOCAL_PHONE_DIGITS
     ? `0${digits.slice(3)}`
     : digits;
 }
@@ -51,7 +52,8 @@ export function nextPhoneDigits(previous: string, text: string) {
 
 /** The refusal for a number that is not one 11-digit local number. */
 export function phoneLengthError(phoneNumber: string) {
-  return phoneNumber.replace(/\D/g, '').length === LOCAL_PHONE_DIGITS
+  // One local number: 0 and ten digits, nothing else (Muse).
+  return /^0\d{10}$/.test(phoneNumber.replace(/\D/g, ''))
     ? null
     : {
         title: 'Check the phone number',

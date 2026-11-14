@@ -121,3 +121,19 @@ describe('bugfix: an overlong number was cut silently (Muse)', () => {
     expect(phoneLengthError('08012345678')).toBeNull();
   });
 });
+
+describe('bugfix: an overlong +234 number passed as 11 digits (Muse)', () => {
+  it('turns any +234 number into its local form before cutting it', () => {
+    expect(nextPhoneDigits('', '23480123456789')).toEqual({
+      digits: '08012345678',
+      trimmed: true,
+    });
+  });
+
+  it('refuses at purchase anything that is not 0 and ten digits', () => {
+    expect(phoneLengthError('23480123456')).toMatchObject({
+      title: 'Check the phone number',
+    });
+    expect(phoneLengthError('08012345678')).toBeNull();
+  });
+});

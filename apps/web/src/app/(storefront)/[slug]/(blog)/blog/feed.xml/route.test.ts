@@ -115,12 +115,14 @@ describe('GET /[slug]/blog/feed.xml', () => {
     });
     mockGetMerchantBlogFeed.mockResolvedValue(
       new NextResponse(
-        '<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><atom:link href="https://ogabassey.com/api/blog/feed/ogabassey" rel="self" type="application/rss+xml"/><title>Ogabassey Blog</title></channel></rss>',
+        '<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><atom:link href="https://ogabassey.com/api/blog/feed/ogabassey" rel="self" type="application/rss+xml"/><atom:link href="https://ogabassey.com/api/blog/feed/other" rel="self" type="application/rss+xml"/><title>Ogabassey Blog</title></channel></rss>',
         {
           status: 200,
           headers: {
             'content-type': 'application/rss+xml; charset=utf-8',
             'content-length': '250',
+            etag: '"upstream-etag"',
+            'content-md5': 'abc123==',
           },
         }
       )
@@ -133,11 +135,16 @@ describe('GET /[slug]/blog/feed.xml', () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain(
-      '<atom:link href="https://ogabassey.com/blog/feed.xml" rel="self" type="application/rss+xml"/>'
-    );
+    expect(
+      body.match(
+        /<atom:link href="https:\/\/ogabassey\.com\/blog\/feed\.xml" rel="self" type="application\/rss\+xml"\/>/g
+      )
+    ).toHaveLength(2);
     expect(body).not.toContain('/api/blog/feed/ogabassey');
+    expect(body).not.toContain('/api/blog/feed/other');
     expect(response.headers.get('content-length')).toBeNull();
+    expect(response.headers.get('content-md5')).toBeNull();
+    expect(response.headers.get('etag')).toBeNull();
   });
 
   it('injects xmlns:atom and canonical atom:link self-link when missing from delegated RSS XML', async () => {

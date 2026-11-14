@@ -29,9 +29,10 @@ function withCanonicalRssSelfLink(
   }
 
   const safeHref = escapeXmlAttribute(canonicalFeedUrl);
-  const selfLinkPattern = /<atom:link\b([^>]*\brel=(["'])self\2[^>]*)(\/?)>/i;
+  const selfLinkPattern = /<atom:link\b([^>]*\brel=(["'])self\2[^>]*)(\/?)>/gi;
 
   if (selfLinkPattern.test(xml)) {
+    selfLinkPattern.lastIndex = 0;
     return xml.replace(
       selfLinkPattern,
       (match, attrs: string, _quote: string, selfClose: string) => {
@@ -103,8 +104,18 @@ export async function GET(
   const xml = await response.text();
   const canonicalFeedUrl = `${sitemapResult.context.storeUrl}/blog/feed.xml`;
   const rewrittenXml = withCanonicalRssSelfLink(xml, canonicalFeedUrl);
+  if (rewrittenXml === xml) {
+    return new NextResponse(xml, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: new Headers(response.headers),
+    });
+  }
+
   const headersOut = new Headers(response.headers);
   headersOut.delete('content-length');
+  headersOut.delete('content-md5');
+  headersOut.delete('etag');
 
   return new NextResponse(rewrittenXml, {
     status: response.status,

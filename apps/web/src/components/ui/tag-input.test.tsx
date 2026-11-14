@@ -250,3 +250,21 @@ describe('TagInput', () => {
     });
   });
 });
+
+describe('TagInput IME composition', () => {
+  it('does not add a tag or remove one while an IME is composing', () => {
+    const onChange = vi.fn();
+    render(<TagInput value={['existing']} onChange={onChange} />);
+    const input = screen.getByRole('textbox');
+
+    fireEvent.change(input, { target: { value: 'にほん' } });
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledWith(['existing', 'にほん']);
+  });
+});

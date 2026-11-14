@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { createClient } from '@/lib/supabase/client';
 import {
   checkPasswordStrength,
@@ -321,7 +322,7 @@ export default function OnboardingForm() {
   const handleKeyDown = async (
     e: React.KeyboardEvent<HTMLInputElement | HTMLButtonElement>
   ) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !isImeComposing(e)) {
       e.preventDefault();
       if (step < totalSteps) {
         await handleNext();

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import type { ChatMessage as ChatMessageType } from './types';
 
 interface ChatInputProps {
@@ -14,6 +15,14 @@ const placeholders = [
   'What are you dreaming of?',
   'Type your letter to Santa...',
 ];
+
+function supportsFieldSizing(): boolean {
+  return (
+    typeof CSS !== 'undefined' &&
+    typeof CSS.supports === 'function' &&
+    CSS.supports('field-sizing', 'content')
+  );
+}
 
 /**
  * Chat input with magical placeholder animation
@@ -35,9 +44,11 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
     );
   }, []);
 
-  // Auto-resize textarea when input changes
+  // The textarea grows through CSS `field-sizing: content`. Browsers without it
+  // (older Safari and Firefox) fall back to measuring the content on each change.
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is intentionally used to trigger resize
   useEffect(() => {
+    if (supportsFieldSizing()) return;
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
@@ -54,7 +65,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isImeComposing(e)) {
       e.preventDefault();
       handleSubmit(e);
     }
@@ -170,7 +181,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder=""
-            className="w-full outline-hidden text-gray-800 bg-transparent px-2 resize-none overflow-y-auto caret-red-600"
+            className="w-full field-sizing-content outline-hidden text-gray-800 bg-transparent px-2 resize-none overflow-y-auto caret-red-600"
             style={{ maxHeight: '8rem' }}
             disabled={isLoading}
             aria-label="Type your message to Santa"

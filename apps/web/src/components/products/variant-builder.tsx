@@ -21,6 +21,7 @@ import type {
   CategoryVariantAttribute,
 } from '@/lib/category-configs';
 import { getCountryByCode } from '@/lib/countries';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import type { ProductVariant } from '@/lib/products';
 
 interface VariantBuilderProps {
@@ -770,7 +771,7 @@ export function VariantBuilder({
                           }))
                         }
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          if (e.key === 'Enter' && !isImeComposing(e)) {
                             e.preventDefault();
                             const value = textInputs[attr.key];
                             if (value) {

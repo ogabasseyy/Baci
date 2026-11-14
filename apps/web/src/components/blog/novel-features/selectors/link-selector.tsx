@@ -8,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { cn } from '@/lib/utils';
 
 export function isValidUrl(url: string) {
@@ -96,7 +97,7 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
               setValue(e.target.value);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isImeComposing(e)) {
                 const url = getUrlFromString(value);
                 if (url) {
                   editor.chain().focus().setLink({ href: url }).run();

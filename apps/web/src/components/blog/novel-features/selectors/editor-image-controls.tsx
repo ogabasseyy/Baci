@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent } from '@/components/ui/popover';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { sanitizeUrl } from '@/lib/sanitize-core';
 import { getTiptap } from '../utils/tiptap';
 
@@ -161,7 +162,7 @@ export function EditorImageControls({
                     if (urlError) setUrlError(null);
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
+                    if (event.key === 'Enter' && !isImeComposing(event)) {
                       event.preventDefault();
                       insertImageFromUrl();
                     }
@@ -181,7 +182,7 @@ export function EditorImageControls({
               value={captionValue}
               onChange={(event) => setCaptionValue(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') {
+                if (event.key === 'Enter' && !isImeComposing(event)) {
                   event.preventDefault();
                   if (mode === 'insert') insertImageFromUrl();
                   else updateCaption();

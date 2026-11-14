@@ -14,6 +14,7 @@ import {
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useToast } from '@/hooks/use-toast';
 import { buildCsrfHeaders } from '@/lib/csrf';
+import { isImeComposing } from '@/lib/is-ime-composing';
 
 export interface DiscountResult {
   valid: boolean;
@@ -252,7 +253,7 @@ export function DiscountCodeInput({
               setError(null);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isImeComposing(e)) {
                 e.preventDefault();
                 handleApply();
               }

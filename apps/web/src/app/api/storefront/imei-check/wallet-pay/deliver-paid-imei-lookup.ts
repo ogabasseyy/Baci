@@ -102,9 +102,15 @@ const pending = (status: string) =>
     { status: 202, headers: { 'Cache-Control': 'no-store' } }
   );
 
+/** A saved IMEI result names the device: never kept by a cache (Muse). */
+function noStore<R extends Response>(response: R): R {
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
+
 function cached(lookup: ImeiLookupRow) {
   if (lookup.cached_response && lookup.cached_status)
-    return json(lookup.cached_response, lookup.cached_status);
+    return noStore(json(lookup.cached_response, lookup.cached_status));
   return pending('delivering');
 }
 
@@ -123,7 +129,7 @@ async function cacheRefunded(input: Input, outcome: Outcome) {
     supabaseAdmin: input.supabaseAdmin,
     terminalStatus: outcome.notFound ? 'refunded_not_found' : 'refunded_error',
   });
-  return json(body as never, outcome.status);
+  return noStore(json(body as never, outcome.status));
 }
 
 /**
@@ -297,7 +303,7 @@ export async function deliverPaidImeiLookup(
       .catch(() => 'conflict');
     if (recorded !== 'fulfilled' && recorded !== 'duplicate')
       return pending('delivering');
-    return response;
+    return noStore(response);
   }
   // Anything but a definite failure (an unexpected non-terminal answer)
   // delivered no result: refund rather than leave the claim stranded.

@@ -198,6 +198,18 @@ BEGIN
      WHERE refund.payment_id = v_imei::uuid AND refund.attempt = 0),
     'a fee-only refund failure was listed as money in');
 
+  -- REGRESSION (Muse): a corrupt amount drops its own row, never the page.
+  EXECUTE (SELECT pg_catalog.string_agg(pg_catalog.format(
+      'ALTER TABLE piggyvest_primary.wallet_payments DROP CONSTRAINT %I', con.conname), '; ')
+     FROM pg_catalog.pg_constraint AS con
+    WHERE con.conrelid = 'piggyvest_primary.wallet_payments'::regclass AND con.contype = 'c'
+      AND pg_catalog.pg_get_constraintdef(con.oid) LIKE '%amount_kobo%');
+  UPDATE piggyvest_primary.wallet_payments SET amount_kobo = 0 WHERE id = v_deferred::uuid;
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.amount_kobo <= 0), 'a row with no positive amount was listed');
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant)),
+    'one corrupt amount emptied the page');
+
   -- Another user sees none of it.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);
   PERFORM pg_catalog.set_config('request.jwt.claims', pg_catalog.jsonb_build_object(

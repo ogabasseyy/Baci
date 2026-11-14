@@ -51,3 +51,33 @@ describe('wallet-pay activity rows', () => {
     ]);
   });
 });
+
+describe('bugfix: a kind the app did not know failed the whole page (Muse)', () => {
+  const row = {
+    id: '33333333-3333-4333-8333-333333333333',
+    direction: 'in',
+    amountKobo: 1000,
+    feeKobo: 0,
+    label: 'Money added',
+    status: 'completed',
+    occurredAt: '2026-11-14T10:00:00Z',
+  };
+
+  it('accepts a well-formed kind added on the server later', () => {
+    expect(
+      piggyvestWalletActivityPageSchema.safeParse({
+        items: [{ ...row, kind: 'cashback_credit' }],
+        nextCursor: null,
+      }).success
+    ).toBe(true);
+  });
+
+  it('still refuses a malformed kind', () => {
+    expect(
+      piggyvestWalletActivityPageSchema.safeParse({
+        items: [{ ...row, kind: 'Bad Kind!' }],
+        nextCursor: null,
+      }).success
+    ).toBe(false);
+  });
+});

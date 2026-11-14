@@ -255,8 +255,13 @@ BEGIN
   SELECT movement.id, movement.kind, movement.direction, movement.amount_kobo,
          movement.fee_kobo, pg_catalog.left(movement.label, 120), movement.status, movement.occurred_at
     FROM movements AS movement
-   WHERE p_before_at IS NULL
-      OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id)
+   -- A row the page schema would refuse (no positive amount, no date) is
+   -- left out, never failing the whole page (Muse); amounts are positive
+   -- by every ledger's own checks, so this only guards a corrupt row.
+   WHERE movement.amount_kobo > 0
+     AND movement.occurred_at IS NOT NULL
+     AND (p_before_at IS NULL
+          OR (movement.occurred_at, movement.id) < (p_before_at, p_before_id))
    ORDER BY movement.occurred_at DESC, movement.id DESC
    LIMIT p_limit;
 END;

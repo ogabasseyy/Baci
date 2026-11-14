@@ -19,6 +19,7 @@ let mockWalletQuery: {
   getWalletBalance?: () => number;
   getWalletVerdict?: (options?: { holdUnsettled?: boolean }) => {
     walletPrimaryUnknown?: boolean;
+    walletIsStoreCredit?: boolean;
   };
   isFetchingNow?: () => boolean;
   isLoading?: boolean;
@@ -345,5 +346,25 @@ describe('bugfix: stale PiggyVest wallet treated as store credit after a rollbac
 
     // Assert
     expect(result.current.walletIsStoreCredit).toBeUndefined();
+  });
+});
+
+describe('bugfix: rollback left a stale store-credit verdict at utility submit', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('is not store credit once the merchant is ruled out now', () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_balance_kobo: 500000 } },
+      getWalletVerdict: () => ({ walletIsStoreCredit: true }),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.getWalletVerdict?.().walletIsStoreCredit).toBe(false);
   });
 });

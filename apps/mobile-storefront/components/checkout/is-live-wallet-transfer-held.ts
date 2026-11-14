@@ -22,11 +22,12 @@ export function isLiveWalletTransferHeld(
     holdUnsettled: piggyvestPossible,
   });
   return (
-    verdict.walletIsStoreCredit === true ||
-    // A ruled-out merchant's timed-out read isn't PiggyVest (Muse).
-    (piggyvestPossible &&
-      (verdict.walletPrimaryUnknown === true ||
-        readers.isFetchingNow() ||
-        readers.getWalletError() != null))
+    // A ruled-out merchant's stale PiggyVest-shaped wallet isn't PiggyVest
+    // any more (Codex): only a possible merchant holds the transfer.
+    piggyvestPossible &&
+    (verdict.walletIsStoreCredit === true ||
+      verdict.walletPrimaryUnknown === true ||
+      readers.isFetchingNow() ||
+      readers.getWalletError() != null)
   );
 }

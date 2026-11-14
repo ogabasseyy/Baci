@@ -49,8 +49,17 @@ export async function resolveCompletedSavingsGoalVariant({
     // tries fail, say it is saved rather than leaving the old question up.
     for (let tries = 0; tries < 2; tries += 1) {
       try {
-        await refetchWallet();
-        return true;
+        // A failed refresh usually resolves to an error result, not a throw.
+        const result = await refetchWallet();
+        if (
+          !(
+            typeof result === 'object' &&
+            result &&
+            'isError' in result &&
+            result.isError
+          )
+        )
+          return true;
       } catch {
         // try once more
       }

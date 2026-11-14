@@ -29,8 +29,9 @@ export function useCardOnlyPurchaseTopUp(
     (verdictNow !== false &&
       (isWalletStoreCredit(wallet) || isWalletPrimaryUnknown(wallet))) ||
     // No customer row yet: unclassified where PiggyVest is possible (Codex).
-    (wallet?.owner_unresolved === true && capability !== false) ||
-    isPiggyvestCardOnlyMerchant(activeMerchantId, capability) ||
+    (wallet?.owner_unresolved === true &&
+      (verdictNow ?? capability) !== false) ||
+    isPiggyvestCardOnlyMerchant(activeMerchantId, verdictNow ?? capability) ||
     // No verdict yet: same rule as the Add money sheet (Codex).
     (capability === null && verdictNow === null)
   );

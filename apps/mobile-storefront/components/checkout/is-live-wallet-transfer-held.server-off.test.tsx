@@ -75,3 +75,11 @@ describe('bugfix: a ruled-out merchant held by a timed-out wallet read', () => {
     expect(isLiveWalletTransferHeld(live, false)).toBe(false);
   });
 });
+
+describe('bugfix: a rolled-back merchant kept its stale PiggyVest wallet classification', () => {
+  it('does not hold the transfer for a PiggyVest-shaped wallet once PiggyVest is ruled out', () => {
+    expect(
+      isLiveWalletTransferHeld(readers({ storeCredit: true }), false)
+    ).toBe(false);
+  });
+});

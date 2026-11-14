@@ -138,7 +138,9 @@ export async function POST(request: NextRequest) {
     const status =
       result.code === 'version_conflict' ||
       result.code === 'idempotency_conflict' ||
-      result.code === 'cart_locked'
+      result.code === 'cart_locked' ||
+      result.code === 'expired' ||
+      result.code === 'not_found'
         ? 409
         : result.code === 'unauthorized'
           ? 403

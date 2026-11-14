@@ -175,6 +175,22 @@ describe('Chatwoot cart mutation replay', () => {
     });
   });
 
+  it.each([
+    'expired',
+    'not_found',
+  ] as const)('returns refresh_required when the cart becomes %s before mutation', async (code) => {
+    arrange();
+    mocks.mutateCart.mockResolvedValue({ ok: false, code });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      accepted: false,
+      code: 'refresh_required',
+    });
+  });
+
   it('logs a live grant refresh failure and does not reissue stale operations', async () => {
     arrange();
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});

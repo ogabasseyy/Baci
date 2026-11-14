@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import type { Biller } from '@/hooks/use-vtu-billers';
 import { useDataFormBeneficiaryController } from './use-data-form-beneficiary-controller';
 
@@ -115,5 +116,27 @@ describe('useDataFormBeneficiaryController', () => {
     );
 
     expect(result.current.walletReturnToHref).toBe('/utilities/data');
+  });
+});
+
+describe('bugfix: fast input pushed the phone field past 11 digits (Fable walk 14)', () => {
+  it('holds 11 digits and tells the customer when a burst lost some', () => {
+    const alert = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    const { result } = renderHook(() =>
+      useDataFormBeneficiaryController({
+        parsedInitialAmount: 0,
+        dataPlans: mockDataPlans,
+      })
+    );
+    act(() => result.current.handlePhoneChange('0803123'));
+    act(() => result.current.handlePhoneChange('0803123456789'));
+    expect(result.current.phoneNumber).toBe('08031234567');
+    expect(alert).toHaveBeenCalledWith(
+      'Check the phone number',
+      expect.stringContaining('first 11 digits')
+    );
+    alert.mockRestore();
   });
 });

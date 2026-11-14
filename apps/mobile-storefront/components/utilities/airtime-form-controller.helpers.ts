@@ -21,19 +21,32 @@ export function sanitizePhoneDigits(text: string): string {
     : digits;
 }
 
+/** What the customer is told when digits beyond one number were dropped. */
+export const PHONE_TRIMMED_NOTICE = {
+  title: 'Check the phone number',
+  message:
+    'We kept the first 11 digits. Please check the number before you pay.',
+};
+
 /**
- * The field's next value. Typing past a complete 11-digit number is ignored,
- * like a maximum length (Fable: the field took 18 digits when typed text
- * arrived late). Anything else, an overlong paste included, is kept as
- * entered so the purchase check can refuse it.
+ * The field's next value: never more than one 11-digit number, however fast
+ * the text arrives (Fable walks 13 and 14: bursts of late text held 12 or
+ * 13 digits). One keystroke past a full number is simply ignored, like a
+ * maximum length; a paste or a burst that loses digits is `trimmed`, so the
+ * customer is told and checks the number instead of it being cut silently
+ * (Muse).
  */
-export function nextPhoneDigits(previous: string, text: string): string {
-  const digits = sanitizePhoneDigits(text);
-  return previous.length === LOCAL_PHONE_DIGITS &&
-    digits.length > LOCAL_PHONE_DIGITS &&
-    digits.startsWith(previous)
-    ? previous
-    : digits;
+export function nextPhoneDigits(previous: string, text: string) {
+  const all = sanitizePhoneDigits(text);
+  return {
+    digits: all.slice(0, LOCAL_PHONE_DIGITS),
+    trimmed:
+      all.length > LOCAL_PHONE_DIGITS &&
+      !(
+        previous.length === LOCAL_PHONE_DIGITS &&
+        all.length === LOCAL_PHONE_DIGITS + 1
+      ),
+  };
 }
 
 /** The refusal for a number that is not one 11-digit local number. */

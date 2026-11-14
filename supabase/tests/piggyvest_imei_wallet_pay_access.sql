@@ -136,6 +136,18 @@ BEGIN
   IF pg_temp.wp_fulfilment(current_setting('test.paid_op')) <> 'claimed' THEN
     RAISE EXCEPTION 'the delivered payment left its claim';
   END IF;
+  -- REGRESSION (Muse): only the payment's OWN delivery blocks its refund. A
+  -- completed lookup at another price is not this payment's (a savepoint
+  -- keeps the paid lookup as it was for the steps below).
+  BEGIN
+    UPDATE public.imei_lookups SET amount_ngn = 400
+     WHERE id = current_setting('test.paid_lookup')::uuid;
+    IF pg_temp.wp_finish(current_setting('test.paid_op'), 'failed') <> 'refund_owed' THEN
+      RAISE EXCEPTION 'a lookup at another price blocked the refund';
+    END IF;
+    RAISE EXCEPTION 'scoped-refund-ok' USING ERRCODE = 'P0002';
+  EXCEPTION WHEN SQLSTATE 'P0002' THEN NULL;
+  END;
 END $$;
 
 -- A failed delivery: refunded_error needs the owed PiggyVest refund.

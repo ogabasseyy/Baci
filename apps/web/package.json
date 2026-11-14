@@ -149,7 +149,7 @@
     "embla-carousel-react": "^8.6.0",
     "entities": "^8.0.0",
     "expo-server-sdk": "^6.1.0",
-    "fast-xml-parser": "5.9.0",
+    "fast-xml-parser": "5.12.0",
     "feed": "^5.2.1",
     "framer-motion": "^12.40.0",
     "fuse.js": "^7.4.2",

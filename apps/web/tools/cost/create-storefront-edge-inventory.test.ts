@@ -154,8 +154,6 @@ describe('createStorefrontEdgeInventory', () => {
           .filter((row) => row.sourceKind === 'storefront_entrypoint')
           .map((row) => row.sourcePath)
       ),
-      'apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts',
-      'apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts',
     ];
 
     // Assert

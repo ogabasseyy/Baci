@@ -426,7 +426,7 @@ describe('BlogPostPageContent', () => {
 
   it('skips dead-link resolution in draft preview so draft-to-draft links survive', async () => {
     mockDraftMode.mockResolvedValue({ isEnabled: true });
-    mockGetRequestScopedBlogPost.mockResolvedValue(smartphoneGuideBlogPost);
+    mockGetLiveBlogPost.mockResolvedValue(smartphoneGuideBlogPost);
 
     render(
       await BlogPostPageContent({
@@ -437,6 +437,12 @@ describe('BlogPostPageContent', () => {
       })
     );
 
+    expect(mockGetRequestScopedBlogPost).not.toHaveBeenCalled();
+    expect(mockGetLiveBlogPost).toHaveBeenCalledWith(
+      'ogabassey',
+      'best-phones-in-nigeria',
+      true
+    );
     expect(mockBlogPostBody).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: undefined })
     );

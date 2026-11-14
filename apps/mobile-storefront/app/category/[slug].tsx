@@ -73,6 +73,7 @@ export default function CategoryScreen() {
           ['smartphones', 'mobile-phones'].includes(category.slug)
         )?.id
       : undefined);
+  const isCategoryResolved = slug === 'all' || Boolean(categoryId);
   const sortBy = sort === 'price_asc' || sort === 'newest' ? sort : undefined;
 
   const { products, isLoading, error, hasMore, refetch, loadMore } =
@@ -80,7 +81,7 @@ export default function CategoryScreen() {
       category: isValidSlug ? categoryId : undefined,
       limit: 20,
       sortBy,
-      enabled: !categoriesLoading && (!budgetPhones || Boolean(categoryId)),
+      enabled: isValidSlug && !categoriesLoading && isCategoryResolved,
     });
 
   const [refreshing, setRefreshing] = React.useState(false);
@@ -116,7 +117,6 @@ export default function CategoryScreen() {
   // message. The supported 'all' slug intentionally resolves no category
   // ID (the catalog fetch is unfiltered), so it counts as resolved;
   // unknown slugs stay withheld.
-  const isCategoryResolved = slug === 'all' || Boolean(categoryId);
   const canShowCategoryMpu =
     isValidSlug &&
     !categoriesLoading &&
@@ -145,7 +145,7 @@ export default function CategoryScreen() {
 
   const renderEmpty = () => {
     // BUG-2-004 FIX: Show error for invalid slug
-    if (!isValidSlug || (budgetPhones && !categoriesLoading && !categoryId)) {
+    if (!isValidSlug || (!categoriesLoading && !isCategoryResolved)) {
       return (
         <View style={styles.emptyContainer}>
           <Ionicons
@@ -164,7 +164,7 @@ export default function CategoryScreen() {
       );
     }
 
-    if (isLoading) {
+    if (categoriesLoading || isLoading) {
       return (
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={BRAND.primary} />

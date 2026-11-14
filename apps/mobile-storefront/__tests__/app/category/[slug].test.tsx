@@ -12,6 +12,7 @@ import {
   mockStorefrontScreenShell,
   mockStorefrontScreenShellModule,
   mockUseLocalSearchParams,
+  mockUseProducts,
   setProductsState,
   setupCategoryMocks,
 } from './category.test-utils';
@@ -58,6 +59,16 @@ describe('CategoryScreen', () => {
 
     render(<CategoryScreen />);
 
+    expect(screen.getByText('Invalid Category')).toBeTruthy();
+  });
+
+  it('keeps unfiltered catalog queries disabled for unknown category slugs', () => {
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'missing-category' });
+    setProductsState({ products: [] });
+    render(<CategoryScreen />);
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
     expect(screen.getByText('Invalid Category')).toBeTruthy();
   });
 

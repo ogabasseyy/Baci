@@ -21,7 +21,9 @@ import {
   OGABASSEY_QUALITY_CHECKS,
   OGABASSEY_RETURN_HELP,
   OGABASSEY_RETURN_SHIPPING,
+  OGABASSEY_RETURN_SUMMARY,
   OGABASSEY_WARRANTY_DETAILS,
+  OGABASSEY_WARRANTY_SUMMARY,
 } from '@baci/shared';
 
 export interface TrustPolicyPageClientProps {
@@ -239,11 +241,17 @@ export function TrustPolicyPageClient({
   trustProfile,
   ogabasseyCare = false,
 }: TrustPolicyPageClientProps) {
-  const summary = getPolicySummary(kind, trustProfile);
   const isOgabasseyReturns = ogabasseyCare && kind === 'returns';
-  const facts = getPolicyFacts(kind, trustProfile).filter(
-    (fact) => !isOgabasseyReturns || fact.label !== 'Return fees'
-  );
+  const isOgabasseyWarranty = ogabasseyCare && kind === 'warranty';
+  const summary = isOgabasseyReturns
+    ? OGABASSEY_RETURN_SUMMARY
+    : isOgabasseyWarranty
+      ? OGABASSEY_WARRANTY_SUMMARY
+      : getPolicySummary(kind, trustProfile);
+  const facts =
+    isOgabasseyReturns || isOgabasseyWarranty
+      ? []
+      : getPolicyFacts(kind, trustProfile);
   const guidance = getPolicyGuidance(kind, merchantName, trustProfile);
 
   return (
@@ -341,21 +349,23 @@ export function TrustPolicyPageClient({
           </section>
         )}
 
-        <dl className="mt-8 grid gap-4 sm:grid-cols-2">
-          {facts.map((fact) => (
-            <div
-              key={fact.label}
-              className="rounded-2xl border border-store-border bg-store-background-text/5 p-4"
-            >
-              <dt className="text-sm font-medium text-store-background-text/60">
-                {fact.label}
-              </dt>
-              <dd className="mt-2 text-base font-medium text-store-background-text">
-                {fact.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        {facts.length > 0 && (
+          <dl className="mt-8 grid gap-4 sm:grid-cols-2">
+            {facts.map((fact) => (
+              <div
+                key={fact.label}
+                className="rounded-2xl border border-store-border bg-store-background-text/5 p-4"
+              >
+                <dt className="text-sm font-medium text-store-background-text/60">
+                  {fact.label}
+                </dt>
+                <dd className="mt-2 text-base font-medium text-store-background-text">
+                  {fact.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
 
         {ogabasseyCare && kind === 'returns' && (
           <a

@@ -235,7 +235,7 @@ export function createMenuSections({
         },
         {
           id: 'feedback',
-          icon: 'star-outline',
+          icon: 'bug-outline',
           label: 'Send Feedback',
           onPress: () => onNavigate('/send-feedback'),
         },

@@ -604,6 +604,37 @@ describe('zeptomail audit logging', () => {
     expect(sendMailMock).toHaveBeenCalledTimes(1);
   });
 
+  it('logs only the provider error code when redaction is requested', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    sendMailMock.mockRejectedValue({
+      error: {
+        message: 'Recipient secret@example.com rejected',
+        code: 'TM_4001',
+        details: [{ target: 'secret@example.com' }],
+      },
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'support@usebaci.com',
+      subject: 'Redacted Test',
+      htmlContent: '<p>Hello</p>',
+      maxAttemptsPerSender: 1,
+      redactProviderErrorLog: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(consoleError).toHaveBeenCalledWith(
+      'ZeptoMail email error:',
+      'TM_4001'
+    );
+    const logged = JSON.stringify(consoleError.mock.calls);
+    expect(logged).not.toContain('secret@example.com');
+    consoleError.mockRestore();
+  });
+
   it('runs the platform fallback when the remaining budget fits it', async () => {
     getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
     sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {

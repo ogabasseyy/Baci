@@ -1,121 +1,110 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import {
-  type NativeProps,
-  themeTextOnPrimary,
-} from '@/components/feedback/feedback-test-helpers';
+import { Alert } from 'react-native';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('react-native', async () => {
-  const { createFeedbackReactNativeMock } = await import(
-    '@/components/feedback/feedback-test-helpers'
-  );
-  return createFeedbackReactNativeMock();
-});
-
-vi.mock('react-native-safe-area-context', async () => {
-  const { flattenStyle } = await import(
-    '@/components/feedback/feedback-test-helpers'
-  );
-  return {
-    SafeAreaView: ({ children, style }: NativeProps) => (
-      <main style={flattenStyle(style)}>{children}</main>
-    ),
-  };
-});
-
-vi.mock('@react-native-vector-icons/ionicons', () => ({
-  default: ({ color, name }: { color?: string; name: string }) => (
-    <span data-color={color} data-testid={`icon-${name}`} />
-  ),
-  __esModule: true,
-}));
+const { mockBack } = vi.hoisted(() => ({ mockBack: vi.fn() }));
 
 vi.mock('expo-router', () => ({
   Stack: {
-    Screen: () => null,
+    Screen: ({
+      options,
+    }: {
+      options: { title: string; headerLeft: () => React.ReactNode };
+    }) => (
+      <header>
+        <h1>{options.title}</h1>
+        {options.headerLeft()}
+      </header>
+    ),
   },
-  useRouter: () => ({ back: vi.fn() }),
+  useRouter: () => ({ back: mockBack }),
 }));
 
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: 'test-user-id' } }),
+vi.mock('@react-native-vector-icons/ionicons', () => ({
+  default: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
-vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({ merchant: { id: 'test-merchant-id' } }),
+vi.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#ffffff',
-      border: '#d1d5db',
-      card: '#ffffff',
-      cardHover: '#f3f4f6',
-      primary: '#2563eb',
-      text: '#111827',
-      textMuted: '#6b7280',
-      textOnPrimary: themeTextOnPrimary,
-      textSecondary: '#4b5563',
-    },
-    isDark: false,
-    shadows: { sm: {} },
-  }),
+  useTheme: () => ({ colors: { background: '#000', text: '#fff' } }),
 }));
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: () => ({
-      insert: vi.fn().mockResolvedValue({ error: null }),
-    }),
-  },
+vi.mock('@/components/feedback/FeedbackForm', () => ({
+  FeedbackForm: ({
+    screen: reportedScreen,
+    showTitle,
+    onCancel,
+    onSent,
+  }: {
+    screen: string | null;
+    showTitle?: boolean;
+    onCancel: () => void;
+    onSent: () => void;
+  }) => (
+    <div>
+      <span>
+        form for {reportedScreen} title {String(showTitle)}
+      </span>
+      <button onClick={onCancel} type="button">
+        cancel form
+      </button>
+      <button onClick={onSent} type="button">
+        finish form
+      </button>
+    </div>
+  ),
 }));
 
 import SendFeedbackScreen from './send-feedback';
 
-describe('SendFeedbackScreen theming', () => {
-  describe('bugfix: hardcoded #FFFFFF colors ignore dark mode tokens', () => {
-    it('uses dynamic textOnPrimary token for submit button icon and label', () => {
-      render(<SendFeedbackScreen />);
+beforeEach(() => {
+  mockBack.mockReset();
+  vi.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+});
 
-      expect(screen.getByTestId('icon-paper-plane')).toHaveAttribute(
-        'data-color',
-        themeTextOnPrimary
-      );
+describe('SendFeedbackScreen', () => {
+  it('renders the shared form without a duplicate heading', () => {
+    render(<SendFeedbackScreen />);
 
-      const submitText = screen.getByText('Submit Feedback');
-      expect(submitText).toHaveAttribute(
-        'data-style-color',
-        themeTextOnPrimary
-      );
-    });
+    expect(
+      screen.getByText('form for /send-feedback title false')
+    ).toBeInTheDocument();
+  });
 
-    it('uses dynamic textOnPrimary token for selected category chip icon and text', () => {
-      render(<SendFeedbackScreen />);
+  it('shows the Send Feedback header with a back arrow', () => {
+    render(<SendFeedbackScreen />);
 
-      const chipButton = screen.getByText('App Experience').closest('button');
-      expect(chipButton).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Send Feedback' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Go back'));
 
-      // Before selection, unselected color is text (#111827)
-      const chipTextBefore = screen.getByText('App Experience');
-      expect(chipTextBefore).toHaveAttribute('data-style-color', '#111827');
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
 
-      // Click to select category
-      if (chipButton) {
-        fireEvent.click(chipButton);
-      }
+  it('goes back when cancelled', () => {
+    render(<SendFeedbackScreen />);
 
-      // After selection, icon and text receive textOnPrimary
-      const chipTextAfter = screen.getByText('App Experience');
-      expect(chipTextAfter).toHaveAttribute(
-        'data-style-color',
-        themeTextOnPrimary
-      );
-      expect(screen.getByTestId('icon-phone-portrait-outline')).toHaveAttribute(
-        'data-color',
-        themeTextOnPrimary
-      );
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'cancel form' }));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('thanks the merchant and goes back once they dismiss the alert', () => {
+    render(<SendFeedbackScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'finish form' }));
+
+    const [title, , buttons] = vi.mocked(Alert.alert).mock.calls[0] ?? [];
+    expect(title).toBe('Thanks for the feedback');
+    expect(mockBack).not.toHaveBeenCalled();
+    buttons?.[0]?.onPress?.();
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

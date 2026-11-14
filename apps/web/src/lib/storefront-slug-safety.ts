@@ -29,7 +29,7 @@ export const MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH = 512;
  * still decodes further after this budget carries the `%2525…` repeated
  * -encoding signature.
  */
-const MAX_SLUG_DECODE_PASSES = 3;
+export const MAX_SLUG_DECODE_PASSES = 3;
 
 const PERCENT_ESCAPE_PATTERN = /%[0-9a-f]{2}/i;
 

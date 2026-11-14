@@ -14,6 +14,12 @@ jest.mock('@/hooks/use-wallet', () => ({ useWallet: () => mockWallet() }));
 jest.mock('@/hooks/use-auth-guard', () => ({
   useRequireAuth: () => mockAuth(),
 }));
+const mockIssueGoalAction = jest.fn();
+const mockSubmitGoalAction = jest.fn();
+jest.mock('@/lib/goal-lifecycle-api', () => ({
+  issueGoalAction: (...args: unknown[]) => mockIssueGoalAction(...args),
+  submitGoalAction: (...args: unknown[]) => mockSubmitGoalAction(...args),
+}));
 jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => {
     const { Text } = jest.requireActual('react-native');
@@ -64,6 +70,19 @@ describe('old goal-actions links', () => {
         `Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`
       )
     ).toBeOnTheScreen();
+  });
+
+  it('never acts on an old kind=complete link: no issue or submit, no kind passed on', async () => {
+    mockParams.mockReturnValue({ goalId: GOAL, kind: 'complete' });
+    render(<WalletGoalActionsRoute />);
+    expect(
+      await screen.findByText(
+        `Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`
+      )
+    ).toBeOnTheScreen();
+    // Complete starts only from the sheet's own review, confirm and PIN.
+    expect(mockIssueGoalAction).not.toHaveBeenCalled();
+    expect(mockSubmitGoalAction).not.toHaveBeenCalled();
   });
 
   it('opens the plain wallet when a cached goal turns out closed on the fresh read', async () => {

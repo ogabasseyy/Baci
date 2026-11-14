@@ -87,6 +87,10 @@ export default function WalletGoalActionsRoute() {
   const goals = wallet.data?.wallet?.savings_goals ?? [];
   // A completed goal with nothing left to move stays in the list but has no
   // action left: treat it as closed, like a cancelled one.
+  // This only decides which goal the link opens, never which actions it
+  // offers: the sheet's GoalLifecycleEntry shows Cancel/Complete only on the
+  // server's ready-main-wallet verdict, so a legacy completed goal with a
+  // balance opens as "complete" with no Complete step.
   const owned = goals.some(
     (goal) =>
       goal.id === goalId &&

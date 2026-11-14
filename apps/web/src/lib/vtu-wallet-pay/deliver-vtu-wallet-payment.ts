@@ -99,10 +99,12 @@ export async function deliverVtuWalletPayment(
       );
       return { kind: 'result', result: await deps.fulfil(false) };
     }
-    // Still processing: reconcile from the provider (never a new vend) and
-    // record a final answer it reaches now, rather than waiting for another
-    // claim lapse (Codex P2).
-    const reconciled = await deps.fulfil(false);
+    // Still processing: reconcile from the provider (or re-drive a pending
+    // purchase interrupted mid-vend, under the same provider reference) as
+    // the claim holder, and record a final answer it reaches now, rather
+    // than waiting for another claim lapse (Codex P2). Only the claim holder
+    // may re-drive such a purchase (Muse high).
+    const reconciled = await deps.fulfil(true);
     if (reconciled.status === 'successful')
       await record(deps, operationId, claim.claimToken, 'fulfilled');
     else if (reconciled.status === 'failed')

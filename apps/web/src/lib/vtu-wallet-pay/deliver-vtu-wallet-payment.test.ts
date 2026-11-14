@@ -91,7 +91,7 @@ describe('deliverVtuWalletPayment', () => {
     deps.finish.mockResolvedValue('fulfilled');
     deps.fulfil.mockResolvedValue(success);
     await deliverVtuWalletPayment(input, deps);
-    expect(deps.fulfil).toHaveBeenCalledWith(false);
+    expect(deps.fulfil).toHaveBeenCalledWith(true);
     expect(deps.finish).toHaveBeenCalledWith(OP, 'fulfilled', TOKEN);
   });
 
@@ -101,6 +101,9 @@ describe('deliverVtuWalletPayment', () => {
     deps.fulfil.mockResolvedValue({ ...success, status: 'processing' });
     await deliverVtuWalletPayment(input, deps);
     expect(deps.finish).not.toHaveBeenCalled();
+    // The reclaimer holds the claim, so it is the one that may re-drive a
+    // purchase interrupted mid-vend (Muse high: the cron no longer can).
+    expect(deps.fulfil).toHaveBeenCalledWith(true);
   });
 
   it('waits for a payment not yet confirmed and for a delivery in progress', async () => {

@@ -48,7 +48,15 @@ beforeEach(() => {
     supabase: { rpc: mocks.rpc },
   });
   mocks.rpc.mockResolvedValue({
-    data: [{ piggyvest_paid: true, amount: 500, status: 'pending' }],
+    data: [
+      {
+        piggyvest_paid: true,
+        amount: 500,
+        status: 'pending',
+        merchant_id: 'm',
+        customer_id: 'c',
+      },
+    ],
     error: null,
   });
   mocks.csrf.mockResolvedValue({ valid: true });
@@ -205,8 +213,29 @@ describe('bugfix: a PIN proof was minted for a payment its purchase would refuse
       'a closed purchase',
       { piggyvest_paid: true, amount: 500, status: 'failed' },
     ],
+    [
+      'another store',
+      {
+        piggyvest_paid: true,
+        amount: 500,
+        status: 'pending',
+        merchant_id: 'x',
+      },
+    ],
+    [
+      'another customer',
+      {
+        piggyvest_paid: true,
+        amount: 500,
+        status: 'pending',
+        customer_id: 'x',
+      },
+    ],
   ])('refuses %s before any PIN check', async (_label, row) => {
-    mocks.rpc.mockResolvedValue({ data: [row], error: null });
+    mocks.rpc.mockResolvedValue({
+      data: [{ merchant_id: 'm', customer_id: 'c', ...row }],
+      error: null,
+    });
     const response = await call({ operationId: OP, pin: '1234' });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({

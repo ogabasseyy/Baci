@@ -65,8 +65,9 @@ export function useGoalWalletSetupPoll({
   const failuresInARow = useRef(0);
   const [attempt, setAttempt] = useState({ scopeKey, count: 0 });
   const count = attempt.scopeKey === scopeKey ? attempt.count : 0;
-  // While PiggyVest is slow, a failed read is shown as "getting ready", so
-  // the checks must keep going through it too.
+  // While PiggyVest is slow, a failed read on a plan last seen getting ready
+  // keeps its calm card, so the checks keep going through failed reads too
+  // (they recover by themselves once a read succeeds).
   const slowdown = usePiggyvestSlowdown();
   // An error this poll reported itself (its last quick read failed) keeps
   // the checks going too, so they recover on their own instead of stopping.

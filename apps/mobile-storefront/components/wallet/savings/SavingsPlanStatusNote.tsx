@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { usePiggyvestSlowdown } from '@/hooks/use-piggyvest-slowdown';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { lastGoalSetupPhase } from './goal-setup-memory';
 import { openSavingsSupport } from './open-savings-support';
 import { SavingsGoalRetryPrompt } from './SavingsGoalRetryPrompt';
 import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
@@ -107,6 +108,8 @@ function StatusNoteView({
   // that finishes loading later must never replace it.
   const [customerChose, setCustomerChose] = useState(false);
   const phase = funding.planFundingPhase;
+  // Same account + merchant + goal key as the poll and setup memory.
+  const scopeKey = JSON.stringify([identityKey, merchantId, goalId]);
   const slowdown = usePiggyvestSlowdown();
   const autoRetry = useAutoRetrySetup({
     active: primary && phase === 'setup_retryable',
@@ -116,8 +119,7 @@ function StatusNoteView({
     // BVN field, and PiggyVest goal setup never needs a BVN, so a stale
     // flag there must not block a retry.
     blocked: bvnGate && funding.planFundingRequiresBvn === true,
-    // Same account + merchant + goal key as the poll and setup memory.
-    scopeKey: JSON.stringify([identityKey, merchantId, goalId]),
+    scopeKey,
     submitting: setup.submitting,
     retry: setup.retry,
   });
@@ -187,11 +189,12 @@ function StatusNoteView({
       />
     );
   if (phase === 'idle' || phase === 'loading' || phase === 'ready') return null;
-  // While PiggyVest is slow, a failed check is not alarming news: keep the
-  // calm card (the shared notice explains) and keep checking.
-  // The same while this note's own checks are still running past their
-  // first minute (its last quick read failed): they have not given up.
-  if (phase === 'error' && (slowdown || slow))
+  // A failed check on a plan this app last saw getting ready is not alarming
+  // news while PiggyVest is slow (the shared notice explains) or while this
+  // note's checks are still running past their first minute: keep the calm
+  // card and keep checking. A failed read says nothing about a plan not seen
+  // waiting (it may well be ready), so that one says it can't check.
+  if (phase === 'error' && (slowdown || slow) && lastSeenWaiting(scopeKey))
     return (
       <SavingsPlanGettingReady
         colors={colors}
@@ -240,6 +243,12 @@ function StatusNoteView({
       }
     />
   );
+}
+
+/** This app's last settled read of the plan said its setup was waiting. */
+function lastSeenWaiting(scopeKey: string): boolean {
+  const last = lastGoalSetupPhase(scopeKey);
+  return last === 'pending' || last === 'setup_retryable';
 }
 
 const styles = StyleSheet.create({

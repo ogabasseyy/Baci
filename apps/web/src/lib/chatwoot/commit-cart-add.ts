@@ -131,7 +131,9 @@ export async function commitChatwootCartAdd(input: {
         : status === 409
           ? code === 'invalid_item'
             ? 'not_addable'
-            : 'refresh_required'
+            : code === 'idempotency_conflict'
+              ? 'idempotency_conflict'
+              : 'refresh_required'
           : 'temporarily_unavailable'
     );
   }

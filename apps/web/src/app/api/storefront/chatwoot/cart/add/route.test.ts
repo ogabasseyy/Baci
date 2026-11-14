@@ -213,6 +213,21 @@ describe('Chatwoot shared-cart add route', () => {
     });
   });
 
+  it('preserves an idempotency conflict as a distinct 409 result', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'idempotency_conflict' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'idempotency_conflict',
+    });
+  });
+
   it('maps a server-resolved unavailable catalog item to not_addable', async () => {
     arrange();
 

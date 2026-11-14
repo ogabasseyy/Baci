@@ -92,6 +92,30 @@ describe('handleChatwootInlineCartAdd', () => {
     });
   });
 
+  it.each([Number.MAX_SAFE_INTEGER + 1, 7])(
+    'does not forward unsafe or stale cart version %s',
+    async (cartVersion) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          response({
+            accepted: true,
+            cartVersion,
+            operationId: 'add-request-01',
+          })
+        )
+      );
+      const value = input();
+
+      await handleChatwootInlineCartAdd(value);
+
+      expect(value.post).toHaveBeenCalledWith({
+        requestId: 'add-request-01',
+        accepted: true,
+      });
+    }
+  );
+
   it('does not refresh the cart for a deterministic unavailable item', async () => {
     vi.stubGlobal(
       'fetch',

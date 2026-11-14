@@ -38,10 +38,10 @@ BEGIN
     OR v_claims->>'cart_scope' IS DISTINCT FROM 'session'
     OR jsonb_typeof(v_claims->'exp') IS DISTINCT FROM 'number'
     OR coalesce((v_claims->>'exp')::numeric, 0) <= extract(epoch FROM now())
-    OR (v_claims->>'cart_id')::uuid IS DISTINCT FROM p_cart_id
-    OR nullif(v_claims->>'cart_merchant_id', '') IS NULL
+    OR lower(v_claims->>'cart_id') IS DISTINCT FROM p_cart_id::text
+    OR coalesce(v_claims->>'cart_merchant_id', '') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     OR nullif(v_claims->>'cart_principal_id', '') IS NULL
-    OR nullif(v_claims->>'cart_grant_id', '') IS NULL
+    OR coalesce(v_claims->>'cart_grant_id', '') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     OR p_operation_id IS NULL OR length(trim(p_operation_id)) = 0 OR length(p_operation_id) > 128
     OR p_expected_version IS NULL OR p_expected_version < 1
     OR p_product_slug IS NULL OR length(trim(p_product_slug)) = 0

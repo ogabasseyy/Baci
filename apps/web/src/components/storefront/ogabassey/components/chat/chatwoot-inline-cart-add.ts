@@ -100,7 +100,9 @@ export async function handleChatwootInlineCartAdd(input: {
     accepted,
     ...(accepted
       ? {
-          ...(typeof mutation?.cartVersion === 'number'
+          ...(typeof mutation?.cartVersion === 'number' &&
+          Number.isSafeInteger(mutation.cartVersion) &&
+          mutation.cartVersion >= input.snapshot.cartVersion
             ? { cartVersion: mutation.cartVersion }
             : null),
           ...(mutation?.replayed === true ? { replayed: true } : null),

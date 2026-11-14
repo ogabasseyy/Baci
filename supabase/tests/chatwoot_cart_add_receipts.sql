@@ -134,6 +134,10 @@ DO $$ DECLARE r jsonb; BEGIN
   IF r->>'code' <> 'unauthorized' OR r->>'state' <> 'null' THEN RAISE EXCEPTION 'cross-cart disclosed state: %',r; END IF;
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','foreign-product',2,'other',NULL);
   IF r->>'code' <> 'invalid_item' THEN RAISE EXCEPTION 'foreign merchant catalog product resolved: %',r; END IF;
+  PERFORM set_config('request.jwt.claims', '{"role":"commerce_cart_shopper","cart_scope":"session","exp":9999999999,"cart_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"buyer-a","cart_grant_id":"bad-uuid"}', false);
+  r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','malformed-grant-claim',2,'unmanaged',NULL);
+  IF r->>'code' <> 'unauthorized' OR r->>'state' <> 'null' THEN RAISE EXCEPTION 'malformed grant claim did not fail closed: %',r; END IF;
+  PERFORM set_config('request.jwt.claims', '{"role":"commerce_cart_shopper","cart_scope":"session","exp":9999999999,"cart_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"buyer-a","cart_grant_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}', false);
 END $$;
 
 -- Strict serialized stock prefers authoritative available_units over the

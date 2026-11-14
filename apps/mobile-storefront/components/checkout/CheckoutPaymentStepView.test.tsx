@@ -21,7 +21,10 @@ jest.mock('@/components/checkout/CheckoutSavingsRetryCard', () => ({
 
 type StepProps = Parameters<typeof CheckoutPaymentStepView>[0];
 
-function renderStep(selectedPayment: StepProps['selectedPayment']) {
+function renderStep(
+  selectedPayment: StepProps['selectedPayment'],
+  overrides: Partial<StepProps> = {}
+) {
   const props: StepProps = {
     availablePaymentMethods: undefined,
     checkoutSavingsBalance: 0,
@@ -46,6 +49,7 @@ function renderStep(selectedPayment: StepProps['selectedPayment']) {
     walletBalance: 0,
     walletFundedBankTransferOptionEnabled: false,
     walletSelection: undefined,
+    ...overrides,
   };
   render(<CheckoutPaymentStepView {...props} />);
   const lastCall = mockSelectorProps.mock.calls.at(-1);
@@ -64,5 +68,27 @@ describe('CheckoutPaymentStepView', () => {
   // visible instead of hiding inside a collapsed "Pay in Full" card.
   it('keeps the selected method visible when returning from Review', () => {
     expect(renderStep('paystack').initiallyCollapsed).toBe(false);
+  });
+
+  it('keeps a wallet-only payment visible when returning from Review', () => {
+    const props = renderStep(null, {
+      walletSelection: { use: true, amount: 250000 },
+    });
+    expect(props.initiallyCollapsed).toBe(false);
+  });
+
+  it('keeps a savings-only payment visible when returning from Review', () => {
+    const props = renderStep(null, {
+      savingsSelection: { use: true, goalId: 'goal-1', amount: 250000 },
+    });
+    expect(props.initiallyCollapsed).toBe(false);
+  });
+
+  it('still collapses when wallet and savings are present but unused', () => {
+    const props = renderStep(null, {
+      savingsSelection: { use: false, goalId: null, amount: 0 },
+      walletSelection: { use: false, amount: 0 },
+    });
+    expect(props.initiallyCollapsed).toBe(true);
   });
 });

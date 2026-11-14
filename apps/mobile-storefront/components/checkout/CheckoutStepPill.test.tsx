@@ -43,6 +43,8 @@ describe('CheckoutStepPill', () => {
 
     const pill = screen.getByLabelText('Address step, not yet available');
     expect(pill).toHaveStyle({ borderStyle: 'dashed' });
+    expect(pill).toHaveAccessibilityState({ disabled: true });
+    expect(pill.props.accessibilityRole).toBe('text');
     expect(screen.queryByRole('button')).toBeNull();
   });
 

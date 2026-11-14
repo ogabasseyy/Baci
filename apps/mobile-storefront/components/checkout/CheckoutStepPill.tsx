@@ -128,6 +128,8 @@ export function CheckoutStepPill({
     <View
       accessible
       accessibilityLabel={`${label} step, ${isCurrent ? 'current' : 'not yet available'}`}
+      accessibilityRole="text"
+      accessibilityState={isCurrent ? { selected: true } : { disabled: true }}
       style={pillStyle}
       testID={`checkout-step-pill-${stepKey}`}
     >

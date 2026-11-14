@@ -1,4 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import {
+  normalizeHttpsOrigin,
+  parseChatwootTenantBindings,
+} from '@/lib/chatwoot/commerce-context-bindings';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
 import { isOxygenPaymentSurface } from './oxygen-payment-surface';
@@ -10,8 +14,13 @@ export function generateCSP(
   nonce?: string,
   pathname?: string,
   searchParams?: URLSearchParams,
-  oxygenOwned = false
+  oxygenOwned = false,
+  storefrontHostname?: string
 ): string {
+  const chatwootOrigin =
+    routeType === 'storefront'
+      ? getEnabledChatwootPlatformOrigin(storefrontHostname)
+      : null;
   const hostedOrigins =
     oxygenOwned &&
     routeType === 'storefront' &&
@@ -61,7 +70,7 @@ export function generateCSP(
       : routeType === 'storefront'
         ? {
             ...baseDirectives,
-            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net`,
+            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net${chatwootOrigin ? ` ${chatwootOrigin}` : ''}`,
             'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
             // wss://*.supabase.co: the shared cart's private Realtime channel.
             // An https: source does not cover wss:, so without it browsers
@@ -84,9 +93,51 @@ export function generateCSP(
           (routeType === 'admin' && builderExperiencePreview))
           ? `${value} ${executionOrigin}`
           : value;
-      return (source ? `${key} ${source}` : key).trim();
+      const withChatwoot =
+        routeType === 'storefront' &&
+        chatwootOrigin &&
+        (key === 'connect-src' || key === 'frame-src')
+          ? `${source} ${chatwootOrigin}${key === 'connect-src' ? ` ${toChatwootSocketOrigin(chatwootOrigin)}` : ''}`
+          : source;
+      return (withChatwoot ? `${key} ${withChatwoot}` : key).trim();
     })
     .join('; ');
+}
+
+/** Exact HTTPS origin only; malformed environment values never widen CSP. */
+function getEnabledChatwootPlatformOrigin(
+  storefrontHostname?: string
+): string | null {
+  if (
+    process.env.EKAETTE_CHATWOOT_WIDGET_ENABLED !== 'true' ||
+    process.env.EKAETTE_CHATWOOT_CONTEXT_ENABLED !== 'true'
+  ) {
+    return null;
+  }
+  const value = process.env.EKAETTE_CHATWOOT_PLATFORM_ORIGIN?.trim();
+  const platformOrigin = normalizeHttpsOrigin(value);
+  if (!platformOrigin) return null;
+  const bindings = parseChatwootTenantBindings(
+    process.env.EKAETTE_CHATWOOT_CONTEXT_BINDINGS
+  );
+  const storefrontOrigin = normalizeHttpsOrigin(
+    storefrontHostname ? `https://${storefrontHostname}` : null
+  );
+  // CSP sees the request host, not the server-resolved merchant slug. On a
+  // shared custom host, one valid merchant binding therefore permits this
+  // fixed platform origin on sibling storefront paths too; the widget config
+  // still performs the exact merchant binding check before loading the SDK.
+  if (
+    !storefrontOrigin ||
+    !bindings?.some((binding) => binding.origin === storefrontOrigin)
+  ) {
+    return null;
+  }
+  return platformOrigin;
+}
+
+function toChatwootSocketOrigin(origin: string): string {
+  return origin.replace(/^https:/, 'wss:');
 }
 
 export function generateCspNonce(): string {

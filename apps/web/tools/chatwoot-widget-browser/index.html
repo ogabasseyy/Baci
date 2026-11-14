@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>Synthetic Chatwoot storefront fixture</title>
+    <script>
+      const loads = Number(sessionStorage.getItem('__chatwootFixtureLoads') || '0') + 1;
+      sessionStorage.setItem('__chatwootFixtureLoads', String(loads));
+      const cookie = document.cookie.split('; ').find((value) => value.startsWith('cw_conversation='));
+      let cookieClaims = null;
+      if (cookie) {
+        const payload = cookie.slice('cw_conversation='.length).split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/');
+        if (payload) {
+          try {
+            cookieClaims = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')));
+          } catch {
+            cookieClaims = null;
+          }
+        }
+      }
+      const previousInbox = sessionStorage.getItem('__chatwootPreviousInbox');
+      window.__chatwootFixtureDocumentStart = {
+        loads,
+        conversationCookiePresent: Boolean(cookie),
+        chatwootCookieCount: document.cookie.split('; ').filter((value) => value.startsWith('cw_')).length,
+        conversationCookieMatchesPreviousInbox: Boolean(cookieClaims?.inbox_id && String(cookieClaims.inbox_id) === previousInbox),
+      };
+      window.__chatwootFixtureCspViolations = [];
+      window.addEventListener('securitypolicyviolation', (event) => {
+        window.__chatwootFixtureCspViolations.push(event.violatedDirective);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

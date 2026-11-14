@@ -24,7 +24,7 @@ Rules that apply throughout:
 | Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Built in #4230 (no alerts); Fable-walked 11-13: pass; low fixes done in 00c334bab7 (PiggyVest merchant only) |
 | Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | Built in #4230; walk owed with a fresh account (onboarding only shows before setup) |
 | Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` | Built in #4230; checked on the mock 11-13: inline "Money received" notice, balance updated |
-| Fund | Wallet activity under the card | `activity/PiggyvestWalletActivity`, `list_piggyvest_wallet_activity` | Built in #4232 (stacked on #4230, PiggyVest merchant only): deposits, contributions, goal refunds and completions. Fable walk fixes (Show more cursor, AI button inset, Pending) in a41e1a35a3; re-walk owed. **Owed:** IMEI/VTU spends from the wallet are not recorded anywhere yet (pay-from-wallet #4225/#4227 must record them before they can be listed) |
+| Fund | Wallet activity under the card | `activity/PiggyvestWalletActivity`, `list_piggyvest_wallet_activity` | Built in #4232 (stacked on #4230): deposits, contributions, goal refunds and completions. **Owed:** IMEI/VTU spends from the wallet are not recorded anywhere yet (pay-from-wallet #4225/#4227 must record them before they can be listed) |
 | Save | Start Savings, Check your plan | `StartSavingsScreen` and modals | Redesigned in #4223 |
 | Save | Add to savings + PIN step | `WalletSavingsProgressModal`, `WalletPinSheet` | Done (#4215) |
 | Save | Goal setup pending / retry / slow notice | `SavingsPlanStatusNote` | Done in #4223 |
@@ -243,3 +243,119 @@ PiggyVest is enabled for the Ogabassey merchant only (owner, 11-13). Holds and P
 - On staging, once PiggyVest resumes outbound transfers: airtime/data/bills and IMEI pay to the PIN and settlement, and the money steps end to end.
 - Owner actions: the `allow-silent-revert` label on #4224; marking #4223 ready.
 
+
+## Walk 4: refreshed combined build (2026-11-13, 19:30–20:07, Fable, mock PiggyVest)
+
+Build: every open PiggyVest head merged locally (#4216, #4222, #4223, #4224, #4230, #4232, #4233, #4234 stack).
+
+Pass:
+- onboarding (BVN, consent, ready) with a fresh account;
+- Add money;
+- Start Savings / Check your plan;
+- Add to savings + PIN;
+- in-sheet Cancel and Complete;
+- Change phone;
+- Wallet PIN (no chat button);
+- old goal-actions link;
+- wallet activity (no provider names in any of 26 API rows or on screen).
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| F1 dead Complete button on a settled plan | #4224 | **Fixed** 15f79481ac |
+| F2 cancelled-plan notification opened another plan | #4224 | **Fixed** 15f79481ac (taps go through the goal link route) |
+| F3 activity rows gross, balance net (deposit fee hidden) | #4232 | **Fixed** 3dfaa869bb (net amount + fee line; Add money mentions the fee) |
+| F4 Change phone quoted weekly on a monthly plan | #4224 | **Fixed** 15f79481ac |
+| F5 savings sheet stayed over another screen | #4224 | **Fixed** 15f79481ac (closes on blur) |
+| F6 goal link trusted a stale wallet | #4224 | **Fixed** 15f79481ac, 6193b93895 (one fresh read per goal; a failed read keeps the link) |
+| F7 airtime 500 blamed PiggyVest / connection | #4225 | **Fixed** da1f56cec0 (neutral copy, savings wallet, title once) |
+| Notification card offset, 3-line cut, AI button overlap, raw time zone | #4224 | **Fixed** 15f79481ac (time zone gets a hint, picker deferred) |
+| "Move your savings" vs "Complete goal" | #4224 | **Fixed** 15f79481ac |
+| Start Savings lows (debit time, terms error, amount focus, search caps, picker tint) | #4223 | **Fixed** 54f8a88a46 |
+| Onboarding lows (consent error, disabled button, BVN show/hide, naming) and older store credit / Money received placement | #4230 | **Fixed** 6f611b14c8 |
+| PIN context rows lack goal name; no "phone changed" confirmation | #4224 | **Fixed** d9058f62ce |
+| Sheet style differences (grey vs red handles, arrow vs chevron back) | design | Open (low): needs one shared sheet/back-button decision across PRs |
+
+Not walkable locally:
+- onboarding pending (the mock answers ready at once);
+- the cancel forfeit line (needs an interest-payout webhook);
+- IMEI and airtime Pay → PIN.
+
+These, and the staging transfer test both ways (business → customer, customer → business), are owed on staging. A ₦1 probe at 17:49 UTC got 202 but never settled.
+
+## Walks 5 and 6: fixes confirmed on the simulator (2026-11-13, mock PiggyVest)
+
+Walk 5 (all heads merged) confirmed:
+- F3: net rows plus a fee line, and Add money mentions the fee.
+- F7: neutral airtime error.
+- The Start Savings fixes, the onboarding fixes, and notifications.
+- No "Older store credit" section for a new customer; "Money received" shows inside the sheet.
+
+It also found a blocker: the savings sheet never opened (close-on-blur via useFocusEffect). That is fixed in 16891aa374 (navigation blur/focus events).
+
+Walk 6, on that fix, passed all seven items:
+- the sheet opens;
+- F4 monthly pace and "Phone changed";
+- F5 sheet closes on leaving and reopens fresh;
+- F6 goal created outside the app;
+- PIN line "Cancelling <goal>";
+- "Complete goal" card label (#4223 e42be94e1a);
+- F1 settled plan notice and cancelled plan notice.
+
+Walk 5/6 lows:
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| Settled plan sheet showed "₦0 of ₦250,000" with no context | #4224 | **Fixed** 2ee4afd868 ("Purchase requested…") |
+| Change phone pace read as a quote (₦25,018) while the plan line stays ₦100/month | #4224 | **Fixed** 2ee4afd868 ("Suggested to finish by", rounded to ₦100) |
+| BVN field red border at rest | #4230 | **Fixed** a7aa48eaf2 |
+| Activity amount touching the fee line | #4232 | **Fixed** 21e0fdddfc |
+| Sign-in placeholder letter-spaced after code sign-in | #4229 | Sent |
+| Airtime phone field over 11 digits; IMEI arrow back button | #4227 / #4225 | Queued (waits on the owner's "Finish and push" in that session) |
+| #4216 vs #4223 head-start rail conflict | #4216 session | Sent (reconcile so either can merge first) |
+| Change phone replaces a custom goal title with the phone name | owner | Decision |
+
+## Walks 7 and 8 (2026-11-13, mock PiggyVest)
+
+Walk 8 ran on every open head except #4229 and the pay-from-wallet stack's latest round, and included #4216 for the first time. All seven walked items pass:
+- Change phone pace wraps and shows the full amount.
+- BVN border: neutral at rest, ink when focused.
+- The savings sheet opens, stays open, closes on leaving, and reopens on the first step.
+- The cancel PIN line names the goal.
+- A settled plan shows "Purchase requested".
+- A new Start Savings plan is created once and reaches enrolled, with no duplicate.
+- Wallet hero and activity show no provider names.
+
+| Finding | Owner | Status |
+| --- | --- | --- |
+| Change phone pace line clipped | #4224 | **Fixed** b85799ac78; walk 8 pass |
+| BVN focus border looked like an error | #4230 | **Fixed** d1abc10183; walk 8 pass |
+| Reopened savings sheet kept the picked amount | #4224 | **Fixed** 99d9243e72 |
+| "About 9 months" next to "10 monthly contributions" | #4223 | Sent |
+| Sign-in placeholder letter-spacing | #4229 | Fixed 32ddbb724c; not yet walked |
+| Airtime >11 digits, IMEI arrow | pay-from-wallet stack | Waits on the owner's "Finish and push" |
+
+Still owed: the live staging transfer test in both directions (business → customer, customer → business). Staging accepts a ₦1 transfer (202) but does not settle it.
+
+## Walks 9–16 (2026-11-14, mock PiggyVest)
+
+Each walk ran on a local-only combined build (`e2e/piggyvest-all`, never pushed) with the latest heads of #4224, #4216, #4222, #4223 and the pay-from-wallet stack (#4218, #4220, #4225, #4227, #4234). Each walk's findings went to the PR that owns them, and the next walk rechecked them.
+
+| Walk | Build | What it covered | Outcome |
+|---|---|---|---|
+| 9–10 | 1144822608, d3644d78df | All savings screens on the combined build | A completed goal swapped to another goal, the PIN sheet could be dragged shut mid-check, the closed-plan note leaked into the next goal's sheet, and an offline hero showed the goals total. All fixed. |
+| 11 | 7f849374b9 | Walk-10 fixes | All 5 fixed. New: an update loop on a settled goal (high), settled-goal links, a hung link read, a red info note, a ₦0 flash. Fixed in 630598739e and ce6e0410d2. |
+| 12 | e8aba60ae5 | Walk-11 fixes and #4216's offline fixes | All fixed except the closed note surviving Back. Fixed in f2dc88ed04. |
+| 13 | 0127982eb0 | Back, in-flight notice, sheet scroll, close X | The Back fix did not fire (expo-router has no `beforeRemove`), and an "awaiting confirmation" card flashed on every add. Fixed in 60699bbbf9 and 20859f664d. The close X miss is only the dev-menu button covering it. |
+| 14 | e05b7c097f | Final full walk, including pay-from-wallet | IMEI paid from the wallet end to end, plus wrong PIN, refund on provider failure and no provider names. Found: the orders link behind the AI button, transport error text, the PIN hint not clearing, the last-known account number on cold launch, and four pay-from-wallet items. All fixed: #4224 in c521a3c9a1, #4216 in a88e7e9625, the stack in its next heads. |
+| 15 | 6ebaada040 | Walk-14 fixes | 11 of 13 pass. #4224's "try again" beside the pending card and stale goal options were fixed in 3114b5b63c. #4216's warm hint and three IMEI/airtime items were fixed by their sessions. |
+| 16 | 4183832ee7 | Walk-15 fixes | 6 of 7 pass, and all regressions pass. |
+
+### Left open after walk 16 (all low)
+- The fresh IMEI form shows "Pay ₦1,000 for Full Report", dimmed until an IMEI is typed, with the preselected card below the fold. #4225 chose to name the check rather than preselect nothing.
+- The first Add tap right after the sheet recovers from an outage can meet "Checking contributions… Please try again after this check." This is the safety check for an earlier transfer still finishing; a second tap works.
+- The savings PIN sheet says "That PIN is not right." without a tries-left count. The IMEI and airtime sheets show one, but the savings PIN API doesn't return it.
+- With the server down at cold launch, the plan sheet's status note says "Getting your plan ready" for a ready plan. Sent to #4223.
+
+### Still owed
+- Airtime from the wallet past the start call: the local stack doesn't serve `calculate_vtu`, so this is staging-only.
+- The staging transfer test, business → customer and customer → business, waits for PiggyVest staging to settle transfers. A ₦1 probe on 2026-11-13 was accepted (202) but never settled.

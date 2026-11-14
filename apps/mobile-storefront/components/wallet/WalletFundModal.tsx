@@ -9,7 +9,9 @@ import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestCardOnlyMerchant } from '@/lib/is-piggyvest-card-only-merchant';
 import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
 import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
@@ -85,12 +87,13 @@ export function WalletFundModal({
   // only a card top-up adds: the PiggyVest account would fund savings.
   // Also when the PiggyVest read is unknown (timed out) or not set up yet,
   // so the purchase never detours into PiggyVest setup.
-  // Same rule as the purchase screens (useCardOnlyPurchaseTopUp): an
+  // Same rule as the purchase screens: an
   // unsettled wallet at a merchant not ruled out is a store credit top-up.
   const storeCreditTopUp =
     isWalletPurchaseReturnHref(fundReturnTo) &&
     (primaryReady ||
       piggyvestMerchant ||
+      // The live verdict wins over this hook's own (Codex).
       (walletPrimaryUnsettled && (verdictNow ?? primaryCapability) !== false) ||
       // No verdict yet: a restored legacy wallet isn't trusted (Codex).
       (primaryCapability === null && verdictNow === null));
@@ -108,21 +111,39 @@ export function WalletFundModal({
   // A store credit top-up opened from a purchase pushes the wallet page;
   // dismissing the sheet returns straight to that purchase instead of
   // leaving the customer on the pushed page (walk-through M8).
+  // Latched while open (Codex): a verdict change mid-sheet must not strand
+  // a customer who arrived from a purchase on the wallet page.
+  // Scoped to that purchase and cleared whenever the sheet closes (Codex),
+  // including programmatic closes, so a later savings sheet never inherits it.
+  const [latchedReturn, setLatchedReturn] = useState<string | null>(null);
+  if (showFundPanel && storeCreditTopUp && fundReturnTo && !latchedReturn)
+    setLatchedReturn(fundReturnTo);
+  if (!showFundPanel && latchedReturn) setLatchedReturn(null);
   const dismissFund = () => {
+    // A question still waiting here is declined (Codex): otherwise its
+    // funding never settles and later top-ups for this account are dropped.
+    answerWalletFundPrompt(false);
     onResetFund();
-    if (!storeCreditTopUp || !fundReturnTo) return;
-    // A deep link has no history underneath: open the purchase instead.
-    if (router.canGoBack()) router.back();
-    else router.replace(fundReturnTo);
+    const returnToPurchase =
+      storeCreditTopUp || (!!fundReturnTo && latchedReturn === fundReturnTo);
+    setLatchedReturn(null);
+    if (!returnToPurchase || !fundReturnTo) return;
+    // Back to that purchase, not merely the previous screen (Codex): a warm
+    // deep link may sit on unrelated history. dismissTo pops to the purchase
+    // when it is in the stack and opens it otherwise (cold deep link).
+    router.dismissTo(fundReturnTo);
   };
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
   // fallback once setup completes.
+  // Not while a rollback's ruling-out has just expired (Codex): the stale
+  // hook's true must not reopen PiggyVest setup; the sheet keeps checking.
   const showPrimarySetup =
     !storeCreditTopUp &&
     !!merchantId &&
     piggyvestMerchant &&
+    !(verdictNow === null && wasPiggyvestLastRuledOut(merchantId)) &&
     fundingAccount?.provider !== 'piggyvest';
   // Keep the panel rendered while the card slides down on close, so the
   // exit animation shows the sheet instead of an empty card; it unmounts

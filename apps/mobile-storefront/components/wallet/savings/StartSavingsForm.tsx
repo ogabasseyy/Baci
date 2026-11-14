@@ -1,20 +1,20 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BRAND, palette } from '@/constants/Colors';
 import { SavingsContributionSection } from './SavingsContributionSection';
+import {
+  howYouSaveLine,
+  SavingsHowYouSaveSection,
+} from './SavingsHowYouSaveSection';
 import { SavingsSetupHero } from './SavingsSetupHero';
+import { SavingsStep } from './SavingsStep';
 import { StartSavingsProductFields } from './StartSavingsProductFields';
-import { savingsCardAccent } from './savings-card-accent';
 import { startSavingsStyles as styles } from './start-savings.styles';
-import type {
-  SavingsSourceMode,
-  StartSavingsColors,
-} from './start-savings.types';
+import type { StartSavingsColors } from './start-savings.types';
 import type {
   LocalSavingsFormController,
   StartSavingsController,
 } from './start-savings-controller.types';
+import { contributionAboveTargetMessage } from './start-savings-controller.utils';
 
 type StartSavingsFormProps = {
   onSearchFocusChange?: (focused: boolean) => void;
@@ -45,9 +45,22 @@ export function StartSavingsForm(
     deviceReady &&
     Number.isFinite(props.controller.contributionValue) &&
     props.controller.contributionValue > 0 &&
+    // A saving bigger than the phone's price is not a finished step.
+    !contributionAboveTargetMessage(
+      props.controller.contributionValue,
+      props.controller.targetValue
+    ) &&
     (!props.controller.initialContributionEnabled ||
       (Number.isFinite(props.controller.effectiveInitialContribution) &&
-        props.controller.effectiveInitialContribution > 0));
+        props.controller.effectiveInitialContribution > 0 &&
+        // Same rule as submit: a head start above the price is not done.
+        props.controller.effectiveInitialContribution <=
+          props.controller.targetValue));
+  const howReady =
+    props.mode !== 'draft' &&
+    scheduleReady &&
+    props.controller.acceptsNonWithdrawableTerms &&
+    (!props.controller.askInterest || props.controller.interestChoice !== null);
   const disabled =
     controller.isSubmitting ||
     (props.mode === 'draft' && !props.controller.canContinue);
@@ -60,46 +73,69 @@ export function StartSavingsForm(
           not available in this test.
         </Text>
       ) : null}
-      {props.mode === 'draft' ? (
-        <>
-          <Text style={[styles.sectionLabel, { color: colors.primary }]}>
-            Local test · Draft only
-          </Text>
-          <StartSavingsProductFields
-            onSearchFocusChange={props.onSearchFocusChange}
-            mode="draft"
-            colors={colors}
-            controller={props.controller}
-          />
-        </>
-      ) : (
-        <>
-          <StartSavingsProductFields
-            onSearchFocusChange={props.onSearchFocusChange}
-            colors={colors}
-            controller={props.controller}
-          />
-          {deviceReady ? (
-            <SavingsContributionSection
+      <View style={styles.steps}>
+        <SavingsStep
+          colors={colors}
+          number={1}
+          title={
+            props.mode === 'draft'
+              ? 'Pick your phone (draft only)'
+              : 'Pick your phone'
+          }
+          icon="phone-portrait-outline"
+          cheer="Every saving gets you closer to your new phone."
+          state={deviceReady ? 'done' : 'current'}
+          last={props.mode === 'draft'}
+        >
+          {props.mode === 'draft' ? (
+            <StartSavingsProductFields
+              onSearchFocusChange={props.onSearchFocusChange}
+              mode="draft"
               colors={colors}
               controller={props.controller}
             />
-          ) : null}
-          {scheduleReady ? (
-            <>
-              <SourceModeSection
+          ) : (
+            <StartSavingsProductFields
+              onSearchFocusChange={props.onSearchFocusChange}
+              colors={colors}
+              controller={props.controller}
+            />
+          )}
+        </SavingsStep>
+        {props.mode === 'draft' ? null : (
+          <>
+            <SavingsStep
+              colors={colors}
+              number={2}
+              title="Make it a habit"
+              icon="calendar-outline"
+              cheer="Small, steady amounts add up faster than you think."
+              state={
+                !deviceReady ? 'later' : scheduleReady ? 'done' : 'current'
+              }
+            >
+              <SavingsContributionSection
                 colors={colors}
                 controller={props.controller}
               />
-
-              <SavingsTermsSection
+            </SavingsStep>
+            <SavingsStep
+              colors={colors}
+              number={3}
+              title="How you’ll save"
+              icon="wallet-outline"
+              cheer={howYouSaveLine(props.controller.sourceMode)}
+              state={!scheduleReady ? 'later' : howReady ? 'done' : 'current'}
+              last
+            >
+              <SavingsHowYouSaveSection
                 colors={colors}
                 controller={props.controller}
               />
-            </>
-          ) : null}
-        </>
-      )}
+            </SavingsStep>
+          </>
+        )}
+      </View>
       {controller.formError ? (
         <Text style={[styles.errorText, { color: colors.error }]}>
           {controller.formError}
@@ -137,115 +173,5 @@ export function StartSavingsForm(
         </Pressable>
       ) : null}
     </>
-  );
-}
-
-function SourceModeSection({ colors, controller }: StartSavingsFormProps) {
-  return (
-    <View style={[styles.sourceModeCard, savingsCardAccent(colors)]}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        03 · Choose how you fund it
-      </Text>
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel="Savings source of funds"
-        style={styles.sourceModeRow}
-      >
-        <SourceModeButton
-          colors={colors}
-          controller={controller}
-          label="Manual debit"
-          mode="manual"
-        />
-        {process.env.EXPO_PUBLIC_HOSTED_STOREFRONT !== '1' ? (
-          <SourceModeButton
-            colors={colors}
-            controller={controller}
-            label="Auto debit"
-            mode="auto_debit"
-          />
-        ) : null}
-      </View>
-      <Text style={[styles.sourceModeHint, { color: colors.textSecondary }]}>
-        {process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1'
-          ? 'Auto debit is not available in this staging build. Use manual contributions while we finish card testing.'
-          : controller.sourceMode === 'auto_debit'
-            ? 'Charges will use a saved Paystack card for scheduled contributions.'
-            : 'Manual debit uses wallet balance or wallet funding before the plan starts.'}
-      </Text>
-    </View>
-  );
-}
-
-function SourceModeButton({
-  colors,
-  controller,
-  label,
-  mode,
-}: StartSavingsFormProps & {
-  label: string;
-  mode: SavingsSourceMode;
-}) {
-  const isActive = controller.sourceMode === mode;
-
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={`Use ${label.toLowerCase()} for savings`}
-      accessibilityState={{ selected: isActive }}
-      onPress={() => controller.handleSourceModeChange(mode)}
-      style={[
-        styles.sourceModeOption,
-        {
-          borderColor: isActive ? BRAND.primary : colors.border,
-          backgroundColor: isActive ? `${BRAND.primary}10` : colors.background,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          styles.sourceModeLabel,
-          { color: isActive ? BRAND.primary : colors.textSecondary },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function SavingsTermsSection({ colors, controller }: StartSavingsFormProps) {
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: controller.acceptsNonWithdrawableTerms }}
-      accessibilityLabel="Accept non-withdrawable savings terms"
-      onPress={() =>
-        controller.setAcceptsNonWithdrawableTerms((value) => !value)
-      }
-      style={styles.checkbox}
-    >
-      <View
-        style={[
-          styles.checkboxMark,
-          {
-            borderColor: controller.acceptsNonWithdrawableTerms
-              ? BRAND.primary
-              : colors.border,
-            backgroundColor: controller.acceptsNonWithdrawableTerms
-              ? BRAND.primary
-              : colors.card,
-          },
-        ]}
-      >
-        {controller.acceptsNonWithdrawableTerms ? (
-          <Ionicons name="checkmark" size={12} color={palette.white} />
-        ) : null}
-      </View>
-      <Text style={[styles.checkboxLabel, { color: colors.textSecondary }]}>
-        I understand savings are reserved for my selected purchase and cannot be
-        withdrawn to a bank account.
-      </Text>
-    </Pressable>
   );
 }

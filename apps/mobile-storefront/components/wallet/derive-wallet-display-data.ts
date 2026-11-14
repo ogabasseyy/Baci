@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { hasMalformedPrimaryBalance } from '@/lib/has-malformed-primary-balance';
 import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { WalletDisplayFundingAccount } from './wallet.types';
@@ -19,6 +20,7 @@ interface WalletDataLike {
   owner_unresolved?: boolean | null;
   primary_balance_kobo?: number | null;
   primary_pending?: boolean | null;
+  primary_stale?: boolean | null;
   primary_unavailable?: boolean | null;
   savings_balance?: number | null;
   savings_goals?: WalletActiveSavingsGoal[] | null;
@@ -136,9 +138,23 @@ export function deriveWalletDisplayData(
     ...primaryFields,
     // The PiggyVest check is unsettled (failed, pending, or no customer row
     // yet): purchase top-ups stay card-only store credit, like IMEI's.
+    // A malformed PiggyVest balance (negative, non-finite) is no answer
+    // either (Muse): purchase top-ups stay card-only store credit.
     ...(isWalletPrimaryUnknown(walletData) ||
+    hasMalformedPrimaryBalance(walletData) ||
     walletData.owner_unresolved === true
       ? { walletPrimaryUnsettled: true as const }
+      : {}),
+    // The PiggyVest read failed (server unreachable): the wallet can't say
+    // what this customer's balance is. Callers gate it to the PiggyVest
+    // merchant and show a "can't check" state, never the goals total.
+    ...(walletData.primary_unavailable === true && !primaryReady
+      ? { primaryUnreadable: true as const }
+      : {}),
+    // The balance is recalled from moments ago (the fresh read failed): the
+    // account number is shown, marked as possibly out of date (walk 14).
+    ...(walletData.primary_stale === true && primaryReady
+      ? { primaryStale: true as const }
       : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),

@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
@@ -14,6 +15,15 @@ export function WalletPinSavedView({
   title: string;
   onDone: () => void;
 }) {
+  // One Done only: a quick double tap must not go back twice (past Settings).
+  const pressed = useRef(false);
+  const [leaving, setLeaving] = useState(false);
+  const done = () => {
+    if (pressed.current) return;
+    pressed.current = true;
+    setLeaving(true);
+    onDone();
+  };
   return (
     <View style={styles.saved}>
       <View
@@ -38,7 +48,9 @@ export function WalletPinSavedView({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Done"
-        onPress={onDone}
+        accessibilityState={{ disabled: leaving }}
+        disabled={leaving}
+        onPress={done}
         style={[styles.primary, { backgroundColor: colors.primary }]}
       >
         <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>

@@ -72,6 +72,13 @@ jest.mock('@/constants/wallet-funding', () => ({
   WALLET_FUNDING_POLLING: { INTERVAL_MS: 5000, TIMEOUT_MS: 120000 },
 }));
 
+// The plan's savings wallet reads as ready, so the amount entry shows.
+jest.mock('@/lib/customer-savings', () => ({
+  ...(jest.requireActual('@/lib/customer-savings') as object),
+  fetchExistingSavingsPlanFunding: () =>
+    Promise.resolve({ status: 'ready', accounts: [] }),
+}));
+
 const _mockSetClipboardString = jest.mocked(setClipboardString);
 
 describe('WalletContent with PiggyVest', () => {
@@ -97,7 +104,7 @@ describe('WalletContent with PiggyVest', () => {
       expect(screen.queryByText('₦5,000')).toBeNull();
     });
 
-    it('sends savings funding to Add money, never Continue to payment', () => {
+    it('sends savings funding to Add money, never Continue to payment', async () => {
       const props = createWalletContentProps();
       render(
         <WalletContent
@@ -109,10 +116,10 @@ describe('WalletContent with PiggyVest', () => {
         />
       );
 
-      expect(screen.queryByText(/Continue to payment/)).toBeNull();
       fireEvent.press(
-        screen.getByRole('button', { name: 'Add money to wallet' })
+        await screen.findByRole('button', { name: 'Add money to wallet' })
       );
+      expect(screen.queryByText(/Continue to payment/)).toBeNull();
       expect(props.onFundSavingsWallet).toHaveBeenCalledTimes(1);
     });
   });

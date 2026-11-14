@@ -142,6 +142,9 @@ export function SavingsNotificationPreferences({
         <Text style={[styles.timeZoneLabel, { color: colors.text }]}>
           Time zone
         </Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Reminders follow this time zone. Nigeria is Africa/Lagos.
+        </Text>
         <TextInput
           accessibilityLabel="Savings notification time zone"
           autoCapitalize="none"

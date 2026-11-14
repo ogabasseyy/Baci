@@ -8,6 +8,7 @@ import { clearSavingsNotice, savingsNotifier } from './savings/savings-notice';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
+import { walletRefreshWorked } from './wallet-refresh-worked';
 
 interface AddSavingsContributionParams {
   activeMerchantId?: string;
@@ -85,6 +86,8 @@ export async function addSavingsContributionToGoal({
     return;
   }
 
+  // The last result is about the previous add, not this one in flight.
+  clearSavingsNotice();
   setIsAddingSavingsContribution(true);
   try {
     const contributionResult = await addSavingsContribution({
@@ -143,13 +146,12 @@ export async function addSavingsContributionToGoal({
         // Reminder cleanup is best effort after a confirmed contribution.
       }
     }
-    clearSavingsContributionAmount();
     clearIdempotencyKey?.();
     triggerHaptic('success');
-    const refreshFailed = await refetchWallet().then(
-      () => false,
-      () => true
-    );
+    const refreshFailed = !(await walletRefreshWorked(refetchWallet));
+    // Cleared after the refresh (it never throws), in the same tick as the
+    // result: clearing first showed NGN 0 while the wallet re-read.
+    clearSavingsContributionAmount();
     const success = buildSavingsSuccessMessage({
       amount,
       goal,
@@ -159,6 +161,7 @@ export async function addSavingsContributionToGoal({
         confirmed.goalCompleted ??
         (confirmed.savedAfter !== undefined &&
           confirmed.savedAfter >= goal.target_amount),
+      mayHaveCompleted: goalCompleted,
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });
@@ -205,9 +208,7 @@ export async function changeSavingsGoalDevice({
       productId: product.id,
       variantId: variantId ?? null,
     });
-    try {
-      await refetchWallet();
-    } catch {
+    if (!(await walletRefreshWorked(refetchWallet))) {
       notify(
         'Device updated',
         'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.',
@@ -215,7 +216,12 @@ export async function changeSavingsGoalDevice({
       );
       return true;
     }
-    // The savings sheet shows the new phone; no alert on top of it.
+    // A calm inline confirmation; a failed refresh keeps its own notice above.
+    notify(
+      'Phone changed',
+      `Your savings now go towards ${product.name}.`,
+      'success'
+    );
     return true;
   } catch (error) {
     notify(

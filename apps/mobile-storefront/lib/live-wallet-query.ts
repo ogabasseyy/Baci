@@ -6,6 +6,7 @@ import type { PiggyvestShortfallVerdict } from '@/lib/prompt-piggyvest-utility-s
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
+import { hasMalformedPrimaryBalance } from './has-malformed-primary-balance';
 
 /**
  * Both identities present but disagreeing (customer row linked to a
@@ -155,7 +156,11 @@ export function createLiveWalletQuery(
         (!wallet || wallet.owner_unresolved === true);
       return {
         walletIsStoreCredit: isWalletStoreCredit(wallet),
-        walletPrimaryUnknown: isWalletPrimaryUnknown(wallet) || unsettled,
+        // A malformed PiggyVest balance is no answer either (Muse).
+        walletPrimaryUnknown:
+          isWalletPrimaryUnknown(wallet) ||
+          hasMalformedPrimaryBalance(wallet) ||
+          unsettled,
       };
     },
     isSettled: () => {

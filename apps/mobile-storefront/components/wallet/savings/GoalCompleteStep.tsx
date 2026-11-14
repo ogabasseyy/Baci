@@ -3,7 +3,6 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { withAlpha } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { useSavingsSheetLock } from '../SavingsSheetLock';
 import { GoalCancelRow as Row } from './GoalCancelRow';
 import { GoalCancelButton as Button } from './GoalCancelStepParts';
@@ -46,12 +45,18 @@ export function GoalCompleteStep({
 }) {
   const { known, saved, interest, total } = goalCompleteBreakdown(goal);
   // A PIN retry can come mid-submit: the sheet stays open until it settles.
-  useSavingsSheetLock(flow.step === 'submitting');
+  // Locked while a request is out (issue or submit), so the sheet can't be
+  // dismissed into a PIN prompt it no longer shows.
+  useSavingsSheetLock(flow.step === 'issuing' || flow.step === 'submitting');
   const done = flow.step === 'done';
   // A plan can also be completed at its end date without reaching the target.
-  // Same test as the database: saved principal, not principal plus interest.
+  // Celebrate only when the saved principal itself reached the target. With
+  // no principal figure the balance may include interest, so the neutral
+  // "plan is ready" wording is used instead.
   const reachedTarget =
-    (goal.principal_amount ?? goal.current_amount) >= goal.target_amount;
+    goal.principal_amount !== undefined &&
+    goal.principal_amount !== null &&
+    goal.principal_amount >= goal.target_amount;
   const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
     flow.step
   );

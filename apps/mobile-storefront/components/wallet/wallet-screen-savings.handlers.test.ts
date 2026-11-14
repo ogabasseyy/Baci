@@ -131,6 +131,25 @@ describe('wallet-screen-savings.handlers', () => {
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
   });
 
+  it('treats a refetch that resolves with isError as a failed refresh', async () => {
+    await addSavingsContributionToGoal({
+      addSavingsContribution: jest.fn(async () => ({})),
+      clearSavingsContributionAmount: jest.fn(),
+      clearIdempotencyKey: jest.fn(),
+      createIdempotencyKey: () => 'savings-key-2',
+      goal,
+      rawAmount: '500',
+      refetchWallet: jest.fn(async () => ({ isError: true })),
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(notifySavings).toHaveBeenCalledWith(
+      'Savings updated',
+      expect.stringMatching(/Pull to refresh your latest balance\.$/),
+      'success'
+    );
+  });
+
   it('clears the idempotency key when wallet refresh fails after a contribution', async () => {
     const addSavingsContribution = jest.fn(async () => ({}));
     const clearSavingsContributionAmount = jest.fn();

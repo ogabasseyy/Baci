@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { getWalletReturnHref } from '@/components/payment-gateway/payment-gateway-controller.helpers';
+import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import {
   getPiggyvestPrimaryCapability,
   isVerifiedEmailRequired,
@@ -18,6 +19,8 @@ import { savingsNotifier } from './savings/savings-notifier';
 import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
+/** Purchase top-up with no saved funding: the caller adds store credit. */
+export const NOTHING_TO_RECOVER = 'nothing-to-recover' as const;
 const activeFundings = new Set<string>();
 // The consent this screen collects: one-time charge, never save the card.
 // The adoption dialog compares only the echoed save-card choice because
@@ -93,6 +96,10 @@ export async function fundPrimaryWalletCard(
     // exists is it safe to report primary unavailable so the caller can
     // run the legacy top-up instead.
     pending = await client.readPending({ merchantId, userId });
+    // A purchase top-up only recovers a saved funding here (Codex): with
+    // nothing saved, the caller adds store credit, never a PiggyVest charge.
+    if (!pending && isWalletPurchaseReturnHref(input.walletReturnTo))
+      return NOTHING_TO_RECOVER;
     if (!pending && !(await getPiggyvestPrimaryCapability(merchantId))) {
       const unavailable = new Error(
         'Primary card funding is unavailable.'

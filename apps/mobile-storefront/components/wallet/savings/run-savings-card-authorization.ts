@@ -18,7 +18,10 @@ export async function runSavingsCardAuthorization(
       merchantSlug: input.activeMerchantSlug,
     });
     if (!isCurrent()) return;
+    // The single review sheet holds the card picker: close it fully (both
+    // flags) so it never stays on top of the Paystack screen.
     input.setShowFundingModal(false);
+    input.setShowPreviewModal(false);
     router.push({
       pathname: '/payment-gateway',
       params: {

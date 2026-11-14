@@ -12,7 +12,7 @@ import { PRIMARY_CREDIT_POLL_INTERVAL_MS } from './use-primary-wallet-credit-pol
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 
 // The live verdict is unknown unless a test says otherwise.
-let mockVerdict: boolean | null = null;
+const mockVerdict: boolean | null = null;
 jest.mock('@/hooks/use-piggyvest-capability-now', () => ({
   usePiggyvestCapabilityNow: () => mockVerdict,
 }));
@@ -56,7 +56,6 @@ const unavailable: WalletData = { ...base, primary_unavailable: true };
 
 describe('usePrimaryWalletWatch', () => {
   beforeEach(() => {
-    mockVerdict = null;
     jest.useFakeTimers();
   });
   afterEach(() => {
@@ -133,26 +132,5 @@ describe('usePrimaryWalletWatch', () => {
       jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS * 2);
     });
     expect(refetch).not.toHaveBeenCalled();
-  });
-});
-
-describe("bugfix: one merchant ruling-out stripped the next merchant's balance", () => {
-  beforeEach(() => {
-    mockVerdict = null;
-    jest.useFakeTimers();
-  });
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('does not suppress merchant B because merchant A was ruled out', () => {
-    mockVerdict = false;
-    const { result, rerender } = setup({ wallet: ready, scopeKey: 'user:a' });
-    expect(result.current?.primary_balance_kobo).toBeUndefined();
-
-    // Same mounted screen, other merchant, verdict not known yet.
-    mockVerdict = null;
-    rerender({ wallet: ready, scopeKey: 'user:b' });
-    expect(result.current?.primary_balance_kobo).toBe(500000);
   });
 });

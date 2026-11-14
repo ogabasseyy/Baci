@@ -2,7 +2,9 @@ import * as Crypto from 'expo-crypto';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
   isPinCancelled,
   type PinProofRequester,
@@ -31,7 +33,18 @@ export async function runBankTransferContribution(
   ctx: { isMounted: () => boolean; requestPinProof?: PinProofRequester }
 ): Promise<void> {
   try {
-    const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
+    // The caller's answer for this customer wins when it says legacy (a
+    // legacy-wallet customer at a PiggyVest merchant stays on legacy).
+    // Otherwise the merchant allowlist decides, and the live verdict follows a
+    // rollback (Codex): neither may debit PiggyVest while the form shows the
+    // restored legacy balance. An unknown verdict at the pilot stays primary,
+    // never legacy; a rollback whose ruling-out just expired waits below.
+    const verdictNow = readPiggyvestCapabilityNow(input.activeMerchantId);
+    const isPrimary =
+      input.primaryRail !== false &&
+      (input.primaryRail === true ||
+        isPiggyvestPrimaryMerchant(input.activeMerchantId)) &&
+      verdictNow !== false;
     const storedKey = input.initialContributionIdempotencyKey;
     // The rail is persisted with the stored id (same state, same scope,
     // cleared together). A truly unrecorded id is only an id from before the
@@ -61,6 +74,21 @@ export async function runBankTransferContribution(
     // rail the customer is currently on.
     const rail: ContributionRail =
       stored.rail ?? (isPrimary ? 'primary' : 'legacy');
+    // A rollback's ruling-out just expired: the form still validates against
+    // the legacy balance, so a fresh id waits for the verdict instead of
+    // debiting PiggyVest (same hold as the wallet screen).
+    if (
+      !stored.rail &&
+      rail === 'primary' &&
+      verdictNow === null &&
+      input.activeMerchantId &&
+      wasPiggyvestLastRuledOut(input.activeMerchantId)
+    ) {
+      const message = 'We are checking your wallet. Please try again shortly.';
+      input.setFormError(message);
+      showAppAlert({ title: 'Still checking', message, variant: 'info' });
+      return;
+    }
     if (rail === 'primary' && !isPrimary && !stored.confirmed) {
       // The original rail is no longer available and the id must never
       // move to legacy: keep it and wait.

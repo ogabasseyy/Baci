@@ -1,5 +1,6 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { resolveSavingsGoalVariant } from '@/lib/customer-savings';
+import { walletRefreshWorked } from './wallet-refresh-worked';
 
 /**
  * True when saved and refreshed; `{ saved }` when saved but the wallet could
@@ -48,21 +49,7 @@ export async function resolveCompletedSavingsGoalVariant({
     // The choice is saved. Refresh so the goal stops asking for it; if two
     // tries fail, say it is saved rather than leaving the old question up.
     for (let tries = 0; tries < 2; tries += 1) {
-      try {
-        // A failed refresh usually resolves to an error result, not a throw.
-        const result = await refetchWallet();
-        if (
-          !(
-            typeof result === 'object' &&
-            result &&
-            'isError' in result &&
-            result.isError
-          )
-        )
-          return true;
-      } catch {
-        // try once more
-      }
+      if (await walletRefreshWorked(refetchWallet)) return true;
     }
     return {
       saved: 'Your choice is saved. Pull down on the wallet to refresh it.',

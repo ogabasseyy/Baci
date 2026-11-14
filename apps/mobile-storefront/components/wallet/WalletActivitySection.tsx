@@ -1,9 +1,9 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { PiggyvestWalletActivity } from './activity/PiggyvestWalletActivity';
 import { withoutPiggyvestActivityRows } from './activity/without-piggyvest-activity-rows';
-import type { WalletContentProps } from './WalletContent';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletTransactionHistory } from './WalletTransactionHistory';
+import type { WalletContentProps } from './wallet-content-props.types';
 
 /**
  * Everything under the wallet card: the PiggyVest wallet activity when the

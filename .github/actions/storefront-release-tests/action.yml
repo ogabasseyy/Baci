@@ -7,4 +7,6 @@ runs:
     - shell: bash
       run: bash .github/scripts/android-storefront-release.test.sh
     - shell: bash
+      run: node .github/scripts/android-native-library-check.test.mjs
+    - shell: bash
       run: bash .github/scripts/ios-storefront-release.test.sh

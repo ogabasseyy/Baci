@@ -36,7 +36,8 @@ interface TableRoute {
   insert?: PiggyvestWebhookIntakeFunction;
   insertKey?: string;
   read?: PiggyvestWebhookIntakeFunction;
-  readKey?: string;
+  /** Columns the read function accepts as its single lookup key. */
+  readKeys?: readonly string[];
 }
 
 const tables: Record<string, TableRoute> = {
@@ -44,25 +45,27 @@ const tables: Record<string, TableRoute> = {
     insert: 'inbox_insert',
     insertKey: 'event_id',
     read: 'inbox_read',
-    readKey: 'event_id',
+    readKeys: ['event_id'],
   },
   piggyvest_event_quarantine: {
     insert: 'quarantine_insert',
     insertKey: 'body_digest',
   },
+  // PVB credit identity is pvb_reference (PiggyVest, 2026-11-11); the
+  // internal provider id stays readable for pre-migration legacy rows.
   piggyvest_inflow_credits: {
     insert: 'inflow_credit_insert',
-    insertKey: 'provider_transaction_id',
+    insertKey: 'pvb_reference',
     read: 'inflow_credit_read',
-    readKey: 'provider_transaction_id',
+    readKeys: ['pvb_reference', 'provider_transaction_id'],
   },
   piggyvest_interest_payouts: {
     insert: 'interest_payout_insert',
-    insertKey: 'provider_payout_id',
+    insertKey: 'pvb_reference',
     read: 'interest_payout_read',
-    readKey: 'provider_payout_id',
+    readKeys: ['pvb_reference', 'provider_payout_id'],
   },
-  piggyvest_plan_wallets: { read: 'plan_wallet_read', readKey: 'wallet_id' },
+  piggyvest_plan_wallets: { read: 'plan_wallet_read', readKeys: ['wallet_id'] },
 };
 
 function columns(selected: string | undefined): string[] {
@@ -166,11 +169,12 @@ class IntakeQuery implements PromiseLike<Result> {
       if (!exactKey || this.filters.length > 0) return null;
       return { fn: route.insert, payload: this.values, wanted, many: true };
     }
-    if (this.op === 'select' && route?.read && route.readKey) {
-      if (!this.single || !only(route.readKey)) return null;
+    const readKey = route?.readKeys?.find((key) => only(key));
+    if (this.op === 'select' && route?.read && readKey) {
+      if (!this.single) return null;
       return {
         fn: route.read,
-        payload: { [route.readKey]: this.filters[0]?.[1] },
+        payload: { [readKey]: this.filters[0]?.[1] },
         wanted,
         many: false,
       };

@@ -17,6 +17,11 @@ export interface WalletData {
    * the last confirmed balance; any authoritative answer leaves it unset.
    */
   primary_unavailable?: boolean;
+  /**
+   * True when the PiggyVest figures were recalled from moments ago because
+   * the fresh read ran slow: shown, but the wallet keeps re-checking.
+   */
+  primary_stale?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];

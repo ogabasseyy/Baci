@@ -16,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useStartupMotionEnabled } from './useStartupMotionEnabled';
 
 interface SkeletonProps {
   width?: DimensionValue;
@@ -35,8 +36,14 @@ export function Skeleton({
 
   // Reanimated Shared Value for loading shimmers
   const opacityValue = useSharedValue(0.3);
+  const motionEnabled = useStartupMotionEnabled();
 
   useEffect(() => {
+    if (!motionEnabled) {
+      cancelAnimation(opacityValue);
+      opacityValue.set(0.3);
+      return;
+    }
     // Pure Reanimated infinite loop driving opacity pulses natively on C++ thread
     // .set()/.get() are the React Compiler-compatible shared value accessors.
     opacityValue.set(
@@ -53,7 +60,7 @@ export function Skeleton({
       cancelAnimation(opacityValue);
       opacityValue.set(0.3);
     };
-  }, [opacityValue]);
+  }, [motionEnabled, opacityValue]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacityValue.get(),

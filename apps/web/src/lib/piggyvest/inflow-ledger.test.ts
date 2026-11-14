@@ -63,6 +63,8 @@ const MAPPING_ROW = {
 };
 
 const STORED_CREDIT_ROW = {
+  pvb_reference: 'pvb-txn-synthetic-001',
+  provider_transaction_id: 'provider-txn-synthetic-001',
   customer_id: 'faas-customer-synthetic-001',
   wallet_id: 'pvb-wallet-synthetic-001',
   amount_kobo: 1750000,
@@ -149,7 +151,7 @@ describe('recordInflowCredit', () => {
         fee_kobo: 0,
         session_id: '000000000001',
       }),
-      { onConflict: 'provider_transaction_id', ignoreDuplicates: true }
+      { onConflict: 'pvb_reference', ignoreDuplicates: true }
     );
     const persisted = upsert.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(persisted).not.toHaveProperty('sender_name');
@@ -320,7 +322,7 @@ describe('recordInflowCredit', () => {
     );
   });
 
-  it('raises a conflict when a redelivery reuses the transaction with a new event identity', async () => {
+  it('treats drift in audit-only internals as the same credit, not a conflict', async () => {
     const { client } = mockSupabase(
       { data: [], error: null },
       { data: MAPPING_ROW, error: null },
@@ -328,6 +330,8 @@ describe('recordInflowCredit', () => {
         data: {
           ...STORED_CREDIT_ROW,
           event_data_id: 'faas-txn-synthetic-002',
+          reference: 'faas-ref-synthetic-other',
+          session_id: null,
           credited_at: '2026-09-15T11:45:00.000Z',
         },
         error: null,
@@ -338,10 +342,9 @@ describe('recordInflowCredit', () => {
       (cause: unknown) => cause
     );
 
-    expect(error).toMatchObject({
-      code: 'INFLOW_LEDGER_CONFLICT',
-      conflict: { mismatchedFields: ['event_data_id', 'credited_at'] },
-    });
+    // Same pvb_reference, so the same credit: eventData.id and timestamp
+    // are not guaranteed stable across PiggyVest retries.
+    expect(error).toBe('duplicate');
   });
 
   it('names every mismatched field in a multi-field conflict', async () => {
@@ -352,7 +355,7 @@ describe('recordInflowCredit', () => {
         data: {
           ...STORED_CREDIT_ROW,
           wallet_id: 'pvb-wallet-other-001',
-          reference: 'other-ref',
+          amount_kobo: 1700000,
         },
         error: null,
       }
@@ -364,7 +367,7 @@ describe('recordInflowCredit', () => {
 
     expect(error).toMatchObject({
       code: 'INFLOW_LEDGER_CONFLICT',
-      conflict: { mismatchedFields: ['wallet_id', 'reference'] },
+      conflict: { mismatchedFields: ['wallet_id', 'amount_kobo'] },
     });
   });
 

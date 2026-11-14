@@ -18,6 +18,7 @@ import type {
   SavingsSourceMode,
 } from './start-savings.types';
 import { readParam } from './start-savings-controller.utils';
+import { resolveStartSavingsWalletBalance } from './start-savings-wallet-balance';
 import { useInitialContributionOperation } from './use-initial-contribution-operation';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
@@ -95,14 +96,13 @@ export function useStartSavingsController() {
     activeMerchantSlug,
     sourceMode,
   });
-  const safeWalletBalance = walletData?.wallet.balance ?? 0;
+  const { balance: safeWalletBalance, primaryWallet } =
+    resolveStartSavingsWalletBalance(walletData?.wallet);
   const fundingAccount = walletData?.wallet.funding_account ?? null;
-
-  const routeVariantId = readParam(params.variantId);
   const { selectVariantOption, variantOptionGroups } =
     useStartSavingsVariantSelection({
       clearProductSelection,
-      routeVariantId,
+      routeVariantId: readParam(params.variantId),
       searchValue,
       selectedCatalogProduct,
       selectedProduct,
@@ -199,6 +199,7 @@ export function useStartSavingsController() {
     contributionValue,
     initialContributionEnabled,
     initialContributionValue,
+    primaryWallet,
     refetch,
     selectedFundingOption,
     selectedPaymentMethodId,

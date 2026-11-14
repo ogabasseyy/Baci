@@ -177,12 +177,13 @@ BEGIN
   RETURN v_op;
 END;
 $$;
--- ... and on to 'dispatched' with the provider balance of 250000 kobo.
+-- ... and on to 'dispatched' with the provider balance of 250000 kobo (the
+-- recorded principal, so no interest is forfeited).
 CREATE FUNCTION pg_temp.gc_dispatched(p_label text) RETURNS text LANGUAGE plpgsql AS $$
 DECLARE v_op text := pg_temp.gc_reserved(p_label);
 BEGIN
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'dispatch', 250000),
+    piggyvest_primary.dispatch_goal_cancel_split(pg_temp.gc_scope(), v_op::uuid, 250000) ->> 'status' = 'dispatched',
     'fixture dispatch ' || p_label);
   RETURN v_op;
 END;

@@ -179,17 +179,19 @@ export async function deliverPaidImeiLookup(
   if (lookup.status === 'completed') {
     const late = await deps.claim(operationId).catch(() => null);
     // Only this lookup's own payment (same purchase and price) is recorded
-    // as delivered by it, as on the pending path below.
-    if (
-      late &&
-      (late.status === 'claimed' || late.status === 'reclaimed') &&
-      late.purpose === 'imei_check' &&
-      late.purchaseRef === lookup.id &&
-      late.amountKobo === lookupPriceKobo(lookup)
-    )
+    // as delivered by it; another claimed payment is refused, as on every
+    // other branch (Muse), and its claim lapses for the drain.
+    if (late && (late.status === 'claimed' || late.status === 'reclaimed')) {
+      if (
+        late.purpose !== 'imei_check' ||
+        late.purchaseRef !== lookup.id ||
+        late.amountKobo !== lookupPriceKobo(lookup)
+      )
+        throw new WalletPaymentMismatchError();
       await deps
         .finish(operationId, 'fulfilled', late.claimToken)
         .catch(() => 'conflict');
+    }
     return cached(lookup);
   }
   // Refunded: retry any refund still owed (exactly once in the database),

@@ -72,6 +72,17 @@ describe('bugfix: a kind the app did not know failed the whole page (Muse)', () 
     ).toBe(true);
   });
 
+  it('accepts a later kind with a digit or a hyphen (Muse)', () => {
+    for (const kind of ['credit_v2', 'gift-card']) {
+      expect(
+        piggyvestWalletActivityPageSchema.safeParse({
+          items: [{ ...row, kind }],
+          nextCursor: null,
+        }).success
+      ).toBe(true);
+    }
+  });
+
   it('still refuses a malformed kind', () => {
     expect(
       piggyvestWalletActivityPageSchema.safeParse({

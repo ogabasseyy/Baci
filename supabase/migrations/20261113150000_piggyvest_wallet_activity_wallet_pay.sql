@@ -97,7 +97,11 @@ BEGIN
              ELSE CASE purchase.type
                     WHEN 'airtime' THEN 'Airtime'
                     WHEN 'data' THEN 'Data'
-                    ELSE COALESCE(NULLIF(pg_catalog.btrim(purchase.biller_name), ''),
+                    -- The biller name is the only free text: capped before
+                    -- the masked number is added, so a long name never cuts
+                    -- the distinguishing suffix, even with the refund
+                    -- prefix (Muse).
+                    ELSE COALESCE(NULLIF(pg_catalog.left(pg_catalog.btrim(purchase.biller_name), 80), ''),
                                   pg_catalog.initcap(purchase.type))
                   END
                   || CASE WHEN purchase.type IN ('airtime', 'data')

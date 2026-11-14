@@ -156,6 +156,19 @@ BEGIN
     'long reserve');
   PERFORM pg_temp.wp_assert((SELECT pg_catalog.max(pg_catalog.char_length(row.label))
     FROM public.list_piggyvest_wallet_activity(c_merchant) AS row) <= 120, 'a label exceeded 120 characters');
+  -- REGRESSION (Muse): the masked suffix survives a long name, refund too.
+  INSERT INTO piggyvest_primary.wallet_payment_refunds (
+    payment_id, integration_id, attempt, state, reference, amount_kobo,
+    source_wallet_id, destination_wallet_id, dispatched_at)
+  VALUES (v_vtu::uuid, 'f9a10000-0000-4000-8000-000000000006', 0, 'dispatched',
+    'pvb-refund-' || v_vtu, 70000, 'synthetic-walletpay-collection',
+    'synthetic-walletpay-main', pg_catalog.clock_timestamp());
+  PERFORM pg_temp.wp_assert((SELECT pg_catalog.count(*) FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.label LIKE 'Long Biller%' OR row.label LIKE 'Refund: Long Biller%') = 2
+    AND NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE (row.label LIKE 'Long Biller%' OR row.label LIKE 'Refund: Long Biller%')
+        AND row.label NOT LIKE '%· 4503…4567'), 'a long biller name cut the masked number');
+  DELETE FROM piggyvest_primary.wallet_payment_refunds WHERE payment_id = v_vtu::uuid;
 
   -- REGRESSION (Codex P2): a failed transfer that only charged a fee is not a
   -- purchase; a released attempt proven successful while another attempt was

@@ -66,7 +66,10 @@ it('rejects forged requests without consuming the authenticated work slots', asy
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('fixture');
-  const body = JSON.stringify({ expiresAt: Date.now() + 30000 });
+  const body = JSON.stringify({
+    expiresAt: Date.now() + 30000,
+    nonce: 'd'.repeat(64),
+  });
   const signature = createHmac('sha256', key)
     .update(`owner-preview/v1\n${body}`)
     .digest('hex');
@@ -74,12 +77,127 @@ it('rejects forged requests without consuming the authenticated work slots', asy
     for (let i = 0; i < 20; i++)
       expect((await send(address.port, { body })).status).toBe(401);
     expect((await send(address.port, { body, signature })).status).toBe(200);
+    expect((await send(address.port, { body, signature })).status).toBe(401);
     expect(bridge).toHaveBeenCalledOnce();
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+it('rejects concurrent signed replays while the original work is still active', async () => {
+  const key = Buffer.alloc(32, 8);
+  let release = () => {};
+  let entered = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const bridge = vi.fn(async () => {
+    entered();
+    await gate;
+    return Response.json({ ok: true });
+  });
+  const handler = createOwnerPreviewHttpHandler(bridge, {
+    admit: createOwnerAdmission(key, 'owner-preview/v1'),
+  });
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  const body = JSON.stringify({
+    expiresAt: Date.now() + 30000,
+    nonce: 'e'.repeat(64),
+  });
+  const signature = createHmac('sha256', key)
+    .update(`owner-preview/v1\n${body}`)
+    .digest('hex');
+  const original = send(address.port, { body, signature });
+  try {
+    await started;
+    const replies = await Promise.all(
+      Array.from({ length: 20 }, () => send(address.port, { body, signature }))
+    );
+    expect(
+      replies.every(
+        (response) => response.status === 401 || response.status === 429
+      )
+    ).toBe(true);
+    expect(replies.some((response) => response.status === 401)).toBe(true);
+    expect(bridge).toHaveBeenCalledOnce();
+    release();
+    expect((await original).status).toBe(200);
+  } finally {
+    release();
+    await original.catch(() => undefined);
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it('does not consume a valid nonce when all work slots are full', async () => {
+  const key = Buffer.alloc(32, 6);
+  let release = () => {};
+  let notify = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const full = new Promise<void>((resolve) => {
+    notify = resolve;
+  });
+  let active = 0;
+  const bridge = vi.fn(async () => {
+    active++;
+    if (active === 16) notify();
+    await gate;
+    return Response.json({ ok: true });
+  });
+  const handler = createOwnerPreviewHttpHandler(bridge, {
+    admit: createOwnerAdmission(key, 'owner-preview/v1'),
+  });
+  const server = createServer((req, res) => {
+    void handler.handle(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  const signed = (i: number) => {
+    const body = JSON.stringify({
+      expiresAt: Date.now() + 30000,
+      nonce: i.toString(16).padStart(64, '0'),
+    });
+    return {
+      body,
+      signature: createHmac('sha256', key)
+        .update(`owner-preview/v1\n${body}`)
+        .digest('hex'),
+    };
+  };
+  const inFlight: ReturnType<typeof send>[] = [];
+  const overflow = signed(16);
+  try {
+    for (let i = 0; i < 16; i++) {
+      inFlight.push(send(address.port, signed(i)));
+      await vi.waitFor(() => expect(active).toBe(i + 1));
+    }
+    await full;
+    expect((await send(address.port, overflow)).status).toBe(429);
+    release();
+    await Promise.all(inFlight);
+    expect((await send(address.port, overflow)).status).toBe(200);
+  } finally {
+    release();
+    await Promise.allSettled(inFlight);
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}, 10000);
 
 async function send(
   port: number,

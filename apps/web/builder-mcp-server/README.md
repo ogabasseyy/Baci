@@ -53,6 +53,14 @@ runner or attestation work already in flight. End-to-end cancellation or a
 separately qualified bounded-work strategy remains required before enabling
 the owner bridge.
 
+The owner transport also rejects duplicate signed nonces in a bounded,
+expiry-aware per-process filter before reserving a long-running work slot.
+That filter resets on restart and is not shared between replicas; the existing
+durable verifier and preview nonce checks remain authoritative. A replay
+rejected by the early filter receives an admission denial, and the filter
+fails closed at capacity. This does not qualify the 600-second downstream work
+deadline or replace production ingress and load testing.
+
 `owner-internal-node.ts` provides a separate loopback-only owner listener.
 The production composition requires a distinct configured owner port and does
 not attach owner routes to the MCP listener. This source change does not

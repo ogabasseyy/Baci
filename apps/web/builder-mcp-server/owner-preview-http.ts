@@ -153,12 +153,12 @@ function createOwnerHttpHandler(
       readers--;
     }
     if (res.destroyed || res.writableEnded) return;
-    if (!binding.admit?.(bytes, signature)) {
-      respond(res, 401);
-      return;
-    }
     if (active >= 16) {
       respond(res, 429);
+      return;
+    }
+    if (!binding.admit?.(bytes, signature)) {
+      respond(res, 401);
       return;
     }
     active++;

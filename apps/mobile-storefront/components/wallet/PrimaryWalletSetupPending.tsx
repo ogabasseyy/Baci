@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { BRAND } from '@/constants/Colors';
+import { BRAND, withAlpha } from '@/constants/Colors';
 import { setupStyles } from './piggyvest-wallet-setup.styles';
 
 type Props = {
@@ -39,16 +39,20 @@ export function PrimaryWalletSetupPending({
         <View
           style={[
             setupStyles.headerIcon,
-            { backgroundColor: BRAND.primaryAlpha12 },
+            {
+              backgroundColor: checkFailed
+                ? withAlpha(colors.warning, 0.14)
+                : BRAND.primaryAlpha12,
+            },
           ]}
         >
           {stillWaiting || checkFailed ? (
             <Ionicons
               accessible={false}
               importantForAccessibility="no"
-              name="time-outline"
+              name={checkFailed ? 'cloud-offline-outline' : 'time-outline'}
               size={24}
-              color={BRAND.primary}
+              color={checkFailed ? colors.warning : BRAND.primary}
             />
           ) : (
             <ActivityIndicator color={BRAND.primary} />
@@ -68,7 +72,7 @@ export function PrimaryWalletSetupPending({
             importantForAccessibility="no"
             name="checkmark-circle"
             size={17}
-            color="#16A34A"
+            color={colors.success}
           />
           <Text style={[setupStyles.benefitText, { color: colors.text }]}>
             Details sent to PiggyVest

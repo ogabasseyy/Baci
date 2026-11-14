@@ -11,8 +11,8 @@ import {
 
 function subtitleFor(status: WalletPinStatus | null) {
   if (status?.resetRequired) return 'Reset your PIN to continue';
-  if (status?.hasPin) return 'Needed when you move money into a savings goal';
-  return 'Set a PIN to move money into savings goals';
+  if (status?.hasPin) return 'Protects money leaving your wallet';
+  return 'Set a PIN to protect money leaving your wallet';
 }
 
 /** Settings > SECURITY > Wallet PIN. Renders nothing unless the server says

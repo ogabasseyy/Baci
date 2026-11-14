@@ -22,6 +22,11 @@ jest.mock('./use-savings-goal-setup', () => ({
   useSavingsGoalSetup: (...args: unknown[]) => mockSetup(...args),
 }));
 const mockIsPrimary = jest.fn();
+const mockCheckAgain = jest.fn();
+jest.mock('./use-goal-wallet-setup-poll', () => ({
+  useGoalWalletSetupPoll: () => ({ slow: false, checkAgain: mockCheckAgain }),
+}));
+
 jest.mock('./use-savings-plan-funding', () => ({
   useSavingsPlanFunding: (...args: unknown[]) => mockHook(...args),
 }));
@@ -57,13 +62,14 @@ describe('SavingsPlanStatusNote', () => {
     });
   });
 
-  it('asks the user to check back and offers no setup action', () => {
+  it('tells the user the plan is getting ready and offers no setup action', () => {
     renderNote();
     expect(
       screen.getByText(
-        'This goal is still being set up. Please check back shortly.'
+        'This usually takes about a minute. You can leave this screen. We’ll keep going.'
       )
     ).toBeTruthy();
+    expect(screen.getByText('Getting your plan ready')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByText(/\d{10}/)).toBeNull();
   });
@@ -123,13 +129,16 @@ describe('SavingsPlanStatusNote', () => {
     });
     renderNote();
     expect(
-      screen.getByText('Setup is not available for this goal right now.')
+      screen.getByText(
+        'We can’t finish setting up this plan right now. This didn’t move any money.'
+      )
     ).toBeTruthy();
-    expect(screen.queryByText(/still being set up/)).toBeNull();
+    expect(screen.queryByText('Getting your plan ready')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Message support' })).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('offers a status-only retry when the lookup failed', () => {
+  it('offers a status-only retry that restarts the checks when the lookup failed', () => {
     const fetchExistingPlanFunding = jest.fn();
     const fetchPlanFunding = jest.fn();
     mockHook.mockReturnValue({
@@ -140,22 +149,26 @@ describe('SavingsPlanStatusNote', () => {
     });
     renderNote();
     expect(
-      screen.getByText("We couldn't check this goal's status.")
+      screen.getByText(
+        'We couldn’t check on your plan just now. Check your connection and try again.'
+      )
     ).toBeTruthy();
-    expect(screen.queryByText(/still being set up/)).toBeNull();
+    expect(screen.queryByText('Getting your plan ready')).toBeNull();
+    mockCheckAgain.mockClear();
     fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
-    expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
+    // Restarts the full check cycle (which re-reads at once), never a setup.
+    expect(mockCheckAgain).toHaveBeenCalledTimes(1);
     expect(fetchPlanFunding).not.toHaveBeenCalled();
   });
 
-  it('shows the setup copy and no retry for a never-started goal', () => {
+  it('shows the getting-ready card and no retry for a pending goal', () => {
     mockHook.mockReturnValue({
       planFundingPhase: 'pending',
       planFundingRequiresBvn: false,
       fundingError: null,
     });
     renderNote();
-    expect(screen.getByText(/still being set up/)).toBeTruthy();
+    expect(screen.getByText('Getting your plan ready')).toBeTruthy();
     expect(screen.queryByText('Try again')).toBeNull();
   });
 
@@ -171,14 +184,14 @@ describe('SavingsPlanStatusNote', () => {
     );
     expect(
       screen.getByText(
-        'This goal is still being set up. Please check back shortly.'
+        'This usually takes about a minute. You can leave this screen. We’ll keep going.'
       )
     ).toBeOnTheScreen();
   });
 });
 
-describe('exhausted pending setup', () => {
-  it('offers Check again, and pressing it runs the supplied check', () => {
+describe('slow pending setup', () => {
+  it('says it is taking longer and offers Check now, which runs the supplied check', () => {
     const onCheckAgain = jest.fn();
     render(
       <SavingsPlanStatusNote
@@ -187,11 +200,98 @@ describe('exhausted pending setup', () => {
         identityKey="user-1"
         merchantId="merchant-1"
         funding={fundingFixture()}
+        slow
         onCheckAgain={onCheckAgain}
       />
     );
-    expect(screen.getByText('Still setting up your goal.')).toBeOnTheScreen();
-    fireEvent.press(screen.getByRole('button', { name: 'Check again' }));
+    expect(screen.getByText(/taking longer than usual/)).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
     expect(onCheckAgain).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no Check now before it is slow', () => {
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture()}
+        onCheckAgain={jest.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
+  });
+});
+
+describe('bugfix: a stalled setup said "about a minute" for 25 minutes with no Check now', () => {
+  beforeEach(() => {
+    mockIsPrimary.mockReturnValue(true);
+    // A retry is in flight, so the automatic retry stays quiet.
+    mockSetup.mockReturnValue({
+      choice: null,
+      setChoice: jest.fn(),
+      submitting: true,
+      attempted: false,
+      error: null,
+      submit: jest.fn(),
+      retry: jest.fn().mockResolvedValue(true),
+    });
+  });
+
+  it('drops the promise and offers Check now on a stalled setup once slow', () => {
+    const onCheckAgain = jest.fn();
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture({ planFundingPhase: 'setup_retryable' })}
+        slow
+        onCheckAgain={onCheckAgain}
+      />
+    );
+    expect(screen.queryByText(/about a minute/)).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
+    expect(onCheckAgain).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: paused copy pointed at a Check now that was not there', () => {
+  it('offers Check now on a paused card even without a parent check', () => {
+    const fetchExistingPlanFunding = jest.fn();
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture({ fetchExistingPlanFunding })}
+        slow
+        paused
+      />
+    );
+    expect(screen.getByText(/Tap Check now/)).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
+    expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: a note still checking past its first minute showed a connection error', () => {
+  it('keeps the calm card when its own quick reads failed but checks go on', () => {
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture({ planFundingPhase: 'error' })}
+        slow
+        onCheckAgain={jest.fn()}
+      />
+    );
+    expect(screen.getByText('Getting your plan ready')).toBeOnTheScreen();
+    expect(screen.queryByText(/couldn’t check on your plan/)).toBeNull();
   });
 });

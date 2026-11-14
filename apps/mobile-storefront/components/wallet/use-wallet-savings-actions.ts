@@ -1,16 +1,18 @@
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
   type PinProofRequester,
   runWithPinProof,
 } from '@/lib/wallet-pin-proof';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
+import { savingsNotifier } from './savings/savings-notice';
 import type { ContributionRail } from './savings/stored-contribution-operation';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import {
@@ -18,6 +20,9 @@ import {
   planWalletSavingsRail,
 } from './wallet-savings-rail';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
+
+const WALLET_RECLASSIFYING_MESSAGE =
+  'Your wallet is updating. Try again in a moment.';
 
 export function createWalletSavingsActions({
   activeMerchantId,
@@ -33,7 +38,7 @@ export function createWalletSavingsActions({
   refetchWallet,
   requestPinProof,
   savingsContributionAmount,
-  spendableBalance,
+  walletBalance,
   startWalletTopUp,
   walletTopUp,
   setIsAddingSavingsContribution,
@@ -48,7 +53,7 @@ export function createWalletSavingsActions({
   /** A funded completed goal whose readiness verdict is still being read. */
   goalSettlementChecking?: boolean;
   idempotencyKeyRef: { current: string | null };
-  /** Legacy-rail balance; defaults to spendableBalance when not supplied. */
+  /** Legacy-rail balance; defaults to walletBalance when not supplied. */
   legacyBalance?: number;
   /** PiggyVest main wallet ready: opens Add money in place of a card top-up. */
   onAddMoney?: () => void;
@@ -61,7 +66,7 @@ export function createWalletSavingsActions({
   /** Opens the wallet PIN sheet; resolves a single-use proof or null. */
   requestPinProof?: PinProofRequester;
   savingsContributionAmount: string;
-  spendableBalance: number;
+  walletBalance: number;
   startWalletTopUp?: () => void;
   walletTopUp?: Pick<
     Parameters<typeof startSavingsWalletTopUp>[0],
@@ -104,7 +109,7 @@ export function createWalletSavingsActions({
     ) {
       return;
     }
-    if (requestedAmount <= spendableBalance) {
+    if (requestedAmount <= walletBalance) {
       return;
     }
     if (primaryReady) {
@@ -130,7 +135,12 @@ export function createWalletSavingsActions({
   };
 
   const handleAddSavingsContribution = () => {
-    const isPrimary = isPiggyvestPrimaryMerchant(activeMerchantId);
+    // A live ruling-out picks legacy for a new contribution (Codex): the
+    // wallet shows legacy funds then, so the rail must match. A stored
+    // PiggyVest id is still kept, never moved (planWalletSavingsRail).
+    const isPrimary =
+      isPiggyvestPrimaryMerchant(activeMerchantId) &&
+      readPiggyvestCapabilityNow(activeMerchantId) !== false;
     const plan = planWalletSavingsRail({
       hasStoredId: idempotencyKeyRef.current !== null,
       isPrimary,
@@ -139,19 +149,69 @@ export function createWalletSavingsActions({
     if (plan.kind === 'blocked') {
       // The original rail is no longer available and the id must never move
       // to legacy: keep it and wait.
-      Alert.alert('Still checking', EARLIER_CONTRIBUTION_CHECKING_MESSAGE);
+      // An inline wallet notice, like every other contribution outcome.
+      savingsNotifier()(
+        'Still checking',
+        EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
+        'warning'
+      );
       return;
     }
     if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {
+      // A check answers only for the operation it started with. If the
+      // stored id changed meanwhile (another account, merchant or goal took
+      // over the screen), its late answer must not clear that newer
+      // operation, its amount or its busy flag.
+      const operationId = idempotencyKeyRef.current;
+      let released = false;
+      let pendingSet = false;
+      const ours = () => idempotencyKeyRef.current === operationId;
       return checkPendingPrimarySavings({
         goal,
         merchantId: activeMerchantId,
-        operationId: idempotencyKeyRef.current,
-        clearOperation: releaseOperation,
-        clearAmount: () => setSavingsContributionAmount(''),
+        operationId,
+        clearOperation: () => {
+          if (!ours()) return;
+          released = true;
+          releaseOperation();
+        },
+        clearAmount: () => {
+          if (released || ours()) setSavingsContributionAmount('');
+        },
         refetchWallet,
-        setPending: setIsAddingSavingsContribution,
+        // Busy is only ever set while this check still owns the operation,
+        // and that busy flag also blocks any new contribution; so the check
+        // always clears the flag it set, even after a scope change.
+        setPending: (value) => {
+          if (value && !ours()) return;
+          if (value) pendingSet = true;
+          else if (!pendingSet) return;
+          setIsAddingSavingsContribution(value);
+        },
       });
+    }
+    // PiggyVest confirmed but not yet reclassified, or unknown after a
+    // ruling-out expired while the balance stays suppressed (Codex): the rail
+    // would debit an unseen PiggyVest balance against an amount checked on
+    // legacy funds. Hold a new contribution and reload. (A pilot with no
+    // verdict yet keeps its server-side fallback.)
+    const verdictNow = readPiggyvestCapabilityNow(activeMerchantId);
+    if (
+      plan.kind === 'submit' &&
+      idempotencyKeyRef.current === null &&
+      !primaryReady &&
+      (verdictNow === true ||
+        (plan.rail === 'primary' &&
+          !!activeMerchantId &&
+          wasPiggyvestLastRuledOut(activeMerchantId)))
+    ) {
+      savingsNotifier()(
+        'Still checking',
+        WALLET_RECLASSIFYING_MESSAGE,
+        'warning'
+      );
+      void refetchWallet?.();
+      return;
     }
     const rail: ContributionRail =
       plan.kind === 'submit' ? plan.rail : 'primary';
@@ -200,9 +260,7 @@ export function createWalletSavingsActions({
       setIsAddingSavingsContribution,
       // An id bound to the legacy rail is validated against the legacy balance.
       walletBalance:
-        rail === 'primary'
-          ? spendableBalance
-          : (legacyBalance ?? spendableBalance),
+        rail === 'primary' ? walletBalance : (legacyBalance ?? walletBalance),
     });
   };
 

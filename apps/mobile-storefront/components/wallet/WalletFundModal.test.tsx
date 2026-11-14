@@ -43,6 +43,39 @@ describe('WalletFundModal', () => {
     );
     expect(screen.getByText('Primary setup panel')).toBeOnTheScreen();
   });
+  it('bugfix: keeps an IMEI top-up on store credit when the PiggyVest read is unknown', () => {
+    // First primary read timed out: not ready, no account, capability unknown.
+    mockUseCapability.mockReturnValue(null);
+    const props = createWalletContentProps();
+    render(
+      <WalletFundModal
+        {...props}
+        creditWatch={creditWatch}
+        fundReturnTo={'/imei-check' as never}
+        fundingAccount={null}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        showFundPanel
+      />
+    );
+    expect(screen.queryByText('Primary setup panel')).toBeNull();
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+  });
+  it('keeps a legacy IMEI top-up when the server rules PiggyVest out', () => {
+    mockUseCapability.mockReturnValue(false);
+    const props = createWalletContentProps();
+    render(
+      <WalletFundModal
+        {...props}
+        creditWatch={creditWatch}
+        fundReturnTo={'/imei-check' as never}
+        fundingAccount={null}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        showFundPanel
+      />
+    );
+    expect(screen.queryByText('Add store credit')).toBeNull();
+    expect(screen.getByText('Add Money')).toBeOnTheScreen();
+  });
   it('falls back to the legacy fund panel when primary is unconfigured', () => {
     mockUseCapability.mockReturnValue(false);
     const props = createWalletContentProps();
@@ -95,7 +128,7 @@ describe('WalletFundModal', () => {
       />
     );
     expect(screen.queryByText('Primary setup panel')).toBeNull();
-    expect(screen.getByText('Add Money')).toBeOnTheScreen();
+    expect(screen.getByText('Add money')).toBeOnTheScreen();
   });
   it('shows savings return guidance when funding an existing plan', () => {
     const props = createWalletContentProps();

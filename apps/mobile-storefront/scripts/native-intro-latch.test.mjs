@@ -46,6 +46,7 @@ test('native lifecycle preserves intro playback on recreation and marker configu
   assert.match(install, /if \(installed\)/);
   assert.ok(install.indexOf('setOnExitAnimationListener') < install.indexOf('if (installed)'), 'each Activity must register the exit listener before recreation returns');
   assert.ok(install.indexOf('setKeepOnScreenCondition') < install.indexOf('if (installed)'), 'each Activity must retain the splash until the overlay is ready');
+  assert.match(install, /if \(window !== activity\.window\) \{[\s\S]*?abort\(\)\s*return/, 'Activity recreation must release an overlay attached to the previous window and stop reattaching it');
   const ios = readFileSync(new URL('ios/LottieSplashPlayer.swift', root), 'utf8');
   const marker = ios.slice(ios.indexOf('if let marker = config.loopMarker'), ios.indexOf('  func remainingLoopTime()', ios.indexOf('if let marker = config.loopMarker')));
   assert.match(marker, /loopMode: \.playOnce/, 'non-looping marker plays once');

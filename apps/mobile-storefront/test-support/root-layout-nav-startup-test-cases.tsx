@@ -1,5 +1,10 @@
 import { expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import type React from 'react';
 
 export function registerRootLayoutNavStartupTests(input: {
@@ -10,13 +15,11 @@ export function registerRootLayoutNavStartupTests(input: {
 }) {
   const { RootLayoutNav } = input;
 
-  it('reports a layout from the app shell', () => {
+  it('reports a layout from the app shell after router readiness', async () => {
     const onFirstLayout = jest.fn();
-    const { UNSAFE_getByProps } = render(
-      <RootLayoutNav onFirstLayout={onFirstLayout} />
-    );
-    fireEvent(UNSAFE_getByProps({ onLayout: onFirstLayout }), 'layout');
-    expect(onFirstLayout).toHaveBeenCalledTimes(1);
+    const view = render(<RootLayoutNav onFirstLayout={onFirstLayout} />);
+    fireEvent(view.getByTestId('root-app-shell'), 'layout');
+    await waitFor(() => expect(onFirstLayout).toHaveBeenCalledTimes(1));
   });
 
   it('mounts update prompts only after the native splash handoff', () => {

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen, waitFor, within } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import type React from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useStartupMotionEnabled } from '@/components/ui/useStartupMotionEnabled';
@@ -17,6 +23,7 @@ const MockView = View;
 const mockUseAuthGuard = jest.fn();
 const mockSetNavigationBarStyle = jest.fn();
 const mockRootStackOptions = jest.fn();
+let mockRootNavigationState: { key: string } | undefined = { key: 'root' };
 const originalPlatformOS = Platform.OS;
 function StartupMotionProbe() {
   const enabled = useStartupMotionEnabled();
@@ -72,7 +79,7 @@ jest.mock('expo-router', () => {
     useGlobalSearchParams: () => ({}),
     useSegments: () => [],
     usePathname: () => '/',
-    useRootNavigationState: () => ({ key: 'root' }),
+    useRootNavigationState: () => mockRootNavigationState,
   };
 });
 
@@ -176,6 +183,7 @@ describe('RootLayoutNav', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockQueryProvider.mockImplementation(renderMockQueryProvider);
+    mockRootNavigationState = { key: 'root' };
     setPlatformOS(originalPlatformOS);
   });
 
@@ -184,6 +192,20 @@ describe('RootLayoutNav', () => {
   });
 
   registerRootLayoutNavStartupTests({ RootLayoutNav });
+
+  it('waits for router readiness after the shell lays out before reporting startup layout', async () => {
+    mockRootNavigationState = undefined;
+    const onFirstLayout = jest.fn();
+    const view = render(<RootLayoutNav onFirstLayout={onFirstLayout} />);
+    fireEvent(view.getByTestId('root-app-shell'), 'layout');
+
+    expect(onFirstLayout).not.toHaveBeenCalled();
+
+    mockRootNavigationState = { key: 'root' };
+    view.rerender(<RootLayoutNav onFirstLayout={onFirstLayout} />);
+
+    await waitFor(() => expect(onFirstLayout).toHaveBeenCalledTimes(1));
+  });
 
   it('asks the native stack to suspend covered routes while checkout or a product is active', () => {
     render(<RootLayoutNav />);

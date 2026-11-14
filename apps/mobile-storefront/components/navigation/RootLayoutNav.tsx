@@ -4,7 +4,7 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from 'expo-router/react-navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityBanner } from '@/components/ConnectivityBanner';
@@ -72,9 +72,13 @@ export function RootLayoutNav({
   shouldResumeNavigation = false,
 }: RootLayoutNavProps) {
   const rootNavigationState = useRootNavigationState();
+  const [appShellHasLaidOut, setAppShellHasLaidOut] = useState(false);
   useEffect(() => {
     if (rootNavigationState?.key) markStartupTiming('router_ready');
   }, [rootNavigationState?.key]);
+  useEffect(() => {
+    if (appShellHasLaidOut && rootNavigationState?.key) onFirstLayout?.();
+  }, [appShellHasLaidOut, rootNavigationState?.key, onFirstLayout]);
   const { GestureHandlerRootView } = getOptionalGestureHandlerRuntime();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
@@ -112,7 +116,8 @@ export function RootLayoutNav({
                     }
                   />
                   <View
-                    onLayout={onFirstLayout}
+                    onLayout={() => setAppShellHasLaidOut(true)}
+                    testID="root-app-shell"
                     style={[
                       styles.appShell,
                       { backgroundColor: colors.background },

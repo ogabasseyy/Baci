@@ -80,7 +80,7 @@ index 9ce48d6..3ef00be 100644
  
    fun isVisible() = visible
  
-@@ -70,6 +84,15 @@ internal object SplashMotionController {
+@@ -70,6 +84,20 @@ internal object SplashMotionController {
      // splash screen to switch to its post-splash theme; skipping it crashes
      // AppCompat ("You need to use a Theme.AppCompat theme").
      val splash = activity.installSplashScreen()
@@ -94,9 +94,14 @@ index 9ce48d6..3ef00be 100644
 +      if (!terminated) player?.play { finishIntro(it) }
 +    }
      if (installed) {
++      if (window !== activity.window) {
++        Log.w(TAG, "Activity recreated during splash intro; releasing splash.")
++        abort()
++        return
++      }
        // A later Activity in the same process: reopened after Back (React Native is
        // already running, so no animation) or recreated while the splash is up.
-@@ -81,27 +104,23 @@ internal object SplashMotionController {
+@@ -81,27 +109,23 @@ internal object SplashMotionController {
      val config = preloadedConfig ?: SplashConfig.load(activity)
      if (config == null) {
        Log.w(TAG, "No config found. Run `npx splash-motion generate <file>` and rebuild.")

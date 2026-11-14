@@ -59,20 +59,20 @@ export function redirectSystemPath({
   if (launcherRoot === 'ogabassey://' || launcherRoot === 'ogabassey:///')
     return '/';
 
-  // Android callers commonly encode the first route as the URL host
-  // (`ogabassey://cart`). Expo's native path parser moves that host into the
-  // route path, so normalize it here before applying the storefront guards.
+  // Native callers encode routes as either a URL host (`ogabassey://cart`)
+  // or a path (`ogabassey:///cart`). Convert both forms to a relative route
+  // before pairing capture so custom-scheme secrets never reach its HTTPS
+  // allowlist as if they were an absolute pairing origin.
   try {
     const customSchemeUrl = new URL(path);
-    if (
-      customSchemeUrl.protocol.toLowerCase() === 'ogabassey:' &&
-      customSchemeUrl.host
-    ) {
+    if (customSchemeUrl.protocol.toLowerCase() === 'ogabassey:') {
+      const route = customSchemeUrl.host
+        ? `/${customSchemeUrl.host}${customSchemeUrl.pathname === '/' ? '' : customSchemeUrl.pathname}`
+        : customSchemeUrl.pathname;
+      const trimmedRoute = route === '/' ? '' : route.replace(/\/$/, '');
       const routePath =
-        customSchemeUrl.pathname === '/'
-          ? ''
-          : customSchemeUrl.pathname.replace(/\/$/, '');
-      normalizedPath = `/${customSchemeUrl.host}${routePath}${customSchemeUrl.search}${customSchemeUrl.hash}`;
+        trimmedRoute.toLowerCase() === '/cart' ? '/cart' : trimmedRoute;
+      normalizedPath = `${routePath}${customSchemeUrl.search}${customSchemeUrl.hash}`;
     }
   } catch {
     // Keep the original path; captureCartPairingLink handles malformed input.

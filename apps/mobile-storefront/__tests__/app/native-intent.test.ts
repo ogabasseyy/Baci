@@ -59,10 +59,7 @@ describe('redirectSystemPath', () => {
   it('keeps bare launcher roots on Home and validates route URLs', () => {
     for (const value of [{ path: 'ogabassey:///cart', initial: true }]) {
       expect(redirectSystemPath(value)).toBe('/cart');
-      expect(mockCapture).toHaveBeenLastCalledWith(
-        value.path,
-        expect.anything()
-      );
+      expect(mockCapture).toHaveBeenLastCalledWith('/cart', expect.anything());
     }
     expect(redirectSystemPath({ path: 'ogabassey:///', initial: false })).toBe(
       '/'
@@ -74,10 +71,19 @@ describe('redirectSystemPath', () => {
     expect(
       redirectSystemPath({ path: 'OGABASSEY:///cart', initial: true })
     ).toBe('/cart');
-    expect(mockCapture).toHaveBeenCalledWith(
-      'OGABASSEY:///cart',
-      expect.anything()
-    );
+    expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
+  });
+
+  it.each([
+    'ogabassey://cart',
+    'ogabassey://cart/',
+    'ogabassey:///cart',
+    'ogabassey:///cart/',
+    'OGABASSEY://CART/',
+    'OGABASSEY:///cart/',
+  ])('normalizes route-form custom URL %s', (path) => {
+    expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
   });
 
   it('normalizes a custom-scheme host into the storefront route path', () => {
@@ -89,6 +95,15 @@ describe('redirectSystemPath', () => {
 
   it('preserves a pairing fragment on a host-form cart route with a trailing slash', () => {
     const path = 'ogabassey://cart/#handoff=token&hid=handoff-id';
+    expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart#handoff=token&hid=handoff-id',
+      expect.anything()
+    );
+  });
+
+  it('preserves pairing fragments on path-form cart routes', () => {
+    const path = 'ogabassey:///cart/#handoff=token&hid=handoff-id';
     expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
     expect(mockCapture).toHaveBeenCalledWith(
       '/cart#handoff=token&hid=handoff-id',

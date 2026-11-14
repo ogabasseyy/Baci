@@ -28,6 +28,7 @@ import {
   isOrganizationBlogAuthor,
 } from './blog-post-structured-data';
 import { getResolvedBlogPost } from './get-resolved-blog-post';
+import { TecnoBlogClickTracker } from './tecno-blog-click-tracker';
 import { ViewCounter } from './view-counter';
 
 interface BlogPostPageContentProps {
@@ -197,6 +198,11 @@ async function renderBlogPostContent({
 
   const body = (
     <>
+      {!isDraftMode &&
+        postUrl ===
+          'https://ogabassey.com/blog/tecno-camon-slim-iphone-instant-transfer-sponsored' && (
+          <TecnoBlogClickTracker />
+        )}
       <Suspense fallback={<BlogPostBodyFallback />}>
         <BlogPostBody
           basePath={basePath}

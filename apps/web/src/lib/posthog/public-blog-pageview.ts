@@ -210,6 +210,16 @@ export function capturePublicBlogPageview(
   );
   lastCapturedPublicBlogPageviewUrl = currentUrl;
 
+  sendPublicBlogEvent(projectToken, env, currentUrl, '$pageview', attribution);
+}
+
+function sendPublicBlogEvent(
+  projectToken: string,
+  env: PostHogEnv,
+  currentUrl: string,
+  event: string,
+  attribution?: PublicBlogAttribution
+): void {
   const url = buildSanitizedUrl(currentUrl);
   const sanitizedUrl = url.href;
   const captureUrl = buildPostHogCaptureUrl(env);
@@ -221,7 +231,7 @@ export function capturePublicBlogPageview(
   const body = JSON.stringify({
     api_key: projectToken,
     distinct_id: distinctId,
-    event: '$pageview',
+    event,
     properties: {
       $current_url: sanitizedUrl,
       $host: url.hostname,
@@ -237,6 +247,30 @@ export function capturePublicBlogPageview(
   });
 
   sendBootFreeCaptureEvent(captureUrl, body);
+}
+
+export function capturePublicBlogInteraction(
+  event: string,
+  env: PostHogEnv = DEFAULT_PUBLIC_BLOG_POSTHOG_ENV,
+  currentUrl = resolveCurrentUrl()
+): void {
+  const token = env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim();
+  if (
+    !token ||
+    !currentUrl ||
+    !isAnalyticsAllowed() ||
+    isLikelyBotUserAgent() ||
+    hasPostHogOptedOut(token)
+  )
+    return;
+
+  sendPublicBlogEvent(
+    token,
+    env,
+    currentUrl,
+    event,
+    getPublicBlogAttribution(new URL(currentUrl))
+  );
 }
 
 export function resetPublicBlogPageviewDedupe(): void {

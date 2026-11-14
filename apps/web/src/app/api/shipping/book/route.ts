@@ -7,6 +7,11 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import {
+  isProviderNeverReachedError,
+  recordOrderShipmentBookingFailure,
+  toBookingFailureResponseError,
+} from '@/lib/shipping/order-shipment-booking-failure';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import type { ShipmentBookingResult } from '@/lib/shipping/types';
 import { createClient } from '@/lib/supabase/server';
@@ -180,7 +185,20 @@ export async function POST(request: NextRequest) {
 
     bookingLockToken = null;
     return bookingSuccessResponse(persisted.shipmentId, result);
-  } catch (error) {
+  } catch (rawError) {
+    if (bookingSupabase && bookingOrderId && bookingMerchantId) {
+      if (isProviderNeverReachedError(rawError)) {
+        retainBookingLock = false;
+      }
+      await recordOrderShipmentBookingFailure(
+        bookingSupabase,
+        bookingMerchantId,
+        bookingOrderId,
+        rawError,
+        retainBookingLock
+      );
+    }
+    const error = toBookingFailureResponseError(rawError);
     if (error instanceof OrderShipmentBookingError)
       return NextResponse.json(
         { error: error.message, code: error.code },

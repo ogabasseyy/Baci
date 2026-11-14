@@ -17,6 +17,10 @@ import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/invento
 import { shouldDeferShippedNotificationToGigPickup } from '@/lib/shipping/gigl-shipment-pickup-state';
 import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
 import {
+  recordOrderShipmentBookingFailure,
+  toBookingFailureResponseError,
+} from '@/lib/shipping/order-shipment-booking-failure';
+import {
   claimOrderShipmentBooking,
   clearOrderShipmentBookingLock,
 } from '@/lib/shipping/order-shipment-booking-lock';
@@ -471,6 +475,15 @@ export async function PATCH(
             updates.shipment_booking_started_at = null;
           }
         } catch (error) {
+          // Keep the reason on the order so a stuck booking can be diagnosed
+          // later; never let this hide the real error below.
+          await recordOrderShipmentBookingFailure(
+            supabase,
+            merchantId,
+            id,
+            error,
+            !shouldReleaseBookingLock(error)
+          );
           if (shipmentBookingLockToken && shouldReleaseBookingLock(error)) {
             try {
               await clearOrderShipmentBookingLock(
@@ -487,7 +500,7 @@ export async function PATCH(
             }
           }
 
-          throw error;
+          throw toBookingFailureResponseError(error);
         }
       }
     }

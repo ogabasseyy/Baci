@@ -31,6 +31,21 @@ test('leaves output unchanged when no private values are supplied', () => {
   assert.equal(redactPrivateValues('build failed', []), 'build failed');
 });
 
+test('redacts padded and unpadded base64url secrets containing URL-safe symbols', () => {
+  const secret = 'ÿÿ';
+  const unpadded = Buffer.from(secret).toString('base64url');
+  const padded = `${unpadded}${'='.repeat((4 - (unpadded.length % 4)) % 4)}`;
+  const redacted = redactPrivateValues(
+    `padded=${padded}\nunpadded=${unpadded}`,
+    [secret]
+  );
+
+  assert.equal(padded, 'w7_Dvw==');
+  assert.equal(unpadded, 'w7_Dvw');
+  assert.equal((redacted.match(/\[REDACTED\]/g) ?? []).length, 2);
+  assert.doesNotMatch(redacted, /w7_Dv8O/);
+});
+
 test('redacts multiline secrets before truncating a diagnostic at the 4 MiB cutoff', () => {
   const maxBytes = 4 * 1024 * 1024;
   const secret = 'private-value-across-cutoff';

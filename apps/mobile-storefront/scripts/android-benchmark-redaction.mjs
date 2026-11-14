@@ -12,6 +12,7 @@ function getPrivateValueVariants(value) {
   );
   const jsonEscaped = JSON.stringify(value).slice(1, -1);
   const base64 = Buffer.from(value).toString('base64');
+  const base64Url = base64.replace(/\+/g, '-').replace(/\//g, '_');
   return new Set([
     value,
     encoded,
@@ -20,6 +21,8 @@ function getPrivateValueVariants(value) {
     jsonEscaped,
     base64,
     base64.replace(/=+$/, ''),
+    base64Url,
+    base64Url.replace(/=+$/, ''),
   ].filter(Boolean));
 }
 

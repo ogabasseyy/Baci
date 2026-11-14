@@ -31,6 +31,7 @@ import {
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 interface UseAirtimePurchaseHandlerProps {
   amount: string;
@@ -241,18 +242,19 @@ export function useAirtimePurchaseHandler({
       type: 'airtime' as const,
       walletAmount: numericAmount,
     };
-    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
-    // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Sync ref guard admits no second submit;
-    // shared helper re-checks the owner after the await (R103).
+    // Settle-then-submit gate (R60) BEFORE the retained peek (R66); the
+    // sync ref guard admits no second submit, owner re-checked (R103).
     if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
       isSubmittingRef.current = false;
       return;
     }
-    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
-    // signs with — a charged-but-unanswered retry must bypass the
-    // balance gate instead of stranding behind top-up.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+    if (
+      await payFromPiggyvest(request, onSuccess, phoneNumber, isRetainedReplay)
+    ) {
+      isSubmittingRef.current = false;
+      return;
+    }
     if (
       !ensureUtilityWalletReady({
         amount: numericAmount,

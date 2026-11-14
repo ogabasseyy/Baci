@@ -13,6 +13,7 @@ import {
   verifyBillCustomer as verifyMonnifyBillCustomer,
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
+import { checkoutPaymentMetadata } from '@/lib/vtu-checkout-payment-metadata';
 import {
   type CustomerRecord,
   resolveVtuCustomer,
@@ -474,7 +475,10 @@ export async function preparePendingVtuTransaction({
    * `vtu_transactions.customer_name` so receipts and "Repeat last" can
    * surface the verified name.
    */
-  input: PurchaseInput & { customerName?: string };
+  input: PurchaseInput & {
+    customerName?: string;
+    paymentMethod?: 'store_credit' | 'piggyvest_wallet';
+  };
   source: PurchaseInput['source'];
   requireCustomer?: boolean;
   /** Fail 5xx (not 400/404) on transient lookup errors; see resolver. */
@@ -877,29 +881,13 @@ export async function preparePendingVtuTransaction({
       paystackEnabled: featureSettings.paystack_enabled ?? true,
       korapayEnabled: featureSettings.korapay_enabled ?? true,
       paymentPending: true,
-      // Wallet payment split. Written ONLY for checkout-sourced
-      // rows whenever walletAmount > 0 (including the wallet-only
-      // case where wallet === amount and card === 0). Phase B.5's
-      // debit hook in fulfillPendingVtuTransaction reads
-      // `paymentSplit.wallet > 0` as the signal to call
-      // redeem_vtu_wallet_payment.
-      //
-      // Source gate: non-checkout flows (loyalty_reward / gift /
-      // direct / storefront_modal) settle via different paths and
-      // the refund helper would skip a non-checkout row, leaving
-      // any debit stranded. The schema enforces this at the API
-      // boundary (`walletAmount is only valid for checkout-sourced
-      // purchases`) and the fulfillment debit gate enforces it at
-      // the money-movement layer; this guard keeps the persisted
-      // metadata coherent with both.
-      ...(source === 'checkout' && input.walletAmount && input.walletAmount > 0
-        ? {
-            paymentSplit: {
-              wallet: input.walletAmount,
-              card: purchaseAmount - input.walletAmount,
-            },
-          }
-        : {}),
+      // Payment source and wallet split (vtu-checkout-payment-metadata).
+      ...checkoutPaymentMetadata({
+        source,
+        paymentMethod: input.paymentMethod,
+        walletAmount: input.walletAmount,
+        purchaseAmount,
+      }),
     },
   };
 

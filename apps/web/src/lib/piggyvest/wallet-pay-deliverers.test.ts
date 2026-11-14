@@ -5,6 +5,9 @@ vi.mock('server-only', () => ({}));
 vi.mock('./wallet-pay-refund-uncollected', () => ({
   refundUncollectedPayment: 'refund-uncollected',
 }));
+vi.mock('./wallet-pay-vtu-deliverer', () => ({
+  settleVtuWalletPayment: 'settle-vtu',
+}));
 
 describe('WALLET_PAY_DELIVERERS', () => {
   it('only registers known wallet pay products', () => {
@@ -13,5 +16,8 @@ describe('WALLET_PAY_DELIVERERS', () => {
   });
   it('refunds an uncollected IMEI payment (no plaintext IMEI is stored)', () => {
     expect(WALLET_PAY_DELIVERERS.imei_check).toBe('refund-uncollected');
+  });
+  it('settles a VTU payment from its stored purchase (never vends)', () => {
+    expect(WALLET_PAY_DELIVERERS.vtu).toBe('settle-vtu');
   });
 });

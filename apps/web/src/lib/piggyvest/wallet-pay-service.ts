@@ -217,6 +217,20 @@ export async function walletPaymentAttemptedForPurchase(input: {
     .wasAttempted(input.purpose, input.purchaseRef);
 }
 
+/** Closes a PiggyVest-paid VTU purchase whose payment ended unpaid. */
+export async function closeUnpaidVtuWalletPurchase(input: {
+  runtime: WalletPayRuntime;
+  scope: unknown;
+  transactionId: string;
+  /** Releases this one issued operation first (the sheet closed pre-PIN). */
+  cancelOperationId?: string;
+}) {
+  const ports = createWalletPayPorts(input.runtime);
+  return await ports
+    .customerStore(input.scope)
+    .closeUnpaidVtu(input.transactionId, input.cancelOperationId);
+}
+
 /** Delivery claim and outcome for confirmed payments (worker side). */
 export function walletPayDelivery(runtime: WalletPayRuntime) {
   const { worker } = createWalletPayPorts(runtime);
@@ -229,5 +243,7 @@ export function walletPayDelivery(runtime: WalletPayRuntime) {
     ) => worker.finish(operationId, outcome, claimToken),
     isImeiDelivered: (operationId: string) =>
       worker.isImeiDelivered(operationId),
+    vtuDeliveryState: (operationId: string) =>
+      worker.vtuDeliveryState(operationId),
   };
 }

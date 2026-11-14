@@ -1,6 +1,11 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import type { z } from 'zod';
+import {
+  type WalletPayAnswer,
+  walletPayRefuse,
+  walletPayResponse,
+} from '@/lib/piggyvest/wallet-pay-http';
 import type { WalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import type { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
@@ -13,7 +18,7 @@ import { normalizeForLookup } from './normalize-for-lookup';
 
 type Identity = { merchantId: string; customerId: string; userId: string };
 type Scope = ReturnType<typeof walletPayScope>;
-type PayAnswer = { status: 'pin_refused'; reason: string } | { status: string };
+type PayAnswer = WalletPayAnswer;
 
 export interface PayImeiWalletPaymentDeps {
   readRuntime: () => WalletPayRuntime | null;
@@ -51,59 +56,10 @@ export interface PayImeiWalletPaymentDeps {
   }) => Promise<Response>;
 }
 
-const NO_STORE = { 'Cache-Control': 'no-store' };
-const refuse = (error: string, code: string, status: number) =>
-  NextResponse.json({ error, code }, { status, headers: NO_STORE });
-const accepted = (status: string, operationId: string) =>
-  NextResponse.json(
-    { status, operationId },
-    { status: 202, headers: { 'Cache-Control': 'no-store' } }
-  );
+const refuse = walletPayRefuse;
 
-/** The HTTP answer for every payment outcome except a confirmed one. */
-function payResponse(result: PayAnswer, operationId: string) {
-  if (result.status === 'pin_refused')
-    return 'reason' in result && result.reason === 'missing'
-      ? refuse(
-          'Please confirm your PIN to continue.',
-          'PIN_PROOF_REQUIRED',
-          400
-        )
-      : refuse(
-          'Please confirm your PIN again to continue.',
-          'PIN_PROOF_REFUSED',
-          403
-        );
-  switch (result.status) {
-    case 'insufficient':
-      return refuse(
-        'Your PiggyVest wallet can not cover this check.',
-        'INSUFFICIENT_FUNDS',
-        409
-      );
-    case 'pending':
-      return accepted('payment_pending', operationId);
-    case 'needs_review':
-      return accepted('payment_review', operationId);
-    case 'refunding':
-      return accepted('payment_refunding', operationId);
-    case 'released':
-    case 'expired':
-      return refuse(
-        'This payment did not go through. Please start again.',
-        'PAYMENT_NOT_COMPLETED',
-        409
-      );
-    case 'conflict':
-      return refuse('Please refresh and try again.', 'PAYMENT_CONFLICT', 409);
-    default:
-      return refuse(
-        'Could not confirm your PiggyVest wallet. Please try again later.',
-        'WALLET_UNAVAILABLE',
-        503
-      );
-  }
-}
+const payResponse = (result: PayAnswer, operationId: string) =>
+  walletPayResponse(result, operationId, 'check');
 
 /**
  * IMEI check paid from the PiggyVest wallet, step 2 (and every status

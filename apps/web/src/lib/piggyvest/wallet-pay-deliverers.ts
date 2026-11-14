@@ -2,6 +2,7 @@ import 'server-only';
 import type { WalletPayPurpose } from '@/schemas/piggyvest-wallet-pay';
 import type { WalletPayDeliverer } from './wallet-pay-drain';
 import { refundUncollectedPayment } from './wallet-pay-refund-uncollected';
+import { settleVtuWalletPayment } from './wallet-pay-vtu-deliverer';
 
 /**
  * Per-product handlers the wallet pay drain uses for confirmed payments
@@ -15,4 +16,6 @@ export const WALLET_PAY_DELIVERERS: Partial<
   // stored in plain text, so an uncollected paid check is refunded (unless
   // its result was already saved, which is recorded as fulfilled).
   imei_check: refundUncollectedPayment,
+  // VTU is settled from its stored purchase (never vended by the drain).
+  vtu: settleVtuWalletPayment,
 };

@@ -4,6 +4,10 @@ import { setMetadataValue } from '@/lib/vtu-metadata-fields';
 import { readPaymentSplit } from '@/lib/vtu-payment-split';
 import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
 import {
+  isPiggyvestWalletPaid,
+  owePiggyvestWalletRefund,
+} from '@/lib/vtu-piggyvest-wallet-paid';
+import {
   shouldSkipRefundWithoutCollectionEvidence,
   VTU_REFUND_SKIPPED_KEY,
   VTU_REFUND_SKIPPED_NO_CHARGE,
@@ -130,6 +134,10 @@ export async function refundVtuToCustomerWallet({
   if (row.source !== 'checkout') {
     return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
   }
+  // Paid from the PiggyVest wallet: the refund is owed there (the wallet pay
+  // ledger opens and sends it exactly once). Never credit store credit.
+  if (isPiggyvestWalletPaid(metadata))
+    return owePiggyvestWalletRefund(metadata, totalAmount);
   if (metadata.refundIssued === true) {
     // Already refunded on a prior fulfillment pass. Reconstruct the
     // restored total (Codex R103 P2): the hybrid kuda-failure branch

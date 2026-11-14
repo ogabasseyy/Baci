@@ -324,6 +324,10 @@
     {
       "path": "lib/pending-vtu-idempotency-store.ts",
       "justification": "Reviewed web-only MMKV Map-fallback durability probe (Codex R125 P1): Platform.OS web gate with localStorage access check so a non-durable web write reports failure and the pre-POST guard refuses; native always durable. Covered by blocked/accessible regression tests."
+    },
+    {
+      "path": "components/wallet-pay/wallet-pay-purchase-keys.ts",
+      "justification": "Reviewed web-only cross-tab lock (navigator.locks) so two browser tabs never mint two wallet-pay keys for one purchase; native runs one JS runtime."
     }
   ],
   "knownForbiddenPatterns": []

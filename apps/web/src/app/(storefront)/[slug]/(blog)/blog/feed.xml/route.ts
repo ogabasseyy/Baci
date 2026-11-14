@@ -4,7 +4,8 @@ import { GET as getMerchantBlogFeed } from '@/app/api/blog/feed/[merchantSlug]/r
 import { xmlSafeFeedUrl } from '@/lib/blog-feed-normalize';
 import { resolveStorefrontSitemapContextResult } from '../../../sitemap-data';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 export interface StorefrontBlogFeedRouteContext {
   params: Promise<{ slug: string }>;

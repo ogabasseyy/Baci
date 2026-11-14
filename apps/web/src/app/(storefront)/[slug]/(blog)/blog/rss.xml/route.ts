@@ -2,7 +2,8 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { resolveStorefrontSitemapContextResult } from '../../../sitemap-data';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 export interface StorefrontBlogRssRouteContext {
   params: Promise<{ slug: string }>;

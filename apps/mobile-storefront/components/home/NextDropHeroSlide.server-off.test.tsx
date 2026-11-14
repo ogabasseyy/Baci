@@ -5,8 +5,9 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 it('keeps the existing wallet destination and hides the preview provider without a live verdict', () => {
-  const originalDev = globalThis.__DEV__;
-  globalThis.__DEV__ = false;
+  const runtime = globalThis as typeof globalThis & { __DEV__: boolean };
+  const originalDev = runtime.__DEV__;
+  runtime.__DEV__ = false;
   try {
     render(
       <NextDropHeroSlide
@@ -24,6 +25,6 @@ it('keeps the existing wallet destination and hides the preview provider without
     fireEvent.press(screen.getByRole('button', { name: 'Explore savings' }));
     expect(mockPush).toHaveBeenCalledWith('/wallet');
   } finally {
-    globalThis.__DEV__ = originalDev;
+    runtime.__DEV__ = originalDev;
   }
 });

@@ -84,13 +84,16 @@ test('inserts the background when the theme has no items', async () => {
     },
   ]);
 });
-test('preserves other themes when AppTheme is missing', async () => {
+test('fails clearly when AppTheme is missing', async () => {
   const resources = { style: [{ $: { name: 'OtherTheme' } }] };
-  await transform(resources);
-  assert.deepEqual(resources, { style: [{ $: { name: 'OtherTheme' } }] });
+  await assert.rejects(
+    transform(resources),
+    /AppTheme was not found while configuring the SplashMotion window background/
+  );
 });
-test('handles an absent style collection', async () => {
-  const resources = {};
-  await transform(resources);
-  assert.deepEqual(resources, {});
+test('fails clearly when the style collection is absent', async () => {
+  await assert.rejects(
+    transform({}),
+    /AppTheme was not found while configuring the SplashMotion window background/
+  );
 });

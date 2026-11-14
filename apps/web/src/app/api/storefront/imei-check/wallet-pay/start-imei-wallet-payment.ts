@@ -230,18 +230,14 @@ export async function startImeiWalletPayment(
       },
     });
   } catch {
-    // The issue may or may not have committed. Removing the lookup succeeds
-    // only while no payment exists for it (the database refuses otherwise),
-    // so a retry with this key either issues afresh or, when the lookup
-    // stays, is told to start again with a new key. Nothing was charged.
-    if (created && !(await removePending(input.supabaseAdmin, lookupId)))
-      return refuse(
-        'PAYMENT_NOT_COMPLETED',
-        'This payment did not go through. Please start again.',
-        409
-      );
-    // Cleaned up (or an earlier lookup kept): nothing was charged, and a
-    // retry with this key can issue, so this is retryable (Muse), not a 500.
+    // The issue may or may not have committed (its answer may be lost after
+    // the payment was created). Removing the lookup succeeds only while no
+    // payment exists for it (the database refuses otherwise). Whether it was
+    // removed or kept, the answer is the same retryable one that keeps the
+    // key: a retry with it either issues afresh or finds the committed
+    // payment and resumes it. Never "start again with a new key", which
+    // could charge a second time while the first payment completes (Codex).
+    if (created) await removePending(input.supabaseAdmin, lookupId);
     return refuse(
       'PIGGYVEST_PAY_UNAVAILABLE',
       'Paying from your PiggyVest wallet is not available right now.',

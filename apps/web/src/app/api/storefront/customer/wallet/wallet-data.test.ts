@@ -99,6 +99,12 @@ describe('fetchCustomerWallet', () => {
             source_type: null,
             type: 'debit',
           },
+          {
+            description: 'PiggyVest bank transfer',
+            id: 'txn-4',
+            source_type: 'piggyvest_primary_inflow',
+            type: 'credit',
+          },
         ],
         error: null,
       },
@@ -107,11 +113,16 @@ describe('fetchCustomerWallet', () => {
     const result = await fetchCustomerWallet({ ...args, supabase });
 
     if (result.kind !== 'ok') throw new Error('expected ok');
-    const text = JSON.stringify(result.transactions);
-    expect(text).not.toMatch(/petrock|paystack|3f2b8c1e/i);
-    expect(result.transactions.map((tx) => tx.description)).toEqual([
+    // Only the text a customer reads is relabeled: source_type is a machine
+    // field older apps branch on, so it keeps its value.
+    const descriptions = result.transactions.map((tx) => tx.description);
+    expect(descriptions.join(' ')).not.toMatch(
+      /petrock|paystack|piggyvest|3f2b8c1e/i
+    );
+    expect(descriptions).toEqual([
       'IMEI check',
       'Partial invoice payment',
+      'Money added',
     ]);
   });
 

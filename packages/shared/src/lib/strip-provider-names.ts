@@ -2,8 +2,10 @@ import { BACK_OFFICE_PROVIDERS_PATTERN as PROVIDERS } from './back-office-provid
 
 // "(Kuda)", "[Monnify]"
 const BRACKETED = new RegExp(`\\s*[([]\\s*(?:${PROVIDERS})\\s*[)\\]]`, 'gi');
-// "Ikeja Electric - Kuda", "Prepaid | Monnify"
-const DASHED = new RegExp(`\\s+[-–—|]\\s*(?:${PROVIDERS})\\b`, 'gi');
+// "Ikeja Electric - Kuda", "Prepaid | Monnify", "Prepaid-Kuda"
+const DASHED = new RegExp(`\\s*[-–—|]\\s*(?:${PROVIDERS})\\b`, 'gi');
+// A separator left at either end once a leading provider is gone ("- Prepaid").
+const EDGE_SEPARATORS = /^[\s\-–—|:,]+|[\s\-–—|:,]+$/g;
 // "via Paystack", "from Kuda": the joining word goes with the provider.
 const JOINED = new RegExp(
   `\\s*\\b(?:via|by|through|from|with)\\s+(?:${PROVIDERS})\\b`,
@@ -23,5 +25,5 @@ export function stripProviderNames(text: string): string {
     .replace(BARE, '')
     .replace(/\(\s*\)|\[\s*\]/g, '')
     .replace(/\s{2,}/g, ' ')
-    .trim();
+    .replace(EDGE_SEPARATORS, '');
 }

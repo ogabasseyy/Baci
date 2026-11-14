@@ -10,6 +10,12 @@ describe('stripProviderNames', () => {
     expect(stripProviderNames('(Paystack) top-up')).toBe('top-up');
   });
 
+  it('leaves no dangling separator when the provider is joined without spaces', () => {
+    expect(stripProviderNames('Prepaid-Kuda')).toBe('Prepaid');
+    expect(stripProviderNames('Prepaid|Monnify')).toBe('Prepaid');
+    expect(stripProviderNames('Kuda - Prepaid')).toBe('Prepaid');
+  });
+
   it('keeps networks, billers and ordinary text', () => {
     for (const text of [
       'MTN',

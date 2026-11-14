@@ -13,6 +13,7 @@ import {
   getShipmentFlowPrimaryActionLabel,
   isShipmentFlowPrimaryDisabled,
 } from './ShipmentFlowSheet.actions';
+import { runShipmentFlowPrimaryAction } from './ShipmentFlowSheet.primary-action';
 import { styles } from './ShipmentFlowSheet.styles';
 import type { ShipmentFlowSheetProps } from './ShipmentFlowSheet.types';
 import { ShipmentFlowSheetPresence } from './ShipmentFlowSheetPresence';
@@ -27,7 +28,9 @@ const IOS_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 0;
 const DEFAULT_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 24;
 export function ShipmentFlowSheet({
   recoveryOrder,
+  canBookGigl,
   canUseProvider,
+  isGiglOrder = false,
   checkoutPaidShippingLabel,
   externalWaybill,
   fulfillmentDetails,
@@ -120,29 +123,24 @@ export function ShipmentFlowSheet({
     if (isBusy) return;
     onStepBack();
   };
-  const handlePrimaryAction = async () => {
-    if (isRecoveryBlocking) return;
-    if (step === 'details') return onContinueFromDetails();
-    if (step === 'rider') return onConfirmSelfFulfillment();
-    if (selectedMode === 'external_waybill') {
-      if (!externalWaybill) return;
-      return externalWaybill.preview?.linkable
-        ? externalWaybill.link()
-        : externalWaybill.check();
-    }
-    if (
-      selectedMode === 'provider' &&
-      giglShipping &&
-      !(await giglShipping.ensureFreshQuoteForConfirmation())
-    ) {
-      return;
-    }
-    const outcome = await onContinueFromMethod();
-    if (outcome === 'review_checkout_quote' && recoveryOrder) {
-      setRecoveryAttempt((attempt) => attempt + 1);
-      setRecoveryRequiredOrderId(recoveryOrder.id);
-    }
-  };
+  const handlePrimaryAction = () =>
+    runShipmentFlowPrimaryAction({
+      canBookGigl,
+      canUseProvider,
+      externalWaybill,
+      giglShipping,
+      isRecoveryBlocking,
+      onConfirmSelfFulfillment,
+      onContinueFromDetails,
+      onContinueFromMethod,
+      onRecoveryRequired: () => {
+        if (!recoveryOrder) return;
+        setRecoveryAttempt((attempt) => attempt + 1);
+        setRecoveryRequiredOrderId(recoveryOrder.id);
+      },
+      selectedMode,
+      step,
+    });
   return (
     <ShipmentFlowSheetPresence
       accessory={
@@ -216,6 +214,7 @@ export function ShipmentFlowSheet({
             ) : null}
             {step === 'method' ? (
               <ShipmentFlowMethodStep
+                bookingDenied={isGiglOrder && !canBookGigl}
                 canUseProvider={canUseProvider}
                 checkoutPaidShippingLabel={checkoutPaidShippingLabel}
                 externalWaybill={externalWaybill}
@@ -223,6 +222,7 @@ export function ShipmentFlowSheet({
                   !giglShipping ? undefined : (
                     <ShipmentFlowGiglPanel
                       addressDraft={giglShipping.addressDraft}
+                      bookingAllowed={canBookGigl}
                       error={giglShipping.error}
                       fundingAccount={giglShipping.fundingAccount}
                       missingFields={giglShipping.missingFields}
@@ -232,9 +232,7 @@ export function ShipmentFlowSheet({
                       onRefreshFundingAccount={() =>
                         void giglShipping.refreshFundingAccount()
                       }
-                      onModeChange={() => {
-                        if (!recoveryBusy) onModeChange('provider');
-                      }}
+                      onModeChange={() => !isBusy && onModeChange('provider')}
                       onRetryQuote={() => void giglShipping.requestQuote()}
                       onTransferred={giglShipping.startTransferPoll}
                       quote={giglShipping.quote}
@@ -244,9 +242,7 @@ export function ShipmentFlowSheet({
                     />
                   )
                 }
-                onModeChange={(mode) => {
-                  if (!isBusy) onModeChange(mode);
-                }}
+                onModeChange={(mode) => !isBusy && onModeChange(mode)}
                 providerLabel={providerLabel}
                 selectedMode={selectedMode}
               />
@@ -257,6 +253,7 @@ export function ShipmentFlowSheet({
             (!recoveryRequired || selectedMode === 'provider') ? (
               <CheckoutShippingRecoveryPanel
                 key={`${recoveryOrder.id}:${recoveryAttempt}`}
+                canRecover={canBookGigl}
                 order={recoveryOrder}
                 required={recoveryRequired}
                 onConfirmed={() => setRecoveryRequiredOrderId(null)}
@@ -277,6 +274,7 @@ export function ShipmentFlowSheet({
             colors={colors}
             isSubmitting={isBusy}
             isPrimaryDisabled={isShipmentFlowPrimaryDisabled({
+              canBookGigl,
               canUseProvider,
               externalWaybill,
               giglShipping,

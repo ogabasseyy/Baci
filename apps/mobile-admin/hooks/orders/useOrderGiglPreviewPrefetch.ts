@@ -10,7 +10,10 @@ import {
 } from '@/lib/order-gigl-preview-target';
 
 interface UseOrderGiglPreviewPrefetchParams {
-  /** True only when the owner's GIG wallet panel would apply to this order. */
+  /**
+   * True only when the GIG wallet panel would apply to this order for this
+   * user (the owner, or staff with orders.fulfill).
+   */
   enabled: boolean;
   order:
     | (OrderGiglPreviewTargetOrder & {

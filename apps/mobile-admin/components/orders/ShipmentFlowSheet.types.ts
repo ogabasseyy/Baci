@@ -9,7 +9,15 @@ import type {
 
 export interface ShipmentFlowSheetProps {
   recoveryOrder?: Order;
+  /**
+   * Owner, or staff with orders.fulfill and orders.edit: may select, fund and
+   * book GIG and recover a checkout GIG destination. Anyone else only sees the
+   * GIG price.
+   */
+  canBookGigl: boolean;
   canUseProvider: boolean;
+  /** The order ships with GIG; only then can GIG booking rights withhold it. */
+  isGiglOrder?: boolean;
   checkoutPaidShippingLabel?: string | null;
   /** Attach a waybill booked in GIG's own app; omitted when GIG is off. */
   externalWaybill?: OrderGiglExternalWaybill;

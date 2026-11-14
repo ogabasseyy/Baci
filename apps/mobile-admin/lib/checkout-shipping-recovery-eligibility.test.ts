@@ -10,18 +10,19 @@ const order = {
   shipment_id: null,
   tracking_number: null,
 } as const;
-const merchant = { id: 'merchant', user_id: 'owner' };
+const merchant = { id: 'merchant' };
 describe('checkout shipping recovery UI eligibility', () => {
-  it('allows the merchant owner to review an unbooked paid checkout order', () => {
-    expect(canUseCheckoutShippingRecovery(order, merchant, 'owner')).toBe(true);
+  it('allows a user who can book GIG to review an unbooked paid checkout order', () => {
+    expect(canUseCheckoutShippingRecovery(order, merchant, true)).toBe(true);
   });
   it.each([
-    ['staff', merchant],
-    [undefined, merchant],
-    ['owner', null],
-    ['owner', { id: 'other', user_id: 'owner' }],
-  ])('rejects unauthorized identity %s', (userId, context) => {
-    expect(canUseCheckoutShippingRecovery(order, context, userId)).toBe(false);
+    [false, merchant],
+    [true, null],
+    [true, { id: 'other' }],
+  ])('rejects recovery rights %s for merchant %j', (canRecover, context) => {
+    expect(canUseCheckoutShippingRecovery(order, context, canRecover)).toBe(
+      false
+    );
   });
   it.each([
     { payment_status: 'pending' },
@@ -32,15 +33,11 @@ describe('checkout shipping recovery UI eligibility', () => {
     { tracking_number: 'tracked' },
   ] as const)('rejects an ineligible order %j', (changes) => {
     expect(
-      canUseCheckoutShippingRecovery(
-        { ...order, ...changes },
-        merchant,
-        'owner'
-      )
+      canUseCheckoutShippingRecovery({ ...order, ...changes }, merchant, true)
     ).toBe(false);
   });
   it('rejects an unavailable order', () => {
-    expect(canUseCheckoutShippingRecovery(undefined, merchant, 'owner')).toBe(
+    expect(canUseCheckoutShippingRecovery(undefined, merchant, true)).toBe(
       false
     );
   });

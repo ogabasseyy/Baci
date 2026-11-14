@@ -60,6 +60,7 @@ describe('getShipmentFlowPrimaryActionLabel', () => {
 
 describe('isShipmentFlowPrimaryDisabled', () => {
   const base = {
+    canBookGigl: true,
     canUseProvider: true,
     isRecoveryBlocking: false,
     selectedMode: 'external_waybill' as const,
@@ -114,5 +115,47 @@ describe('isShipmentFlowPrimaryDisabled', () => {
         selectedMode: 'self_fulfillment',
       })
     ).toBe(true);
+  });
+
+  it('gates wallet booking on GIG booking rights but not the waybill link', () => {
+    const wallet = {
+      state: 'ready',
+      wallet: { canBook: true },
+    } as never;
+    expect(
+      isShipmentFlowPrimaryDisabled({
+        ...base,
+        canBookGigl: false,
+        giglShipping: wallet,
+        selectedMode: 'provider',
+      })
+    ).toBe(true);
+    expect(
+      isShipmentFlowPrimaryDisabled({
+        ...base,
+        canBookGigl: true,
+        giglShipping: wallet,
+        selectedMode: 'provider',
+      })
+    ).toBe(false);
+    expect(
+      isShipmentFlowPrimaryDisabled({
+        ...base,
+        canBookGigl: false,
+        externalWaybill: waybill('preview', true),
+      })
+    ).toBe(false);
+  });
+
+  it('keeps a saved non-GIG quote bookable without GIG booking rights', () => {
+    expect(
+      isShipmentFlowPrimaryDisabled({
+        ...base,
+        canBookGigl: false,
+        canUseProvider: true,
+        giglShipping: undefined,
+        selectedMode: 'provider',
+      })
+    ).toBe(false);
   });
 });

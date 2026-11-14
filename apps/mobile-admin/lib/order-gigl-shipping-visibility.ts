@@ -1,8 +1,8 @@
 import { canUseSelectedShippingProvider } from './order-shipment';
 
 interface OrderGiglShippingVisibilityInput {
-  hasRecoverableWalletCharge?: boolean;
-  merchantOwnerId?: string | null;
+  /** Owner, or staff with orders.fulfill and orders.edit. */
+  canBookGigl?: boolean;
   order?: {
     selected_quote_id?: string | null;
     shipment_id?: string | null;
@@ -10,35 +10,32 @@ interface OrderGiglShippingVisibilityInput {
     shipping_provider?: string | null;
     tracking_number?: string | null;
   } | null;
-  userId?: string | null;
 }
 
 export function getOrderGiglShippingVisibility({
-  hasRecoverableWalletCharge = false,
-  merchantOwnerId,
+  canBookGigl = false,
   order,
-  userId,
 }: OrderGiglShippingVisibilityInput) {
-  const isMerchantOwner = Boolean(
-    userId && merchantOwnerId && userId === merchantOwnerId
-  );
+  const isGiglOrder = order?.shipping_provider?.trim().toUpperCase() === 'GIGL';
   const isSavedMerchantWalletGiglOrder = Boolean(
-    order?.shipping_provider?.trim().toUpperCase() === 'GIGL' &&
-      order.shipping_funding_source === 'merchant_wallet' &&
+    isGiglOrder &&
+      order?.shipping_funding_source === 'merchant_wallet' &&
       order.selected_quote_id
   );
-  // Keep merchant-wallet GIGL bookings on the bound quote so recovery can
-  // reach the existing reservation instead of forcing a replacement quote.
-  // Staff cannot create the first wallet debit (owner-only), so only advertise
-  // booking when a recoverable charge already exists.
   const canUseProvider = order ? canUseSelectedShippingProvider(order) : false;
+  // Booking binds the saved quote (and debits the wallet for wallet orders), so
+  // the server rejects it for anyone without GIG booking rights: owner, or
+  // staff with orders.fulfill and orders.edit. Do not offer it to them.
+  const needsBookingRights =
+    isSavedMerchantWalletGiglOrder ||
+    (isGiglOrder && order?.shipping_funding_source === 'customer_checkout');
   const providerBookingAvailable =
-    isSavedMerchantWalletGiglOrder && !isMerchantOwner
-      ? canUseProvider && hasRecoverableWalletCharge
-      : canUseProvider;
+    needsBookingRights && !canBookGigl ? false : canUseProvider;
 
   return {
-    isMerchantOwner,
+    // A saved quote exists whoever may book it; it, not booking rights,
+    // decides whether the wallet quote flow applies.
+    hasSavedProviderQuote: canUseProvider,
     isSavedMerchantWalletGiglOrder,
     providerBookingAvailable,
   };

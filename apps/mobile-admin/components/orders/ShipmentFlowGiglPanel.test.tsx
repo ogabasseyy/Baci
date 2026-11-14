@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowGiglPanel } from './ShipmentFlowGiglPanel';
+import {
+  giglPanelActions as actions,
+  giglPanelBase as base,
+} from './ShipmentFlowGiglPanel.test-support';
 
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
 
@@ -19,40 +23,6 @@ vi.mock('@/hooks/useTheme', () => ({
     },
   }),
 }));
-
-const actions = {
-  onAddressFieldChange: vi.fn(),
-  onFundWallet: vi.fn(),
-  onRefreshFundingAccount: vi.fn(),
-  onModeChange: vi.fn(),
-  onPlaceSelect: vi.fn(),
-  onRetryQuote: vi.fn(),
-  onTransferred: vi.fn(),
-};
-
-const base = {
-  ...actions,
-  addressDraft: {},
-  error: null,
-  fundingAccount: null,
-  missingFields: [],
-  quote: {
-    id: 'quote-1',
-    provider: 'GIGL' as const,
-    serviceTier: 'Express',
-    carrierName: 'GIG Logistics',
-    displayName: 'Door Delivery',
-    estimatedDays: 2,
-    price: 11000,
-    currency: 'NGN' as const,
-    pickupIncluded: true,
-    insuranceIncluded: false,
-    expiresAt: '2026-09-01T18:00:00.000Z',
-  },
-  selected: false,
-  state: 'ready' as const,
-  wallet: { availableBalance: 1000, canBook: false, shortfall: 10000 },
-};
 
 describe('ShipmentFlowGiglPanel', () => {
   it('shows one bundled GIG price, the balance and the top-up when the wallet is short', () => {

@@ -176,4 +176,54 @@ describe('ShipmentFlowMethodStep', () => {
       screen.getByText(/does not have a saved quote to book against anymore/i)
     ).toBeInTheDocument();
   });
+
+  it('tells staff without booking rights to ask an admin, even without a checkout price', () => {
+    render(
+      <ShipmentFlowMethodStep
+        bookingDenied
+        canUseProvider={false}
+        onModeChange={vi.fn()}
+        providerLabel="GIG"
+        selectedMode="provider"
+      />
+    );
+
+    expect(
+      screen.getByText('Ask the store owner or an admin to book this shipment.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/This will book the shipment/i)).toBeNull();
+  });
+
+  it('keeps normal booking copy for another provider when GIG booking is denied', () => {
+    render(
+      <ShipmentFlowMethodStep
+        bookingDenied
+        canUseProvider
+        onModeChange={vi.fn()}
+        providerLabel="Topship"
+        selectedMode="provider"
+      />
+    );
+
+    expect(
+      screen.getByText(/book the shipment with Topship/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Ask the store owner/i)).toBeNull();
+  });
+
+  it('keeps the missing-quote explanation for another provider when GIG booking is denied', () => {
+    render(
+      <ShipmentFlowMethodStep
+        canUseProvider={false}
+        onModeChange={vi.fn()}
+        providerLabel="Topship"
+        selectedMode="provider"
+      />
+    );
+
+    expect(
+      screen.getByText(/Topship was selected for checkout/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Ask the store owner/i)).toBeNull();
+  });
 });

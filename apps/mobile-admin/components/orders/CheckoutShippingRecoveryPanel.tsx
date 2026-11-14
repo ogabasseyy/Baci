@@ -1,26 +1,27 @@
 import type { Order } from '@baci/shared';
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { useAuth } from '@/hooks/useAuth';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 import { canUseCheckoutShippingRecovery } from '@/lib/checkout-shipping-recovery-eligibility';
 import { CheckoutRecoveryForm } from './CheckoutRecoveryForm';
 
 export function CheckoutShippingRecoveryPanel({
+  canRecover,
   order,
   onBlockingChange,
   onBusyChange,
   required = false,
   onConfirmed,
 }: {
+  /** Owner, or staff with orders.fulfill and orders.edit (canBookOrderGigl). */
+  canRecover: boolean;
   order: Order;
   required?: boolean;
   onConfirmed?: () => void;
   onBlockingChange: (value: boolean) => void;
   onBusyChange?: (value: boolean) => void;
 }) {
-  const { user } = useAuth();
   const { merchant } = useMerchant();
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
@@ -32,7 +33,7 @@ export function CheckoutShippingRecoveryPanel({
     onBusyChange?.(busy);
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
-  if (!canUseCheckoutShippingRecovery(order, merchant, user?.id)) return null;
+  if (!canUseCheckoutShippingRecovery(order, merchant, canRecover)) return null;
   return (
     <View>
       {required ? (

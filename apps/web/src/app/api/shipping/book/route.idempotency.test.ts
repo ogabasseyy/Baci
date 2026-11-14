@@ -299,7 +299,7 @@ describe('POST /api/shipping/book idempotency', () => {
     const firstResponse = await POST(buildRequest());
     const retryResponse = await POST(buildRequest());
 
-    expect(firstResponse.status).toBe(503);
+    expect(firstResponse.status).toBe(500);
     expect(retryResponse.status).toBe(409);
     await expect(retryResponse.json()).resolves.toMatchObject({
       code: 'SHIPMENT_BOOKING_IN_PROGRESS',

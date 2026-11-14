@@ -67,9 +67,10 @@ export function createOwnerPreviewBridgeClient(settings: {
   key: Uint8Array;
   executionOrigin: string;
   now?: () => number;
-  fetch?: typeof fetch;
+  fetch: typeof fetch;
 }) {
-  if (settings.key.length !== 32) throw Error('INVALID_OWNER_BRIDGE_CONFIG');
+  if (settings.key.length !== 32 || typeof settings.fetch !== 'function')
+    throw Error('INVALID_OWNER_BRIDGE_CONFIG');
   const key = Uint8Array.from(settings.key);
   const executionOrigin = productionOrigin(settings.executionOrigin);
   const now = settings.now ?? Date.now;
@@ -97,7 +98,7 @@ export function createOwnerPreviewBridgeClient(settings: {
     const signature = createHmac('sha256', key)
       .update(`owner-preview/v1\n${body}`)
       .digest('hex');
-    const response = await (settings.fetch ?? fetch)(
+    const response = await settings.fetch(
       'https://mcp.usebaci.com/internal/owner/preview',
       {
         method: 'POST',

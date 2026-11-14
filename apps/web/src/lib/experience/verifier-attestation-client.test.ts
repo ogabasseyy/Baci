@@ -8,6 +8,11 @@ import { createVerifierAttestationClient } from './verifier-attestation-client';
 
 const key = new Uint8Array(32).fill(9);
 const id = '11111111-1111-4111-8111-111111111111';
+it('requires an explicitly installed transport', () => {
+  expect(() => createVerifierAttestationClient({ key } as never)).toThrow(
+    'INVALID_VERIFIER_CONFIG'
+  );
+});
 function fixture() {
   const user = {
     auth: {

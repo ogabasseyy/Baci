@@ -58,9 +58,13 @@ The production composition requires a distinct configured owner port and does
 not attach owner routes to the MCP listener. This source change does not
 provide TLS, mutual authentication, or a private network path. The live
 topology has not been updated or qualified; local separation tests are not
-deployed ingress evidence. The web callers still target the existing MCP host;
-until a separate authenticated path and matching caller configuration are
-implemented, owner preview and attestation must remain disabled.
+deployed ingress evidence. The candidate web preview and draft-approval
+callers require the dedicated mTLS transport and fail closed without its
+private configuration. The MCP-host URL in their clients is a fixed logical
+route mapped by that transport, not a network fallback. Public verification
+also requires an explicit transport and is not installed for publication.
+Certificates, private ingress, deployment and live negative tests remain
+unqualified, so owner preview and attestation must remain disabled.
 
 Pass `--experience` before or after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the

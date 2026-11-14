@@ -6,6 +6,15 @@ vi.mock('server-only', () => ({}));
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
 import { createOwnerPreviewBridgeClient } from './owner-preview-bridge-client';
 
+it('requires an explicitly installed transport', () => {
+  expect(() =>
+    createOwnerPreviewBridgeClient({
+      key: Buffer.alloc(32, 1),
+      executionOrigin: 'https://output.example.net',
+    } as never)
+  ).toThrow('INVALID_OWNER_BRIDGE_CONFIG');
+});
+
 const key = new Uint8Array(32).fill(7);
 const now = 1700000000000;
 const merchantId = '10000000-0000-4000-8000-000000000001';

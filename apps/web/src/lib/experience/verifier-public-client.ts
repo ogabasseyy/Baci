@@ -6,10 +6,11 @@ import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
 /** Sends no caller-selected merchant or receipt data to the independent verifier. */
 export function createVerifierPublicClient(settings: {
   key: Uint8Array;
-  fetch?: typeof fetch;
+  fetch: typeof fetch;
   now?: () => number;
 }): OwnerLifecycleVerification['verifyCommitted'] {
-  if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
+  if (settings.key.length !== 32 || typeof settings.fetch !== 'function')
+    throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
   return async (client, receipt) => {
     const approvalId = experienceApprovalId.parse(receipt.approvalId);
@@ -35,7 +36,7 @@ export function createVerifierPublicClient(settings: {
     const signature = createHmac('sha256', key)
       .update(`verifier-public/v1\n${body}`)
       .digest('hex');
-    const response = await (settings.fetch ?? fetch)(
+    const response = await settings.fetch(
       'https://mcp.usebaci.com/internal/owner/public',
       {
         method: 'POST',

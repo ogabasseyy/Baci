@@ -1130,3 +1130,16 @@ the final Place Order button without clicking it; request assertions prohibited
 order and payment calls and the isolated orders table remained empty. This is
 local synthetic evidence, not a live OAuth, ingress or production checkout test.
 The extended wait is specific to this test and is not a performance result.
+
+On 14 November, a review-only operator bundle was assembled from candidate
+commit `3decf788677a14ff7d42833895107da8bdb9a662`. All 11 manifest hashes
+matched locally and after transfer to Contabo. In a temporary isolated
+directory, the pinned pnpm lock installed with lifecycle scripts disabled;
+Node 24 checked all five bundled JavaScript entries, and `next/link.js`,
+`next/image.js`, `jsdom`, and `sharp` imported as an unprivileged user. The
+builder, verifier, runner and preflight entries rejected an unconfigured,
+unprivileged start. The temporary directory was removed; no service, role,
+configuration, ingress or firewall rule was installed. The root-owned node
+and browser rootfs directories exist on Contabo, but this packaging smoke does
+not verify their current contents, start an isolated build, qualify the
+privileged boundary or establish a live OAuth or storefront flow.

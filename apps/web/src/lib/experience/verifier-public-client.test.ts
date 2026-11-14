@@ -17,6 +17,12 @@ const client = {
   },
 };
 
+it('requires an explicitly installed transport', () => {
+  expect(() => createVerifierPublicClient({ key } as never)).toThrow(
+    'INVALID_VERIFIER_CONFIG'
+  );
+});
+
 it('sends only the authenticated owner and approval id under a dedicated signature', async () => {
   const fetch = vi.fn(async () => new Response(null, { status: 204 }));
   const verify = createVerifierPublicClient({

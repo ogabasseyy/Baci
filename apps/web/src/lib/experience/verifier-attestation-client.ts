@@ -6,10 +6,11 @@ import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
 /** Baci server only. The verifier endpoint is fixed and accepts no browser token. */
 export function createVerifierAttestationClient(settings: {
   key: Uint8Array;
-  fetch?: typeof fetch;
+  fetch: typeof fetch;
   now?: () => number;
 }): OwnerLifecycleVerification['attest'] {
-  if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
+  if (settings.key.length !== 32 || typeof settings.fetch !== 'function')
+    throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
   return async (client, approvalId, kind) => {
     const id = experienceApprovalId.parse(approvalId);
@@ -38,7 +39,7 @@ export function createVerifierAttestationClient(settings: {
     const signature = createHmac('sha256', key)
       .update(`verifier-attest/v1\n${body}`)
       .digest('hex');
-    const response = await (settings.fetch ?? fetch)(
+    const response = await settings.fetch(
       'https://mcp.usebaci.com/internal/owner/attest',
       {
         method: 'POST',

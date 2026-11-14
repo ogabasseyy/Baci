@@ -4,12 +4,13 @@ import { isFundedUnsettledGoal } from './savings/goal-settlement';
 
 /**
  * Which savings goal the wallet shows. A goal named by the route wins.
- * Otherwise, while the savings sheet is open, it stays on the goal it opened
- * on: a contribution that completes that goal must not swap the sheet to
- * another active goal (the completed goal still needs its Complete action).
- * Pass the sheet as open while a contribution is still settling too: the pin
- * holds until it settles, even if the sheet was dismissed meanwhile.
- * Closing the sheet (with nothing in flight) releases the pin.
+ * Otherwise the goal the savings sheet opened on (or a contribution started
+ * on) stays selected: a contribution that completes it must not swap the
+ * wallet to another active goal, even if the sheet is closed and reopened
+ * meanwhile, because the completed goal still needs its Complete action.
+ * The pin is released only when that goal leaves the list (cancelled, or
+ * another account) or is completed and settled, so the wallet falls back
+ * to its default goal.
  */
 export function usePinnedSavingsGoal(
   sheetOpen: boolean,
@@ -21,14 +22,15 @@ export function usePinnedSavingsGoal(
   const [pinned, setPinned] = useState<string | null>(null);
   const shown = useRef<WalletActiveSavingsGoal | null>(null);
   useEffect(() => {
-    if (!sheetOpen) {
-      // A goal that was just completed and still holds money stays selected
-      // until it settles: its Complete action must remain reachable.
-      if (pinned !== null && !isFundedUnsettledGoal(shown.current))
-        setPinned(null);
+    const goal = shown.current;
+    if (pinned !== null) {
+      const gone = goal === null || goal.id !== pinned;
+      const settled =
+        goal?.status === 'completed' && !isFundedUnsettledGoal(goal);
+      if (gone || settled) setPinned(null);
       return;
     }
-    if (pinned === null && shown.current) setPinned(shown.current.id);
+    if (sheetOpen && goal) setPinned(goal.id);
   });
   return {
     routeGoalId,

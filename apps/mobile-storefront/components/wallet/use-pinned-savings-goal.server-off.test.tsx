@@ -41,15 +41,39 @@ describe('server keeps PiggyVest off: usePinnedSavingsGoal', () => {
     const { result, rerender } = render({ open: true, shown: goal('goal-a') });
     rerender({ open: true, shown: goal('goal-a') });
     expect(result.current.goalId).toBe('goal-a');
-    rerender({ open: true, shown: goal('goal-b') });
+    // The wallet keeps showing the pinned goal (it asks for it by id), even
+    // after a refresh that would otherwise promote another active goal.
+    rerender({ open: true, shown: goal('goal-a', { current_amount: 9000 }) });
     expect(result.current.goalId).toBe('goal-a');
   });
 
-  it('releases the pin when the sheet closes on an ordinary goal', () => {
+  it('keeps the pin across a close and reopen', () => {
     const { result, rerender } = render({ open: true, shown: goal('goal-a') });
     rerender({ open: true, shown: goal('goal-a') });
     rerender({ open: false, shown: goal('goal-a') });
+    rerender({ open: true, shown: goal('goal-a') });
+    expect(result.current.goalId).toBe('goal-a');
+  });
+
+  it('releases the pin when the pinned goal leaves the list', () => {
+    const { result, rerender } = render({ open: true, shown: goal('goal-a') });
+    rerender({ open: true, shown: goal('goal-a') });
+    // The wallet fell back to another goal: goal A is gone.
     rerender({ open: false, shown: goal('goal-b') });
+    rerender({ open: false, shown: goal('goal-b') });
+    expect(result.current.goalId).toBeUndefined();
+  });
+
+  it('releases the pin once the completed goal has settled', () => {
+    const settled = goal('goal-a', {
+      status: 'completed',
+      current_amount: 0,
+      principal_amount: 0,
+    });
+    const { result, rerender } = render({ open: true, shown: goal('goal-a') });
+    rerender({ open: true, shown: goal('goal-a') });
+    rerender({ open: false, shown: settled });
+    rerender({ open: false, shown: settled });
     expect(result.current.goalId).toBeUndefined();
   });
 

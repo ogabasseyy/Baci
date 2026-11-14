@@ -6,7 +6,8 @@ import { shouldReportContributionFailure } from './wallet-contribution-failure';
 /**
  * Tells the customer why a wallet contribution failed. Insufficient funds
  * moved nothing, so the stored operation id stays valid; a closed PIN sheet
- * is silent; every other failure is reported with its message.
+ * is silent; a server refusal is reported with its message, and a transport
+ * failure (outcome unknown) says it is still being confirmed.
  */
 export function reportContributionError(
   error: unknown,
@@ -23,9 +24,20 @@ export function reportContributionError(
     return;
   }
   if (!shouldReportContributionFailure(error, releaseOperation)) return;
-  notify(
-    'Unable to add savings',
-    customerErrorText(error, 'Please try again in a moment.'),
-    'warning'
-  );
+  const worded = customerErrorText(error, '');
+  if (!worded) {
+    // A timeout or lost connection: the contribution may still go through,
+    // so never say "try again" beside the card that says not to pay again.
+    notify(
+      'Still confirming your savings',
+      UNCONFIRMED_CONTRIBUTION_MESSAGE,
+      'warning'
+    );
+    return;
+  }
+  notify('Unable to add savings', worded, 'warning');
 }
+
+/** Shown when a contribution's outcome is unknown (timeout, no connection). */
+export const UNCONFIRMED_CONTRIBUTION_MESSAGE =
+  "We couldn't confirm this contribution yet. Check again in a moment before adding more.";

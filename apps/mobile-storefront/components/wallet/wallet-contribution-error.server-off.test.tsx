@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { TimeoutError } from '@/lib/fetch-with-timeout';
 import { notifySavings } from './savings/savings-notice';
-import { reportContributionError } from './wallet-contribution-error';
+import {
+  reportContributionError,
+  UNCONFIRMED_CONTRIBUTION_MESSAGE,
+} from './wallet-contribution-error';
 
 jest.mock('./savings/savings-notice', () => {
   const notifySavings = jest.fn();
@@ -50,23 +53,25 @@ describe('contribution errors with the server off', () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to a generic message for a non-Error rejection', () => {
+  it('treats a non-Error rejection as an unconfirmed outcome', () => {
     reportContributionError('nope');
     expect(noticeSpy).toHaveBeenCalledWith(
-      'Unable to add savings',
-      'Please try again in a moment.',
+      'Still confirming your savings',
+      UNCONFIRMED_CONTRIBUTION_MESSAGE,
       'warning'
     );
   });
 
   // Walk 14: "Request timed out after 30000ms" reached the customer.
-  it('never shows transport wording such as a timeout', () => {
+  // Walk 15: "Please try again" sat above "don't start another payment".
+  it('says a timed-out contribution is still being confirmed, never "try again"', () => {
     const release = jest.fn();
     reportContributionError(new TimeoutError(30000), release);
     expect(noticeSpy).toHaveBeenCalledWith(
-      'Unable to add savings',
-      'Please try again in a moment.',
+      'Still confirming your savings',
+      UNCONFIRMED_CONTRIBUTION_MESSAGE,
       'warning'
     );
+    expect(release).not.toHaveBeenCalled();
   });
 });

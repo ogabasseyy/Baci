@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -20,6 +20,9 @@ type Props = {
 };
 
 // The database compares maturity against the UTC date, so the button must too.
+const AUTO_RETRY_MS = 10_000;
+const AUTO_RETRY_LIMIT = 12;
+
 function utcToday() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -55,6 +58,16 @@ export function GoalLifecycleEntry({
   // Complete until something else refreshes the wallet.
   const [retry, setRetry] = useState(0);
   const gate = usePrimaryGoalGate(walletUpdatedAt, retry);
+  // A failed read also retries by itself (every 10 s, up to 12 times), so
+  // the link heals once the server is back without needing a tap.
+  useEffect(() => {
+    if (gate !== 'error' || retry >= AUTO_RETRY_LIMIT) return;
+    const timer = setTimeout(
+      () => setRetry((value) => value + 1),
+      AUTO_RETRY_MS
+    );
+    return () => clearTimeout(timer);
+  }, [gate, retry]);
   if (hasPendingContribution) return null;
   if (gate === 'error')
     return (

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -148,6 +148,23 @@ describe('GoalLifecycleEntry', () => {
       screen.getByRole('button', { name: 'Try loading goal options again' })
     );
     expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 1);
+  });
+
+  // Walk 15: after the server came back the form recovered but this link
+  // stayed until tapped; a quiet retry lets it heal on its own.
+  it('re-reads a failed readiness verdict by itself after a pause', () => {
+    jest.useFakeTimers();
+    try {
+      jest.mocked(usePrimaryGoalGate).mockReturnValue('error');
+      renderEntry(makeGoal());
+      expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 0);
+      act(() => {
+        jest.advanceTimersByTime(10_000);
+      });
+      expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('opens the in-sheet Cancel and Complete steps, never another screen', () => {

@@ -17,6 +17,7 @@ import {
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
 import { isBotUserAgent } from '@/lib/events/is-bot-user-agent';
+import { minimizeDeliveryData } from '@/lib/events/minimize-delivery-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
 import { shopperIp } from '@/lib/events/shopper-ip';
@@ -159,7 +160,10 @@ export async function POST(request: NextRequest) {
       });
       try {
         await recordAnalyticsDomainEvent(eventSupabase, {
-          deliveryData: deliveryData(input, request),
+          deliveryData: minimizeDeliveryData(
+            deliveryData(input, request),
+            eventType
+          ),
           eventData,
           eventName: toClientAnalyticsDomainEventName(
             eventType,

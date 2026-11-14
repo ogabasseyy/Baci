@@ -12,6 +12,7 @@ import {
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
 import { isBotUserAgent } from '@/lib/events/is-bot-user-agent';
+import { minimizeDeliveryData } from '@/lib/events/minimize-delivery-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
 import { redactStoredPageUrl } from '@/lib/events/redact-stored-page-url';
@@ -144,7 +145,10 @@ export async function POST(request: NextRequest) {
       });
       try {
         await recordAnalyticsDomainEvent(eventSupabase, {
-          deliveryData: conversionEventPayload.deliveryData(input, request),
+          deliveryData: minimizeDeliveryData(
+            conversionEventPayload.deliveryData(input, request),
+            eventType
+          ),
           eventData: conversionEventPayload.toStoredEventData(input),
           eventName,
           eventTimestamp,

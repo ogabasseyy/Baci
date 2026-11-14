@@ -109,6 +109,59 @@ describe('POST /api/analytics/conversion', () => {
       })
     );
   });
+  it('records ad-matching fields for a consented conversion event', async () => {
+    mocks.enqueueEnabled = true;
+    mocks.resolveContext.mockResolvedValue({
+      merchantId: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+      ok: true,
+      trustLevel: 'tenant_verified_client',
+      verified: true,
+    });
+    const response = await POST(
+      request(
+        { user_data: { em: 'a@example.com', fbp: 'fbp.1' } },
+        { 'user-agent': 'Agent', 'x-forwarded-for': '203.0.113.1' }
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        deliveryData: expect.objectContaining({
+          email: 'a@example.com',
+          fbp: 'fbp.1',
+          ip: '203.0.113.1',
+          ua: 'Agent',
+        }),
+      })
+    );
+  });
+  it('records no personal fields when the visitor granted no consent', async () => {
+    mocks.enqueueEnabled = true;
+    mocks.resolveContext.mockResolvedValue({
+      merchantId: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+      ok: true,
+      trustLevel: 'tenant_verified_client',
+      verified: true,
+    });
+    const response = await POST(
+      request(
+        {
+          analytics_consent: false,
+          marketing_consent: false,
+          user_data: { em: 'a@example.com', ph: '+2348000000000' },
+        },
+        { 'user-agent': 'Agent', 'x-forwarded-for': '203.0.113.1' }
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        deliveryData: { analytics_consent: false, marketing_consent: false },
+      })
+    );
+  });
   it('accepts an empty pre-order checkout ID and persists requested targets', async () => {
     mocks.enqueueEnabled = true;
     mocks.resolveContext.mockResolvedValue({

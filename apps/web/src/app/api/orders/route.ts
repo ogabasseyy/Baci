@@ -47,6 +47,7 @@ import { resolveEffectiveCheckoutShippingProvider } from '@/lib/checkout/resolve
 import { resolveOfferReplayForOrderRoute } from '@/lib/checkout/resolve-idempotent-offer-replay-route';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
+import { shouldApplyServerDerivedDiscount as shouldApplyServerDerivedDiscountFor } from '@/lib/checkout/should-apply-server-derived-discount';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
@@ -1317,6 +1318,15 @@ export async function POST(request: NextRequest) {
     // falls back to parent prices and a legitimately offer-priced line
     // would false-positive as below-catalog. The RPC replays the stored
     // order (or rejects conflicts by hash) without these recomputes.
+    // Same decision gates the charge below and the cost-floor measurement.
+    const shouldApplyServerDerivedDiscount =
+      shouldApplyServerDerivedDiscountFor({
+        redvaultRequested,
+        merchantCanAutoNegotiate,
+        requestedDiscountCode,
+        expectedTotal: body.expected_total,
+        source,
+      });
     let negotiationDiscount:
       | Awaited<ReturnType<typeof computeOrderNegotiationDiscount>>
       | undefined;
@@ -1327,6 +1337,7 @@ export async function POST(request: NextRequest) {
           conditionPriceOverrides,
           items: orderItemsPayload,
           merchantId: merchant_id,
+          monitorCostFloor: shouldApplyServerDerivedDiscount,
           offerPrices: liveOfferPrices,
           supabase,
           vatRegistered,
@@ -1377,11 +1388,6 @@ export async function POST(request: NextRequest) {
     //   per-line/catalog VAT source as this route. The per-line discount is
     //   still server-validated and capped before this point; this branch only
     //   decides whether the validated discount should be charged.
-    const shouldApplyServerDerivedDiscount =
-      !redvaultRequested &&
-      merchantCanAutoNegotiate &&
-      !requestedDiscountCode &&
-      (typeof body.expected_total === 'number' || source === 'mobile_app');
     // F1 replay: the bypass skipped the negotiation recompute, so the
     // stored discount restores unconditionally (like the stored tax
     // above) — hashing a recomputed zero against the first attempt's

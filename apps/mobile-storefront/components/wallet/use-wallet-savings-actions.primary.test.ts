@@ -42,7 +42,7 @@ function createInput(goal: WalletActiveSavingsGoal | null = activeGoal) {
     operationRailRef: { current: null as 'primary' | 'legacy' | null },
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '2500',
-    spendableBalance: 0,
+    walletBalance: 0,
     startWalletTopUp: jest.fn(),
     setIsFundPending: jest.fn<(value: boolean) => void>(),
     setIsAddingSavingsContribution: jest.fn<(value: boolean) => void>(),
@@ -69,7 +69,7 @@ describe('createWalletSavingsActions with PiggyVest', () => {
       primaryReady: true,
       savingsContributionAmount: '1000',
       legacyBalance: 2000,
-      spendableBalance: 0,
+      walletBalance: 0,
     }).handleAddSavingsContribution();
     expect(addSavingsContributionToGoal).toHaveBeenCalledWith(
       expect.objectContaining({ walletBalance: 2000 })
@@ -82,7 +82,7 @@ describe('createWalletSavingsActions with PiggyVest', () => {
       activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
       primaryReady: true,
       legacyBalance: 2000,
-      spendableBalance: 700,
+      walletBalance: 700,
     }).handleAddSavingsContribution();
     expect(addSavingsContributionToGoal).toHaveBeenCalledWith(
       expect.objectContaining({ walletBalance: 700 })
@@ -112,7 +112,7 @@ describe('createWalletSavingsActions with PiggyVest', () => {
         ...createInput(),
         onAddMoney: jest.fn(),
         primaryReady: true,
-        spendableBalance: 5000,
+        walletBalance: 5000,
       };
       createWalletSavingsActions(input).handleFundSavingsWallet();
 

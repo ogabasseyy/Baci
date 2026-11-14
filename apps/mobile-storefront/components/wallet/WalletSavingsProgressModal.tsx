@@ -5,6 +5,9 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
+import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
+import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalCancelStep } from './savings/GoalCancelStep';
@@ -13,6 +16,7 @@ import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { isFundedUnsettledGoal } from './savings/goal-settlement';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
+import { usePlanStillSettingUp } from './savings/use-plan-still-setting-up';
 import { WalletPinSheet } from './savings/WalletPinSheet';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
@@ -49,11 +53,15 @@ export function WalletSavingsProgressModal({
     primaryForeground: BRAND.onPrimary,
     primaryLowOpacity: BRAND.primaryAlpha12,
   };
+  // Matches the wallet card: "View plan" there means not "Add to savings" here.
+  const settingUp = usePlanStillSettingUp(goal);
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
   // Every close, by the customer or by leaving the wallet, drops an unsent
-  // cancel/complete review and lets the parent reset its pickers.
+  // cancel/complete review, declines a funding question still waiting in this
+  // sheet (otherwise its funding never settles) and lets the parent reset.
   const closeSheet = () => {
     cancel.closed();
+    answerWalletFundPrompt(false);
     onClose();
   };
   // The sheet is sized to what it shows, so it never ends in empty space.
@@ -146,6 +154,7 @@ export function WalletSavingsProgressModal({
   const canAddToSavings =
     (goal.source_mode === 'manual' || usesPlanFunding) &&
     goal.status !== 'completed';
+  const addTitle = canAddToSavings && !settingUp;
   const canChangeDevice =
     canAddToSavings ||
     (goal.selection_unresolved &&
@@ -189,7 +198,7 @@ export function WalletSavingsProgressModal({
                 ]}
               >
                 <Ionicons
-                  name={canAddToSavings ? 'wallet-outline' : 'flag-outline'}
+                  name={addTitle ? 'wallet-outline' : 'flag-outline'}
                   size={16}
                   color={colors.primary}
                 />
@@ -198,7 +207,7 @@ export function WalletSavingsProgressModal({
                 accessibilityRole="header"
                 style={[styles.title, { color: colors.primary }]}
               >
-                {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
+                {addTitle ? 'Add to savings' : 'Your savings plan'}
               </Text>
             </View>
             <Pressable
@@ -221,7 +230,10 @@ export function WalletSavingsProgressModal({
               setBodyHeight(Math.ceil(height))
             }
           >
+            <PiggyvestSlowdownNotice />
             <SavingsNoticeCard colors={colors} goalId={goal?.id} inSheet />
+            {/* A top-up started here asks its funding question here. */}
+            <WalletFundPromptCard colors={colors} />
             <SavingsGoalSummary
               colors={colors}
               goal={goal}

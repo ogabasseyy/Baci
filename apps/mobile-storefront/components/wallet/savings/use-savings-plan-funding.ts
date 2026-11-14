@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import {
   fetchExistingSavingsPlanFunding,
   fetchSavingsPlanFunding,
@@ -6,6 +7,7 @@ import {
 import { PLAN_NOT_SET_UP_MESSAGE } from '@/lib/customer-savings-plan-funding';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { getErrorMessage } from './start-savings-controller.utils';
 
 export type SavingsPlanFundingPhase =
@@ -73,8 +75,19 @@ export function useSavingsPlanFunding({
   // legacy path. Primary provisioning ignores client BVN (it resolves
   // identity from auth plus goal ownership), so an early primary
   // confirmation never misuses the collected value.
+  // The live verdict too (Codex): a wallet-read rollback written elsewhere
+  // shows the BVN field again without a remount, so the legacy fallback
+  // never submits an empty BVN.
+  const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
   const planFundingRequiresBvn =
-    !isPiggyvestPrimaryMerchant(activeMerchantId) || primaryCapability !== true;
+    !isPiggyvestPrimaryMerchant(activeMerchantId) ||
+    primaryCapability !== true ||
+    verdictNow === false ||
+    // A rollback whose ruling-out just expired (Codex): keep BVN until a
+    // fresh positive verdict lands, so a legacy fallback never sends it empty.
+    (verdictNow === null &&
+      !!activeMerchantId &&
+      wasPiggyvestLastRuledOut(activeMerchantId));
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,

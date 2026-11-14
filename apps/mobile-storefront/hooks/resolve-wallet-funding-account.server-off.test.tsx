@@ -12,11 +12,17 @@ let mockActiveUserId: string | undefined = 'user-1';
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: (id: string) => mockIsPrimaryMerchant(id),
 }));
+const mockRollback = jest.fn(
+  (_merchantId: unknown, error: unknown) =>
+    (error as { code?: string })?.code === 'PIGGYVEST_NOT_READY'
+);
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
   getPiggyvestPrimaryCapabilitySnapshot: (...args: unknown[]) =>
     mockSnapshot(...args),
   isPrimaryWalletNotReady: (error: unknown) =>
     (error as { code?: string })?.code === 'PIGGYVEST_NOT_READY',
+  rollbackObservedCapabilityOnNotReady: (merchantId: unknown, error: unknown) =>
+    mockRollback(merchantId, error),
 }));
 jest.mock('@/lib/piggyvest-primary-wallet', () => ({
   piggyvestPrimaryWalletApi: {
@@ -57,6 +63,11 @@ describe('primary funding account with the server off', () => {
     await expect(readPrimaryFundingAccount('m1', 'user-1')).resolves.toEqual({
       status: 'not_ready',
     });
+    // bugfix: the wallet read's not-ready rolls a stale positive verdict back.
+    expect(mockRollback).toHaveBeenCalledWith(
+      'm1',
+      expect.objectContaining({ code: 'PIGGYVEST_NOT_READY' })
+    );
   });
 
   it('settles unavailable, never throws, when the endpoint is unreachable', async () => {

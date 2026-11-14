@@ -11,6 +11,11 @@ import { WalletContent } from './WalletContent';
 import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
 let restoreCustomer: () => void;
 beforeEach(() => {
   restoreCustomer = setWalletTestCustomer();
@@ -93,7 +98,7 @@ it('renders savings progress modal and wires manual contribution actions', async
         product_variant_label: 'Color: Black · Storage: 256GB',
       }}
       savingsContributionAmount="500"
-      spendableBalance={1000}
+      walletBalance={1000}
       showSavingsProgress
     />
   );

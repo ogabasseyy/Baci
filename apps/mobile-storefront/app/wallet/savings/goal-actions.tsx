@@ -91,11 +91,14 @@ export default function WalletGoalActionsRoute() {
   // offers: the sheet's GoalLifecycleEntry shows Cancel/Complete only on the
   // server's ready-main-wallet verdict, so a legacy completed goal with a
   // balance opens as "complete" with no Complete step.
-  const owned = goals.some(
-    (goal) =>
-      goal.id === goalId &&
-      (goal.status !== 'completed' || isFundedUnsettledGoal(goal))
-  );
+  // The goal may come as the active goal alone (partial payload): check both.
+  const owned =
+    wallet.data?.wallet?.active_savings_goal?.id === goalId ||
+    goals.some(
+      (goal) =>
+        goal.id === goalId &&
+        (goal.status !== 'completed' || isFundedUnsettledGoal(goal))
+    );
   // Every link gets one fresh read before it is followed: a goal missing
   // from the cached wallet may have been created elsewhere, and one present
   // in it may have closed elsewhere since the last read.

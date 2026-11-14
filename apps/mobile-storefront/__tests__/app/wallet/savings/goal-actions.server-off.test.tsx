@@ -241,6 +241,23 @@ describe('old goal-actions links', () => {
     ).toBeOnTheScreen();
   });
 
+  it('bugfix: open the sheet when the goal is only the active goal', async () => {
+    mockWallet.mockReturnValue({
+      isLoading: false,
+      data: {
+        wallet: { active_savings_goal: { id: GOAL }, savings_goals: [] },
+      },
+      refetch: jest.fn().mockResolvedValue({ isError: false }),
+    });
+    mockParams.mockReturnValue({ goalId: GOAL });
+    render(<WalletGoalActionsRoute />);
+    expect(
+      await screen.findByText(
+        `Redirect:/wallet?action=savings&savingsGoalId=${GOAL}`
+      )
+    ).toBeOnTheScreen();
+  });
+
   it('wait for the wallet before deciding', () => {
     mockWallet.mockReturnValue({ isLoading: true, data: undefined });
     mockParams.mockReturnValue({ goalId: GOAL });

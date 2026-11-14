@@ -22,6 +22,17 @@ export interface WalletData {
    * the fresh read ran slow: shown, but the wallet keeps re-checking.
    */
   primary_stale?: boolean;
+  /**
+   * True when PiggyVest is confirmed for this customer but the account or
+   * balance isn't ready yet: purchase screens hold bank-transfer funding.
+   */
+  primary_pending?: boolean;
+  /**
+   * True when a signed-in user has no single customer row for this merchant
+   * yet, so the wallet kind can't be classified: where PiggyVest is
+   * possible, purchase screens hold bank-transfer funding.
+   */
+  owner_unresolved?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];
@@ -36,6 +47,8 @@ export interface WalletSavingsVariantResolutionOption {
 export interface WalletActiveSavingsGoal {
   contribution_amount: number;
   contribution_frequency: 'daily' | 'weekly' | 'monthly';
+  /** When the plan was created; its savings wallet setup starts then. */
+  created_at?: string;
   current_amount: number;
   id: string;
   maturity_date: string;

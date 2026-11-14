@@ -27,6 +27,7 @@ import { useWalletSavingsAmount } from './use-wallet-savings-amount';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { useWalletSavingsRefs } from './use-wallet-savings-refs';
 import { useWalletSavingsSheetState } from './use-wallet-savings-sheet-state';
+import { walletPurchaseProps } from './wallet-purchase-props';
 import {
   deriveWalletDisplayData,
   getWalletLoadingMessage,
@@ -57,9 +58,7 @@ export function WalletScreen({
     }))
   );
   const { data, dataUpdatedAt, isError, isLoading, refetch, isRefetching } =
-    useWallet({
-      cachePolicy: 'display',
-    });
+    useWallet({ cachePolicy: 'display' });
   const {
     data: paymentSettings,
     isError: isPaymentSettingsError,
@@ -180,11 +179,11 @@ export function WalletScreen({
       setShowFundPanel,
       setShowSavingsProgressModal,
     }),
-    primaryReady: display?.primaryReady ?? false,
+    primaryReady: display?.savingsPrimary ?? false,
     refetchWallet: refetch,
     savingsContributionAmount,
     legacyBalance: display?.legacyBalance,
-    spendableBalance: display?.spendableBalance ?? 0,
+    walletBalance: display?.walletBalance ?? 0,
     walletTopUp: { customer, user, setIsFundPending },
     setIsAddingSavingsContribution,
     setShowSavingsProgressModal,
@@ -196,18 +195,18 @@ export function WalletScreen({
   if (redirectTo) {
     return <Redirect href={redirectTo} />;
   }
-  const loadingMessage = getWalletLoadingMessage({
-    hasMerchantContext,
-    hasWalletData: Boolean(data),
-    isError,
-    isLoading,
-    user,
-  });
   if (!user || !hasMerchantContext || isLoading || !data) {
     return (
       <WalletScreenView
         colors={colors}
-        loadingMessage={loadingMessage}
+        loadingMessage={getWalletLoadingMessage({
+          hasMerchantContext,
+          hasWalletData: Boolean(data),
+          isError,
+          isLoading,
+          user,
+        })}
+        onRetry={refetch}
         presentation={presentation}
       />
     );
@@ -219,7 +218,7 @@ export function WalletScreen({
     fundingAccount,
     savingsBalance,
     showQuickSave,
-    spendableBalance,
+    walletBalance,
     totalBalance,
   } = display ?? deriveWalletDisplayData(data.wallet, goalPin.goalId);
   return (
@@ -250,6 +249,7 @@ export function WalletScreen({
           loyaltyPoints: data.wallet.loyalty_points,
           needsPhone,
           primaryReady: display?.primaryReady ?? false,
+          ...walletPurchaseProps(display),
           onAddSavingsContribution: handleAddSavingsContribution,
           ...createSavingsGoalContentHandlers({
             activeMerchantId,
@@ -280,7 +280,7 @@ export function WalletScreen({
           redeemPoints,
           savingsContributionAmount,
           savingsBalance,
-          spendableBalance,
+          walletBalance,
           showSavingsProgress: showSavingsProgressModal,
           showQuickSave,
           showFundPanel,

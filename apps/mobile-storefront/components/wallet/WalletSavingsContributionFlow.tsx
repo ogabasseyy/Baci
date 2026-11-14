@@ -86,7 +86,7 @@ export function WalletSavingsContributionFlow({
       : 'Enter an amount greater than zero.'
     : needsFunding
       ? primaryReady
-        ? 'Add money to your wallet to save this amount.'
+        ? 'Add money to your savings wallet to save this amount.'
         : usesPlanFunding
           ? 'Add money to your wallet to save this amount. This is a staging preview, so do not send real money.'
           : topUpBlocked
@@ -125,7 +125,9 @@ export function WalletSavingsContributionFlow({
           />
         </View>
         <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
-          {`${formatNgnCurrency(walletBalance)} available in wallet`}
+          {`${formatNgnCurrency(walletBalance)} available in ${
+            primaryReady ? 'savings wallet' : 'wallet'
+          }`}
         </Text>
       </View>
       <SavingsQuickAmounts

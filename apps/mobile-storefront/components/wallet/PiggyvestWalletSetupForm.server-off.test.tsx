@@ -20,11 +20,16 @@ it('requires BVN and explicit consent before submitting', () => {
       onSubmit={onSubmit}
     />
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Create account number' })
-  );
+  const create = screen.getByRole('button', { name: 'Create account number' });
+  // Disabled until an 11-digit BVN and consent are both given.
+  expect(create).toBeDisabled();
+  fireEvent.press(create);
   expect(onSubmit).not.toHaveBeenCalled();
-  expect(screen.getByText('Enter a valid 11-digit BVN.')).toBeOnTheScreen();
+
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  expect(create).toBeDisabled();
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(create).toBeEnabled();
 });
 
 it('exposes the visible button label as its accessible name', () => {
@@ -144,4 +149,24 @@ it('clears the BVN only after the setup is confirmed', async () => {
     bvn: '12345678901',
     consent: true,
   });
+});
+
+it('bugfix: the consent message clears once the box is ticked, and reads plainly', () => {
+  // The schema's consent message, triggered by a valid BVN without consent
+  // through a programmatic submit, is shown under the box and cleared on tick.
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.dark}
+      merchantId={merchantId}
+      onSubmit={jest.fn()}
+    />
+  );
+  expect(screen.getByText('Set up your savings wallet')).toBeOnTheScreen();
+  expect(screen.queryByText('Please accept wallet setup.')).toBeNull();
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(
+    screen.queryByText('Tick the box to agree before continuing.')
+  ).toBeNull();
 });

@@ -114,20 +114,20 @@ it("asks the interest question for a ready customer's never-set-up goal, sets it
   renderModal();
 
   expect(
-    await screen.findByText('Earn interest on this goal?')
+    await screen.findByText('Earn interest on this plan?')
   ).toBeOnTheScreen();
   const yes = screen.getByRole('radio', { name: 'Yes, earn interest' });
   const no = screen.getByRole('radio', { name: 'No, do not earn interest' });
   expect(yes.props.accessibilityState.checked).toBe(false);
   expect(no.props.accessibilityState.checked).toBe(false);
-  const submit = screen.getByRole('button', { name: 'Set up this goal' });
+  const submit = screen.getByRole('button', { name: 'Finish setting up' });
   expect(submit.props.accessibilityState.disabled).toBe(true);
   // No contribution can be attempted into an unprovisioned goal.
   expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
   expect(calls('POST', SETUP)).toHaveLength(0);
 
   fireEvent.press(yes);
-  fireEvent.press(screen.getByRole('button', { name: 'Set up this goal' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Finish setting up' }));
   await act(async () => {
     await jest.advanceTimersByTimeAsync(0);
   });
@@ -150,6 +150,6 @@ it("asks the interest question for a ready customer's never-set-up goal, sets it
   expect(
     await screen.findByLabelText('Savings top-up amount')
   ).toBeOnTheScreen();
-  expect(screen.queryByText('Earn interest on this goal?')).toBeNull();
+  expect(screen.queryByText('Earn interest on this plan?')).toBeNull();
   expect(calls('POST', SETUP)).toHaveLength(1);
 });

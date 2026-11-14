@@ -21,9 +21,10 @@ Rules that apply throughout:
 | Stage | Screen | Where | Status |
 | --- | --- | --- | --- |
 | Shell | Wallet hero card, account number, shortcuts | `WalletHeroSection` | One honest wallet in #4216 |
-| Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Built in #4230 (no alerts); Fable-walked 11-13: pass, low fixes pending |
+| Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Built in #4230 (no alerts); Fable-walked 11-13: pass; low fixes done in 00c334bab7 (PiggyVest merchant only) |
 | Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | Built in #4230; walk owed with a fresh account (onboarding only shows before setup) |
-| Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` (Alert) | Built in #4230; checked on the mock 11-13: inline "Money received" notice, balance updated |
+| Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` | Built in #4230; checked on the mock 11-13: inline "Money received" notice, balance updated |
+| Fund | Wallet activity under the card | `WalletTransactionHistory` | Retitled "Older store credit" in #4230; the PiggyVest activity list is #4232 |
 | Save | Start Savings, Check your plan | `StartSavingsScreen` and modals | Redesigned in #4223 |
 | Save | Add to savings + PIN step | `WalletSavingsProgressModal`, `WalletPinSheet` | Done (#4215) |
 | Save | Goal setup pending / retry / slow notice | `SavingsPlanStatusNote` | Done in #4223 |
@@ -212,7 +213,7 @@ wallet ₦50,000"; the forfeit line correctly stays hidden with no interest.
 | Savings notification inbox rows had no card (style function dropped) | #4224 | **Fixed** 041fa26e2c, checked on simulator |
 | Unlabelled "₦100 a month" in Add to savings | #4223 | **Fixed** 3b5838c558 ("Your plan: ₦100 a month, …"), checked on simulator |
 | WalletContent / savings sheet over 300 lines once #4223 + #4224 combine | #4224 | **Fixed** 9e5ded499d (288 / 269 alone; 295 / 275 combined) |
-| Savings wallet has no transaction history ("Store credit activity" only) | #4216 session | Sent; part of the Fund follow-up |
+| Savings wallet has no transaction history ("Store credit activity" only) | #4230 | List retitled "Older store credit" with an honest scope line; real PiggyVest activity needs a server read (new migration + route), not built |
 | Checkout wallet rows not walked: shipping rates fail in the local stack | owner | Walk on staging, or allow local rate mocking |
 | #4227 conflicts with #4222 in the savings/evidence executors | pay-from-wallet session | Sent; reconcile by merging #4222 |
 | Storefront UI issues outside PiggyVest (blank toast, city error, Redeem contrast, home overlap, empty cart, settings footer) | proposed session | Awaiting owner start |

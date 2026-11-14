@@ -22,7 +22,7 @@ jest.mock('expo-router', () => {
     useNavigation: () => ({ addListener: () => () => undefined }),
   };
 });
-// The PIN screen's Back guard needs a navigator; this route test has none.
+// The PIN screen's back guard (#4230) needs a navigator this test has none of.
 jest.mock('expo-router/react-navigation', () => ({
   usePreventRemove: jest.fn(),
 }));

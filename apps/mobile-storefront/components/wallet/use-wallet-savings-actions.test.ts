@@ -49,7 +49,7 @@ function createInput(goal: WalletActiveSavingsGoal | null = activeGoal) {
     operationRailRef: { current: null as 'primary' | 'legacy' | null },
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '2500',
-    spendableBalance: 0,
+    walletBalance: 0,
     startWalletTopUp: jest.fn(),
     setIsFundPending: jest.fn<(value: boolean) => void>(),
     setIsAddingSavingsContribution: jest.fn<(value: boolean) => void>(),
@@ -140,7 +140,7 @@ describe('createWalletSavingsActions', () => {
 
   it('does not open plan transfer when the wallet already covers the amount', () => {
     const input = createInput();
-    input.spendableBalance = 2500;
+    input.walletBalance = 2500;
 
     createWalletSavingsActions(input).handleFundSavingsWallet();
 
@@ -155,7 +155,7 @@ describe('createWalletSavingsActions', () => {
     ] as const) {
       const input = createInput();
       input.savingsContributionAmount = amount;
-      input.spendableBalance = balance;
+      input.walletBalance = balance;
       createWalletSavingsActions(input).handleFundSavingsWallet();
       expect(router.push).not.toHaveBeenCalled();
     }

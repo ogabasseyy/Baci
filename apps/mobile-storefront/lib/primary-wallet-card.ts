@@ -182,6 +182,15 @@ export function createPrimaryWalletCardFundingClient() {
     }
   };
   return {
+    /**
+     * The raw stored record, read in this scope's queue (Codex): a check
+     * that runs while start() is persisting its placeholder waits for it
+     * instead of reading an empty slot.
+     */
+    peekRaw: (input: unknown) => {
+      const scope = schemas.scope.parse(input);
+      return serialize(key(scope), () => AsyncStorage.getItem(key(scope)));
+    },
     readPending: (input: unknown) => {
       const scope = schemas.scope.parse(input);
       return serialize(key(scope), () => read(scope));

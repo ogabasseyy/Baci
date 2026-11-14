@@ -58,10 +58,14 @@ function isExactHttpsOrigin(value: string): boolean {
   }
 }
 
-function isCartOrCheckoutPath(pathname: string | null): boolean {
-  return Boolean(
-    pathname?.split('/').some((part) => part === 'cart' || part === 'checkout')
-  );
+function isCartOrCheckoutPath(
+  pathname: string | null,
+  storeSlug: string | undefined
+): boolean {
+  const segments = pathname?.split('/').filter(Boolean);
+  if (!segments?.length) return false;
+  const routeIndex = segments[0] === storeSlug ? 1 : 0;
+  return segments[routeIndex] === 'cart' || segments[routeIndex] === 'checkout';
 }
 
 export function ChatwootWidget({
@@ -120,7 +124,7 @@ export function ChatwootWidget({
 
     const activeTenantKey = widgetWindow.__baciChatwootConfigKey;
     if (activeTenantKey && configKey && activeTenantKey !== configKey) {
-      if (isCartOrCheckoutPath(pathname)) {
+      if (isCartOrCheckoutPath(pathname, storeSlug)) {
         // Keep shopper-entered cart/checkout state intact. The prior widget
         // stays hidden and tenant switching resumes on the next safe route.
         widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
@@ -165,7 +169,7 @@ export function ChatwootWidget({
       setActiveWidgetKey(configKey);
     }
 
-    widgetWindow.chatwootSettings = {};
+    widgetWindow.chatwootSettings ??= {};
     const scriptId = 'baci-chatwoot-sdk';
     const existingScript = document.getElementById(scriptId);
     const run = () => {

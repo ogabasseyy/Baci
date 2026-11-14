@@ -52,6 +52,8 @@ beforeEach(() => {
   mocks.pathname = '/shop';
   delete (window as Window & { chatwootSDK?: unknown }).chatwootSDK;
   delete (window as Window & { $chatwoot?: unknown }).$chatwoot;
+  delete (window as Window & { chatwootSettings?: Record<string, unknown> })
+    .chatwootSettings;
   delete (window as Window & { __baciChatwootRunStarted?: boolean })
     .__baciChatwootRunStarted;
   delete (window as Window & { __baciChatwootConfigKey?: string })
@@ -69,6 +71,24 @@ afterEach(() => {
 });
 
 describe('ChatwootWidget', () => {
+  it('preserves Chatwoot settings configured before the widget mounts', () => {
+    const settings = { locale: 'en', position: 'left' };
+    (
+      window as Window & { chatwootSettings?: Record<string, unknown> }
+    ).chatwootSettings = settings;
+
+    render(
+      <ChatwootWidget config={config}>
+        <span>storefront</span>
+      </ChatwootWidget>
+    );
+
+    expect(
+      (window as Window & { chatwootSettings?: Record<string, unknown> })
+        .chatwootSettings
+    ).toBe(settings);
+  });
+
   it('keeps the widget and bridge absent when no tenant binding is configured', () => {
     render(
       <ChatwootWidget config={null}>
@@ -300,6 +320,9 @@ describe('ChatwootWidget', () => {
   it.each([
     '/shop/cart',
     '/shop/checkout',
+    '/shop/checkout/success',
+    '/cart',
+    '/checkout/success',
   ])('defers tenant reloads until leaving cart and checkout paths (%s)', (pathname) => {
     const reset = vi.fn();
     const toggleBubbleVisibility = vi.fn();
@@ -343,6 +366,49 @@ describe('ChatwootWidget', () => {
     view.rerender(
       <ChatwootWidget
         config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+      >
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+
+    expect(reset).toHaveBeenCalledOnce();
+    expect(mocks.reload).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { pathname: '/shop/products/cart', storeSlug: 'shop' },
+    { pathname: '/checkout/products/item', storeSlug: 'checkout' },
+  ])('does not defer a tenant reload for a cart or checkout slug ($pathname)', ({
+    pathname,
+    storeSlug,
+  }) => {
+    const reset = vi.fn();
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (
+        window as Window & {
+          $chatwoot?: Record<string, unknown>;
+        }
+      ).$chatwoot = { reset, websiteToken, baseUrl };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+    mocks.pathname = pathname;
+    const view = render(
+      <ChatwootWidget config={{ ...config, storeSlug }}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+    fireEvent(window, new Event('chatwoot:ready'));
+
+    view.rerender(
+      <ChatwootWidget
+        config={{
+          ...config,
+          storeSlug,
+          websiteToken: 'next-public-widget-token-123',
+        }}
       >
         <SupportStatus />
       </ChatwootWidget>

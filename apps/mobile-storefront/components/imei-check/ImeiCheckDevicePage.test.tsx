@@ -181,3 +181,30 @@ describe('runtime capability selection', () => {
     expect(screen.queryByText('Verify Now - ₦400')).toBeNull();
   });
 });
+
+describe('bugfix: picking another check wiped a typed IMEI (Fable walk 15)', () => {
+  it('keeps a typed IMEI the next check also takes', () => {
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '356938035643809'
+    );
+    fireEvent.press(screen.getByText('Quick ID'));
+    expect(
+      screen.getByPlaceholderText('Enter IMEI or serial').props.value
+    ).toBe('356938035643809');
+  });
+
+  it('still clears a serial the next check can not take', () => {
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.press(screen.getByText('Quick ID'));
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter IMEI or serial'),
+      'C02XL0ABJGH5'
+    );
+    fireEvent.press(screen.getByText('Full Report'));
+    expect(screen.getByPlaceholderText('Enter 15-digit IMEI').props.value).toBe(
+      ''
+    );
+  });
+});

@@ -102,7 +102,13 @@ export function ImeiCheckDevicePage({
       IMEI_SERVICE_TIERS[nextTier].identifier,
       IMEI_IDENTIFIER_BY_DEVICE[device]
     );
-    if (nextIdentifier !== identifier) {
+    // Only a typed number the next check can't take is cleared: a 15-digit
+    // IMEI typed for Full Report survives a switch to "IMEI or serial"
+    // (Fable walk 15).
+    if (
+      nextIdentifier !== identifier &&
+      normalizeDeviceIdentifier(imei, nextIdentifier) !== imei
+    ) {
       setImei('');
     }
     setSelectedTier(nextTier);

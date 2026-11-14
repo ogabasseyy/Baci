@@ -1,4 +1,5 @@
 import 'server-only';
+import { piggyvestGoalCancelForfeitSchemas as schemas } from '@/schemas/piggyvest-goal-cancel-forfeit';
 import type { driveGoalCancelForfeit } from './goal-cancel-forfeit';
 import { runGoalCancelForfeitReconciliation } from './goal-cancel-forfeit-reconciliation';
 import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
@@ -73,15 +74,9 @@ export function forfeitDriverPorts(input: {
       return claim;
     },
     verifyDestination: async (forfeit) => {
-      const wallet = (await retrievePiggyvestWallet(
-        provider,
-        forfeit.destinationWalletId
-      )) as Partial<
-        Record<
-          'id' | 'business_id' | 'api_customer_id' | 'currency' | 'status',
-          unknown
-        >
-      >;
+      const wallet = schemas.providerWallet.parse(
+        await retrievePiggyvestWallet(provider, forfeit.destinationWalletId)
+      );
       // Ogabassey's own active NGN wallet in this business: the database's
       // configured wallet must equal the deployment's
       // PIGGYVEST_INTEREST_WALLET_ID (two independent settings, so one typo
@@ -101,20 +96,9 @@ export function forfeitDriverPorts(input: {
       // The source must still be this customer's active NGN goal wallet in
       // this business, holding at least the interest being sent: a reassigned
       // or poisoned wallet id can never be debited by the business token.
-      const source = (await retrievePiggyvestWallet(
-        provider,
-        forfeit.sourceWalletId
-      )) as Partial<
-        Record<
-          | 'id'
-          | 'business_id'
-          | 'api_customer_id'
-          | 'currency'
-          | 'status'
-          | 'balance',
-          unknown
-        >
-      >;
+      const source = schemas.providerWallet.parse(
+        await retrievePiggyvestWallet(provider, forfeit.sourceWalletId)
+      );
       // Not paged here: the hand-back that follows pages once per forfeit.
       const sourceOk =
         source.id === forfeit.sourceWalletId &&
@@ -122,8 +106,7 @@ export function forfeitDriverPorts(input: {
         source.api_customer_id === forfeit.providerCustomerId &&
         source.currency === 'NGN' &&
         source.status === 'active' &&
-        typeof source.balance === 'number' &&
-        Number.isSafeInteger(source.balance) &&
+        source.balance !== undefined &&
         source.balance >= forfeit.amountKobo;
       return sourceOk ? true : 'source_unavailable';
     },

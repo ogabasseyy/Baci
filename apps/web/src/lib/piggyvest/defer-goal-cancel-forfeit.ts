@@ -11,7 +11,12 @@ export function deferGoalCancelForfeit(task: () => Promise<unknown>): void {
   try {
     after(async () => {
       try {
-        await task();
+        // The leg reports most failures as an outcome rather than throwing.
+        if ((await task()) === 'failed')
+          console.warn(
+            '[PiggyVest] Goal cancel interest leg failed after the answer; the daily sweep retries:',
+            'failed'
+          );
       } catch (error) {
         // Swept later; never surfaces to the customer.
         console.warn(

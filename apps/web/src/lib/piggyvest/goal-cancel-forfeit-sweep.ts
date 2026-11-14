@@ -163,10 +163,20 @@ export async function sweepPendingGoalCancelForfeits(input: {
       const outcome = await driveGoalCancelForfeit(
         item.operationId,
         forfeitDriverPorts({
-          claim: async (id) =>
-            schemas.claimRows.parse(
+          claim: async (id) => {
+            const claim = schemas.claimRows.parse(
               (await execute(sql.workerClaim, bound(id))).rows
-            )[0].result,
+            )[0].result;
+            // A listed in-flight forfeit only comes back claimed when it was an
+            // abandoned, never-posted claim the database just recovered. With
+            // new transfers off it is handed straight back unsent.
+            if (claim.status === 'claimed' && !input.allowNewTransfers) {
+              const forfeit = schemas.forfeit.parse(claim.forfeit);
+              await execute(sql.workerUnclaim, bound(forfeit.operationId));
+              return { status: 'waiting' as const };
+            }
+            return claim;
+          },
           release: async (id) =>
             schemas.releaseRows.parse(
               (await execute(sql.workerRelease, bound(id))).rows

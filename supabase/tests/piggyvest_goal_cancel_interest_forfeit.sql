@@ -524,6 +524,22 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: a replacement already marked posting stays findable for its
+  -- own provider record, but is flagged to settle into review.
+  BEGIN
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit_worker(c_integration, 'staging', v_op::uuid);
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET posted_at = pg_catalog.clock_timestamp()
+     WHERE cancel_operation_id = v_op::uuid AND state = 'dispatched';
+    PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
+        pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict', 'posted late success');
+    PERFORM pg_temp.gc_assert(
+      (SELECT state || '/' || review_on_settle FROM piggyvest_primary.goal_cancel_interest_forfeits
+        WHERE cancel_operation_id = v_op::uuid AND id <> v_forfeit::uuid AND posted_at IS NOT NULL)
+        = 'dispatched/true',
+      'a posted replacement was hidden from its provider record, or not flagged for review');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   PERFORM pg_temp.gc_assert(piggyvest_primary.settle_goal_cancel_forfeit(c_integration, 'staging',
       pg_temp.gf_forfeit_proof(v_forfeit)) LIKE 'conflict%',
     'a late success of a released forfeit settled automatically');
@@ -581,6 +597,7 @@ DECLARE
   v_scope jsonb := pg_temp.gc_scope();
   v_op text;
   v_forfeit text;
+  v_i integer;
 BEGIN
   DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits;
   UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
@@ -942,9 +959,11 @@ DO $ceiling$
 DECLARE
   c_goal constant uuid := 'f3860000-0000-4000-8000-000000000005';
   v_op text;
+  v_text text;
   v_before numeric;
   v_forfeit text;
   v_result jsonb;
+  v_n integer;
 BEGIN
   UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
    WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
@@ -1144,6 +1163,39 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: a reversal arriving after the posting mark (sent, or about to
+  -- be) sends the forfeit to review, so its success settles into review for a
+  -- person instead of confirming the unreduced amount.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('reversal-posted');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'posted split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'posted principal');
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid,
+      'posting:33333333-3333-4333-8333-333333333333') = 'posting', 'posted mark');
+    PERFORM pg_temp.gf_receipt('gf-reversed-posted', 400, pg_catalog.clock_timestamp() - interval '2 days');
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-posted', 'gf-reversed-posted', 100,
+      repeat('7', 64), 'synthetic-reversal-5');
+    -- Regression: it stays findable so the success is recorded (transaction
+    -- id), but settles into review, never confirming the unreduced amount.
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gf_forfeit(v_op, 'state') = 'dispatched'
+      AND piggyvest_primary.read_dispatched_goal_cancel_forfeit('f3860000-0000-4000-8000-000000000006',
+            'staging', v_forfeit::uuid) IS NOT NULL
+      AND piggyvest_primary.settle_goal_cancel_forfeit('f3860000-0000-4000-8000-000000000006', 'staging',
+            pg_temp.gf_forfeit_proof(v_forfeit)) = 'conflict'
+      AND pg_temp.gf_forfeit(v_op, 'state') = 'needs_review'
+      AND pg_temp.gf_forfeit(v_op, 'provider_transaction_id') IS NOT NULL,
+      'a reversal after the posting mark lost the provider record or let the forfeit confirm');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- Regression: a delayed record of interest paid before the cancel (already
   -- forfeited by the split) does not tell the customer interest was added.
   BEGIN
@@ -1162,6 +1214,207 @@ BEGIN
       (SELECT voided_at IS NOT NULL FROM savings_notifications.events
         WHERE event_key = 'primary-interest:f3860000-0000-4000-8000-000000000006:gf-delayed'),
       'a delayed pre-cancel interest record told the customer interest was added to a cancelled goal');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a reversal after every forfeit of the cancel was already sent
+  -- keeps the forfeited total (that interest reached Ogabassey's wallet) and
+  -- becomes review work the sweep pages, never a silent drop.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('reversal-after-sent');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'sent split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'sent principal');
+    PERFORM pg_temp.gf_receipt('gf-late-sent', 400);
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-sent-' || id::text
+     WHERE cancel_operation_id = v_op::uuid;
+    -- Regression: a later payout left unsent does not make the earlier, sent
+    -- payout's reversal look unsent.
+    PERFORM pg_temp.gf_receipt('gf-late-unsent', 250);
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-sent', 'gf-late-sent', 150,
+      repeat('8', 64), 'synthetic-reversal-6');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal after the interest was sent lowered the total silently');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a forfeit flagged by a reversal after its posting mark is
+  -- not replaced in full when PiggyVest rejects it; it goes to review.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('flagged-reject');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'flagged split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'flagged principal');
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET posted_at = pg_catalog.clock_timestamp(), review_on_settle = true WHERE id = v_forfeit::uuid;
+    v_text := piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'release');
+    PERFORM pg_temp.gc_assert(
+      v_text = 'needs_review'
+      AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                       WHERE cancel_operation_id = v_op::uuid AND state = 'reserved'),
+      'a rejected forfeit flagged by a reversal was replaced for its unreduced amount');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a replacement never aims at the goal wallet even when the
+  -- configured interest wallet was rotated onto it; the last validated
+  -- destination is kept.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('alias-reject');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'alias split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'alias principal');
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    UPDATE piggyvest_primary.goal_interest_forfeit_wallets
+       SET provider_wallet_id = (SELECT source_wallet_id FROM piggyvest_primary.goal_cancel_interest_forfeits
+                                  WHERE id = v_forfeit::uuid);
+    v_text := piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'release');
+    PERFORM pg_temp.gc_assert(
+      v_text = 'released'
+      AND (SELECT destination_wallet_id FROM piggyvest_primary.goal_cancel_interest_forfeits
+            WHERE cancel_operation_id = v_op::uuid AND state = 'reserved')
+          = (SELECT destination_wallet_id FROM piggyvest_primary.goal_cancel_interest_forfeits WHERE id = v_forfeit::uuid),
+      'a replacement aimed at the goal wallet, or the release failed: '
+        || (SELECT pg_catalog.string_agg(state || '/' || destination_wallet_id || '/' || source_wallet_id, ', ')
+              FROM piggyvest_primary.goal_cancel_interest_forfeits WHERE cancel_operation_id = v_op::uuid));
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a reversal of a payout whose forfeit was refused (review, no
+  -- provider-proven transfer) counts it as unsent and lowers the total.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('refused-reversal');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'refused split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'refused principal');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-refused-split-' || id::text
+     WHERE cancel_operation_id = v_op::uuid;
+    PERFORM pg_temp.gf_receipt('gf-refused', 500);
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'needs_review', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp()
+     WHERE cancel_operation_id = v_op::uuid AND state = 'reserved';
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-refused', 'gf-refused', 200,
+      repeat('6', 64), 'synthetic-reversal-7');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)
+        = v_before - 200
+      AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                       WHERE cancel_operation_id = v_op::uuid AND destination_wallet_id = 'reversed-after-forfeit'),
+      'a reversal of a refused forfeit kept the reversed amount as forfeited');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: payout A's interest follows its forfeit through a rejection
+  -- and replacement. After the replacement was sent, reversing A is review
+  -- work (the interest reached Ogabassey), even while a later payout B is
+  -- still unsent in a sibling plan.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('lineage');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'lineage split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'lineage principal');
+    PERFORM pg_temp.gf_receipt('gf-lineage-a', 400);
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    v_text := piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'release');
+    PERFORM pg_temp.gc_assert(v_text = 'released', 'lineage release: ' || v_text);
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-lineage-' || id::text
+     WHERE cancel_operation_id = v_op::uuid AND state = 'reserved';
+    PERFORM pg_temp.gf_receipt('gf-lineage-b', 250);
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-lineage', 'gf-lineage-a', 150,
+      repeat('9', 64), 'synthetic-reversal-8');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal of interest already sent through a replacement was treated as unsent');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a delayed receipt (paid before the dispatch) recorded while the
+  -- cancel is in flight has its notice voided when the cancel settles.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('inflight-notice');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'inflight split');
+    INSERT INTO savings_notifications.events (merchant_id, customer_id, goal_id, event_key, type, title, body)
+    VALUES ('f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003', c_goal,
+      'primary-interest:f3860000-0000-4000-8000-000000000006:gf-inflight', 'interest_credited', 'Interest', 'Interest')
+    ON CONFLICT DO NOTHING;
+    PERFORM pg_temp.gf_receipt('gf-inflight', 500, pg_catalog.clock_timestamp() - interval '3 days');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'inflight principal');
+    PERFORM pg_temp.gc_assert(
+      (SELECT voided_at IS NOT NULL FROM savings_notifications.events
+        WHERE event_key = 'primary-interest:f3860000-0000-4000-8000-000000000006:gf-inflight'),
+      'a delayed receipt recorded while the cancel was in flight left a live interest notice');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a backlog bigger than one batch is rotated through across
+  -- sweeps; the same oldest rows were handed out every day, so a later row
+  -- was never checked.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('rotation');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'rotation split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'rotation principal');
+    FOR v_n IN 1..3 LOOP
+      INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+        cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+        source_wallet_id, destination_wallet_id, amount_kobo, reserved_at, alerted_at)
+      SELECT cancel.id, cancel.integration_id, cancel.intent_id, cancel.goal_id, 'needs_review',
+             piggyvest_primary.next_goal_cancel_forfeit_reference(cancel.goal_id),
+             cancel.source_wallet_id, 'reversed-after-forfeit', v_n,
+             pg_catalog.clock_timestamp() - pg_catalog.make_interval(mins => 10 - v_n),
+             pg_catalog.clock_timestamp() - interval '2 days'
+        FROM piggyvest_primary.goal_cancel_operations AS cancel
+       WHERE cancel.id = v_op::uuid;
+    END LOOP;
+    PERFORM pg_temp.gc_assert(
+      (SELECT pg_catalog.count(DISTINCT item ->> 'forfeitId') = 3
+         FROM (SELECT pg_catalog.jsonb_array_elements(
+                        piggyvest_primary.list_goal_cancel_forfeit_work('f3860000-0000-4000-8000-000000000006', 'staging', 2, false)) AS item
+               UNION ALL
+               SELECT pg_catalog.jsonb_array_elements(
+                        piggyvest_primary.list_goal_cancel_forfeit_work('f3860000-0000-4000-8000-000000000006', 'staging', 2, false))) AS listed),
+      'two successive sweeps did not cover a three-row backlog');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -1197,6 +1450,17 @@ BEGIN
         @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('operationId', v_op))
       AND piggyvest_primary.ack_goal_cancel_hold_worker('f3860000-0000-4000-8000-000000000006', 'staging', v_op::uuid),
       'a hold still open a day after its page was not paged again');
+    -- Regression: a never-paged hold comes before daily repeats, so a backlog
+    -- of repeats can not starve it.
+    UPDATE piggyvest_primary.goal_cancel_operations
+       SET held_alerted_at = pg_catalog.clock_timestamp() - interval '3 days',
+           held_reason = 'provider_balance_below_principal'
+     WHERE id <> v_op::uuid AND state = 'released';
+    UPDATE piggyvest_primary.goal_cancel_operations SET held_alerted_at = NULL WHERE id = v_op::uuid;
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.list_goal_cancel_holds_worker('f3860000-0000-4000-8000-000000000006', 'staging')
+        -> 0 ->> 'operationId' = v_op,
+      'a never-paged hold was listed after daily repeats');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -1258,6 +1522,12 @@ BEGIN
     WHERE class.oid IN ('piggyvest_primary.goal_cancel_interest_forfeits'::regclass,
                         'piggyvest_primary.goal_interest_forfeit_wallets'::regclass,
                         'piggyvest_primary.goal_cancel_late_interest_contributions'::regclass)), false)
+    -- Regression: the contribution table's forfeit foreign key is indexed.
+    AND EXISTS (SELECT 1 FROM pg_catalog.pg_index AS idx
+                 WHERE idx.indrelid = 'piggyvest_primary.goal_cancel_late_interest_contributions'::regclass
+                   AND idx.indkey[0] = (SELECT attnum FROM pg_catalog.pg_attribute
+                                         WHERE attrelid = 'piggyvest_primary.goal_cancel_late_interest_contributions'::regclass
+                                           AND attname = 'forfeit_id'))
     AND NOT has_table_privilege('piggyvest_primary_authorizer',
       'piggyvest_primary.goal_cancel_late_interest_contributions', 'SELECT')
     AND NOT has_table_privilege('service_role',

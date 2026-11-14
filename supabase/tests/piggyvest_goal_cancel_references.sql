@@ -48,10 +48,13 @@ BEGIN
   -- Since 20261112190514 a cancel refunds only the recorded principal, so the
   -- operator who cleared the review records what the goal still holds first
   -- (with a principal of 0 the split dispatch answers needs_review).
+  v_op := pg_temp.gc_reserved('ref-zero');
   PERFORM pg_temp.gc_assert(
-    piggyvest_primary.dispatch_goal_cancel_split(v_scope, (pg_temp.gc_reserved('ref-zero'))::uuid, 700)
+    piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, 700)
       ->> 'status' = 'needs_review',
     'a goal with no recorded principal was dispatched');
+  -- That refusal holds the goal; the operator clears the hold before retrying.
+  UPDATE piggyvest_primary.goal_cancel_operations SET held_reason = NULL WHERE id = v_op::uuid;
   UPDATE public.customer_savings_goals SET current_amount = 2500 WHERE id = c_goal::uuid;
   v_text := pg_temp.gc_dispatched('ref2');
   PERFORM pg_temp.gc_assert((SELECT reference FROM piggyvest_primary.goal_cancel_operations WHERE id = v_text::uuid)

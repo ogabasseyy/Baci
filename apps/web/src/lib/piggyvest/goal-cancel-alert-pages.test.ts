@@ -9,7 +9,8 @@ it('pages then acknowledges each alert, in that order', async () => {
     acknowledge: async (item) => order.push(`ack ${item}`),
     now: () => 0,
   });
-  expect(order).toEqual(['page a', 'ack a', 'page b', 'ack b']);
+  // Regression: every alert is paged before any acknowledgement is awaited.
+  expect(order).toEqual(['page a', 'page b', 'ack a', 'ack b']);
   expect(result).toEqual({ paged: 2, failed: 0 });
 });
 

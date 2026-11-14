@@ -327,22 +327,32 @@ it('bugfix: stops acknowledging pages at the deadline, still paging every alert'
     ],
     true
   );
-  let clock = 1000;
+  // The budget runs out after both pages and one acknowledgement.
+  const times = [1000, 1000, 1000, 2000];
   const result = await sweepPendingGoalCancelForfeits({
     ...input(true),
     deadlineAt: 1500,
-    now: () => {
-      const current = clock;
-      clock += 1000;
-      return current;
-    },
+    now: () => times.shift() ?? 2000,
   });
-  // Paged and acknowledged one at a time within the budget; the other
-  // repeats next run.
-  expect(mocks.alert).toHaveBeenCalledOnce();
-  // One acknowledgement fits the budget; the other repeats next run.
+  // Every alert is paged first; acknowledgements stop at the deadline and
+  // the unacknowledged one repeats next run.
+  expect(mocks.alert).toHaveBeenCalledTimes(2);
   expect(
     mocks.execute.mock.calls.filter((call) => call[0] === sql.workerAck)
   ).toHaveLength(1);
   expect(result).toMatchObject({ failed: 0 });
+});
+
+it('bugfix: never sends a recovered stale claim while new transfers are off', async () => {
+  db(
+    [{ operationId: opB, forfeitId, state: 'dispatched', alert: false }],
+    { status: 'claimed', forfeit },
+    'unclaimed'
+  );
+  await sweepPendingGoalCancelForfeits(input(false));
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.execute.mock.calls[2]).toEqual([
+    sql.workerUnclaim,
+    [integrationId, 'staging', forfeit.operationId],
+  ]);
 });

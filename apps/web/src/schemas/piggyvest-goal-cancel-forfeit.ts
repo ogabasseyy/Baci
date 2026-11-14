@@ -107,6 +107,18 @@ export const piggyvestGoalCancelForfeitSchemas = {
     )
     .length(1),
   ackRows: z.array(z.strictObject({ result: z.boolean() })).length(1),
+  // A PiggyVest wallet as the forfeit leg checks it (both the destination and
+  // the goal wallet the interest comes from). A reply that does not parse is a
+  // failed check (retried), never read as a mismatch; the values are then
+  // compared by the caller.
+  providerWallet: z.object({
+    id: piggyvestProviderIdSchema,
+    business_id: piggyvestProviderIdSchema,
+    api_customer_id: piggyvestProviderIdSchema,
+    currency: z.string(),
+    status: z.string(),
+    balance: z.int().nonnegative().optional(),
+  }),
   // Cancels held before anything was sent, for the sweep to page.
   holdRows: z
     .array(

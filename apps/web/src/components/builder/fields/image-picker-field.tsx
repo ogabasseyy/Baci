@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { MediaLibrary } from '../media-library';
 
 interface ImagePickerFieldProps {
@@ -101,6 +102,9 @@ export function ImagePickerField({
                     defaultValue={value}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        // Cancel Enter so a surrounding form cannot submit implicitly.
+                        e.preventDefault();
+                        if (isImeComposing(e)) return;
                         onChange(e.currentTarget.value);
                         setDialogOpen(false);
                       }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { QuizTopicInput } from './quiz-topic-input';
@@ -30,5 +30,20 @@ describe('QuizTopicInput', () => {
     expect(
       screen.getByRole('button', { name: /remove phones/i })
     ).toBeInTheDocument();
+  });
+
+  it('does not add a topic while an IME composition is confirming with Enter', () => {
+    const onChange = vi.fn();
+    render(<QuizTopicInput onChange={onChange} topics={['Phones']} />);
+    const input = screen.getByPlaceholderText(/type a topic/i);
+
+    fireEvent.change(input, { target: { value: 'ノート' } });
+    // Cancelled, so a surrounding form cannot submit implicitly.
+    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(
+      false
+    );
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

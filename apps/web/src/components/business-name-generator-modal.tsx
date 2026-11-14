@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { cn } from '@/lib/utils';
 
 interface BusinessNameGeneratorModalProps {
@@ -172,6 +173,7 @@ export function BusinessNameGeneratorModal({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !isGenerating) {
                     e.preventDefault();
+                    if (isImeComposing(e)) return;
                     handleGenerate();
                   }
                 }}

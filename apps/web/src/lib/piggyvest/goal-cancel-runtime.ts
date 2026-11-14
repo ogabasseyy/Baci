@@ -8,6 +8,7 @@ import {
   type DeferForfeit,
   finishGoalCancel as finish,
 } from './goal-cancel-finish';
+import { HOLD_PAGES } from './goal-cancel-hold-pages';
 import { runGoalCancelReconciliation } from './goal-cancel-reconciliation';
 import { publicStatus, readGoalCancelStatus } from './goal-cancel-status';
 import { createGoalCancelStore } from './goal-cancel-store';
@@ -70,30 +71,6 @@ function bindEvidence(
 }
 
 /** Step 1: the server issues the per-attempt operation id the PIN is bound to. */
-const HOLD_PAGES: Partial<
-  Record<
-    string,
-    {
-      code:
-        | 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW'
-        | 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE';
-      reason: string;
-    }
-  >
-> = {
-  needs_review: {
-    code: 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
-    reason: 'provider_balance_below_principal',
-  },
-  forfeit_unavailable: {
-    code: 'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
-    reason: 'interest_wallet_missing',
-  },
-  too_large: {
-    code: 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
-    reason: 'principal_above_transfer_limit',
-  },
-};
 
 export async function issuePrimaryWalletGoalCancel(input: {
   configuration: unknown;
@@ -187,8 +164,8 @@ export async function submitPrimaryWalletGoalCancel(input: {
     splitDispatch: async (operationId, balanceKobo) => {
       const split = await store.splitDispatch(operationId, balanceKobo);
       // The database never answers an inconsistent split; if it ever did,
-      // the attempt is dispatched with nothing sent, so a person is paged
-      // and nothing moves.
+      // nothing is sent: the attempt is released (it must not sit dispatched
+      // with no transfer) and a person is paged.
       if (
         split.status === 'dispatched' &&
         (split.principalKobo > balanceKobo ||
@@ -198,6 +175,7 @@ export async function submitPrimaryWalletGoalCancel(input: {
           reason: 'split_inconsistent',
           operationId,
         });
+        await store.releaseAfterRejection(operationId).catch(() => false);
         return { status: 'needs_review' as const };
       }
       // A hold (released, a person must act): paged now, then acknowledged;
@@ -260,7 +238,10 @@ export async function submitPrimaryWalletGoalCancel(input: {
 
 /**
  * Status check for a cancel: the only thing a retry does. It reads our record
- * and asks PiggyVest (TSQ) about the deterministic reference; it never posts.
+ * and asks PiggyVest (TSQ) about the deterministic reference; it never posts
+ * the customer's transfer. Once the principal is confirmed it may start
+ * Ogabassey's interest-forfeit transfer (after the answer, never the
+ * customer's money).
  */
 export async function checkPrimaryWalletGoalCancelStatus(input: {
   configuration: unknown;

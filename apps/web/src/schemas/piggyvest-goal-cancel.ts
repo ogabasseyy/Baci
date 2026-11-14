@@ -28,7 +28,8 @@ export const piggyvestGoalCancelSchemas = {
       step: z.literal('issue'),
       merchantId: z.uuid(),
       goalId: z.uuid(),
-      interestForfeitAcknowledged: z.boolean().optional(),
+      // null counts as absent: an older client gets the update prompt.
+      interestForfeitAcknowledged: z.boolean().nullish(),
     }),
     z.strictObject({
       step: z.literal('submit'),
@@ -36,7 +37,8 @@ export const piggyvestGoalCancelSchemas = {
       goalId: z.uuid(),
       operationId: z.uuid(),
       pinProof: proof,
-      interestForfeitAcknowledged: z.boolean().optional(),
+      // null counts as absent: an older client gets the update prompt.
+      interestForfeitAcknowledged: z.boolean().nullish(),
     }),
   ]),
   statusRequest: z.strictObject({

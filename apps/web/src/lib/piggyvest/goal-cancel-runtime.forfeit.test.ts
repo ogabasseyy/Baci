@@ -241,6 +241,8 @@ it('pages and sends nothing when the database ever answers an inconsistent split
       operationId,
     }
   );
+  // Regression: released, never left dispatched with nothing sent.
+  expect(mocks.execute.mock.calls.at(-1)?.[1]).toContain('release');
 });
 
 it('sends no new interest transfer while PiggyVest savings are switched off', async () => {

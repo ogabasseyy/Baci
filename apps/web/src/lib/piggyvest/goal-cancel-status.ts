@@ -20,7 +20,8 @@ export function publicStatus(outcome: {
 
 /**
  * Status check for a cancel: the only thing a retry does. It reads our record
- * and asks PiggyVest (TSQ) about the deterministic reference; it never posts.
+ * and asks PiggyVest (TSQ) about the deterministic reference; it never posts
+ * the customer's transfer.
  */
 export async function readGoalCancelStatus(
   store: Pick<GoalCancelStore, 'readStatus' | 'cancelStaleReservation'>,

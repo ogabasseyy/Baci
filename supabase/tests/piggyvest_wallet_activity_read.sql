@@ -215,4 +215,39 @@ END
 $signed_out$;
 
 RESET ROLE;
+
+-- Review holds and settling (Codex): a held cancel already credited the
+-- wallet, so it reads completed; settling later never moves its ordering
+-- key (keyset pages stay stable); a malformed provider timestamp is ignored.
+UPDATE piggyvest_primary.goal_cancel_operations
+   SET state = 'needs_review', settled_at = now()
+ WHERE id = 'f3870000-0000-4000-8000-0000000000a5';
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', 'f3870000-0000-4000-8000-000000000001', 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $review$
+DECLARE v_row record;
+BEGIN
+  SELECT activity.status, activity.occurred_at INTO v_row
+    FROM public.list_piggyvest_wallet_activity('f3870000-0000-4000-8000-000000000002') AS activity
+   WHERE activity.id = 'f3870000-0000-4000-8000-0000000000a5';
+  IF v_row.status IS DISTINCT FROM 'completed' THEN
+    RAISE EXCEPTION 'a review-held refund must read completed, got %', v_row.status;
+  END IF;
+  IF v_row.occurred_at > now() - interval '1 day 29 minutes' THEN
+    RAISE EXCEPTION 'settling moved the ordering key to %', v_row.occurred_at;
+  END IF;
+END
+$review$;
+RESET ROLE;
+DO $parse$
+BEGIN
+  IF piggyvest_primary.parse_receipt_credited_at('2026-02-31T10:00:00Z') IS NOT NULL
+    OR piggyvest_primary.parse_receipt_credited_at(NULL) IS NOT NULL
+    OR piggyvest_primary.parse_receipt_credited_at('2026-11-12T10:00:00Z')
+       IS DISTINCT FROM '2026-11-12T10:00:00Z'::timestamptz THEN
+    RAISE EXCEPTION 'credited-at parsing is wrong';
+  END IF;
+END
+$parse$;
 ROLLBACK;

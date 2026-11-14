@@ -1,5 +1,6 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { PiggyvestWalletActivity } from './activity/PiggyvestWalletActivity';
+import { withoutPiggyvestActivityRows } from './activity/without-piggyvest-activity-rows';
 import type { WalletContentProps } from './WalletContent';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletTransactionHistory } from './WalletTransactionHistory';
@@ -38,7 +39,11 @@ export function WalletActivitySection({
       <WalletTransactionHistory
         colors={colors}
         storeCreditBalance={storeCreditBalance}
-        transactions={transactions}
+        transactions={
+          showActivity
+            ? withoutPiggyvestActivityRows(transactions)
+            : transactions
+        }
       />
     </>
   );

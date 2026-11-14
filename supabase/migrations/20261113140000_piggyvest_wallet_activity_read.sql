@@ -28,6 +28,24 @@
 
 BEGIN;
 
+-- A receipt's provider timestamp, or NULL when it is missing or unreadable:
+-- one malformed value must never fail a customer's whole activity list.
+CREATE FUNCTION piggyvest_primary.parse_receipt_credited_at(p_value text)
+RETURNS timestamptz
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $fn$
+BEGIN
+  RETURN p_value::timestamptz;
+EXCEPTION WHEN others THEN
+  RETURN NULL;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION piggyvest_primary.parse_receipt_credited_at(text)
+FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.list_piggyvest_wallet_activity(
   p_merchant_id uuid,
   p_before_at timestamptz DEFAULT NULL,
@@ -93,7 +111,12 @@ BEGIN
            CASE WHEN receipt.financial_identity ->> 'custodyKind' = 'card'
                 THEN 'Card top-up' ELSE 'Money added' END AS label,
            'completed'::text AS status,
-           receipt.created_at AS occurred_at
+           -- When the money reached the wallet, not when a late or replayed
+           -- event was processed; never later than the row itself.
+           LEAST(
+             piggyvest_primary.parse_receipt_credited_at(
+               receipt.financial_identity ->> 'creditedAt'),
+             receipt.created_at) AS occurred_at
       FROM piggyvest_primary.inflow_receipts AS receipt
       JOIN mine ON mine.intent_id = receipt.intent_id
      WHERE receipt.financial_identity ->> 'amountKobo' ~ '^[1-9][0-9]{0,11}$'
@@ -124,8 +147,11 @@ BEGIN
            cancel.amount_kobo,
            0::bigint,
            'Returned from ' || COALESCE(goal.title, 'a savings goal'),
-           CASE WHEN cancel.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
-           COALESCE(cancel.settled_at, cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
+           -- A review hold has already credited the wallet: spendable money.
+           CASE WHEN cancel.state = 'dispatched' THEN 'pending' ELSE 'completed' END,
+           -- Immutable ordering key: settling must not move a row across a
+           -- page cursor.
+           COALESCE(cancel.dispatched_at, cancel.reserved_at, cancel.issued_at)
       FROM piggyvest_primary.goal_cancel_operations AS cancel
       JOIN mine ON mine.intent_id = cancel.intent_id
       LEFT JOIN public.customer_savings_goals AS goal ON goal.id = cancel.goal_id
@@ -134,13 +160,18 @@ BEGIN
     UNION ALL
     -- Goal completed: its full balance, interest included, returns to the wallet.
     SELECT complete.id,
-           'goal_completed',
+           -- A review hold credits only the transferred amount and leaves the
+           -- goal open: only a confirmed completion says "Goal completed".
+           CASE WHEN complete.state = 'confirmed'
+                THEN 'goal_completed' ELSE 'goal_refund' END,
            'in',
            complete.amount_kobo,
            0::bigint,
-           'Goal completed: ' || COALESCE(goal.title, 'savings goal'),
-           CASE WHEN complete.state IN ('confirmed', 'reviewed') THEN 'completed' ELSE 'pending' END,
-           COALESCE(complete.settled_at, complete.dispatched_at, complete.reserved_at, complete.issued_at)
+           CASE WHEN complete.state = 'confirmed'
+                THEN 'Goal completed: ' || COALESCE(goal.title, 'savings goal')
+                ELSE 'Returned from ' || COALESCE(goal.title, 'a savings goal') END,
+           CASE WHEN complete.state = 'dispatched' THEN 'pending' ELSE 'completed' END,
+           COALESCE(complete.dispatched_at, complete.reserved_at, complete.issued_at)
       FROM piggyvest_primary.goal_complete_operations AS complete
       JOIN mine ON mine.intent_id = complete.intent_id
       LEFT JOIN public.customer_savings_goals AS goal ON goal.id = complete.goal_id

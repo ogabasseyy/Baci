@@ -42,10 +42,10 @@ describe('quiz-sweep-baseline-store', () => {
     mocks.getRedis.mockReturnValue(null);
   });
 
-  it('uses in-memory baseline when Redis is not configured', async () => {
+  it('uses in-memory baseline and sweeps cold starts when Redis is not configured', async () => {
     expect(await loadQuizSweepBaseline()).toEqual({
       baseline: null,
-      requiresColdStartSweep: false,
+      requiresColdStartSweep: true,
     });
 
     const baseline = {

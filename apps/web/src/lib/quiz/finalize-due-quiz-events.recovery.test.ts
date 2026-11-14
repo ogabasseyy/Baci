@@ -37,6 +37,7 @@ import {
   finalizeDueQuizEvents,
   resetQuizSweepStateForTests,
 } from './finalize-due-quiz-events';
+import { saveQuizSweepBaseline } from './quiz-sweep-baseline-store';
 
 function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
   const floor =
@@ -95,7 +96,11 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
         .mockResolvedValueOnce({ data: 0, error: null });
     };
 
-    // Tick 1: cold idle baseline
+    // Tick 1: warm idle baseline
+    await saveQuizSweepBaseline({
+      watermarks: tick1Watermarks,
+      hasPendingRecoverySweep: false,
+    });
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
     idleRpcSequence();
     await finalizeDueQuizEvents();
@@ -138,6 +143,10 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     };
 
     // Tick 1: baseline
+    await saveQuizSweepBaseline({
+      watermarks: tick1Watermarks,
+      hasPendingRecoverySweep: false,
+    });
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
     idleRpcSequence();
     await finalizeDueQuizEvents();

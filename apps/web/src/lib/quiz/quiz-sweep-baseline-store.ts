@@ -129,7 +129,7 @@ export async function loadQuizSweepBaseline(): Promise<{
   if (!redis) {
     return {
       baseline: inMemoryBaseline,
-      requiresColdStartSweep: false,
+      requiresColdStartSweep: inMemoryBaseline === null,
     };
   }
 

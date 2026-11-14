@@ -28,6 +28,7 @@ import {
   finalizeDueQuizEvents,
   resetQuizSweepStateForTests,
 } from './finalize-due-quiz-events';
+import { saveQuizSweepBaseline } from './quiz-sweep-baseline-store';
 
 function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
   const floor =
@@ -41,9 +42,13 @@ function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
 }
 
 describe('finalizeDueQuizEvents idle sweep gating', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     resetQuizSweepStateForTests();
+    await saveQuizSweepBaseline({
+      watermarks: makeOkWatermarks('ok'),
+      hasPendingRecoverySweep: false,
+    });
     mocks.phase.mockReturnValue('1a');
     mocks.approved.mockReturnValue(false);
     mocks.resolveQuizSweepWatermarks.mockResolvedValue(makeOkWatermarks('ok'));
@@ -79,9 +84,12 @@ describe('finalizeDueQuizEvents idle sweep gating', () => {
   });
 
   it('skips cache invalidation on idle successfully probed empty tables', async () => {
-    mocks.resolveQuizSweepWatermarks.mockResolvedValue(
-      makeOkWatermarks('empty')
-    );
+    const emptyWatermarks = makeOkWatermarks('empty');
+    await saveQuizSweepBaseline({
+      watermarks: emptyWatermarks,
+      hasPendingRecoverySweep: false,
+    });
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(emptyWatermarks);
     mocks.rpc
       .mockResolvedValueOnce({ data: { updated: true }, error: null })
       .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
@@ -95,6 +103,7 @@ describe('finalizeDueQuizEvents idle sweep gating', () => {
   });
 
   it('overrides the idle shortcut when a watermark probe failed despite zero RPC mutation counters', async () => {
+    resetQuizSweepStateForTests();
     const failedWatermarks = {
       ...makeOkWatermarks('ok'),
       awards: {

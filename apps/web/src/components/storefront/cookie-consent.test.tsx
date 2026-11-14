@@ -87,5 +87,14 @@ describe('CookieConsent', () => {
     expect(
       screen.getByText(/By using our store, you agree to our/i)
     ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Customize' })).toHaveClass(
+      'min-h-11'
+    );
+    expect(screen.getByRole('button', { name: 'Necessary Only' })).toHaveClass(
+      'min-h-11'
+    );
+    expect(screen.getByRole('button', { name: 'Accept All' })).toHaveClass(
+      'min-h-11'
+    );
   });
 });

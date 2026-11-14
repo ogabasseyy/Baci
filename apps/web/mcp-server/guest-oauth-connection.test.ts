@@ -52,3 +52,17 @@ it('lets concurrent first calls share the initialized grant without a spurious f
   await auth.revoke(tokens.refresh_token, request.client_id);
   await expect(first.resolveToken()).rejects.toThrow();
 });
+
+it('preserves a retryable initialization conflict when refresh rotates the access token', async () => {
+  const { fixture, request, verifier } = await import('./guest-oauth.test-support');
+  const { GuestOAuthGrantConflict } = await import('./guest-oauth-cart-lifetime');
+  const { auth } = fixture();
+  const { code } = await auth.authorize(request);
+  const tokens = await auth.exchange({ ...request, code, code_verifier: verifier });
+  vi.spyOn(auth, 'updateGrant').mockImplementationOnce(async () => {
+    await auth.refresh({ ...request, refresh_token: tokens.refresh_token });
+    throw new GuestOAuthGrantConflict();
+  });
+  const connection = createGuestOAuthConnection(auth, { async initializeConnectionCart() {} }, tokens.access_token);
+  await expect(connection.resolveToken()).rejects.toThrow('temporarily_unavailable');
+});

@@ -1,5 +1,4 @@
 import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
-import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { loadBrandAuthorityInventorySafely } from '@/lib/storefront-category/load-brand-authority-inventory-safely';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
@@ -17,27 +16,14 @@ export async function verifyEligibleHubsAgainstDestination(args: {
   if (args.hubs.brandHubs.length === 0 && args.hubs.familyHubs.length === 0) {
     return { brandHubs: [], familyHubs: [] };
   }
-  // The destination loaders 404 without an active categories row, even
-  // when denormalized product data matches the slug. The lookup is bounded
-  // like the inventory scan so a stall degrades to no hub links. Inventory
-  // checks start concurrently so the two 3s budgets overlap, not stack.
-  let categoryTimer: ReturnType<typeof setTimeout> | undefined;
-  const categoryPromise = Promise.race([
-    brandAuthorityPublicData
-      .getCategory(args.merchantId, args.categorySlug)
-      .catch(() => null),
-    new Promise<null>((resolve) => {
-      categoryTimer = setTimeout(() => resolve(null), 3_000);
-    }),
-  ]).finally(() => {
-    if (categoryTimer) clearTimeout(categoryTimer);
-  });
-
+  // Each bounded shared read includes active-category validation under the
+  // same deadline as inventory and hydration. Do not start a separate
+  // category lookup whose work could outlive the verifier.
   const brandHubs: ResolvedEligibleCategoryHubDestinations['brandHubs'] = [];
   const familyHubs: ResolvedEligibleCategoryHubDestinations['familyHubs'] = [];
   const inventoryProductsByBrand = new Map<string, Array<{ name: string }>>();
 
-  const verifiedPromise = Promise.all(
+  const verified = await Promise.all(
     args.hubs.brandHubs.map(async (hub) => {
       if (!hub.brand_key) return null;
       const entry = brandAuthorityTaxonomy.getEntry(
@@ -64,13 +50,6 @@ export async function verifyEligibleHubsAgainstDestination(args: {
       };
     })
   );
-  const [category, verified] = await Promise.all([
-    categoryPromise,
-    verifiedPromise,
-  ]);
-  if (!category) {
-    return { brandHubs: [], familyHubs: [] };
-  }
   for (const result of verified) {
     if (!result?.hub.brand_key) continue;
     brandHubs.push(result.hub);

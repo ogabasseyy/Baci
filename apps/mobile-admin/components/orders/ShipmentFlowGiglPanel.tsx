@@ -8,7 +8,9 @@ import type {
   OrderGiglMissingField,
   OrderGiglQuote,
   OrderGiglReceiver,
+  OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
+import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
@@ -55,6 +57,7 @@ interface Props {
   missingFields: OrderGiglMissingField[];
   onAddressFieldChange: (field: OrderGiglMissingField, value: string) => void;
   onFundWallet: () => void;
+  onPlaceSelect: (place: OrderGiglSelectedPlace) => void;
   onRefreshFundingAccount: () => void;
   onModeChange: () => void;
   onRetryQuote: () => void;
@@ -111,6 +114,7 @@ export function ShipmentFlowGiglPanel({
   missingFields,
   onAddressFieldChange,
   onFundWallet,
+  onPlaceSelect,
   onRefreshFundingAccount,
   onModeChange,
   onRetryQuote,
@@ -154,6 +158,28 @@ export function ShipmentFlowGiglPanel({
         title={`Ship with ${providerName}`}
       />
 
+      {missingFields.includes('address') ? (
+        <CheckoutRecoveryAddressInput
+          accessibilityLabel="Search shipping address"
+          address={addressDraft.address ?? ''}
+          disabled={loading}
+          onSearchChange={(text) => onAddressFieldChange('address', text)}
+          onSelect={(place) => {
+            const latitude = Number.parseFloat(place.latitude);
+            const longitude = Number.parseFloat(place.longitude);
+            const hasPin =
+              Number.isFinite(latitude) && Number.isFinite(longitude);
+            onPlaceSelect({
+              address: place.address,
+              city: place.city,
+              state: place.state,
+              latitude: hasPin ? latitude : undefined,
+              longitude: hasPin ? longitude : undefined,
+            });
+          }}
+          placeholder="Search delivery address"
+        />
+      ) : null}
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
           <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>

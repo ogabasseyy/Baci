@@ -35,24 +35,9 @@ function buildProductData(
 type ProductVariantFixture = NonNullable<NormalizedProductDetails['variants']>;
 
 const s22Variants: ProductVariantFixture = [
-  {
-    id: 'v1',
-    attributes: { ram: '8GB', storage: '128GB' },
-    price_override: 500000,
-    stock_quantity: 9999,
-  },
-  {
-    id: 'v2',
-    attributes: { ram: '12GB', storage: '256GB' },
-    price_override: 550000,
-    stock_quantity: 9999,
-  },
-  {
-    id: 'v3',
-    attributes: { ram: '12GB', storage: '512GB' },
-    price_override: 600000,
-    stock_quantity: 9999,
-  },
+  { id: 'v1', attributes: { ram: '8GB', storage: '128GB' }, price_override: 500000, stock_quantity: 9999 },
+  { id: 'v2', attributes: { ram: '12GB', storage: '256GB' }, price_override: 550000, stock_quantity: 9999 },
+  { id: 'v3', attributes: { ram: '12GB', storage: '512GB' }, price_override: 600000, stock_quantity: 9999 },
 ];
 
 function renderSelectors({
@@ -100,6 +85,13 @@ function renderSelectors({
 }
 
 describe('ProductOptionSelectors — dependent variant filtering', () => {
+  it('explains selected restricted connectivity before purchase', () => {
+    renderSelectors({ selectedAttributes: { sim_type: 'Wi-Fi Only' } });
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'confirm connectivity limitations before purchase'
+    );
+  });
+
   it('renders all storage options as enabled when no RAM is selected', () => {
     renderSelectors({ effectiveAxes: ['storage'] });
 

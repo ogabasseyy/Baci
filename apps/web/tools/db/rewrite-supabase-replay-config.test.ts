@@ -27,7 +27,7 @@ port = 54329
 enabled = true
 port = 54323
 
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 # smtp_port = 54325
@@ -56,6 +56,14 @@ const ports = Object.fromEntries(
 ) as SupabaseReplayPortMap;
 
 describe('rewriteSupabaseReplayConfig', () => {
+  it('rewrites the local SMTP section emitted by Supabase CLI 2.111', () => {
+    const generated = config;
+    const rewritten = rewriteSupabaseReplayConfig(generated, {
+      ports,
+      projectId: 'baci_replay_abc123',
+    });
+    expect(rewritten).toContain('[local_smtp]\nenabled = true\nport = 41004');
+  });
   it('rewrites only project identity and the seven qualified ports', () => {
     const rewritten = rewriteSupabaseReplayConfig(config, {
       ports,
@@ -82,7 +90,7 @@ describe('rewriteSupabaseReplayConfig', () => {
       'db.port': 54322,
       'db.shadow_port': 54320,
       'edge_runtime.inspector_port': 8083,
-      'inbucket.port': 54324,
+      'local_smtp.port': 54324,
       'studio.port': 54323,
     });
   });

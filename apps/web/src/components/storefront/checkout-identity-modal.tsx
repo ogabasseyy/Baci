@@ -1,10 +1,10 @@
 'use client';
 
-import { AlertCircle, Loader2, User, UserPlus, Zap } from 'lucide-react';
+import { UserPlus, Zap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { CheckoutCodeSignin } from '@/components/storefront/checkout-code-signin';
 import { buildCheckoutIdentityRoutes } from '@/components/storefront/checkout-route';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,38 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { PasswordInput } from '@/components/ui/password-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { createClient } from '@/lib/supabase/client';
 
 interface CheckoutIdentityModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   checkoutUrl: string;
-}
-
-// Module-scope helper: throw inside try/catch is not yet supported by React
-// Compiler within component bodies. Returns an error message, or null on success.
-async function signInWithPasswordForCheckout(
-  supabase: ReturnType<typeof createClient>,
-  email: string,
-  password: string
-): Promise<string | null> {
-  try {
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (loginError) throw loginError;
-
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : 'Failed to sign in';
-  }
 }
 
 export function CheckoutIdentityModal({
@@ -53,39 +28,12 @@ export function CheckoutIdentityModal({
   checkoutUrl,
 }: CheckoutIdentityModalProps) {
   const [_activeTab, setActiveTab] = useState<'signin' | 'new'>('new');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
-  const supabase = createClient();
   const merchantContext = useMerchantSafe();
   const _merchant = merchantContext?.merchant;
   const { checkoutUrl: normalizedCheckoutUrl, signupUrl } =
     buildCheckoutIdentityRoutes(checkoutUrl);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    const errorMessage = await signInWithPasswordForCheckout(
-      supabase,
-      email,
-      password
-    );
-
-    if (errorMessage) {
-      setError(errorMessage);
-      setIsLoading(false);
-      return;
-    }
-
-    // Successful login - proceed to checkout
-    router.push(normalizedCheckoutUrl);
-    onOpenChange(false);
-  };
 
   const handleGuestCheckout = () => {
     router.push(normalizedCheckoutUrl);
@@ -186,80 +134,13 @@ export function CheckoutIdentityModal({
               value="signin"
               className="animate-in fade-in slide-in-from-bottom-2 duration-300"
             >
-              <form onSubmit={handleLogin} className="space-y-4">
-                {error && (
-                  <Alert
-                    variant="destructive"
-                    className="rounded-xl bg-red-50 border-red-100 text-red-600"
-                  >
-                    <AlertCircle className="size-4" />
-                    <AlertDescription className="text-xs font-medium">
-                      {error}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="email"
-                    className="text-xs font-bold text-gray-700 uppercase tracking-wide px-1"
-                  >
-                    Email Address
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="py-6 rounded-xl border-gray-200 focus:border-store-primary focus:ring-store-primary/10"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <Label
-                      htmlFor="password"
-                      className="text-xs font-bold text-gray-700 uppercase tracking-wide"
-                    >
-                      Password
-                    </Label>
-                    <button
-                      type="button"
-                      onClick={() => router.push('/forgot-password')}
-                      className="text-[10px] font-bold text-store-primary hover:underline uppercase"
-                    >
-                      Forgot?
-                    </button>
-                  </div>
-                  <PasswordInput
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="py-6 rounded-xl border-gray-200 focus:border-store-primary focus:ring-store-primary/10"
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-store-primary hover:bg-store-primary/90 text-white font-bold py-6 rounded-xl text-base shadow-lg transition-all active:scale-[0.98]"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 size-5 animate-spin" />
-                      Signing in…
-                    </>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <User size={18} />
-                      Sign In & Checkout
-                    </span>
-                  )}
-                </Button>
-              </form>
+              <CheckoutCodeSignin
+                merchantSlug={_merchant?.slug ?? ''}
+                onSuccess={() => {
+                  router.push(normalizedCheckoutUrl);
+                  onOpenChange(false);
+                }}
+              />
             </TabsContent>
           </Tabs>
         </div>

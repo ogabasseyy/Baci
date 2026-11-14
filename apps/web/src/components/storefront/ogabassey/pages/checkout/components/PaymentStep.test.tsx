@@ -149,6 +149,39 @@ describe('PaymentStep', () => {
   );
 
   describe('Rendering', () => {
+    it('keeps mobile payment actions inside the padded card content', () => {
+      render(<PaymentStep {...defaultProps} />);
+      const action = screen.getByRole('button', { name: 'Place Order' });
+      const paddedContent = action.closest('.p-6');
+      expect(paddedContent).not.toBeNull();
+      expect(paddedContent).toContainElement(
+        screen.getByRole('checkbox', { name: /email me with exclusive offers/i })
+      );
+    });
+
+    it('hides Oxygen when wallet credit reduces the amount due', () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+      vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:3451');
+      try {
+        const view = render(
+          <PaymentStep {...defaultProps} paymentTab="installments" />,
+        );
+        expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
+        expect(screen.getByText(/From 25% down/)).toBeInTheDocument();
+        view.rerender(
+          <PaymentStep
+            {...defaultProps}
+            paymentTab="installments"
+            remainingAmount={9000}
+          />,
+        );
+        expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('renders payment step when currentStep is payment', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} />);
@@ -156,6 +189,7 @@ describe('PaymentStep', () => {
       // Assert
       expect(screen.getByText('Payment Method')).toBeInTheDocument();
     });
+
 
     it('applies active styling when currentStep is payment', () => {
       // Arrange & Act
@@ -522,8 +556,8 @@ describe('PaymentStep', () => {
     );
   });
 
-  describe('Pay in Installments Options', () => {
-    it('shows CredPal when enabled in feature settings', () => {
+  describe('Pay Small Small Options', () => {
+    it('hides retired CredPal even when enabled in feature settings', () => {
       // Arrange
       const merchant = {
         feature_settings: { credpal_enabled: true } as FeatureSettings,
@@ -539,8 +573,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('CredPal')).toBeInTheDocument();
-      expect(screen.getByTestId('credpal-logo')).toBeInTheDocument();
+      expect(screen.queryByText('CredPal')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('credpal-logo')).not.toBeInTheDocument();
     });
 
     it('shows Credit Direct when enabled in feature settings', () => {
@@ -560,7 +594,7 @@ describe('PaymentStep', () => {
 
       // Assert
       expect(screen.getByText('Credit Direct')).toBeInTheDocument();
-      expect(screen.getByTestId('credit-direct-logo')).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Credit Direct lending logo' })).toBeInTheDocument();
     });
 
     it('shows Klump when enabled in feature settings', () => {
@@ -601,7 +635,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay in Installments' }),
+        screen.queryByRole('button', { name: 'Pay Small Small' }),
       ).not.toBeInTheDocument();
     });
 
@@ -648,7 +682,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay in Installments' }),
+        screen.queryByRole('button', { name: 'Pay Small Small' }),
       ).not.toBeInTheDocument();
     });
 
@@ -716,7 +750,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay in Installments' }),
+        screen.queryByRole('button', { name: 'Pay Small Small' }),
       ).not.toBeInTheDocument();
     });
 
@@ -799,10 +833,10 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay Small Small' })).not.toBeInTheDocument();
     });
 
-    it('shows CredPal info when CredPal is selected', () => {
+    it('does not show retired CredPal instructions for a stale selection', () => {
       // Arrange
       const merchant = {
         feature_settings: { credpal_enabled: true } as FeatureSettings,
@@ -819,8 +853,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('How CredPal works')).toBeInTheDocument();
-      expect(screen.getByText(/quick approval in minutes/i)).toBeInTheDocument();
+      expect(screen.queryByText('How CredPal works')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay Small Small' })).not.toBeInTheDocument();
     });
 
     it('shows Credit Direct info when Credit Direct is selected', () => {
@@ -840,8 +874,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('How Credit Direct works')).toBeInTheDocument();
-      expect(screen.getByText(/instant approval decision/i)).toBeInTheDocument();
+      expect(screen.getByText('24 supported banks')).toBeInTheDocument();
+      expect(screen.queryByText(/instant approval decision/i)).not.toBeInTheDocument();
     });
 
     it('shows Klump info when Klump is selected', () => {
@@ -862,7 +896,7 @@ describe('PaymentStep', () => {
       expect(screen.getByText(/complete approval securely/i)).toBeInTheDocument();
     });
 
-    it('calls setPaymentMethod when CredPal is selected', () => {
+    it('never offers CredPal selection after retirement', () => {
       // Arrange
       const setPaymentMethod = vi.fn();
       const merchant = {
@@ -878,11 +912,8 @@ describe('PaymentStep', () => {
       );
 
       // Act
-      const credpalLabel = screen.getByText('CredPal').closest('label');
-      if (credpalLabel) fireEvent.click(credpalLabel);
-
-      // Assert
-      expect(setPaymentMethod).toHaveBeenCalledWith('credpal');
+      expect(screen.queryByText('CredPal')).not.toBeInTheDocument();
+      expect(setPaymentMethod).not.toHaveBeenCalledWith('credpal');
     });
 
     it('calls setPaymentMethod when Klump is selected', () => {
@@ -971,6 +1002,14 @@ describe('PaymentStep', () => {
   });
 
   describe('Mobile Place Order Button', () => {
+    it.each(['oxygen', 'credit_direct', 'credpal', 'klump'] as const)(
+      'labels the %s installment action Begin Process', (paymentMethod) => {
+        render(<PaymentStep {...defaultProps} paymentTab="installments" paymentMethod={paymentMethod} />);
+        expect(screen.getByRole('button', { name: 'Begin Process' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Place Order' })).not.toBeInTheDocument();
+      }
+    );
+
     it('shows place order button on mobile', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} />);
@@ -1047,7 +1086,7 @@ describe('PaymentStep', () => {
         />
       );
 
-      const button = screen.getByRole('button', { name: /place order/i });
+      const button = screen.getByRole('button', { name: 'Begin Process' });
       expect(button).toBeDisabled();
     });
 

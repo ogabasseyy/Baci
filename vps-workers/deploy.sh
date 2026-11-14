@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Deploy VPS workers to bassey@82.29.190.219
-# Usage: bash vps-workers/deploy.sh
-
+# Deploy VPS workers to bassey@82.29.190.219 (usage: bash vps-workers/deploy.sh)
 set -euo pipefail
-
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/prepare-worker-release.sh
 source "$WORKER_ROOT/lib/prepare-worker-release.sh"
@@ -15,7 +12,6 @@ source "$WORKER_ROOT/lib/install-remediation-cron-transition.sh"
 source "$WORKER_ROOT/lib/print-worker-env-reminder.sh"
 # shellcheck source=lib/install-worker-services.sh
 source "$WORKER_ROOT/lib/install-worker-services.sh"
-
 VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
 REMEDIATION_DISABLED_MARKER="/home/bassey/.config/baci/remediation.disabled"
@@ -28,7 +24,6 @@ CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
 # auto-releasing it for a clean retry. Every other failure (including
 # a clean rollback that just needs a rerun) exits 1.
 WORKER_UNRECONCILED_EXIT=42
-
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Refusing worker deployment from a dirty tracked checkout." >&2
   exit 1
@@ -142,7 +137,9 @@ $CRON_BLOCK_START
 0 5    * * * flock -n $REMOTE_DIR/locks/process-settlements.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements' >> $REMOTE_DIR/logs/process-settlements.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/order-cancellation-side-effects.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements?cancellationsOnly=true' >> $REMOTE_DIR/logs/order-cancellation-side-effects.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
+*/5 * * * * flock -n $REMOTE_DIR/locks/oxygen-callback-reconciliation.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/oxygen-callback-reconciliation' >> $REMOTE_DIR/logs/oxygen-callback-reconciliation.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
+*/5 *  * * * flock -n $REMOTE_DIR/locks/cart-notice-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/cart-notice-health' >> $REMOTE_DIR/logs/cart-notice-health.log 2>&1
 20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
 # process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.
 * *    * * * flock -n $REMOTE_DIR/locks/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
@@ -164,12 +161,15 @@ $CRON_BLOCK_START
 0 2    * * * flock -n $REMOTE_DIR/locks/ai-jobs-worker.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/ai-jobs/worker' >> $REMOTE_DIR/logs/ai-jobs-worker.log 2>&1
 15 2   * * * flock -n $REMOTE_DIR/locks/sync-petrock-catalog.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/sync-petrock-catalog' >> $REMOTE_DIR/logs/sync-petrock-catalog.log 2>&1
 0 6    * * * flock -n $REMOTE_DIR/locks/wallet-payouts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/wallet-payouts' >> $REMOTE_DIR/logs/wallet-payouts.log 2>&1
+*/5 * * * * flock -n $REMOTE_DIR/locks/piggyvest-degraded-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-degraded-health' >> $REMOTE_DIR/logs/piggyvest-degraded-health.log 2>&1
+0 23  * * * flock -n $REMOTE_DIR/locks/piggyvest-daily-reconciliation.lock bash -lc 'cd $REMOTE_DIR && if $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-daily-reconciliation; then $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-goal-cancel-forfeit-sweep; else $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-goal-cancel-forfeit-sweep; false; fi' >> $REMOTE_DIR/logs/piggyvest-daily-reconciliation.log 2>&1
 0 8    * * * flock -n $REMOTE_DIR/locks/alert-stuck-bnpl.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/alert-stuck-bnpl' >> $REMOTE_DIR/logs/alert-stuck-bnpl.log 2>&1
 30 8   1 * * flock -n $REMOTE_DIR/locks/vtu-cashback-summaries.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/vtu-cashback-summaries' >> $REMOTE_DIR/logs/vtu-cashback-summaries.log 2>&1
 */15 * * * * flock -n $REMOTE_DIR/locks/publish-scheduled-posts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/publish-scheduled-posts' >> $REMOTE_DIR/logs/publish-scheduled-posts.log 2>&1
 0 10   * * * flock -n $REMOTE_DIR/locks/storefront-update-nudge.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/storefront-update-nudge' >> $REMOTE_DIR/logs/storefront-update-nudge.log 2>&1
 30 9   * * * flock -n $REMOTE_DIR/locks/ios-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/ios-live-build-sync' >> $REMOTE_DIR/logs/ios-live-build-sync.log 2>&1
 45 9   * * * flock -n $REMOTE_DIR/locks/android-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/android-live-build-sync' >> $REMOTE_DIR/logs/android-live-build-sync.log 2>&1
+* * * * * flock -n $REMOTE_DIR/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd $REMOTE_DIR && timeout --verbose --signal=TERM --kill-after=10s 50s $REMOTE_DIR/bin/process-piggyvest-webhook-capture-drain.sh --once' >> $REMOTE_DIR/logs/piggyvest-webhook-capture-drain.log 2>&1
 * * * * * flock -n $REMOTE_DIR/locks/quiz-finalize.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=5s 50s $REMOTE_DIR/bin/process-quiz-finalization.sh --once' >> $REMOTE_DIR/logs/quiz-finalize.log 2>&1
 15 4   * * * flock -n $REMOTE_DIR/locks/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
 $CRON_BLOCK_END

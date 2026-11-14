@@ -67,7 +67,7 @@ it('announces checking and confirmed success, prevents editing, and restores ent
     screen.getByRole('status', { name: 'Verification code status' })
   ).toHaveTextContent('Checking email code');
   expect(screen.getByRole('textbox')).toBeDisabled();
-  expect(screen.queryByText('1')).toBeNull();
+  expect(screen.getByText('1')).toBeVisible();
   view.rerender(<OtpVerificationField {...props} error="Code expired" />);
   expect(screen.getByRole('alert')).toHaveTextContent('Code expired');
   expect(screen.getByRole('textbox')).toHaveAttribute(
@@ -190,4 +190,35 @@ it('keeps the caret visible after an advisory expiry while input is editable', (
   fireEvent.focus(input);
   expect(input).toBeEnabled();
   expect(view.container.querySelector(`.${styles.caret}`)).toBeTruthy();
+});
+
+it('can hide duplicate checking copy visually without hiding status from assistive technology or errors', () => {
+  const view = render(
+    <OtpVerificationField
+      value="123456"
+      onChange={vi.fn()}
+      pending
+      hidePendingMessage
+    />
+  );
+  expect(screen.getByText('Checking your code…')).toHaveClass('sr-only');
+  expect(screen.getByRole('status')).toHaveTextContent('Checking your code…');
+  view.rerender(
+    <OtpVerificationField
+      value="123456"
+      onChange={vi.fn()}
+      hidePendingMessage
+      error="Code was rejected"
+    />
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('Code was rejected');
+  expect(screen.getByRole('alert')).not.toHaveClass('sr-only');
+});
+
+it('allows an intentionally empty idle hint without replacing it with default copy', () => {
+  render(<OtpVerificationField value="" onChange={vi.fn()} hint="" />);
+  expect(
+    screen.getByRole('status', { name: 'Verification code status' })
+  ).toBeEmptyDOMElement();
+  expect(screen.queryByText('Enter the 6-digit code.')).toBeNull();
 });

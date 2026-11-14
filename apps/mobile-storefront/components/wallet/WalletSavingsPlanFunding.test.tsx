@@ -24,6 +24,13 @@ jest.mock('@/lib/savings-card-contribution-snapshot', () => ({
   readSavingsCardContributionSnapshot: jest.fn().mockResolvedValue(null),
   saveSavingsCardContributionSnapshot: jest.fn(),
 }));
+let mockPrimary = false;
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
+  isPiggyvestPrimaryMerchant: () => mockPrimary,
+}));
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: () => mockPrimary,
+}));
 jest.mock('@/lib/config', () => ({
   CONFIG: { MERCHANT_ID: 'merchant-1', MERCHANT_SLUG: 'savings-synthetic' },
 }));
@@ -73,68 +80,108 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'user-1';
   mockMerchantId = 'merchant-1';
+  mockPrimary = false;
   jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
 });
+const pending: SavingsPlanFundingResponse = { status: 'pending', accounts: [] };
 
-it('retrieves the existing plan account, never creating or funding one on open', async () => {
+it('never fetches or shows the goal bank account, only wallet guidance', async () => {
   render(panel());
   await act(async () => {});
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
-  expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledWith({
-    goalId: goal.id,
-    merchantId: 'merchant-1',
-    merchantSlug: 'savings-synthetic',
-  });
+  expect(screen.getByText('Add from your wallet')).toBeOnTheScreen();
+  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: 'Copy savings account number' })
+  ).toBeNull();
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   expect(fetchSavingsPlanFunding).not.toHaveBeenCalled();
 });
 
-it('retries the read after a network failure', async () => {
-  jest
-    .mocked(fetchExistingSavingsPlanFunding)
-    .mockRejectedValueOnce(new Error('Network unavailable'));
-  render(panel());
+it('shows no account note for auto-debit goals', async () => {
+  render(panel({ ...goal, source_mode: 'auto_debit' }));
   await act(async () => {});
-  expect(screen.getByText('Network unavailable')).toBeOnTheScreen();
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh savings account' })
-  );
-  await act(async () => {});
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
+  expect(screen.queryByText('Add from your wallet')).toBeNull();
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
 });
 
-it.each([
-  'user',
-  'merchant',
-  'goal',
-] as const)('discards a late account response when the %s changes', async (scope) => {
-  let complete: (response: SavingsPlanFundingResponse) => void = () =>
-    undefined;
-  jest.mocked(fetchExistingSavingsPlanFunding).mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        complete = resolve;
-      })
-  );
-  jest
-    .mocked(fetchExistingSavingsPlanFunding)
-    .mockResolvedValue({ status: 'pending' });
-  const view = render(panel());
-  if (scope === 'user') mockUserId = 'user-2';
-  if (scope === 'merchant') mockMerchantId = 'merchant-2';
-  view.rerender(panel(scope === 'goal' ? { ...goal, id: 'goal-2' } : goal));
-  await act(async () => {
-    complete(ready);
-  });
-  expect(screen.queryByText('0000008907')).toBeNull();
-});
-
-it('hides the account immediately when the user signs out', async () => {
+it('hides the guidance immediately when the user signs out', async () => {
   const view = render(panel());
   await act(async () => {});
   mockUserId = undefined;
   view.rerender(panel());
-  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(screen.queryByText('Add from your wallet')).toBeNull();
   expect(
     screen.getByText('Sign in to add to this savings plan.')
   ).toBeOnTheScreen();
+});
+
+describe('sibling notes', () => {
+  beforeEach(() => {
+    mockPrimary = true;
+  });
+  const STATUS_COPY = 'Getting your plan ready';
+
+  it('resets both notes on a goal switch without a duplicate-key warning', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(pending);
+    const onRefreshWallet = jest
+      .fn()
+      .mockRejectedValue(new Error('Wallet down'));
+    const element = (currentGoal: WalletActiveSavingsGoal) => (
+      <WalletSavingsPlanFunding
+        addAmount=""
+        colors={Colors.dark}
+        goal={currentGoal}
+        onAddAmountChange={jest.fn()}
+        onRefreshWallet={onRefreshWallet}
+      />
+    );
+    const view = render(element(goal));
+    await act(async () => {});
+    expect(screen.getByText(STATUS_COPY)).toBeOnTheScreen();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Refresh savings progress' })
+    );
+    await act(async () => {});
+    expect(screen.getByText('Wallet down')).toBeOnTheScreen();
+
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
+    view.rerender(element({ ...goal, id: 'goal-2' }));
+    // The wallet note remounted (its error is gone) and the status note
+    // remounted and looked up the new goal (now ready, so it is hidden).
+    expect(screen.queryByText('Wallet down')).toBeNull();
+    await act(async () => {});
+    expect(fetchExistingSavingsPlanFunding).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalId: 'goal-2' })
+    );
+    expect(screen.queryByText(STATUS_COPY)).toBeNull();
+    const keyWarnings = errorSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('same key')
+    );
+    expect(keyWarnings).toHaveLength(0);
+    errorSpy.mockRestore();
+  });
+
+  it('re-reads the goal status after a successful progress refresh', async () => {
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(pending);
+    render(
+      <WalletSavingsPlanFunding
+        addAmount=""
+        colors={Colors.dark}
+        goal={goal}
+        onAddAmountChange={jest.fn()}
+        onRefreshWallet={jest.fn().mockResolvedValue({ isError: false })}
+      />
+    );
+    await act(async () => {});
+    expect(screen.getByText(STATUS_COPY)).toBeOnTheScreen();
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Refresh savings progress' })
+    );
+    await act(async () => {});
+    expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(STATUS_COPY)).toBeNull();
+  });
 });

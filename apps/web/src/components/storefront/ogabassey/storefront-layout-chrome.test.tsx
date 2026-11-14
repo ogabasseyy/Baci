@@ -63,12 +63,6 @@ vi.mock('./components/Footer', () => {
   throw new Error('Full Footer must stay out of storefront-layout-chrome');
 });
 
-vi.mock('./components/MobileFooter', () => ({
-  MobileFooter: ({ storeSlug }: { storeSlug: string }) => (
-    <nav aria-label="Mobile footer">{storeSlug}</nav>
-  ),
-}));
-
 vi.mock('./components/chat/DeferredChatWidget', () => ({
   DeferredChatWidget: () => <aside aria-label="chat widget" />,
 }));
@@ -148,63 +142,6 @@ describe('OgabasseyLayoutChrome', () => {
     expect(
       screen.queryByRole('complementary', { name: /chat widget/i })
     ).not.toBeInTheDocument();
-  });
-
-  it('renders mobile and lightweight semantic footer links immediately while deferring full footer commerce widgets', () => {
-    render(
-      <OgabasseyLayoutChrome
-        basePath="/ogabassey"
-        merchant={merchantWithPublishablePolicies}
-        section="footer"
-      />
-    );
-
-    expect(
-      screen.getByRole('navigation', { name: /mobile footer/i })
-    ).toHaveTextContent('/ogabassey');
-    expect(
-      screen.getByRole('contentinfo', {
-        name: /semantic storefront footer/i,
-      })
-    ).toContainElement(screen.getByRole('link', { name: /about us/i }));
-    expect(screen.getByRole('link', { name: /all products/i })).toHaveAttribute(
-      'href',
-      '/ogabassey/products'
-    );
-    expect(screen.getByRole('link', { name: /returns/i })).toHaveAttribute(
-      'href',
-      '/ogabassey/returns'
-    );
-    expect(screen.getByRole('link', { name: /shipping/i })).toHaveAttribute(
-      'href',
-      '/ogabassey/shipping'
-    );
-    expect(screen.getByRole('link', { name: /warranty/i })).toHaveAttribute(
-      'href',
-      '/ogabassey/warranty'
-    );
-    expect(
-      screen.queryByRole('contentinfo', { name: /full storefront footer/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('complementary', { name: 'FOOTER_BANNER' })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('complementary', { name: /cart sidebar/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('complementary', { name: /chat widget/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('region', { name: /dynamic slot/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('navigation', { name: /ogabassey storefront/i })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole('main')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('region', { name: /deferred shell/i })
-    ).toHaveAttribute('data-defer-interaction-until-next-paint', 'true');
   });
 
   it('reserves the full footer and ad subtree on the deferred fallback so activation does not shift', () => {

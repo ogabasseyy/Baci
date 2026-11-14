@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, View } from 'react-native';
-import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import type {
@@ -112,8 +111,8 @@ export function SavingsNotificationPreferences({
           accessibilityLabel="Quiet hours summary"
           style={[styles.subtitle, { color: colors.textSecondary }]}
         >
-          {formatDateTimeDisplay(quietHoursStart, 'time')} –{' '}
-          {formatDateTimeDisplay(quietHoursEnd, 'time')} (use 24-hour HH:MM)
+          {/* Same 24-hour times as the fields below. */}
+          {`${quietHoursStart} – ${quietHoursEnd}`}
         </Text>
         <View style={styles.timeFields}>
           <SavingsQuietHoursTimeField
@@ -137,8 +136,14 @@ export function SavingsNotificationPreferences({
             value={quietHoursEnd}
           />
         </View>
-        <Text style={[styles.timeZoneLabel, { color: colors.textSecondary }]}>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Enter times in 24-hour format, for example 22:00.
+        </Text>
+        <Text style={[styles.timeZoneLabel, { color: colors.text }]}>
           Time zone
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Reminders follow this time zone. Nigeria is Africa/Lagos.
         </Text>
         <TextInput
           accessibilityLabel="Savings notification time zone"

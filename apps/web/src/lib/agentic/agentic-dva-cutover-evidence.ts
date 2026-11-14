@@ -17,10 +17,7 @@ const RESUMABLE_STATES = new Set<string>(
   agenticDvaCutoverConstants.resumableStates
 );
 
-type CutoverDisposition =
-  | 'manual_review'
-  | 'release_stale_no_account_claim'
-  | 'resume_stored_account';
+type CutoverDisposition = 'manual_review' | 'resume_stored_account';
 
 export interface CutoverActionPayload {
   currency: unknown;
@@ -109,13 +106,8 @@ export function assessAgenticDvaCutoverSession(
     if (now.getTime() - updatedAtMs < agenticDvaCutoverConstants.claimStaleMs) {
       return manual('claim_not_stale');
     }
-    return {
-      ...base,
-      actionPayload: redactCutoverValue(buildActionPayload(record)),
-      disposition: 'release_stale_no_account_claim',
-      reason: null,
-      resume: null,
-    };
+    // A missing local account cannot prove that the provider did not issue one.
+    return manual('provider_outcome_unconfirmed');
   }
 
   if (!RESUMABLE_STATES.has(state)) {

@@ -27,8 +27,10 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.claim_piggyvest_webhook_captures(10, 60, 0)) THEN
     RAISE EXCEPTION 'a leased row must not be claimed twice';
   END IF;
-  IF public.resolve_piggyvest_webhook_capture(v_id, NULL, 'processed', NULL) THEN
-    RAISE EXCEPTION 'inline completion must not overwrite a claimed row';
+  -- An incomplete inline release cannot overwrite a worker claim. Successful
+  -- inline completion is covered by piggyvest_webhook_capture_claim_recovery.sql.
+  IF public.resolve_piggyvest_webhook_capture(v_id, NULL, 'pending', NULL) THEN
+    RAISE EXCEPTION 'an incomplete inline release must not overwrite a claimed row';
   END IF;
   IF public.resolve_piggyvest_webhook_capture(v_id, gen_random_uuid(), 'processed', NULL) THEN
     RAISE EXCEPTION 'a wrong claim token must not resolve the row';

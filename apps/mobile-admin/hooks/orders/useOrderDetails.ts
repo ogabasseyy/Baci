@@ -15,6 +15,7 @@ import type { TransactionReviewQueryError } from '@/lib/transaction-review-fallb
 import { ALL_BRANCH_SCOPE, type BranchScope } from '@/schemas/branch';
 import { useBranchScope } from '../useBranchScope';
 import { useMerchant } from '../useMerchant';
+import { fetchCancelRefundPlan } from './fetchCancelRefundPlan';
 import {
   attachOrderItemOfferLabels,
   mapOrderItems,
@@ -200,6 +201,15 @@ export async function fetchOrderById(
     ...order,
     amount_paid: amountPaid,
     balance,
+    cancel_refund_plan: await fetchCancelRefundPlan({
+      // The stored column, not the effective total: it is what the worker caps on.
+      amountPaid: order.amount_paid,
+      currency: order.currency,
+      merchantId,
+      orderId,
+      paymentStatus,
+      total: orderTotal,
+    }),
     payment_status: paymentStatus,
     fulfillment_details: orderWithMeta.fulfillment_details ?? null,
     items: await attachOrderItemOfferLabels(

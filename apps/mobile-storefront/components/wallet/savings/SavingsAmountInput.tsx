@@ -1,4 +1,6 @@
-import { Text, TextInput, View } from 'react-native';
+import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
+import { Pressable, Text, TextInput } from 'react-native';
 import {
   normalizeAmountInput,
   themedInputStyle,
@@ -17,18 +19,25 @@ export function SavingsAmountInput({
   value: string;
   onChangeText: (value: string) => void;
 }) {
+  const input = useRef<TextInputInstance>(null);
   return (
-    <View
+    // The whole box, not just the digits, opens the keyboard. The input
+    // itself stays the one accessible element.
+    <Pressable
+      accessible={false}
+      onPress={() => input.current?.focus()}
+      testID="savings-amount-box"
       style={[
         styles.input,
         themedInputStyle(colors),
         { flexDirection: 'row', alignItems: 'center', gap: 8 },
       ]}
     >
-      <Text style={{ color: colors.text, fontSize: 26, fontWeight: '700' }}>
+      <Text style={{ color: colors.text, fontSize: 23, fontWeight: '700' }}>
         ₦
       </Text>
       <TextInput
+        ref={input}
         accessibilityLabel={label}
         value={normalizeAmountInput(value).replace(
           /\B(?=(\d{3})+(?!\d))/g,
@@ -43,10 +52,10 @@ export function SavingsAmountInput({
           minWidth: 0,
           paddingVertical: 6,
           color: colors.text,
-          fontSize: 26,
+          fontSize: 23,
           fontWeight: '700',
         }}
       />
-    </View>
+    </Pressable>
   );
 }

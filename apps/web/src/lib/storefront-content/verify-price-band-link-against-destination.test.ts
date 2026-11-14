@@ -62,6 +62,68 @@ describe('verifyPriceBandLinkAgainstDestination', () => {
     ).toEqual([links[1]]);
   });
 
+  it('keeps expansion-category price-band links when merchantCurrency is NGN and drops them when USD', () => {
+    const gamingPool = [
+      ...Array.from({ length: 2 }, (_, i) => ({
+        slug: `asus-${i}`,
+        name: `ASUS ROG ${i}`,
+        brand: 'ASUS',
+        price: 1_200_000,
+        category_slug: 'gaming-laptops',
+        product_key_specs: { chipset: 'Ryzen 7', ram_gb: 16, storage_gb: 512 },
+      })),
+      ...Array.from({ length: 2 }, (_, i) => ({
+        slug: `msi-${i}`,
+        name: `MSI Katana ${i}`,
+        brand: 'MSI',
+        price: 1_300_000,
+        category_slug: 'gaming-laptops',
+        product_key_specs: {
+          chipset: 'Intel i7',
+          ram_gb: 32,
+          storage_gb: 1024,
+        },
+      })),
+      ...Array.from({ length: 2 }, (_, i) => ({
+        slug: `lenovo-${i}`,
+        name: `Lenovo Legion ${i}`,
+        brand: 'Lenovo',
+        price: 1_400_000,
+        category_slug: 'gaming-laptops',
+        product_key_specs: {
+          chipset: 'Intel i9',
+          ram_gb: 32,
+          storage_gb: 2048,
+        },
+      })),
+    ];
+
+    const bandLink = {
+      href: 'https://store.test/gaming-laptops/best-under/under-1-5m',
+      label: 'Best Gaming Laptops Under ₦1,500,000',
+    };
+
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'gaming-laptops',
+        links: [bandLink],
+        compareProducts: gamingPool,
+        bandProducts: gamingPool,
+        merchantCurrency: 'NGN',
+      })
+    ).toEqual([bandLink]);
+
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'gaming-laptops',
+        links: [bandLink],
+        compareProducts: gamingPool,
+        bandProducts: gamingPool,
+        merchantCurrency: 'USD',
+      })
+    ).toEqual([]);
+  });
+
   it('derives band indexability from the normalized band pool when supplied', () => {
     const comparePool = [
       ...Array.from({ length: 3 }, (_, i) =>

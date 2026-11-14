@@ -1,0 +1,11 @@
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA auth; CREATE SCHEMA oxygen_private;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE TABLE public.oxygen_workflows(id uuid PRIMARY KEY,merchant_id uuid,customer_id uuid,order_id uuid,environment text,stage text,version int,updated_at timestamptz);
+CREATE TABLE public.customers(id uuid PRIMARY KEY,merchant_id uuid);
+CREATE TABLE public.orders(id uuid PRIMARY KEY,merchant_id uuid,customer_id uuid,total numeric,currency text,payment_method text,cancelled_at timestamptz,payment_status text);
+CREATE TABLE oxygen_private.runtime_bindings(merchant_id uuid,worker_user_id uuid,environment text,enabled boolean);
+CREATE TABLE oxygen_private.provider_states(workflow_id uuid PRIMARY KEY,state jsonb);
+CREATE TABLE oxygen_private.activation_trials(workflow_id uuid);
+CREATE TABLE oxygen_private.commands(workflow_id uuid,status text,command jsonb);
+CREATE TABLE oxygen_private.payment_recovery(workflow_id uuid,booking_reference uuid,action text,status text,result jsonb,expected_version int,completed_at timestamptz,created_at timestamptz,id uuid);

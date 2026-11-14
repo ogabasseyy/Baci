@@ -3,22 +3,31 @@ import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { shippingService } from '@/lib/shipping';
 import { normalizeNigerianQuoteReceiver } from '@/lib/shipping/normalize-nigerian-quote-receiver';
 import {
+  createQuoteReadCapability,
+  quoteReadCookieName,
+  readQuoteRequestCapability,
+} from '@/lib/shipping/quote-session-capability';
+import {
+  assertStorefrontQuoteStorage,
+  persistStorefrontShippingQuote,
+  QuoteStorageUnavailable,
+  resolveStorefrontQuoteSession,
+} from '@/lib/shipping/storefront-quote-attestation';
+import {
   MERCHANT_PROVIDER_CODE,
   type QuoteRequest,
 } from '@/lib/shipping/types';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { QuoteRequestSchema } from '@/schemas/shipping';
 import { postAdminOrderGiglQuote } from './admin-order-gigl-quote';
-import {
-  getMerchantRateQuotes,
-  type MerchantRateQuoteResult,
-} from './merchant-rate-quotes';
+import { loadPublicMerchantRates } from './load-public-merchant-rates';
 import { toPublicQuoteResponse } from './public-quote-response';
 import { resolveQuoteMerchantContext } from './quote-merchant-context';
 import {
   buildMerchantOnlyQuoteResponse,
   orchestrateQuoteSources,
 } from './quote-source-orchestration';
+import { readCachedShippingQuotes } from './read-cached-quotes';
 import { resolveQuoteSender } from './resolve-quote-sender';
 import { toShippingQuoteUpsert } from './shipping-quote-persistence';
 
@@ -65,7 +74,7 @@ export async function POST(request: NextRequest) {
       ),
     };
 
-    const supabase = createAdminClient();
+    const supabase = await createClient();
 
     const merchantContext = await resolveQuoteMerchantContext({
       data,
@@ -91,15 +100,15 @@ export async function POST(request: NextRequest) {
       merchantContext.merchantPayoutCurrency != null;
 
     const includeMerchantRateQuotes = data.supports_merchant_rates === true;
-    const merchantQuotesPromise = merchantContext.merchantId
-      ? getMerchantRateQuotes(supabase, {
-          merchantId: merchantContext.merchantId,
-          receiverCountryCode: data.receiver.countryCode,
-          receiverState: data.receiver.state,
-          merchantCurrency,
-          cartSubtotal: data.cart_subtotal,
-        })
-      : Promise.resolve<MerchantRateQuoteResult>({ quotes: [] });
+    const merchantQuotesPromise = loadPublicMerchantRates(
+      merchantContext.merchantId,
+      {
+        receiverCountryCode: data.receiver.countryCode,
+        receiverState: data.receiver.state,
+        merchantCurrency,
+        cartSubtotal: data.cart_subtotal,
+      }
+    );
 
     if (data.merchant_rates_only) {
       const result = await merchantQuotesPromise;
@@ -154,6 +163,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const requestedCapability = readQuoteRequestCapability(
+      request,
+      merchantContext.merchantId
+    );
+    const quoteSession = await resolveStorefrontQuoteSession(
+      supabase,
+      merchantContext.merchantId,
+      data.sessionId,
+      requestedCapability
+    );
     const quoteRequest: QuoteRequest = {
       merchantId: merchantContext.merchantId,
       sender: senderResult.sender,
@@ -164,35 +183,44 @@ export async function POST(request: NextRequest) {
         countryCode: data.receiver.countryCode,
       },
       items: data.items,
-      sessionId: data.sessionId || crypto.randomUUID(),
+      sessionId: quoteSession,
       shipmentType: data.shipmentType,
       deliveryPreference: data.deliveryPreference,
     };
 
     const merchantRateResult = await merchantQuotesPromise;
-    const response = await orchestrateQuoteSources({
+    const sourceResponse = await orchestrateQuoteSources({
       quoteRequest,
       merchantRateResult,
       merchantCurrency,
       merchantCountry,
       hasTrustedMerchantCurrencyContext,
       includeMerchantRateQuotes,
-      sessionId: data.sessionId,
-      getCarrierQuotes: (request, allowedProviderCodes) =>
-        shippingService.getQuotes(request, allowedProviderCodes),
+      sessionId: quoteSession,
+      getCarrierQuotes: async (request, allowedProviderCodes) => {
+        if (quoteRequest.merchantId && allowedProviderCodes?.length !== 0)
+          await assertStorefrontQuoteStorage(supabase, quoteRequest.merchantId);
+        return shippingService.getQuotes(request, allowedProviderCodes);
+      },
     });
+
+    const response = { ...sourceResponse, sessionId: quoteSession };
 
     const persistenceResults = await Promise.all(
       response.quotes.all
-        .filter((quote) => quote.provider !== MERCHANT_PROVIDER_CODE)
+        .filter(
+          (quote) =>
+            !!quoteRequest.merchantId &&
+            quote.provider !== MERCHANT_PROVIDER_CODE
+        )
         .map((quote) =>
-          supabase.from('shipping_quotes').upsert(
+          persistStorefrontShippingQuote(
+            supabase,
             toShippingQuoteUpsert(quote, {
               merchantId: quoteRequest.merchantId,
               sessionId: response.sessionId,
               quoteRequest,
-            }),
-            { onConflict: 'id' }
+            })
           )
         )
     );
@@ -210,8 +238,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(toPublicQuoteResponse(response));
+    const result = NextResponse.json(toPublicQuoteResponse(response));
+    result.headers.set('Cache-Control', 'no-store');
+    if (persistenceResults.length && quoteRequest.merchantId) {
+      const capability = createQuoteReadCapability(
+        quoteRequest.merchantId,
+        response.sessionId
+      );
+      result.headers.set('X-Baci-Quote-Read-Token', capability);
+      result.cookies.set(
+        quoteReadCookieName(quoteRequest.merchantId),
+        capability,
+        {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: request.nextUrl?.protocol === 'https:',
+          path: '/api/shipping/quotes',
+          maxAge: 300,
+        }
+      );
+    }
+    return result;
   } catch (error) {
+    if (error instanceof QuoteStorageUnavailable)
+      return NextResponse.json(
+        {
+          error: 'Carrier quotes temporarily unavailable',
+          code: 'QUOTE_STORAGE_UNAVAILABLE',
+        },
+        { status: 503 }
+      );
     console.error('Error getting shipping quotes:', error);
     return NextResponse.json(
       { error: 'Failed to get shipping quotes' },
@@ -225,76 +281,5 @@ export async function POST(request: NextRequest) {
 // =============================================================================
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
-
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: 'Session ID required' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createAdminClient();
-
-    const { data: quotes, error } = await supabase
-      .from('shipping_quotes')
-      .select(
-        'id, session_id, provider, service_tier, carrier_name, estimated_days, min_days, max_days, price, currency, pickup_included, insurance_included, is_station_pickup, station_name, station_address, provider_rate_id, expires_at'
-      )
-      .eq('session_id', sessionId)
-      .gt('expires_at', new Date().toISOString())
-      .order('price', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching quotes:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch quotes' },
-        { status: 500 }
-      );
-    }
-
-    if (!quotes || quotes.length === 0) {
-      return NextResponse.json(
-        { error: 'Quotes expired or not found' },
-        { status: 404 }
-      );
-    }
-
-    const transformedQuotes = quotes.map((q) => ({
-      id: q.id,
-      provider: q.provider,
-      serviceTier: q.service_tier,
-      carrierName: q.carrier_name,
-      displayName: q.carrier_name,
-      estimatedDays: q.estimated_days,
-      minDays: q.min_days,
-      maxDays: q.max_days,
-      price: q.price,
-      currency: q.currency,
-      pickupIncluded: q.pickup_included,
-      insuranceIncluded: q.insurance_included,
-      isStationPickup: q.is_station_pickup,
-      stationName: q.station_name,
-      stationAddress: q.station_address,
-      providerRateId: q.provider_rate_id,
-      expiresAt: new Date(q.expires_at),
-    }));
-
-    return NextResponse.json({
-      quotes: {
-        featured: transformedQuotes.slice(0, 3),
-        all: transformedQuotes,
-      },
-      sessionId,
-      expiresAt: quotes[0]?.expires_at,
-    });
-  } catch (error) {
-    console.error('Error fetching cached quotes:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch quotes' },
-      { status: 500 }
-    );
-  }
+  return await readCachedShippingQuotes(request);
 }

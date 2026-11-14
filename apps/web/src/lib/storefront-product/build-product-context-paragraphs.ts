@@ -56,8 +56,11 @@ function buildCategoryChecklist(categorySlug: string, categoryName: string) {
   return `For ${categoryName} products, review the exact model, condition, variant, package contents, compatibility notes, warranty terms and delivery requirements before checkout. Category pages can contain similar-looking items, so the structured specs and selected options should be used to confirm the final retail unit.`;
 }
 
-function buildAvailabilitySentence(stock: number | null | undefined) {
-  if (stock != null && stock <= 0) {
+function buildAvailabilitySentence(
+  stock: number | null | undefined,
+  manageStock?: boolean | null
+) {
+  if (manageStock !== false && stock != null && stock <= 0) {
     return 'Availability should be rechecked because this item may currently be out of stock.';
   }
 
@@ -149,7 +152,8 @@ export function buildProductContextParagraphs({
     `${productName} is listed by ${merchantName} in ${categoryLabel}, ${buildPricePhrase(
       displayPriceText
     )}. Use this product page to review ${conditionPhrase}, compare the exact item details, and verify practical purchase details before checkout. ${buildAvailabilitySentence(
-      currentProduct.stock
+      currentProduct.stock,
+      currentProduct.manage_stock
     )}`,
     `${buildComparisonSentence({
       categoryLabel,

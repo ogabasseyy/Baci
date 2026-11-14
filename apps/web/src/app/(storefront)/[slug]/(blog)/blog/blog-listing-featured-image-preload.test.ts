@@ -1,10 +1,13 @@
-import { preload } from 'react-dom';
+import { preconnect, prefetchDNS, preload } from 'react-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BLOG_LISTING_FEATURED_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/blog-media';
 import { preloadBlogListingFeaturedImage } from './blog-listing-featured-image-preload';
 
 vi.mock('server-only', () => ({}));
 
 vi.mock('react-dom', () => ({
+  preconnect: vi.fn(),
+  prefetchDNS: vi.fn(),
   preload: vi.fn(),
 }));
 
@@ -49,10 +52,13 @@ describe('preloadBlogListingFeaturedImage', () => {
     vi.clearAllMocks();
   });
 
-  it('preloads the AVIF tier the featured-story picture paints for CDN heroes', () => {
+  it('preconnects the CDN and preloads the AVIF tier the featured-story picture paints for CDN heroes', () => {
     preloadBlogListingFeaturedImage(
       'https://cdn.ogabassey.com/core-assets/blog/post/hero.jpg'
     );
+
+    expect(prefetchDNS).toHaveBeenCalledWith('https://cdn.ogabassey.com');
+    expect(preconnect).toHaveBeenCalledWith('https://cdn.ogabassey.com');
 
     // Explicit `format=avif` twin at the 750 preload width — never the
     // poisonable `format=auto` body (Cloudflare Free ignores Vary: Accept).
@@ -61,7 +67,7 @@ describe('preloadBlogListingFeaturedImage', () => {
       expect.objectContaining({
         as: 'image',
         fetchPriority: 'high',
-        imageSizes: '100vw',
+        imageSizes: BLOG_LISTING_FEATURED_IMAGE_SIZES,
         imageSrcSet: expect.stringContaining(
           'https://cdn.ogabassey.com/image/width=750,quality=50,format=avif/core-assets/blog/post/hero.jpg 750w'
         ),
@@ -78,12 +84,15 @@ describe('preloadBlogListingFeaturedImage', () => {
   it('preloads the decodable fallback (no AVIF twin) for root-relative blog images', () => {
     preloadBlogListingFeaturedImage('/uploads/blog/hero.jpg');
 
+    expect(prefetchDNS).not.toHaveBeenCalled();
+    expect(preconnect).not.toHaveBeenCalled();
+
     expect(preload).toHaveBeenCalledWith(
       '/uploads/blog/hero.jpg?w=750&q=50',
       expect.objectContaining({
         as: 'image',
         fetchPriority: 'high',
-        imageSizes: '100vw',
+        imageSizes: BLOG_LISTING_FEATURED_IMAGE_SIZES,
         imageSrcSet: expect.stringContaining('/uploads/blog/hero.jpg?w=640'),
       })
     );
@@ -97,6 +106,8 @@ describe('preloadBlogListingFeaturedImage', () => {
     preloadBlogListingFeaturedImage('/placeholder.png');
     preloadBlogListingFeaturedImage(undefined);
 
+    expect(prefetchDNS).not.toHaveBeenCalled();
+    expect(preconnect).not.toHaveBeenCalled();
     expect(preload).not.toHaveBeenCalled();
   });
 });

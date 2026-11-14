@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -8,6 +9,21 @@ import {
 } from '@/components/storefront/ogabassey/config/blog-media';
 
 vi.mock('server-only', () => ({}));
+
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    ...props
+  }: {
+    children: ReactNode;
+    href: string;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
 
 // Restore the REAL next/image getImageProps (the global vitest.setup mocks
 // next/image with only a `default` export) so both the rendered <picture> and
@@ -32,6 +48,7 @@ vi.mock('react-dom', async (importOriginal) => {
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { preloadOgabasseyBlogPostHeroResources } from './[postSlug]/blog-post-hero-resource-hints';
 import { preloadBlogListingFeaturedImage } from './blog-listing-featured-image-preload';
+import { BlogListingOgabasseyLcpHero } from './blog-listing-ogabassey-lcp-hero';
 
 const CDN_BLOG_IMAGE =
   'https://cdn.ogabassey.com/core-assets/blog/post/hero.jpg';
@@ -114,6 +131,18 @@ describe('OgaBassey blog image preload-vs-render parity', () => {
 
     // PRELOAD side: the resource hint the static blog-post shell emits.
     preloadOgabasseyBlogPostHeroResources(CDN_BLOG_IMAGE);
+    const { srcSet: preloadedAvifSrcSet, type } = getPreloadedAvifSrcSet();
+
+    expect(renderedAvifSrcSet).not.toBe('');
+    expect(renderedAvifSrcSet).toContain('format=avif');
+    expect(type).toBe('image/avif');
+    expect(preloadedAvifSrcSet).toBe(renderedAvifSrcSet);
+    expectNoPoisonableFormats(renderedAvifSrcSet, preloadedAvifSrcSet);
+  });
+
+  it('committed LCP hero component renders and preloads a byte-identical AVIF srcSet in initial HTML', () => {
+    const markup = renderToStaticMarkup(<BlogListingOgabasseyLcpHero />);
+    const renderedAvifSrcSet = extractAvifSourceSrcSet(markup);
     const { srcSet: preloadedAvifSrcSet, type } = getPreloadedAvifSrcSet();
 
     expect(renderedAvifSrcSet).not.toBe('');

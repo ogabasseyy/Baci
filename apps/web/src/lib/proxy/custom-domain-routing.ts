@@ -27,6 +27,7 @@ import {
 } from '@/lib/proxy/routing-policy';
 import { runStorefrontPreflight } from '@/lib/proxy/storefront-preflight';
 import { buildLegacyTermsAliasRedirectResponse } from '@/lib/proxy/terms-redirects';
+import { applyOwnedOxygenDocumentPolicy } from './oxygen-owned-document';
 
 function decorate(
   response: NextResponse,
@@ -58,7 +59,7 @@ function customHeaders(
 }
 
 /** Owns every validated custom-domain request, preserving the former branch order. */
-export async function runCustomDomainRouting(
+async function runCustomDomainRoutingInternal(
   request: NextRequest,
   pathname: string,
   hostname: string,
@@ -200,5 +201,29 @@ export async function runCustomDomainRouting(
     pathname,
     hostname,
     userAgent
+  );
+}
+
+export async function runCustomDomainRouting(
+  request: NextRequest,
+  pathname: string,
+  hostname: string,
+  userAgent: string,
+  context: CustomDomainContext
+): Promise<NextResponse> {
+  const response = await runCustomDomainRoutingInternal(
+    request,
+    pathname,
+    hostname,
+    userAgent,
+    context
+  );
+  return applyOwnedOxygenDocumentPolicy(
+    response,
+    request,
+    pathname,
+    hostname,
+    userAgent,
+    context.domainMerchantSlug
   );
 }

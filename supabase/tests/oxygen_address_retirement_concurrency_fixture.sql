@@ -1,0 +1,15 @@
+CREATE ROLE anon;
+CREATE ROLE authenticated;
+CREATE SCHEMA auth;
+CREATE SCHEMA oxygen_private;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE TABLE public.customers(id uuid PRIMARY KEY,merchant_id uuid,user_id uuid);
+CREATE TABLE public.orders(id uuid PRIMARY KEY,merchant_id uuid,customer_id uuid,payment_method text,payment_status text,cancelled_at timestamptz,currency text,total numeric);
+CREATE TABLE public.oxygen_workflows(id uuid PRIMARY KEY,order_id uuid,merchant_id uuid,customer_id uuid,stage text,version integer,environment text);
+CREATE TABLE oxygen_private.provider_states(workflow_id uuid,state jsonb);
+CREATE TABLE oxygen_private.commands(id uuid PRIMARY KEY,workflow_id uuid,idempotency_key uuid,expected_version integer,channel text,command jsonb,status text,created_at timestamptz,started_at timestamptz,completed_at timestamptz);
+INSERT INTO public.customers VALUES('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000003');
+INSERT INTO public.orders VALUES('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','oxygen','unpaid',NULL,'NGN',100);
+INSERT INTO public.oxygen_workflows VALUES('00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','booked',0,'staging');
+INSERT INTO oxygen_private.provider_states VALUES('00000000-0000-4000-8000-000000000005','{"bookingReference":"00000000-0000-4000-8000-000000000008","booking":{"status":"BOOKED"},"kyc":{"address_status":"NOT_DONE"}}');
+INSERT INTO oxygen_private.commands VALUES('00000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000007',0,'web','{"action":"submit_address"}','queued',now(),NULL,NULL);

@@ -65,6 +65,22 @@ describe('terms metadata', () => {
 
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/terms');
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/terms');
+    expect(metadata.robots).toEqual({ index: false, follow: false });
+  });
+
+  it('returns indexable robots metadata when terms content or template exists', async () => {
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+      business_name: 'Test Store',
+      logo_url: null,
+      slug: 'test-store',
+      pages: { terms: 'Terms content' },
+    } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'test-store' }),
+    });
+
+    expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 });
 

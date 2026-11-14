@@ -1,6 +1,7 @@
 import 'server-only';
 import { Client } from 'pg';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
+import { primaryDbLink } from './primary-db-link';
 import { PRIMARY_SAVINGS_PROVISIONING_STATEMENTS as statements } from './primary-savings-provisioning-store';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
 
@@ -40,22 +41,26 @@ export function createPrimarySavingsProvisioningExecutor(
       )
     )
       throw new Error('Savings provisioning database unavailable');
+    const link = primaryDbLink(config.login, config.port);
     const client = new Client({
       host: config.host,
       port: config.port,
       database: config.name,
-      user: config.login,
+      user: link.user,
       password: config.password,
-      ssl: { rejectUnauthorized: true, ca: config.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: config.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-primary-goal-wallet',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const result = await client.query<{
         database_name: string;
         login_name: string;

@@ -1,9 +1,11 @@
 import { render } from '@testing-library/react';
 import postcss, { type AnyNode } from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { OGABASSEY_DARK_TOKENS } from '@/components/storefront/ogabassey/dark-mode-tokens';
 import { OgabasseyHeaderCriticalStyle } from '@/components/storefront/ogabassey/storefront-header-critical-style';
 import { OgabasseyHomeCriticalShell } from './ogabassey/ogabassey-home-critical-shell';
 import { OgabasseyPublicationSafeHeroFallback } from './ogabassey/ogabassey-publication-safe-hero-fallback';
+import { readStorefrontFile } from './storefront-css-partition-read';
 import { StorefrontLcpCopyStyle } from './storefront-lcp-copy-style';
 
 describe('StorefrontLcpCopyStyle', () => {
@@ -116,5 +118,54 @@ describe('StorefrontLcpCopyStyle', () => {
     expect(css).toContain('[data-cwv-lcp-copy="blog"]');
     expect(css).toContain('.sr-only');
     expect(css).toContain('!important');
+  });
+
+  it('inlines OgaBassey dark-mode custom property overrides on first paint to prevent a white flash before deferred stylesheets load', () => {
+    render(<StorefrontLcpCopyStyle />);
+    const css =
+      document.querySelector('style[href="storefront-lcp-copy"]')
+        ?.textContent ??
+      document.querySelector('style')?.textContent ??
+      '';
+    const darkTokensCss = readStorefrontFile(
+      'storefront-ogabassey-dark-mode-tokens.css'
+    ).toLowerCase();
+
+    const expectedBg = OGABASSEY_DARK_TOKENS.background.toLowerCase();
+    const expectedFg = OGABASSEY_DARK_TOKENS.foreground.toLowerCase();
+    const expectedSecondary = OGABASSEY_DARK_TOKENS.secondary.toLowerCase();
+    const expectedCard = OGABASSEY_DARK_TOKENS.card.toLowerCase();
+    const expectedBorder = OGABASSEY_DARK_TOKENS.border.toLowerCase();
+
+    expect(css).toContain(`--storefront-dark-background: ${expectedBg};`);
+    expect(css).toContain(`--storefront-dark-secondary: ${expectedSecondary};`);
+    expect(css).toContain('@media (prefers-color-scheme: dark)');
+    expect(css).toContain(
+      'body:has(.storefront-variant-ogabassey.storefront-mode-system)'
+    );
+    expect(css).toContain(
+      '.storefront-ppr-static-shell:has([data-ogabassey-home-hero-reserve-fallback])'
+    );
+    expect(css).toContain(
+      '--store-background: var(--storefront-dark-background) !important;'
+    );
+    expect(css).toContain(
+      '--store-secondary: var(--storefront-dark-secondary) !important;'
+    );
+    expect(css).toContain(
+      '--ogabassey-surface: var(--storefront-dark-card) !important;'
+    );
+
+    for (const declaration of [
+      `--store-background: ${expectedBg} !important;`,
+      `--store-foreground: ${expectedFg} !important;`,
+      `--store-secondary: ${expectedSecondary} !important;`,
+      `--store-surface: ${expectedCard} !important;`,
+      `--ogabassey-surface: ${expectedCard} !important;`,
+      `--ogabassey-border: ${expectedBorder} !important;`,
+    ]) {
+      expect(css).toContain(declaration);
+      expect(darkTokensCss).toContain(declaration);
+    }
   });
 });

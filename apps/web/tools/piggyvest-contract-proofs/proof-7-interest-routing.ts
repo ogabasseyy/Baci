@@ -245,11 +245,15 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
     }
   }
 
-  // 3. Goal sub-wallets: own payout left unset (inheritance), and explicit.
+  // 3. Goal sub-wallets: the four routing variants, read at once and at 5 minutes.
   const owner: GoalOwner | null = customerId
-    ? { qa: qa7, customerId }
+    ? { qa: qa7, customerId, mainWalletId }
     : state.customerId
-      ? { qa: ctx.qa, customerId: state.customerId }
+      ? {
+          qa: ctx.qa,
+          customerId: state.customerId,
+          mainWalletId: state.mainWalletId,
+        }
       : null;
   if (owner && !customerId) {
     b.note(

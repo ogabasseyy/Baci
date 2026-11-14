@@ -63,6 +63,8 @@ export function DesktopCheckoutActions({
       >
         {isProcessing ? (
           <Loader2 className="animate-spin" />
+        ) : paymentMethod === 'oxygen' ? (
+          'Begin Process'
         ) : paymentMethod === 'invoice' ? (
           'Get a Proforma Invoice'
         ) : paymentMethod === 'payforme' ? (

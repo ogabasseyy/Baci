@@ -29,9 +29,6 @@ export async function resolveStorefrontPdpHardNotFound(
   if (!isStorefrontDocumentNavigation(request.method, request.headers)) {
     return null;
   }
-  // Param URLs should not become hard 404s, but redirectable legacy aliases
-  // should still canonicalize while preserving attribution/search params.
-  const hasSearchParams = request.nextUrl.search.length > 0;
 
   const routeType = getRouteType(pathname);
   if (routeType !== 'storefront') {
@@ -88,16 +85,13 @@ export async function resolveStorefrontPdpHardNotFound(
   // Confirmed-EMPTY hubs (anti-thin-page guard) get the same hard 404 as
   // missing PDPs: the page's own thin-hub notFound() only yields a PPR
   // soft-404 (200 + noindex shell). The verdict is the page's own criterion
-  // served by /api/internal/compare-hub-status, fails open on any uncertainty,
-  // and is skipped for param URLs — mirroring the PDP hasSearchParams rule —
-  // so a hub that gains eligible products serves 200 on the next clean crawl.
+  // served by /api/internal/compare-hub-status and fails open on any
+  // uncertainty so a hub that gains eligible products serves 200 on the next
+  // crawl.
   if (
     !isProductsFallbackPdp &&
     CATEGORY_LISTING_HUB_SEGMENTS.has(productSlug.toLowerCase())
   ) {
-    if (hasSearchParams) {
-      return null;
-    }
     const hubStatus = await resolveStorefrontCompareHubStatus({
       origin: request.nextUrl.origin,
       identifier,
@@ -138,7 +132,7 @@ export async function resolveStorefrontPdpHardNotFound(
     return NextResponse.redirect(redirectUrl, 308);
   }
 
-  if (resolution.kind !== 'missing' || hasSearchParams) {
+  if (resolution.kind !== 'missing') {
     return null;
   }
 

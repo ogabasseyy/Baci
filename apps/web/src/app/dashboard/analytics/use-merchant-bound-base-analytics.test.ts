@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Dispatch, SetStateAction } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';

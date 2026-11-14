@@ -206,4 +206,43 @@ describe('normalizeCategoryPageProducts', () => {
     const clientProjected = toClientCategoryPageProducts(normalized);
     expect(clientProjected[0]?.created_at).toBe('2026-10-30T12:00:00.000Z');
   });
+
+  it('projects normalized variant_model directly onto category products', () => {
+    const [skuMatrix] = normalizeCategoryPageProducts(
+      [
+        {
+          id: 'prod-sku',
+          name: 'Phone With Matrix',
+          slug: 'phone-with-matrix',
+          description: 'Phone',
+          price: 1000000,
+          condition: 'new',
+          stock: 3,
+          images: ['https://cdn.example.com/phone.png'],
+          categories: [{ name: 'Phones', slug: 'phones' }],
+          variant_model: 'sku_matrix',
+        },
+      ],
+      'phones'
+    );
+    expect(skuMatrix?.variant_model).toBe('sku_matrix');
+
+    const [legacy] = normalizeCategoryPageProducts(
+      [
+        {
+          id: 'prod-legacy',
+          name: 'Phone Legacy',
+          slug: 'phone-legacy',
+          description: 'Phone',
+          price: 900000,
+          condition: 'used',
+          stock: 2,
+          images: ['https://cdn.example.com/phone.png'],
+          categories: [{ name: 'Phones', slug: 'phones' }],
+        },
+      ],
+      'phones'
+    );
+    expect(legacy?.variant_model).toBe('legacy');
+  });
 });

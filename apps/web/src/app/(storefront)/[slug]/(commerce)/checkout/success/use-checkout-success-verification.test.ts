@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { CHECKOUT_FUNNEL_EVENTS } from '@baci/shared/contracts';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { useRouter } from 'next/navigation';

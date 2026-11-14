@@ -97,8 +97,9 @@ async function getToken(): Promise<string> {
   } catch (error) {
     // Pre-dispatch (Codex R103 P1): no provider request was sent,
     // so this is a known failure, not an ambiguous vend outcome.
-    // Match aborts by name across prototypes: fetch rejects with a
-    // DOMException, which is not an instanceof Error.
+    // Match aborts by name: in Node, fetch rejects with a DOMException,
+    // which is an Error. The DOMException check only matters for one from
+    // another realm (jsdom's is not an instanceof Error).
     if (
       (error instanceof Error || error instanceof DOMException) &&
       error.name === 'AbortError'

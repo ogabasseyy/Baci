@@ -1,0 +1,29 @@
+{
+  "pin": {
+    "format": "baci.runner-installation-pin/v1",
+    "toolchainDigest": "cd2c3ba6f25516f6d3dc13d5c9cbf64518d232d895b94a050416e2e42976f401",
+    "rootfs": {
+      "node24": "980ec874a38bac27f720d1614245dca42bc4f52b4ff0d1792cfe8ccc2b6cb90c",
+      "browser": "bd45c8505b951a74c1781506060bd1f3eac5d017c67fb7bc8cf1e81fa43481ce"
+    },
+    "runscDigest": "c771292129c7ff96e83c5074485e3d33cfc938652dc70682bb792a66842d4de2",
+    "versions": {
+      "compilerNode": "v24.21.0",
+      "captureNode": "v24.20.0",
+      "runsc": "release-20261019.0"
+    }
+  },
+  "inventory": {
+    "node24": {
+      "digest": "980ec874a38bac27f720d1614245dca42bc4f52b4ff0d1792cfe8ccc2b6cb90c",
+      "entries": 35380,
+      "bytes": 1163541361
+    },
+    "browser": {
+      "digest": "bd45c8505b951a74c1781506060bd1f3eac5d017c67fb7bc8cf1e81fa43481ce",
+      "entries": 37087,
+      "bytes": 2462318711
+    }
+  },
+  "scope": "local disposable runner observation; not production image provenance"
+}

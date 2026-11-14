@@ -28,6 +28,7 @@ export interface CheckoutOrderErrorData {
 
 export interface CheckoutOrderResponse {
   order: CheckoutPaymentOrder;
+  idempotency?: { replayed?: boolean };
   wallet?: CheckoutWalletRedemption | null;
   amountDueToGateway?: number;
 }
@@ -53,6 +54,7 @@ export interface SubmitCheckoutOrderOptions {
 
 export interface SubmittedCheckoutOrder {
   order: CheckoutPaymentOrder;
+  freshOrder?: true;
   wallet: CheckoutWalletRedemption | null;
   amountDueToGateway: number;
   redvaultSummary?: RedvaultQuoteSummary;
@@ -210,5 +212,10 @@ export async function submitCheckoutOrder({
     order: result.order,
     wallet: result.wallet ?? null,
     amountDueToGateway: result.amountDueToGateway ?? total,
+    ...(response.status === 201 &&
+    response.headers.get('x-idempotency-replayed') !== 'true' &&
+    result.idempotency?.replayed !== true
+      ? { freshOrder: true as const }
+      : {}),
   };
 }

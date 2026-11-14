@@ -10,6 +10,7 @@ describe('emptyScenarioState', () => {
       mainWalletId: null,
       mainWalletBasis: 'none',
       goalWalletId: null,
+      houseWalletId: null,
       wallets: [],
       authorized: new Set(),
       notes: [],

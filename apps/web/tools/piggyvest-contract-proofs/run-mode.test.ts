@@ -206,7 +206,7 @@ describe('parseRunConfig: inherited object keys are never modes', () => {
 describe('parseRunConfig: business payout wallet', () => {
   const base = ['--live-sandbox-mutations', '--allowlist', 'a'];
   const BUSINESS = 'PVB_PROOF_BUSINESS_WALLET_ID';
-  it('reads the business sandbox wallet id from the environment, mutation mode only', () => {
+  it('reads the business sandbox wallet id from the environment in live modes only', () => {
     const id = '01M2TBUSINESSWALLET0000001';
     expect(
       parseRunConfig(base, { ...LIVE_ENV, [BUSINESS]: id }).businessWalletId
@@ -217,7 +217,7 @@ describe('parseRunConfig: business payout wallet', () => {
         ...LIVE_ENV,
         [BUSINESS]: id,
       }).businessWalletId
-    ).toBeNull();
+    ).toBe(id);
     expect(parseRunConfig([], { [BUSINESS]: id }).businessWalletId).toBeNull();
   });
 

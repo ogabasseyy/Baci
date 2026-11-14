@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import type { z } from 'zod';
 import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wallet-bank-inbox';
+import { primaryDbLink } from './primary-db-link';
 import { readPrimaryEngineReady } from './primary-wallet-engine-ready';
 
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
@@ -45,25 +46,26 @@ export function createPrimaryWalletBankInboxStore(configuration: unknown) {
         : action === 'enqueue'
     )
       throw new Error('Primary bank inbox capability unavailable');
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,
       database: config.database.name,
-      user: config.database.login,
+      user: link.user,
       password: config.database.password,
       ssl: {
         rejectUnauthorized: true,
         ca: config.database.certificateAuthority,
+        ...link.tls,
       },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: `baci-primary-bank-${intake ? 'intake' : 'worker'}`,
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       // No validity-against-deadline pin: intake and worker drain
       // existing mappings past the deposit deadline, so role validity
       // must cover the drain window (extended operationally at

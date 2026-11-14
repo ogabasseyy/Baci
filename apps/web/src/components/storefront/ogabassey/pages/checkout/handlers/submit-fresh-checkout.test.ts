@@ -58,6 +58,12 @@ describe('submitFreshCheckout', () => {
     vi.mocked(submitRedvaultPreparedOrder).mockResolvedValue(false);
   });
 
+  it('passes the lifecycle freshness proof into the dispatch context', async () => {
+    vi.mocked(runCheckoutOrderLifecycle).mockResolvedValue({ ...paymentReady, freshOrder: true } as never);
+    await submitFreshCheckout(options());
+    expect(continueCheckoutPayment).toHaveBeenCalledWith(expect.objectContaining({ dispatch: expect.objectContaining({ freshOrder: true }) }));
+  });
+
   it('stops after a prepared REDVAULT order handles the submit', async () => {
     vi.mocked(submitRedvaultPreparedOrder).mockResolvedValue(true);
 

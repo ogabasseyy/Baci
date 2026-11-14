@@ -1,47 +1,22 @@
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { getCachedMerchant } from '@/lib/cached-data';
-import CheckoutPage from './page';
+import { expect, it, vi } from 'vitest';
 
-const pending = new Promise<never>(() => {});
-const state = vi.hoisted(() => ({ suspend: false }));
-vi.mock('@/lib/cached-data', () => ({
-  getCachedMerchant: vi.fn(),
-  getCachedMerchantByDomain: vi.fn(),
-}));
-vi.mock('@/components/checkout-theme-provider', () => ({
-  CheckoutThemeProvider: ({ children }: { children: ReactNode }) => children,
-}));
-vi.mock('@/components/storefront/new-template', () => ({
-  NewTemplateCheckoutPage: () => <p>New checkout</p>,
-}));
-vi.mock('@/components/storefront/ogabassey/pages/checkout-page', () => ({
-  CheckoutPage: () => {
-    if (state.suspend) throw pending;
-    return <p>Guest checkout</p>;
+vi.mock('./checkout-content', () => ({
+  CheckoutContent: () => {
+    throw new Promise(() => {});
   },
 }));
-vi.mock(
-  '@/components/storefront/ogabassey/pages/checkout/components/CheckoutCartCapacityGate',
-  () => ({
-    CheckoutCartCapacityGate: ({ children }: { children: ReactNode }) =>
-      children,
-  })
-);
-beforeEach(() => {
-  state.suspend = false;
-  vi.mocked(getCachedMerchant).mockResolvedValue({
-    id: 'merchant',
-    template_id: 'ogabassey',
-  } as Awaited<ReturnType<typeof getCachedMerchant>>);
-});
-it('renders the guest checkout for the resolved merchant', async () => {
-  render(await CheckoutPage({ params: Promise.resolve({ slug: 'shop' }) }));
-  expect(screen.getByText('Guest checkout')).toBeVisible();
-});
-it('keeps query-driven checkout suspension inside an explicit loading boundary', async () => {
-  state.suspend = true;
-  render(await CheckoutPage({ params: Promise.resolve({ slug: 'shop' }) }));
-  expect(screen.getByRole('status')).toHaveTextContent('Loading checkout');
+
+import CheckoutPage from './page';
+
+it('streams a loading placeholder while checkout route data is pending', () => {
+  render(<CheckoutPage params={new Promise(() => {})} />);
+  const status = screen.getByRole('status', { name: 'Loading checkout' });
+  expect(status).toHaveClass('ogabassey-checkout-page');
+  expect(screen.getByText('Secure Checkout')).toBeInTheDocument();
+  expect(screen.getByText('Contact Information')).toBeInTheDocument();
+  expect(screen.getByText('Delivery Method')).toBeInTheDocument();
+  expect(screen.getByText('Order Summary')).toBeInTheDocument();
+  expect(screen.queryByText('Loading checkout…')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });

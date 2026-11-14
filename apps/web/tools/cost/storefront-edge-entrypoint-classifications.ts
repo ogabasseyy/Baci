@@ -36,8 +36,13 @@ const RELEASE_ENTRYPOINTS = [
 ] as const;
 
 const DYNAMIC_ENTRYPOINTS = [
+  // Full-code profiles require the current trusted origin/runtime composition.
+  '(catalog)/(listing)/collections/[handle]/page.tsx',
+  '(content)/pages/[...experiencePath]/page.tsx',
   '(blog)/blog/[...catchAll]/route.ts',
+  '(blog)/blog/feed.xml/route.ts',
   '(blog)/blog/news-sitemap.xml/route.ts',
+  '(blog)/blog/rss.xml/route.ts',
   'sitemap/[id]/route.ts',
   '(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx',
   '(catalog)/(listing)/search/page.tsx',
@@ -54,6 +59,7 @@ const DYNAMIC_ENTRYPOINTS = [
   '(content)/pages/rewards/page.tsx',
   '(customer)/account/addresses/page.tsx',
   '(customer)/account/callback/route.ts',
+  '(customer)/account/checkout-return/page.tsx',
   '(customer)/account/login/page.tsx',
   '(customer)/account/orders/[orderId]/insurance/page.tsx',
   '(customer)/account/orders/[orderId]/page.tsx',

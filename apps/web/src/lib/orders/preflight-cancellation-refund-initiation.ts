@@ -90,10 +90,16 @@ export async function preflightCancellationRefundInitiation({
       auditBlockedLegIds.has(transaction.id) &&
       !refundedPaymentIds.has(transaction.id)
   );
+  // A "cancel only" order is refunded by the merchant outside Baci: a
+  // recorded manual refund can requeue this step, but the persisted mode
+  // must keep every uncovered leg off the provider (verification of
+  // recorded claims below still runs).
+  const manualRefundOnly = order.cancellation_refund_mode === 'manual';
   // Legs carrying manual rows never initiate: merchant-attested money
   // plus a provider refund would double-pay the customer.
   const initiationTransactions = transactions.filter(
     (transaction) =>
+      !manualRefundOnly &&
       !mismatchedIds.has(transaction.id) &&
       !auditBlockedLegIds.has(transaction.id) &&
       !manualLinkedLegIds.has(transaction.id)
@@ -171,6 +177,7 @@ export async function preflightCancellationRefundInitiation({
     ): transaction is GatewayPaymentTransaction & {
       gateway_reference: string;
     } =>
+      !manualRefundOnly &&
       normalizePaymentGateway(transaction.gateway) === 'PAYSTACK' &&
       transaction.gateway_reference !== null &&
       transaction.gateway_reference !== ''

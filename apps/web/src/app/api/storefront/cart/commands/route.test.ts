@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
-import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import {
+  __resetCartMerchantLookupCacheForTesting,
+  __resetCartQuotaStoreForTesting,
+} from '@/lib/cart/request-context';
 import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
   CartSessionConfigError,
@@ -134,6 +137,7 @@ const savedSecret = process.env.CART_SESSION_SECRET;
 beforeEach(() => {
   vi.clearAllMocks();
   __resetCartQuotaStoreForTesting();
+  __resetCartMerchantLookupCacheForTesting();
   mocks.alias = null;
   mocks.capturedPrincipal = null;
   mocks.cartError = null;
@@ -463,6 +467,9 @@ describe('POST /api/storefront/cart/commands', () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^csrf;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     expect((await response.json()).code).toBe('forbidden');
   });
 

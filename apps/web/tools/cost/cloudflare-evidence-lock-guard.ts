@@ -1,23 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, readFile, rm } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
-
-type GuardRecord = Readonly<{
-  pid: number;
-  processStartTime: string;
-  token: string;
-}>;
-type OwnerRecordHandle = Readonly<{
-  writeFile(value: string): Promise<void>;
-  sync(): Promise<void>;
-  close(): Promise<void>;
-}>;
-type OwnerRecordIo = Readonly<{
-  open(path: string, flags: number, mode: number): Promise<OwnerRecordHandle>;
-  remove(path: string): Promise<void>;
-}>;
+import {
+  type GuardRecord,
+  type OwnerRecordIo,
+  ownerRecordIo,
+  writeOwnerRecord,
+} from './cloudflare-evidence-owner-record';
 
 const GUARD_TIMEOUT_MS = 60_000;
 const guardPath = (path: string) => `${path}.reclaim-guard`;
@@ -72,39 +62,6 @@ function isProcessLive(record: GuardRecord) {
   }
   const observed = processStartTime(record.pid);
   return observed === undefined || observed === record.processStartTime;
-}
-
-const ownerRecordIo: OwnerRecordIo = {
-  open,
-  remove: (path) => rm(path, { force: true }),
-};
-
-async function writeOwnerRecord(
-  path: string,
-  record: GuardRecord,
-  io: OwnerRecordIo
-) {
-  let handle: OwnerRecordHandle | undefined;
-  try {
-    handle = await io.open(
-      path,
-      constants.O_WRONLY |
-        constants.O_CREAT |
-        constants.O_EXCL |
-        constants.O_NOFOLLOW,
-      0o600
-    );
-    await handle.writeFile(`${JSON.stringify(record)}\n`);
-    await handle.sync();
-    await handle.close();
-    handle = undefined;
-  } catch (error) {
-    if (handle) {
-      await handle.close().catch(() => undefined);
-      await io.remove(path).catch(() => undefined);
-    }
-    throw error;
-  }
 }
 
 function isPidLive(pid: number) {

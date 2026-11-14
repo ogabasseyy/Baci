@@ -79,10 +79,12 @@ vi.mock('@/components/storefront/search-autocomplete', () => ({
     value,
     onChange,
     onSelectProduct,
+    onSubmitSearch,
   }: {
     value: string;
     onChange: (value: string) => void;
     onSelectProduct: (url: string) => void;
+    onSubmitSearch: (query: string) => void;
   }) => (
     <div>
       <input
@@ -90,6 +92,7 @@ vi.mock('@/components/storefront/search-autocomplete', () => ({
         aria-label="Search products"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter') onSubmitSearch(value); }}
       />
       <button
         type="button"
@@ -125,7 +128,13 @@ vi.mock('../components/empty-state', () => ({
   EmptyState: () => null,
 }));
 
+vi.mock('next/headers', () => ({ headers: async () => new Headers([['host', 'ogabassey.com'], ['x-pathname', '/search']]) }));
+vi.mock('@/lib/cached-data', () => ({ getRequestScopedMerchant: vi.fn(async () => ({ id: 'merchant-1', slug: 'ogabassey', template_id: 'ogabassey', business_name: 'Ogabassey', payout_currency: 'NGN' })) }));
+vi.mock('@/lib/storefront-search', () => ({ getStorefrontSearchProducts: vi.fn(async () => ({ count: 0, products: [], productIds: [], query: 'iphone' })) }));
+vi.mock('../components/GoogleAdManager', () => ({ GoogleAdManager: () => null }));
 import { OgabasseyNavbar } from './navbar';
+import { OgabasseyLayoutChrome } from '../storefront-layout-chrome';
+import { SearchPageContent } from '@/app/(storefront)/[slug]/(catalog)/(listing)/search/search-page-content';
 
 describe('OgabasseyNavbar', () => {
   beforeEach(() => {
@@ -137,6 +146,20 @@ describe('OgabasseyNavbar', () => {
     mocks.setIsCartOpen.mockClear();
   });
 
+
+  it('submits a new navbar search from the results page without a duplicate editor', async () => {
+    mocks.pathname = '/ogabassey/search';
+    const result = await SearchPageContent({ params: Promise.resolve({ slug: 'ogabassey' }), searchParams: Promise.resolve({ q: 'iphone' }) });
+    const user = userEvent.setup();
+    render(<><OgabasseyLayoutChrome section="header" basePath="/ogabassey" />{result}</>);
+    expect(screen.queryByRole('form', { name: 'Edit search' })).toBeNull();
+    await user.click(screen.getByRole('searchbox', { name: /search products/i }));
+    await screen.findByRole('button', { name: /select product/i });
+    const input = screen.getByRole('searchbox', { name: /search products/i });
+    await user.clear(input);
+    await user.type(input, 'samsung{enter}');
+    expect(mocks.push).toHaveBeenCalledWith('/ogabassey/search?q=samsung');
+  });
 
   it('pushes store-prefixed product routes from search selection', async () => {
     const user = userEvent.setup();

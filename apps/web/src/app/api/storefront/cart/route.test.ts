@@ -55,6 +55,10 @@ describe('GET /api/storefront/cart', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('set-cookie')).toBeNull();
+    // Step durations only, in request order, for reading latency live.
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^auth-features;dur=[\d.]+, auth;dur=[\d.]+, quota;dur=[\d.]+, cart;dur=[\d.]+, grant;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     const payload = await response.json();
     expect(payload.cart.cartId).toBe(CART_ID);
     expect(payload.cart.lines).toHaveLength(1);
@@ -65,6 +69,36 @@ describe('GET /api/storefront/cart', () => {
       principalId: 'guest-a1',
       scope: 'session',
     });
+  });
+
+  it('reuses the store lookup on the next read from the same instance', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const headers = { cookie: cartCookie(sessionProof()) };
+    expect((await getCart({ headers })).status).toBe(200);
+
+    // The lookup would now fail; a remembered published store still serves.
+    mocks.merchantRows = [];
+    expect((await getCart({ headers })).status).toBe(200);
+  });
+
+  it('never remembers a store that failed to resolve', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const headers = { cookie: cartCookie(sessionProof()) };
+    mocks.merchantRows = [];
+    expect((await getCart({ headers })).status).not.toBe(200);
+
+    mocks.merchantRows = [merchantRow(MERCHANT)];
+    expect((await getCart({ headers })).status).toBe(200);
   });
 
   it('accepts a native Bearer session proof', async () => {
@@ -89,6 +123,10 @@ describe('GET /api/storefront/cart', () => {
     });
 
     expect(response.status).toBe(404);
+    // Failures report the steps that ran, so slow errors can be diagnosed.
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^auth-features;dur=[\d.]+, auth;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     expect((await response.json()).code).toBe('not_found');
     expect(mocks.capturedPrincipal).toBeNull();
   });
@@ -96,6 +134,7 @@ describe('GET /api/storefront/cart', () => {
   it('rejects missing proofs and foreign merchants', async () => {
     const missing = await getCart({ headers: {} });
     expect(missing.status).toBe(401);
+    expect(missing.headers.get('Server-Timing')).toMatch(/total;dur=[\d.]+$/);
     expect((await missing.json()).code).toBe('missing_proof');
 
     const foreign = await getCart({

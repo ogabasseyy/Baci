@@ -43,9 +43,9 @@ SELECT pg_temp.assert_true((SELECT wallet.available_balance=saved.available_bala
   FROM public.customer_wallets wallet CROSS JOIN production_cash_before saved),'Paid interest is never ordinary wallet cash');
 SELECT pg_temp.assert_true((SELECT count(*)=1 FROM savings_notifications.events WHERE goal_id=pg_temp.goal_id(45)
   AND type='goal_completed' AND voided_at IS NULL),'Production funded completion enqueues parent completion notice');
-SELECT pg_temp.assert_true((SELECT count(*)=1 AND bool_and(body='Your savings grew by ₦30.00 in paid interest. Keep going!')
+SELECT pg_temp.assert_true((SELECT count(*)=1 AND bool_and(position('₦30.00' IN body)>0)
   FROM savings_notifications.events WHERE goal_id=pg_temp.goal_id(45) AND type='interest_credited' AND voided_at IS NULL),
-  'Production net payout enqueues one savings-only interest notice');
+  'Production net payout on a completed goal enqueues one interest notice carrying the exact net amount (copy wording is pinned by the interest-copy replay suites)');
 
 SET ROLE authenticated;
 SELECT pg_temp.assert_true((public.get_customer_savings_earnings('00000000-0000-4000-8000-000000000001',true)

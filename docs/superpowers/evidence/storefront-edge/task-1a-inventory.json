@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "8ef4106db2cdc5dc39ba5e71fafd58c109f4b08f",
+  "originMainSha": "25b33169ddf1bef3d40ea4268223e6e5fa5ceda8",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "1b9725a77c50b31ef08835bae461cf9c33268908d83e320de15d237c00dacbfa",
-  "routingProxyInputSha256": "12cf8d3cbaa0f2e0cfa71ca2f24c410e895ff38378ec99870ab213187ac4dd71",
+  "routeTreeSha256": "d64602eb1d41899946e4e661241b50f82fb2aa97327ed61870d0ce5bb6e9f2f3",
+  "routingProxyInputSha256": "753dc9593e2b0faac0ed4842c354a81a9605bef97407ab8fc921aa47b3d50d67",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -531,6 +531,311 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/activation-trial/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/activation-trial",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/activation-trial/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/approval-code/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/approval-code",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/approval-code/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/attempts/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/attempts",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/attempts/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/availability/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/availability",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/availability/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/bank-details/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/bank-details",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/bank-details/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/chat/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/chat",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/chat/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/draft/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "PUT"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/draft",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/draft/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/host-observation/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/host-observation",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/host-observation/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/order-plan/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/order-plan",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/order-plan/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/phone-handoff/redeem/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/phone-handoff/redeem",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/phone-handoff/redeem/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/plans/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/plans",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/plans/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/plans/accept/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/plans/accept",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/plans/accept/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/plans/quote/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/plans/quote",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/plans/quote/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/reconcile/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/reconcile",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/reconcile/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/recovery/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/recovery",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/recovery/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/residential-context/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/residential-context",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/residential-context/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/storefront-availability/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/storefront-availability",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/webhook/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/webhook",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/webhook/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/actions/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/actions",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/actions/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/address-recovery/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/address-recovery",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/address-recovery/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/phone-handoff/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/phone-handoff",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/phone-handoff/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/phone-recovery/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/phone-recovery",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/phone-recovery/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/selfie-status/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/selfie-status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/selfie-status/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:payments/status/route.ts",
       "methods": [
         "GET",
@@ -938,6 +1243,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/continuity/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/continuity",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/continuity/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/cart/handoff/route.ts",
       "methods": [
         "GET",
@@ -998,6 +1316,42 @@
       "routePattern": "/api/storefront/cart/session/revoke",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/cart/session/revoke/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/authorize/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/authorize",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/authorize/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/challenge/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/challenge",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/challenge/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/verify/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/verify",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1146,6 +1500,44 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-cancel/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-cancel",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-cancel/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-complete/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-complete",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-complete/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-pin/verify/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-pin/verify",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-pin/verify/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/customer/savings/goals/route.ts",
       "methods": [
         "GET",
@@ -1244,6 +1636,18 @@
       "routePattern": "/api/storefront/customer/savings/primary-provisioning",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/primary-provisioning/setup/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/primary-provisioning/setup",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/setup/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1438,6 +1842,55 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/change/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/change",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/change/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/reset/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/reset",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/reset/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/set/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/set",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/set/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/status/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/status/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/discount/validate/route.ts",
       "methods": [
         "OPTIONS",
@@ -1447,6 +1900,44 @@
       "routePattern": "/api/storefront/discount/validate",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/discount/validate/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/experience/catalog/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/experience/catalog",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/experience/catalog/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/experience/launch/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/experience/launch",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/experience/launch/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/experience/state/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/experience/state",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/experience/state/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -5346,6 +5837,29 @@
     },
     {
       "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts:options",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "reason": "rolling_news_sitemap_requires_origin",
       "id": "storefront:(blog)/blog/news-sitemap.xml/route.ts",
       "methods": [
@@ -5366,6 +5880,29 @@
       "routePattern": "/blog/news-sitemap.xml",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/news-sitemap.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts:options",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts"
     },
     {
       "decision": "edge_release",
@@ -5548,6 +6085,18 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(customer)/account/checkout-return/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/account/checkout-return",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(customer)/account/checkout-return/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(customer)/account/login/page.tsx",
       "methods": [
         "GET",
@@ -5695,6 +6244,18 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/collections/[handle]/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/collections/{handle}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/collections/[handle]/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(catalog)/(pdp)/product/[productSlug]/page.tsx",
       "methods": [
         "GET",
@@ -5795,6 +6356,18 @@
       "routePattern": "/blog/{*catchAll}",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/[...catchAll]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(content)/pages/[...experiencePath]/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/pages/{*experiencePath}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(content)/pages/[...experiencePath]/page.tsx"
     },
     {
       "decision": "origin_dynamic",
@@ -6853,6 +7426,37 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts:options:slug-prefixed",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/{storefrontIdentifier}/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "storefront:(blog)/blog/news-sitemap.xml/route.ts:options:slug-prefixed",
       "methods": [
         "OPTIONS"
@@ -6877,6 +7481,37 @@
       "routePattern": "/{storefrontIdentifier}/blog/news-sitemap.xml",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/news-sitemap.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts:options:slug-prefixed",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/{storefrontIdentifier}/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts",
       "hostCondition": {
         "hostKind": "platform_root_domain",
         "precedence": "before_path_decision"
@@ -7123,6 +7758,22 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(customer)/account/checkout-return/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/account/checkout-return",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(customer)/account/checkout-return/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(customer)/account/login/page.tsx:slug-prefixed",
       "methods": [
         "GET",
@@ -7269,6 +7920,22 @@
       "routePattern": "/{storefrontIdentifier}/blog/{postSlug}",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/[postSlug]/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/collections/[handle]/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/collections/{handle}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/collections/[handle]/page.tsx",
       "hostCondition": {
         "hostKind": "platform_root_domain",
         "precedence": "before_path_decision"
@@ -7468,6 +8135,22 @@
       "routePattern": "/{storefrontIdentifier}/blog/{*catchAll}",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/[...catchAll]/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(content)/pages/[...experiencePath]/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/pages/{*experiencePath}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(content)/pages/[...experiencePath]/page.tsx",
       "hostCondition": {
         "hostKind": "platform_root_domain",
         "precedence": "before_path_decision"
@@ -8648,5 +9331,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "ae630f7e127b680c8b4e447748d03c54334095ef0b71c16b37db364068f61179"
+  "inventorySha256": "23f369462a5ea1bceb3793ce45fcce69cfc230351d729a68034152537467a354"
 }

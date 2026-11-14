@@ -4,6 +4,7 @@ const mockCookies = vi.fn();
 const mockHeaders = vi.fn();
 const mockCreateClient = vi.fn();
 const mockSelect = vi.fn();
+const mockEq = vi.fn();
 const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
@@ -44,8 +45,12 @@ describe('root sitemap', () => {
       order: mockOrder,
     });
 
-    mockSelect.mockReturnValue({
+    mockEq.mockReturnValue({
       not: mockNot,
+    });
+
+    mockSelect.mockReturnValue({
+      eq: mockEq,
     });
 
     mockCreateClient.mockReturnValue({
@@ -101,6 +106,11 @@ describe('root sitemap', () => {
 
     const result = await sitemap();
 
+    expect(mockSelect).toHaveBeenCalledWith(
+      'slug, updated_at, domains(domain, status, domain_type, is_primary)'
+    );
+    expect(mockEq).toHaveBeenCalledWith('is_published', true);
+    expect(mockNot).toHaveBeenCalledWith('slug', 'is', null);
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

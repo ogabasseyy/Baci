@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { calculateCheckoutSession } from '@/lib/agentic/checkout';
+import { computeAgenticOrderTax } from '@/lib/agentic/checkout-order-tax';
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 const VARIANT_ID = '22222222-2222-4222-8222-222222222222';
@@ -9,6 +10,7 @@ function createQueryChain(data: unknown[], error: unknown = null) {
   const chain = {
     eq: vi.fn(),
     in: vi.fn(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: data[0] ?? null, error }),
     returns: vi.fn().mockResolvedValue({ data: error ? null : data, error }),
     select: vi.fn(),
   };
@@ -18,9 +20,17 @@ function createQueryChain(data: unknown[], error: unknown = null) {
   return chain;
 }
 
-function createCheckoutSupabase(productQuery: unknown, variantQuery: unknown) {
+function createCheckoutSupabase(
+  productQuery: unknown,
+  variantQuery: unknown,
+  vatRegistrationStatus = 'not_registered'
+) {
+  const merchantQuery = createQueryChain([
+    { vat_registration_status: vatRegistrationStatus },
+  ]);
   return {
     from: vi.fn((table: string) => {
+      if (table === 'merchants') return merchantQuery;
       if (table === 'products') {
         return productQuery;
       }
@@ -29,6 +39,7 @@ function createCheckoutSupabase(productQuery: unknown, variantQuery: unknown) {
       }
       throw new Error(`Unexpected table ${table}`);
     }),
+    rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
   };
 }
 
@@ -88,6 +99,145 @@ describe('calculateCheckoutSession', () => {
     );
 
     expect(result.messages).toEqual([]);
+  });
+
+  it('includes registered VAT and selected shipping in the authorized checkout total', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 1.05,
+        stock: 0,
+        stock_quantity: 0,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ]);
+    const variantQuery = createQueryChain([]);
+    const supabase = createCheckoutSupabase(
+      productQuery,
+      variantQuery,
+      'registered'
+    );
+    const result = await calculateCheckoutSession(
+      supabase as never,
+      [{ id: PRODUCT_ID, quantity: 3 }],
+      'shipping_standard',
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems[0]?.tax).toBe(0.24);
+    expect(result.totals).toEqual([
+      {
+        type: 'items_base_amount',
+        display_text: 'Items Subtotal',
+        amount: 3.15,
+      },
+      { type: 'fulfillment', display_text: 'Shipping', amount: 2500 },
+      { type: 'tax', display_text: 'Tax', amount: 0.24 },
+      { type: 'total', display_text: 'Total Due', amount: 2503.39 },
+    ]);
+    const dispatchedTax = await computeAgenticOrderTax({
+      items: result.lineItems.map((line) => ({
+        product_id: line.item.product_id,
+        quantity: line.item.quantity,
+        variant_id: line.item.variant_id,
+      })),
+      merchantId: MERCHANT_ID,
+      supabase: supabase as never,
+    });
+    expect(dispatchedTax).toBe(
+      result.totals.find((total) => total.type === 'tax')?.amount
+    );
+  });
+
+  it('keeps VAT at zero for non-registered merchants', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 100,
+        stock: 0,
+        stock_quantity: 0,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ]);
+    const result = await calculateCheckoutSession(
+      createCheckoutSupabase(productQuery, createQueryChain([])) as never,
+      [{ id: PRODUCT_ID, quantity: 2 }],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems[0]?.tax).toBe(0);
+    expect(result.totals.find((total) => total.type === 'tax')?.amount).toBe(0);
+    expect(result.totals.find((total) => total.type === 'total')?.amount).toBe(
+      200
+    );
+  });
+
+  it('uses the parent product VAT category for variant checkout lines', async () => {
+    const variantQuery = createQueryChain([
+      {
+        id: VARIANT_ID,
+        merchant_id: MERCHANT_ID,
+        product_id: PRODUCT_ID,
+        price_override: 1.05,
+        stock_quantity: 0,
+        attributes: { color: 'Black' },
+        product: {
+          name: 'Phone',
+          price: 2,
+          manage_stock: false,
+          vat_category_code: 'Z',
+          vat_rate: 20,
+        },
+      },
+    ]);
+    const result = await calculateCheckoutSession(
+      createCheckoutSupabase(
+        createQueryChain([]),
+        variantQuery,
+        'registered'
+      ) as never,
+      [{ id: VARIANT_ID, quantity: 3 }],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems[0]?.base_amount).toBe(3.15);
+    expect(result.lineItems[0]?.tax).toBe(0);
+    expect(result.totals.find((total) => total.type === 'tax')?.amount).toBe(0);
+    expect(result.totals.find((total) => total.type === 'total')?.amount).toBe(
+      3.15
+    );
+    const dispatchedTax = await computeAgenticOrderTax({
+      items: result.lineItems.map((line) => ({
+        product_id: line.item.product_id,
+        variant_id: line.item.variant_id,
+        quantity: line.item.quantity,
+      })),
+      merchantId: MERCHANT_ID,
+      supabase: createCheckoutSupabase(
+        createQueryChain([
+          {
+            id: PRODUCT_ID,
+            price: 2,
+            vat_category_code: 'Z',
+            vat_rate: 20,
+          },
+        ]),
+        createQueryChain([]),
+        'registered'
+      ) as never,
+    });
+    expect(dispatchedTax).toBe(0);
   });
 
   it('keeps variant line items tied to parent products', async () => {

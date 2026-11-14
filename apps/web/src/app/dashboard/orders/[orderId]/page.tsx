@@ -39,7 +39,7 @@ export default async function OrderDetailsPage({ params }: Props) {
   // gate mirrors the section exactly, so a shown panel always paints
   // first content from the server instead of flashing a loader.
   const initialRefundSummary = shouldShowOrderRefundPanel(order)
-    ? await getInitialRefundSummary(order.id)
+    ? await getInitialRefundSummary(order.id, merchant.id)
     : null;
   return (
     <OrderDetailsClientPage

@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 
 export function createInput(overrides = {}) {
   return {
+    acceptsNonWithdrawableTerms: true,
     activeMerchantId: 'merchant-1',
     activeMerchantSlug: 'ogabassey',
     contributionValue: 20000,
@@ -27,6 +28,7 @@ export function createInput(overrides = {}) {
     },
     setFormError: jest.fn(),
     setInitialContributionIdempotencyKey: jest.fn(),
+    setInitialContributionRail: jest.fn(),
     setShowFundingModal: jest.fn(),
     setShowPreviewModal: jest.fn(),
     setShowSuccessModal: jest.fn(),

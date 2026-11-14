@@ -1,0 +1,6 @@
+{
+  "loadAverage": [65.35302734375, 61.4951171875, 58.00146484375],
+  "cpuCount": 12,
+  "contaminated": true,
+  "reason": "concurrent peer work and build/test load; not an idle-host qualification"
+}

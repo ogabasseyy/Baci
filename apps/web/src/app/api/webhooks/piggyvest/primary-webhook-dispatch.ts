@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
 import { authorizesLegacyHandling } from '@/lib/piggyvest/primary-event-owner';
 import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest-webhook-response';
 import { dispatchPrimaryWalletBankInboxIntake } from '@/lib/piggyvest/primary-wallet-bank-inbox-intake';
@@ -23,10 +24,36 @@ const noStore = { 'Cache-Control': 'no-store' };
 // and ack the valid event, and the quarantine stores only a digest, so
 // the provider would stop retrying and the deposit or payout could never
 // be replayed.
+// Kill-switch deferrals are tagged (side table, so the provider-facing
+// Response is unchanged) so the capture drain can settle a replayed one
+// without spending a processing attempt: a paused switch says nothing about
+// the row, and counting it toward MAX_DRAIN_ATTEMPTS would park a captured
+// deposit as needs_review.
+const killSwitchDeferrals = new WeakSet<Response>();
+
+export function isKillSwitchDeferral(response: Response): boolean {
+  return killSwitchDeferrals.has(response);
+}
+
 function retryable(code: string, error: string): Response {
   return NextResponse.json(
     { received: false, code, error },
     { status: 503, headers: noStore }
+  );
+}
+
+// A wallet-transfer outflow is a terminal notice for a transfer already
+// submitted, which must keep reconciling. Only a custody-signed one is new
+// card-custody money in, so only that is deferred.
+function isMoneyInDelivery(
+  eventType: string,
+  families: readonly PiggyvestWebhookKeyFamily[]
+): boolean {
+  if (eventType === 'wallet-transfer.outflow.success')
+    return families.includes('custody');
+  return (
+    eventType === 'bank-transfer.inflow.success' ||
+    eventType === 'interest-payout.success'
   );
 }
 
@@ -43,13 +70,31 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
    * gated on `families`, and each runtime only merges its own family.
    */
   keyScope?: WebhookKeyScope;
+  env?: NodeJS.ProcessEnv;
 }): Promise<Response | 'conflict' | null> {
   const { keyScope } = input;
+  const env = input.env ?? process.env;
+  // Under the master kill switch every money-in delivery is deferred, not
+  // dropped: the retryable 503 makes PiggyVest redeliver, and the deposit is
+  // recorded exactly once after the switch is lifted. Without this, a
+  // legacy-signed delivery would fall through to the legacy credit path.
+  if (
+    isPiggyvestKilled(env) &&
+    isMoneyInDelivery(input.event.eventType, input.families)
+  ) {
+    const deferred = retryable(
+      'PIGGYVEST_KILL_SWITCH_ACTIVE',
+      'PiggyVest intake paused; delivery will be retried'
+    );
+    killSwitchDeferrals.add(deferred);
+    return deferred;
+  }
   if (input.event.eventType === 'wallet-transfer.outflow.success') {
     if (input.families.includes('custody')) {
       const custody = await dispatchPrimaryCardSignedCustodyIntake({
         rawBody: input.rawBody,
         signature: input.signature,
+        environment: env,
         keyScope,
       });
       if (custody.response) return custody.response;
@@ -65,6 +110,7 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const primary = await primaryInterestWebhookResponse({
         rawBody: input.rawBody,
         signature: input.signature,
+        env,
         keyScope,
       });
       if (primary === 'disabled')
@@ -81,6 +127,7 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const bank = await dispatchPrimaryWalletBankInboxIntake({
         rawBody: input.rawBody,
         signature: input.signature,
+        env,
         keyScope,
       });
       if (bank.response) return bank.response;
@@ -91,6 +138,7 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       signature: input.signature,
       secret: input.matchedSecret,
       families: input.families,
+      env,
     });
     if (primary === 'credited' || primary === 'duplicate') {
       return NextResponse.json(

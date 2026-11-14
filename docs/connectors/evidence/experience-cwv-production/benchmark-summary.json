@@ -1,0 +1,76 @@
+{
+  "baseMain": "c2e351bec25e8ecd8dbd958a57edf5827632f663",
+  "build": {
+    "host": "http://localhost:43178",
+    "gateway": "http://127.0.0.1:43179",
+    "apiPort": 60879,
+    "synthetic": true,
+    "buildDigest": "cb28b8d0969a31d7fc5b07ac0e3561b7d42e7a87881767a90b61ec31fe008d92",
+    "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a"
+  },
+  "environment": "local-synthetic-production-build",
+  "samplesPerProfile": 1,
+  "cwvQualified": false,
+  "releaseQualified": false,
+  "contaminated": true,
+  "samples": [
+    {
+      "profile": "mobile",
+      "route": "/qa1",
+      "cache": "fresh-browser-profile; warm server after delivery preflight",
+      "frameLcpFromHostMs": 6466.6,
+      "hostClsDiagnosticSum": 0.22724609375,
+      "frameClsDiagnosticSum": 0,
+      "labEventDurationsMs": [16, 48],
+      "decodedImages": [
+        {
+          "complete": true,
+          "width": 240
+        },
+        {
+          "complete": true,
+          "width": 240
+        }
+      ],
+      "browser": {
+        "name": "Chrome Emulated Moto G4",
+        "version": "151.0.7922.169"
+      },
+      "httpStatuses": {
+        "200": 46,
+        "401": 1,
+        "500": 1
+      },
+      "failures": [["/api/storefront/cart", 401], ["/api/events", 500]]
+    },
+    {
+      "profile": "desktop",
+      "route": "/qa1",
+      "cache": "fresh-browser-profile; warm server after delivery preflight",
+      "frameLcpFromHostMs": 6033.8,
+      "hostClsDiagnosticSum": 0,
+      "frameClsDiagnosticSum": 0,
+      "labEventDurationsMs": [40, 40, 40],
+      "decodedImages": [
+        {
+          "complete": true,
+          "width": 240
+        },
+        {
+          "complete": true,
+          "width": 240
+        }
+      ],
+      "browser": {
+        "name": "Chrome",
+        "version": "151.0.7922.169"
+      },
+      "httpStatuses": {
+        "200": 46,
+        "401": 1,
+        "500": 1
+      },
+      "failures": [["/api/storefront/cart", 401], ["/api/events", 500]]
+    }
+  ]
+}

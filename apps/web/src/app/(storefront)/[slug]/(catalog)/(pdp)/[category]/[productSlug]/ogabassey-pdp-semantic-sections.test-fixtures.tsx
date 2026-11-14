@@ -13,6 +13,7 @@ export type SemanticModel = {
 
 export const mockGetCachedProductSeoLinkData = vi.fn();
 export const mockLoadPdpBrandHubEligibilityInventorySafely = vi.fn();
+export const mockLoadPriceBandDestinationPoolSafely = vi.fn();
 export const mockBuildProductSemanticModel =
   vi.fn<(input: unknown) => SemanticModel>();
 export const mockProductSemanticSections = vi.fn(
@@ -47,6 +48,14 @@ vi.mock(
     loadPdpBrandHubEligibilityInventorySafely: (...args: unknown[]) =>
       mockLoadPdpBrandHubEligibilityInventorySafely(...args),
     PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS: 1_000,
+  })
+);
+
+vi.mock(
+  '@/lib/storefront-content/load-price-band-destination-pool-safely',
+  () => ({
+    loadPriceBandDestinationPoolSafely: (...args: unknown[]) =>
+      mockLoadPriceBandDestinationPoolSafely(...args),
   })
 );
 

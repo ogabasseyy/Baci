@@ -27,6 +27,7 @@ describe('primary PiggyVest wallet API client', () => {
       expect.objectContaining({
         account: expect.objectContaining({ provider: 'piggyvest' }),
         requiresConsent: false,
+        balanceKobo: 12345,
       })
     );
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
@@ -46,6 +47,16 @@ describe('primary PiggyVest wallet API client', () => {
       provisioningStatus: 'pending',
     });
   });
+  it('rejects a snapshot with an unknown status instead of guessing a balance', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'suspended', balanceKobo: 5000 }),
+    });
+    await expect(piggyvestPrimaryWalletApi.read(merchantId)).rejects.toThrow(
+      'Could not confirm your PiggyVest account'
+    );
+  });
   it('requires consent and valid BVN before any request', async () => {
     await expect(
       piggyvestPrimaryWalletApi.create({
@@ -60,7 +71,7 @@ describe('primary PiggyVest wallet API client', () => {
         bvn: '00000000000',
         consent: false,
       })
-    ).rejects.toThrow('accept wallet setup');
+    ).rejects.toThrow('Tick the box to agree');
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
   it('submits consent and BVN with CSRF and refreshes the provider account afterward', async () => {

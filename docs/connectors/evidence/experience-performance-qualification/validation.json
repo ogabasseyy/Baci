@@ -1,0 +1,108 @@
+{
+  "main": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "monorepo": {
+    "command": "pnpm exec turbo lint typecheck",
+    "status": "passed",
+    "tasks": 14,
+    "cached": 11,
+    "warnings": 13,
+    "log": "/tmp/experience-qualification-monorepo-checks.log"
+  },
+  "experienceFocused": {
+    "files": 65,
+    "tests": 170,
+    "status": "passed",
+    "log": "/tmp/experience-qualification-focused-final.log"
+  },
+  "cartAndCheckout": {
+    "files": 119,
+    "tests": 632,
+    "status": "passed",
+    "log": "/tmp/experience-current-main-cart-final-green.log",
+    "previousFailure": "Node-environment admission test inherited a browser Web Locks mock; moved browser API test to default jsdom, preserving original denial and no-fetch assertions."
+  },
+  "mcpLifecycle": {
+    "files": 1,
+    "tests": 1,
+    "status": "passed",
+    "includes": [
+      "normal-auth upload/build/preview",
+      "read performance",
+      "changed price invalidates evidence",
+      "owner revocation",
+      "zero published heads"
+    ]
+  },
+  "review": {
+    "status": "incomplete",
+    "attempts": 2,
+    "failure": "Connection failed: WebSocket closed",
+    "partialIssues": 5,
+    "criticalOrMajorPartialIssues": 0,
+    "fixes": [
+      "corrupted retained report returns not-measured with auth checks preserved",
+      "top-level type-only imports"
+    ],
+    "deferredComments": {
+      "conditionalLifecycleAssertions": "Real-runner integration permits busy-host not-measured by design; deterministic unit tests separately cover exact report and invalidation outcomes. Metrics are not fabricated to force a report.",
+      "supervisor306Lines": "Repository says aim for 300 lines, not a hard cap; performance types and retention already extracted. Further refactor deferred to avoid unrelated churn."
+    },
+    "paidFallback": false
+  },
+  "fullMonorepoTests": "not run; affected Experience/cart/checkout consumers selected",
+  "published": false,
+  "ordersCreated": 0,
+  "payments": 0,
+  "reviewFollowupTests": {
+    "files": 2,
+    "tests": 18,
+    "status": "passed"
+  },
+  "postReviewTypecheck": {
+    "command": "tsc --noEmit -p tsconfig.experience-commerce.json",
+    "status": "passed",
+    "log": "/tmp/experience-qualification-followup-tsc.log"
+  },
+  "productionBuild": {
+    "status": "passed",
+    "main": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+    "buildId": "hCOoAQctlvfMP6myShYlK",
+    "routesGenerated": 647,
+    "fixture": {
+      "host": "http://localhost:43178",
+      "gateway": "http://127.0.0.1:43179",
+      "apiPort": 50172,
+      "synthetic": true,
+      "preparedRenders": 4,
+      "buildDigest": "cb28b8d0969a31d7fc5b07ac0e3561b7d42e7a87881767a90b61ec31fe008d92",
+      "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a"
+    },
+    "limitations": [
+      "synthetic fixture omits compare_at_price and blog_posts; build completed",
+      "runtime-only corrupted-report read fix followed production build; no browser markup changes"
+    ]
+  },
+  "browserMatrix": {
+    "samples": 24,
+    "routes": 4,
+    "viewports": [390, 1440],
+    "coldSamplesPerCell": 3,
+    "status": "completed-diagnostic-only",
+    "allSamplesContaminated": true,
+    "frameClsMax": 0,
+    "hostClsMax": 4.62962962962963e-5,
+    "report": "local-matrix-2026-10-26.md"
+  },
+  "currentMainCheckout": {
+    "desktop": 1440,
+    "mobile": 390,
+    "status": "passed through final review without submission",
+    "product": 250,
+    "shipping": 1500,
+    "total": 1750,
+    "currency": "NGN",
+    "normalCartAndShipping": true,
+    "orderCountAfter": 0,
+    "limitation": "Unconfigured Places provider returns500; manual address and merchant shipping work."
+  }
+}

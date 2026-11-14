@@ -72,7 +72,8 @@ describe('initializeRedvaultCheckout preserveAttempts', () => {
     const attemptAdapter = {
       claimInitialization: vi.fn().mockResolvedValue({
         attempt: staleAttempt,
-        claimed: true,
+        claimed: false,
+        fresh: false,
       }),
       markIndeterminate: vi.fn(),
       markInitialized: vi.fn(),

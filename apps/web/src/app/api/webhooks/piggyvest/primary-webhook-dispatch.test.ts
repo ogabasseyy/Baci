@@ -48,6 +48,7 @@ it('claims a custody-signed outflow through the custody intake', async () => {
   expect(mocks.custody).toHaveBeenCalledWith({
     rawBody,
     signature: base.signature,
+    environment: expect.any(Object),
   });
 });
 
@@ -112,6 +113,7 @@ it('falls through to the shared inflow dispatcher when the bank intake declines'
     signature: base.signature,
     secret: 'fixture-secret',
     families: ['legacy', 'bank'],
+    env: expect.any(Object),
   });
 });
 

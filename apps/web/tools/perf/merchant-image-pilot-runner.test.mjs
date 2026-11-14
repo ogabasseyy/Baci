@@ -43,8 +43,14 @@ describe('merchant-image-pilot-runner', () => {
       viewport: '375x667',
     });
     expect(prepared.runId).toMatch(/^[0-9a-f-]{36}$/);
-    // Real capture order: navigate first, screenshot after — the runner
-    // binds the screenshot's mtime to the navigation window.
+    // Derive fixture navigation time from the recorded screenshot mtime,
+    // preserving navigation-before-capture ordering on coarse filesystems.
+    const pngBytes = await pngBuffer(750, 1334);
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, pngBytes);
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -64,16 +70,13 @@ describe('merchant-image-pilot-runner', () => {
             {
               _meta: { connectivity: 'native' },
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
         },
       })
     );
-    const pngBytes = await pngBuffer(750, 1334);
-    const shotPath = join(dir, 'shot.png');
-    await writeFile(shotPath, pngBytes);
     const finished = await finishRun({
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
       har: harPath,
@@ -193,6 +196,12 @@ describe('merchant-image-pilot-runner', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
+    const pngBytes = await pngBuffer(750, 1334);
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, pngBytes);
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -202,16 +211,13 @@ describe('merchant-image-pilot-runner', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
         },
       })
     );
-    const pngBytes = await pngBuffer(750, 1334);
-    const shotPath = join(dir, 'shot.png');
-    await writeFile(shotPath, pngBytes);
     const base = {
       har: harPath,
       outDir: join(dir, 'bound'),

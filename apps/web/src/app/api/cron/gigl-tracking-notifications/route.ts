@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
+import { createGiglNotificationWorkerClient } from '@/lib/gigl-notification-worker-client';
 import { logger } from '@/lib/logger';
-import { createServiceClient } from '@/lib/supabase/service';
 import { createCronBatchSizeSchema } from '@/schemas/cron-batch-size';
 import { runGiglTrackingNotificationBatch } from './run-gigl-tracking-notification-batch';
 
@@ -22,11 +22,20 @@ export async function GET(request: Request) {
   if (!batchSize.success)
     return NextResponse.json({ error: 'Invalid batch size' }, { status: 400 });
 
-  const supabase = createServiceClient('event-pipeline');
+  let client: ReturnType<typeof createGiglNotificationWorkerClient>;
+  try {
+    client = createGiglNotificationWorkerClient(process.env);
+  } catch {
+    logger.error({ message: 'Invalid GIGL tracking worker token' });
+    return NextResponse.json(
+      { error: 'GIGL notification worker unavailable' },
+      { status: 500 }
+    );
+  }
   const workerId = `gigl-notifications-${crypto.randomUUID()}`;
   const result = await runGiglTrackingNotificationBatch({
     batchSize: batchSize.data,
-    client: supabase,
+    client,
     workerId,
   });
   if (!result.ok && result.reason === 'claim_failed') {

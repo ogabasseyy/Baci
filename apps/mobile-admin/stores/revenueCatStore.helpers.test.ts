@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { CustomerInfo } from 'react-native-purchases';
 import { describe, expect, it } from 'vitest';
 import { isProFromInfo } from './revenueCatStore.helpers';

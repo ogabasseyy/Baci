@@ -1,0 +1,5 @@
+{
+  "purpose": "While PiggyVest storefront work lands on main, the storefront apps reach devices only through one deliberate owner release: store releases start from an owner tag or a manual dispatch, the iOS OTA export refuses sources that carry this file, and every new PiggyVest storefront file needs a server-off test.",
+  "baseline_commit": "7a4ff22ce726f0b63e7598ad183e38a408d556c3",
+  "runbook": "docs/runbooks/storefront-release-gate.md"
+}

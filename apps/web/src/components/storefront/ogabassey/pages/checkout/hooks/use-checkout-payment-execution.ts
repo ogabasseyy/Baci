@@ -9,6 +9,7 @@ import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import type { useCheckoutFormSession } from './use-checkout-form-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 import { useCheckoutRedvaultAvailability } from './use-checkout-redvault-availability';
+import { useOxygenStorefrontAvailability } from './use-oxygen-storefront-availability';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 import { useWalletFundedOrderCompletion } from './use-wallet-funded-order-completion';
@@ -80,6 +81,13 @@ export function useCheckoutPaymentExecution({
   // The commerce checkout does not mount CustomerAuthProvider; resolve the
   // cookie-backed storefront session before choosing the wallet-funded path.
   const customerSession = useStorefrontCustomerSession(identity.merchantSlug);
+  const oxygenAllowed = useOxygenStorefrontAvailability({
+    customerId: customerSession.accountId,
+    merchantId: identity.merchantId,
+    revision: customerSession.revision,
+    authenticated: customerSession.isAuthenticated,
+    loading: customerSession.status === 'loading',
+  });
   const dva = useCheckoutDvaSession({
     checkoutCart: cart.checkoutCart,
     clearCart: cart.clearCart,
@@ -227,6 +235,7 @@ export function useCheckoutPaymentExecution({
     crypto,
     dva,
     handlePlaceOrder,
+    oxygenAllowed,
     redvaultAvailable,
     walletFundedTransfer,
   };

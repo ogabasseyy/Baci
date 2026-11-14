@@ -1,7 +1,7 @@
 import { getPublicSupabaseClient } from '@/lib/cached-data';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
-import { getEffectiveProductStock } from '@/lib/product-stock';
 import type { ProductSemanticCandidate } from '@/lib/storefront-product/product-semantic-types';
+import { resolveSemanticCandidateStock } from '@/lib/storefront-product/resolve-semantic-candidate-stock';
 
 /**
  * Upper bound for the EXACT-category semantic-link inventory below.
@@ -36,6 +36,7 @@ export interface ProductSemanticInventoryCategoryJoin {
 }
 
 export interface ProductSemanticInventoryRow {
+  id?: string | null;
   brand?: string | null;
   condition?: string | null;
   name?: string | null;
@@ -51,6 +52,7 @@ export interface ProductSemanticInventoryRow {
   is_parent?: boolean | null;
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 /**
@@ -70,10 +72,12 @@ export const PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT = `
   is_parent,
   parent_product_id,
   manage_stock,
+  has_condition_offers,
   ${PRODUCT_KEY_SPECS_RELATION_SELECT}
 `;
 
 const PRODUCT_SEMANTIC_INVENTORY_SELECT = `
+  id,
   ${PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT},
   product_categories!inner(categories!inner(slug))
 `;
@@ -175,7 +179,8 @@ function toProductSemanticCandidate(
   row: ProductSemanticInventoryRow,
   fallbackCategorySlug: string
 ): ProductSemanticCandidate | null {
-  const slug = row.slug?.trim();
+  const hasExplicitSlug = Boolean(row.slug?.trim());
+  const slug = row.slug?.trim() || (row.id ? String(row.id).trim() : '');
   const name = row.name?.trim();
   const price = parseSemanticProductPrice(row.price);
 
@@ -184,23 +189,21 @@ function toProductSemanticCandidate(
   }
 
   return {
+    ...(row.id ? { id: String(row.id) } : {}),
     slug,
     name,
     price,
     brand: row.brand,
     condition: row.condition,
-    // Effective stock (stock_quantity with legacy fallback), matching
-    // the scoped loader and normalizeProduct — a naive
-    // `stock_quantity ?? stock` zeroes rows with quantity 0 but
-    // positive legacy stock (live for ogabassey).
-    stock: getEffectiveProductStock({
-      stock: row.stock,
-      stock_quantity: row.stock_quantity,
-    }),
+    // Candidate stock: resolveSemanticCandidateStock handles unmanaged (null)
+    // vs tracked/omitted finite effective stock.
+    stock: resolveSemanticCandidateStock(row),
     category_slug: getJoinedCategorySlug(row) ?? fallbackCategorySlug,
     product_key_specs: normalizeProductKeySpecs(row.product_key_specs),
     is_parent: row.is_parent ?? null,
     parent_product_id: row.parent_product_id ?? null,
-    manage_stock: row.manage_stock ?? null,
+    manage_stock: row.manage_stock,
+    has_condition_offers: row.has_condition_offers ?? false,
+    ...(!hasExplicitSlug ? { has_explicit_slug: false } : {}),
   };
 }

@@ -7,7 +7,6 @@ import {
   SavingsContributionResponseSchema,
   SavingsDeviceSwapResponseSchema,
   SavingsGoalActionResponseSchema,
-  SavingsGoalSummarySchema,
 } from '@/schemas/customer-savings';
 import { customerSavingsPlanFunding } from './customer-savings-plan-funding';
 
@@ -15,6 +14,7 @@ export type {
   CustomerPaymentMethod,
   SavingsGoal,
 } from '@/schemas/customer-savings';
+export { createSavingsGoal } from './customer-savings-create-goal';
 export { resolveSavingsGoalVariant } from './customer-savings-variant-resolution';
 
 /** Default savings card authorization amount in kobo, NGN minor units. */
@@ -93,41 +93,11 @@ export async function listCustomerPaymentMethods({
   return CustomerPaymentMethodsResponseSchema.parse(data).methods;
 }
 
-export async function createSavingsGoal(input: {
-  contributionAmount: number;
-  contributionFrequency: 'daily' | 'weekly' | 'monthly';
-  maturityDate: string;
-  nonWithdrawableAccepted: true;
-  productId: string;
-  sourceMode: 'manual' | 'auto_debit';
-  startDate: string;
-  targetAmount: number;
-  termsAccepted: true;
-  autoDebitAuthorized?: boolean;
-  goalIdempotencyKey?: string;
-  initialContributionAmount?: number;
-  initialContributionIdempotencyKey?: string;
-  merchantId?: string | null;
-  merchantSlug?: string | null;
-  savedPaymentMethodId?: string | null;
-  title?: string;
-  variantId?: string | null;
-}) {
-  const customerSavingsApiClient = getCustomerSavingsApiClient();
-  const data = await customerSavingsApiClient.fetchJson({
-    body: {
-      ...input,
-      ...customerSavingsApiClient.buildMerchantIdentifiers(input),
-    },
-    method: 'POST',
-    path: '/api/storefront/customer/savings/goals',
-  });
-  return SavingsGoalSummarySchema.parse(data);
-}
-
 export const fetchSavingsPlanFunding = customerSavingsPlanFunding.provision;
 export const fetchExistingSavingsPlanFunding =
   customerSavingsPlanFunding.recover;
+export const setupExistingSavingsGoal = customerSavingsPlanFunding.setup;
+export const retrySavingsGoalSetup = customerSavingsPlanFunding.retrySetup;
 
 export async function addSavingsContribution(input: {
   amount: number;

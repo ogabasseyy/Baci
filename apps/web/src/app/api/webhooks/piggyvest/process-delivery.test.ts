@@ -25,7 +25,7 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) => mocks.process(...args),
 }));
 
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   isAuthorizationQuarantine,
   processVerifiedDelivery,
@@ -33,7 +33,7 @@ import {
 
 const client = {
   name: 'intake-client',
-} as unknown as PiggyvestIntakeServiceClient;
+} as unknown as PiggyvestIntakeClient;
 const config = { baseUrl: 'https://provider.example', token: 'synthetic' };
 const signature = 'ab'.repeat(64);
 
@@ -180,13 +180,15 @@ describe('primary and legacy processing', () => {
     const response = await run(restriction, ['legacy', 'interest']);
 
     expect(response).toBe(claimed);
-    expect(mocks.dispatch).toHaveBeenCalledWith({
-      rawBody: Buffer.from(JSON.stringify(restriction)),
-      signature,
-      matchedSecret: 'matched-secret',
-      event: expect.objectContaining({ eventId: restriction.eventId }),
-      families: ['legacy', 'interest'],
-    });
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawBody: Buffer.from(JSON.stringify(restriction)),
+        signature,
+        matchedSecret: 'matched-secret',
+        event: expect.objectContaining({ eventId: restriction.eventId }),
+        families: ['legacy', 'interest'],
+      })
+    );
     expect(mocks.record).not.toHaveBeenCalled();
   });
 

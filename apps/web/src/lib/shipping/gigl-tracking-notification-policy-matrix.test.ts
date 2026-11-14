@@ -71,4 +71,55 @@ describe('GIGL tracking notification policy matrix', () => {
       getGiglTrackingNotificationPolicies('Shipment created', 'pending')
     ).toEqual([]);
   });
+
+  describe('approved merchant/customer map', () => {
+    const pairs = (
+      raw: string,
+      status: Parameters<typeof getGiglTrackingNotificationPolicies>[1]
+    ) =>
+      getGiglTrackingNotificationPolicies(raw, status).map(
+        (p) => `${p.audience}:${p.notificationKind}`
+      );
+
+    it('sends nothing at booking', () => {
+      expect(pairs('CRT', 'booked')).toEqual([]);
+    });
+    it('alerts only the merchant when pickup is scheduled', () => {
+      expect(pairs('MAPT', 'pickup_scheduled')).toEqual([
+        'merchant:pickup_assigned',
+      ]);
+    });
+    it('alerts only the merchant with pickup_delayed for raw DLP', () => {
+      expect(pairs('DLP', 'pickup_scheduled')).toEqual([
+        'merchant:pickup_delayed',
+      ]);
+    });
+    it('tells both sides at pickup', () => {
+      expect(pairs('MPIK', 'picked_up')).toEqual([
+        'merchant:picked_up',
+        'customer:picked_up',
+      ]);
+    });
+    it('tells only the customer in transit', () => {
+      expect(pairs('MSVC', 'in_transit')).toEqual(['customer:transit_started']);
+    });
+    it('tells both sides out for delivery', () => {
+      expect(pairs('MSHC', 'out_for_delivery')).toEqual([
+        'merchant:out_for_delivery',
+        'customer:out_for_delivery',
+      ]);
+    });
+    it('tells both sides on delivery', () => {
+      expect(pairs('MAHD', 'delivered')).toEqual([
+        'merchant:delivered',
+        'customer:delivered',
+      ]);
+    });
+    it('tells both sides on cancellation', () => {
+      expect(pairs('MSCC', 'cancelled')).toEqual([
+        'merchant:cancelled',
+        'customer:cancelled',
+      ]);
+    });
+  });
 });

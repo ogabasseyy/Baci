@@ -118,3 +118,22 @@ renewal permits no credential, firewall, authentication-setting or database-gran
 change, and renews no other exception. Required review, CI, coordinated deployment,
 rollback and recovery-activation checks remain enforced. At expiry, replace this
 boundary or obtain a new explicit owner decision; never silently extend it.
+
+## GIGL tracking notification worker (retired)
+
+The temporary exception for `apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts`
+(approved 2026-08-01, reapproved 2026-10-01, due to expire 2026-11-15) has been
+removed from `AGENTS.md` and `.ruler/01-critical-rules.md`. Its removal condition
+was met: the notification graph no longer constructs any service-role client.
+
+The route now uses the existing restricted `gigl_tracking_worker` capability
+(`GIGL_TRACKING_WORKER_TOKEN`, the same JWT the tracking fallback and webhook
+expedite already use, so no new secret). Migration
+`20261104100000_gigl_notification_worker_wrappers.sql` adds twelve lease-bound
+`gigl_worker_*` wrappers and extends the PostgREST request-scope hook allowlist.
+Every wrapper is keyed on an outbox row the caller currently leases; tenant,
+order, customer, audience and app type are derived inside the database, and the
+role keeps no table privilege. Push delivery runs through an injected store
+(`apps/web/src/lib/push-store.ts`) so the shared push core imports no
+service-role client. DB replay test `supabase/tests/gigl_notification_worker_wrappers.sql`
+asserts the grants through the catalog.

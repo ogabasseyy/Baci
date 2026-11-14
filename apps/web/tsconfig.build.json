@@ -1,6 +1,24 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "checkers": 1
-  }
+    "checkers": 1,
+    "tsBuildInfoFile": ".next/cache/tsconfig.build.tsbuildinfo"
+  },
+  "files": [".typed-navigation/link.d.ts"],
+  "exclude": [
+    "node_modules",
+    ".next/types/link.d.ts",
+    "supabase",
+    "supabase/**/*",
+    "scripts",
+    "src/scripts",
+    ".next/dev",
+    ".next/dev/**/*",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/__tests__/**",
+    "**/__mocks__/**"
+  ]
 }

@@ -125,7 +125,7 @@ export function CategoryHubSections({
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
+                    className="inline-flex min-h-11 items-center text-sm font-medium text-store-primary underline-offset-4 hover:underline"
                   >
                     {link.label}
                   </a>
@@ -157,7 +157,7 @@ export function CategoryHubSections({
                 <li key={link.href} className="space-y-1">
                   <a
                     href={link.href}
-                    className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline"
+                    className="inline-flex min-h-11 items-center text-sm font-semibold text-store-primary underline-offset-4 hover:underline"
                   >
                     {link.title}
                   </a>

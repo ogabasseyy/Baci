@@ -15,9 +15,15 @@ export function addWalletCurrencyAmounts(left: number, right: number): number {
 export function projectWalletSavingsInterest<T extends SavingsGoalRow>({
   goals,
   goalInterestKobo,
+  goalInterestKnown = false,
 }: {
   goals: readonly T[];
   goalInterestKobo: WalletSavingsInterestResponse['goal_interest_kobo'];
+  /**
+   * The server reported per-goal interest: a goal with none has its stored
+   * balance as its exact principal, so the review can show the full split.
+   */
+  goalInterestKnown?: boolean;
 }): {
   goals: (T & { current_amount?: unknown })[];
   savingsBalance: number;
@@ -45,6 +51,9 @@ export function projectWalletSavingsInterest<T extends SavingsGoalRow>({
       appliedInterestKobo += interestKobo;
       const projected = {
         ...goal,
+        // The stored balance before the interest projection: whether a goal
+        // still holds money to settle must not count interest already paid.
+        principal_amount: currentAmount,
         current_amount: addWalletCurrencyAmounts(
           currentAmount,
           interestKobo / 100
@@ -60,6 +69,10 @@ export function projectWalletSavingsInterest<T extends SavingsGoalRow>({
       savingsBalance,
       currentAmount ?? 0
     );
+    // No interest credited, and the server said so: the stored balance is
+    // the exact principal (interest is never added to it).
+    if (goalInterestKnown && currentAmount !== null)
+      return { ...goal, principal_amount: currentAmount };
     return goal;
   });
 

@@ -1,5 +1,6 @@
 import 'server-only';
 import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/primary-wallet-paid-interest-inbox';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export type PrimaryWalletPaidInterestInboxSecrets = {
   webhookSecret: unknown;
@@ -60,7 +61,7 @@ export function readPrimaryWalletPaidInterestInboxRuntime(
   // enabling the drain timer.
   if (
     mode === 'intake' &&
-    (env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED !== 'true' ||
+    (!isPiggyvestFeatureOn('paid_interest_inbox', env) ||
       env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED !== 'true')
   )
     return null;

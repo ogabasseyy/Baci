@@ -34,6 +34,17 @@ jest.mock('@/components/useColorScheme', () => ({
 }));
 
 describe('FAQScreen', () => {
+  it('does not advertise retired CredPal in payment guidance', () => {
+    render(<FAQScreen />);
+    fireEvent.press(
+      screen.getByRole('button', {
+        name: /what payment methods do you accept/i,
+      })
+    );
+    expect(screen.queryByText(/CredPal/i)).toBeNull();
+    expect(screen.getByText(/Credit Direct/i)).toBeTruthy();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });

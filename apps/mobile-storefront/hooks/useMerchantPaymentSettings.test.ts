@@ -27,6 +27,16 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 describe('getEnabledPaymentMethods', () => {
+  it('never advertises retired CredPal even if saved settings enable it', () => {
+    const settings = normalizePaymentSettings({
+      credpal_enabled: true,
+      credit_direct_enabled: true,
+    });
+    expect(settings.credpal_enabled).toBe(false);
+    expect(getEnabledPaymentMethods(settings)).not.toContain('credpal');
+    expect(getEnabledPaymentMethods(settings)).toContain('credit_direct');
+  });
+
   it('keeps the safe fallback when payment settings are unavailable', () => {
     expect(getEnabledPaymentMethods(undefined)).toEqual(['paystack']);
   });

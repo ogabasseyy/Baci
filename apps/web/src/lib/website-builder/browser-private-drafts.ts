@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { denyNativeLegacyMutation } from '@/lib/experience/native-builder-guard';
 import type {
   BuilderCreateInput,
   BuilderPublishInput,
@@ -28,6 +29,8 @@ export async function mutatePrivateBrowserDraft(
     | Omit<BuilderCreateInput, 'merchantId'>
     | Omit<BuilderPublishInput, 'merchantId'>
 ) {
+  const denied = await denyNativeLegacyMutation(client, merchantId);
+  if (denied) return { response: denied };
   const save = 'config' in input;
   // Read once only when the historical browser DTO omitted its optional CAS token.
   let expected = input.expectedLastUpdated;

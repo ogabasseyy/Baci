@@ -1,0 +1,3 @@
+supabase/tests/savings_interest_notification_copy.sql
+supabase/tests/savings_interest_notification_triggers.sql
+supabase/tests/savings_interest_notification_fallback.sql

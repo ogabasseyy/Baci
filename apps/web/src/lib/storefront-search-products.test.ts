@@ -1,3 +1,8 @@
+const listingVariants = vi.hoisted(() => vi.fn(async () => ({})));
+vi.mock('./cached-data', () => ({
+  getPublicProductVariantsByProductIds: listingVariants,
+}));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockAnalyticsInsert = vi.fn().mockResolvedValue({ error: null });
@@ -201,5 +206,71 @@ describe('getStorefrontSearchProducts submission tracking', () => {
     expect(mockAnalyticsSupabase.from).not.toHaveBeenCalledWith(
       'search_analytics'
     );
+  });
+});
+
+describe('plain search default phone pricing', () => {
+  it('hydrates only selected result IDs and advertises the cellular configuration', async () => {
+    const merchantId = '123e4567-e89b-12d3-a456-426614174000';
+    vi.mocked(createClient).mockReturnValue({
+      rpc: vi.fn(async () => ({
+        data: [{ product_id: 'iphone16', total_count: 1 }],
+        error: null,
+      })),
+    } as never);
+    vi.mocked(createPublicClient).mockReturnValue({
+      from: () => ({
+        select: () => ({
+          in: () => ({
+            eq: () => ({
+              eq: async () => ({
+                data: [
+                  {
+                    id: 'iphone16',
+                    name: 'iPhone 16',
+                    price: 600000,
+                    category: 'Smartphones',
+                    has_variants: true,
+                    manage_stock: false,
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as never);
+    listingVariants.mockResolvedValue({
+      iphone16: [
+        {
+          id: 'wifi',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Wi-Fi Only' },
+          price_override: 600000,
+          stock_quantity: 0,
+        },
+        {
+          id: 'cellular',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 900000,
+          condition: 'new',
+          stock_quantity: 0,
+        },
+      ],
+    });
+    const result = await getStorefrontSearchProducts({
+      merchantId,
+      query: 'iphone 16',
+      limit: 20,
+    });
+    expect(result.products[0]).toMatchObject({
+      price: 900000,
+      condition: 'new',
+      has_variants: true,
+    });
+    expect(result.products[0]).not.toHaveProperty('variants');
+    expect(listingVariants).toHaveBeenCalledWith(merchantId, ['iphone16']);
   });
 });

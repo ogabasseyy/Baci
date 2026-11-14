@@ -1,3 +1,4 @@
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { PaymentMethod } from '../types';
 import { isGatewayAmountDifferentFromOrderTotal } from '../utils';
 
@@ -34,6 +35,10 @@ export function isNgnChargeCurrency(currency?: string | null): boolean {
   return (
     typeof currency === 'string' && currency.trim().toUpperCase() === 'NGN'
   );
+}
+
+function isOxygenEligible(input: { oxygenAllowed: boolean; currency?: string | null; orderAmount: number; payableAmount: number }): boolean {
+  return (input.oxygenAllowed || isOxygenStorefrontStagingEnabled()) && isNgnChargeCurrency(input.currency) && input.payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(input.payableAmount, input.orderAmount);
 }
 
 function toAmountLimit(
@@ -138,6 +143,7 @@ export function isPaymentMethodAvailable({
   currency,
   orderAmount,
   payableAmount,
+  oxygenAllowed = false,
 }: {
   paymentMethod: PaymentMethod;
   paystackCheckoutAvailable: boolean;
@@ -148,8 +154,11 @@ export function isPaymentMethodAvailable({
   currency?: string | null;
   orderAmount: number;
   payableAmount: number;
+  oxygenAllowed?: boolean;
 }): boolean {
   switch (paymentMethod) {
+    case 'oxygen':
+      return isOxygenEligible({ oxygenAllowed, currency, payableAmount, orderAmount });
     case 'paystack':
       return paystackCheckoutAvailable;
     case 'uba_redvault':
@@ -168,11 +177,7 @@ export function isPaymentMethodAvailable({
     case 'pod':
       return featureSettings?.pay_on_delivery_enabled === true;
     case 'credpal':
-      // NGN-only Nigerian BNPL rail (see resolveChargeCurrency).
-      return (
-        featureSettings?.credpal_enabled === true &&
-        isNgnChargeCurrency(currency)
-      );
+      return false;
     case 'credit_direct':
       return isCreditDirectEligible({
         featureSettings,
@@ -201,14 +206,16 @@ export function hasAnyInstallmentOption({
   currency,
   orderAmount,
   payableAmount,
+  oxygenAllowed = false,
 }: {
   featureSettings?: FeatureSettings | null;
   currency?: string | null;
   orderAmount: number;
   payableAmount: number;
+  oxygenAllowed?: boolean;
 }): boolean {
   return Boolean(
-    (featureSettings?.credpal_enabled && isNgnChargeCurrency(currency)) ||
+    isOxygenEligible({ oxygenAllowed, currency, payableAmount, orderAmount }) ||
       isCreditDirectEligible({
         featureSettings,
         currency,

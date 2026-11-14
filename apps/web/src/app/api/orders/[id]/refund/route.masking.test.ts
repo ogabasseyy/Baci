@@ -56,6 +56,7 @@ describe('order refund route', () => {
       historyTruncated: false,
       legs: [],
       needsPaystackCheck: false,
+      cancellationRefundMode: 'unknown',
     });
   });
   it('masks raw worker text inside audit event details', async () => {
@@ -127,6 +128,7 @@ describe('order refund route', () => {
       legs: [],
       needsPaystackCheck: false,
       status: 'failed',
+      cancellationRefundMode: 'unknown',
     });
   });
   it('drops unknown top-level keys from the success shape', async () => {
@@ -149,6 +151,7 @@ describe('order refund route', () => {
       historyTruncated: false,
       legs: [],
       needsPaystackCheck: false,
+      cancellationRefundMode: 'unknown',
     });
   });
 });

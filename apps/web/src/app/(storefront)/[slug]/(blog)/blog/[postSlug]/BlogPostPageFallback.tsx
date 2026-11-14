@@ -14,7 +14,7 @@ export function BlogPostPageFallback() {
         <article className="max-w-6xl mx-auto bg-card text-card-foreground rounded-3xl p-6 md:p-10 md:px-12 shadow-sm border border-border overflow-hidden">
           {/* Featured image skeleton — layout-identical to the real hero
               container so replacing it causes no CLS. */}
-          <div className="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-muted">
+          <div className="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-muted ogabassey-blog-post-hero-frame">
             <div className="absolute inset-0 animate-pulse bg-muted/30" />
           </div>
 

@@ -2,6 +2,10 @@ name: pnpm install with incremental cache
 description: Restore and save pnpm dependency and Turborepo caches with PR security boundaries.
 
 inputs:
+  allow-self-hosted-cache-save:
+    description: 'Allow the trusted deployment runner to save the shared pnpm cache'
+    required: false
+    default: 'false'
   store-dir:
     description: 'Base path for pnpm store; pnpm appends its current store version'
     required: false
@@ -41,8 +45,57 @@ runs:
         dest: ${{ runner.temp }}/setup-pnpm-install-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
     # Strict split caching for pnpm content-addressable store
+    # The persistent private CI runner keeps its pnpm store outside the workspace.
+    # `git clean` at checkout deletes a workspace-relative store, which forced every
+    # job to download an ~850 MB cache at ~3 MB/s (about 5 minutes) before installing.
+    # Only the two named contabo-baci-ci runners qualify: an exact allowlist, because runner labels are
+    # not available inside a composite action (register a new CI runner here too, or it just uses the
+    # slower GitHub cache path). Each runner gets its own store directory named after the runner
+    # (pnpm-store-<runner name> under its tool cache), so two runners never share or prune one store,
+    # whatever the server layout. The deploy runner shares the production
+    # server (tight disk) and runs these installs rarely, so it keeps the GitHub cache path.
+    # The cache save below never runs for a persistent store (it would archive the wrong path).
+    - id: pnpm-store
+      name: Select pnpm store directory
+      shell: bash
+      env:
+        STORE_DIR: ${{ inputs.store-dir }}
+        PERSISTENT_RUNNER: ${{ runner.environment == 'self-hosted' && contains(fromJSON('["contabo-baci-ci","contabo-baci-ci-2"]'), runner.name) }}
+        TOOL_CACHE: ${{ runner.tool_cache }}
+      run: |
+        set -euo pipefail
+        persistent=false
+        dir="$STORE_DIR"
+        if [ "$PERSISTENT_RUNNER" = 'true' ] && [ "$STORE_DIR" = '.pnpm-store' ]; then
+          persistent=true
+          # runner.tool_cache is always set by the runner; refuse a missing, empty or relative value instead of
+          # creating a store at the filesystem root or inside the checkout.
+          case "${TOOL_CACHE:-}" in
+            /*) ;;
+            *)
+              echo "::error::the runner tool cache must be an absolute path (got '${TOOL_CACHE:-}')"
+              exit 1
+              ;;
+          esac
+          # RUNNER_NAME is a default variable the runner sets for every job; the allowlist above makes it path-safe.
+          dir="$TOOL_CACHE/pnpm-store-${RUNNER_NAME:?}"
+          # A store inside the checkout would be wiped by `git clean`, which is the problem this avoids.
+          if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+            case "$dir" in
+              "$GITHUB_WORKSPACE"|"$GITHUB_WORKSPACE"/*)
+                echo "::error::the persistent pnpm store must live outside the workspace (got $dir)"
+                exit 1
+                ;;
+            esac
+          fi
+          mkdir -p "$dir"
+        fi
+        echo "persistent=$persistent" >> "$GITHUB_OUTPUT"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
     - id: pnpm-store-cache
       name: Restore pnpm store cache
+      if: steps.pnpm-store.outputs.persistent != 'true'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
         path: ${{ inputs.store-dir }}
@@ -54,7 +107,7 @@ runs:
       shell: bash
       env:
         PNPM_BIN_DIR: ${{ steps.setup_pnpm.outputs.bin_dest }}
-        STORE_DIR: ${{ inputs.store-dir }}
+        STORE_DIR: ${{ steps.pnpm-store.outputs.dir }}
       run: |
         set -euo pipefail
 
@@ -94,6 +147,28 @@ runs:
           echo "$STORE_DIR"
           echo "${delimiter}"
         } >> "$GITHUB_ENV"
+
+    # Safety valve for the persistent store: it is content-addressed so stale entries are harmless, but
+    # nothing else ever shrinks it. Past the limit, drop unreferenced packages (the next install refills).
+    - name: Prune an oversized persistent pnpm store
+      if: steps.pnpm-store.outputs.persistent == 'true'
+      shell: bash
+      env:
+        STORE_DIR: ${{ steps.pnpm-store.outputs.dir }}
+        MAX_STORE_KB: '16777216'
+      run: |
+        set -euo pipefail
+        size_kb="$(du -sk "$STORE_DIR" 2>/dev/null | cut -f1 || true)"
+        if [ -z "$size_kb" ]; then
+          echo "::warning::could not measure the pnpm store at $STORE_DIR; skipping the size check"
+          exit 0
+        fi
+        if [ "$size_kb" -gt "$MAX_STORE_KB" ]; then
+          echo "pnpm store is ${size_kb} KB (limit ${MAX_STORE_KB} KB); pruning unreferenced packages"
+          # Name the store explicitly so the prune hits the directory measured above, and never fail the job
+          # over housekeeping: the next install still works, and the warning shows up in the run summary.
+          pnpm store prune --store-dir "$STORE_DIR" || echo "::warning::pnpm store prune failed; continuing without pruning"
+        fi
 
     - name: Install Dependencies
       shell: bash
@@ -138,6 +213,8 @@ runs:
     # Cache Save Engine: PR branches are strictly RESTORE-ONLY to prevent cache poisoning & save storage limit (10GB)
     - name: Save pnpm store cache (main branch only)
       if: >
+        steps.pnpm-store.outputs.persistent != 'true' &&
+        (runner.environment == 'github-hosted' || inputs.allow-self-hosted-cache-save == 'true') &&
         github.ref == 'refs/heads/main' &&
         github.event_name == 'push' &&
         steps.pnpm-store-cache.outputs.cache-hit != 'true'

@@ -112,4 +112,14 @@ describe('RSS XML character safety', () => {
       '&&amp;#x0;#x1A;'
     );
   });
+
+  it('preserves semantic figure and figcaption elements in feed content', () => {
+    const input =
+      '<figure class="blog-inline-image"><img src="https://cdn.example.com/phone.jpg" alt="Galaxy Buds" /><figcaption>Galaxy Buds listening decision.</figcaption></figure>';
+    const output = sanitizeForFeed(input);
+
+    expect(output).toBe(
+      '<figure><img src="https://cdn.example.com/phone.jpg" alt="Galaxy Buds" /><figcaption>Galaxy Buds listening decision.</figcaption></figure>'
+    );
+  });
 });

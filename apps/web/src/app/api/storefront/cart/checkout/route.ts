@@ -222,6 +222,7 @@ export async function POST(request: NextRequest) {
       sessionReused: result.sessionReused,
       snapshot: result.snapshot,
       sessionExpiresAt: result.sessionExpiresAt,
+      databaseNow: result.databaseNow,
     });
     const cookieMaxAge = cartSessionCookieMaxAge(proofExpiresAt);
     if (proof && cookieMaxAge > 0) {

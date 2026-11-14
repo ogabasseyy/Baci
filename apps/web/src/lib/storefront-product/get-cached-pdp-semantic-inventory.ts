@@ -142,44 +142,7 @@ async function getCachedPdpSemanticInventoryForSafeCategory(
 
   if (scope.kind === 'category') {
     if (scope.categoryIds.length === 0) return [];
-    const ids = scope.categoryIds;
-    const deadline = createStorefrontReadDeadline(
-      PDP_SEMANTIC_INVENTORY_TIMEOUT_MS
-    );
-    const directQueryBase = supabase
-      .from('products')
-      .select(getProductSeoSelect(false))
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('category_id', ids)
-      .order('created_at', { ascending: false });
-    const directQuery = boundInventoryQuery(directQueryBase);
-    const joinedQuery = boundInventoryQuery(
-      query.in('product_categories.category_id', ids)
-    );
-    try {
-      const [direct, joined] = await Promise.race([
-        Promise.all(
-          [directQuery, joinedQuery].map((candidate) =>
-            Promise.resolve(
-              prepareStorefrontSingleAttemptQuery(candidate, deadline.signal)
-            )
-          )
-        ),
-        deadline.promise,
-      ]);
-      if (direct.error) throw direct.error;
-      if (joined.error) throw joined.error;
-      return normalizeInventoryRows(
-        [
-          ...((direct.data ?? []) as ProductSeoRow[]),
-          ...((joined.data ?? []) as ProductSeoRow[]),
-        ],
-        categorySlug
-      );
-    } finally {
-      deadline.cleanup();
-    }
+    query = query.in('product_categories.category_id', scope.categoryIds);
   } else if (scope.kind === 'legacy') {
     const sanitizedCategoryName = scope.categoryName.replace(/[,().]/g, '');
     if (!sanitizedCategoryName) return [];

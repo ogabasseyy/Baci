@@ -19,6 +19,14 @@ it('shows Geoapify and data-source follow links', () => {
 });
 it('identifies Google predictions correctly', () => {
   render(<AddressAutocompleteAttribution provider="google" />);
-  expect(screen.getByLabelText('Powered by Google')).toBeVisible();
+  const logo = screen.getByRole('img', { name: 'Powered by Google' });
+  expect(logo).toBeVisible();
+  expect(logo).toHaveAttribute(
+    'src',
+    '/attribution/powered-by-google-on-white.png'
+  );
+  expect(logo).toHaveAttribute('width', '120');
+  expect(logo).toHaveAttribute('height', '14');
+  expect(logo).not.toHaveClass('opacity-60');
   expect(screen.queryByRole('link')).not.toBeInTheDocument();
 });

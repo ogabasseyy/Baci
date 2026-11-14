@@ -1,0 +1,15 @@
+{
+  "scope": "All 24 benchmark navigations; checkout actions are separately recorded with the disposable DB count.",
+  "harFiles": 8,
+  "browser": [
+    {
+      "name": "Chrome",
+      "version": "151.0.7922.169"
+    }
+  ],
+  "origins": ["http://127.0.0.1:43179", "http://localhost:43178"],
+  "httpErrors": [],
+  "orderPaymentWrites": [],
+  "externalOrigins": [],
+  "rawHarRetention": "Ignored local scratch only; no raw cookies, tokens, headers or response bodies copied here."
+}

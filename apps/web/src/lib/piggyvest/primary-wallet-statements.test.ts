@@ -11,6 +11,12 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
     );
   });
 
+  it('pins the read-only onboarding presence statement', () => {
+    expect(PRIMARY_WALLET_STATEMENTS.presence).toBe(
+      'SELECT piggyvest_primary.has_onboarding($1::jsonb) AS result'
+    );
+  });
+
   it('pins the routing-pending statements', () => {
     expect(PRIMARY_WALLET_STATEMENTS.routingPending).toBe(
       'SELECT piggyvest_primary.record_onboarding_routing_pending($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result'
@@ -35,6 +41,12 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
     );
     expect(PRIMARY_WALLET_STATEMENTS.readReview).toBe(
       'SELECT piggyvest_primary.read_onboarding_review($1::jsonb) AS result'
+    );
+  });
+
+  it('pins the rollout cohort membership statement', () => {
+    expect(PRIMARY_WALLET_STATEMENTS.readRolloutCohort).toBe(
+      'SELECT piggyvest_primary.read_rollout_cohort_membership($1::jsonb) AS result'
     );
   });
 

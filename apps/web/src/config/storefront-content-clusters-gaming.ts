@@ -6,7 +6,6 @@ const gamingBrands = {
   nintendo: ['nintendo', 'switch'],
   xbox: ['xbox', 'microsoft'],
   steam: ['steam'],
-  gaming: ['gaming', 'game'],
 } as const;
 
 export const GAMING_CONTENT_CLUSTER_SUPPORT = {

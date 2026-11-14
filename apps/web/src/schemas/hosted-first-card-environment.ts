@@ -63,6 +63,10 @@ export const hostedFirstCardEnvironmentSchema = z
     // The public checkout surface must stay disabled: only the explicit
     // false marker (or its absence) is accepted, never true.
     PREFUNDED_CARD_PUBLIC_ENABLED: z.literal('false').optional(),
+    // Server-only: the launcher copies a killed parent's switch into the
+    // worker. Declared so propagation does not depend on the parse result
+    // being discarded; it is deliberately absent from the public output.
+    PIGGYVEST_KILL_SWITCH: z.string().optional(),
     // Inherited service credentials must never enter an isolated worker.
     SUPABASE_SERVICE_ROLE_KEY: z.never().optional(),
   })

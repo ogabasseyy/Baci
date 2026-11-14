@@ -67,6 +67,15 @@ function buildPresentation(
 }
 
 describe('deriveCheckoutOrderSummaryPresentation', () => {
+  it('uses the same wallet switch state on mobile and desktop and hides it for guests', () => {
+    const model = buildPresentation();
+    expect(model.mobile.showWalletControl).toBe(true);
+    expect(model.mobile.walletSelected).toBe(model.desktop.payWithWallet);
+    expect(model.mobile.setPayWithWallet).toBe(model.desktop.setPayWithWallet);
+    expect(buildPresentation({ hasUser: false }).mobile.showWalletControl).toBe(
+      false
+    );
+  });
   it('maps the same resumed order source into both summaries and hides local discounts', () => {
     const model = buildPresentation();
 

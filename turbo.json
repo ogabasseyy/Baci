@@ -14,6 +14,7 @@
     "BACI_REAL_PNPM",
     "PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN",
     "PNPM_CONFIG_ALLOW_UNUSED_PATCHES",
+    "GOMEMLIMIT",
     "CEREBRAS_API_KEY",
     "GROQ_API_KEY",
     "OPENROUTER_API_KEY",
@@ -25,7 +26,9 @@
     "BACI_REMOTE_CACHE_COOLDOWN_MS",
     "BACI_REMOTE_CACHE_TIMEOUT_MS",
     "BACI_REMOTE_CACHE_DISTRUST_MS",
-    "BACI_REMOTE_CACHE_DROPPED_BUST_DISTRUST_MS"
+    "BACI_REMOTE_CACHE_DROPPED_BUST_DISTRUST_MS",
+    "PIGGYVEST_EGRESS_RELAY_URL",
+    "PIGGYVEST_EGRESS_RELAY_SECRET"
   ],
   "tasks": {
     "build": {
@@ -89,6 +92,10 @@
         "PETROCK_ENABLED_TIERS",
         "PETROCK_REMEDIATION_ENABLED",
         "USDT_WALLET_ENABLED",
+        "PIGGYVEST_GOAL_CANCEL_DISABLED",
+        "PIGGYVEST_INTEREST_WALLET_ID",
+        "PIGGYVEST_INTEREST_WALLET_OWNER_ID",
+        "PIGGYVEST_GOAL_COMPLETE_DISABLED",
         "NEXT_PUBLIC_WALLET_ORDER_AUTO_DEBIT_ENABLED",
         "WALLET_CREDIT_PUSH_ENABLED",
         "IMEI_FX_NGN_USD",
@@ -136,6 +143,9 @@
         "$TURBO_ROOT$/tsconfig*.json"
       ]
     },
+    "typecheck:build": {
+      "cache": false
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -151,6 +161,10 @@
         "BACI_BUILDER_LOCAL_PG_MAJOR",
         "BACI_BUILDER_LOCAL_PG_BIN"
       ]
+    },
+    "qualify:experience:release": {
+      "cache": false,
+      "dependsOn": ["^qualify:experience:release"]
     }
   }
 }

@@ -1,12 +1,14 @@
-import { Stack } from 'expo-router';
+import { Stack, useRootNavigationState } from 'expo-router';
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from 'expo-router/react-navigation';
+import { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityBanner } from '@/components/ConnectivityBanner';
+import { CartWriteNotice } from '@/components/cart/CartWriteNotice';
 import { NativeCartPairingPanel } from '@/components/cart/NativeCartPairingPanel';
 import { SharedCartBridge } from '@/components/cart/SharedCartBridge';
 import { ChatWidget } from '@/components/chat/ChatWidget';
@@ -16,7 +18,9 @@ import { DrawerMenu } from '@/components/navigation/DrawerMenu';
 import { NavigationBarStyleProvider } from '@/components/navigation/NavigationBarStyleProvider';
 import { renderRootStackScreens } from '@/components/navigation/RootStackScreens';
 import { RouteResumeController } from '@/components/navigation/RouteResumeController';
+import { getRootStackScreenOptions } from '@/components/navigation/root-stack-screen-options';
 import AppKeyboardProvider from '@/components/ui/AppKeyboardProvider';
+import { StartupMotionProvider } from '@/components/ui/StartupMotionProvider';
 import { MobileUpdateController } from '@/components/updates/MobileUpdateController';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
@@ -26,6 +30,7 @@ import { useRouteDiagnostics } from '@/hooks/use-route-diagnostics';
 import { CONFIG } from '@/lib/config';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { QueryProvider } from '@/lib/QueryProvider';
+import { markStartupTiming } from '@/lib/startup-timing';
 import { getTemplateConfig } from '@/lib/templates';
 import { AdTrackingRouteReadinessProvider } from '@/services/tiktok-product-route-tracking';
 
@@ -54,16 +59,26 @@ const OgabasseyDarkTheme = {
 };
 
 interface RootLayoutNavProps {
+  onFirstLayout?: () => void;
   adTrackingReady?: boolean;
   persistenceEnabled?: boolean;
   shouldResumeNavigation?: boolean;
 }
 
 export function RootLayoutNav({
+  onFirstLayout,
   adTrackingReady = true,
   persistenceEnabled = true,
   shouldResumeNavigation = false,
 }: RootLayoutNavProps) {
+  const rootNavigationState = useRootNavigationState();
+  const [appShellHasLaidOut, setAppShellHasLaidOut] = useState(false);
+  useEffect(() => {
+    if (rootNavigationState?.key) markStartupTiming('router_ready');
+  }, [rootNavigationState?.key]);
+  useEffect(() => {
+    if (appShellHasLaidOut && rootNavigationState?.key) onFirstLayout?.();
+  }, [appShellHasLaidOut, rootNavigationState?.key, onFirstLayout]);
   const { GestureHandlerRootView } = getOptionalGestureHandlerRuntime();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
@@ -80,98 +95,100 @@ export function RootLayoutNav({
   useRouteDiagnostics();
 
   return (
-    <QueryProvider persistenceEnabled={persistenceEnabled}>
-      <GestureHandlerRootView
-        style={[styles.root, { backgroundColor: colors.background }]}
-      >
-        <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
-          <SafeAreaProvider>
-            <AppKeyboardProvider>
-              <ThemeProvider
-                value={
-                  colorScheme === 'dark'
-                    ? OgabasseyDarkTheme
-                    : OgabasseyLightTheme
-                }
-              >
-                <StatusBar
-                  barStyle={
-                    colorScheme === 'dark' ? 'light-content' : 'dark-content'
+    <StartupMotionProvider enabled={persistenceEnabled}>
+      <QueryProvider persistenceEnabled={persistenceEnabled}>
+        <GestureHandlerRootView
+          style={[styles.root, { backgroundColor: colors.background }]}
+        >
+          <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
+            <SafeAreaProvider>
+              <AppKeyboardProvider>
+                <ThemeProvider
+                  value={
+                    colorScheme === 'dark'
+                      ? OgabasseyDarkTheme
+                      : OgabasseyLightTheme
                   }
-                />
-                <View
-                  style={[
-                    styles.appShell,
-                    { backgroundColor: colors.background },
-                  ]}
                 >
-                  <GlobalErrorBoundary context="RootNavigation">
-                    <AdTrackingRouteReadinessProvider ready={adTrackingReady}>
-                      <RouteResumeController
-                        shouldResume={shouldResumeNavigation}
-                      />
-                      <MobileUpdateController />
-                      <SharedCartBridge />
-                      <NativeCartPairingPanel />
-                      {/*
-                       * No custom `header` function in screenOptions — that would
-                       * make react-native-screens NativeStack reserve a header zone
-                       * via additionalSafeAreaInsets on every screen, even ones
-                       * with `headerShown: false`, which combined with screens'
-                       * own `<SafeAreaView edges={['top']}>` produced ~120pt of
-                       * stacked blank padding above content. Mirrors apps/mobile-admin
-                       * which uses the native iOS UINavigationBar.
-                       *
-                       * Screens that need a custom JS header can opt in
-                       * per-Stack.Screen via `options.header`. Inner-content
-                       * customization (back button, title node, right action) is
-                       * available via `headerLeft`, `headerRight`, `headerTitle`
-                       * without triggering the inset reservation.
-                       */}
-                      <Stack
-                        screenOptions={{
-                          // Suspend older covered routes without discarding
-                          // state. Native-stack keeps transition-adjacent
-                          // Fabric screens live until it is safe to freeze.
-                          freezeOnBlur: true,
-                          headerStyle: {
-                            backgroundColor: colors.background,
-                          },
-                          headerTintColor: colors.text,
-                          headerTitleStyle: {
-                            fontWeight: '600',
-                          },
-                          headerShadowVisible: false,
-                          contentStyle: {
-                            backgroundColor: colors.background,
-                          },
-                          animation: 'slide_from_right',
-                          gestureEnabled: true,
-                          gestureDirection: 'horizontal',
-                          headerBackTitle: '',
-                        }}
-                      >
-                        {renderRootStackScreens({
-                          mutedContentBackgroundColor: colors.muted,
-                        })}
-                      </Stack>
-                    </AdTrackingRouteReadinessProvider>
-                  </GlobalErrorBoundary>
-                  {enableConnectivityBanner ? <ConnectivityBanner /> : null}
-                  {enableChatWidget ? (
-                    <ChatWidget
-                      bottomOffset={CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET}
-                    />
-                  ) : null}
-                  {enableNegotiationModal ? <NegotiationModal /> : null}
-                  {enableDrawerMenu ? <DrawerMenu /> : null}
-                </View>
-              </ThemeProvider>
-            </AppKeyboardProvider>
-          </SafeAreaProvider>
-        </NavigationBarStyleProvider>
-      </GestureHandlerRootView>
-    </QueryProvider>
+                  <StatusBar
+                    barStyle={
+                      colorScheme === 'dark' ? 'light-content' : 'dark-content'
+                    }
+                  />
+                  <View
+                    onLayout={() => setAppShellHasLaidOut(true)}
+                    testID="root-app-shell"
+                    style={[
+                      styles.appShell,
+                      { backgroundColor: colors.background },
+                    ]}
+                  >
+                    {/*
+                     * The offline banner sits above the app, in the layout, so
+                     * it pushes every screen down instead of covering headers.
+                     * The nested provider measures the area below the banner:
+                     * while it shows, screens there see no top inset (the
+                     * banner already covers the status bar) and are not
+                     * padded twice.
+                     */}
+                    {enableConnectivityBanner ? <ConnectivityBanner /> : null}
+                    <SafeAreaProvider style={styles.root}>
+                      <GlobalErrorBoundary context="RootNavigation">
+                        <AdTrackingRouteReadinessProvider
+                          ready={adTrackingReady}
+                        >
+                          <RouteResumeController
+                            shouldResume={shouldResumeNavigation}
+                          />
+                          {/* The shell mounts to report first layout before the
+                              hide promise resolves; defer update UI until then. */}
+                          {persistenceEnabled && <MobileUpdateController />}
+                          <SharedCartBridge />
+                          <NativeCartPairingPanel />
+                          <CartWriteNotice />
+                          {/*
+                           * No custom `header` function in screenOptions — that would
+                           * make react-native-screens NativeStack reserve a header zone
+                           * via additionalSafeAreaInsets on every screen, even ones
+                           * with `headerShown: false`, which combined with screens'
+                           * own `<SafeAreaView edges={['top']}>` produced ~120pt of
+                           * stacked blank padding above content. Mirrors apps/mobile-admin
+                           * which uses the native iOS UINavigationBar.
+                           *
+                           * Screens that need a custom JS header can opt in
+                           * per-Stack.Screen via `options.header`. Inner-content
+                           * customization (back button, title node, right action) is
+                           * available via `headerLeft`, `headerRight`, `headerTitle`
+                           * without triggering the inset reservation.
+                           */}
+                          <Stack
+                            screenOptions={getRootStackScreenOptions({
+                              background: colors.background,
+                              text: colors.text,
+                            })}
+                          >
+                            {renderRootStackScreens({
+                              mutedContentBackgroundColor: colors.muted,
+                            })}
+                          </Stack>
+                        </AdTrackingRouteReadinessProvider>
+                      </GlobalErrorBoundary>
+                      {enableChatWidget ? (
+                        <ChatWidget
+                          bottomOffset={CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET}
+                        />
+                      ) : null}
+                      {enableNegotiationModal ? <NegotiationModal /> : null}
+                      {enableDrawerMenu ? <DrawerMenu /> : null}
+                    </SafeAreaProvider>
+                  </View>
+                </ThemeProvider>
+              </AppKeyboardProvider>
+            </SafeAreaProvider>
+          </NavigationBarStyleProvider>
+        </GestureHandlerRootView>
+      </QueryProvider>
+    </StartupMotionProvider>
   );
 }
 

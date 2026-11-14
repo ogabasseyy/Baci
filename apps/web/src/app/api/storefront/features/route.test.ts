@@ -69,6 +69,24 @@ describe('GET /api/storefront/features', () => {
     mockGetCachedFeatureSettings.mockResolvedValue({});
   });
 
+  it('does not advertise retired CredPal even if stored settings enable it', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: { id: 'merchant-1', country: 'NG', business_type: 'fashion' },
+      error: null,
+    });
+    mockGetCachedFeatureSettings.mockResolvedValueOnce({
+      credpal_enabled: true,
+      credit_direct_enabled: true,
+    });
+    const response = await GET(
+      buildMerchantRequest(`merchantId=${VALID_MERCHANT_ID}`)
+    );
+    expect(await response.json()).toMatchObject({
+      credpalEnabled: false,
+      creditDirectEnabled: true,
+    });
+  });
+
   it('resolves the merchant via the RLS anon client and derives paystack from the bounded RPC', async () => {
     mockSingle.mockResolvedValueOnce({
       data: { id: 'merchant-1', country: 'NG', business_type: 'fashion' },

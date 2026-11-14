@@ -1,12 +1,14 @@
+'use client';
+
 // Migrated from temp-source/components/Logo.tsx
 // Note: The mounted state workaround was removed because the theme is now passed
 // from the server via cookies, ensuring SSR/CSR consistency.
 import type React from 'react';
 
-import { useV2Theme } from '../providers/v2-theme-context';
+import { useV2ThemeSafe } from '../providers/use-v2-theme-safe';
 
 export const Logo: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => {
-  const { theme } = useV2Theme();
+  const { theme } = useV2ThemeSafe();
 
   const isSanta = theme === 'santa';
 
@@ -82,7 +84,7 @@ export const Logo: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...pr
 };
 
 export const LogoIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => {
-  const { theme } = useV2Theme();
+  const { theme } = useV2ThemeSafe();
 
   const isSanta = theme === 'santa';
 

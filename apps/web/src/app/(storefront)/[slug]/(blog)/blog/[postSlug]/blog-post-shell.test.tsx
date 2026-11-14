@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { BLOG_POST_HERO_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/blog-media';
 
 interface MockImageProps {
   alt: string;
@@ -115,10 +116,7 @@ describe('BlogPostShell', () => {
     expect(image).toHaveAttribute('data-fetchpriority', '');
     expect(image).toHaveAttribute('data-fill', 'true');
     expect(image).toHaveAttribute('data-quality', '50');
-    expect(image).toHaveAttribute(
-      'data-sizes',
-      '(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1200px'
-    );
+    expect(image).toHaveAttribute('data-sizes', BLOG_POST_HERO_IMAGE_SIZES);
   });
 
   it('hoists the post title and streams the body region beneath it', () => {

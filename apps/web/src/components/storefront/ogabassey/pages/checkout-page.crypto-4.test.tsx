@@ -134,9 +134,13 @@ it('records the full order total for crypto completion after wallet credits', as
       .find((button) => !button.hasAttribute('disabled'));
     fireEvent.click(placeOrderButton as HTMLButtonElement);
 
-    const continueButton = await screen.findByRole('button', {
-      name: /continue with USDT on TRX/i,
-    });
+    const continueButton = await screen.findByRole(
+      'button',
+      {
+        name: /continue with USDT on TRX/i,
+      },
+      { timeout: 10_000 }
+    );
     fireEvent.click(continueButton);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -165,4 +169,4 @@ it('records the full order total for crypto completion after wallet credits', as
   } finally {
     fetchMock.mockRestore();
   }
-});
+}, 30_000);

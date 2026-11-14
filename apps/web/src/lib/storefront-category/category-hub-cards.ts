@@ -1,4 +1,3 @@
-import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
 import { buildCategoryHubBrandCards } from '@/lib/storefront-category/category-hub-brand-cards';
 import { buildPriceBandCards } from '@/lib/storefront-category/category-hub-price-band-cards';
 import type {
@@ -6,209 +5,39 @@ import type {
   CategoryHubCard,
   CategoryHubProduct,
 } from '@/lib/storefront-category/category-hub-types';
-import { buildPriceBandCandidate } from '@/lib/storefront-compare/compare-eligibility';
-import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
-
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function getSpecNumber(
-  product: CategoryHubProduct,
-  key: string
-): number | null {
-  const value = product.product_key_specs?.[key];
-  return isNumber(value) ? value : null;
-}
-
-function pickRepresentativeProduct(
-  products: CategoryHubProduct[],
-  comparator: (left: CategoryHubProduct, right: CategoryHubProduct) => number
-) {
-  return [...products].sort(comparator)[0] ?? null;
-}
-
-function buildBestForCards(input: {
-  categorySlug: string;
-  storeUrl: string;
-  products: CategoryHubProduct[];
-}) {
-  const lowestEligibleBand = getCuratedPriceBands(input.categorySlug)
-    .map((band) =>
-      buildPriceBandCandidate({
-        categorySlug: input.categorySlug,
-        band,
-        products: input.products,
-      })
-    )
-    .find((candidate) => candidate.isIndexable);
-
-  const makeCard = (
-    title: string,
-    description: string,
-    products: CategoryHubProduct[],
-    comparator: (left: CategoryHubProduct, right: CategoryHubProduct) => number
-  ): CategoryHubCard | null => {
-    const representative = pickRepresentativeProduct(products, comparator);
-    if (!representative) {
-      return null;
-    }
-
-    return {
-      title,
-      description,
-      href: `${input.storeUrl}/${input.categorySlug}/${representative.slug}`,
-    };
-  };
-
-  if (input.categorySlug === 'smartphones') {
-    const priorityDefaults = CATEGORY_HUB_DEFAULTS.smartphones;
-    const photography = input.products.filter(
-      (product) => (getSpecNumber(product, 'main_camera_mp') ?? 0) >= 48
-    );
-    const battery = input.products.filter(
-      (product) =>
-        (getSpecNumber(product, 'battery_mah') ?? 0) >= 5000 ||
-        (getSpecNumber(product, 'charging_watt') ?? 0) >= 45
-    );
-    const budget = lowestEligibleBand?.products ?? [];
-
-    return [
-      makeCard(
-        priorityDefaults.bestFor.photography.title,
-        priorityDefaults.bestFor.photography.description,
-        photography,
-        (left, right) =>
-          (getSpecNumber(right, 'main_camera_mp') ?? 0) -
-            (getSpecNumber(left, 'main_camera_mp') ?? 0) ||
-          left.price - right.price ||
-          left.name.localeCompare(right.name)
-      ),
-      makeCard(
-        priorityDefaults.bestFor.battery.title,
-        priorityDefaults.bestFor.battery.description,
-        battery,
-        (left, right) =>
-          (getSpecNumber(right, 'battery_mah') ?? 0) -
-            (getSpecNumber(left, 'battery_mah') ?? 0) ||
-          (getSpecNumber(right, 'charging_watt') ?? 0) -
-            (getSpecNumber(left, 'charging_watt') ?? 0) ||
-          left.price - right.price ||
-          left.name.localeCompare(right.name)
-      ),
-      makeCard(
-        priorityDefaults.bestFor.budget.title,
-        priorityDefaults.bestFor.budget.description,
-        budget,
-        (left, right) =>
-          left.price - right.price || left.name.localeCompare(right.name)
-      ),
-    ].filter((card): card is CategoryHubCard => Boolean(card));
-  }
-
-  if (input.categorySlug === 'laptops') {
-    const priorityDefaults = CATEGORY_HUB_DEFAULTS.laptops;
-    const workAndSchool = input.products.filter(
-      (product) =>
-        (getSpecNumber(product, 'ram_gb') ?? 0) >= 8 ||
-        (getSpecNumber(product, 'storage_gb') ?? 0) >= 256
-    );
-    const performance = input.products.filter(
-      (product) => (getSpecNumber(product, 'ram_gb') ?? 0) >= 16
-    );
-    const budget = lowestEligibleBand?.products ?? [];
-
-    return [
-      makeCard(
-        priorityDefaults.bestFor.workAndSchool.title,
-        priorityDefaults.bestFor.workAndSchool.description,
-        workAndSchool,
-        (left, right) =>
-          (getSpecNumber(right, 'ram_gb') ?? 0) -
-            (getSpecNumber(left, 'ram_gb') ?? 0) ||
-          (getSpecNumber(right, 'storage_gb') ?? 0) -
-            (getSpecNumber(left, 'storage_gb') ?? 0) ||
-          left.price - right.price ||
-          left.name.localeCompare(right.name)
-      ),
-      makeCard(
-        priorityDefaults.bestFor.performance.title,
-        priorityDefaults.bestFor.performance.description,
-        performance,
-        (left, right) =>
-          (getSpecNumber(right, 'ram_gb') ?? 0) -
-            (getSpecNumber(left, 'ram_gb') ?? 0) ||
-          left.price - right.price ||
-          left.name.localeCompare(right.name)
-      ),
-      makeCard(
-        priorityDefaults.bestFor.budget.title,
-        priorityDefaults.bestFor.budget.description,
-        budget,
-        (left, right) =>
-          left.price - right.price || left.name.localeCompare(right.name)
-      ),
-    ].filter((card): card is CategoryHubCard => Boolean(card));
-  }
-
-  if (input.categorySlug === 'smart-tvs') {
-    const priorityDefaults = CATEGORY_HUB_DEFAULTS['smart-tvs'];
-    const bigScreen = input.products.filter(
-      (product) => (getSpecNumber(product, 'screen_size_inches') ?? 0) >= 55
-    );
-    const fastMotion = input.products.filter(
-      (product) => (getSpecNumber(product, 'refresh_rate_hz') ?? 0) >= 120
-    );
-    const budget = lowestEligibleBand?.products ?? [];
-
-    return [
-      makeCard(
-        priorityDefaults.bestFor.bigScreenViewing.title,
-        priorityDefaults.bestFor.bigScreenViewing.description,
-        bigScreen,
-        (left, right) =>
-          (getSpecNumber(right, 'screen_size_inches') ?? 0) -
-            (getSpecNumber(left, 'screen_size_inches') ?? 0) ||
-          left.price - right.price ||
-          left.name.localeCompare(right.name)
-      ),
-      makeCard(
-        priorityDefaults.bestFor.fastMotion.title,
-        priorityDefaults.bestFor.fastMotion.description,
-        fastMotion,
-        (left, right) =>
-          (getSpecNumber(right, 'refresh_rate_hz') ?? 0) -
-            (getSpecNumber(left, 'refresh_rate_hz') ?? 0) ||
-          left.price - right.price ||
-          left.name.localeCompare(right.name)
-      ),
-      makeCard(
-        priorityDefaults.bestFor.budget.title,
-        priorityDefaults.bestFor.budget.description,
-        budget,
-        (left, right) =>
-          left.price - right.price || left.name.localeCompare(right.name)
-      ),
-    ].filter((card): card is CategoryHubCard => Boolean(card));
-  }
-
-  return [];
-}
+import { buildBestForCards } from './category-hub-best-for-cards';
 
 export function buildCategoryHubCards(input: {
   categorySlug: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  priceBandProducts?: CategoryHubProduct[];
+  compareProducts?: CategoryHubProduct[];
+  merchantCurrency?: string | null;
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {
       productCount: number;
       productCountIsLowerBound?: boolean;
     }
   >;
-}) {
+}): {
+  bestForCards: CategoryHubCard[];
+  brandCards: CategoryHubCard[];
+  priceBandCards: CategoryHubCard[];
+} {
   return {
-    bestForCards: buildBestForCards(input),
+    bestForCards: buildBestForCards({
+      categorySlug: input.categorySlug,
+      storeUrl: input.storeUrl,
+      products: input.products,
+      merchantCurrency: input.merchantCurrency,
+    }),
     brandCards: buildCategoryHubBrandCards(input),
-    priceBandCards: buildPriceBandCards(input),
+    priceBandCards: buildPriceBandCards({
+      categorySlug: input.categorySlug,
+      storeUrl: input.storeUrl,
+      products: input.priceBandProducts ?? input.products,
+      merchantCurrency: input.merchantCurrency,
+    }),
   };
 }

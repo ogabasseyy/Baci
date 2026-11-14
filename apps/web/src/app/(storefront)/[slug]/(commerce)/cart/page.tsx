@@ -17,7 +17,19 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CartPage({
+export default function CartPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  return (
+    <Suspense fallback={<CommerceRouteLoading />}>
+      <ResolvedCartPage params={params} />
+    </Suspense>
+  );
+}
+
+export async function ResolvedCartPage({
   params,
 }: {
   params: Promise<{ slug: string }>;

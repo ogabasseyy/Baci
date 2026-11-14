@@ -73,12 +73,8 @@ export function initializeRedvaultPaystackCheckout({
       async probeInitialization({ reference }) {
         const verification = await verifyTransaction(reference);
         if (!verification.success) {
-          // Only a confirmed-missing provider transaction is safe to
-          // initialize again; any other failure stays ambiguous so the
-          // stale claim is held for reconciliation instead of reissued.
-          return verification.code === 'HTTP_404'
-            ? { status: 'not_found' as const }
-            : { status: 'unknown' as const };
+          // A lookup miss does not establish that an issued URL is retired.
+          return { status: 'unknown' as const };
         }
         return verification.data.status === 'success'
           ? { status: 'paid' as const }

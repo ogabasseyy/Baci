@@ -55,6 +55,35 @@ describe('generateProductSchema content and custom properties', () => {
     );
   });
 
+  it('uses the generic fallback when both descriptions are unsupported', () => {
+    const schema = generateProductSchema(
+      makeSeoProduct({ description: 'N/A', meta_description: 'N/A' }),
+      'Ogabassey',
+      'NGN',
+      'NG'
+    );
+
+    expect(schema.description).toBe(
+      'Buy Test Product from Ogabassey. Best prices, fast delivery, and secure payments.'
+    );
+  });
+
+  it('caps the generic fallback when product names are unusually long', () => {
+    const schema = generateProductSchema(
+      makeSeoProduct({
+        name: 'Phone '.repeat(100),
+        description: 'N/A',
+        meta_description: 'N/A',
+      }),
+      'Ogabassey',
+      'NGN',
+      'NG'
+    );
+
+    expect(schema.description).toHaveLength(500);
+    expect(schema.description).toMatch(/\.\.\.$/);
+  });
+
   it('filters stored additional properties through the current product taxonomy', () => {
     const schema = generateProductSchema(
       makeSeoProduct({

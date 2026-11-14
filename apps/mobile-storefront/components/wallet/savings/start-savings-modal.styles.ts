@@ -26,7 +26,7 @@ export const startSavingsModalStyles = {
     gap: SPACING.sm,
   },
   modalTitle: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 14,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   summaryRow: {
@@ -36,10 +36,10 @@ export const startSavingsModalStyles = {
     paddingVertical: SPACING.xs,
   },
   summaryLabel: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
   },
   summaryValue: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
     textAlign: 'right',
   },
@@ -52,11 +52,11 @@ export const startSavingsModalStyles = {
     padding: SPACING.md,
   },
   fundingOptionTitle: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   fundingOptionDescription: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     marginTop: SPACING.xs,
     lineHeight: MODAL_DESCRIPTION_LINE_HEIGHT,
   },
@@ -77,20 +77,19 @@ export const startSavingsModalStyles = {
   },
   savedPaymentMethodTitle: {
     flex: 1,
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   savedPaymentMethodMeta: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     lineHeight: MODAL_DESCRIPTION_LINE_HEIGHT,
-    textTransform: 'uppercase',
   },
   emptyText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: MODAL_BODY_LINE_HEIGHT,
   },
   emptyFundingAccountText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: MODAL_BODY_LINE_HEIGHT,
   },
   outlineButton: {
@@ -101,7 +100,7 @@ export const startSavingsModalStyles = {
     paddingVertical: SPACING.sm,
   },
   outlineButtonText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   transferCard: {
@@ -117,10 +116,10 @@ export const startSavingsModalStyles = {
     marginTop: SPACING.xs,
   },
   transferMetaLabel: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
   },
   transferMetaValue: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   transferActionRow: {
@@ -136,7 +135,7 @@ export const startSavingsModalStyles = {
     paddingVertical: SPACING.sm,
   },
   secondaryButtonText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   modalCloseButton: {
@@ -144,8 +143,27 @@ export const startSavingsModalStyles = {
     alignSelf: 'center',
   },
   modalCloseText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
   },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: palette.red[200],
+    marginBottom: 4,
+  },
+  reviewEyebrow: { fontSize: 13, fontWeight: '600' },
+  reviewCard: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 6 },
+  reviewProduct: { fontSize: 15, fontWeight: '600' },
+  reviewTarget: { fontSize: 27, fontWeight: '700' },
+  reviewDivider: {
+    borderTopWidth: 1,
+    marginTop: 8,
+    paddingTop: 12,
+    gap: 10,
+  },
+  doneBody: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
   successIconWrap: {
     width: SUCCESS_ICON_SIZE,
     height: SUCCESS_ICON_SIZE,

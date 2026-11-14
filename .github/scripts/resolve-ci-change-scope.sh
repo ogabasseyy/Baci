@@ -10,6 +10,7 @@ if [[ "${EVENT_NAME:-}" == "merge_group" ]]; then
   quiz_db=true
   cwv_runner=true
   deploy_scripts=true
+  piggyvest_runbook=true
 else
   mobile_admin="${FILTER_MOBILE_ADMIN:-false}"
   mobile_storefront="${FILTER_MOBILE_STOREFRONT:-false}"
@@ -17,6 +18,7 @@ else
   quiz_db="${FILTER_QUIZ_DB:-false}"
   cwv_runner="${FILTER_CWV_RUNNER:-false}"
   deploy_scripts="${FILTER_DEPLOY_SCRIPTS:-false}"
+  piggyvest_runbook="${FILTER_PIGGYVEST_RUNBOOK:-false}"
   # Dispatched automation branches (e.g. Muse pin updates) change no web
   # paths but must still run mandated lint/typecheck/test gates on request.
   if [[ "${FORCE_QUALITY_GATES:-false}" == "true" ]]; then
@@ -31,4 +33,5 @@ fi
   printf 'quiz_db=%s\n' "$quiz_db"
   printf 'cwv_runner=%s\n' "$cwv_runner"
   printf 'deploy_scripts=%s\n' "$deploy_scripts"
+  printf 'piggyvest_runbook=%s\n' "$piggyvest_runbook"
 } >> "$GITHUB_OUTPUT"

@@ -1,12 +1,9 @@
--- Contract test: piggyvest_primary.engine_ready, the fail-closed readiness
--- stub for the PiggyVest ledger and transfer engine, and who may read it.
---
--- Until the enforcing readiness check replaces it, engine_ready answers
--- not-ready for every surface, so the inflow executor and the bank-inbox
--- worker (which ask it before any credit or claim) never credit a wallet.
+-- Contract test: who may read piggyvest_primary.engine_ready, the PiggyVest
+-- engine readiness check (first shipped as a fail-closed stub, now replaced
+-- by the enforcing check, whose verdicts are proven in
+-- piggyvest_primary_engine_ready_enforcing.sql).
 -- Proves, against live PostgreSQL:
---   * the stub verdict is exactly {ready:false, missing:[the stub marker]}
---     for every surface, an unknown surface and NULL;
+--   * an unknown surface and NULL are never ready;
 --   * only the dedicated readiness reader holds EXECUTE; it is granted to
 --     exactly the evidence, bank-inbox worker and authorizer roles; anon,
 --     authenticated, service_role, PUBLIC and the other PiggyVest roles
@@ -30,23 +27,18 @@ BEGIN
   IF p_ok IS DISTINCT FROM true THEN RAISE EXCEPTION '%', p_message; END IF;
 END $$;
 
--- The stub verdict, identical for every input.
+-- The stub verdict is replaced by the enforcing check
+-- (20261104130900); its verdicts are proven in
+-- piggyvest_primary_engine_ready_enforcing.sql. Here: whatever the
+-- installed body, an unknown surface and NULL are never ready.
 DO $$
-DECLARE
-  v_surface text;
-  v_stub constant jsonb :=
-    '{"ready": false, "missing": ["engine_readiness_not_installed"]}';
 BEGIN
-  FOREACH v_surface IN ARRAY ARRAY['inflow', 'bank_inbox', 'settlement_drain',
-    'settlement_full', 'spend', 'goal_inflow', 'treasury_sweep', 'approvals',
-    'not_a_surface', '']
-  LOOP
-    PERFORM pg_temp.check(
-      piggyvest_primary.engine_ready(v_surface) = v_stub,
-      format('engine_ready(%L) must return the stub verdict', v_surface));
-  END LOOP;
-  PERFORM pg_temp.check(piggyvest_primary.engine_ready(NULL) = v_stub,
-    'engine_ready(NULL) must return the stub verdict');
+  PERFORM pg_temp.check(piggyvest_primary.engine_ready('not_a_surface')
+      = '{"ready": false, "missing": ["unknown_surface"]}'::jsonb,
+    'an unknown surface must not be ready');
+  PERFORM pg_temp.check(piggyvest_primary.engine_ready(NULL)
+      = '{"ready": false, "missing": ["unknown_surface"]}'::jsonb,
+    'engine_ready(NULL) must not be ready');
 END $$;
 
 \ir piggyvest_primary_engine_ready_stub_grants.inc.sql

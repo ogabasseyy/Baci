@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { GPTTotal } from '@/lib/agentic/checkout';
+import { mapUcpCheckoutLineItem } from '@/lib/agentic/ucp-checkout-line-item-adapter';
 import { UCP_PROFILE_VERSION } from '@/lib/agentic/ucp-discovery-profile';
 import { mapUcpOrderLineItem } from '@/lib/agentic/ucp-order-line-item-adapter';
 
@@ -34,7 +35,7 @@ export function buildUcpCheckoutResponse(response: unknown) {
     },
     status: mapCheckoutStatus(response.status),
     line_items: Array.isArray(response.line_items)
-      ? response.line_items.map((lineItem) => mapCheckoutLineItem(lineItem))
+      ? response.line_items.map(mapUcpCheckoutLineItem)
       : [],
     totals: mapCheckoutTotals(response.totals),
   };
@@ -159,55 +160,6 @@ function mapCheckoutStatus(status: unknown): string {
     default:
       return 'requires_escalation';
   }
-}
-
-function mapCheckoutLineItem(lineItem: unknown) {
-  const lineItemRecord = isRecord(lineItem) ? lineItem : {};
-  const item = getRecord(lineItemRecord.item);
-  const quantity =
-    toPositiveInteger(lineItemRecord.quantity) ??
-    toPositiveInteger(item?.quantity) ??
-    1;
-  const lineTotal =
-    toIntegerAmount(lineItemRecord.total) ??
-    toIntegerAmount(lineItemRecord.subtotal) ??
-    toIntegerAmount(lineItemRecord.base_amount) ??
-    0;
-  const unitPrice =
-    quantity > 0
-      ? Math.max(0, Math.round(lineTotal / quantity))
-      : Math.max(0, lineTotal);
-
-  return {
-    ...lineItemRecord,
-    id: toStringValue(lineItemRecord.id) ?? 'unknown',
-    item: {
-      ...(item ?? {}),
-      id:
-        toStringValue(item?.id) ??
-        toStringValue(lineItemRecord.id) ??
-        'unknown',
-      price: unitPrice,
-      title:
-        toStringValue(item?.title) ?? toStringValue(item?.id) ?? 'Unknown item',
-    },
-    quantity,
-    totals: [
-      {
-        amount: Math.max(
-          0,
-          toIntegerAmount(lineItemRecord.subtotal) ?? lineTotal
-        ),
-        display_text: 'Subtotal',
-        type: 'subtotal',
-      },
-      {
-        amount: Math.max(0, lineTotal),
-        display_text: 'Total',
-        type: 'total',
-      },
-    ],
-  };
 }
 
 function mapCheckoutTotals(totals: unknown): unknown[] {

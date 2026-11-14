@@ -7,11 +7,24 @@ import { promisify } from 'node:util';
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, '../../../..');
 const execFileAsync = promisify(execFile);
 
-export function createReplayManifestTestWorkspace() {
+export function createReplayManifestTestWorkspace(
+  removeRoot = (root: string) =>
+    rm(root, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 })
+) {
   const temporaryRoots: string[] = [];
+  const pendingOperations = new Set<Promise<unknown>>();
 
   return {
     workspaceRoot: WORKSPACE_ROOT,
+    run: <T>(operation: () => Promise<T>) => {
+      const pending = Promise.resolve().then(operation);
+      pendingOperations.add(pending);
+      void pending.then(
+        () => pendingOperations.delete(pending),
+        () => pendingOperations.delete(pending)
+      );
+      return pending;
+    },
     copyWorkspace: async (prefix = 'baci-replay-verifier-') => {
       const root = await mkdtemp(path.join(tmpdir(), prefix));
       temporaryRoots.push(root);
@@ -39,11 +52,18 @@ export function createReplayManifestTestWorkspace() {
       );
       return root;
     },
-    cleanUp: async () =>
-      Promise.all(
-        temporaryRoots
-          .splice(0)
-          .map((root) => rm(root, { force: true, recursive: true }))
-      ),
+    cleanUp: async () => {
+      await Promise.allSettled([...pendingOperations]);
+      const roots = temporaryRoots.splice(0);
+      const results = await Promise.allSettled(
+        roots.map(async (root) => removeRoot(root))
+      );
+      const failures = results.flatMap((result, index) => {
+        if (result.status === 'fulfilled') return [];
+        temporaryRoots.push(roots[index]);
+        return [result.reason];
+      });
+      if (failures.length > 0) throw failures[0];
+    },
   };
 }

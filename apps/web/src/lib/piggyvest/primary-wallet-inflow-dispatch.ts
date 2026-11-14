@@ -9,13 +9,14 @@ export async function dispatchPrimaryWalletInflow(input: {
   signature: string | null;
   secret: string | undefined;
   families: readonly PiggyvestWebhookKeyFamily[];
+  env?: NodeJS.ProcessEnv;
 }) {
   // Key-family binding: only bank or legacy keys authorize inflow credit.
   // Any other family passes through unmapped so the route quarantines the
   // delivery instead of crediting from a foreign signing key.
   if (!input.families.includes('bank') && !input.families.includes('legacy'))
     return 'unmapped' as const;
-  const runtime = readPrimaryWalletInflowRuntime();
+  const runtime = readPrimaryWalletInflowRuntime(input.env ?? process.env);
   if (!runtime) return 'disabled' as const;
   return await applyPrimaryWalletSignedInflow({
     ...input,

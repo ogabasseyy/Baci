@@ -1,3 +1,7 @@
+vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
+  createShippingQuoteRouteProof: () => ({ signature: 'synthetic-test-proof' }),
+}));
+
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +11,11 @@ const mockGetMerchantForApiRequest = vi.fn();
 const mockHasPermission = vi.fn();
 const mockGetQuotes = vi.fn();
 const FIXED_QUOTE_EXPIRY = '2099-01-01T00:00:00.000Z';
+
+// Share rate fixture data across the separate public and admin mock clients.
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => mockCreateAdminClient(),
+}));
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
@@ -96,12 +105,17 @@ function buildSupabaseMock(
       }
       throw new Error(`Unexpected table: ${table}`);
     }),
-    // Merchant-configured rates RPC: no rates by default, so the historical
-    // carrier-only expectations in this suite stay byte-identical.
-    rpc: vi.fn().mockResolvedValue({
-      data: { locations: [], rates: [], zones: [] },
-      error: null,
-    }),
+    quotePersistence: shippingQuotesTable.upsert,
+    rpc: vi.fn((name: string, args: { p_quote?: unknown }) =>
+      name === 'storefront_shipping_quote_storage_ready'
+        ? Promise.resolve({ data: true, error: null })
+        : name === 'persist_storefront_shipping_quote'
+          ? shippingQuotesTable.upsert(args.p_quote)
+          : Promise.resolve({
+              data: { locations: [], rates: [], zones: [] },
+              error: null,
+            })
+    ),
   };
 }
 
@@ -171,9 +185,7 @@ describe('POST /api/shipping/quotes', () => {
   it('stores the resolved authenticated merchant on international quote requests', async () => {
     const supabase = buildSupabaseMock({ id: 'user-1' });
     mockCreateAdminClient.mockReturnValue(supabase);
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
+    mockCreateServerClient.mockResolvedValue(supabase);
     mockGetQuotes.mockResolvedValue({
       quotes: {
         featured: [],
@@ -202,17 +214,13 @@ describe('POST /api/shipping/quotes', () => {
     const response = await POST(buildQuoteRequest());
 
     expect(response.status).toBe(200);
-    const quotesTable = supabase.from('shipping_quotes') as {
-      upsert: ReturnType<typeof vi.fn>;
-    };
-    expect(quotesTable.upsert).toHaveBeenCalledWith(
+    expect(supabase.quotePersistence).toHaveBeenCalledWith(
       expect.objectContaining({
         merchant_id: 'merchant-1',
         quote_request: expect.objectContaining({
           merchantId: 'merchant-1',
         }),
-      }),
-      { onConflict: 'id' }
+      })
     );
   });
 

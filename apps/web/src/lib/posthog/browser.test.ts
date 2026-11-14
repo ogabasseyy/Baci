@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const PAGEVIEW_CAPTURE_OPTIONS = { send_instantly: true };
@@ -392,6 +394,50 @@ describe('initializePostHogBrowser', () => {
       '$pageview',
       {
         $current_url: 'https://usebaci.com/pricing?plan=starter',
+        app_surface: 'web',
+      },
+      PAGEVIEW_CAPTURE_OPTIONS
+    );
+  });
+
+  it('forwards custom properties with pageviews when loaded or queued', async () => {
+    const env = {
+      NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_project_token',
+    };
+    const { capturePostHogPageview, initializePostHogBrowser } =
+      await importBrowserInitializer();
+
+    capturePostHogPageview('https://usebaci.com/blog/guide', {
+      $referrer: 'https://google.com',
+      $referring_domain: 'google.com',
+      utm_source: 'search',
+    });
+    initializePostHogBrowser(env);
+    loadPostHogClient();
+
+    expect(mocks.posthogCapture).toHaveBeenCalledWith(
+      '$pageview',
+      {
+        $current_url: 'https://usebaci.com/blog/guide',
+        $referrer: 'https://google.com',
+        $referring_domain: 'google.com',
+        app_surface: 'web',
+        utm_source: 'search',
+      },
+      PAGEVIEW_CAPTURE_OPTIONS
+    );
+
+    capturePostHogPageview('https://usebaci.com/blog/guide-2', {
+      $referrer: '$direct',
+      $referring_domain: '$direct',
+    });
+
+    expect(mocks.posthogCapture).toHaveBeenLastCalledWith(
+      '$pageview',
+      {
+        $current_url: 'https://usebaci.com/blog/guide-2',
+        $referrer: '$direct',
+        $referring_domain: '$direct',
         app_surface: 'web',
       },
       PAGEVIEW_CAPTURE_OPTIONS

@@ -1,3 +1,4 @@
+import { isGiglShippingRetainingPaymentMethod } from '@baci/shared/lib/gigl-shipping-retention-payment-methods';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadOrderGiglInternalCreditRetainedAmount } from './load-order-gigl-internal-credit-retained-amount';
 import { loadOrderGiglSettledRetainedAmount } from './load-order-gigl-settled-retained-amount';
@@ -18,16 +19,6 @@ export type AssertGiglCustomerCheckoutPrepaidContext = {
   /** Test injection / preloaded settled retention; skips the settlements read. */
   settledRetainedAmount?: number;
 };
-
-const GIGL_CHECKOUT_PAYMENT_METHODS_WITHOUT_RETENTION = new Set([
-  'pod',
-  'pay_on_delivery',
-  'credit_direct',
-  'credit-direct',
-  'manual',
-  'manual_payment',
-  'cash',
-]);
 
 function normalizePaymentMethod(
   paymentMethod: string | null | undefined
@@ -54,9 +45,7 @@ export function isPayOnDeliveryPaymentMethod(
 export function isGiglCheckoutPaymentWithoutRetainedShipping(
   paymentMethod: string | null | undefined
 ): boolean {
-  return GIGL_CHECKOUT_PAYMENT_METHODS_WITHOUT_RETENTION.has(
-    normalizePaymentMethod(paymentMethod)
-  );
+  return !isGiglShippingRetainingPaymentMethod(paymentMethod);
 }
 
 /**
@@ -81,6 +70,9 @@ export function hasGiglCheckoutShippingRetention(
   );
 }
 
+// Invariant: mobile-admin treats GIGL_REQUIRES_PREPAID_OR_WALLET as a refusal
+// before carrier submission (not an unknown booking state). Only raise it from
+// pre-submission guards; never after a booking request has been sent.
 function throwPrepaidRequired(): never {
   throw new OrderShipmentBookingError(
     'GIGL shipping must be prepaid at checkout or funded from the merchant wallet before booking.',
@@ -114,20 +106,26 @@ export async function assertGiglCustomerCheckoutPrepaid(
   // source. Preserve the prior paid booking path for those rows; only stamped
   // customer_checkout orders require settlement-covered retention below.
   if (order.shipping_funding_source == null) {
+    // Credit Direct / cash / manual never route shipping money to Baci, so a
+    // null funding source cannot count as prepaid: bind the merchant wallet.
     if (
       paymentStatus !== 'paid' ||
-      isPayOnDeliveryPaymentMethod(order.payment_method)
+      isPayOnDeliveryPaymentMethod(order.payment_method) ||
+      isGiglCheckoutPaymentWithoutRetainedShipping(paymentMethod)
     ) {
       throwPrepaidRequired();
     }
     return;
   }
 
+  // Stamped customer_checkout orders are judged by settled retention below,
+  // not by the payment-method allow-list: an order whose settlement proves Baci
+  // holds the full tariff must still book (the DB forbids rebinding it to the
+  // wallet). Without settled coverage it is refused and rebinds to the wallet.
   const hasRetentionIntent = hasGiglCheckoutShippingRetention(order);
   const requiresPrepaidShipping =
     paymentStatus !== 'paid' ||
     isPayOnDeliveryPaymentMethod(order.payment_method) ||
-    isGiglCheckoutPaymentWithoutRetainedShipping(paymentMethod) ||
     !hasRetentionIntent;
 
   if (requiresPrepaidShipping) {

@@ -1,10 +1,16 @@
 import { useRef } from 'react';
-import { Alert } from 'react-native';
+import { isFundedUnsettledGoal } from './savings/goal-settlement';
+import { notifySavings } from './savings/savings-notice';
+import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
+import { useWalletPinPrompt } from './savings/use-wallet-pin-prompt';
 import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 
 export function useWalletSavingsController(
-  input: Parameters<typeof createWalletSavingsActions>[0] & { userId?: string }
+  input: Parameters<typeof createWalletSavingsActions>[0] & {
+    userId?: string;
+    walletUpdatedAt?: number;
+  }
 ) {
   // The pending key belongs to the (user, merchant, goal) scope that
   // created it: the server answers not_found for any other scope (its
@@ -23,26 +29,55 @@ export function useWalletSavingsController(
   if (boundScope.current !== scopeKey) {
     boundScope.current = scopeKey;
     input.idempotencyKeyRef.current = null;
+    input.operationRailRef.current = null;
   }
   const recovery = usePrimarySavingsRecovery({
     merchantId: input.activeMerchantId,
     userId: input.userId,
     goalId: input.goal?.id,
     operationRef: input.idempotencyKeyRef,
+    railRef: input.operationRailRef,
     setAmount: input.setSavingsContributionAmount,
   });
-  const actions = createWalletSavingsActions(input);
+  const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
+  const gate = usePrimaryGoalGate(input.walletUpdatedAt);
+  const goalAwaitingSettlement =
+    gate === 'ready' && isFundedUnsettledGoal(input.goal);
+  const actions = createWalletSavingsActions({
+    ...input,
+    goalAwaitingSettlement,
+    goalSettlementChecking:
+      (gate === 'checking' || gate === 'error') &&
+      isFundedUnsettledGoal(input.goal),
+    requestPinProof: requestProof,
+  });
   const retryRecovery = () => {
     recovery.retry();
-    Alert.alert(
+    notifySavings(
       'Checking contributions',
-      'We need to check for an existing transfer before starting another payment. Please try again after this check.'
+      'We need to check for an existing transfer before starting another payment. Please try again after this check.',
+      'info'
     );
   };
+  const hasPendingSavingsContribution =
+    recovery.ready && actions.hasPendingSavingsContribution;
   return {
     ...actions,
-    hasPendingSavingsContribution:
-      recovery.ready && actions.hasPendingSavingsContribution,
+    goalAwaitingSettlement,
+    pinSheetProps,
+    hasPendingSavingsContribution,
+    /** What the wallet content needs to show the savings sheet correctly. */
+    walletContentSavingsProps: {
+      hasPendingSavingsContribution,
+      // The card keeps "Complete goal" while the check is running or the
+      // server is unreachable (walk 11): the same funded goal never flips to
+      // "Start another plan". The sheet still waits for 'ready' to act.
+      goalAwaitingSettlement:
+        goalAwaitingSettlement ||
+        ((gate === 'checking' || gate === 'error') &&
+          isFundedUnsettledGoal(input.goal)),
+      walletUpdatedAt: input.walletUpdatedAt,
+    },
     handleAddSavingsContribution: recovery.ready
       ? actions.handleAddSavingsContribution
       : retryRecovery,

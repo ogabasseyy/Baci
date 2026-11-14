@@ -1,23 +1,26 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T20:34:23+00:00",
-  "source_revision": "740122683e1c16979372ce963ca2aabd0b8f3fed",
-  "evidence_digest": "0768371803be406d0d4f5c025f46d9162c68f1769b19f3c3894586c642a76fae",
-  "claims_digest": "55262d91c0adc6264e692c92fb5e8608a885c79e68e215d1a6c8b16251b14f60",
-  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-11T18:05:00+00:00",
+  "source_revision": "fc72484cc2f18b91ce001c074c49014c614384b6",
+  "evidence_digest": "d195a66b699bfd12b9e701bb2f10ebc644eeb5645b790586f3fa8063a23796ba",
+  "claims_digest": "ac4bd93c2509d0f8e4599bb57e8259d593a351f9006c0db0e556e99f4ff8fa97",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
-        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
+        "apps/web/src/config/oxygen-storefront-staging.ts",
+        "apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts",
+        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql"
       ]
     },
     {
@@ -70,14 +73,20 @@
       "title": "Staff-entered orders",
       "status": "code_evidenced",
       "claim": "Baci implements manual order creation, payment recording and order-status management for merchant staff.",
-      "limitations": "Network and permissions are required. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
+      "limitations": "Network and permissions are required. For a paid order with an outstanding external payment (planned from the ledger by one shared function; when the ledger cannot be read the prompt falls back to offering the choice and the server decides), the web order page and the mobile order-details screen let the merchant choose an automatic refund or a cancel-only path with a manual refund (owner or refund permission). The automatic option is hidden when an outstanding leg is not a Paystack leg with a reference, and the mobile list-screen status dropdown always uses the automatic default. The automatic path is queued and depends on the provider accepting it, so do not claim every cancellation refunds the customer. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
       "source_refs": [
         "apps/web/src/app/dashboard/orders/create/page.tsx",
         "apps/mobile-admin/app/(admin)/order/new.tsx",
         "apps/mobile-admin/hooks/orders/useRecordPayment.ts",
         "apps/web/src/app/dashboard/orders/create/create-order-form.tsx",
         "apps/mobile-admin/hooks/useNewOrderController.ts",
-        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts"
+        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts",
+        "supabase/migrations/20261111090100_merchant_cancel_order_refund_mode.sql",
+        "packages/shared/src/lib/cancel-refund-plan.ts",
+        "apps/web/src/app/api/orders/[id]/cancelled/route.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/use-order-cancellation.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/cancel-order-dialog.tsx",
+        "apps/mobile-admin/hooks/createOrderDetailsStatusActions.ts"
       ]
     },
     {
@@ -196,7 +205,30 @@
         "apps/web/src/app/api/agentic/catalog/search/route.ts",
         "apps/web/src/app/api/agentic/carts/route.ts",
         "apps/web/src/app/api/agentic/checkout_sessions/route.ts",
-        "apps/web/src/app/api/agentic/orders/[id]/route.ts"
+        "apps/web/src/app/api/agentic/orders/[id]/route.ts",
+        "apps/web/src/lib/agentic/checkout.ts",
+        "apps/web/src/lib/agentic/checkout-session-tax.ts",
+        "apps/web/src/lib/agentic/agentic-line-tax.ts",
+        "apps/web/src/lib/agentic/checkout-catalog.ts",
+        "apps/web/src/lib/agentic/checkout-order-tax.ts",
+        "apps/web/src/lib/agentic/checkout-completion-payloads.ts",
+        "apps/web/src/lib/agentic/checkout-totals.ts",
+        "apps/web/src/lib/agentic/ucp-checkout-line-item-adapter.ts",
+        "apps/web/src/lib/agentic/ucp-response-adapters.ts"
+      ]
+    },
+    {
+      "id": "custom-storefront-mcp",
+      "title": "Full-code storefront MCP foundations",
+      "status": "code_evidenced",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
+      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
+      "source_refs": [
+        "apps/web/builder-mcp-server/registry.ts",
+        "apps/web/src/lib/experience/production-integration.ts",
+        "apps/web/tools/experience-runner/linux-runner.ts",
+        "apps/web/tools/experience-runner/preview-delivery.ts",
+        "docs/connectors/experience-runner-delivery-qualification.md"
       ]
     },
     {

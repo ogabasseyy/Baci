@@ -1,0 +1,1 @@
+supabase/tests/piggyvest_card_purge_trigger_grants.sql

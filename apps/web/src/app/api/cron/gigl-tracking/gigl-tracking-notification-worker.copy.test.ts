@@ -1,30 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processClaimedGiglTrackingNotifications } from './gigl-tracking-notification-worker';
 
+import { createGiglTrackingNotificationSupabase } from './gigl-tracking-notification-worker.test-support';
+
 const notifyMerchant = vi.hoisted(() => vi.fn());
 const notifyCustomer = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
-
-function query(data: unknown) {
-  const builder = {
-    eq: vi.fn(() => builder),
-    maybeSingle: vi.fn().mockResolvedValue({ data, error: null }),
-    select: vi.fn(() => builder),
-  };
-  return builder;
-}
+vi.mock('@/lib/expo-client', () => ({ getExpoClient: vi.fn() }));
+vi.mock('@/lib/expo-push-core', () => ({
+  notifyCustomerWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyCustomer(...args),
+  notifyMerchantWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyMerchant(...args),
+}));
 
 function supabaseFor(description: string) {
-  const from = vi
-    .fn()
-    .mockImplementationOnce(() => query({ description }))
-    .mockImplementation(() => query(null));
-  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-  return { from, rpc };
+  return createGiglTrackingNotificationSupabase({ description });
 }
 
 const merchantKinds = [
-  ['pickup_delayed', 'Pickup delayed'],
+  ['pickup_delayed', 'GIG pickup delayed'],
   ['failed', 'Delivery issue'],
   ['returned', 'Order returned'],
   ['cancelled', 'Shipment cancelled'],
@@ -56,6 +50,7 @@ describe('GIGL tracking notification copy', () => {
           merchant_id: '00000000-0000-4000-8000-000000000002',
           notification_kind: kind,
           order_id: '00000000-0000-4000-8000-000000000003',
+          recipient_user_ids: ['00000000-0000-4000-8000-0000000000a1'],
           shipment_id: '00000000-0000-4000-8000-000000000005',
           tracking_event_id: '00000000-0000-4000-8000-000000000004',
         },
@@ -76,10 +71,11 @@ describe('GIGL tracking notification copy', () => {
   it.each(
     customerKinds
   )('uses explicit customer copy for %s', async (kind, title) => {
-    const supabase = supabaseFor('provider detail');
-    supabase.from
-      .mockImplementationOnce(() => query({ customer_id: 'customer' }))
-      .mockImplementationOnce(() => query({ user_id: 'user' }));
+    const supabase = createGiglTrackingNotificationSupabase(
+      { description: 'provider detail' },
+      { customer_id: 'customer' },
+      { user_id: 'user' }
+    );
 
     await processClaimedGiglTrackingNotifications(
       supabase as never,
@@ -90,6 +86,7 @@ describe('GIGL tracking notification copy', () => {
           merchant_id: '00000000-0000-4000-8000-000000000002',
           notification_kind: kind,
           order_id: '00000000-0000-4000-8000-000000000003',
+          recipient_user_ids: ['00000000-0000-4000-8000-0000000000a1'],
           shipment_id: '00000000-0000-4000-8000-000000000005',
           tracking_event_id: '00000000-0000-4000-8000-000000000004',
         },

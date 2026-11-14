@@ -80,39 +80,120 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       const auth = `SELECT set_config('request.jwt.claim.role','authenticated',true);
         SELECT set_config('request.jwt.claim.sub','${RECOVERY_OWNER_ID}',true); SET LOCAL ROLE authenticated;`;
       database.query(`BEGIN; ${auth} ${prepareStep(value)} COMMIT;`);
-      const confirmer = database.queryAsync(`BEGIN; ${auth}
-        SELECT public.get_customer_checkout_shipping_recovery_context('${RECOVERY_ORDER_ID}');
-        SELECT public.confirm_customer_checkout_shipping_recovery('${RECOVERY_ORDER_ID}','${value.id}',true);
-        SELECT pg_sleep(1); COMMIT;`);
-      // Observe the relation lock before starting the editor: a condition
-      // wait with a robust timeout replaces the fixed short delay, so a slow
-      // CI host fails explicitly instead of silently observing unlocked.
-      let locked = false;
-      await recoveryWaitFor(() => {
-        locked =
-          database
-            .query(`SELECT EXISTS(SELECT 1 FROM pg_locks
-          WHERE relation='public.products'::regclass AND mode='RowShareLock' AND granted);`)
-            .trim() === 't';
-        return locked;
-      }, 'products RowShareLock');
-      const editor =
-        database.queryAsync(`SET application_name='recovery_product_editor';
-        UPDATE public.products SET weight_value=2 RETURNING weight_value;`);
-      let blocked = false;
-      await recoveryWaitFor(() => {
-        blocked =
-          database
-            .query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
-          WHERE application_name='recovery_product_editor' AND wait_event_type='Lock');`)
-            .trim() === 't';
-        return blocked;
-      }, 'product editor lock wait');
-      const results = await Promise.all([confirmer, editor]);
-      expect(locked).toBe(true);
-      expect(blocked).toBe(true);
-      expect(results[0]).toContain('"confirmed": true');
-      expect(results[1].trim()).toBe('2');
-    });
+
+      // Hold a test-only advisory lock so the confirmer cannot commit until
+      // we have observed the editor waiting on its actual product lock.
+      const holder =
+        database.queryAsync(`SET application_name='recovery_test_gate';
+        SELECT pg_advisory_lock(74123, 1); SELECT pg_sleep(29);`);
+      let confirmer: Promise<string> | undefined;
+      let editor: Promise<string> | undefined;
+      let backgroundError: unknown;
+      let released = false;
+      let primaryError: unknown;
+      let cleanupError: unknown;
+      void holder.catch((error: unknown) => {
+        if (!released) backgroundError = error;
+      });
+      const deadline = Date.now() + 20000;
+      const waitFor = async (probe: () => boolean, description: string) => {
+        await recoveryWaitFor(
+          () => {
+            if (backgroundError) throw backgroundError;
+            return probe();
+          },
+          description,
+          Math.max(1, deadline - Date.now())
+        );
+      };
+      try {
+        await waitFor(
+          () =>
+            database
+              .query(`SELECT EXISTS(SELECT 1 FROM pg_locks l
+              JOIN pg_stat_activity a ON a.pid=l.pid
+              WHERE a.application_name='recovery_test_gate'
+                AND l.locktype='advisory' AND l.classid=74123
+                AND l.objid=1 AND l.objsubid=2 AND l.granted);`)
+              .trim() === 't',
+          'test advisory gate'
+        );
+        confirmer =
+          database.queryAsync(`SET application_name='recovery_test_confirmer';
+          BEGIN; ${auth}
+          SELECT public.get_customer_checkout_shipping_recovery_context('${RECOVERY_ORDER_ID}');
+          SELECT public.confirm_customer_checkout_shipping_recovery('${RECOVERY_ORDER_ID}','${value.id}',true);
+          SELECT pg_advisory_xact_lock(74123, 1); COMMIT;`);
+        void confirmer.catch((error: unknown) => {
+          backgroundError = error;
+        });
+        await waitFor(
+          () =>
+            database
+              .query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity a
+              JOIN pg_locks p ON p.pid=a.pid
+              JOIN pg_locks g ON g.pid=a.pid
+              WHERE a.application_name='recovery_test_confirmer'
+                AND p.relation='public.products'::regclass
+                AND p.mode='RowShareLock' AND p.granted
+                AND g.locktype='advisory' AND g.classid=74123
+                AND g.objid=1 AND g.objsubid=2 AND NOT g.granted);`)
+              .trim() === 't',
+          'confirmed transaction holding product lock'
+        );
+        editor =
+          database.queryAsync(`SET application_name='recovery_product_editor';
+          UPDATE public.products SET weight_value=2 RETURNING weight_value;`);
+        void editor.catch((error: unknown) => {
+          backgroundError = error;
+        });
+        await waitFor(
+          () =>
+            database
+              .query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity editor
+              JOIN pg_stat_activity confirmer ON confirmer.application_name='recovery_test_confirmer'
+              WHERE editor.application_name='recovery_product_editor'
+                AND confirmer.pid = ANY(pg_blocking_pids(editor.pid)));`)
+              .trim() === 't',
+          'product editor blocked by confirmer'
+        );
+        const release = database
+          .query(`SELECT COALESCE(bool_or(pg_terminate_backend(pid)), false)
+          FROM pg_stat_activity WHERE application_name='recovery_test_gate' AND pid <> pg_backend_pid();`)
+          .trim();
+        expect(release).toBe('t');
+        released = true;
+        const results = await Promise.all([confirmer, editor]);
+        expect(results[0]).toContain('"confirmed": true');
+        expect(results[1].trim()).toBe('2');
+      } catch (error) {
+        primaryError = error;
+      } finally {
+        try {
+          if (!released) {
+            const stopped = database
+              .query(`SELECT COALESCE(bool_and(pg_terminate_backend(pid)), true)
+              FROM pg_stat_activity WHERE application_name='recovery_test_gate' AND pid <> pg_backend_pid();`)
+              .trim();
+            if (stopped !== 't')
+              cleanupError = new Error('could not stop test gate');
+          }
+        } catch (error) {
+          cleanupError = error;
+        }
+        await Promise.allSettled([
+          holder,
+          ...(confirmer ? [confirmer] : []),
+          ...(editor ? [editor] : []),
+        ]);
+      }
+      if (primaryError && cleanupError)
+        throw new AggregateError(
+          [primaryError, cleanupError],
+          'test and cleanup failed'
+        );
+      if (primaryError) throw primaryError;
+      if (cleanupError) throw cleanupError;
+    }, 45000);
   }
 );

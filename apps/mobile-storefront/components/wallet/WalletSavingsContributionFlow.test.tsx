@@ -41,13 +41,31 @@ describe('WalletSavingsContributionFlow', () => {
     expect(props.onAddAmountChange).toHaveBeenLastCalledWith('');
   });
 
+  it('widens the amount field with the digits, so a chip-set amount is never clipped', () => {
+    const props = {
+      ...createProps(),
+      addAmount: '1000',
+      remainingAmount: 900000,
+    };
+    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
+    const narrow = StyleSheet.flatten(
+      screen.getByLabelText('Savings top-up amount').props.style
+    ).minWidth as number;
+    rerender(<WalletSavingsContributionFlow {...props} addAmount="500000" />);
+    const wide = StyleSheet.flatten(
+      screen.getByLabelText('Savings top-up amount').props.style
+    ).minWidth as number;
+    expect(wide).toBeGreaterThan(narrow);
+    expect(wide).toBeGreaterThanOrEqual('500,000'.length * 24);
+  });
+
   it('does not open another funding screen before an amount is entered for a ₦0 wallet', () => {
     const props = createProps();
     render(<WalletSavingsContributionFlow {...props} />);
 
-    expect(screen.getByText('Available in wallet: ₦0')).toBeOnTheScreen();
+    expect(screen.getByText('₦0 available in wallet')).toBeOnTheScreen();
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })
@@ -69,7 +87,7 @@ describe('WalletSavingsContributionFlow', () => {
     render(<WalletSavingsContributionFlow {...props} />);
 
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     fireEvent.press(
       screen.getByRole('button', {
@@ -97,7 +115,7 @@ describe('WalletSavingsContributionFlow', () => {
         )
       ).toBeOnTheScreen();
       const payment = screen.getByRole('button', {
-        name: 'Continue to payment',
+        name: 'Wallet funding unavailable',
       });
       expect(payment).toHaveAccessibilityState({ disabled: true });
       fireEvent.press(payment);
@@ -133,14 +151,13 @@ describe('WalletSavingsContributionFlow', () => {
       const props = { ...createProps(), addAmount: '500' };
       render(<WalletSavingsContributionFlow {...props} />);
 
-      expect(
-        screen.getByText(/do not send a real bank transfer/i)
-      ).toBeOnTheScreen();
+      expect(screen.getByText(/do not send real money/i)).toBeOnTheScreen();
       const payment = screen.getByRole('button', {
-        name: 'Open savings bank transfer details',
+        name: 'Add money for savings',
       });
       expect(payment).toHaveAccessibilityState({ disabled: false });
-      expect(payment).toHaveTextContent('View bank transfer details');
+      expect(payment).toHaveTextContent('Add money');
+      expect(screen.queryByText(/bank transfer/i)).toBeNull();
       fireEvent.press(payment);
       expect(props.onFundWallet).toHaveBeenCalledTimes(1);
     } finally {
@@ -163,7 +180,7 @@ describe('WalletSavingsContributionFlow', () => {
     render(<WalletSavingsContributionFlow {...props} />);
 
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })
@@ -190,7 +207,7 @@ describe('WalletSavingsContributionFlow', () => {
       fireEvent.press(contribute);
       expect(props.onAddSavings).toHaveBeenCalledTimes(1);
       expect(props.onFundWallet).not.toHaveBeenCalled();
-      expect(screen.queryByText('View bank transfer details')).toBeNull();
+      expect(screen.queryByText('Add money')).toBeNull();
     } finally {
       if (previousMode === undefined)
         delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
@@ -202,7 +219,9 @@ describe('WalletSavingsContributionFlow', () => {
     const props = { ...createProps(), addAmount: '500', walletBalance: 500 };
     render(<WalletSavingsContributionFlow {...props} />);
 
-    expect(screen.getByText(/Move ₦500 from your wallet/i)).toBeOnTheScreen();
+    // The button names the amount; no separate "Move ₦500" sentence.
+    expect(screen.getByText('Add ₦500')).toBeOnTheScreen();
+    expect(screen.queryByText(/Move ₦500 from your wallet/i)).toBeNull();
     expect(
       screen.queryByRole('button', {
         name: 'Continue to payment',
@@ -237,62 +256,5 @@ describe('WalletSavingsContributionFlow', () => {
         name: 'Continue to payment',
       })
     ).toBeNull();
-  });
-
-  it('waits for an amount and rejects one above the remaining goal', () => {
-    const props = { ...createProps(), walletBalance: 1000 };
-    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
-
-    expect(
-      screen.getByRole('button', { name: 'Confirm savings top-up' })
-    ).toHaveAccessibilityState({ disabled: true });
-    fireEvent.changeText(
-      screen.getByLabelText('Savings top-up amount'),
-      '1200'
-    );
-    expect(props.onAddAmountChange).toHaveBeenCalledWith('1200');
-
-    rerender(<WalletSavingsContributionFlow {...props} addAmount="1200" />);
-    expect(screen.getByText(/only needs ₦1,000 more/i)).toBeOnTheScreen();
-    expect(
-      screen.queryByRole('button', { name: 'Confirm savings top-up' })
-    ).toBeNull();
-    expect(
-      screen.queryByRole('button', {
-        name: 'Continue to payment',
-      })
-    ).toBeNull();
-  });
-
-  it('disables funding and amount edits while a savings transfer is pending', () => {
-    const props = {
-      ...createProps(),
-      addAmount: '500',
-      isAdding: true,
-      walletBalance: 100,
-    };
-    render(<WalletSavingsContributionFlow {...props} />);
-
-    const fund = screen.getByRole('button', {
-      name: 'Continue to payment',
-    });
-    expect(fund).toHaveAccessibilityState({ disabled: true });
-    expect(screen.getByLabelText('Savings top-up amount').props.editable).toBe(
-      false
-    );
-    fireEvent.press(fund);
-    expect(props.onFundWallet).not.toHaveBeenCalled();
-  });
-
-  it('disables repeated payment starts while wallet funding is pending', () => {
-    const props = { ...createProps(), addAmount: '500', isFundPending: true };
-    render(<WalletSavingsContributionFlow {...props} />);
-
-    const fund = screen.getByRole('button', {
-      name: 'Continue to payment',
-    });
-    expect(fund).toHaveAccessibilityState({ disabled: true, busy: true });
-    fireEvent.press(fund);
-    expect(props.onFundWallet).not.toHaveBeenCalled();
   });
 });

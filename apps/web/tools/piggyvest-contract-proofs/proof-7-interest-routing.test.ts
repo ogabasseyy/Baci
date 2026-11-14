@@ -27,13 +27,12 @@ async function run(options: Parameters<typeof makeHarness>[0] = {}) {
 }
 
 describe('proof 7: main-wallet interest routing at creation', () => {
-  it('creates a new QA customer with a payout wallet, reads it back, and tests both goal variants', async () => {
+  it('creates a new QA customer with a payout wallet, reads it back, and tests the four goal variants', async () => {
     const { h, result, newPosts } = await run();
     expect(result.status).toBe('observed');
     expect(newPosts).toEqual([
       '/api/v1/customers',
-      '/api/v1/wallet/sub-account',
-      '/api/v1/wallet/sub-account',
+      ...Array(4).fill('/api/v1/wallet/sub-account'),
     ]);
     expect(answer(result, 'customer_create_with_payout_accepted')).toBe('yes');
     expect(answer(result, 'customer_created_fresh')).toBe('yes');
@@ -46,7 +45,7 @@ describe('proof 7: main-wallet interest routing at creation', () => {
     expect(answer(result, 'main_wallet_accrual_flag_readable')).toBe('yes');
     expect(answer(result, 'goal_without_payout_created')).toBe('yes');
     expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
-      'no'
+      'unknown'
     );
     expect(answer(result, 'goal_explicit_payout_accepted')).toBe('yes');
     expect(
@@ -113,7 +112,7 @@ describe('proof 7: main-wallet interest routing at creation', () => {
   it('records a sub-account endpoint that rejects interest_payout_wallet', async () => {
     const { result } = await run({ mock: { subAccountAcceptsPayout: false } });
     expect(answer(result, 'goal_explicit_payout_accepted')).toBe('no');
-    expect(result.values.goal_explicit_error_message).toBe(
+    expect(result.values.goal_d_error_message).toBe(
       'Invalid interest payout wallet'
     );
     expect(answer(result, 'goal_without_payout_created')).toBe('yes');
@@ -249,11 +248,13 @@ describe('proof 7: a new attempt re-tests with fresh names', () => {
 });
 
 describe('proof 7: inheritance needs a readable destination', () => {
-  it('says no when the goal readback shows an empty payout field next to the main wallet naming the business wallet', async () => {
+  it('an empty goal payout field proves nothing, even next to a main wallet naming the business wallet', async () => {
     const { result } = await run();
-    expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
-      'no'
-    );
+    const id = 'goal_without_payout_inherits_business_payout';
+    expect(result.status).toBe('observed');
+    const finding = result.findings.find((f) => f.id === id);
+    expect(finding).toMatchObject({ answer: 'unknown' });
+    expect(finding?.detail).toMatch(/in writing/);
   });
 
   it('says unknown when the goal readback omits its payout destination (only the accrual flag is there)', async () => {

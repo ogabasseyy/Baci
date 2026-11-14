@@ -5,7 +5,8 @@ import {
   piggyvestPrimaryWalletOnboardingConfigurationSchema,
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
-import { PiggyvestApiError } from './client';
+import { settlePrimaryWalletCreateIfNotSent } from './primary-wallet-create-not-sent';
+import { classifyPrimaryWalletCreationDecline } from './primary-wallet-creation-decline';
 import {
   lookupPrimaryWalletCustomer,
   type PrimaryWalletCustomerLookup,
@@ -42,7 +43,8 @@ type Outcome = {
     | 'INVALID_BVN'
     | 'OWNERSHIP_REVIEW_REQUIRED'
     | 'INTEREST_ROUTING_REVIEW_REQUIRED'
-    | 'STORAGE_UNAVAILABLE';
+    | 'STORAGE_UNAVAILABLE'
+    | 'PROVIDER_UNAVAILABLE';
 };
 
 export async function onboardPiggyvestPrimaryWallet(
@@ -144,10 +146,11 @@ export async function onboardPiggyvestPrimaryWallet(
     }
   }
 
+  let createReturned = false; // only createCustomer's rejection proves not-sent
   try {
-    const result = piggyvestPrimaryWalletCreationSchema.safeParse(
-      await input.createCustomer(providerRequest)
-    );
+    const created = await input.createCustomer(providerRequest);
+    createReturned = true;
+    const result = piggyvestPrimaryWalletCreationSchema.safeParse(created);
     if (!result.success) {
       await input.storage.recordUncertain(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
@@ -249,6 +252,15 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
+    // Credentials rejected or relay refused: fail fast, never "pending".
+    const notSent = await settlePrimaryWalletCreateIfNotSent({
+      error,
+      createReturned,
+      reclaimed: claim.reclaimed === true,
+      storage: input.storage,
+      claimedScope,
+    });
+    if (notSent) return notSent;
     // A decline that names the interest settings is our configured payout
     // wallet being refused, never the customer's BVN. On a fresh claim it
     // proves nothing was created, so the intent is released for a corrected
@@ -258,7 +270,7 @@ export async function onboardPiggyvestPrimaryWallet(
     // is released so a corrected BVN can be claimed, unless the lookup found
     // our customer: releasing would make the next attempt a fresh claim that
     // refuses it. Every other throw stays ambiguous.
-    const decline = classifyCreationDecline(error);
+    const decline = classifyPrimaryWalletCreationDecline(error);
     const keepReclaimable =
       decline === 'interest_routing'
         ? claim.reclaimed === true
@@ -283,18 +295,4 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'unavailable', code: 'NOT_CONFIGURED' }
       : { status: 'pending' };
   }
-}
-
-function classifyCreationDecline(
-  error: unknown
-): 'interest_routing' | 'bvn' | null {
-  if (!(error instanceof PiggyvestApiError)) return null;
-  if (
-    error.declined &&
-    (error.status === 400 || error.status === 422) &&
-    /payout|interest/i.test(error.message)
-  )
-    return 'interest_routing';
-  // Only 400 is a BVN verdict; every other status stays transport-ambiguous.
-  return error.status === 400 ? 'bvn' : null;
 }

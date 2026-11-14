@@ -1,0 +1,61 @@
+.activity {
+  position: relative;
+  width: 112px;
+  height: 88px;
+  margin-bottom: 4px;
+}
+.pink,
+.blue,
+.gold {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 16px;
+  animation: float 2s ease-in-out infinite;
+}
+.pink {
+  left: 4px;
+  top: 25px;
+  background: #fce7f3;
+  transform: rotate(-14deg);
+}
+.blue {
+  right: 4px;
+  top: 9px;
+  background: #dbeafe;
+  animation-delay: -0.7s;
+}
+.gold {
+  right: 15px;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  background: #fef3c7;
+  animation-delay: -1.4s;
+}
+.sparkle {
+  position: absolute;
+  inset: 20px 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  color: #a855a0;
+  background: #fff;
+  box-shadow: 0 3px 18px #7c3aed0d;
+}
+@keyframes float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pink,
+  .blue,
+  .gold {
+    animation: none;
+  }
+}

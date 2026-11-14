@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { SavingsSheetTextInput } from '../SavingsSheetTextInput';
 import { savingsCardContributionUtils as money } from './savings-card-contribution-utils';
 import { useSavingsFirstCardCheckout } from './use-savings-first-card-checkout';
 
@@ -90,7 +91,7 @@ export function SavingsFirstCardCheckout({
               ]}
             >
               <Text style={[styles.currency, { color: colors.text }]}>₦</Text>
-              <TextInput
+              <SavingsSheetTextInput
                 accessibilityLabel="New card contribution amount"
                 editable={!checkout.busy}
                 keyboardType="decimal-pad"
@@ -237,29 +238,29 @@ export function SavingsFirstCardCheckout({
 const styles = StyleSheet.create({
   container: { borderWidth: 1, borderRadius: 20, padding: 16, gap: 12 },
   content: { gap: 12 },
-  title: { fontSize: 16, fontWeight: '600' },
-  body: { fontSize: 14, lineHeight: 21 },
-  label: { fontSize: 15, fontWeight: '600' },
+  title: { fontSize: 14, fontWeight: '600' },
+  body: { fontSize: 13, lineHeight: 21 },
+  label: { fontSize: 14, fontWeight: '600' },
   input: {
     borderWidth: 1,
     borderRadius: 14,
-    minHeight: 56,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     gap: 8,
   },
-  currency: { fontSize: 24 },
-  field: { flex: 1, minWidth: 0, fontSize: 24, paddingVertical: 10 },
+  currency: { fontSize: 22 },
+  field: { flex: 1, minWidth: 0, fontSize: 22, paddingVertical: 8 },
   primary: {
-    minHeight: 50,
+    minHeight: 44,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   disabled: { opacity: 0.5 },
   secondary: {
-    minHeight: 48,
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: 14,
     alignItems: 'center',

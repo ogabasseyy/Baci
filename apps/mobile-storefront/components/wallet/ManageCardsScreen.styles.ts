@@ -14,16 +14,16 @@ export function createManageCardsStyles(colors: ManageCardsColors) {
       gap: SPACING.sm,
     },
     title: {
-      fontSize: TYPOGRAPHY.size['2xl'],
+      fontSize: 21,
       fontWeight: TYPOGRAPHY.weight.bold,
     },
     subtitle: {
-      fontSize: TYPOGRAPHY.size.sm,
-      lineHeight: TYPOGRAPHY.size.sm * TYPOGRAPHY.lineHeight.relaxed,
+      fontSize: 11,
+      lineHeight: 12 * TYPOGRAPHY.lineHeight.relaxed,
       marginBottom: SPACING.sm,
     },
     centeredState: {
-      minHeight: 180,
+      minHeight: 155,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -37,7 +37,7 @@ export function createManageCardsStyles(colors: ManageCardsColors) {
     },
     stateText: {
       flex: 1,
-      fontSize: TYPOGRAPHY.size.sm,
+      fontSize: 11,
       fontWeight: TYPOGRAPHY.weight.medium,
     },
     retryButton: {
@@ -49,7 +49,7 @@ export function createManageCardsStyles(colors: ManageCardsColors) {
     retryButtonText: {
       color: colors.primaryForeground,
       fontWeight: TYPOGRAPHY.weight.semibold,
-      fontSize: TYPOGRAPHY.size.xs,
+      fontSize: 10,
     },
     cardsList: {
       gap: SPACING.sm,
@@ -66,11 +66,11 @@ export function createManageCardsStyles(colors: ManageCardsColors) {
       flex: 1,
     },
     cardLabel: {
-      fontSize: TYPOGRAPHY.size.base,
+      fontSize: 13,
       fontWeight: TYPOGRAPHY.weight.semibold,
     },
     cardMeta: {
-      fontSize: TYPOGRAPHY.size.sm,
+      fontSize: 11,
       marginTop: SPACING.xs,
     },
     cardBankMeta: {
@@ -84,7 +84,7 @@ export function createManageCardsStyles(colors: ManageCardsColors) {
     },
     defaultBadgeText: {
       color: colors.primary,
-      fontSize: TYPOGRAPHY.size.xs,
+      fontSize: 10,
       fontWeight: TYPOGRAPHY.weight.semibold,
     },
     bottomActionWrap: {
@@ -101,7 +101,7 @@ export function createManageCardsStyles(colors: ManageCardsColors) {
     },
     primaryButtonText: {
       color: colors.primaryForeground,
-      fontSize: TYPOGRAPHY.size.base,
+      fontSize: 13,
       fontWeight: TYPOGRAPHY.weight.semibold,
     },
   });

@@ -187,7 +187,7 @@ export const OgabasseyV2LegalDispute: React.FC<LegalProps> = ({ merchant }) => {
               Important Note on Returns
             </h3>
             <p className="text-red-800 text-sm mb-4 leading-relaxed">
-              Please note that our <strong>7-Day Return Policy</strong> applies
+              Please note that our <strong>14-Day Return Policy</strong> applies
               strictly to devices with technical defects that were not disclosed
               at the time of purchase. Physical damage, liquid damage, or
               modification of the device software by the user voids all

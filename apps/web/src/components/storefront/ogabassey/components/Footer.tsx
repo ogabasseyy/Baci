@@ -35,10 +35,12 @@ type SocialPlatform =
   | 'linkedin'
   | 'snapchat';
 
-// Monochrome at rest (clean on the dark footer); the merchant accent appears
-// on hover so the row stays theme-driven instead of hardcoding platform colors.
+// Monochrome at rest (clean on the dark footer); full contrast on hover
+// so links pass WCAG 2.1 AA on the dark chrome surface.
 const SOCIAL_LINK_CLASS =
-  'text-current/65 hover:text-store-primary transition-colors';
+  'text-current/65 hover:text-current transition-colors';
+const FOOTER_TEXT_LINK_CLASS =
+  'hover:text-current hover:underline underline-offset-4 transition-colors';
 
 interface FooterProps {
   merchant?: MerchantData;
@@ -60,10 +62,22 @@ function firstNonEmptyTrimmed(
     .find((value): value is string => Boolean(value));
 }
 
+const DEFAULT_OGABASSEY_SOCIAL_LINKS: Record<string, string> = {
+  instagram: 'https://instagram.com/ogabasseyy',
+  facebook: 'https://www.facebook.com/ogabasseyyy',
+  tiktok: 'https://www.tiktok.com/@ogabasseyy',
+  twitter: 'https://x.com/ogabasseyy',
+  youtube: 'https://www.youtube.com/@ogabassey',
+  linkedin: 'https://www.linkedin.com/company/ogabasseyy/',
+};
+
 export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
   const basePath = normalizeStoreSlug(storeSlug);
   const businessName = merchant?.business_name || 'Ogabassey';
-  const socialLinks = merchant?.social_media || {};
+  const socialLinks =
+    merchant?.social_media && Object.keys(merchant.social_media).length > 0
+      ? merchant.social_media
+      : DEFAULT_OGABASSEY_SOCIAL_LINKS;
   // Prefer the public support email (what merchants edit in store settings) over the
   // private account email, so admin edits surface and the account email isn't exposed.
   const contactEmail =
@@ -118,7 +132,8 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
   };
 
   return (
-    <footer className="ogabassey-footer border-t border-store-border/40 pt-10 pb-32 md:pb-10 relative overflow-hidden font-sans">
+    <footer className="ogabassey-footer border-t border-store-border/40 pt-10 pb-16 md:pb-10 relative overflow-hidden font-sans">
+      <h2 className="sr-only">{businessName} footer</h2>
       <GadgetPattern className="ogabassey-footer__pattern" opacity={0.1} />
 
       <div className="max-w-[1400px] mx-auto px-6 lg:px-12 relative z-10">
@@ -150,7 +165,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
               {renderSocialLink(socialLinks.tiktok, 'TikTok', 'tiktok', Music)}
               {renderSocialLink(
                 socialLinks.twitter,
-                'X (Twitter)',
+                'X (formerly Twitter)',
                 'twitter',
                 Twitter
               )}
@@ -175,7 +190,6 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
             </div>
           </div>
 
-          {/* Column 2: Quick Links (Merged) */}
           {/* Column 2: Quick Links (Unified) */}
           <nav className="flex justify-between md:justify-start gap-12" aria-label="Footer navigation">
             <div>
@@ -183,9 +197,12 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 Menu
               </h3>
               <ul className="space-y-2 text-xs text-current/65">
-                <li><Link href={asRoute(`${basePath}/about`)} className="hover:text-store-primary">About Us</Link></li>
-                <li><Link href={asRoute(`${basePath}/blog`)} className="hover:text-store-primary">Blog</Link></li>
-                <li><Link href={asRoute(`${basePath}/repairs`)} className="hover:text-store-primary">Repairs</Link></li>
+                <li><Link href={asRoute(`${basePath}/products`)} className={FOOTER_TEXT_LINK_CLASS}>All Products</Link></li>
+                <li><Link href={asRoute(`${basePath}/swap`)} className={FOOTER_TEXT_LINK_CLASS}>Swap / Trade-in</Link></li>
+                <li><Link href={asRoute(`${basePath}/imei-check`)} className={FOOTER_TEXT_LINK_CLASS}>IMEI Checker</Link></li>
+                <li><Link href={asRoute(`${basePath}/repairs`)} className={FOOTER_TEXT_LINK_CLASS}>Repairs</Link></li>
+                <li><Link href={asRoute(`${basePath}/blog`)} className={FOOTER_TEXT_LINK_CLASS}>Blog</Link></li>
+                <li><Link href={asRoute(`${basePath}/about`)} className={FOOTER_TEXT_LINK_CLASS}>About Us</Link></li>
               </ul>
             </div>
             <div>
@@ -193,14 +210,14 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 Support
               </h3>
               <ul className="space-y-2 text-xs text-current/65">
-                <li><Link href={asRoute(`${basePath}/track-order`)} className="hover:text-store-primary">Track Order</Link></li>
-                <li><Link href={asRoute(`${basePath}/faq`)} className="hover:text-store-primary">Help Center</Link></li>
-                <li><Link href={asRoute(`${basePath}/contact`)} className="hover:text-store-primary">Contact Us</Link></li>
-                <li><Link href={asRoute(`${basePath}/terms`)} className="hover:text-store-primary">Terms of Service</Link></li>
-                <li><Link href={asRoute(`${basePath}/privacy`)} className="hover:text-store-primary">Privacy Policy</Link></li>
+                <li><Link href={asRoute(`${basePath}/track-order`)} className={FOOTER_TEXT_LINK_CLASS}>Track Order</Link></li>
+                <li><Link href={asRoute(`${basePath}/faq`)} className={FOOTER_TEXT_LINK_CLASS}>Help Center</Link></li>
+                <li><Link href={asRoute(`${basePath}/contact`)} className={FOOTER_TEXT_LINK_CLASS}>Contact Us</Link></li>
+                <li><Link href={asRoute(`${basePath}/terms`)} className={FOOTER_TEXT_LINK_CLASS}>Terms of Service</Link></li>
+                <li><Link href={asRoute(`${basePath}/privacy`)} className={FOOTER_TEXT_LINK_CLASS}>Privacy Policy</Link></li>
                 {trustLinks.map((link) => (
                   <li key={link.label}>
-                    <Link href={link.href} className="hover:text-store-primary">
+                    <Link href={link.href} className={FOOTER_TEXT_LINK_CLASS}>
                       {link.label}
                     </Link>
                   </li>
@@ -249,7 +266,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
           <FooterAppPayments />
         </div>
 
-        <div className="mt-8 pt-4 border-t border-store-border/40 text-center text-[10px] text-current/50">
+        <div className="mt-8 pt-4 border-t border-store-border/40 text-center text-xs text-current/65">
           <span>&copy; {businessName}. All rights reserved.</span>
         </div>
       </div>

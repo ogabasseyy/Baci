@@ -29,6 +29,9 @@ describe('BlogPostHeader', () => {
     expect(
       screen.getByRole('heading', { name: 'Pixel 9 Review' })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Pixel 9 Review' })
+    ).toHaveAttribute('data-cwv-lcp-copy', 'blog-post');
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('(Editor)')).toBeInTheDocument();
     expect(screen.getByText(/1 March 2026/i)).toBeInTheDocument();

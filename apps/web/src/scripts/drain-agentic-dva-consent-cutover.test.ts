@@ -96,24 +96,12 @@ describe('runDrainAgenticDvaConsentCutoverCli', () => {
     );
   });
 
-  it('defaults to a read-only dry run for an exact stale claim', async () => {
+  it('does not authorize a dry-run release for an unconfirmed stale claim', async () => {
     const row = claimingRow();
     const { supabase, update } = createSupabase(row);
-
-    await expect(
-      runDrainAgenticDvaConsentCutoverCli(
-        argsFor(row, 'claiming_payment'),
-        supabase as never,
-        now
-      )
-    ).resolves.toBe(0);
-
+    await expect(runDrainAgenticDvaConsentCutoverCli(argsFor(row, 'claiming_payment'), supabase as never, now)).resolves.toBe(1);
     expect(update).not.toHaveBeenCalled();
     expect(reserveAgenticIdempotencyKey).not.toHaveBeenCalled();
-    expect(finalizeAgenticCheckoutPayment).not.toHaveBeenCalled();
-    const output = vi.mocked(console.log).mock.calls[0][0] as string;
-    expect(output).toContain('dry_run');
-    expect(output).not.toContain('secret-canary');
   });
 
   it('rejects a state or evidence mismatch without any mutation', async () => {
@@ -129,35 +117,11 @@ describe('runDrainAgenticDvaConsentCutoverCli', () => {
     expect(reserveAgenticIdempotencyKey).not.toHaveBeenCalled();
   });
 
-  it('releases an exact stale no-account claim with compare-and-set filters', async () => {
+  it('does not release an unconfirmed stale claim on apply', async () => {
     const row = claimingRow();
-    const { supabase, update, updateChain } = createSupabase(row, {
-      data: { session_id: row.session_id },
-      error: null,
-    });
-
-    await expect(
-      runDrainAgenticDvaConsentCutoverCli(
-        [...argsFor(row, 'claiming_payment'), '--apply'],
-        supabase as never,
-        now
-      )
-    ).resolves.toBe(0);
-
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payment_reference: null,
-        metadata: expect.objectContaining({
-          agentic: expect.objectContaining({
-            payment_state: 'payment_setup_failed',
-          }),
-        }),
-      })
-    );
-    expect(updateChain.eq).toHaveBeenCalledWith('updated_at', row.updated_at);
-    expect(updateChain.is).toHaveBeenCalledWith('virtual_account_bank', null);
-    expect(updateChain.is).toHaveBeenCalledWith('virtual_account_name', null);
-    expect(updateChain.is).toHaveBeenCalledWith('virtual_account_number', null);
+    const { supabase, update } = createSupabase(row, { data: { session_id: row.session_id }, error: null });
+    await expect(runDrainAgenticDvaConsentCutoverCli([...argsFor(row, 'claiming_payment'), '--apply'], supabase as never, now)).resolves.toBe(1);
+    expect(update).not.toHaveBeenCalled();
     expect(reserveAgenticIdempotencyKey).not.toHaveBeenCalled();
   });
 

@@ -56,7 +56,7 @@ describe('runPaidOrderSideEffects', () => {
       await executors.paid_email();
       await executors.ad_tracking_conversion();
       await executors.merchant_settlement({
-        gatewayResponse: { fees: 19_600 },
+        gatewayResponse: { fees: 19_600, fees_split: null, subaccount: {} },
       });
       return {
         failedSteps: [],

@@ -1,3 +1,4 @@
+vi.mock('@/contexts/customer-auth-context', () => ({ useOptionalCustomerAuth: () => ({}), useCustomerAuth: () => ({ sendOtp: vi.fn(), verifyOtp: vi.fn() }) }));
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +25,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 vi.mock('@/lib/routes', () => ({ asRoute: vi.fn((p: string) => p) }));
 vi.mock('@/lib/utils', () => ({ cn: vi.fn((...args: string[]) => args.filter(Boolean).join(' ')) }));
 
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { CheckoutIdentityModal } from './CheckoutIdentityModal';
 
 describe('CheckoutIdentityModal', () => {
@@ -44,6 +46,13 @@ describe('CheckoutIdentityModal', () => {
     expect(screen.getByText('Checkout')).toBeInTheDocument();
   });
 
+  it('uses the responsive overlay rather than a competing bottom-alignment utility', () => {
+    render(<CheckoutIdentityModal {...defaultProps} />);
+    const overlay = screen.getByRole('dialog', { name: 'Let’s get you started' }).parentElement;
+    expect(overlay?.className).toContain('overlay');
+    expect(overlay).not.toHaveClass('items-end');
+  });
+
   it('returns null when not open', () => {
     render(<CheckoutIdentityModal {...defaultProps} isOpen={false} />);
 
@@ -51,139 +60,51 @@ describe('CheckoutIdentityModal', () => {
     expect(screen.queryByText('Checkout')).not.toBeInTheDocument();
   });
 
-  it('shows guest checkout and create account options', () => {
+  it('shows email, social sign-in and guest options together', () => {
     render(<CheckoutIdentityModal {...defaultProps} />);
 
-    expect(
-      screen.getByRole('button', { name: /continue as guest/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /register now/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Email address' })).toHaveAttribute('placeholder', 'you@example.com');
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with apple/i })).toBeInTheDocument();
   });
 
   it('navigates to checkout on guest click and calls onClose', () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
+    const onProceed = vi.fn();
+    render(<CheckoutIdentityModal {...defaultProps} onProceed={onProceed} />);
 
     fireEvent.click(
       screen.getByRole('button', { name: /continue as guest/i })
     );
 
     expect(mockPush).toHaveBeenCalledWith('/checkout');
+    expect(onProceed).toHaveBeenCalledOnce();
     expect(defaultProps.onClose).toHaveBeenCalled();
   });
 
-  it('switches to sign-in tab and shows login form', () => {
+  it('offers guest checkout if merchant identity is unavailable', () => {
+    vi.mocked(useMerchantSafe).mockReturnValueOnce(null);
     render(<CheckoutIdentityModal {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    expect(
-      screen.getByPlaceholderText('name@example.com')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /sign in & checkout/i })
-    ).toBeInTheDocument();
+    expect(screen.getByText(/sign-in is currently unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Email address' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
   });
 
-  it('keeps the password visibility toggle name stable while pressed', () => {
+  it('offers guest checkout when the merchant has no slug', () => {
+    const merchant = vi.mocked(useMerchantSafe)();
+    if (!merchant?.merchant) throw new Error('Expected merchant fixture');
+    vi.mocked(useMerchantSafe).mockReturnValueOnce({ ...merchant, merchant: { ...merchant.merchant, slug: '' } });
     render(<CheckoutIdentityModal {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    const passwordInput = screen.getByLabelText('Password');
-    const toggleButton = screen.getByRole('button', {
-      name: 'Show password',
-    });
-
-    expect(passwordInput).toHaveAttribute('type', 'password');
-    expect(toggleButton).toHaveAttribute('aria-pressed', 'false');
-    expect(toggleButton).not.toHaveTextContent('Show');
-
-    fireEvent.click(toggleButton);
-
-    expect(passwordInput).toHaveAttribute('type', 'text');
-    expect(
-      screen.getByRole('button', { name: 'Show password' })
-    ).toHaveAttribute('aria-pressed', 'true');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
-
-    expect(passwordInput).toHaveAttribute('type', 'password');
-    expect(
-      screen.getByRole('button', { name: 'Show password' })
-    ).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/sign-in is currently unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
   });
 
-  it('shows error message when sign-in fails', async () => {
-    const loginError = Object.assign(new Error('Invalid login credentials'), {
-      name: 'AuthApiError',
-      status: 400,
-    });
-    mockSignInWithPassword.mockResolvedValue({
-      error: loginError as never,
-    });
-
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    // Switch to sign-in tab
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    // Fill in credentials
-    fireEvent.change(screen.getByPlaceholderText('name@example.com'), {
-      target: { value: 'bad@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'wrong-password' },
-    });
-
-    // Submit the form
-    fireEvent.click(
-      screen.getByRole('button', { name: /sign in & checkout/i })
-    );
-
-    // Expect the error to be displayed
-    await waitFor(() => {
-      expect(
-        screen.getByText('Invalid login credentials')
-      ).toBeInTheDocument();
-    });
-
-    // Should NOT navigate on failure
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('navigates to checkout on successful sign-in', async () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    // Switch to sign-in tab
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    // Fill in credentials
-    fireEvent.change(screen.getByPlaceholderText('name@example.com'), {
-      target: { value: 'user@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'correct-password' },
-    });
-
-    // Submit the form
-    fireEvent.click(
-      screen.getByRole('button', { name: /sign in & checkout/i })
-    );
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/checkout');
-      expect(defaultProps.onClose).toHaveBeenCalled();
-    });
-  });
-
-  it('navigates to signup with encoded redirect on register click', () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /register now/i }));
-
-    expect(mockPush).toHaveBeenCalledWith('/signup?redirect=%2Fcheckout');
+  it('closes with Escape and exposes an accessible dialog', () => {
+    const onClose = vi.fn();
+    render(<CheckoutIdentityModal {...defaultProps} onClose={onClose} />);
+    expect(screen.getByRole('dialog', { name: 'Let’s get you started' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('has a close button with proper aria-label', () => {

@@ -5,6 +5,34 @@ export interface WalletData {
   earnings_balance?: number | null;
   funding_account?: WalletFundingAccount | null;
   loyalty_points: number;
+  /**
+   * PiggyVest main-wallet balance in KOBO. Present only when the server
+   * says the primary wallet is ready. Additive: `balance` and
+   * `total_balance` stay the legacy figures that checkout still spends.
+   */
+  primary_balance_kobo?: number | null;
+  /**
+   * True when the primary read failed transiently (timeout or error), so the
+   * balance above is unknown rather than absent. Lets the wallet screen keep
+   * the last confirmed balance; any authoritative answer leaves it unset.
+   */
+  primary_unavailable?: boolean;
+  /**
+   * True when the PiggyVest figures were recalled from moments ago because
+   * the fresh read ran slow: shown, but the wallet keeps re-checking.
+   */
+  primary_stale?: boolean;
+  /**
+   * True when PiggyVest is confirmed for this customer but the account or
+   * balance isn't ready yet: purchase screens hold bank-transfer funding.
+   */
+  primary_pending?: boolean;
+  /**
+   * True when a signed-in user has no single customer row for this merchant
+   * yet, so the wallet kind can't be classified: where PiggyVest is
+   * possible, purchase screens hold bank-transfer funding.
+   */
+  owner_unresolved?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];
@@ -19,9 +47,16 @@ export interface WalletSavingsVariantResolutionOption {
 export interface WalletActiveSavingsGoal {
   contribution_amount: number;
   contribution_frequency: 'daily' | 'weekly' | 'monthly';
+  /** When the plan was created; its savings wallet setup starts then. */
+  created_at?: string;
   current_amount: number;
   id: string;
   maturity_date: string;
+  /** Stored balance before projected interest; absent when no interest applies. */
+  principal_amount?: number;
+  /** The catalogue product and exact variant this goal saves for, when known. */
+  product_id?: string | null;
+  variant_id?: string | null;
   product_condition?: string | null;
   product_image?: string | null;
   product_variant_label?: string | null;

@@ -5,6 +5,7 @@ import {
   generateMetaDescription,
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
+import { hasPublishableReturnsPolicy } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { getTrustRouteContext } from '../trust-route-context';
 import { ReturnsPageContent } from './returns-page-content';
 
@@ -32,7 +33,7 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Returns Policy | ${context.merchant.business_name}`,
+    title: 'Returns Policy',
     description,
     alternates: {
       canonical: canonicalUrl,
@@ -46,7 +47,9 @@ export async function generateMetadata({
         images: [{ url: context.merchant.logo_url }],
       }),
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: hasPublishableReturnsPolicy(context.trustProfile)
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: true },
   };
 }
 

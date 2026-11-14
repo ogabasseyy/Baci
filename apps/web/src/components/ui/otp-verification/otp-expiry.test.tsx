@@ -79,7 +79,7 @@ it('resends only on a click, blocks duplicate clicks, and waits for a new confir
   const view = render(<OtpVerificationField {...props} />);
   expect(resend).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Sending…' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sending code…' }));
   expect(resend).toHaveBeenCalledTimes(1);
   await act(async () => finish(true));
   expect(screen.getByRole('textbox')).toBeDisabled();
@@ -104,4 +104,21 @@ it('keeps expiry and safe messaging when resend fails', async () => {
     'private provider token'
   );
   expect(screen.getByRole('textbox')).toBeDisabled();
+});
+
+it('replaces the resend-area countdown with Resend code only when the window expires', () => {
+  render(
+    <OtpVerificationField
+      value=""
+      onChange={vi.fn()}
+      sentAt={Date.now()}
+      onResend={vi.fn()}
+      resendAfterExpiry
+    />
+  );
+  expect(screen.getByRole('timer')).toHaveTextContent('5:00');
+  expect(screen.queryByRole('button', { name: 'Resend code' })).toBeNull();
+  act(() => vi.advanceTimersByTime(300000));
+  expect(screen.queryByRole('timer')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Resend code' })).toBeEnabled();
 });

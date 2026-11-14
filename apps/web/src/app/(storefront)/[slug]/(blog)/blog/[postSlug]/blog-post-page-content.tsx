@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { hasBlogAuthorPage } from '@/lib/blog-authors';
 import { getBlogPostRedirect } from '@/lib/blog-post-redirects';
 import { getRequestLocale } from '@/lib/request-locale';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
@@ -22,7 +23,10 @@ import { BlogPostBody } from './BlogPostBody';
 import { BlogPostBodyFallback } from './BlogPostBodyFallback';
 import { buildCanonicalBlogPostUrl } from './blog-post-content';
 import { BlogPostShell } from './blog-post-shell';
-import { buildBlogPostStructuredData } from './blog-post-structured-data';
+import {
+  buildBlogPostStructuredData,
+  isOrganizationBlogAuthor,
+} from './blog-post-structured-data';
 import { getResolvedBlogPost } from './get-resolved-blog-post';
 import { ViewCounter } from './view-counter';
 
@@ -106,6 +110,12 @@ async function renderBlogPostContent({
   const hasAuthorHub = Boolean(
     post.author_name && hasBlogAuthorPage(post.author_name, merchant.slug)
   );
+  const isOrganizationAuthor = isOrganizationBlogAuthor({
+    authorName,
+    hasAuthorHub,
+    merchantBusinessName: merchant.business_name,
+    postAuthorName: post.author_name,
+  });
   const authorSlug =
     hasAuthorHub && post.author_name ? generateSlug(post.author_name) : null;
   const authorHref = authorSlug
@@ -118,6 +128,7 @@ async function renderBlogPostContent({
   const structuredData = buildBlogPostStructuredData({
     catalogPrices: { products: relatedProducts, currencySource: merchant },
     author: {
+      type: isOrganizationAuthor ? 'Organization' : 'Person',
       id: authorId,
       image: post.author_image_url ?? undefined,
       name: authorName,
@@ -131,13 +142,28 @@ async function renderBlogPostContent({
     postUrl,
   });
 
+  const displayedRelatedProductSlugs = new Set(
+    relatedProducts
+      .filter(
+        (p) =>
+          typeof p.name === 'string' &&
+          p.name.trim().length > 0 &&
+          typeof p.slug === 'string' &&
+          p.slug.trim().length > 0
+      )
+      .slice(0, 8)
+      .map((p) => (p.slug ?? '').trim())
+  );
   const [clusterPost] = await loadClassifiedClusterPosts(merchant.id, [post]);
+  const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const clusterModel = await buildInformationalClusterModel({
     merchantId: merchant.id,
     merchantSlug: merchant.slug,
     storeUrl: baseUrl,
     countryCode: merchant.country,
+    merchantCurrency,
     post: clusterPost,
+    excludedProductSlugs: displayedRelatedProductSlugs,
   });
 
   const beforeChrome = (

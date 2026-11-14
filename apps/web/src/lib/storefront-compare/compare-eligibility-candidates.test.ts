@@ -3,7 +3,7 @@ import {
   buildBrandCompareCandidate,
   buildPriceBandCandidate,
 } from './compare-eligibility';
-import { CURATED_PRICE_BANDS } from './price-band-taxonomy';
+import { CURATED_PRICE_BANDS } from './get-configured-price-bands';
 
 describe('compare eligibility candidate builders', () => {
   it('derives a single canonical brand-compare candidate from category products', () => {

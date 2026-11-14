@@ -1,13 +1,17 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
+import type { OrderGiglExternalWaybill } from '@/hooks/orders/useOrderGiglExternalWaybill';
 import { useTheme } from '@/hooks/useTheme';
 import type { ShipmentCompletionMode } from '@/lib/order-shipment';
+import { ShipmentFlowGiglWaybillPanel } from './ShipmentFlowGiglWaybillPanel';
 import { ShipmentOptionCard } from './ShipmentOptionCard';
 
 interface ShipmentFlowMethodStepProps {
   canUseProvider: boolean;
   /** Formatted shipping price the customer paid with a saved checkout quote. */
   checkoutPaidShippingLabel?: string | null;
+  /** "Already booked on GIG?" — omitted when the store cannot use GIG. */
+  externalWaybill?: OrderGiglExternalWaybill;
   giglPanel?: ReactNode;
   onModeChange: (mode: ShipmentCompletionMode) => void;
   providerLabel: string | null;
@@ -17,6 +21,7 @@ interface ShipmentFlowMethodStepProps {
 export function ShipmentFlowMethodStep({
   canUseProvider,
   checkoutPaidShippingLabel,
+  externalWaybill,
   giglPanel,
   onModeChange,
   providerLabel,
@@ -24,8 +29,8 @@ export function ShipmentFlowMethodStep({
 }: ShipmentFlowMethodStepProps) {
   const { colors } = useTheme();
   const providerDescription = providerLabel
-    ? `This will book the shipment with ${providerLabel} using the saved checkout quote for this order.`
-    : 'This will use the selected provider and saved checkout quote for this order.';
+    ? `This will book the shipment with ${providerLabel} using the saved shipping quote for this order.`
+    : 'This will use the selected provider and saved shipping quote for this order.';
   // A fact only: booking can still ask for a new price (stale sender or price).
   const paidNote = checkoutPaidShippingLabel
     ? ` Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout.`
@@ -52,6 +57,14 @@ export function ShipmentFlowMethodStep({
           }
         />
       )}
+
+      {externalWaybill ? (
+        <ShipmentFlowGiglWaybillPanel
+          externalWaybill={externalWaybill}
+          onSelect={() => onModeChange('external_waybill')}
+          selected={selectedMode === 'external_waybill'}
+        />
+      ) : null}
 
       <ShipmentOptionCard
         colors={colors}

@@ -100,6 +100,7 @@ export async function submitFreshCheckout({
     const paymentOptions = createPaymentOptions(result);
     await continueCheckoutPayment({
       ...paymentOptions,
+      dispatch: { ...paymentOptions.dispatch, freshOrder: result.freshOrder },
       capturePaymentStarted: (reference) => {
         tracker.capturePaymentStarted(reference);
         paymentOptions.capturePaymentStarted(reference);

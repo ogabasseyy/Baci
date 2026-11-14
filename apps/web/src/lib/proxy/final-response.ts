@@ -13,9 +13,11 @@ import {
   getRouteType,
   shouldPartitionStorefrontMetadataCache,
 } from '@/lib/proxy/routing-policy';
+import { isRootDomain, isVercelPreview, ROOT_DOMAIN } from './host';
+import { applyOwnedOxygenDocumentPolicy } from './oxygen-owned-document';
 
 /** Decorates the final no-host-routing response without changing its prior order. */
-export function buildFinalProxyResponse(
+function buildFinalProxyResponseInternal(
   request: NextRequest,
   pathname: string,
   hostname: string,
@@ -74,5 +76,36 @@ export function buildFinalProxyResponse(
     undefined,
     request,
     hostname
+  );
+}
+
+export function buildFinalProxyResponse(
+  request: NextRequest,
+  pathname: string,
+  hostname: string,
+  userAgent: string
+): Promise<NextResponse> {
+  const response = buildFinalProxyResponseInternal(
+    request,
+    pathname,
+    hostname,
+    userAgent
+  );
+  const segments = pathname.split('/').filter(Boolean);
+  const platform =
+    isRootDomain(hostname, ROOT_DOMAIN) ||
+    isVercelPreview(hostname) ||
+    isLocalhost(hostname);
+  const slug =
+    platform && segments.length === 2 && segments[1] === 'checkout'
+      ? segments[0]
+      : null;
+  return applyOwnedOxygenDocumentPolicy(
+    response,
+    request,
+    pathname,
+    hostname,
+    userAgent,
+    slug
   );
 }

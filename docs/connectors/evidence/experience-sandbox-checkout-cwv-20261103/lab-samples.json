@@ -1,0 +1,1728 @@
+{
+  "schemaVersion": 1,
+  "samples": [
+    {
+      "route": "/qa1",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 140,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1312,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711098799.7,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 752,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 752,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711099278.3,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1230.60009765625,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 45,
+        "first": {
+          "at": "2026-11-03T13:04:43.821Z",
+          "cpuCount": 12,
+          "loadAverage": [57.88818359375, 66.939453125, 66.880859375],
+          "loadPerCpu": [
+            4.824015299479167, 5.578287760416667, 5.573404947916667
+          ]
+        },
+        "last": {
+          "at": "2026-11-03T13:05:27.877Z",
+          "cpuCount": 12,
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
+        },
+        "maxLoadPerCpu": 6.216959635416667
+      }
+    },
+    {
+      "route": "/qa1",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 128,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1416,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711111749.5,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 888,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 888,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711112241,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1379.5,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 45,
+        "first": {
+          "at": "2026-11-03T13:04:43.821Z",
+          "cpuCount": 12,
+          "loadAverage": [57.88818359375, 66.939453125, 66.880859375],
+          "loadPerCpu": [
+            4.824015299479167, 5.578287760416667, 5.573404947916667
+          ]
+        },
+        "last": {
+          "at": "2026-11-03T13:05:27.877Z",
+          "cpuCount": 12,
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
+        },
+        "maxLoadPerCpu": 6.216959635416667
+      }
+    },
+    {
+      "route": "/qa1",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 176,
+        "imagesDecoded": false,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 1820,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711086786.5,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1076,
+        "imagesDecoded": true,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 1076,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711087609,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1898.5,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 45,
+        "first": {
+          "at": "2026-11-03T13:04:43.821Z",
+          "cpuCount": 12,
+          "loadAverage": [57.88818359375, 66.939453125, 66.880859375],
+          "loadPerCpu": [
+            4.824015299479167, 5.578287760416667, 5.573404947916667
+          ]
+        },
+        "last": {
+          "at": "2026-11-03T13:05:27.877Z",
+          "cpuCount": 12,
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
+        },
+        "maxLoadPerCpu": 6.216959635416667
+      }
+    },
+    {
+      "route": "/qa1/collections/all",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 260,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1716,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711130681.6,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 988,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 988,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711131463.4,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1769.7998046875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 49,
+        "first": {
+          "at": "2026-11-03T13:05:28.085Z",
+          "cpuCount": 12,
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
+        },
+        "last": {
+          "at": "2026-11-03T13:06:16.172Z",
+          "cpuCount": 12,
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
+        },
+        "maxLoadPerCpu": 7.745361328125
+      }
+    },
+    {
+      "route": "/qa1/collections/all",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 280,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1716,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711144166.1,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1168,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1168,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711144912.9,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1914.7998046875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 49,
+        "first": {
+          "at": "2026-11-03T13:05:28.085Z",
+          "cpuCount": 12,
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
+        },
+        "last": {
+          "at": "2026-11-03T13:06:16.172Z",
+          "cpuCount": 12,
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
+        },
+        "maxLoadPerCpu": 7.745361328125
+      }
+    },
+    {
+      "route": "/qa1/collections/all",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 164,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 2068,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711156664.8,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 2136,
+        "imagesDecoded": true,
+        "interactionDurationMs": 24,
+        "lastShift": 0,
+        "lcpMs": 2136,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711157611.8,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 3083,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 49,
+        "first": {
+          "at": "2026-11-03T13:05:28.085Z",
+          "cpuCount": 12,
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
+        },
+        "last": {
+          "at": "2026-11-03T13:06:16.172Z",
+          "cpuCount": 12,
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
+        },
+        "maxLoadPerCpu": 7.745361328125
+      }
+    },
+    {
+      "route": "/qa1/phones/synthetic-device",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 1004,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 2468,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711214528,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1644,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1644,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711216119.2,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 3235.199951171875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 56,
+        "first": {
+          "at": "2026-11-03T13:06:16.852Z",
+          "cpuCount": 12,
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
+        },
+        "last": {
+          "at": "2026-11-03T13:07:11.941Z",
+          "cpuCount": 12,
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
+        },
+        "maxLoadPerCpu": 9.260538736979166
+      }
+    },
+    {
+      "route": "/qa1/phones/synthetic-device",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 3220,
+        "imagesDecoded": false,
+        "interactionDurationMs": 32,
+        "lastShift": 0,
+        "lcpMs": 6452,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711180718.5,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 2548,
+        "imagesDecoded": true,
+        "interactionDurationMs": 32,
+        "lastShift": 0,
+        "lcpMs": 2548,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711185898.9,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 7728.39990234375,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 56,
+        "first": {
+          "at": "2026-11-03T13:06:16.852Z",
+          "cpuCount": 12,
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
+        },
+        "last": {
+          "at": "2026-11-03T13:07:11.941Z",
+          "cpuCount": 12,
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
+        },
+        "maxLoadPerCpu": 9.260538736979166
+      }
+    },
+    {
+      "route": "/qa1/phones/synthetic-device",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 312,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1748,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711200614.8,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1472,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1472,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711201562,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 2419.199951171875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 56,
+        "first": {
+          "at": "2026-11-03T13:06:16.852Z",
+          "cpuCount": 12,
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
+        },
+        "last": {
+          "at": "2026-11-03T13:07:11.941Z",
+          "cpuCount": 12,
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
+        },
+        "maxLoadPerCpu": 9.260538736979166
+      }
+    },
+    {
+      "route": "/qa1/pages/story",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 452,
+        "imagesDecoded": false,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 1820,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711234861,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 668,
+        "imagesDecoded": true,
+        "interactionDurationMs": 24,
+        "lastShift": 0,
+        "lcpMs": 668,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711235767.8,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1574.800048828125,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 45,
+        "first": {
+          "at": "2026-11-03T13:07:12.027Z",
+          "cpuCount": 12,
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
+        },
+        "last": {
+          "at": "2026-11-03T13:07:56.111Z",
+          "cpuCount": 12,
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
+        },
+        "maxLoadPerCpu": 9.0316162109375
+      }
+    },
+    {
+      "route": "/qa1/pages/story",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 108,
+        "imagesDecoded": false,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 1472,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [
+          {
+            "hadRecentInput": true,
+            "startTime": 132.40000000037253,
+            "value": 8.422991397318119e-5
+          }
+        ],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711249343.8,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1120,
+        "imagesDecoded": true,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 1120,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711249856.4,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1632.599853515625,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 45,
+        "first": {
+          "at": "2026-11-03T13:07:12.027Z",
+          "cpuCount": 12,
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
+        },
+        "last": {
+          "at": "2026-11-03T13:07:56.111Z",
+          "cpuCount": 12,
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
+        },
+        "maxLoadPerCpu": 9.0316162109375
+      }
+    },
+    {
+      "route": "/qa1/pages/story",
+      "width": 390,
+      "height": 844,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 156,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1392,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711260976.5,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1176,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1176,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711261407.1,
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1606.60009765625,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 45,
+        "first": {
+          "at": "2026-11-03T13:07:12.027Z",
+          "cpuCount": 12,
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
+        },
+        "last": {
+          "at": "2026-11-03T13:07:56.111Z",
+          "cpuCount": 12,
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
+        },
+        "maxLoadPerCpu": 9.0316162109375
+      }
+    },
+    {
+      "route": "/qa1",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 516,
+        "imagesDecoded": false,
+        "interactionDurationMs": 72,
+        "lastShift": 0,
+        "lcpMs": 2396,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711310024.7,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1556,
+        "imagesDecoded": true,
+        "interactionDurationMs": 72,
+        "lastShift": 0,
+        "lcpMs": 1556,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711310864.4,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 2395.699951171875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 53,
+        "first": {
+          "at": "2026-11-03T13:07:56.787Z",
+          "cpuCount": 12,
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
+        },
+        "last": {
+          "at": "2026-11-03T13:08:48.866Z",
+          "cpuCount": 12,
+          "loadAverage": [136.1611328125, 94.630859375, 78.4765625],
+          "loadPerCpu": [
+            11.346761067708334, 7.885904947916667, 6.539713541666667
+          ]
+        },
+        "maxLoadPerCpu": 11.346761067708334
+      }
+    },
+    {
+      "route": "/qa1",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 272,
+        "imagesDecoded": false,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 2640,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711293576.5,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1844,
+        "imagesDecoded": true,
+        "interactionDurationMs": 24,
+        "lastShift": 0,
+        "lcpMs": 1844,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711294371.1,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 2638.60009765625,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 53,
+        "first": {
+          "at": "2026-11-03T13:07:56.787Z",
+          "cpuCount": 12,
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
+        },
+        "last": {
+          "at": "2026-11-03T13:08:48.866Z",
+          "cpuCount": 12,
+          "loadAverage": [136.1611328125, 94.630859375, 78.4765625],
+          "loadPerCpu": [
+            11.346761067708334, 7.885904947916667, 6.539713541666667
+          ]
+        },
+        "maxLoadPerCpu": 11.346761067708334
+      }
+    },
+    {
+      "route": "/qa1",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 280,
+        "imagesDecoded": false,
+        "interactionDurationMs": 40,
+        "lastShift": 0,
+        "lcpMs": 2020,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711279361.7,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1224,
+        "imagesDecoded": true,
+        "interactionDurationMs": 40,
+        "lastShift": 0,
+        "lcpMs": 1224,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711280159.9,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 2022.199951171875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 53,
+        "first": {
+          "at": "2026-11-03T13:07:56.787Z",
+          "cpuCount": 12,
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
+        },
+        "last": {
+          "at": "2026-11-03T13:08:48.866Z",
+          "cpuCount": 12,
+          "loadAverage": [136.1611328125, 94.630859375, 78.4765625],
+          "loadPerCpu": [
+            11.346761067708334, 7.885904947916667, 6.539713541666667
+          ]
+        },
+        "maxLoadPerCpu": 11.346761067708334
+      }
+    },
+    {
+      "route": "/qa1/collections/all",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 160,
+        "imagesDecoded": false,
+        "interactionDurationMs": 32,
+        "lastShift": 0,
+        "lcpMs": 1640,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711345923.8,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1144,
+        "imagesDecoded": true,
+        "interactionDurationMs": 32,
+        "lastShift": 0,
+        "lcpMs": 1144,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711346418.3,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1638.5,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 44,
+        "first": {
+          "at": "2026-11-03T13:08:49.723Z",
+          "cpuCount": 12,
+          "loadAverage": [141.75341796875, 96.4794921875, 79.2236328125],
+          "loadPerCpu": [
+            11.812784830729166, 8.039957682291666, 6.601969401041667
+          ]
+        },
+        "last": {
+          "at": "2026-11-03T13:09:32.768Z",
+          "cpuCount": 12,
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
+        },
+        "maxLoadPerCpu": 12.715983072916666
+      }
+    },
+    {
+      "route": "/qa1/collections/all",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 92,
+        "imagesDecoded": false,
+        "interactionDurationMs": null,
+        "lastShift": 0,
+        "lcpMs": 1356,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711359523.8,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 940,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 940,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711359938.4,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1354.599853515625,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 44,
+        "first": {
+          "at": "2026-11-03T13:08:49.723Z",
+          "cpuCount": 12,
+          "loadAverage": [141.75341796875, 96.4794921875, 79.2236328125],
+          "loadPerCpu": [
+            11.812784830729166, 8.039957682291666, 6.601969401041667
+          ]
+        },
+        "last": {
+          "at": "2026-11-03T13:09:32.768Z",
+          "cpuCount": 12,
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
+        },
+        "maxLoadPerCpu": 12.715983072916666
+      }
+    },
+    {
+      "route": "/qa1/collections/all",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 112,
+        "imagesDecoded": false,
+        "interactionDurationMs": 24,
+        "lastShift": 0,
+        "lcpMs": 2024,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711332657.7,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 1284,
+        "imagesDecoded": true,
+        "interactionDurationMs": 24,
+        "lastShift": 0,
+        "lcpMs": 1284,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711333396.5,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 2022.800048828125,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 44,
+        "first": {
+          "at": "2026-11-03T13:08:49.723Z",
+          "cpuCount": 12,
+          "loadAverage": [141.75341796875, 96.4794921875, 79.2236328125],
+          "loadPerCpu": [
+            11.812784830729166, 8.039957682291666, 6.601969401041667
+          ]
+        },
+        "last": {
+          "at": "2026-11-03T13:09:32.768Z",
+          "cpuCount": 12,
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
+        },
+        "maxLoadPerCpu": 12.715983072916666
+      }
+    },
+    {
+      "route": "/qa1/phones/synthetic-device",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 64,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1288,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711386470.6,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 620,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 620,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711386854.1,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1003.5,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 40,
+        "first": {
+          "at": "2026-11-03T13:09:33.042Z",
+          "cpuCount": 12,
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
+        },
+        "last": {
+          "at": "2026-11-03T13:10:12.080Z",
+          "cpuCount": 12,
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
+        },
+        "maxLoadPerCpu": 10.1590576171875
+      }
+    },
+    {
+      "route": "/qa1/phones/synthetic-device",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 104,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1256,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711374604.5,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 532,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 532,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711374983.1,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 910.60009765625,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 40,
+        "first": {
+          "at": "2026-11-03T13:09:33.042Z",
+          "cpuCount": 12,
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
+        },
+        "last": {
+          "at": "2026-11-03T13:10:12.080Z",
+          "cpuCount": 12,
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
+        },
+        "maxLoadPerCpu": 10.1590576171875
+      }
+    },
+    {
+      "route": "/qa1/phones/synthetic-device",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 112,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1256,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711398237,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 716,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 716,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711398632.5,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1111.5,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 40,
+        "first": {
+          "at": "2026-11-03T13:09:33.042Z",
+          "cpuCount": 12,
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
+        },
+        "last": {
+          "at": "2026-11-03T13:10:12.080Z",
+          "cpuCount": 12,
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
+        },
+        "maxLoadPerCpu": 10.1590576171875
+      }
+    },
+    {
+      "route": "/qa1/pages/story",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 4.62962962962963e-5,
+        "firstPaintMs": 112,
+        "imagesDecoded": false,
+        "interactionDurationMs": null,
+        "lastShift": 151.10000000009313,
+        "lcpMs": 2168,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 4.62962962962963e-5,
+        "rawShifts": [
+          {
+            "hadRecentInput": false,
+            "startTime": 151.10000000009313,
+            "value": 4.62962962962963e-5
+          }
+        ],
+        "sessionStart": 151.10000000009313,
+        "sessionValue": 4.62962962962963e-5,
+        "timeOrigin": 1793711413738,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 792,
+        "imagesDecoded": true,
+        "interactionDurationMs": 40,
+        "lastShift": 0,
+        "lcpMs": 792,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711415115.2,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 2169.199951171875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 39,
+        "first": {
+          "at": "2026-11-03T13:10:12.100Z",
+          "cpuCount": 12,
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
+        },
+        "last": {
+          "at": "2026-11-03T13:10:50.143Z",
+          "cpuCount": 12,
+          "loadAverage": [74.69287109375, 87.69921875, 78.19921875],
+          "loadPerCpu": [6.224405924479167, 7.308268229166667, 6.5166015625]
+        },
+        "maxLoadPerCpu": 7.508219401041667
+      }
+    },
+    {
+      "route": "/qa1/pages/story",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 88,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1244,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711424820.9,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 536,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 536,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711425201.1,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 916.2001953125,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 39,
+        "first": {
+          "at": "2026-11-03T13:10:12.100Z",
+          "cpuCount": 12,
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
+        },
+        "last": {
+          "at": "2026-11-03T13:10:50.143Z",
+          "cpuCount": 12,
+          "loadAverage": [74.69287109375, 87.69921875, 78.19921875],
+          "loadPerCpu": [6.224405924479167, 7.308268229166667, 6.5166015625]
+        },
+        "maxLoadPerCpu": 7.508219401041667
+      }
+    },
+    {
+      "route": "/qa1/pages/story",
+      "width": 1440,
+      "height": 900,
+      "host": {
+        "cls": 0,
+        "firstPaintMs": 544,
+        "imagesDecoded": false,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 1832,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711436864.1,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "frame": {
+        "cls": 0,
+        "firstPaintMs": 588,
+        "imagesDecoded": true,
+        "interactionDurationMs": 16,
+        "lastShift": 0,
+        "lcpMs": 588,
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
+        "overflow": false,
+        "postPaintCls": 0,
+        "rawShifts": [],
+        "sessionStart": 0,
+        "sessionValue": 0,
+        "timeOrigin": 1793711437734.4,
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        },
+        "customInteraction": "true"
+      },
+      "frameLcpFromHostMs": 1458.2998046875,
+      "cwvQualified": false,
+      "fieldInp": false,
+      "cache": "disabled",
+      "network": "native",
+      "cpuThrottle": 1,
+      "contaminated": true,
+      "hostLoadSummary": {
+        "samples": 39,
+        "first": {
+          "at": "2026-11-03T13:10:12.100Z",
+          "cpuCount": 12,
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
+        },
+        "last": {
+          "at": "2026-11-03T13:10:50.143Z",
+          "cpuCount": 12,
+          "loadAverage": [74.69287109375, 87.69921875, 78.19921875],
+          "loadPerCpu": [6.224405924479167, 7.308268229166667, 6.5166015625]
+        },
+        "maxLoadPerCpu": 7.508219401041667
+      }
+    }
+  ],
+  "aggregates": [
+    {
+      "width": 390,
+      "route": "/qa1",
+      "samples": 3,
+      "medianCompositeLcpMs": 1416,
+      "nearestRankP75CompositeLcpMs": 1898.5,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 390,
+      "route": "/qa1/collections/all",
+      "samples": 3,
+      "medianCompositeLcpMs": 1914.8,
+      "nearestRankP75CompositeLcpMs": 3083,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 390,
+      "route": "/qa1/phones/synthetic-device",
+      "samples": 3,
+      "medianCompositeLcpMs": 3235.2,
+      "nearestRankP75CompositeLcpMs": 7728.4,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 390,
+      "route": "/qa1/pages/story",
+      "samples": 3,
+      "medianCompositeLcpMs": 1632.6,
+      "nearestRankP75CompositeLcpMs": 1820,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 1440,
+      "route": "/qa1",
+      "samples": 3,
+      "medianCompositeLcpMs": 2396,
+      "nearestRankP75CompositeLcpMs": 2640,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 1440,
+      "route": "/qa1/collections/all",
+      "samples": 3,
+      "medianCompositeLcpMs": 1640,
+      "nearestRankP75CompositeLcpMs": 2024,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 1440,
+      "route": "/qa1/phones/synthetic-device",
+      "samples": 3,
+      "medianCompositeLcpMs": 1256,
+      "nearestRankP75CompositeLcpMs": 1288,
+      "maxRawCls": 0,
+      "maxPostPaintCls": 0,
+      "allContaminated": true
+    },
+    {
+      "width": 1440,
+      "route": "/qa1/pages/story",
+      "samples": 3,
+      "medianCompositeLcpMs": 1832,
+      "nearestRankP75CompositeLcpMs": 2169.2,
+      "maxRawCls": 4.62962962962963e-5,
+      "maxPostPaintCls": 4.62962962962963e-5,
+      "allContaminated": true
+    }
+  ],
+  "cwvQualified": false,
+  "releaseQualified": false,
+  "fieldInp": false
+}

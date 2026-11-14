@@ -92,4 +92,14 @@ describe('buildSharedOfferPolicies', () => {
       '@id': 'https://shop.example/phones/x#shipping-policy',
     });
   });
+
+  it('returns empty objects when both policies are omitted', () => {
+    const policiesFor = buildSharedOfferPolicies(
+      new URL('https://shop.example/phones/x'),
+      'x'
+    );
+
+    expect(policiesFor(0)).toEqual({});
+    expect(policiesFor(1)).toEqual({});
+  });
 });

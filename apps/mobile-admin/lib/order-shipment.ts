@@ -13,7 +13,10 @@ export {
 } from './order-fulfillment-details';
 export { buildOrderFulfillmentDetailsForPersistence } from './order-fulfillment-identifiers';
 
-export type ShipmentCompletionMode = 'provider' | 'self_fulfillment';
+export type ShipmentCompletionMode =
+  | 'provider'
+  | 'self_fulfillment'
+  | 'external_waybill';
 export type ShipmentFlowStep = 'details' | 'method' | 'rider';
 
 const KNOWN_PROVIDER_LABELS: Record<string, string> = {

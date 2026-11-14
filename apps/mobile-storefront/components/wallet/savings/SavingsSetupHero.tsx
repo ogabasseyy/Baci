@@ -1,6 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
-import { SavingsProviderPreview } from '../SavingsProviderPreview';
+import { BRAND, palette } from '@/constants/Colors';
+
+// Brand palette: soft red tint, dark text, red accents.
+const INK = palette.gray[900];
 
 /** Decorative artwork stays local so the setup loads without image requests. */
 export function SavingsSetupHero() {
@@ -8,15 +11,15 @@ export function SavingsSetupHero() {
     <View style={styles.hero}>
       <View style={styles.topRow}>
         <View style={styles.badge}>
-          <Ionicons name="sparkles" size={13} color="#302047" />
-          <Text style={styles.badgeText}>BIG UPGRADE ENERGY</Text>
+          <Ionicons name="sparkles" size={13} color={BRAND.primary} />
+          <Text style={styles.badgeText}>Big upgrade energy</Text>
         </View>
         <View
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           style={styles.spark}
         >
-          <Ionicons name="sparkles" size={26} color="#302047" />
+          <Ionicons name="sparkles" size={26} color={BRAND.primary} />
         </View>
       </View>
       <View style={styles.body}>
@@ -36,28 +39,27 @@ export function SavingsSetupHero() {
           <View style={styles.orbit} />
           <View style={styles.phone}>
             <View style={styles.notch} />
-            <Ionicons name="heart" size={30} color="#C93438" />
+            <Ionicons name="heart" size={30} color={BRAND.primary} />
             <Text style={styles.phoneText}>next up</Text>
           </View>
           <View style={styles.coin}>
-            <Ionicons name="add" size={25} color="#283316" />
+            <Ionicons name="add" size={25} color={palette.white} />
           </View>
         </View>
       </View>
       <View style={styles.footer}>
-        <Ionicons name="trending-up" size={16} color="#302047" />
+        <Ionicons name="trending-up" size={16} color={BRAND.primary} />
         <Text style={styles.footerText}>
           Small steps. Main character upgrade.
         </Text>
       </View>
-      <SavingsProviderPreview />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   hero: {
-    backgroundColor: '#E2D3FF',
+    backgroundColor: palette.red[50],
     borderRadius: 28,
     padding: 22,
     gap: 20,
@@ -72,28 +74,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F4EDFF',
+    backgroundColor: palette.white,
     borderRadius: 30,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    color: '#302047',
-  },
+  badgeText: { fontSize: 11, fontWeight: '700', color: INK },
   spark: { transform: [{ rotate: '12deg' }] },
   body: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   copy: { flex: 1 },
   title: {
-    fontSize: 34,
+    fontSize: 31,
     lineHeight: 37,
     fontWeight: '900',
     letterSpacing: -1.4,
-    color: '#302047',
+    color: INK,
   },
-  subtitle: { marginTop: 12, fontSize: 14, lineHeight: 21, color: '#514064' },
+  subtitle: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 21,
+    color: palette.gray[600],
+  },
   art: {
     width: 92,
     height: 136,
@@ -105,15 +107,15 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#CBB4F1',
+    backgroundColor: palette.red[100],
   },
   phone: {
     width: 70,
     height: 115,
     borderRadius: 18,
     borderWidth: 4,
-    borderColor: '#302047',
-    backgroundColor: '#FFF4E6',
+    borderColor: INK,
+    backgroundColor: palette.white,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
@@ -125,9 +127,9 @@ const styles = StyleSheet.create({
     width: 25,
     height: 5,
     borderRadius: 8,
-    backgroundColor: '#302047',
+    backgroundColor: INK,
   },
-  phoneText: { color: '#302047', fontSize: 10, fontWeight: '800' },
+  phoneText: { color: INK, fontSize: 9, fontWeight: '800' },
   coin: {
     position: 'absolute',
     bottom: 0,
@@ -135,19 +137,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#D6F588',
+    backgroundColor: BRAND.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: '#E2D3FF',
+    borderColor: palette.red[50],
   },
   footer: {
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#C7B4E2',
+    borderTopColor: palette.red[200],
     paddingTop: 14,
   },
-  footerText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#302047' },
+  footerText: { flex: 1, fontSize: 11, fontWeight: '600', color: INK },
 });

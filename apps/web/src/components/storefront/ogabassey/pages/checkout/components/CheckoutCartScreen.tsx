@@ -9,14 +9,18 @@ export function CheckoutCartScreen({
   model,
   order,
   requestedId,
+  verifiedOxygenOrderId,
+  requestedOxygenId,
 }: {
   model: CheckoutScreenProps;
   requestedId: string | null;
+  verifiedOxygenOrderId?: string;
+  requestedOxygenId?: string | null;
   order: ReturnType<typeof useCheckoutAttemptSession>['resumedOrder'];
 }) {
   return (
     <CheckoutCartCapacityGate
-      validatedResume={matchesValidatedResume(order, requestedId)}
+      validatedResume={matchesValidatedResume(order, requestedId) || Boolean(verifiedOxygenOrderId && verifiedOxygenOrderId === requestedOxygenId)}
       onReturnToCart={model.page.onReturnToCart}
     >
       <CheckoutScreen {...model} />

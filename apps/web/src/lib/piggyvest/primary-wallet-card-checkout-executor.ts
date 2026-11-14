@@ -1,6 +1,7 @@
 import 'server-only';
 import { Client } from 'pg';
 import { primaryWalletCardCheckoutRuntimeSchema } from '@/schemas/primary-wallet-card-checkout-runtime';
+import { primaryDbLink } from './primary-db-link';
 
 // Card top-up initialization is retired, so there is deliberately no
 // statement for reserve, claim_initialization or record_initialization:
@@ -73,22 +74,26 @@ export function createPrimaryWalletCardCheckoutExecutor(
     )
       throw new Error('Primary card storage unavailable');
     const database = config[statement.role];
+    const link = primaryDbLink(database.login, database.port);
     const client = new Client({
       host: database.host,
       port: database.port,
       database: database.name,
-      user: database.login,
+      user: link.user,
       password: database.password,
-      ssl: { rejectUnauthorized: true, ca: database.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: database.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-primary-card-checkout',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(verifySession, [
         `primary_card_${statement.role}`,
       ]);

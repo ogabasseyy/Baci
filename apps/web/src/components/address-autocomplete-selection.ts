@@ -38,6 +38,7 @@ export async function selectAddressPrediction(
         streetNumber: details.streetNumber || '',
         route: details.route || '',
         city: details.city || '',
+        lga: details.lga || '',
         state: details.state || '',
         zip: details.postalCode || '',
         country: details.country || '',

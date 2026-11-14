@@ -1,60 +1,56 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import type Colors from '@/constants/Colors';
-import { palette } from '@/constants/Colors';
+import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
+import { getSavingsProgress } from './get-savings-progress';
+import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
+import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
+import { SavingsProgressMeter } from './SavingsProgressMeter';
+import { planCardView } from './savings/plan-card-view';
+import type { GoalCardSetupState } from './savings/use-goal-card-setup-state';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
+  /** Funded goal the database marked completed that is not yet settled. */
+  awaitingSettlement?: boolean;
   goal: WalletActiveSavingsGoal;
   onOpen: () => void;
+  /** The plan's savings wallet is not ready: show that, not "add money". */
+  setupState?: GoalCardSetupState;
 };
 
 export function WalletSavingsPlanCard({
-  colors,
+  awaitingSettlement = false,
+  colors: themeColors,
   goal,
   onOpen,
+  setupState = null,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
-  const actionGlowColors =
-    colors.primaryForeground === palette.black
-      ? ([palette.amber[600], palette.amber[400], palette.amber[600]] as const)
-      : ([palette.red[700], palette.red[600], palette.red[700]] as const);
-  const progress =
-    goal.target_amount > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            Math.round((goal.current_amount / goal.target_amount) * 100)
-          )
-        )
-      : 0;
-  const remaining = Math.max(0, goal.target_amount - goal.current_amount);
-  const productImageSource = getSavingsGoalImageSource(goal, 128);
-  const hasStarted = goal.current_amount > 0;
-  const actionLabel = goal.selection_unresolved
-    ? 'Choose exact variant'
-    : goal.status === 'completed'
-      ? 'Start another plan'
-      : goal.status === 'paused' || goal.source_mode !== 'manual'
-        ? 'View plan'
-        : 'Add to savings';
+  // This is the Ogabassey app: savings actions retain its brand across appearance modes.
+  const colors = {
+    ...themeColors,
+    primary: BRAND.primary,
+    primaryForeground: BRAND.onPrimary,
+    primaryLowOpacity: BRAND.primaryAlpha12,
+  };
+  const actionGlowColors = [
+    BRAND.primaryDark,
+    BRAND.primary,
+    BRAND.primaryDark,
+  ] as const;
+  const { percent: progress } = getSavingsProgress(goal);
+  const { colour, details, storage } = getSavingsVariantPresentation(
+    goal.product_variant_label
+  );
+  const view = planCardView({ goal, awaitingSettlement, setupState });
+  const { actionLabel, footerLine, heading } = view;
   const hasSavingsGlow = actionLabel === 'Add to savings';
-  const heading =
-    goal.status === 'completed'
-      ? 'Plan complete'
-      : goal.status === 'paused'
-        ? 'Plan paused'
-        : hasStarted
-          ? 'Your next upgrade is taking shape'
-          : 'Your plan is ready';
 
   return (
     <View
@@ -64,26 +60,15 @@ export function WalletSavingsPlanCard({
       ]}
     >
       <View style={styles.topRow}>
-        <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>
-          {productImageSource ? (
-            <Image
-              accessibilityLabel={goal.title}
-              source={productImageSource}
-              style={styles.image}
-              contentFit="contain"
-              autoplay={false}
-            />
-          ) : (
-            <Ionicons
-              name="phone-portrait-outline"
-              size={36}
-              color={colors.primary}
-            />
-          )}
-        </View>
+        <SavingsGoalConditionArtwork
+          colors={colors}
+          goal={goal}
+          imageRequestSize={128}
+          size={86}
+        />
         <View style={styles.titleBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
-            YOUR NEXT UPGRADE
+            {view.eyebrow}
           </Text>
           <Text
             style={[styles.title, { color: colors.cardForeground }]}
@@ -91,63 +76,84 @@ export function WalletSavingsPlanCard({
           >
             {goal.title}
           </Text>
-          {goal.product_variant_label ? (
+          {storage ? (
+            <Text
+              style={[
+                styles.storageTag,
+                { backgroundColor: colors.muted, color: colors.text },
+              ]}
+            >
+              {storage}
+            </Text>
+          ) : null}
+          {details ? (
             <Text
               style={[styles.variant, { color: colors.textSecondary }]}
               numberOfLines={1}
             >
-              {goal.product_variant_label}
+              {details}
             </Text>
           ) : null}
-          <Text style={[styles.heading, { color: colors.textSecondary }]}>
-            {heading}
-          </Text>
-          <View style={styles.amountRow}>
-            <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>
-              SAVED
+          {heading ? (
+            <Text style={[styles.heading, { color: colors.textSecondary }]}>
+              {heading}
             </Text>
-            <Text
-              style={[styles.savedAmount, { color: colors.cardForeground }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {formatNgnCurrency(goal.current_amount)}
-              <Text
-                style={[styles.targetAmount, { color: colors.textSecondary }]}
-              >
-                {' / '}
-                {formatNgnCurrency(goal.target_amount)}
-              </Text>
-            </Text>
-          </View>
+          ) : null}
+          {view.showProgress ? (
+            <>
+              <View style={styles.amountRow}>
+                <Text
+                  style={[styles.savedAmount, { color: colors.cardForeground }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {formatNgnCurrency(goal.current_amount)}
+                  <Text
+                    style={[
+                      styles.targetAmount,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {' / '}
+                    {formatNgnCurrency(goal.target_amount)}
+                  </Text>
+                </Text>
+              </View>
+              <SavingsProgressMeter
+                accessibilityLabel="Savings plan progress"
+                colors={colors}
+                height={9}
+                percent={progress}
+              />
+            </>
+          ) : null}
+        </View>
+        {colour ? (
           <View
             accessible
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings plan progress"
-            accessibilityValue={{ min: 0, max: 100, now: progress }}
+            accessibilityRole="image"
+            accessibilityLabel={`Device colour: ${colour.name}`}
             style={[
-              styles.track,
-              { backgroundColor: colors.primaryLowOpacity },
+              styles.colourSwatch,
+              {
+                backgroundColor: colour.hex,
+                borderColor: colors.textSecondary,
+              },
             ]}
-          >
-            <View
-              style={[
-                styles.fill,
-                { width: `${progress}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
-        </View>
+          />
+        ) : null}
       </View>
       <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {hasStarted
-            ? `${formatNgnCurrency(remaining)} to go`
-            : 'Start with your first contribution'}
-        </Text>
-        <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {progress}% · {formatDateTimeDisplay(goal.maturity_date, 'date')}
-        </Text>
+        {footerLine ? (
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+            {footerLine}
+          </Text>
+        ) : null}
+        {view.showEndDate && goal.maturity_date ? (
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+            Ends {formatDateTimeDisplay(goal.maturity_date, 'date')}
+          </Text>
+        ) : null}
       </View>
       <View
         style={[
@@ -211,23 +217,31 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  iconWrap: {
-    width: 86,
-    height: 86,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+  colourSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignSelf: 'flex-start',
+    marginTop: 18,
   },
-  image: { width: 78, height: 78 },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },
   eyebrow: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  title: { fontSize: 18, fontWeight: '700' },
-  variant: { fontSize: 12 },
-  heading: { fontSize: 12, marginTop: 1 },
+  title: { fontSize: 16, fontWeight: '700' },
+  storageTag: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  variant: { fontSize: 11 },
+  heading: { fontSize: 11, marginTop: 1 },
   amountRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -235,32 +249,20 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 5,
   },
-  amountLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginRight: 3,
-  },
   savedAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     flexShrink: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
-  targetAmount: { fontSize: 11, fontWeight: '400' },
-  track: {
-    height: 7,
-    borderRadius: 9,
-    overflow: 'hidden',
-  },
-  fill: { height: '100%', borderRadius: 9 },
+  targetAmount: { fontSize: 10, fontWeight: '400' },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: 6,
   },
-  footerText: { fontSize: 11 },
+  footerText: { fontSize: 10 },
   viewPlanGlowFrame: {
     borderRadius: 24,
     marginTop: 4,
@@ -282,5 +284,5 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  viewPlanText: { fontSize: 14, fontWeight: '700' },
+  viewPlanText: { fontSize: 13, fontWeight: '700' },
 });

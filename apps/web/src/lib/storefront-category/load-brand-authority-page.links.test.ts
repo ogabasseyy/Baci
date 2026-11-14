@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { brandAuthorityPageLoader } from './load-brand-authority-page';
 
 const mockGetMerchant = vi.fn();
 const mockGetCategory = vi.fn();
@@ -48,6 +49,7 @@ function makeProduct(index: number, brand = 'Samsung') {
     price: 100_000 + index,
     condition: 'new',
     stock: 2,
+    manage_stock: true,
     availability: 'InStock' as const,
     has_condition_offers: false,
     product_key_specs: null,
@@ -100,6 +102,67 @@ describe('loadBrandAuthorityPage', () => {
     expect(getCategoryAuthorityNoun('accessories', 'Accessories')).toEqual({
       titleNoun: 'Accessories',
       lowerNoun: 'accessories',
+    });
+  });
+
+  it('renders PlayStation 5 brand authority page without repeating brand name', async () => {
+    mockGetCategory.mockResolvedValueOnce({
+      id: 'cat-ps5',
+      name: 'PlayStation 5',
+    });
+    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce(
+      Array.from({ length: 6 }, (_, index) => ({
+        ...makeProduct(index, 'PlayStation'),
+        category: 'PlayStation 5',
+        category_slug: 'playstation-5',
+      }))
+    );
+
+    const page = await brandAuthorityPageLoader.load(
+      {
+        merchantSlug: 'ogabassey',
+        categorySlug: 'playstation-5',
+        brandSlug: 'playstation',
+      },
+      { includeRequestPathPrefix: false }
+    );
+
+    expect(page).toMatchObject({
+      heading: 'PlayStation 5 Games, Consoles and Prices in Nigeria',
+      metaDescription:
+        'Compare a selection of 6 PlayStation 5 products from Ogabassey, with current prices, key specs, condition, and availability in Nigeria.',
+      intro:
+        'Explore a selection of 6 PlayStation 5 products from Ogabassey. Compare current prices, specifications, condition, and availability before choosing a model.',
+    });
+    expect(page?.heading).not.toContain('PlayStation PlayStation 5');
+  });
+
+  it('renders audio category brand authority page with Audio & Speakers heading', async () => {
+    mockGetCategory.mockResolvedValueOnce({
+      id: 'cat-audio',
+      name: 'Audio',
+    });
+    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce(
+      Array.from({ length: 6 }, (_, index) => ({
+        ...makeProduct(index, 'JBL'),
+        category: 'Audio',
+        category_slug: 'audio',
+      }))
+    );
+
+    const page = await brandAuthorityPageLoader.load(
+      {
+        merchantSlug: 'ogabassey',
+        categorySlug: 'audio',
+        brandSlug: 'jbl',
+      },
+      { includeRequestPathPrefix: false }
+    );
+
+    expect(page).toMatchObject({
+      heading: 'JBL Audio & Speakers and Prices in Nigeria',
+      metaDescription:
+        'Compare a selection of 6 JBL audio products from Ogabassey, with current prices, key specs, condition, and availability in Nigeria.',
     });
   });
 });

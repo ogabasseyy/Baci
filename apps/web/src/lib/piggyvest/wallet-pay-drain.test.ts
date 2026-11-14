@@ -123,4 +123,27 @@ describe('runWalletPayDrain', () => {
     });
     expect(summary).toMatchObject({ failed: 1 });
   });
+
+  it('bugfix: stops taking work near the deadline so settling never starves refunds and deliveries (Codex P2)', async () => {
+    worker.listWork.mockResolvedValue({
+      settle: [A],
+      refund: [B],
+      deliver: [],
+    });
+    // Only 100 s left: past the settle reserve (180 s), inside the refund one (90 s).
+    const summary = await runWalletPayDrain(
+      { runtime, deliverers: {}, deadlineMs: Date.now() + 100_000 },
+      deps
+    );
+    expect(deps.reconcilePayment).not.toHaveBeenCalled();
+    expect(deps.refund).toHaveBeenCalledTimes(1);
+    expect(summary).toMatchObject({ deferred: 1, refunds: 1, settled: 0 });
+    // Without a budget nothing is deferred.
+    vi.clearAllMocks();
+    const unbounded = await runWalletPayDrain(
+      { runtime, deliverers: {} },
+      deps
+    );
+    expect(unbounded.deferred).toBe(0);
+  });
 });

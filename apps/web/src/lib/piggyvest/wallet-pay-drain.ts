@@ -42,8 +42,17 @@ export interface WalletPayDrainSummary {
   refunds: number;
   delivered: number;
   skipped: number;
+  /** Left for the next run: too little of this run's time remained. */
+  deferred: number;
   failed: number;
 }
+
+// Time reserved after each phase, so a slow settle phase cannot starve the
+// refunds and deliveries after it (Codex P2): settling stops with 180 s
+// left, refunds with 90 s, deliveries with 30 s.
+const RESERVE_AFTER_SETTLE_MS = 180_000;
+const RESERVE_AFTER_REFUND_MS = 90_000;
+const RESERVE_AFTER_DELIVER_MS = 30_000;
 
 /**
  * The wallet pay background job: whatever the customer's own requests did
@@ -59,6 +68,8 @@ export async function runWalletPayDrain(
     runtime: WalletPayRuntime;
     deliverers: Partial<Record<WalletPayPurpose, WalletPayDeliverer>>;
     maxRows?: number;
+    /** The invocation's hard stop (epoch ms); unset runs without a budget. */
+    deadlineMs?: number;
   },
   deps: {
     worker: (
@@ -79,8 +90,11 @@ export async function runWalletPayDrain(
     refunds: 0,
     delivered: 0,
     skipped: 0,
+    deferred: 0,
     failed: 0,
   };
+  const outOfTime = (reserveMs: number) =>
+    input.deadlineMs !== undefined && Date.now() > input.deadlineMs - reserveMs;
   const attempt = async (work: () => Promise<void>) => {
     try {
       await work();
@@ -89,7 +103,11 @@ export async function runWalletPayDrain(
     }
   };
   const work = await worker.listWork(input.maxRows ?? 50);
-  for (const id of work.settle)
+  for (const id of work.settle) {
+    if (outOfTime(RESERVE_AFTER_SETTLE_MS)) {
+      summary.deferred += 1;
+      continue;
+    }
     await attempt(async () => {
       if (await worker.releaseStale(id)) summary.released += 1;
       else {
@@ -97,12 +115,22 @@ export async function runWalletPayDrain(
         summary.settled += 1;
       }
     });
-  for (const id of work.refund)
+  }
+  for (const id of work.refund) {
+    if (outOfTime(RESERVE_AFTER_REFUND_MS)) {
+      summary.deferred += 1;
+      continue;
+    }
     await attempt(async () => {
       await deps.refund({ runtime, paymentId: id, surfaceErrors: true });
       summary.refunds += 1;
     });
-  for (const item of work.deliver)
+  }
+  for (const item of work.deliver) {
+    if (outOfTime(RESERVE_AFTER_DELIVER_MS)) {
+      summary.deferred += 1;
+      continue;
+    }
     await attempt(async () => {
       const deliver = input.deliverers[item.purpose];
       if (!deliver) {
@@ -120,5 +148,6 @@ export async function runWalletPayDrain(
       });
       summary.delivered += 1;
     });
+  }
   return summary;
 }

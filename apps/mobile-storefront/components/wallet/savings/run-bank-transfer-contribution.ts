@@ -169,8 +169,8 @@ export async function runBankTransferContribution(
           outcome === 'pending' ? 'Transfer pending' : 'Transfer cancelled',
         message:
           outcome === 'pending'
-            ? 'Your plan will update after PiggyVest confirms the transfer. No new payment has been started.'
-            : 'The transfer was cancelled and your reserved wallet funds were released. You can try again.',
+            ? 'Your plan will update once the transfer is confirmed. No new payment has been started.'
+            : 'The transfer was cancelled and nothing was taken from your wallet. You can try again.',
         variant: outcome === 'pending' ? 'info' : 'error',
       });
       try {

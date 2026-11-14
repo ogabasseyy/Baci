@@ -31,9 +31,17 @@ export function CartAssuranceRow({
     onToggle(cartItemId);
   };
 
+  const showRemovalNotice = removedByShopper && !hasAssurance;
+
   return (
-    <div>
-      <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
+    // The width cap sits on this wrapper (the flex child of the extras row).
+    // On the label it resolved against a shrink-to-fit box and squeezed the copy.
+    // The removal message keeps the full row, as it had before.
+    <div
+      data-testid="cart-assurance-row"
+      className={showRemovalNotice ? 'w-full' : 'max-w-[70%]'}
+    >
+      <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70">
         <span className="relative flex items-center mt-0.5">
           <input
             ref={checkboxRef}
@@ -72,13 +80,13 @@ export function CartAssuranceRow({
         </span>
       </label>
       <div role="status" className="text-xs text-store-background-text/70">
-        {removedByShopper && !hasAssurance && (
+        {showRemovalNotice && (
           <p className="mt-2">
             This item won’t include screen and liquid damage protection.
           </p>
         )}
       </div>
-      {removedByShopper && !hasAssurance && (
+      {showRemovalNotice && (
         <div className="space-y-1 text-xs text-store-background-text/70">
           <p>A little extra care? You can always add a screen protector 🙂</p>
           <button

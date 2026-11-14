@@ -123,6 +123,28 @@ BEGIN
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM NOT LIKE 'cannot delete customer with unsettled wallet payments%' THEN RAISE; END IF;
   END;
+
+  -- 9. REGRESSION (Codex P1/P2): a duplicate payment's refund keeps retrying
+  -- when an attempt is rejected (its own review reason does not freeze it),
+  -- and a fee-free refund clears that reason, so the payment leaves the
+  -- review report and the customer deletion fence.
+  PERFORM pg_temp.wp_assert((SELECT review_reason FROM piggyvest_primary.wallet_payments WHERE id = v_late::uuid)
+    = 'duplicate_payment', 'the duplicate payment has no duplicate_payment review reason');
+  v_refund := piggyvest_primary.read_owed_wallet_refund(c_integration, 'staging', v_late::uuid);
+  PERFORM pg_temp.wp_assert(piggyvest_primary.manage_wallet_refund(c_integration, 'staging',
+    (v_refund ->> 'refundId')::uuid, 'dispatch'), 'duplicate refund dispatch');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.release_failed_wallet_refund(c_integration, 'staging',
+    pg_temp.wp_refund_proof(v_late, 'txn-r3-rf0')) = 'released', 'duplicate refund release');
+  v_refund := piggyvest_primary.read_owed_wallet_refund(c_integration, 'staging', v_late::uuid);
+  PERFORM pg_temp.wp_assert(v_refund ->> 'reference' = 'pvb-refund-' || v_late || '-1',
+    'a rejected duplicate refund opened no retry: ' || COALESCE(v_refund::text, 'null'));
+  PERFORM pg_temp.wp_assert(piggyvest_primary.manage_wallet_refund(c_integration, 'staging',
+    (v_refund ->> 'refundId')::uuid, 'dispatch'), 'duplicate refund retry dispatch');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.settle_wallet_refund(c_integration, 'staging',
+    pg_temp.wp_refund_proof(v_late, 'txn-r3-rf1', 1)) = 'confirmed', 'duplicate refund settle');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_fulfilment(v_late) = 'refunded'
+    AND (SELECT review_reason IS NULL FROM piggyvest_primary.wallet_payments WHERE id = v_late::uuid),
+    'a refunded duplicate kept its review reason');
 END;
 $behaviour$;
 

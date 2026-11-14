@@ -5,6 +5,7 @@ import {
   ShieldCheck,
   Truck,
 } from 'lucide-react';
+import { hasPublishableWarrantyPolicy } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -313,9 +314,11 @@ export function TrustPolicyPageClient({
               Ogabassey Assurance
             </h2>
             <p className="mt-2 text-sm">{OGABASSEY_ASSURANCE_SUMMARY}</p>
-            <a href="./warranty" className="mt-2 inline-block underline">
-              See device coverage
-            </a>
+            {hasPublishableWarrantyPolicy(trustProfile) && (
+              <a href="./warranty" className="mt-2 inline-block underline">
+                See device coverage
+              </a>
+            )}
           </aside>
         )}
         <section className="mt-6 rounded-2xl border border-store-border bg-store-background-text/5 p-4">
@@ -367,14 +370,6 @@ export function TrustPolicyPageClient({
           </dl>
         )}
 
-        {ogabasseyCare && kind === 'returns' && (
-          <a
-            href="./warranty"
-            className="mt-5 inline-block font-semibold underline"
-          >
-            Read the warranty
-          </a>
-        )}
         {contactHref ? (
           <div className="mt-8">
             <a

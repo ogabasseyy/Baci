@@ -9,7 +9,7 @@ import Animated, {
   FadeInDown,
   FadeInRight,
 } from 'react-native-reanimated';
-import { BRAND, palette, RADIUS, SPACING } from '@/constants/Colors';
+import { BRAND, RADIUS, SPACING } from '@/constants/Colors';
 import type { Customer } from '@/stores/auth-store';
 import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
 import { ProfileQuizBadge } from './ProfileQuizBadge';
@@ -21,29 +21,11 @@ interface ProfileHeaderProps {
   branded?: boolean;
 }
 
-function getTierInfo(tier?: string) {
-  switch (tier?.toLowerCase()) {
-    case 'gold':
-      return { label: 'Gold', color: '#D4AF37', bg: '#D4AF3720' };
-    case 'silver':
-      return { label: 'Silver', color: '#A8A9AD', bg: '#A8A9AD20' };
-    case 'platinum':
-      return { label: 'Platinum', color: '#E5E4E2', bg: '#E5E4E218' };
-    default:
-      return {
-        label: 'Member',
-        color: palette.amber[500],
-        bg: `${palette.amber[500]}18`,
-      };
-  }
-}
-
 export function ProfileHeader({
   customer,
   loyaltyPoints,
   branded = false,
 }: ProfileHeaderProps) {
-  const tier = getTierInfo();
   // NativeWind's css-interop drops Pressable style callbacks on device, which
   // left pills unstyled on the red card. Track pressed state ourselves and
   // pass a plain style array instead.
@@ -119,12 +101,6 @@ export function ProfileHeader({
             <Text style={styles.email} numberOfLines={1}>
               {customer.email}
             </Text>
-            <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-              <Ionicons name="star" size={10} color={tier.color} />
-              <Text style={[styles.tierLabel, { color: tier.color }]}>
-                {tier.label}
-              </Text>
-            </View>
             {latestQuizBadge ? (
               <ProfileQuizBadge
                 eventTitle={latestQuizBadge.eventTitle}
@@ -214,20 +190,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.65)',
     marginBottom: SPACING.sm,
-  },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-  },
-  tierLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
 });

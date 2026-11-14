@@ -13,6 +13,7 @@ import Animated, {
   type SharedValue,
   useAnimatedStyle,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Header } from '@/components/storefront/Header';
@@ -96,6 +97,9 @@ export function HomeScreenView({
     undefined
   );
   const colorScheme = useColorScheme();
+  const { top } = useSafeAreaInsets();
+  const barStyle =
+    isElite || colorScheme === 'dark' ? 'light-content' : 'dark-content';
   const useWarmDarkSurface = nextDrop && colorScheme === 'dark';
   useHomeNavigationBarStyle(colorScheme, !isConfigLoading);
 
@@ -118,6 +122,9 @@ export function HomeScreenView({
   if (isConfigLoading) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
+        <StatusBar
+          barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'}
+        />
         <Header
           showSearch
           useScallopedSearch={nextDrop}
@@ -136,7 +143,7 @@ export function HomeScreenView({
     <View style={[styles.container, { backgroundColor }]}>
       <Stack.Screen options={{ headerShown: false, title: '' }} />
       {shouldRenderDecorations && <SnowEffect />}
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={barStyle} />
 
       {shouldRenderDecorations && !isElite && (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
@@ -167,6 +174,17 @@ export function HomeScreenView({
         </View>
       )}
 
+      <View
+        pointerEvents="none"
+        style={[
+          styles.headerOverlay,
+          {
+            height: top,
+            backgroundColor: isElite ? blackColor : backgroundColor,
+            zIndex: 99,
+          },
+        ]}
+      />
       <Animated.View
         style={[
           styles.headerOverlay,

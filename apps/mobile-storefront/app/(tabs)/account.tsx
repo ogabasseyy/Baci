@@ -1,5 +1,5 @@
 import type { Href } from 'expo-router';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useIsFocused } from 'expo-router/react-navigation';
 import {
   ActivityIndicator,
@@ -96,7 +96,14 @@ export default function AccountScreen() {
   }
 
   if (!authUser) {
-    return null;
+    return isFocused ? (
+      <Redirect
+        href={{
+          pathname: '/auth/login',
+          params: { returnTo: '/(tabs)/account' },
+        }}
+      />
+    ) : null;
   }
 
   const handleSignOut = () => {

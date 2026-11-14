@@ -19,7 +19,7 @@ export type ImeiVerifyDecision =
  */
 export async function decideImeiVerify(input: {
   retainedStoreCredit: boolean;
-  retainsPiggyvest: () => Promise<boolean | null | 'unreadable'>;
+  retainsPiggyvest: () => Promise<boolean | null>;
   ownerAtTap: string | null;
   currentOwner: () => string | null;
   walletLoading: boolean;
@@ -36,9 +36,6 @@ export async function decideImeiVerify(input: {
   // credit request still holding its key wins.
   if (input.retainedStoreCredit) return { kind: 'pay', rail: 'store_credit' };
   if (retainedPiggyvest === true) return { kind: 'pay', rail: 'piggyvest' };
-  // The saved keys could not be read: they may hide a payment still
-  // settling, so no other rail is chosen on a guess (Codex P1).
-  if (retainedPiggyvest === 'unreadable') return { kind: 'unavailable' };
   if (input.walletLoading) return { kind: 'wait' };
   if (input.walletError) return { kind: 'unavailable' };
   return {

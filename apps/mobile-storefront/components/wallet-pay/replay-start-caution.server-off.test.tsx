@@ -43,3 +43,30 @@ describe('startWithReplayCaution', () => {
     ).rejects.toThrow('network');
   });
 });
+
+describe('bugfix: a replayed start refused for no reason forgot its key (Muse)', () => {
+  it('answers an unexplained replayed failure as possibly paid (key kept)', async () => {
+    await expect(
+      startWithReplayCaution(true, async () => outcome('failed'))
+    ).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'not_started', maybePaid: true },
+    });
+  });
+
+  it('keeps a stated refusal and any fresh failure as they are', async () => {
+    const checkDetails = {
+      kind: 'outcome' as const,
+      outcome: {
+        kind: 'failed' as const,
+        failedReason: 'check_details' as const,
+      },
+    };
+    await expect(
+      startWithReplayCaution(true, async () => checkDetails)
+    ).resolves.toEqual(checkDetails);
+    await expect(
+      startWithReplayCaution(false, async () => outcome('failed'))
+    ).resolves.toEqual({ kind: 'outcome', outcome: { kind: 'failed' } });
+  });
+});

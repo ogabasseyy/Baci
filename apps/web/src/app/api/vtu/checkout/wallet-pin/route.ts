@@ -75,6 +75,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       issued.purchase.purchaseRef !== parsed.data.transactionId
     )
       return invalid();
+    // The caller's own purchase, prepared as PiggyVest-paid and still
+    // pending, for exactly the issued amount: no PIN proof is minted for a
+    // pair the pay step would refuse (Muse; owner-scoped read).
+    const { data: purchaseRows, error: purchaseError } = await supabase.rpc(
+      'get_vtu_wallet_pay_purchase',
+      { p_transaction_id: parsed.data.transactionId }
+    );
+    if (purchaseError) throw new Error('VTU purchase read failed');
+    const purchase = (
+      purchaseRows as Array<{
+        piggyvest_paid: boolean;
+        amount: number | string;
+        status: string;
+      }> | null
+    )?.[0];
+    if (
+      purchase?.piggyvest_paid !== true ||
+      purchase.status !== 'pending' ||
+      Math.round(Number(purchase.amount) * 100) !== issued.binding.amountKobo
+    )
+      return invalid();
     // Charged only once a real PIN check will happen.
     const limited = await chargeWalletPinCustomerLimit(
       'wallet-pay-verify',

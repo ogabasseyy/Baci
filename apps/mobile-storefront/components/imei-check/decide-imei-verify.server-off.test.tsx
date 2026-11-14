@@ -76,3 +76,15 @@ describe('decideImeiVerify', () => {
     ).resolves.toEqual({ kind: 'ignore' });
   });
 });
+
+describe('bugfix: a kept store credit request waited for the wallet read (Muse)', () => {
+  it('replays a kept store credit request even while the wallet loads or failed', async () => {
+    const kept = { ...base, retainedStoreCredit: true };
+    await expect(
+      decideImeiVerify({ ...kept, walletLoading: true })
+    ).resolves.toEqual({ kind: 'pay', rail: 'store_credit' });
+    await expect(
+      decideImeiVerify({ ...kept, walletError: true })
+    ).resolves.toEqual({ kind: 'pay', rail: 'store_credit' });
+  });
+});

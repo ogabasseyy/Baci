@@ -31,15 +31,17 @@ export async function decideImeiVerify(input: {
   const retainedPiggyvest = await input.retainsPiggyvest();
   if (retainedPiggyvest === null) return { kind: 'ignore' };
   if (input.currentOwner() !== input.ownerAtTap) return { kind: 'ignore' };
-  // A store credit request still holding its key replays on store credit.
-  if (retainedPiggyvest && !input.retainedStoreCredit)
-    return { kind: 'pay', rail: 'piggyvest' };
+  // A kept attempt of either rail replays on that rail before the wallet
+  // read is consulted: neither replay needs the balance (Muse). A store
+  // credit request still holding its key wins.
+  if (input.retainedStoreCredit) return { kind: 'pay', rail: 'store_credit' };
+  if (retainedPiggyvest) return { kind: 'pay', rail: 'piggyvest' };
   if (input.walletLoading) return { kind: 'wait' };
   if (input.walletError) return { kind: 'unavailable' };
   return {
     kind: 'pay',
     rail: chooseImeiPaymentRail({
-      retainedStoreCredit: input.retainedStoreCredit,
+      retainedStoreCredit: false,
       retainedPiggyvest: false,
       piggyvestCovers: input.piggyvestCovers(),
       walletBalance: input.walletBalance,

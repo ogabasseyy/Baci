@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   binding: vi.fn(),
   limit: vi.fn(),
   verify: vi.fn(),
+  rpc: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -44,7 +45,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.auth.mockResolvedValue({
     user: { id: 'u' },
-    supabase: { rpc: vi.fn() },
+    supabase: { rpc: mocks.rpc },
+  });
+  mocks.rpc.mockResolvedValue({
+    data: [{ piggyvest_paid: true, amount: 500, status: 'pending' }],
+    error: null,
   });
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.runtime.mockReturnValue({
@@ -182,6 +187,39 @@ describe('POST /api/vtu/checkout/wallet-pin', () => {
       pin: '1234',
     });
     expect(response.status).toBe(400);
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: a PIN proof was minted for a payment its purchase would refuse (Muse)', () => {
+  it.each([
+    [
+      'another amount',
+      { piggyvest_paid: true, amount: 400, status: 'pending' },
+    ],
+    [
+      'a store credit purchase',
+      { piggyvest_paid: false, amount: 500, status: 'pending' },
+    ],
+    [
+      'a closed purchase',
+      { piggyvest_paid: true, amount: 500, status: 'failed' },
+    ],
+  ])('refuses %s before any PIN check', async (_label, row) => {
+    mocks.rpc.mockResolvedValue({ data: [row], error: null });
+    const response = await call({ operationId: OP, pin: '1234' });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_OPERATION_INVALID',
+    });
+    expect(mocks.limit).not.toHaveBeenCalled();
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+
+  it('refuses a purchase the caller can not see', async () => {
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    const response = await call({ operationId: OP, pin: '1234' });
+    expect(response.status).toBe(409);
     expect(mocks.verify).not.toHaveBeenCalled();
   });
 });

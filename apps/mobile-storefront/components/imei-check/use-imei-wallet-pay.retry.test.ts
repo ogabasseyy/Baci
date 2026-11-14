@@ -267,3 +267,18 @@ describe('bugfix: switching wallet pay off hid a kept PiggyVest attempt (Codex P
     await expect(off.result.current.retains('basic', IMEI)).resolves.toBe(true);
   });
 });
+
+describe('bugfix: a broken key store opened the sheet while switched off (Muse)', () => {
+  it('fails closed while switched on, and open while switched off', async () => {
+    const has = jest
+      .spyOn(walletPayPurchaseKeys, 'has')
+      .mockRejectedValue(new Error('unreadable'));
+    await expect(setup().result.current.retains('basic', IMEI)).resolves.toBe(
+      true
+    );
+    await expect(
+      setup(false).result.current.retains('basic', IMEI)
+    ).resolves.toBe(false);
+    has.mockRestore();
+  });
+});

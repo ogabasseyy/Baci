@@ -146,7 +146,7 @@ it('keeps persistent native hide failures bounded before exposing recovery', asy
   );
 });
 
-it('exposes startup recovery when native splash visibility cannot be read', async () => {
+it('waits for the native watchdog before exposing recovery when visibility is unknown', async () => {
   mockHide.mockRejectedValue(new Error('native hide unavailable'));
   jest.mocked(SplashMotion.isVisible).mockImplementation(() => {
     throw new Error('native visibility unavailable');
@@ -158,6 +158,10 @@ it('exposes startup recovery when native splash visibility cannot be read', asyn
   await act(async () => intro.resolve(true));
   act(() => result.current.onFirstLayout());
   await waitFor(() => expect(result.current.hideFailed).toBe(true));
+
+  expect(result.current.nativeSplashVisible).toBe(true);
+  expect(result.current.shouldShowStartupRecovery).toBe(false);
+  await act(async () => jest.advanceTimersByTimeAsync(30_001));
 
   expect(result.current.nativeSplashVisible).toBe(false);
   expect(result.current.shouldShowStartupRecovery).toBe(true);
@@ -183,9 +187,9 @@ it('waits for the bounded native recovery attempt before releasing the app to re
   expect(result.current.shouldShowStartupRecovery).toBe(false);
 
   await act(async () => recovery.reject(new Error('bounded recovery failed')));
-  await waitFor(() =>
-    expect(result.current.shouldShowStartupRecovery).toBe(true)
-  );
+  expect(result.current.shouldShowStartupRecovery).toBe(false);
+  await act(async () => jest.advanceTimersByTimeAsync(30_001));
+  expect(result.current.shouldShowStartupRecovery).toBe(true);
   expect(result.current.nativeSplashVisible).toBe(false);
 });
 

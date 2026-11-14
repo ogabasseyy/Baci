@@ -10,12 +10,13 @@ interface NativeSplashHandoffOptions {
   ready: boolean;
 }
 
-function readNativeSplashVisibility() {
+function readNativeSplashVisibility(): boolean | null {
   try {
     return SplashMotion.isVisible();
   } catch {
-    // Fail open to recovery when the native visibility API is unavailable.
-    return false;
+    // Unknown is not the same as hidden: keep recovery behind the native
+    // watchdog unless a later visibility read confirms the overlay is gone.
+    return null;
   }
 }
 
@@ -31,6 +32,7 @@ export function useNativeSplashHandoff({
   const [hasLayout, setHasLayout] = useState(false);
   const firstLayoutRecorded = useRef(false);
   const hidePromiseRef = useRef<Promise<boolean> | null>(null);
+  const visibilityUnknownFallbackElapsed = useRef(false);
   const intro = useNativeSplashIntro(initialVisible);
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export function useNativeSplashHandoff({
         // promise clear so the bounded recovery attempt below can call native
         // hide again.
         hidePromiseRef.current = null;
-        setNativeSplashVisible(readNativeSplashVisibility());
+        setNativeSplashVisible(readNativeSplashVisibility() ?? true);
         setHideFailed(true);
       }
     });
@@ -122,7 +124,7 @@ export function useNativeSplashHandoff({
       } else {
         // Keep this as one bounded retry; a persistent native failure falls
         // through to StartupRecoveryScreen and the native watchdog.
-        setNativeSplashVisible(readNativeSplashVisibility());
+        setNativeSplashVisible(readNativeSplashVisibility() ?? true);
       }
     });
     return () => {
@@ -137,16 +139,41 @@ export function useNativeSplashHandoff({
     }
 
     let active = true;
+    let visibilityUnknownFallback: ReturnType<typeof setTimeout> | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
     const syncVisibility = () => {
       const visible = readNativeSplashVisibility();
-      if (active) setNativeSplashVisible(visible);
+      if (!active) return;
+      if (visible === null) {
+        if (visibilityUnknownFallbackElapsed.current) {
+          setNativeSplashVisible(false);
+          return;
+        }
+        setNativeSplashVisible(true);
+        if (!visibilityUnknownFallback) {
+          // SplashMotion removes a stuck overlay after its native 15s watchdog.
+          visibilityUnknownFallback = setTimeout(() => {
+            visibilityUnknownFallbackElapsed.current = true;
+            if (interval) clearInterval(interval);
+            if (active) setNativeSplashVisible(false);
+          }, 15_000);
+        }
+        return;
+      }
+      if (visibilityUnknownFallback) {
+        clearTimeout(visibilityUnknownFallback);
+        visibilityUnknownFallback = undefined;
+      }
+      visibilityUnknownFallbackElapsed.current = false;
+      setNativeSplashVisible(visible);
     };
 
     syncVisibility();
-    const interval = setInterval(syncVisibility, 1000);
+    interval = setInterval(syncVisibility, 1000);
     return () => {
       active = false;
       clearInterval(interval);
+      if (visibilityUnknownFallback) clearTimeout(visibilityUnknownFallback);
     };
   }, [showSplash, hideFailed, timedOut]);
 

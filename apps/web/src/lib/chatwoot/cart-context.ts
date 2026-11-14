@@ -35,7 +35,7 @@ export type ChatwootCartContextResult =
     }
   | {
       ok: false;
-      status: 400 | 401 | 403 | 404 | 409 | 503;
+      status: 400 | 401 | 403 | 404 | 409 | 410 | 503;
       code: string;
     };
 
@@ -61,6 +61,9 @@ function cartContextError(
   }
   if (code === 'version_conflict' || code === 'cart_locked') {
     return { ok: false, status: 409, code };
+  }
+  if (code === 'expired' || code === 'not_found') {
+    return { ok: false, status: 410, code: 'cart_expired' };
   }
   if (code === 'merchant_unavailable') {
     return { ok: false, status: 404, code };

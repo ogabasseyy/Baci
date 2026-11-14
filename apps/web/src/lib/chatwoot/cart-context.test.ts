@@ -191,6 +191,23 @@ describe('loadChatwootCartContext', () => {
     expect(JSON.stringify(result)).not.toContain('verified-session-proof');
   });
 
+  it.each([
+    'expired',
+    'not_found',
+  ] as const)('returns a terminal cart response when the initial snapshot is %s', async (code) => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    useVerifiedCartContext();
+    mocks.getCart.mockResolvedValueOnce({ ok: false, code });
+
+    await expect(loadChatwootCartContext(makeRequest())).resolves.toMatchObject(
+      {
+        ok: false,
+        status: 410,
+        code: 'cart_expired',
+      }
+    );
+  });
+
   it('allows shared storefront origins while using only the resolved tenant binding and cart', async () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
     const tenantBId = '6df442af-4d21-4f4f-9f0b-607400000099';

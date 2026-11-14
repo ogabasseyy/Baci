@@ -264,6 +264,31 @@ describe('Chatwoot shared-cart quantity route', () => {
     log.mockRestore();
   });
 
+  it('accepts a committed replay without a version when the live read fails', async () => {
+    arrange();
+    mocks.mutateCart.mockResolvedValueOnce({
+      ok: true,
+      operationId: body.requestId,
+      replayed: true,
+      cart: { expiresAt: cart.expiresAt, version: cart.version + 1 },
+    });
+    mocks.getCart.mockRejectedValueOnce(
+      new Error('synthetic snapshot failure')
+    );
+
+    const response = await POST(request());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      accepted: true,
+      operationId: body.requestId,
+      replayed: true,
+    });
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+  });
+
   it('rejects a conversation mismatch before mutation', async () => {
     arrange();
     mocks.verifyChatwootSessionCapability.mockResolvedValue({

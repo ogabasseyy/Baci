@@ -4,7 +4,8 @@ import { buildCsrfHeaders } from '@/lib/csrf';
 export async function postChatwootBridgeJson(
   path: string,
   body: Record<string, unknown>,
-  storeSlug: string
+  storeSlug: string,
+  signal?: AbortSignal
 ): Promise<Record<string, unknown> | null> {
   try {
     const response = await fetch(cartRoute(path, storeSlug), {
@@ -13,6 +14,7 @@ export async function postChatwootBridgeJson(
       cache: 'no-store',
       headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
+      signal,
     });
     let value: unknown;
     try {

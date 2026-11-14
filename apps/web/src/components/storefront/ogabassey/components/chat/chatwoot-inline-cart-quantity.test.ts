@@ -98,6 +98,19 @@ describe('handleChatwootInlineCartQuantity', () => {
     expect(value.post).not.toHaveBeenCalled();
   });
 
+  it('refreshes the shared cart when an accepted response omits cartVersion', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({ accepted: true })));
+    const value = input();
+
+    await handleChatwootInlineCartQuantity(value);
+
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'quantity-0001',
+      accepted: true,
+    });
+  });
+
   it('refreshes the same cart after a transport failure with an unknown commit outcome', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
     const value = input();

@@ -1,4 +1,5 @@
 import { postChatwootBridgeJson } from './chatwoot-bridge-request';
+import { runCartSessionCookieWrite } from '@/hooks/cart/cart-session-write-fence';
 import type { chatwootCommerceMessageSchema } from '@/schemas/chatwoot-commerce-message';
 import type { chatwootCartReviewSnapshotSchema } from '@/schemas/chatwoot-cart-review-snapshot';
 import type { z } from 'zod';
@@ -50,18 +51,24 @@ export async function handleChatwootInlineCartQuantity(input: {
 
   let mutation: Record<string, unknown> | null;
   try {
-    mutation = await postChatwootBridgeJson(
-      '/api/storefront/chatwoot/cart/quantity',
-      {
-        cartVersion: message.data.cartVersion,
-        conversationId: input.conversationId,
-        expectedQuantity: message.data.expectedQuantity,
-        lineId,
-        quantity: message.data.quantity,
-        requestId,
-        sessionToken: input.sessionToken,
-      },
-      input.storeSlug
+    mutation = await runCartSessionCookieWrite(
+      input.storeSlug,
+      null,
+      (signal) =>
+        postChatwootBridgeJson(
+          '/api/storefront/chatwoot/cart/quantity',
+          {
+            cartVersion: message.data.cartVersion,
+            conversationId: input.conversationId,
+            expectedQuantity: message.data.expectedQuantity,
+            lineId,
+            quantity: message.data.quantity,
+            requestId,
+            sessionToken: input.sessionToken,
+          },
+          input.storeSlug,
+          signal
+        )
     );
   } catch {
     mutation = null;

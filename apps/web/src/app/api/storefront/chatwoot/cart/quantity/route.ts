@@ -255,6 +255,8 @@ export async function POST(request: NextRequest) {
       });
     }
   }
+  // An idempotent replay stays accepted when the live-cart read fails; only
+  // include cartVersion when the current version was independently verified.
   const response = NextResponse.json(
     {
       accepted: true,

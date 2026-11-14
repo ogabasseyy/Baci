@@ -63,4 +63,17 @@ describe('postChatwootBridgeJson', () => {
       postChatwootBridgeJson('/cart', {}, 'store-a')
     ).resolves.toBeNull();
   });
+
+  it('passes the cart-session fence signal to fetch', async () => {
+    const fetchMock = vi.fn(async () => response({ accepted: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+
+    await postChatwootBridgeJson('/cart', {}, 'store-a', controller.signal);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/cart?merchantSlug=store-a',
+      expect.objectContaining({ signal: controller.signal })
+    );
+  });
 });

@@ -185,7 +185,7 @@ describe('Chatwoot inline cart quantity mutations', () => {
     expect(mocks.cartState.refreshSharedCart).not.toHaveBeenCalled();
   });
 
-  it('suppresses the reply and refresh when a newer context invalidates an in-flight mutation', async () => {
+  it('reconciles the same-cart commit but suppresses its stale reply after context change', async () => {
     let finishMutation:
       | ((response: {
           ok: true;
@@ -253,6 +253,6 @@ describe('Chatwoot inline cart quantity mutations', () => {
         String(payload).startsWith('baci-cart-quantity-result:')
       )
     ).toBe(false);
-    expect(mocks.cartState.refreshSharedCart).not.toHaveBeenCalled();
+    expect(mocks.cartState.refreshSharedCart).toHaveBeenCalledOnce();
   });
 });

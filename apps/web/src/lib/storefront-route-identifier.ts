@@ -1,5 +1,10 @@
 import type { headers } from 'next/headers';
-import { getRootDomain } from '@/env';
+
+// Read NEXT_PUBLIC_ROOT_DOMAIN directly instead of importing `@/env` so this
+// module stays inside the lightweight edge-routing closure enforced by
+// `tools/cost/storefront-edge-inventory-routing-input-paths.ts`.
+const getRootDomain = () =>
+  process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com';
 
 export function resolveMerchantContextIdentifier(
   headersList: Awaited<ReturnType<typeof headers>>

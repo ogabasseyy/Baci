@@ -47,9 +47,9 @@ const withFirebaseModularHeaders = (config) => {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
       // 1. Clean up ALL previous surgical fixes to prevent duplication
-      // This regex matches our surgicalPostInstall blocks
+      // Remove the whole generated target configuration before re-injecting it.
       podfileContent = podfileContent.replace(
-        /installer\.pods_project\.targets\.each do \|target\|[\s\S]*?end\n\s*end\n\s*end/g,
+        / {4}# Added by withFirebaseModularHeaders[\s\S]*?(?=\n {4}# Force load RNScreens)/g,
         ''
       );
       // Clean up multiple RNScreens force-load blocks
@@ -61,6 +61,7 @@ const withFirebaseModularHeaders = (config) => {
       // 2. Define the new surgical fix
       const surgicalPostInstall = `
     # Added by withFirebaseModularHeaders
+    react_native_common_path = File.expand_path(File.join(config[:reactNativePath], 'ReactCommon'), __dir__)
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         # Ensure pods have DEFINES_MODULE set for static framework linkage
@@ -75,6 +76,13 @@ const withFirebaseModularHeaders = (config) => {
           config.build_settings['OTHER_CFLAGS'] ||= '$(inherited)'
           config.build_settings['OTHER_CFLAGS'] << ' -Wno-error -Wno-implicit-int -Wno-strict-prototypes -Wno-implicit-function-declaration'
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        end
+
+        if ['NitroModules', 'NitroMmkv', 'RNSplashMotion'].include?(target.name)
+          # Nitro's ReactCommon includes resolve through jserrorhandler; CocoaPods
+          # does not add this React Native source directory to these pod targets.
+          config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) '
+          config.build_settings['HEADER_SEARCH_PATHS'] << %Q{"#{react_native_common_path}" }
         end
       end
     end

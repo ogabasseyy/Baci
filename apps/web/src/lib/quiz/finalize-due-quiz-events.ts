@@ -182,9 +182,11 @@ export async function finalizeDueQuizEvents() {
       lastObservedWatermarks !== null
         ? lastObservedWatermarks
         : sweepWatermarks;
-    await invalidateQuizProductCaches(client, sweepTargetWatermarks);
+    const sweepSucceeded =
+      (await invalidateQuizProductCaches(client, sweepTargetWatermarks)) !==
+      false;
 
-    if (sweepWatermarks.hasProbeFailure) {
+    if (sweepWatermarks.hasProbeFailure || !sweepSucceeded) {
       hasPendingRecoverySweep = true;
     } else {
       hasPendingRecoverySweep = false;

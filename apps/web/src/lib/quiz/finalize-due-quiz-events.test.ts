@@ -487,4 +487,57 @@ describe('finalizeDueQuizEvents', () => {
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
   });
+
+  it('retains the recovery baseline when cache invalidation reports incomplete delivery', async () => {
+    const tick1Watermarks = makeOkWatermarks('ok');
+    const tick2Watermarks = {
+      ...makeOkWatermarks('ok'),
+      events: {
+        status: 'ok' as const,
+        floor: '2026-09-01T00:00:05Z',
+        boundarySnapshots: new Map([['evt-1', '{"status":"ended"}']]),
+      },
+    };
+    const idleRpcSequence = () => {
+      mocks.rpc
+        .mockResolvedValueOnce({ data: { updated: true }, error: null })
+        .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
+        .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+        .mockResolvedValueOnce({ data: 0, error: null });
+    };
+
+    // Tick 1: baseline
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
+
+    // Tick 2: external mutation triggers sweep, but sweep reports incomplete (false).
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(false);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 3: watermarks unchanged, but recovery is still pending -> retries from tick1Watermarks.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
+      expect.anything(),
+      tick1Watermarks
+    );
+
+    // Tick 4: recovery succeeded -> idle skip resumes.
+    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    idleRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
+  });
 });

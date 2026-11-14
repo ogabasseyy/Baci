@@ -118,12 +118,13 @@ async function collectQuizCacheTargetRows<T>(
 export async function invalidateQuizProductCaches(
   client: QuizClient,
   watermarks: QuizSweepWatermarks
-): Promise<void> {
-  if (typeof (client as { from?: unknown }).from !== 'function') return;
+): Promise<boolean> {
+  if (typeof (client as { from?: unknown }).from !== 'function') return true;
 
   const productIdsByMerchant = new Map<string, Set<string>>();
   const eventMerchantIds = new Map<string, string>();
   let sweepIncomplete = false;
+  let deliveryFailed = false;
 
   try {
     const eventPage = await collectQuizCacheTargetRows<QuizEventCacheRow>(
@@ -286,9 +287,12 @@ export async function invalidateQuizProductCaches(
               ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
             });
           } catch {
-            // The quiz RPC already completed; edge eviction stays best effort.
+            // The quiz RPC already completed; edge eviction stays best effort,
+            // but report incomplete delivery so the caller retains its baseline.
+            deliveryFailed = true;
           }
         })
     );
   }
+  return !sweepIncomplete && !deliveryFailed;
 }

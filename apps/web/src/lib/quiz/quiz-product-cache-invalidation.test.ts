@@ -413,4 +413,24 @@ describe('invalidateQuizProductCaches', () => {
       })
     );
   });
+
+  it('returns false when a target sweep fails or purge delivery rejects', async () => {
+    const client = createClient();
+    mockScheduleOrderProductBlogPurge.mockRejectedValueOnce(
+      new Error('purge failed')
+    );
+
+    const deliveryFailedResult = await invalidateQuizProductCaches(
+      client as never,
+      makeWatermarks()
+    );
+    expect(deliveryFailedResult).toBe(false);
+
+    mockScheduleOrderProductBlogPurge.mockResolvedValue(undefined);
+    const completeResult = await invalidateQuizProductCaches(
+      client as never,
+      makeWatermarks()
+    );
+    expect(completeResult).toBe(true);
+  });
 });

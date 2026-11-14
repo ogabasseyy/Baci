@@ -69,6 +69,8 @@ describe('goal-actions links waiting on a silent wallet read', () => {
       expect(screen.getByText("Couldn't open your savings")).toBeOnTheScreen();
       fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
       expect(refetch).toHaveBeenCalledTimes(1);
+      // The hung read is cancelled, not left running beside the new one.
+      expect(refetch).toHaveBeenCalledWith({ cancelRefetch: true });
       // A fresh wait starts: the spinner, then Keep waiting again.
       expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
       act(() => {

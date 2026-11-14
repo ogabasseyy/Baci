@@ -151,7 +151,8 @@ export default function WalletGoalActionsRoute() {
     ? `/wallet/savings/goal-actions?goalId=${encodeURIComponent(goalId)}`
     : '/wallet';
   const login = `/auth/login?returnTo=${encodeURIComponent(back)}` as Href;
-  const reread = () => void wallet.refetch();
+  // Supersedes a hung read (cancels it) instead of stacking a second one.
+  const reread = () => void wallet.refetch({ cancelRefetch: true });
   if (auth.isLoading) return <GoalLinkShell />;
   if (auth.redirectTo) return <Redirect href={login} />;
   if (!goalId) return <Redirect href="/wallet" />;

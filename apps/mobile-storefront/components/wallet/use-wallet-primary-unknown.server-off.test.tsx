@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import {
   clearObservedPiggyvestPrimaryCapability,
@@ -37,6 +37,22 @@ describe('bugfix: unreachable PiggyVest read at the pilot (walk 10)', () => {
 
   it('is not unknown when the read succeeded', () => {
     const { result } = renderHook(() => useWalletPrimaryUnknown(PILOT, false));
+    expect(result.current).toBe(false);
+  });
+});
+
+describe('bugfix: expired rollback treated as an unreachable read', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('keeps PiggyVest off once a ruling-out has just expired', () => {
+    jest.useFakeTimers();
+    observePiggyvestPrimaryCapability(PILOT, false);
+    jest.advanceTimersByTime(61_000);
+
+    const { result } = renderHook(() => useWalletPrimaryUnknown(PILOT, true));
+
     expect(result.current).toBe(false);
   });
 });

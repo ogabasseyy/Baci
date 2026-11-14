@@ -1,5 +1,6 @@
 import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 
 /**
  * True when the PiggyVest read failed (server unreachable) at the merchant
@@ -13,9 +14,16 @@ export function useWalletPrimaryUnknown(
   primaryUnreadable: boolean | undefined
 ): boolean {
   const verdictNow = usePiggyvestCapabilityNow(merchantId);
+  // A rollback whose ruling-out just expired is not "unknown": PiggyVest
+  // stays off until a fresh positive verdict (Codex).
   return (
     primaryUnreadable === true &&
     isPiggyvestPrimaryMerchant(merchantId) &&
-    verdictNow !== false
+    verdictNow !== false &&
+    !(
+      verdictNow === null &&
+      !!merchantId &&
+      wasPiggyvestLastRuledOut(merchantId)
+    )
   );
 }

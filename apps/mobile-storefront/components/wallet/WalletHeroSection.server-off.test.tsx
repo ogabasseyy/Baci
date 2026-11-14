@@ -103,6 +103,11 @@ describe('bugfix: known PiggyVest customer looked new with the server unreachabl
     );
 
     expect(screen.getByText('9814644749')).toBeOnTheScreen();
+    // Walk 12: shown, not "Checking your account…", and marked as last known.
+    expect(screen.queryByText('Checking your account…')).toBeNull();
+    expect(
+      screen.getByText('Last known account. It may be out of date.')
+    ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Create account number' })
     ).toBeNull();

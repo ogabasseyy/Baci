@@ -163,6 +163,19 @@ export function WalletHeroSection({
           <Text style={styles.accountUnavailableMessage}>
             Can’t check your account right now.
           </Text>
+        ) : primaryUnknown && fundingAccount?.provider === 'piggyvest' ? (
+          // The server can't be reached: the last-known PiggyVest account
+          // number is shown, marked as possibly out of date (walk 12).
+          <View>
+            <WalletHeroFundingAccount
+              account={fundingAccount}
+              emphasizeCopied
+              purpose="savings"
+            />
+            <Text style={styles.accountUnavailableMessage}>
+              Last known account. It may be out of date.
+            </Text>
+          </View>
         ) : fundingAccount && legacyUnconfirmed ? (
           <Text style={styles.accountUnavailableMessage}>
             Checking your account…

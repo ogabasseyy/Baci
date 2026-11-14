@@ -475,15 +475,8 @@ export async function PATCH(
             updates.shipment_booking_started_at = null;
           }
         } catch (error) {
-          // Keep the reason on the order so a stuck booking can be diagnosed
-          // later; never let this hide the real error below.
-          await recordOrderShipmentBookingFailure(
-            supabase,
-            merchantId,
-            id,
-            error,
-            !shouldReleaseBookingLock(error)
-          );
+          console.error('Shipment booking failed:', error);
+          let lockReleased = false;
           if (shipmentBookingLockToken && shouldReleaseBookingLock(error)) {
             try {
               await clearOrderShipmentBookingLock(
@@ -492,6 +485,7 @@ export async function PATCH(
                 id,
                 shipmentBookingLockToken
               );
+              lockReleased = true;
             } catch (lockError) {
               console.error(
                 'Failed to release shipment booking lock after booking error:',
@@ -499,7 +493,15 @@ export async function PATCH(
               );
             }
           }
-
+          // Keep the reason on the order so a stuck booking can be diagnosed
+          // later; never let this hide the real error below.
+          await recordOrderShipmentBookingFailure(
+            supabase,
+            merchantId,
+            id,
+            error,
+            !lockReleased
+          );
           throw toBookingFailureResponseError(error);
         }
       }

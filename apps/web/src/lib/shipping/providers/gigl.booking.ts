@@ -1,3 +1,4 @@
+import { GIGL_BOOKING_TIMEOUT_MESSAGE } from '../order-shipment-booking-failure';
 import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
 import type { BookingRequest, ShipmentBookingResult } from '../types';
 import type { GiglApiClient } from './gigl.auth';
@@ -264,7 +265,7 @@ export async function bookGiglShipment(
       io.log('warn', 'GIGL booking timed out', {
         timeoutMs: GIGL_BOOKING_TIMEOUT_MS,
       });
-      throw new Error('GIGL booking timed out');
+      throw new Error(GIGL_BOOKING_TIMEOUT_MESSAGE);
     }
 
     throw error;

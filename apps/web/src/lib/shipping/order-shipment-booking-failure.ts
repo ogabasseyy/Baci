@@ -16,6 +16,12 @@ export type ClassifiedBookingFailure = {
 };
 
 const MAX_MESSAGE_LENGTH = 500;
+/** The message GIG's booking client throws when its own deadline passes. */
+export const GIGL_BOOKING_TIMEOUT_MESSAGE = 'GIGL booking timed out';
+
+// Deliberately partial: only dial-level failures that prove nothing was sent.
+// ETIMEDOUT, ECONNRESET and EPIPE can happen after the request left, so those
+// stay locked (fail safe against double booking).
 const NEVER_REACHED_CODES = new Set([
   'ECONNREFUSED',
   'ENOTFOUND',
@@ -36,7 +42,8 @@ function isProviderTimeoutError(error: unknown): boolean {
   // Only GIG's own booking timeout: a database or client-abort timeout says
   // nothing about whether GIG booked the parcel.
   return (
-    error instanceof Error && /^GIGL booking timed out/i.test(error.message)
+    error instanceof Error &&
+    error.message.startsWith(GIGL_BOOKING_TIMEOUT_MESSAGE)
   );
 }
 

@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
     bookingLockToken = null;
     return bookingSuccessResponse(persisted.shipmentId, result);
   } catch (rawError) {
+    console.error('Error booking shipment:', rawError);
     if (bookingSupabase && bookingOrderId && bookingMerchantId) {
       if (isProviderNeverReachedError(rawError)) {
         retainBookingLock = false;
@@ -204,7 +205,6 @@ export async function POST(request: NextRequest) {
         { error: error.message, code: error.code },
         { status: error.status }
       );
-    console.error('Error booking shipment:', error);
     return NextResponse.json(
       { error: 'Failed to book shipment' },
       { status: 500 }

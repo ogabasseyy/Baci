@@ -68,7 +68,11 @@ export function redirectSystemPath({
       customSchemeUrl.protocol.toLowerCase() === 'ogabassey:' &&
       customSchemeUrl.host
     ) {
-      normalizedPath = `/${customSchemeUrl.host}${customSchemeUrl.pathname}${customSchemeUrl.search}${customSchemeUrl.hash}`;
+      const routePath =
+        customSchemeUrl.pathname === '/'
+          ? ''
+          : customSchemeUrl.pathname.replace(/\/$/, '');
+      normalizedPath = `/${customSchemeUrl.host}${routePath}${customSchemeUrl.search}${customSchemeUrl.hash}`;
     }
   } catch {
     // Keep the original path; captureCartPairingLink handles malformed input.

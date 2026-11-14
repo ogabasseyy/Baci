@@ -87,6 +87,15 @@ describe('redirectSystemPath', () => {
     expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
   });
 
+  it('preserves a pairing fragment on a host-form cart route with a trailing slash', () => {
+    const path = 'ogabassey://cart/#handoff=token&hid=handoff-id';
+    expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart#handoff=token&hid=handoff-id',
+      expect.anything()
+    );
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

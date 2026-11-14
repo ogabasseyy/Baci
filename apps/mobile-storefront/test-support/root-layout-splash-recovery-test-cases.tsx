@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react-native';
 import type React from 'react';
 import { registerRootLayoutPendingSplashRecoveryTest } from './root-layout-pending-splash-recovery-test-cases';
+import { registerRootLayoutTimeoutPlaceholderTests } from './root-layout-timeout-placeholder-test-cases';
 
 export interface SplashRecoveryTestContext {
   RootLayout: React.ComponentType;
@@ -279,5 +280,12 @@ export function registerRootLayoutSplashRecoveryTests({
     hideSplash,
     isSplashVisible,
     rootLayoutNavUnmount,
+  });
+
+  registerRootLayoutTimeoutPlaceholderTests({
+    RootLayout,
+    initializeStorage,
+    hideSplash,
+    isSplashVisible,
   });
 }

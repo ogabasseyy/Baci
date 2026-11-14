@@ -8,7 +8,7 @@ import {
   Inter_900Black,
 } from '@expo-google-fonts/inter';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { RootLayoutNav } from '@/components/navigation/RootLayoutNav';
 import { RootStartupError } from '@/components/navigation/RootStartupError';
 import { StartupRecoveryScreen } from '@/components/navigation/StartupRecoveryScreen';
@@ -285,18 +285,28 @@ export default function RootLayout() {
     if (error) throw error;
   }, [error]);
 
+  const timedOutStartupBlocked =
+    timedOut && (!shouldRenderApp || !loaded || !isStorageReady);
+
   if (
     shouldShowStartupRecovery ||
-    (timedOut &&
-      (!shouldRenderApp || !loaded || !isStorageReady) &&
-      !nativeSplashVisible)
+    (timedOutStartupBlocked && !nativeSplashVisible)
   ) {
     return <StartupRecoveryScreen onLayout={onFirstLayout} />;
   }
 
-  if (!shouldRenderApp) {
+  if (!shouldRenderApp || timedOutStartupBlocked) {
     return (
-      <View testID="startup-placeholder" style={styles.startupPlaceholder} />
+      <View testID="startup-placeholder" style={styles.startupPlaceholder}>
+        {timedOutStartupBlocked ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={styles.startupPlaceholderMessage}
+          >
+            Getting things ready…
+          </Text>
+        ) : null}
+      </View>
     );
   }
 
@@ -317,5 +327,11 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  startupPlaceholder: { backgroundColor: '#20000b', flex: 1 },
+  startupPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#20000b',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  startupPlaceholderMessage: { color: '#fff', fontSize: 14 },
 });

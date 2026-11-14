@@ -28,7 +28,7 @@ export const piggyvestWalletActivityRowSchema = z.strictObject({
   fee_kobo: z.number().int().nonnegative(),
   label: z.string().min(1).max(600),
   status: z.enum(['completed', 'pending']),
-  occurred_at: z.string().min(1),
+  occurred_at: z.iso.datetime({ offset: true }),
 });
 
 export type PiggyvestWalletActivityRow = z.infer<

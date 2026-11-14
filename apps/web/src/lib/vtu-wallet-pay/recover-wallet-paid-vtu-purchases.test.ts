@@ -79,7 +79,12 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
       walletPayClaimed: true,
     });
     expect(delivery.finish).toHaveBeenCalledWith(OP, 'fulfilled', TOKEN);
-    expect(summary).toEqual({ checked: 1, recovered: 1, errored: 0 });
+    expect(summary).toEqual({
+      checked: 1,
+      recovered: 1,
+      errored: 0,
+      deferred: 0,
+    });
   });
 
   it('owes the one refund when the re-driven vend failed', async () => {
@@ -138,7 +143,7 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     };
     await expect(
       recoverWalletPaidVtuPurchases({ supabase }, off as never)
-    ).resolves.toEqual({ checked: 0, recovered: 0, errored: 0 });
+    ).resolves.toEqual({ checked: 0, recovered: 0, errored: 0, deferred: 0 });
   });
 
   it('counts a failure and carries on, never throwing', async () => {
@@ -146,5 +151,31 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     await expect(
       recoverWalletPaidVtuPurchases({ supabase }, deps as never)
     ).resolves.toMatchObject({ checked: 1, errored: 1 });
+  });
+});
+
+describe('bugfix: recovery could run past the cron deadline holding a claim (Codex P2)', () => {
+  it('takes no claim when too little time remains before the deadline', async () => {
+    const summary = await recoverWalletPaidVtuPurchases(
+      { supabase, deadlineMs: Date.now() + 1000 },
+      deps
+    );
+    expect(worker.claim).not.toHaveBeenCalled();
+    expect(fulfil).not.toHaveBeenCalled();
+    expect(summary).toEqual({
+      checked: 0,
+      recovered: 0,
+      errored: 0,
+      deferred: 1,
+    });
+  });
+
+  it('still recovers when the deadline is far away', async () => {
+    const summary = await recoverWalletPaidVtuPurchases(
+      { supabase, deadlineMs: Date.now() + 600_000 },
+      deps
+    );
+    expect(summary.recovered).toBe(1);
+    expect(summary.deferred).toBe(0);
   });
 });

@@ -25,6 +25,7 @@ vi.mock('@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases', () => ({
     checked: 0,
     recovered: 0,
     errored: 0,
+    deferred: 0,
   })),
 }));
 
@@ -89,7 +90,7 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
       failed: 0,
       processing: 1,
       successful: 1,
-      walletPay: { checked: 0, recovered: 0, errored: 0 },
+      walletPay: { checked: 0, recovered: 0, errored: 0, deferred: 0 },
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(reconcileProcessingVtuTransactions).toHaveBeenCalledWith({
@@ -111,6 +112,7 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
       checked: 1,
       recovered: 0,
       errored: 1,
+      deferred: 0,
     });
 
     const response = await GET(createCronRequest());
@@ -118,11 +120,12 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     expect(response.status).toBe(200);
     expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith({
       supabase: { admin: true },
+      deadlineMs: expect.any(Number),
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith({
       message: 'PiggyVest-paid VTU recovery completed with errors',
-      walletPay: { checked: 1, recovered: 0, errored: 1 },
+      walletPay: { checked: 1, recovered: 0, errored: 1, deferred: 0 },
     });
   });
 

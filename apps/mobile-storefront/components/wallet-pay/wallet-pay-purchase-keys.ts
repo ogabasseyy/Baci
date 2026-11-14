@@ -167,15 +167,40 @@ export const walletPayPurchaseKeys = {
       return key;
     });
   },
-  forget(purchase: string) {
+  /**
+   * Drops this purchase's key. With `onlyKey`, only that exact key: another
+   * tab may have settled this purchase and started a newer check under a new
+   * key, which a late answer here must never delete (Codex P1).
+   */
+  forget(purchase: string, onlyKey?: string) {
     return serialized(async () => {
       const purchases = await load();
       if (!(purchase in purchases)) return;
+      if (onlyKey !== undefined && purchases[purchase]?.key !== onlyKey) return;
       delete purchases[purchase];
       // Retried: a removal that never reaches the phone would bring the old
       // key back after a restart (a replay of the finished purchase).
       for (let attempt = 0; attempt < FORGET_ATTEMPTS; attempt += 1)
         if (await save(purchases)) return;
+    });
+  },
+  /**
+   * Retires a settled purchase's key, but only that key, and puts it back if
+   * the answer was dropped meanwhile (the sheet closed during the storage
+   * work, so nothing consumed the delivered answer): the next try then
+   * replays it instead of paying a new lookup (Codex P2).
+   */
+  retire(purchase: string, key: string, stillWanted: () => boolean) {
+    return serialized(async () => {
+      const purchases = await load();
+      if (purchases[purchase]?.key !== key) return;
+      const entry = purchases[purchase];
+      delete purchases[purchase];
+      for (let attempt = 0; attempt < FORGET_ATTEMPTS; attempt += 1)
+        if (await save(purchases)) break;
+      if (stillWanted() || purchases[purchase]) return;
+      purchases[purchase] = entry;
+      await save(purchases);
     });
   },
   /** Tests only: drops the in-memory copy, as an app restart does. */
@@ -201,6 +226,8 @@ export function trackWalletPayPurchase<Result>(
     stillOwner: () => boolean;
     /** False once the sheet dropped this purchase (closed or reopened). */
     stillWanted?: () => boolean;
+    /** The idempotency key this attempt used: only it is ever retired. */
+    key?: () => string | null;
   }
 ): WalletPayAdapter<Result> {
   const settle = async () => {
@@ -215,7 +242,18 @@ export function trackWalletPayPurchase<Result>(
     const id = typeof purchase === 'string' ? purchase : purchase();
     // A storage failure never hides the settled answer (Muse): the key just
     // stays, and the next try replays the same settled request.
-    if (id) await walletPayPurchaseKeys.forget(id).catch(() => undefined);
+    const key = options.key?.() ?? null;
+    if (id && key)
+      await walletPayPurchaseKeys
+        .retire(
+          id,
+          key,
+          () =>
+            options.stillOwner() &&
+            (options.stillWanted ? options.stillWanted() : true)
+        )
+        .catch(() => undefined);
+    else if (id) await walletPayPurchaseKeys.forget(id).catch(() => undefined);
     options.onSettled();
   };
   const switched = {

@@ -40,7 +40,9 @@ BEGIN
   -- The first attempt for a goal uses the bare reference.
   PERFORM pg_temp.gc_assert(v_result #>> '{reservation,reference}' = 'pvb-cancel-' || c_goal,
     'the first reference carried a suffix: ' || v_result::text);
-  PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', 250000), 'final dispatch');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, 250000) ->> 'status' = 'dispatched',
+    'final dispatch');
   -- A residual provider balance after the transfer (a credit landed between
   -- the snapshot and the transfer) is never settled as cancelled-at-zero: the
   -- refund is credited, the goal stays open with the residual recorded, a

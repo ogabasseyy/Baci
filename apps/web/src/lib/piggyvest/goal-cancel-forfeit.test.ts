@@ -1,0 +1,220 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PiggyvestApiError } from './client';
+import { driveGoalCancelForfeit } from './goal-cancel-forfeit';
+
+vi.mock('server-only', () => ({}));
+const operationId = '00000000-0000-4000-8000-000000000002';
+const forfeit = {
+  operationId: '00000000-0000-4000-8000-000000000003',
+  goalId: '00000000-0000-4000-8000-000000000001',
+  amountKobo: 12000,
+  sourceWalletId: 'goal-wallet',
+  destinationWalletId: 'interest-wallet',
+  reference: 'pvb-forfeit-00000000-0000-4000-8000-000000000001',
+  businessId: 'business',
+  providerCustomerId: 'customer',
+};
+function ports() {
+  return {
+    claim: vi.fn().mockResolvedValue({ status: 'claimed', forfeit }),
+    verifyDestination: vi.fn().mockResolvedValue(true),
+    unclaim: vi.fn().mockResolvedValue('unclaimed'),
+    markPosting: vi.fn().mockResolvedValue('posting'),
+    transfer: vi.fn().mockResolvedValue({ accepted: true }),
+    lookupTransfer: vi.fn().mockResolvedValue('not_found'),
+    release: vi.fn().mockResolvedValue('released'),
+    reconcile: vi.fn().mockResolvedValue({ status: 'pending' }),
+  };
+}
+beforeEach(() => vi.clearAllMocks());
+
+it('sends the claimed interest to the interest wallet exactly once, then reads its status', async () => {
+  const p = ports();
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+  expect(p.transfer).toHaveBeenCalledOnce();
+  expect(p.transfer).toHaveBeenCalledWith(forfeit);
+  expect(p.reconcile).toHaveBeenCalledWith(forfeit.operationId);
+});
+
+it('reports confirmed when the status read settles it', async () => {
+  const p = ports();
+  p.reconcile.mockResolvedValue({ status: 'confirmed' });
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('confirmed');
+});
+
+it('never resends an already dispatched forfeit; it only reads its status', async () => {
+  const p = ports();
+  p.claim.mockResolvedValue({
+    status: 'pending',
+    forfeitId: forfeit.operationId,
+  });
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+  expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.reconcile).toHaveBeenCalledWith(forfeit.operationId);
+});
+
+it.each([
+  'waiting',
+  'confirmed',
+  'needs_review',
+  'none',
+  'unavailable',
+] as const)('sends nothing when the claim answers %s', async (status) => {
+  const p = ports();
+  p.claim.mockResolvedValue({ status });
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe(status);
+  expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.reconcile).not.toHaveBeenCalled();
+});
+
+it('keeps a timed-out forfeit pending and never resends it (202/timeout is indeterminate)', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_NETWORK_ERROR', 'timeout')
+  );
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+  expect(p.transfer).toHaveBeenCalledOnce();
+  expect(p.release).not.toHaveBeenCalled();
+});
+
+it('releases a definitively rejected forfeit only when no transfer exists under its reference', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('released');
+  expect(p.lookupTransfer).toHaveBeenCalledWith(forfeit);
+  expect(p.release).toHaveBeenCalledWith(forfeit.operationId);
+});
+
+it('holds a rejected forfeit pending when the lookup finds a transfer', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  p.lookupTransfer.mockResolvedValue('submitted');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+  expect(p.release).not.toHaveBeenCalled();
+});
+
+it('refuses a claim whose forfeit is not a forfeit transfer', async () => {
+  const p = ports();
+  p.claim.mockResolvedValue({
+    status: 'claimed',
+    forfeit: {
+      ...forfeit,
+      reference: 'pvb-cancel-00000000-0000-4000-8000-000000000001',
+    },
+  });
+  await expect(driveGoalCancelForfeit(operationId, p)).rejects.toThrow();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('answers pending without a status read when no reconciler is bound', async () => {
+  const p = ports();
+  const { reconcile: _reconcile, ...rest } = p;
+  expect(await driveGoalCancelForfeit(operationId, rest)).toBe('pending');
+});
+
+it('reports needs_review when the database caps a third rejected forfeit', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  p.release.mockResolvedValue('needs_review');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('needs_review');
+});
+
+it('hands the forfeit back unsent, never as a rejection, when the interest wallet is not ours', async () => {
+  const p = ports();
+  p.verifyDestination.mockResolvedValue(false);
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
+  expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId, 'mismatch');
+  expect(p.release).not.toHaveBeenCalled();
+});
+
+it("hands the forfeit back unsent with its own reason when the goal wallet is short or not the customer's", async () => {
+  const p = ports();
+  p.verifyDestination.mockResolvedValue('source_unavailable');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
+  expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.unclaim).toHaveBeenCalledWith(
+    forfeit.operationId,
+    'source_unavailable'
+  );
+});
+
+it('hands the forfeit back unsent when the interest wallet can not be checked', async () => {
+  const p = ports();
+  p.verifyDestination.mockRejectedValue(new Error('down'));
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('unavailable');
+  expect(p.transfer).not.toHaveBeenCalled();
+  expect(p.unclaim).toHaveBeenCalledWith(forfeit.operationId, 'check_failed');
+  expect(p.release).not.toHaveBeenCalled();
+});
+
+it.each([
+  'PIGGYVEST_AUTH_ERROR',
+  'PIGGYVEST_RELAY_UNAVAILABLE',
+] as const)('releases a %s refusal without a lookup that would fail in the same outage', async (code) => {
+  const p = ports();
+  p.transfer.mockRejectedValue(new PiggyvestApiError(code, 'not sent', 401));
+  p.lookupTransfer.mockRejectedValue(new Error('same outage'));
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('released');
+  expect(p.lookupTransfer).not.toHaveBeenCalled();
+  expect(p.release).toHaveBeenCalledWith(forfeit.operationId);
+});
+
+it('sends nothing unless the database recorded that the forfeit is about to be posted', async () => {
+  for (const failure of [
+    () => Promise.resolve('not_released' as const),
+    () => Promise.reject(new Error('db down')),
+  ]) {
+    const p = ports();
+    p.markPosting.mockImplementation(failure);
+    expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+    expect(p.transfer).not.toHaveBeenCalled();
+  }
+});
+
+it('marks the forfeit as posting before its single POST', async () => {
+  const p = ports();
+  await driveGoalCancelForfeit(operationId, p);
+  expect(p.markPosting.mock.invocationCallOrder[0]).toBeLessThan(
+    p.transfer.mock.invocationCallOrder[0]
+  );
+});
+
+it('reports needs_review when the replacement could not be merged under the ceiling', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  p.release.mockResolvedValue('released_needs_review');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('needs_review');
+});
+
+describe('bugfix: a posting mark whose answer was lost stranded the forfeit unsent', () => {
+  it('repeats the mark once with the same token and posts when the database confirms it', async () => {
+    const p = ports();
+    p.markPosting
+      .mockReset()
+      .mockRejectedValueOnce(new Error('connection lost'))
+      .mockResolvedValueOnce('posting');
+    await driveGoalCancelForfeit(operationId, p);
+    expect(p.markPosting).toHaveBeenCalledTimes(2);
+    expect(p.markPosting.mock.calls[0][1]).toBe(p.markPosting.mock.calls[1][1]);
+    expect(p.transfer).toHaveBeenCalledOnce();
+  });
+
+  it('sends nothing when the repeat is refused', async () => {
+    const p = ports();
+    p.markPosting
+      .mockReset()
+      .mockRejectedValueOnce(new Error('connection lost'))
+      .mockResolvedValueOnce('not_released');
+    expect(await driveGoalCancelForfeit(operationId, p)).toBe('pending');
+    expect(p.transfer).not.toHaveBeenCalled();
+  });
+});

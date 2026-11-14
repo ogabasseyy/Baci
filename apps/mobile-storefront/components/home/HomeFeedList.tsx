@@ -184,6 +184,7 @@ export function HomeFeedList({
         // Search covers the feed with a full-screen scrim; withhold the
         // home ad placements so no obscured delivery is requested.
         suppressAds={isSearchOpen}
+        autoplayPaused={isSearchOpen}
         heroAdOwnerBlockId={heroAdOwnerBlockId}
         launchAdOwnerBlockId={launchAdOwnerBlockId}
       />
@@ -222,6 +223,7 @@ export function HomeFeedList({
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
         suppressAds={isSearchOpen}
+        autoplayPaused={isSearchOpen}
         heroAdOwnerBlockId={heroAdOwnerBlockId}
         launchAdOwnerBlockId={launchAdOwnerBlockId}
       />

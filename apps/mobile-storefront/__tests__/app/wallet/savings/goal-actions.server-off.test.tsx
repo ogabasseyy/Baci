@@ -110,3 +110,34 @@ describe('old goal-actions links', () => {
     expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: goal link hung or trusted a stale goal list', () => {
+  beforeEach(() => {
+    mockAuth.mockReturnValue({ isLoading: false, redirectTo: null });
+    mockParams.mockReturnValue({ goalId: GOAL });
+  });
+
+  it('offers a retry when the wallet read never starts', () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    mockWallet.mockReturnValue({
+      isError: false,
+      data: undefined,
+      fetchStatus: 'idle',
+      refetch,
+    });
+    render(<WalletGoalActionsRoute />);
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not trust a cached goal list when the refresh failed', () => {
+    mockWallet.mockReturnValue({
+      isError: true,
+      data: { wallet: { savings_goals: [{ id: GOAL }] } },
+      refetch: jest.fn(),
+    });
+    render(<WalletGoalActionsRoute />);
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeOnTheScreen();
+  });
+});

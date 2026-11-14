@@ -114,3 +114,14 @@ describe('bugfix: IMEI top-up below the card minimum for an unresolved wallet ow
     expect(result.current).toBe(false);
   });
 });
+
+describe('bugfix: rollback kept an unresolved owner card-only', () => {
+  it('is not card-only for an unresolved owner once PiggyVest is ruled out now', () => {
+    mockCapability = true; // stale hook value from before the rollback
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    const { result } = renderHook(() =>
+      useCardOnlyPurchaseTopUp('merchant-1', { owner_unresolved: true })
+    );
+    expect(result.current).toBe(false);
+  });
+});

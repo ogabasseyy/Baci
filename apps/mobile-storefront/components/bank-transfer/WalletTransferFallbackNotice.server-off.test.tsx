@@ -9,7 +9,9 @@ import {
 
 describe('WalletTransferFallbackNotice', () => {
   it('tells the customer the order uses a one-time bank transfer', () => {
-    render(<WalletTransferFallbackNotice colors={Colors.light} />);
+    render(
+      <WalletTransferFallbackNotice colors={Colors.light} reason="piggyvest" />
+    );
 
     expect(screen.getByText(WALLET_TRANSFER_FALLBACK_COPY)).toBeOnTheScreen();
   });

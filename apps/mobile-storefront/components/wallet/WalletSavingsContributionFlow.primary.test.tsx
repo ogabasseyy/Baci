@@ -34,9 +34,13 @@ describe('WalletSavingsContributionFlow with PiggyVest', () => {
     it('offers Add money, never a card payment, when the balance is too low', () => {
       const props = renderPrimary({ walletBalance: 100 });
 
-      expect(screen.getByText('₦100 available in wallet')).toBeOnTheScreen();
       expect(
-        screen.getByText('Add money to your wallet to save this amount.')
+        screen.getByText('₦100 available in savings wallet')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByText(
+          'Add money to your savings wallet to save this amount.'
+        )
       ).toBeOnTheScreen();
       expect(screen.queryByText(/Continue to payment/)).toBeNull();
       expect(screen.queryByText(/Opening payment/)).toBeNull();

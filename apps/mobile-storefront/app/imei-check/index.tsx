@@ -8,13 +8,14 @@ import * as Crypto from 'expo-crypto';
 import { router, Stack } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { Alert, Keyboard, Pressable, View } from 'react-native';
+import { Keyboard, Pressable, View } from 'react-native';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
 import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
 import HeroCard from '@/components/imei-check/imei-check-hero-card';
 import { ImeiCheckPending } from '@/components/imei-check/imei-check-pending';
 import { ImeiCheckResultView } from '@/components/imei-check/imei-check-result-view';
 import { imeiCheckScreenActions } from '@/components/imei-check/imei-check-screen-actions';
+import { getImeiWalletCopy } from '@/components/imei-check/imei-wallet-copy';
 import { resolveImeiCheckFailure } from '@/components/imei-check/resolve-imei-check-failure';
 import { submitImeiCheck } from '@/components/imei-check/submit-imei-check';
 import { useImeiDeviceNavigation } from '@/components/imei-check/use-imei-device-navigation';
@@ -24,6 +25,8 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
+import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
 import { createLogger } from '@/lib/logger';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
@@ -68,7 +71,15 @@ export default function ImeiCheckerScreen() {
   });
   const requestIdentity = useImeiRequestIdentity(Crypto.randomUUID);
 
-  const walletBalance = walletQuery.data?.wallet.balance ?? 0;
+  // Checks spend the older balance: store credit for PiggyVest customers.
+  const wallet = walletQuery.data?.wallet;
+  const walletBalance = wallet?.balance ?? 0;
+  const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, wallet);
+  const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
+  // Same rule as fundWallet: not ruled out means a card-only top-up.
+  const topUpCardOnly = usePiggyvestCapabilityNow(merchantId) !== false;
+  const fundWallet = (amount: number) =>
+    imeiCheckScreenActions.fundWallet(amount, merchantId);
 
   const clearIdempotencyKey = () => {
     requestIdentity.clear();
@@ -102,31 +113,20 @@ export default function ImeiCheckerScreen() {
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
     if (!isValidDeviceIdentifier(imei, serviceTier.identifier)) {
-      Alert.alert(
-        serviceTier.identifier === 'serial'
-          ? 'Invalid serial'
-          : 'Invalid number',
-        serviceTier.identifier === 'serial'
-          ? 'Please enter a valid device serial number.'
-          : serviceTier.identifier === 'imei'
-            ? 'Please enter a valid 15-digit IMEI number.'
-            : 'Please enter a valid IMEI or serial number.'
-      );
+      imeiCheckScreenActions.alertInvalidIdentifier(serviceTier.identifier);
       return;
     }
 
     if (walletQuery.isLoading) {
-      setError('Loading wallet balance. Please wait a moment and try again.');
+      setError(`${walletCopy.loading} Please try again in a moment.`);
       return;
     }
     if (walletQuery.isError) {
-      setError(
-        'Wallet balance unavailable. Refresh your wallet and try again.'
-      );
+      setError(walletCopy.unavailable);
       return;
     }
     if (walletBalance < serviceTier.price) {
-      imeiCheckScreenActions.fundWallet(serviceTier.price - walletBalance);
+      fundWallet(serviceTier.price - walletBalance);
       return;
     }
 
@@ -164,7 +164,7 @@ export default function ImeiCheckerScreen() {
           return;
         }
         if (outcome.topUpAmount !== null) {
-          imeiCheckScreenActions.fundWallet(outcome.topUpAmount);
+          fundWallet(outcome.topUpAmount);
           return;
         }
         if (outcome.shouldRefetchWallet) {
@@ -287,9 +287,11 @@ export default function ImeiCheckerScreen() {
             pagerRef={pagerRef}
             visitedDevices={visitedDevices}
             walletBalance={walletBalance}
+            walletIsStoreCredit={walletIsStoreCredit}
+            topUpCardOnly={topUpCardOnly}
             onPageSelected={handlePageSelected}
             onVerify={handleVerify}
-            onTopUpWallet={imeiCheckScreenActions.fundWallet}
+            onTopUpWallet={fundWallet}
           />
         </AppKeyboardContainer>
       )}

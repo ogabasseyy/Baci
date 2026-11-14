@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import type Colors from '@/constants/Colors';
@@ -12,6 +13,8 @@ interface CartStateViewProps {
   isRetrying: boolean;
   onRetry: () => void;
   onStartShopping: () => void;
+  /** Same exit as the loaded cart's back button; omit to hide it. */
+  onBack?: () => void;
 }
 
 export default function CartStateView({
@@ -21,7 +24,9 @@ export default function CartStateView({
   isRetrying,
   onRetry,
   onStartShopping,
+  onBack,
 }: CartStateViewProps) {
+  const insets = useSafeAreaInsets();
   const hasError = variant === 'error';
   const surfaceInset =
     colorScheme === 'dark' ? colors.muted : colors.background;
@@ -33,6 +38,25 @@ export default function CartStateView({
         isDark={colorScheme === 'dark'}
       />
 
+      {onBack ? (
+        <Pressable
+          onPress={onBack}
+          hitSlop={12}
+          style={[
+            styles.backButton,
+            styles.stateBackButton,
+            {
+              backgroundColor: surfaceInset,
+              borderColor: colors.border,
+              top: insets.top + 12,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Back to home"
+        >
+          <Ionicons name="arrow-back" size={18} color={colors.text} />
+        </Pressable>
+      ) : null}
       <View style={styles.emptyContainer}>
         <View style={[styles.emptyIconBg, { backgroundColor: surfaceInset }]}>
           <Ionicons

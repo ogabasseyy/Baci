@@ -656,8 +656,12 @@ BEGIN
        SET voided_at = COALESCE(event.voided_at, pg_catalog.clock_timestamp())
       FROM piggyvest_primary.paid_interest_receipts AS receipt
      WHERE receipt.goal_id = v_operation.goal_id AND receipt.integration_id = v_operation.integration_id
-       AND (receipt.financial_identity ->> 'paidAt') IS NOT NULL
-       AND (receipt.financial_identity ->> 'paidAt')::timestamptz > v_operation.dispatched_at
+       -- Paid after the dispatch, or recorded while the cancel was in flight
+       -- (a delayed receipt of interest the split already forfeited, whose
+       -- notice the confirmed-only voiding in the receipt trigger never saw).
+       AND (receipt.received_at >= v_operation.dispatched_at
+            OR ((receipt.financial_identity ->> 'paidAt') IS NOT NULL
+                AND (receipt.financial_identity ->> 'paidAt')::timestamptz > v_operation.dispatched_at))
        AND event.merchant_id = receipt.merchant_id AND event.customer_id = receipt.customer_id
        AND event.goal_id = receipt.goal_id
        AND event.event_key = 'primary-interest:' || receipt.integration_id::text || ':' || receipt.payout_id;
@@ -710,6 +714,7 @@ DECLARE
   v_released integer;
   v_wallet text;
   v_other piggyvest_primary.goal_cancel_interest_forfeits%ROWTYPE;
+  v_new uuid;
 BEGIN
   SELECT forfeit.* INTO v_forfeit FROM piggyvest_primary.goal_cancel_interest_forfeits AS forfeit
    WHERE forfeit.id = p_forfeit_id FOR UPDATE;
@@ -755,12 +760,18 @@ BEGIN
       v_forfeit.source_wallet_id, COALESCE(v_wallet, v_forfeit.destination_wallet_id),
       v_forfeit.amount_kobo, pg_catalog.clock_timestamp())
     RETURNING id INTO v_review_id;
+    -- Payouts planned into the released row follow its replacement, so a
+    -- later reversal sees where their interest actually went.
+    UPDATE piggyvest_primary.goal_cancel_late_interest_contributions
+       SET forfeit_id = v_review_id WHERE forfeit_id = v_forfeit.id;
     RETURN 'released_needs_review:' || v_review_id::text;
   END IF;
   IF FOUND THEN
     UPDATE piggyvest_primary.goal_cancel_interest_forfeits
        SET amount_kobo = v_other.amount_kobo + v_forfeit.amount_kobo
      WHERE id = v_other.id;
+    UPDATE piggyvest_primary.goal_cancel_late_interest_contributions
+       SET forfeit_id = v_other.id WHERE forfeit_id = v_forfeit.id;
     RETURN 'released';
   END IF;
   INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
@@ -769,7 +780,10 @@ BEGIN
   VALUES (v_forfeit.cancel_operation_id, v_forfeit.integration_id, v_forfeit.intent_id, v_forfeit.goal_id,
     'reserved', piggyvest_primary.next_goal_cancel_forfeit_reference(v_forfeit.goal_id),
     v_forfeit.source_wallet_id, COALESCE(v_wallet, v_forfeit.destination_wallet_id),
-    v_forfeit.amount_kobo, pg_catalog.clock_timestamp());
+    v_forfeit.amount_kobo, pg_catalog.clock_timestamp())
+  RETURNING id INTO v_new;
+  UPDATE piggyvest_primary.goal_cancel_late_interest_contributions
+     SET forfeit_id = v_new WHERE forfeit_id = v_forfeit.id;
   RETURN 'released';
 END;
 $$;
@@ -945,6 +959,11 @@ BEGIN
            amount_kobo = CASE WHEN v_forfeit.amount_kobo + v_other.amount_kobo <= 9999999999
                               THEN v_forfeit.amount_kobo + v_other.amount_kobo ELSE v_forfeit.amount_kobo END
      WHERE id = v_forfeit.id;
+    IF v_forfeit.amount_kobo + v_other.amount_kobo <= 9999999999 THEN
+      -- Merged: payouts planned into the released plan follow the survivor.
+      UPDATE piggyvest_primary.goal_cancel_late_interest_contributions
+         SET forfeit_id = v_forfeit.id WHERE forfeit_id = v_other.id;
+    END IF;
     IF v_forfeit.amount_kobo + v_other.amount_kobo > 9999999999 THEN
       -- Not merged: the other plan stays as it was, this one goes to review
       -- unstamped, so the daily sweep pages the review (not a wallet page).

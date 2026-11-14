@@ -1327,6 +1327,62 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: payout A's interest follows its forfeit through a rejection
+  -- and replacement. After the replacement was sent, reversing A is review
+  -- work (the interest reached Ogabassey), even while a later payout B is
+  -- still unsent in a sibling plan.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('lineage');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'lineage split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'lineage principal');
+    PERFORM pg_temp.gf_receipt('gf-lineage-a', 400);
+    PERFORM piggyvest_primary.claim_goal_cancel_forfeit(pg_temp.gc_scope(), v_op::uuid);
+    v_forfeit := pg_temp.gf_forfeit(v_op, 'id');
+    v_text := piggyvest_primary.manage_goal_cancel_forfeit(pg_temp.gc_scope(), v_forfeit::uuid, 'release');
+    PERFORM pg_temp.gc_assert(v_text = 'released', 'lineage release: ' || v_text);
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-lineage-' || id::text
+     WHERE cancel_operation_id = v_op::uuid AND state = 'reserved';
+    PERFORM pg_temp.gf_receipt('gf-lineage-b', 250);
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-lineage', 'gf-lineage-a', 150,
+      repeat('9', 64), 'synthetic-reversal-8');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal of interest already sent through a replacement was treated as unsent');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a delayed receipt (paid before the dispatch) recorded while the
+  -- cancel is in flight has its notice voided when the cancel settles.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('inflight-notice');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'inflight split');
+    INSERT INTO savings_notifications.events (merchant_id, customer_id, goal_id, event_key, type, title, body)
+    VALUES ('f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003', c_goal,
+      'primary-interest:f3860000-0000-4000-8000-000000000006:gf-inflight', 'interest_credited', 'Interest', 'Interest')
+    ON CONFLICT DO NOTHING;
+    PERFORM pg_temp.gf_receipt('gf-inflight', 500, pg_catalog.clock_timestamp() - interval '3 days');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'inflight principal');
+    PERFORM pg_temp.gc_assert(
+      (SELECT voided_at IS NOT NULL FROM savings_notifications.events
+        WHERE event_key = 'primary-interest:f3860000-0000-4000-8000-000000000006:gf-inflight'),
+      'a delayed receipt recorded while the cancel was in flight left a live interest notice');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
     UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL

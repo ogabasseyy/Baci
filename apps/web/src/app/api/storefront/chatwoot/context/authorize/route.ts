@@ -45,7 +45,13 @@ export async function POST(request: NextRequest) {
       sessionToken: parsed.data.sessionToken,
       state: cartContext.state,
     });
-    const response = { authorized: true, ...authorized };
+    // Keep cart identity in the same-origin host response, outside the snapshot
+    // that is projected to the untrusted Chatwoot widget.
+    const response = {
+      authorized: true,
+      ...authorized,
+      ...(includeCartSnapshot ? { cartId: cartContext.state.cartId } : {}),
+    };
     if (includeCartSnapshot) {
       const projectedCartSnapshot = projectChatwootCartReview(
         cartContext.cart,

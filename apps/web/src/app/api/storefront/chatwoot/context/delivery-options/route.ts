@@ -20,6 +20,8 @@ import {
 } from '@/lib/shipping/merchant-rates/subdivisions';
 import { chatwootDeliveryOptionsRequestSchema } from '@/schemas/chatwoot-delivery-options';
 
+// This pilot endpoint serves Nigerian destinations and NGN merchants only.
+
 const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
 function unavailable(status: number, code: string) {
@@ -92,8 +94,12 @@ export async function POST(request: NextRequest) {
       receiverCountryCode: 'NG',
       receiverState: subdivision.name,
       merchantCurrency: cart.currency,
-      cartSubtotal:
-        cart.subtotalMinor / 10 ** getMoneyCurrencyExponent(cart.currency),
+      cartSubtotal: Number(
+        (
+          cart.subtotalMinor /
+          10 ** getMoneyCurrencyExponent(cart.currency)
+        ).toFixed(getMoneyCurrencyExponent(cart.currency))
+      ),
     });
   } catch {
     return unavailable(503, 'rate_lookup_unavailable');

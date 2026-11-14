@@ -11,6 +11,7 @@ import { authorizeCurrentChatwootInlineAction } from './chatwoot-inline-action-a
 
 const authorized = {
   conversationId: 905,
+  cartId: 'cart-1',
   snapshot: { cartVersion: 8 },
 };
 
@@ -41,6 +42,35 @@ describe('authorizeCurrentChatwootInlineAction', () => {
       storeSlug: 'store',
       actionGeneration: 4,
       getLatestActionGeneration: () => 5,
+      requestedCartRef: { cartId: 'cart-1', version: 8 },
+      getCurrentCartRef: () => ({ cartId: 'cart-1', version: 8 }),
+    });
+
+    expect(result.actionStillCurrent).toBe(false);
+  });
+
+  it('does not request authorization when the requested cart was stale initially', async () => {
+    const result = await authorizeCurrentChatwootInlineAction({
+      sessionToken: 'session-905',
+      storeSlug: 'store',
+      actionGeneration: 4,
+      getLatestActionGeneration: () => 4,
+      requestedCartRef: { cartId: 'cart-1', version: 8 },
+      getCurrentCartRef: () => ({ cartId: 'cart-2', version: 8 }),
+    });
+
+    expect(result).toEqual({ authorized: null, actionStillCurrent: false });
+    expect(mocks.authorize).not.toHaveBeenCalled();
+  });
+
+  it('rejects authorization bound to a different cart identity', async () => {
+    mocks.authorize.mockResolvedValue({ ...authorized, cartId: 'cart-2' });
+
+    const result = await authorizeCurrentChatwootInlineAction({
+      sessionToken: 'session-905',
+      storeSlug: 'store',
+      actionGeneration: 4,
+      getLatestActionGeneration: () => 4,
       requestedCartRef: { cartId: 'cart-1', version: 8 },
       getCurrentCartRef: () => ({ cartId: 'cart-1', version: 8 }),
     });

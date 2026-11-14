@@ -217,6 +217,48 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
     expect(JSON.stringify(body)).not.toContain('private-checkout-session');
   });
 
+  it('passes a decimal-safe NGN subtotal to merchant tier lookup', async () => {
+    mocks.loadChatwootCartContext
+      .mockResolvedValueOnce(
+        loadedContext({
+          subtotalMinor: 199,
+          totalMinor: 199,
+          lines: [
+            {
+              id: 'server-line-1',
+              item: { productId: 'server-product-1' },
+              quantity: 1,
+              unitPriceMinor: 199,
+              lineTotalMinor: 199,
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        loadedContext({
+          subtotalMinor: 199,
+          totalMinor: 199,
+          lines: [
+            {
+              id: 'server-line-1',
+              item: { productId: 'server-product-1' },
+              quantity: 1,
+              unitPriceMinor: 199,
+              lineTotalMinor: 199,
+            },
+          ],
+        })
+      );
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.loadPublicMerchantRates).toHaveBeenCalledWith(
+      binding.merchantId,
+      expect.objectContaining({ cartSubtotal: 1.99 })
+    );
+  });
+
   it('rejects stale carts before reading merchant rates', async () => {
     mocks.readCartJsonBody.mockResolvedValueOnce({
       ok: true,

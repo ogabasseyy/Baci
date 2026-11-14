@@ -16,7 +16,7 @@ export function isMajorAmountRepresentable(
   const minor = Math.round(scaled);
   const tolerance = Math.min(
     1e-10 + Number.EPSILON * Math.abs(scaled) * 4,
-    0.01
+    1e-6
   );
   return Number.isSafeInteger(minor) && Math.abs(scaled - minor) <= tolerance;
 }

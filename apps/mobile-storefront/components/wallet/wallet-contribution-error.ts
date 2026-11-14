@@ -1,3 +1,4 @@
+import { customerErrorText } from '@/lib/customer-error-text';
 import { notifySavings, type SavingsNotify } from './savings/savings-notice';
 import { getErrorCode } from './savings/stored-contribution-operation';
 import { shouldReportContributionFailure } from './wallet-contribution-failure';
@@ -24,7 +25,7 @@ export function reportContributionError(
   if (!shouldReportContributionFailure(error, releaseOperation)) return;
   notify(
     'Unable to add savings',
-    error instanceof Error ? error.message : 'Please try again in a moment.',
+    customerErrorText(error, 'Please try again in a moment.'),
     'warning'
   );
 }

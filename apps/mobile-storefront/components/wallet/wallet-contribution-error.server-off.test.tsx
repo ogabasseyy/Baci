@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { TimeoutError } from '@/lib/fetch-with-timeout';
 import { notifySavings } from './savings/savings-notice';
 import { reportContributionError } from './wallet-contribution-error';
 
@@ -51,6 +52,17 @@ describe('contribution errors with the server off', () => {
 
   it('falls back to a generic message for a non-Error rejection', () => {
     reportContributionError('nope');
+    expect(noticeSpy).toHaveBeenCalledWith(
+      'Unable to add savings',
+      'Please try again in a moment.',
+      'warning'
+    );
+  });
+
+  // Walk 14: "Request timed out after 30000ms" reached the customer.
+  it('never shows transport wording such as a timeout', () => {
+    const release = jest.fn();
+    reportContributionError(new TimeoutError(30000), release);
     expect(noticeSpy).toHaveBeenCalledWith(
       'Unable to add savings',
       'Please try again in a moment.',

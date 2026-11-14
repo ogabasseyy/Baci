@@ -10,6 +10,10 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, RADIUS, SPACING } from '@/constants/Colors';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+} from '@/constants/layout';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
 
 type SavingsNotificationListProps = {
@@ -105,11 +109,9 @@ export function SavingsNotificationList({
             accessibilityRole="button"
             accessibilityLabel="Try again"
             onPress={onRetry}
-            style={({ pressed }) => [
-              styles.retryButton,
-              { backgroundColor: colors.primary },
-              pressed && styles.pressed,
-            ]}
+            // A static style: on device the function form rendered no
+            // button at all in walk 14 (white text with no background).
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -203,13 +205,18 @@ export function SavingsNotificationList({
   );
 }
 
+/** Clears the floating AI button: its bottom offset plus its height and a gap. */
+export const NOTIFICATIONS_BOTTOM_INSET =
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET + CHAT_WIDGET_FAB_SIZE + SPACING.sm;
+
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     gap: SPACING.sm,
     padding: SPACING.md,
-    // Room under the last card for the floating AI button.
-    paddingBottom: 96,
+    // The footer ("View your orders") must sit above the floating AI
+    // button's whole band, wherever it is snapped (left or right edge).
+    paddingBottom: NOTIFICATIONS_BOTTOM_INSET,
   },
   notification: {
     alignItems: 'center',

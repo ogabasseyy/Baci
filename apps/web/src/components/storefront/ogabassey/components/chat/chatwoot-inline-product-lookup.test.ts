@@ -88,6 +88,24 @@ describe('handleChatwootInlineProductLookup', () => {
     });
   });
 
+  it('preserves the validated server error code when the bridge adds HTTP status', async () => {
+    mocks.postChatwootBridgeJson.mockResolvedValueOnce({
+      ok: false,
+      code: 'quota_exceeded',
+      requestId: 'product-request-01',
+      httpStatus: 429,
+    });
+    const { post, promise } = run(null);
+
+    await promise;
+
+    expect(post).toHaveBeenCalledWith('baci-product-response:', {
+      requestId: 'product-request-01',
+      status: 'unavailable',
+      code: 'quota_exceeded',
+    });
+  });
+
   it('ignores a response after the active frame/context changes', async () => {
     mocks.postChatwootBridgeJson.mockResolvedValueOnce({
       ok: true,

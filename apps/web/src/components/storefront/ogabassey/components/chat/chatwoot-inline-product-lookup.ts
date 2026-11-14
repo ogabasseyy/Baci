@@ -25,7 +25,9 @@ export async function handleChatwootInlineProductLookup(input: {
     { allowNonOkResponse: true }
   );
   if (!input.isCurrentAction()) return;
-  const result = chatwootProductLookupResponseSchema.safeParse(value);
+  const responseBody = value ? { ...value } : value;
+  if (responseBody) delete responseBody.httpStatus;
+  const result = chatwootProductLookupResponseSchema.safeParse(responseBody);
   const uncorrelatedInvalidRequest =
     result.success &&
     !result.data.ok &&

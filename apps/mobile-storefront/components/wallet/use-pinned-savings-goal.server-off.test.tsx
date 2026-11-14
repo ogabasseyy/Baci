@@ -123,6 +123,19 @@ describe('server keeps PiggyVest off: usePinnedSavingsGoal', () => {
     expect(result.current.goalId).toBeUndefined();
   });
 
+  // Walk 17: the wallet route passes '' when the link names no goal, and ''
+  // beat the pin, so a completed goal's sheet jumped to the default goal.
+  it('treats an empty route goal id as none, so the pin still wins', () => {
+    const { result, rerender } = render({
+      open: true,
+      route: '',
+      shown: goal('goal-a'),
+    });
+    rerender({ open: true, route: '', shown: goal('goal-a') });
+    expect(result.current.goalId).toBe('goal-a');
+    expect(result.current.routeGoalId).toBeUndefined();
+  });
+
   it('lets a goal named by the route win', () => {
     const { result } = render({
       open: true,

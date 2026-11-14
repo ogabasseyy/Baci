@@ -16,9 +16,13 @@ export function usePinnedSavingsGoal(
   sheetOpen: boolean,
   routeSavingsGoalId: string | string[] | undefined
 ) {
-  const routeGoalId = Array.isArray(routeSavingsGoalId)
-    ? routeSavingsGoalId[0]
-    : routeSavingsGoalId;
+  // The wallet route passes '' when the link names no goal: that is no goal,
+  // so it must not beat the pin (walk 17: a completed goal's sheet jumped).
+  const routeGoalId =
+    (Array.isArray(routeSavingsGoalId)
+      ? routeSavingsGoalId[0]
+      : routeSavingsGoalId
+    )?.trim() || undefined;
   const [pinned, setPinned] = useState<string | null>(null);
   const shown = useRef<WalletActiveSavingsGoal | null>(null);
   useEffect(() => {

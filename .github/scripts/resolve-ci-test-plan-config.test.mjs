@@ -13,6 +13,7 @@ import './ci-build-runner-contract.test.mjs';
 import './ci-hosted-free-runner-contract.test.mjs';
 import './ci-hosted-postgresql-contract.test.mjs';
 import './install-postgresql-hosted.test.mjs';
+import './install-postgresql-hosted-stalled-apt.test.mjs';
 import './dependency-review-availability.test.mjs';
 import './codeql-private-availability.test.mjs';
 import './jules-sunset-contract.test.mjs';
@@ -35,6 +36,15 @@ import './tools-worker-typecheck-contract.test.mjs';
 import './web-build-timeout-contract.test.mjs';
 import './web-test-checkout-contract.test.mjs';
 import './shipping-recovery-ci-contract.test.mjs';
+import './resolve-ci-test-plan-classes.test.mjs';
+import './resolve-ci-test-plan-contract.test.mjs';
+import './resolve-ci-test-plan-diff.test.mjs';
+import './resolve-ci-test-plan-paths.test.mjs';
+import './resolve-ci-test-plan-playwright.test.mjs';
+import './resolve-ci-test-plan-readers.test.mjs';
+import './resolve-ci-test-plan-triggers.test.mjs';
+import './vitest-changed-files-provider.test.mjs';
+import './vitest-changed-files-provider-git.test.mjs';
 
 test('treats turbo build env additions as safe config smoke changes', () => {
   assert.equal(

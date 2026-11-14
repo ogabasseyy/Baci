@@ -48,7 +48,7 @@ const mockDeriveWalletDisplayData = jest.fn(() => ({
   fundingAccount: null,
   savingsBalance: 0,
   showQuickSave: false,
-  spendableBalance: 0,
+  walletBalance: 0,
   totalBalance: 0,
 }));
 
@@ -156,7 +156,7 @@ describe('WalletScreen interest preview integration', () => {
       fundingAccount: null,
       savingsBalance: 0,
       showQuickSave: false,
-      spendableBalance: 0,
+      walletBalance: 0,
       totalBalance: 0,
     });
     mockPreview.mockImplementation(({ goal, ownerId }) => (

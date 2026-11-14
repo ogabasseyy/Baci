@@ -22,6 +22,17 @@ export interface WalletData {
    * the fresh read ran slow: shown, but the wallet keeps re-checking.
    */
   primary_stale?: boolean;
+  /**
+   * True when PiggyVest is confirmed for this customer but the account or
+   * balance isn't ready yet: purchase screens hold bank-transfer funding.
+   */
+  primary_pending?: boolean;
+  /**
+   * True when a signed-in user has no single customer row for this merchant
+   * yet, so the wallet kind can't be classified: where PiggyVest is
+   * possible, purchase screens hold bank-transfer funding.
+   */
+  owner_unresolved?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];
@@ -43,6 +54,9 @@ export interface WalletActiveSavingsGoal {
   maturity_date: string;
   /** Stored balance before projected interest; absent when no interest applies. */
   principal_amount?: number;
+  /** The catalogue product and exact variant this goal saves for, when known. */
+  product_id?: string | null;
+  variant_id?: string | null;
   product_condition?: string | null;
   product_image?: string | null;
   product_variant_label?: string | null;

@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { notifySavings, type SavingsNotify } from './savings/savings-notice';
 import { getErrorCode } from './savings/stored-contribution-operation';
 import { shouldReportContributionFailure } from './wallet-contribution-failure';
 
@@ -9,18 +9,22 @@ import { shouldReportContributionFailure } from './wallet-contribution-failure';
  */
 export function reportContributionError(
   error: unknown,
-  releaseOperation?: () => void
+  releaseOperation?: () => void,
+  /** The caller's notifier, bound to the account the action started for. */
+  notify: SavingsNotify = notifySavings
 ): void {
   if (getErrorCode(error) === 'INSUFFICIENT_FUNDS') {
-    Alert.alert(
+    notify(
       'Not enough money in your wallet',
-      'Add money to your wallet, then try again.'
+      'Add money to your wallet, then try again.',
+      'warning'
     );
     return;
   }
   if (!shouldReportContributionFailure(error, releaseOperation)) return;
-  Alert.alert(
+  notify(
     'Unable to add savings',
-    error instanceof Error ? error.message : 'Please try again in a moment.'
+    error instanceof Error ? error.message : 'Please try again in a moment.',
+    'warning'
   );
 }

@@ -34,9 +34,7 @@ describe('SettingsWalletPinSection', () => {
     };
     render(<SettingsWalletPinSection />);
     expect(screen.getByText('SECURITY')).toBeTruthy();
-    expect(
-      screen.getByText('Needed when you move money into a savings goal')
-    ).toBeTruthy();
+    expect(screen.getByText('Protects money leaving your wallet')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: /Wallet PIN/ }));
     expect(router.push).toHaveBeenCalledWith('/settings/wallet-pin');
   });
@@ -49,7 +47,7 @@ describe('SettingsWalletPinSection', () => {
     };
     render(<SettingsWalletPinSection />);
     expect(
-      screen.getByText('Set a PIN to move money into savings goals')
+      screen.getByText('Set a PIN to protect money leaving your wallet')
     ).toBeTruthy();
   });
 

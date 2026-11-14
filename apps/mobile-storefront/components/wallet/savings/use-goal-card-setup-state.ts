@@ -12,6 +12,7 @@ import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
 export type GoalCardSetupState =
   | 'checking'
+  | 'unreachable'
   | 'getting_ready'
   | 'needs_setup'
   | 'needs_help'
@@ -30,6 +31,9 @@ export function goalCardSetupStateFor(
     return 'getting_ready';
   if (phase === 'not_started') return 'needs_setup';
   if (phase === 'unavailable') return 'needs_help';
+  // The read failed (server unreachable, walk 15): say so instead of
+  // "Checking your plan…" for as long as it stays down.
+  if (phase === 'error') return 'unreachable';
   return 'checking';
 }
 

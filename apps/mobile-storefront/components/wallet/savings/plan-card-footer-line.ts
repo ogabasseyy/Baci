@@ -10,6 +10,7 @@ export function planCardFooterLine(
   hasStarted: boolean
 ): string | null {
   if (setupState === 'checking') return 'Checking your plan…';
+  if (setupState === 'unreachable') return 'Can’t check your plan right now';
   if (setupState === 'getting_ready') return 'Getting your plan ready';
   if (setupState === 'needs_setup') return 'Finish setting up your plan';
   if (setupState === 'needs_help') return 'We couldn’t finish your plan setup';

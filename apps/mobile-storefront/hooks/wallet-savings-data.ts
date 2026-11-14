@@ -277,7 +277,9 @@ export function toActiveSavingsGoal({
     product_image:
       snapshotImage ??
       (productImages ? getPrimaryProductImage(productImages) : null),
+    product_id: goal.product_id ?? null,
     product_variant_label: productVariantLabel,
+    variant_id: goal.variant_id,
     selection_unresolved: selectionUnresolved,
     source_mode: goal.source_mode,
     status: goal.status,

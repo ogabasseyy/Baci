@@ -1,7 +1,12 @@
 import { Alert } from 'react-native';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isWalletPurchaseReturnHref } from '@/lib/is-wallet-purchase-return-href';
 import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability-cache';
+import { confirmDiscardUnreadableFunding } from './confirm-discard-unreadable-funding';
+import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
+import { hasRetainedPrimaryCardFunding } from './has-retained-primary-card-funding';
+import { isSameSignedInUser } from './is-same-signed-in-user';
 
 /**
  * Resolves which rail a wallet funding must use. Known verdicts (and the
@@ -22,8 +27,41 @@ import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-
  */
 export async function resolveFundWalletRail(
   activeMerchantId?: string,
-  options?: { onRetry?: () => void }
+  options?: { onRetry?: () => void; userId?: string; walletReturnTo?: string }
 ): Promise<'primary' | 'legacy' | 'blocked'> {
+  // A top-up for a purchase (IMEI check, utilities) adds store credit: those
+  // purchases spend the legacy balance, never the PiggyVest savings wallet.
+  // A saved PiggyVest card funding (maybe already charged) is recovered
+  // first through the primary path, never doubled by a new legacy charge.
+  if (isWalletPurchaseReturnHref(options?.walletReturnTo)) {
+    const retained = await hasRetainedPrimaryCardFunding(
+      activeMerchantId,
+      options?.userId
+    );
+    // A saved funding we can't read may still charge (Codex): never start a
+    // second card charge silently. The customer can cancel, or knowingly
+    // clear it and continue; a charged payment still lands in savings.
+    if (retained === 'unreadable') {
+      confirmDiscardUnreadableFunding({
+        merchantId: activeMerchantId,
+        onRetry: options?.onRetry,
+        userId: options?.userId,
+      });
+      return 'blocked';
+    }
+    // The read awaited storage (Codex): an account switch meanwhile must not
+    // release this flow's funding under the new account's token.
+    if (options?.userId && !isSameSignedInUser(options.userId)) {
+      const message =
+        'You switched accounts. Start the top-up again from this account.';
+      walletOutcomeNotifier(activeMerchantId)(
+        { title: 'Signed-in account changed', message, tone: 'warning' },
+        { title: 'Signed-in account changed', message }
+      );
+      return 'blocked';
+    }
+    return retained ? 'primary' : 'legacy';
+  }
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) return 'primary';
   if (
     activeMerchantId &&

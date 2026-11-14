@@ -90,7 +90,7 @@ describe('WalletContent with PiggyVest', () => {
           {...createWalletContentProps()}
           primaryReady={display.primaryReady}
           savingsBalance={display.savingsBalance}
-          spendableBalance={display.spendableBalance}
+          walletBalance={display.walletBalance}
           totalBalance={display.totalBalance}
         />
       );
@@ -107,7 +107,7 @@ describe('WalletContent with PiggyVest', () => {
           primaryReady
           savingsContributionAmount="500"
           showSavingsProgress
-          spendableBalance={100}
+          walletBalance={100}
         />
       );
 

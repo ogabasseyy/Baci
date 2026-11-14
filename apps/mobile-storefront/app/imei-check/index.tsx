@@ -5,7 +5,6 @@ import {
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { Keyboard, View } from 'react-native';
 import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
@@ -23,6 +22,7 @@ import { submitImeiCheck } from '@/components/imei-check/submit-imei-check';
 import { useImeiDeviceNavigation } from '@/components/imei-check/use-imei-device-navigation';
 import { useImeiPendingLookup } from '@/components/imei-check/use-imei-pending-lookup';
 import { useImeiRequestIdentity } from '@/components/imei-check/use-imei-request-identity';
+import { useImeiScreenNavigationGuards } from '@/components/imei-check/use-imei-screen-navigation-guards';
 import { useImeiWalletPay } from '@/components/imei-check/use-imei-wallet-pay';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
@@ -236,9 +236,7 @@ export default function ImeiCheckerScreen() {
     setError(null);
   };
 
-  usePreventRemove(result !== null || walletPay.sheet.step !== 'closed', () =>
-    walletPay.sheet.step !== 'closed' ? walletPay.sheet.back() : handleReset()
-  );
+  useImeiScreenNavigationGuards(walletPay.sheet, result !== null, handleReset);
 
   return (
     <StorefrontScreenShell

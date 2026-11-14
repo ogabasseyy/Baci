@@ -64,7 +64,7 @@ export function walletPayNotice(
       action: 'open_wallet',
     },
     not_completed: {
-      title: 'Payment did not go through',
+      title: "Payment didn't go through",
       message: 'Nothing was taken from your savings wallet. Please try again.',
       tone: 'warning',
       action: null,

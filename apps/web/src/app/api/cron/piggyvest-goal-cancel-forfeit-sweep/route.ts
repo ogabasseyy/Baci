@@ -6,7 +6,12 @@ export const maxDuration = 300;
 // No new forfeit starts after this much of the budget, so the one in flight
 // (wallet check, posting mark, one POST, the status read and the residual
 // wallet read, each with its 30 s client timeout, plus database round trips:
-// about 150 s at worst) still ends inside maxDuration.
+// about 150 s at worst) still ends inside maxDuration. If provider timeouts
+// ever stack past it and the run is killed, that is an expected retry, not a
+// failure: the claim, the posting token and the status read make every step
+// idempotent, a forfeit already marked posting is settled by the next sweep's
+// status check (never re-sent), and the sweep rotates to rows it has not
+// listed yet.
 const FORFEIT_SWEEP_BUDGET_MS = 120_000;
 
 // Daily sweep of early-cancel interest forfeits (run from the 23:00 VPS

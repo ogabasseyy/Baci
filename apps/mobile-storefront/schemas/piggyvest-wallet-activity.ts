@@ -16,7 +16,7 @@ const item = z.strictObject({
   feeKobo: z.number().int().nonnegative(),
   label: z.string().min(1).max(600),
   status: z.enum(['completed', 'pending']),
-  occurredAt: z.string().min(1),
+  occurredAt: z.iso.datetime({ offset: true }),
 });
 
 /** One page of GET /api/storefront/customer/wallet/piggyvest-activity. */

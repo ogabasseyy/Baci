@@ -64,6 +64,7 @@ describe('piggyvestWalletActivityRowSchema', () => {
       { ...row, kind: 'withdrawal' },
       { ...row, amount_kobo: 0 },
       { ...row, fee_kobo: -1 },
+      { ...row, occurred_at: 'not-a-date' },
     ])
       expect(piggyvestWalletActivityRowSchema.safeParse(bad).success).toBe(
         false

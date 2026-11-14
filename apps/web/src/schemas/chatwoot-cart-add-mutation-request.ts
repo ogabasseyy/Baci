@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { postgresUuidSchema } from './postgres-uuid';
 
 export const chatwootCartAddMutationRequestSchema = z
   .object({
@@ -15,6 +16,6 @@ export const chatwootCartAddMutationRequestSchema = z
       .max(80)
       .regex(/^[A-Za-z0-9_-]+$/),
     sessionToken: z.string().min(1).max(12_000),
-    variantId: z.uuid().optional(),
+    variantId: postgresUuidSchema.optional(),
   })
   .strict();

@@ -59,11 +59,8 @@ export async function POST(request: NextRequest) {
     }
     return unavailable(503, 'temporarily_unavailable');
   }
-  if (
-    capability.conversationId !== parsed.data.conversationId ||
-    parsed.data.cartVersion > cartContext.cart.version
-  ) {
-    return unavailable(409, 'refresh_required');
+  if (capability.conversationId !== parsed.data.conversationId) {
+    return unavailable(403, 'invalid_context');
   }
 
   let quota: Awaited<ReturnType<typeof checkCartQuota>>;

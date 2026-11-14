@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { postgresUuidSchema } from './postgres-uuid';
 
 const productSlug = z
   .string()
@@ -58,7 +59,7 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
       data: z
         .object({
           slug: productSlug,
-          variantId: z.uuid().optional(),
+          variantId: postgresUuidSchema.optional(),
           displayedPrice: z.number().finite().nonnegative(),
           requestId: addRequestId,
           conversationId,

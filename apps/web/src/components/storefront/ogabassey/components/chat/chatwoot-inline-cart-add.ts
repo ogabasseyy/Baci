@@ -67,6 +67,7 @@ export async function handleChatwootInlineCartAdd(input: {
   const acceptedResponseMismatch =
     mutation?.accepted === true && mutation.operationId !== requestId;
   const refreshRequired = mutation?.code === 'refresh_required';
+  const idempotencyConflict = mutation?.code === 'idempotency_conflict';
   const responseStatus = mutation?.httpStatus;
   const outcomeUnavailable =
     mutation === null ||
@@ -85,7 +86,7 @@ export async function handleChatwootInlineCartAdd(input: {
     input.onSessionTokenRenewed?.(mutation.sessionToken);
   }
   if (
-    (accepted || refreshRequired || outcomeUnavailable) &&
+    (accepted || refreshRequired || idempotencyConflict || outcomeUnavailable) &&
     input.isCurrentCartContext()
   ) {
     try {

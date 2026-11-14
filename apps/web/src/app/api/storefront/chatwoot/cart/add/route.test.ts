@@ -150,6 +150,28 @@ describe('Chatwoot shared-cart add route', () => {
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
   });
 
+  it('accepts a PostgreSQL UUID variant id with legacy RFC bits', async () => {
+    arrange({
+      ...body,
+      variantId: '00000000-0000-0000-0000-000000000001',
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'not_addable',
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith('commerce_cart_add_chatwoot', {
+      p_cart_id: cartId,
+      p_expected_version: 12,
+      p_operation_id: body.requestId,
+      p_product_slug: body.productSlug,
+      p_variant_id: '00000000-0000-0000-0000-000000000001',
+    });
+  });
+
   it('rejects short request IDs before database-backed context lookup', async () => {
     arrange({ ...body, requestId: 'short' });
 
@@ -175,8 +197,65 @@ describe('Chatwoot shared-cart add route', () => {
     expect(mocks.checkCartQuota).not.toHaveBeenCalled();
   });
 
-  it('requires refresh when the client version is ahead of the cart snapshot', async () => {
+  it('returns invalid_context when the conversation does not match the session', async () => {
+    arrange();
+    mocks.verifyChatwootSessionCapability.mockResolvedValueOnce({
+      conversationId: 906,
+      sessionExpiresAt: 1_799_000_000,
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'invalid_context',
+    });
+    expect(mocks.checkCartQuota).not.toHaveBeenCalled();
+  });
+
+  it('reloads the cart when the request version is ahead of the loaded snapshot', async () => {
     arrange(body, 11);
+    mocks.getCart.mockResolvedValueOnce({
+      ok: true,
+      cart: {
+        cartId,
+        merchantId,
+        version: 12,
+        expiresAt: '2026-11-30T00:00:00.000Z',
+        lines: [],
+      },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'not_addable',
+    });
+    expect(mocks.getCart).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith('commerce_cart_add_chatwoot', {
+      p_cart_id: cartId,
+      p_expected_version: 12,
+      p_operation_id: body.requestId,
+      p_product_slug: body.productSlug,
+      p_variant_id: body.variantId,
+    });
+  });
+
+  it('requires refresh when the latest cart is still behind the request version', async () => {
+    arrange(body, 11);
+    mocks.getCart.mockResolvedValueOnce({
+      ok: true,
+      cart: {
+        cartId,
+        merchantId,
+        version: 11,
+        expiresAt: '2026-11-30T00:00:00.000Z',
+        lines: [],
+      },
+    });
 
     const response = await POST(request());
 
@@ -185,7 +264,7 @@ describe('Chatwoot shared-cart add route', () => {
       accepted: false,
       code: 'refresh_required',
     });
-    expect(mocks.checkCartQuota).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it('returns quota exhaustion before canonical cart mutation', async () => {

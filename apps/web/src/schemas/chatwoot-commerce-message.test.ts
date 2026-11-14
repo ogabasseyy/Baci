@@ -17,7 +17,7 @@ describe('Chatwoot commerce message schemas', () => {
     ).toBe(true);
   });
 
-  it('requires normalized add request IDs and UUID variant IDs', () => {
+  it('accepts PostgreSQL UUID variant IDs and requires normalized add request IDs', () => {
     const base = {
       event: 'baci-cart-add',
       data: {
@@ -30,6 +30,15 @@ describe('Chatwoot commerce message schemas', () => {
       },
     };
     expect(chatwootCommerceMessageSchema.safeParse(base).success).toBe(true);
+    expect(
+      chatwootCommerceMessageSchema.safeParse({
+        ...base,
+        data: {
+          ...base.data,
+          variantId: '00000000-0000-0000-0000-000000000001',
+        },
+      }).success
+    ).toBe(true);
     expect(
       chatwootCommerceMessageSchema.safeParse({
         ...base,

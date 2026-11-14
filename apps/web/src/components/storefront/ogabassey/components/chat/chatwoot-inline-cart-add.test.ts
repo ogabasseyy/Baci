@@ -153,4 +153,23 @@ describe('handleChatwootInlineCartAdd', () => {
       code: 'refresh_required',
     });
   });
+
+  it('refreshes the cart when an idempotency conflict may hide a prior add', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({ accepted: false, code: 'idempotency_conflict' }, false)
+      )
+    );
+    const value = input();
+
+    await handleChatwootInlineCartAdd(value);
+
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'add-request-01',
+      accepted: false,
+      code: 'idempotency_conflict',
+    });
+  });
 });

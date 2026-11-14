@@ -80,7 +80,7 @@ const conditionLabels = {
   new: 'New',
   used: 'Used',
   open_box: 'Open Box',
-  refurbished: 'Refurbished',
+  refurbished: 'refurbished',
 } as const;
 
 export const getBlackFridayProducts = cache(async () => {

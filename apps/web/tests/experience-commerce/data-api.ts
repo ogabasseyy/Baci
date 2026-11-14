@@ -1,8 +1,8 @@
 /** Owned loopback Data API; only disposable roles and synthetic auth. */
 import { generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { createServer, request } from 'node:http';
+import type { Pool } from 'pg';
 import { startLocalPostgrest } from '../../tools/builder-auth/local-postgrest-fixture.ts';
-import type { createCommerceEngineFixture } from './cart-engine-fixture.ts';
 export function failCommerceUpstream(res: {
   readonly headersSent: boolean;
   writeHead: (status: number) => unknown;
@@ -16,9 +16,10 @@ export function failCommerceUpstream(res: {
   res.writeHead(503);
   res.end();
 }
-export async function startCommerceDataApi(
-  f: Awaited<ReturnType<typeof createCommerceEngineFixture>>
-) {
+export async function startCommerceDataApi(f: {
+  pool: Pool;
+  connection: { host: string };
+}) {
   const { privateKey, publicKey } = generateKeyPairSync('ec', {
     namedCurve: 'prime256v1',
   });
@@ -61,7 +62,11 @@ export async function startCommerceDataApi(
   });
   const server = createServer((req, res) => {
     const origin = req.headers.origin;
-    if (origin && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin))
+    if (
+      origin &&
+      (origin === 'https://synthetic.synthetic.test' ||
+        /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin))
+    )
       res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader(
@@ -100,7 +105,11 @@ export async function startCommerceDataApi(
         headers,
       },
       (reply) => {
-        res.writeHead(reply.statusCode ?? 502, reply.headers);
+        const responseHeaders = { ...reply.headers };
+        for (const name of Object.keys(responseHeaders)) {
+          if (name.startsWith('access-control-')) delete responseHeaders[name];
+        }
+        res.writeHead(reply.statusCode ?? 502, responseHeaders);
         reply.pipe(res);
       }
     );

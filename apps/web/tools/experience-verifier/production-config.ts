@@ -31,6 +31,7 @@ const schema = z.strictObject({
     anonKey: z.string().max(8192),
   }),
   rootDomain: z.string().min(1).max(253),
+  publicObserver: z.literal('co-located').optional(),
 });
 
 /** Operator input only; errors never contain credentials or configuration. */

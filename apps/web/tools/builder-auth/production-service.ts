@@ -1,6 +1,7 @@
 import { Pool, type PoolConfig } from 'pg';
 import { parseProductionAuthConfig } from './production-config.ts';
 import { verifyProductionAuthDatabaseRole } from './production-role.ts';
+import { deleteExpiredAuthRecords, startAuthRetention } from './retention.ts';
 import { createBuilderAuthRuntime } from './runtime.ts';
 
 type RuntimeSettings = Parameters<typeof createBuilderAuthRuntime>[0];
@@ -42,9 +43,20 @@ export async function startProductionAuthBroker(
         Promise.reject(Error('DISCONNECT_NOT_AVAILABLE')),
     });
     const listener = await runtime.listenPrivate(config.socketPath);
+    const stopRetention = startAuthRetention({
+      run: async () => {
+        await deleteExpiredAuthRecords(pool as Pool, 500);
+      },
+      schedule: (callback) => {
+        const timer = setInterval(callback, 15 * 60 * 1000);
+        timer.unref();
+        return () => clearInterval(timer);
+      },
+    });
     let closing: Promise<void> | undefined;
     return {
       runtime,
+      socketPath: config.socketPath,
       publicBinding: {
         supabase: config.supabase,
         jwks: {
@@ -59,7 +71,11 @@ export async function startProductionAuthBroker(
             try {
               await listener.close();
             } finally {
-              await pool?.end();
+              try {
+                await stopRetention();
+              } finally {
+                await pool?.end();
+              }
             }
           } catch {
             throw Error('AUTH_BROKER_SHUTDOWN_FAILED');

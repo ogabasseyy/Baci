@@ -16,9 +16,7 @@ JOBS = {
     "capture": ("browser", "capture-worker.mjs", False),
     "performance": ("browser", "performance-worker.mjs", False),
     "checks": ("browser", "browser-checks.mjs", False),
-    "prerender-checks": ("browser", "prerender-browser-worker.mjs", False),
-    "prerender-private-checks": ("browser", "private-preview-browser-worker.mjs", False),
-    "durable-public-checks": ("browser", "public-browser-worker.mjs", False),
+    "public-observe": ("browser", "public-observation-worker.mjs", False),
 }
 
 

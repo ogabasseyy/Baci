@@ -25,6 +25,7 @@ it('accepts only the dedicated resource issuer/audience/expiry/algorithm, never 
       .sign(keys.privateKey);
   await expect(verify(await sign())).resolves.toBeUndefined();
   for (const token of [
+    await sign('https://mcp.usebaci.com'),
     await sign('https://other.test'),
     await sign(BUILDER_ISSUER, 'authenticated'),
     await sign(BUILDER_ISSUER, [BUILDER_RESOURCE, 'authenticated']),

@@ -139,6 +139,48 @@ beforeEach(() => {
   f.existingBuild = null;
   f.job.expires_at = new Date(Date.now() + 600000).toISOString();
 });
+it('does not record evidence or finalize when the linked build lease is lost', async () => {
+  const candidate = validCandidate();
+  const execute = vi.fn(async (kind: string) => ({
+    jobId: 'synthetic',
+    output:
+      kind === 'compile'
+        ? candidate
+        : {
+            status: 'passed',
+            buildDigest: candidate.digest,
+            screenshot: Buffer.from('89504e470d0a1a0a', 'hex').toString(
+              'base64'
+            ),
+          },
+  }));
+  const original = context as unknown as {
+    merchantId: string;
+    supabase: { rpc: (name: string) => Promise<unknown> };
+  };
+  const linked = {
+    ...original,
+    identity: { connectionId: 'connection', grantVersion: 1 },
+    supabase: {
+      ...original.supabase,
+      rpc: vi.fn(async (name: string) =>
+        name === 'experience_renew_build_lease'
+          ? { data: false, error: null }
+          : { data: null, error: null }
+      ),
+    },
+  };
+  const input = deps(execute);
+  await expect(
+    runExperienceBuild(
+      linked as never,
+      { jobId: 'j', idempotencyKey: 'i' },
+      input
+    )
+  ).rejects.toThrow('BUILD_LEASE_LOST');
+  expect(input.recordVerifiedEvidence).not.toHaveBeenCalled();
+  expect(f.finalize).not.toHaveBeenCalled();
+});
 it('recovers a missing renderer after finalization without creating a second build or repeating capture', async () => {
   const candidate = validCandidate();
   const execute = vi.fn(async (kind: string) => ({

@@ -19,6 +19,9 @@ test('jobs: normal owner queue/finalize, evidence role separated, replay converg
         : ['20261024171619_experience_owner_intents.sql']),
       '20261028162326_experience_retry_build_quota.sql',
       '20261103161500_experience_https_build_origins.sql',
+      '20261113175836_experience_build_connection_binding.sql',
+      '20261113180409_experience_build_bound_lifecycle.sql',
+      '20261113181020_experience_finalize_connection_binding.sql',
     ])
       await f.pool.query(
         readFileSync(
@@ -162,6 +165,7 @@ test('jobs: retry preserves the merchant active-job quota and owner authorizatio
       '20261024073157_experience_private_uploads.sql',
       '20261025060500_experience_upload_manifest_validation.sql',
       '20261024073533_experience_job_and_draft_lifecycle.sql',
+      '20261113175836_experience_build_connection_binding.sql',
       ...(process.env.BACI_D_RED
         ? []
         : ['20261024171619_experience_owner_intents.sql']),
@@ -231,6 +235,15 @@ test('jobs: retry preserves the merchant active-job quota and owner authorizatio
       readFileSync(
         new URL(
           '../../../../supabase/migrations/20261028162326_experience_retry_build_quota.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
+    await f.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261113180409_experience_build_bound_lifecycle.sql',
           import.meta.url
         ),
         'utf8'

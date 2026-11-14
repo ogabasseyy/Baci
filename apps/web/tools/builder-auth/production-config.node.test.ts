@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { exportJWK, generateKeyPair } from 'jose';
+import {
+  BUILDER_ISSUER,
+  BUILDER_RESOURCE,
+} from '../../builder-mcp-server/metadata.ts';
 import { parseProductionAuthConfig } from './production-config.ts';
 
 async function fixture() {
@@ -35,11 +39,13 @@ async function fixture() {
 
 test('binds a production broker to the dedicated resource and verified upstream', async () => {
   const config = parseProductionAuthConfig(await fixture());
-  assert.equal(config.provider.issuer, 'https://mcp.usebaci.com');
+  assert.equal(config.provider.issuer, 'https://builder-auth.usebaci.com');
   assert.equal(config.provider.resource, 'https://mcp.usebaci.com/builder/mcp');
+  assert.equal(config.provider.issuer, BUILDER_ISSUER);
+  assert.equal(config.provider.resource, BUILDER_RESOURCE);
   assert.equal(
     config.upstream.redirectUri,
-    'https://mcp.usebaci.com/upstream/callback'
+    'https://builder-auth.usebaci.com/upstream/callback'
   );
   assert.equal(config.vault.keys.get('v1')?.byteLength, 32);
 });

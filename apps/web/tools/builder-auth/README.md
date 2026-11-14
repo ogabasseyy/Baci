@@ -30,6 +30,13 @@ separately configured HTTPS ingress must run with access to that socket and
 route only the intended broker endpoints. The listener is not started by
 importing or constructing the runtime and does not provision an ingress.
 
+The candidate's dedicated issuer is `https://builder-auth.usebaci.com`, while
+its protected MCP resource remains `https://mcp.usebaci.com/builder/mcp`.
+The fixed auth loopback presents the builder-auth host to the private broker.
+Do not route the existing commerce issuer or the root discovery routes on
+`mcp.usebaci.com` to this broker. This is source configuration, not evidence
+that DNS, TLS, ingress or the upstream OAuth callback is provisioned.
+
 `startProductionAuthBroker` accepts trusted operator configuration and opens a
 TLS-verified pool using the dedicated `baci_builder_auth_login` login, with
 `baci_builder_auth_storage` as the effective database role. The login must be
@@ -98,6 +105,11 @@ owner inside every mutation. Task 6 must wire the private runtime into the new
 fixed execution gateway, with throttling, redacted audit and protocol challenges.
 Task 9 owns full release replay, real staging/ChatGPT journeys and packaging.
 
-Expired provider/transaction records are ignored on read. Release operations
-must schedule bounded retention cleanup. Owner disconnect immediately stops
-access via the canonical row; encrypted session cleanup may follow separately.
+Expired provider/transaction records are ignored on read. The local production
+broker candidate also schedules bounded cleanup of those two record types every
+15 minutes using the restricted broker role; its expiry indexes and production
+operation still require review and deployment qualification. Monitor the
+`AUTH_RETENTION_BATCH_FAILED` signal and backlog; a batch limit is not a
+guaranteed deletion deadline. This does not clean source artifacts, backups or
+encrypted sessions. Owner disconnect immediately stops access via the canonical
+row; encrypted session cleanup may follow separately.

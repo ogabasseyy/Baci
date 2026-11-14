@@ -86,7 +86,7 @@ it('uses the same live connection and user-scoped RLS resolution for experience 
       scope: 'storefront.read',
     })
       .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
-      .setIssuer('https://mcp.usebaci.com')
+      .setIssuer('https://builder-auth.usebaci.com')
       .setAudience('https://mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')

@@ -70,7 +70,7 @@ it('creates and lists an unpublished synthetic store through the co-located gate
       scope: 'storefront.read storefront.write',
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'builder', typ: 'at+jwt' })
-      .setIssuer('https://mcp.usebaci.com')
+      .setIssuer('https://builder-auth.usebaci.com')
       .setAudience('https://mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')
@@ -90,7 +90,7 @@ it('creates and lists an unpublished synthetic store through the co-located gate
       scope: 'storefront.read',
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'builder', typ: 'at+jwt' })
-      .setIssuer('https://mcp.usebaci.com')
+      .setIssuer('https://builder-auth.usebaci.com')
       .setAudience('https://mcp.usebaci.com/builder/mcp')
       .setSubject(otherActor)
       .setExpirationTime('5m')

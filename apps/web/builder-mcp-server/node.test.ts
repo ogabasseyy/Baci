@@ -19,7 +19,9 @@ it('serves discovery on a real loopback listener and shuts down cleanly', async 
     const metadata = (await response.json()) as {
       authorization_servers: string[];
     };
-    expect(metadata.authorization_servers).toEqual(['https://mcp.usebaci.com']);
+    expect(metadata.authorization_servers).toEqual([
+      'https://builder-auth.usebaci.com',
+    ]);
     expect(runtime.server.requestTimeout).toBe(30000);
     expect(runtime.server.headersTimeout).toBe(10000);
   } finally {

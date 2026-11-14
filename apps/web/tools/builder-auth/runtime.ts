@@ -90,6 +90,10 @@ export async function createBuilderAuthRuntime(settings: {
       }),
     readConnection: storage.readConnection,
     resolveLinkedAccessToken,
+    listBuildConnections: storage.listActiveEditConnections,
+    resolveBuildToken: resolveLinkedAccessToken,
+    resolveBuildUser: (token: string) =>
+      getLinkedUser(settings.supabase, token),
     editRunner: createLinkedEditRunner({
       listConnections: storage.listActiveEditConnections,
       readConnection: storage.readConnection,

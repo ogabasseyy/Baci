@@ -22,4 +22,7 @@ test('publication fixture selection includes the candidate-finalization regressi
     command.includes('tools/experience-sql/draft-approval.node.test.ts')
   );
   assert.ok(command.includes('tools/experience-sql/jobs.node.test.ts'));
+  assert.ok(
+    command.includes('tools/experience-sql/job-connection-binding.node.test.ts')
+  );
 });

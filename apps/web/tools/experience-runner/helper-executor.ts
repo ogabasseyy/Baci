@@ -8,10 +8,7 @@ const kinds = new Set<QualificationKind>([
   'performance',
   'checks',
   'prerender',
-  'prerender-checks',
   'prerender-build',
-  'prerender-private-checks',
-  'durable-public-checks',
 ]);
 const helper = '/usr/local/libexec/baci-experience-helper';
 

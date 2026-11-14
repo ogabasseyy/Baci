@@ -2,13 +2,60 @@
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-const f = vi.hoisted(() => ({ create: vi.fn(), install: vi.fn() }));
+const f = vi.hoisted(() => ({
+  create: vi.fn(),
+  install: vi.fn(),
+  worker: vi.fn(),
+}));
 vi.mock('./production-builder-ports', () => ({
   createProductionBuilderPorts: f.create,
   installProductionBuilderPorts: f.install,
 }));
+vi.mock('./background-build-worker', () => ({
+  createBackgroundBuildWorker: f.worker,
+}));
 
 import { startProductionBuilderHost } from './production-builder-host';
+
+it('starts an opted-in worker and closes it before ports and broker', async () => {
+  const order: string[] = [];
+  const runtime = {
+    readConnection: vi.fn(),
+    resolveLinkedAccessToken: vi.fn(),
+    listBuildConnections: vi.fn(),
+    resolveBuildUser: vi.fn(),
+    resolveBuildToken: vi.fn(),
+  };
+  const dispatcher = { finalizeBuild: vi.fn(), resolveUserClient: vi.fn() };
+  f.create.mockReturnValue({ composition: { dispatcher } });
+  f.install.mockReturnValue({
+    close: () => order.push('ports'),
+    deliver: vi.fn(),
+  });
+  f.worker.mockReturnValue({
+    close: async () => {
+      order.push('worker');
+    },
+  });
+  const host = await startProductionBuilderHost({
+    integration: {} as never,
+    backgroundWorker: { schedule: vi.fn() },
+    startBroker: async () => ({
+      runtime,
+      publicBinding: {
+        supabase: { url: 'https://example.test', anonKey: 'public' },
+        jwks: { keys: [] },
+      },
+      close: async () => {
+        order.push('broker');
+      },
+    }),
+  });
+  expect(dispatcher).toMatchObject({ backgroundBuilds: true });
+  expect(f.worker).toHaveBeenCalledOnce();
+  await host.close();
+  expect(order).toEqual(['worker', 'ports', 'broker']);
+});
 
 it('binds the actual broker runtime before installing ports and closes in order', async () => {
   const calls: string[] = [];

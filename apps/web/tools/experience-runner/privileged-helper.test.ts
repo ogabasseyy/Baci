@@ -14,13 +14,7 @@ const jobs = {
   capture: ['browser', 'capture-worker.mjs', false],
   performance: ['browser', 'performance-worker.mjs', false],
   checks: ['browser', 'browser-checks.mjs', false],
-  'prerender-checks': ['browser', 'prerender-browser-worker.mjs', false],
-  'prerender-private-checks': [
-    'browser',
-    'private-preview-browser-worker.mjs',
-    false,
-  ],
-  'durable-public-checks': ['browser', 'public-browser-worker.mjs', false],
+  'public-observe': ['browser', 'public-observation-worker.mjs', false],
 } as const;
 
 it('reconstructs each fixed sandbox policy independently of caller input', () => {
@@ -47,6 +41,9 @@ it('reconstructs each fixed sandbox policy independently of caller input', () =>
 it('rejects unknown job kinds and arguments', () => {
   for (const args of [
     ['policy', 'shell'],
+    ['policy', 'prerender-checks'],
+    ['policy', 'prerender-private-checks'],
+    ['policy', 'durable-public-checks'],
     ['policy', 'compile', '/etc'],
     ['prepare', '../escape'],
   ]) {

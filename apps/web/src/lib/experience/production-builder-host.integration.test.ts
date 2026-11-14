@@ -108,7 +108,7 @@ it('routes a signed builder request through the installed host and denies a revo
       scope: 'storefront.read',
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'synthetic', typ: 'at+jwt' })
-      .setIssuer('https://mcp.usebaci.com')
+      .setIssuer('https://builder-auth.usebaci.com')
       .setAudience('https://mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')

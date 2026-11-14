@@ -28,7 +28,11 @@ export const runCommand: LinuxRunnerCommand = async (
     timeout: timeoutMs,
     maxBuffer: 16 * 1024 * 1024,
     encoding: 'utf8',
-    env: { PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C.UTF-8' },
+    env: {
+      PATH: '/usr/local/bin:/usr/bin:/bin',
+      LANG: 'C.UTF-8',
+      NODE_ENV: 'production',
+    },
   });
   const exceeds = outputBudgetExceeded();
   let overflow = false;

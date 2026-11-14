@@ -65,3 +65,15 @@ it('does not run a job if preparation fails and reports cleanup failures', async
     runHelperQualification('compile', {}, cleanupFails)
   ).rejects.toThrow('DELETE_FAILED');
 });
+
+it.each([
+  'prerender-checks',
+  'prerender-private-checks',
+  'durable-public-checks',
+] as const)('rejects uninstalled fixture-only browser job %s before invoking the helper', async (kind) => {
+  const command = vi.fn(async () => '{}');
+  await expect(runHelperQualification(kind, {}, command)).rejects.toThrow(
+    'INVALID_RUNNER_KIND'
+  );
+  expect(command).not.toHaveBeenCalled();
+});

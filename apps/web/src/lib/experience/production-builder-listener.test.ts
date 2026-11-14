@@ -21,7 +21,7 @@ it('verifies a broker-signed token and delivers the MCP request to the installed
     scope: 'storefront.read',
   })
     .setProtectedHeader({ alg: 'ES256', kid: 'fixture', typ: 'at+jwt' })
-    .setIssuer('https://mcp.usebaci.com')
+    .setIssuer('https://builder-auth.usebaci.com')
     .setAudience('https://mcp.usebaci.com/builder/mcp')
     .setSubject('10000000-0000-4000-8000-000000000001')
     .setExpirationTime('5m')

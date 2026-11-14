@@ -125,3 +125,47 @@ it('only exposes build verification when the worker is installed', async () => {
     await listener.close();
   }
 });
+
+it('only exposes public verification when an explicit handler is installed', async () => {
+  const publicHandler = vi.fn(async (r: Request) => {
+    expect(r.url).toBe('https://verifier.baci-internal.invalid/v1/public');
+    return new Response(null, { status: 204 });
+  });
+  for (const enabled of [false, true]) {
+    const listener = await startVerifierListener(
+      async () => new Response(null, { status: 403 }),
+      0,
+      undefined,
+      undefined,
+      enabled ? publicHandler : undefined
+    );
+    try {
+      const address = listener.server.address();
+      if (!address || typeof address === 'string') throw Error('NO_LISTENER');
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = request(
+          {
+            host: '127.0.0.1',
+            port: address.port,
+            path: '/v1/public',
+            method: 'POST',
+            headers: {
+              host: 'verifier.baci-internal.invalid',
+              'content-type': 'application/json',
+            },
+          },
+          (res) => {
+            res.resume();
+            res.on('end', () => resolve(res.statusCode ?? 0));
+          }
+        );
+        req.on('error', reject);
+        req.end('{}');
+      });
+      expect(status).toBe(enabled ? 204 : 404);
+    } finally {
+      await listener.close();
+    }
+  }
+  expect(publicHandler).toHaveBeenCalledOnce();
+});

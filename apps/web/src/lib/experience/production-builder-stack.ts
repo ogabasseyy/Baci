@@ -26,6 +26,7 @@ export async function startProductionBuilderStack(settings: {
   deliveryPort: number;
   verifierPort?: number;
   verifierKey?: Uint8Array;
+  backgroundWorker?: { schedule(callback: () => void): () => void };
   ownerBridge?: {
     key: Uint8Array;
     consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
@@ -81,6 +82,9 @@ export async function startProductionBuilderStack(settings: {
     host = await startProductionBuilderHost({
       integration: settings.host.integration,
       startBroker: settings.host.startBroker,
+      ...(settings.backgroundWorker
+        ? { backgroundWorker: settings.backgroundWorker }
+        : {}),
       ...(settings.verifierKey && settings.verifierPort
         ? {
             buildVerifier: {

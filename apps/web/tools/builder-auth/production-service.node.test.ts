@@ -72,7 +72,10 @@ test('starts only after broker construction and closes listener before database'
     },
     createRuntime: async (settings) => {
       events.push('runtime');
-      assert.equal(settings.provider.issuer, 'https://mcp.usebaci.com');
+      assert.equal(
+        settings.provider.issuer,
+        'https://builder-auth.usebaci.com'
+      );
       await assert.rejects(settings.authenticateDisconnect({} as never));
       return {
         listenPrivate: async (socketPath: string) => {

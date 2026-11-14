@@ -17,6 +17,8 @@ import { createIndependentBuildVerifier } from './build-verifier';
 import { createVerifierCaptureHandler } from './capture-handler';
 import { startVerifierListener } from './listener';
 import { createVerifierNonceStore } from './nonce-store';
+import { createPublicVerificationCoordinator } from './public-verification-coordinator';
+import { createPublicVerificationHandler } from './public-verification-handler';
 import { createVerifierWorkerResolver } from './worker-resolver';
 
 /** Trusted process startup. The caller owns the restricted pool and shutdown. */
@@ -29,6 +31,12 @@ export async function startVerifierService(settings: {
   executionOrigin: string;
   supabase: { url: string; anonKey: string };
   canonicalBase(slug: string, client: SupabaseClient): string | Promise<string>;
+  publicVerification?: {
+    rootDomain: string;
+    observe: Parameters<
+      typeof createPublicVerificationCoordinator
+    >[0]['observe'];
+  };
 }) {
   if (
     settings.key.length !== 32 ||
@@ -100,12 +108,40 @@ export async function startVerifierService(settings: {
     resolveUserClient,
     resolveWorker: workers.resolve,
   });
-  const listener = await startVerifierListener(
-    handler,
-    settings.port,
-    buildHandler,
-    captureHandler
-  );
+  const publicHandler = settings.publicVerification
+    ? createPublicVerificationHandler({
+        key: settings.key,
+        consumeNonce,
+        resolveUserClient,
+        verify: async (owner, id) => {
+          if (!settings.publicVerification)
+            throw Error('PUBLIC_VERIFIER_NOT_INSTALLED');
+          const verify = await createPublicVerificationCoordinator({
+            owner,
+            pool: settings.pool,
+            supabase: settings.supabase,
+            rootDomain: settings.publicVerification.rootDomain,
+            executionOrigin: settings.executionOrigin,
+            observe: settings.publicVerification.observe,
+          });
+          await verify(id);
+        },
+      })
+    : undefined;
+  const listener = publicHandler
+    ? await startVerifierListener(
+        handler,
+        settings.port,
+        buildHandler,
+        captureHandler,
+        publicHandler
+      )
+    : await startVerifierListener(
+        handler,
+        settings.port,
+        buildHandler,
+        captureHandler
+      );
   return {
     async close() {
       await listener.close();

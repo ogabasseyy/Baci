@@ -38,7 +38,8 @@ export async function startVerifierListener(
   handler: (request: Request) => Promise<Response>,
   port: number,
   buildHandler?: (request: Request) => Promise<Response>,
-  captureHandler?: (request: Request) => Promise<Response>
+  captureHandler?: (request: Request) => Promise<Response>,
+  publicHandler?: (request: Request) => Promise<Response>
 ) {
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw Error('INVALID_VERIFIER_PORT');
@@ -55,7 +56,8 @@ export async function startVerifierListener(
       req.method !== 'POST' ||
       (req.url !== '/v1/attest' &&
         !(req.url === '/v1/build' && buildHandler) &&
-        !(req.url === '/v1/capture' && captureHandler)) ||
+        !(req.url === '/v1/capture' && captureHandler) &&
+        !(req.url === '/v1/public' && publicHandler)) ||
       req.headers.host !== 'verifier.baci-internal.invalid' ||
       req.rawHeaders.filter(
         (_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host'
@@ -86,7 +88,9 @@ export async function startVerifierListener(
           ? buildHandler
           : req.url === '/v1/capture'
             ? captureHandler
-            : handler;
+            : req.url === '/v1/public'
+              ? publicHandler
+              : handler;
       if (!selected) throw Error('VERIFIER_UNAVAILABLE');
       const result = await selected(
         new Request(`https://verifier.baci-internal.invalid${req.url}`, {

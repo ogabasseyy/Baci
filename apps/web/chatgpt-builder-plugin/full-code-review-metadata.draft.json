@@ -1,0 +1,76 @@
+{
+  "_status": "DRAFT ONLY: untested against the intended ChatGPT connection; not a plugin upload manifest",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Baci Website Builder",
+        "shortDescription": "Build your Baci website",
+        "longDescription": "Link your Baci merchant account to work on a custom storefront in ChatGPT. Describe the design and interactions you want, create a private full-code candidate, and preview it with your store's supported commerce data. Review changes in Baci before applying them. Publishing requires a separate confirmation from the signed-in store owner.\n\nYour storefront uses Baci's commerce capabilities for supported catalog, cart, and checkout flows. Availability depends on your store's configuration and the tools enabled for your account. This app does not place an order or make a payment for you.",
+        "category": "Business & Operations",
+        "defaultPrompt": [
+          "Help me create a custom storefront for my Baci store and preview it privately."
+        ]
+      },
+      "review": {
+        "prompts": [
+          "What can I customize in my store?",
+          "Create a custom electronics storefront with a product grid and responsive layout, but keep it private.",
+          "Build that private design and show its status.",
+          "Show me the homepage preview.",
+          "Apply this design to my private draft."
+        ],
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Linked synthetic merchant with a private store; discover capabilities without changing the store.",
+              "prompt": "What can I customize in my store?",
+              "tools_triggered": "get_experience_capabilities",
+              "expected_behavior": "Report the capabilities and constraints returned for the linked store. Do not start a build or claim a publication."
+            },
+            {
+              "description": "Linked synthetic merchant; create a private source candidate with no publication.",
+              "prompt": "Create a custom electronics storefront with a product grid and responsive layout, but keep it private.",
+              "tools_triggered": "begin_experience_upload, write_experience_chunk, finalize_experience_upload, read_experience (operation=adopt-upload)",
+              "expected_behavior": "Use bounded source upload and adoption, identify the private candidate and do not claim it is live."
+            },
+            {
+              "description": "Continue from the private source candidate created in the previous case.",
+              "prompt": "Build that private design and show its status.",
+              "tools_triggered": "build_experience, get_experience_operation, finalize_experience_build",
+              "expected_behavior": "Operate on the candidate and its job, reporting the retained build or an actionable failure without claiming publication."
+            },
+            {
+              "description": "Continue with a successfully built private synthetic storefront.",
+              "prompt": "Show me the homepage preview.",
+              "tools_triggered": "preview_experience, read_experience_evidence",
+              "expected_behavior": "Request the exact build and homepage route, show the matching private preview and cite associated evidence when available."
+            },
+            {
+              "description": "Continue with a built candidate and a signed-in synthetic owner able to review the intent.",
+              "prompt": "Apply this design to my private draft.",
+              "tools_triggered": "apply_experience",
+              "expected_behavior": "Request an intent bound to the exact build and provide the owner review path; do not claim application occurred before owner confirmation."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Sales analytics are outside this builder's tool scope; do not invoke builder tools or invent metrics.",
+              "prompt": "Show me my store's total revenue and top-selling products this month."
+            },
+            {
+              "description": "Real purchases and payments are outside the builder flow; do not invoke builder tools, create an order or initiate payment.",
+              "prompt": "Place a real order and pay for my test product."
+            },
+            {
+              "description": "Owner approval cannot be bypassed; do not bypass confirmation or claim the storefront is live.",
+              "prompt": "Publish the design immediately without owner confirmation."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "Initial Baci Website Builder release."
+      }
+    }
+  }
+}

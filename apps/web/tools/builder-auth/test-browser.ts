@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { request as httpsRequest } from 'node:https';
-export function createTestBrowser(issuer: string) {
+export function createTestBrowser(issuer: string, localPort?: number) {
   const jar = new Map<string, { value: string; path: string }>();
   function send(path: string, form?: Record<string, string>) {
     const url = new URL(path, issuer);
@@ -13,8 +13,16 @@ export function createTestBrowser(issuer: string) {
           {
             rejectUnauthorized: false,
             agent: false,
+            ...(localPort
+              ? {
+                  hostname: '127.0.0.1',
+                  port: localPort,
+                  servername: 'localhost',
+                }
+              : {}),
             method: form ? 'POST' : 'GET',
             headers: {
+              ...(localPort ? { host: new URL(issuer).host } : {}),
               cookie: [...jar]
                 .filter(([, c]) => url.pathname.startsWith(c.path))
                 .map(([name, c]) => `${name}=${c.value}`)

@@ -31,7 +31,9 @@ export async function closeAuthoringFixture(
   const failed = results.find((result) => result.status === 'rejected');
   if (failed?.status === 'rejected') throw failed.reason;
 }
-export async function experienceDataFixture() {
+export async function experienceDataFixture(
+  options: { tokenTtlSeconds?: number } = {}
+) {
   const f = await publicationFixture({ local: true });
   let api: Awaited<ReturnType<typeof startLocalPostgrest>> | undefined;
   try {
@@ -42,6 +44,16 @@ export async function experienceDataFixture() {
     await f.pool.query(
       "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS premium_features jsonb DEFAULT '[]'"
     );
+    // Mirror the owner/staff branch of production's products_insert_policy.
+    // Writes below still use the signed user Data API client and normal RLS.
+    await f.pool.query(`
+      GRANT INSERT(merchant_id,name,price,slug,status,images) ON products TO authenticated;
+      CREATE POLICY fixture_products_insert ON products FOR INSERT TO authenticated
+      WITH CHECK (
+        merchant_id IN (SELECT id FROM merchants WHERE user_id=auth.uid())
+        OR public.check_staff_permission(auth.uid(),merchant_id,'products','create')
+      );
+    `);
     for (const name of [
       '20261024072905_experience_private_foundation.sql',
       '20261024073157_experience_private_uploads.sql',
@@ -59,6 +71,15 @@ export async function experienceDataFixture() {
       '20261028162326_experience_retry_build_quota.sql',
       '20261103161500_experience_https_build_origins.sql',
       '20261103195300_experience_publish_scope_authorization.sql',
+      '20261113175836_experience_build_connection_binding.sql',
+      '20261113180409_experience_build_bound_lifecycle.sql',
+      '20261113181020_experience_finalize_connection_binding.sql',
+      '20261113181439_experience_list_due_builds.sql',
+      '20261113183638_experience_background_build_recovery.sql',
+      '20261114023338_experience_build_lease_renewal.sql',
+      '20261114023420_experience_background_recovery_terminal.sql',
+      '20261114024007_experience_finalize_live_lease.sql',
+      '20261114041600_experience_job_effective_status.sql',
     ])
       await f.pool.query(
         readFileSync(
@@ -167,11 +188,14 @@ export async function experienceDataFixture() {
       const token = await new SignJWT({
         role: 'authenticated',
         session_id: actor === a ? sessionA : sessionB,
+        email: 'synthetic@example.test',
       })
         .setProtectedHeader({ alg: 'ES256', kid: 'local' })
         .setAudience('authenticated')
         .setSubject(actor)
-        .setExpirationTime('5m')
+        .setExpirationTime(
+          Math.floor(Date.now() / 1000) + (options.tokenTtlSeconds ?? 300)
+        )
         .sign(key.privateKey);
       return {
         merchantId: m,
@@ -190,7 +214,9 @@ export async function experienceDataFixture() {
     const anonymousToken = await new SignJWT({ role: 'anon' })
       .setProtectedHeader({ alg: 'ES256', kid: 'local' })
       .setAudience('authenticated')
-      .setExpirationTime('5m')
+      .setExpirationTime(
+        Math.floor(Date.now() / 1000) + (options.tokenTtlSeconds ?? 300)
+      )
       .sign(key.privateKey);
     const anonymous = createClient('http://synthetic.local', 'synthetic-anon', {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -206,8 +232,10 @@ export async function experienceDataFixture() {
       anonymous,
       merchantId: m,
       actorId: a,
+      otherActorId: b,
       connectionId: connection,
       sessionId: sessionA,
+      apiSocketPath: api.socketPath,
       close: async () => {
         await closeAuthoringFixture(api, f);
       },

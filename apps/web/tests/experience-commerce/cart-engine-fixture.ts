@@ -30,6 +30,17 @@ export async function createCommerceEngineFixture() {
   });
   try {
     await pg.pool.query(cartSetupSql());
+    // The shared cart fixture predates the checkout's required database clock.
+    // Apply the current production migration to this disposable cluster.
+    await pg.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261105210000_commerce_cart_checkout_database_clock.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
     if (
       (await pg.pool.query('SELECT count(*) FROM orders')).rows[0].count !== '0'
     )

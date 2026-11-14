@@ -7,6 +7,7 @@ import type {
 import { NextRequest } from 'next/server';
 import type { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 vi.mock('server-only', () => ({}));
 
@@ -29,19 +30,14 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 }));
 
 import { POST as previewPost } from '@/app/api/builder-experience/preview/route';
-import { queueExperienceBuild } from '@/lib/experience/build-service';
-import { requestDraftApply } from '@/lib/experience/draft-apply';
+import { confirmDraftApply } from '@/lib/experience/approval-service';
 import { createIndependentApprovalVerifier } from '@/lib/experience/independent-approval-verifier';
 import { runExperienceBuild } from '@/lib/experience/local-build-supervisor';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
 import { createPreviewLaunch } from '@/lib/experience/preview-launch';
 import { createPreviewVault } from '@/lib/experience/preview-service';
-import {
-  beginUpload,
-  finalizeUpload,
-  writeChunk,
-} from '@/lib/experience/upload-service';
+import { experienceApprovalRef } from '@/schemas/experience-publication';
 import { runLocalQualification } from '../../tools/experience-runner/local-oci-executor';
 import { createLocalPrerenderArtifacts } from '../../tools/experience-runner/prerender-artifacts';
 import { createProductionPreviewDelivery } from '../../tools/experience-runner/preview-delivery';
@@ -58,6 +54,7 @@ import { createIndependentBuildVerifier } from '../../tools/experience-verifier/
 import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
 import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-store';
 import { experienceDataFixture } from './data-fixture.test-support';
+import { startMcpRunnerFixture } from './mcp-runner.test-support';
 import { confirmSyntheticDraft } from './owner-approval-loopback.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
 import { setupBuildVerification } from './verifier-build-loopback.test-support';
@@ -70,6 +67,7 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
   let buildVerification:
     | Awaited<ReturnType<typeof setupBuildVerification>>
     | undefined;
+  let mcp: Awaited<ReturnType<typeof startMcpRunnerFixture>> | undefined;
   try {
     const hostOrigin = 'https://shop.synthetic.test';
     const previewOrigin = 'https://builder.synthetic-baci.test';
@@ -125,30 +123,65 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       assets: [],
       capabilities: ['navigation', 'catalog.read'],
     };
-    const upload = await beginUpload(f.owner, {
-      manifest,
-      files: {
-        files: [
-          {
-            path: 'app.tsx',
-            bytes: Buffer.byteLength(content),
-            digest: digestBytes(content),
-          },
-        ],
-      },
+    let dependencies: Parameters<typeof runExperienceBuild>[2] | undefined;
+    const capturedBuild: {
+      value?: Awaited<ReturnType<typeof runExperienceBuild>>;
+    } = {};
+    mcp = await startMcpRunnerFixture(f, async (ctx, input) => {
+      if (!dependencies) throw Error('BUILD_NOT_READY');
+      capturedBuild.value = await runExperienceBuild(ctx, input, dependencies);
+      return capturedBuild.value;
     });
-    await writeChunk(f.owner, {
-      uploadId: upload.uploadId,
+    const upload = z
+      .object({
+        status: z.literal('ok'),
+        value: z.object({ uploadId: z.uuid() }),
+      })
+      .parse(
+        await mcp.call('begin_experience_upload', {
+          storefrontId: f.merchantId,
+          manifest,
+          files: {
+            files: [
+              {
+                path: 'app.tsx',
+                bytes: Buffer.byteLength(content),
+                digest: digestBytes(content),
+              },
+            ],
+          },
+        })
+      );
+    const chunk = await mcp.call('write_experience_chunk', {
+      storefrontId: f.merchantId,
+      uploadId: upload.value.uploadId,
       path: 'app.tsx',
       offset: 0,
-      bytes: Buffer.from(content),
+      bytesBase64: Buffer.from(content).toString('base64'),
       chunkDigest: digestBytes(content),
     });
-    const artifact = await finalizeUpload(f.owner, upload);
-    const job = await queueExperienceBuild(f.owner, {
-      artifactId: artifact.artifactId,
-      idempotencyKey: randomUUID(),
-    });
+    expect(chunk).toMatchObject({ status: 'ok' });
+    const artifact = z
+      .object({
+        status: z.literal('ok'),
+        value: z.object({ artifactId: z.uuid() }),
+      })
+      .parse(
+        await mcp.call('finalize_experience_upload', {
+          storefrontId: f.merchantId,
+          uploadId: upload.value.uploadId,
+        })
+      );
+    const queued = z
+      .object({ status: z.literal('ok'), value: z.object({ jobId: z.uuid() }) })
+      .parse(
+        await mcp.call('build_experience', {
+          storefrontId: f.merchantId,
+          artifactId: artifact.value.artifactId,
+          idempotencyKey: randomUUID(),
+        })
+      );
+    const job = queued.value;
     const bootstrap: PublicBootstrap = {
       route: {
         epoch: 1,
@@ -195,7 +228,7 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       capture,
       previewOrigin,
     });
-    const dependencies: Parameters<typeof runExperienceBuild>[2] = {
+    dependencies = {
       profile: 'production',
       previewOrigin,
       hostOrigin,
@@ -207,11 +240,17 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       bootstrap: async () => bootstrap,
       recordVerifiedEvidence: buildVerification.client,
     };
-    const build = await runExperienceBuild(
-      buildVerification.ctx,
-      { jobId: job.jobId, idempotencyKey: randomUUID() },
-      dependencies
-    );
+    const response = await mcp.call('finalize_experience_build', {
+      storefrontId: f.merchantId,
+      jobId: job.jobId,
+      idempotencyKey: randomUUID(),
+    });
+    expect(response).toMatchObject({ status: 'ok' });
+    const build = capturedBuild.value;
+    if (!build) throw Error('MCP build did not run');
+    expect(response).toMatchObject({
+      value: { buildId: build.buildId, buildDigest: build.buildDigest },
+    });
     expect(build.proofs).toHaveLength(12);
     expect(new Set(build.proofs.map((proof) => proof.hostOrigin))).toEqual(
       new Set([hostOrigin, previewOrigin])
@@ -269,12 +308,20 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       .maybeSingle();
     expect(snapshot.error).toBeNull();
     expect(snapshot.data?.build_id).toBe(build.buildId);
-    const approval = await requestDraftApply(f.owner, {
+    const approvalResponse = await mcp.call('apply_experience', {
+      storefrontId: f.merchantId,
       buildId: build.buildId,
       evidenceId: captured.evidenceId,
       expectedVersion: 0,
       idempotencyKey: randomUUID(),
     });
+    const approval = z
+      .object({ status: z.literal('ok'), value: experienceApprovalRef })
+      .parse(approvalResponse).value;
+    // An MCP request creates an intent, not a committed draft or verifier proof.
+    await expect(
+      confirmDraftApply(f.owner.supabase, approval.approvalId)
+    ).rejects.toThrow('CONFIRMATION_UNAVAILABLE');
     const verifier = createIndependentApprovalVerifier({
       capture: createApprovalCapture(capture),
       record: await createVerifierApprovalRecorder(verifierPool),
@@ -407,6 +454,7 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
         .rows[0].count
     ).toBe('0');
   } finally {
+    await mcp?.close();
     await buildVerification?.close();
     await verifierPool?.end();
     await f.close();

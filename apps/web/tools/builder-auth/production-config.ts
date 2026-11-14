@@ -119,13 +119,13 @@ export function parseProductionAuthConfig(input: unknown) {
       )
     )
       throw Error();
-    const issuer = 'https://mcp.usebaci.com';
+    const issuer = 'https://builder-auth.usebaci.com';
     return {
       databaseUrl: config.databaseUrl,
       socketPath: config.socketPath,
       provider: {
         issuer,
-        resource: `${issuer}/builder/mcp`,
+        resource: 'https://mcp.usebaci.com/builder/mcp',
         callback: config.callback,
         clientId: config.clientId,
         cookieKeys: config.cookieKeys,

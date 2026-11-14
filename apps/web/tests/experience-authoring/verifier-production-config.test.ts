@@ -29,6 +29,15 @@ it('parses explicit isolated origins and resolves the merchant domain', async ()
   ).resolves.toBe('https://synthetic.merchant.test');
   expect(parsed.key).toHaveLength(32);
 });
+it('allows only the explicit co-located observer mode', () => {
+  expect(
+    parseVerifierProductionConfig({ ...valid, publicObserver: 'co-located' })
+      .publicObserver
+  ).toBe('co-located');
+  expect(() =>
+    parseVerifierProductionConfig({ ...valid, publicObserver: 'remote' })
+  ).toThrow('INVALID_VERIFIER_CONFIG');
+});
 it.each([
   { databaseUrl: 'postgresql://postgres:password@db.test:5432/postgres' },
   {

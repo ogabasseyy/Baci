@@ -14,6 +14,8 @@ const f = vi.hoisted(() => ({
   buildHandler: vi.fn(),
   buildVerifier: vi.fn(),
   captureHandler: vi.fn(),
+  publicHandler: vi.fn(),
+  publicCoordinator: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('../../tools/experience-verifier/nonce-store', () => ({
@@ -58,6 +60,13 @@ vi.mock('../../tools/experience-verifier/build-verifier', () => ({
 vi.mock('../../tools/experience-verifier/capture-handler', () => ({
   createVerifierCaptureHandler: f.captureHandler,
 }));
+vi.mock('../../tools/experience-verifier/public-verification-handler', () => ({
+  createPublicVerificationHandler: f.publicHandler,
+}));
+vi.mock(
+  '../../tools/experience-verifier/public-verification-coordinator',
+  () => ({ createPublicVerificationCoordinator: f.publicCoordinator })
+);
 
 import { startVerifierService } from '../../tools/experience-verifier/service';
 
@@ -154,4 +163,61 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
       runner: { ...config.runner, key: config.key },
     })
   ).rejects.toThrow('INVALID_VERIFIER_CONFIG');
+});
+
+it('wires public verification only when a trusted observer is explicitly supplied', async () => {
+  const nonce = vi.fn();
+  const resolveUser = vi.fn();
+  const observe = vi.fn();
+  const publicHandler = vi.fn();
+  const verify = vi.fn(async () => ({ status: 'verified' }));
+  f.nonce.mockResolvedValueOnce(nonce);
+  f.record.mockResolvedValueOnce(vi.fn());
+  f.buildRecord.mockResolvedValueOnce(vi.fn());
+  f.resolver.mockReturnValueOnce(resolveUser);
+  f.verifier.mockReturnValueOnce({ attest: vi.fn() });
+  f.handler.mockReturnValueOnce(vi.fn());
+  f.buildHandler.mockReturnValueOnce(vi.fn());
+  f.captureHandler.mockReturnValueOnce(vi.fn());
+  f.publicHandler.mockReturnValueOnce(publicHandler);
+  f.publicCoordinator.mockResolvedValueOnce(verify);
+  f.listen.mockResolvedValueOnce({ close: vi.fn() });
+  const config = {
+    pool: {},
+    key: new Uint8Array(32).fill(1),
+    port: 8891,
+    runner: {
+      endpoint: 'https://runner.runtime.test/v1/execute',
+      key: new Uint8Array(32).fill(2),
+      toolchainDigest: 'a'.repeat(64),
+    },
+    previewOrigin: 'https://builder.baci.test',
+    executionOrigin: 'https://output.runtime.test',
+    supabase: {
+      url: 'https://project.supabase.co',
+      anonKey: 'sb_publishable_synthetic',
+    },
+    canonicalBase: () => 'https://shop.merchant.test',
+    publicVerification: { rootDomain: 'merchant.test', observe },
+  } as unknown as Parameters<typeof startVerifierService>[0];
+  const service = await startVerifierService(config);
+  expect(f.listen.mock.calls.at(-1)?.[4]).toBe(publicHandler);
+  const settings = f.publicHandler.mock.calls.at(-1)?.[0];
+  expect(settings).toMatchObject({
+    key: config.key,
+    consumeNonce: nonce,
+    resolveUserClient: resolveUser,
+  });
+  const owner = {};
+  await settings.verify(owner, 'approval');
+  expect(f.publicCoordinator).toHaveBeenCalledWith(
+    expect.objectContaining({
+      owner,
+      observe,
+      pool: config.pool,
+      rootDomain: 'merchant.test',
+    })
+  );
+  expect(verify).toHaveBeenCalledWith('approval');
+  await service.close();
 });

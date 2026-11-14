@@ -164,7 +164,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
   const keys = await generateKeyPair('ES256', { extractable: true });
   const provider = createBuilderProvider(
     {
-      issuer: 'https://mcp.usebaci.com',
+      issuer: 'https://builder-auth.usebaci.com',
       resource: 'https://mcp.usebaci.com/builder/mcp',
       callback: 'https://chatgpt.com/approved-callback',
       clientId: 'synthetic-client',
@@ -184,7 +184,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
   assert.equal(provider.proxy, false);
   const listener = await listenPrivateAuth({
     socketPath,
-    issuer: 'https://mcp.usebaci.com',
+    issuer: 'https://builder-auth.usebaci.com',
     provider,
     handler: async (req, res) => provider.callback()(req, res),
   });
@@ -197,7 +197,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
             socketPath,
             path: '/.well-known/openid-configuration',
             headers: {
-              host: 'mcp.usebaci.com',
+              host: 'builder-auth.usebaci.com',
               'x-forwarded-host': 'evil.test',
               'x-forwarded-proto': 'http',
             },
@@ -217,13 +217,13 @@ test('the actual provider advertises the HTTPS issuer through the private listen
     );
     assert.equal(result.status, 200);
     const metadata = JSON.parse(result.body);
-    assert.equal(metadata.issuer, 'https://mcp.usebaci.com');
+    assert.equal(metadata.issuer, 'https://builder-auth.usebaci.com');
     assert.equal(metadata.authorization_response_iss_parameter_supported, true);
     assert(metadata.code_challenge_methods_supported.includes('S256'));
     assert(metadata.token_endpoint_auth_methods_supported.includes('none'));
     assert.equal(
       new URL(metadata.authorization_endpoint).origin,
-      'https://mcp.usebaci.com'
+      'https://builder-auth.usebaci.com'
     );
     const params = new URLSearchParams({
       client_id: 'synthetic-client',
@@ -243,7 +243,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
         {
           socketPath,
           path: `/auth?${params}`,
-          headers: { host: 'mcp.usebaci.com' },
+          headers: { host: 'builder-auth.usebaci.com' },
         },
         (res) => {
           res.resume();
@@ -261,7 +261,10 @@ test('the actual provider advertises the HTTPS issuer through the private listen
     assert.equal(errorRedirect.status, 303);
     const location = new URL(errorRedirect.location ?? '');
     assert.equal(location.origin, 'https://chatgpt.com');
-    assert.equal(location.searchParams.get('iss'), 'https://mcp.usebaci.com');
+    assert.equal(
+      location.searchParams.get('iss'),
+      'https://builder-auth.usebaci.com'
+    );
     assert(location.searchParams.get('error'));
   } finally {
     await listener.close();

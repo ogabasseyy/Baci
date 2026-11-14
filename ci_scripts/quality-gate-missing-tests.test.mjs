@@ -17,3 +17,7 @@ test('skips Next.js route files and colocated tests', () => {
   assert.match(source, /page\.tsx/);
   assert.match(source, /route\.ts/);
 });
+
+test('bugfix: also audits unstaged edits to tracked source files', () => {
+  assert.match(source, /git diff --name-only --diff-filter=ACM/);
+});

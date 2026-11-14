@@ -41,7 +41,7 @@ export async function scheduleOrderProductBlogPurge({
   productIds,
   supabase,
   targetSweepIncomplete = false,
-}: ScheduleOrderProductBlogPurgeInput): Promise<void> {
+}: ScheduleOrderProductBlogPurgeInput): Promise<boolean> {
   const normalizedProductIds = Array.from(
     new Set(
       productIds
@@ -50,7 +50,7 @@ export async function scheduleOrderProductBlogPurge({
     )
   );
   if (normalizedProductIds.length === 0) {
-    return;
+    return true;
   }
 
   // Enrichment, per-slug revalidation, and blog-cache expiry need only
@@ -95,7 +95,7 @@ export async function scheduleOrderProductBlogPurge({
     revalidateProducts(merchantId, undefined, { expireImmediately: true });
   }
   if (entries.length === 0) {
-    return;
+    return true;
   }
 
   // Hard-expire the per-slug PDP snapshots before the edge purge below:
@@ -116,7 +116,7 @@ export async function scheduleOrderProductBlogPurge({
       'Skipped order-related edge purge because blog-cache hard expiry failed',
       { merchantId }
     );
-    return;
+    return false;
   }
 
   let merchantSlug = suppliedMerchantSlug?.trim() || null;
@@ -132,7 +132,7 @@ export async function scheduleOrderProductBlogPurge({
           'Skipped order-related edge purge because merchant slug lookup failed',
           { merchantId, error }
         );
-        return;
+        return false;
       }
       merchantSlug = data?.slug?.trim() || null;
     } catch (error) {
@@ -140,11 +140,11 @@ export async function scheduleOrderProductBlogPurge({
         'Skipped order-related edge purge because merchant slug lookup failed',
         { merchantId, error }
       );
-      return;
+      return false;
     }
   }
   if (!merchantSlug) {
-    return;
+    return true;
   }
 
   if (blogPostSlugsIncomplete) {
@@ -162,4 +162,5 @@ export async function scheduleOrderProductBlogPurge({
     // purge in that case so those pages cannot remain stale until TTL.
     scheduleStorefrontProductPurge(merchantSlug, entries);
   }
+  return true;
 }

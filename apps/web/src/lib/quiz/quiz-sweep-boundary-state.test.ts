@@ -5,6 +5,7 @@ import {
   serializeBoundaryRowState,
   shouldSkipUnchangedBoundaryRow,
   toCanonicalIsoTimestamp,
+  withoutBoundarySnapshots,
 } from './quiz-sweep-boundary-state';
 
 function makeWatermarks(
@@ -132,5 +133,17 @@ describe('quiz-sweep-boundary-state', () => {
         })
       )
     ).toBe(true);
+  });
+
+  it('clears boundarySnapshots across all tables in withoutBoundarySnapshots', () => {
+    const base = makeWatermarks();
+    const stripped = withoutBoundarySnapshots(base);
+
+    expect(stripped.events.floor).toBe(base.events.floor);
+    expect(stripped.events.boundarySnapshots.size).toBe(0);
+    expect(stripped.reservations.boundarySnapshots.size).toBe(0);
+    expect(stripped.awards.floor).toBe(base.awards.floor);
+    expect(stripped.awards.boundarySnapshots.size).toBe(0);
+    expect(base.events.boundarySnapshots.size).toBe(1);
   });
 });

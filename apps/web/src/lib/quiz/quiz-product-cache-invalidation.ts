@@ -280,12 +280,16 @@ export async function invalidateQuizProductCaches(
         .slice(start, start + QUIZ_PURGE_MERCHANT_CONCURRENCY)
         .map(async ([merchantId, productIds]) => {
           try {
-            await scheduleOrderProductBlogPurge({
-              merchantId,
-              productIds: Array.from(productIds),
-              supabase: client,
-              ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
-            });
+            const purgeSucceeded =
+              (await scheduleOrderProductBlogPurge({
+                merchantId,
+                productIds: Array.from(productIds),
+                supabase: client,
+                ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
+              })) !== false;
+            if (!purgeSucceeded) {
+              deliveryFailed = true;
+            }
           } catch {
             // The quiz RPC already completed; edge eviction stays best effort,
             // but report incomplete delivery so the caller retains its baseline.

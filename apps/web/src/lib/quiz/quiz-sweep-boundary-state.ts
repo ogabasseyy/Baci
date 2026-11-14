@@ -200,6 +200,21 @@ function hasTableWatermarkChanged(
 }
 
 /**
+ * Return a copy of `watermarks` with empty `boundarySnapshots` so a cold-start
+ * sweep without a prior baseline does not skip unacknowledged boundary rows.
+ */
+export function withoutBoundarySnapshots(
+  watermarks: QuizSweepWatermarks
+): QuizSweepWatermarks {
+  return {
+    ...watermarks,
+    events: { ...watermarks.events, boundarySnapshots: new Map() },
+    reservations: { ...watermarks.reservations, boundarySnapshots: new Map() },
+    awards: { ...watermarks.awards, boundarySnapshots: new Map() },
+  };
+}
+
+/**
  * Detect whether any table's watermark floor, probe status, or boundary
  * snapshot changed since the previous tick (for example, due to the
  * database-side `run_quiz_deadline_clock_v2` pg_cron job or another writer).

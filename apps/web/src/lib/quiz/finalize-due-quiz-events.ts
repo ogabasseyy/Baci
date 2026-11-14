@@ -19,7 +19,10 @@ import {
   resetQuizSweepBaselineForTests,
   saveQuizSweepBaseline,
 } from './quiz-sweep-baseline-store';
-import { hasQuizSweepWatermarksChanged } from './quiz-sweep-boundary-state';
+import {
+  hasQuizSweepWatermarksChanged,
+  withoutBoundarySnapshots,
+} from './quiz-sweep-boundary-state';
 import { resolveQuizSweepWatermarks } from './quiz-sweep-watermarks';
 
 type QuizFinalizationClient = SupabaseClient<Database>;
@@ -197,10 +200,12 @@ async function runFinalizeDueQuizEvents() {
 
   if (shouldSweepCaches) {
     const sweepTargetWatermarks =
-      (hasExternalMutationSinceLastTick || hasPendingRecoverySweep) &&
-      lastObservedWatermarks !== null
+      lastObservedWatermarks !== null &&
+      (hasExternalMutationSinceLastTick || hasPendingRecoverySweep)
         ? lastObservedWatermarks
-        : sweepWatermarks;
+        : lastObservedWatermarks === null && requiresColdStartSweep
+          ? withoutBoundarySnapshots(sweepWatermarks)
+          : sweepWatermarks;
     const sweepSucceeded =
       (await invalidateQuizProductCaches(client, sweepTargetWatermarks)) !==
       false;

@@ -149,11 +149,13 @@ describe('scheduleOrderProductBlogPurge', () => {
         merchantError: new Error('merchant lookup failed'),
       });
 
-      await scheduleOrderProductBlogPurge({
+      const result = await scheduleOrderProductBlogPurge({
         merchantId: 'merchant-1',
         productIds: ['product-1'],
         supabase: supabase as never,
       });
+
+      expect(result).toBe(false);
 
       // The inventory mutation already committed: enrichment, per-slug
       // revalidation, and blog-cache expiry need only the merchant id, so
@@ -195,7 +197,7 @@ describe('scheduleOrderProductBlogPurge', () => {
           productIds: ['product-1'],
           supabase: supabase as never,
         })
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
 
       // The caller-supplied ids still name the affected products, so a
       // rejected enrichment escalates to the hostname fallback instead of
@@ -288,11 +290,13 @@ describe('scheduleOrderProductBlogPurge', () => {
       const { supabase, maybeSingle } = makeSupabase({});
       mockExpireProductBlogCacheReliable.mockResolvedValueOnce(false);
 
-      await scheduleOrderProductBlogPurge({
+      const result = await scheduleOrderProductBlogPurge({
         merchantId: 'merchant-1',
         productIds: ['product-1'],
         supabase: supabase as never,
       });
+
+      expect(result).toBe(false);
 
       expect(mockRevalidateSlugs).toHaveBeenCalled();
       expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(

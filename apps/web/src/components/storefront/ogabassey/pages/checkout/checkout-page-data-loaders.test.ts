@@ -103,6 +103,35 @@ describe('checkout-page data loaders', () => {
     });
   });
 
+  it('omits the tracking token for DVA callers that do not have one', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          success: true,
+          dva: { account_number: '1234567890' },
+          reference: 'BAC-2',
+        }),
+        { status: 200 }
+      )
+    );
+
+    await requestDvaInitialization({
+      merchantId: 'merchant-1',
+      orderId: 'order-2',
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '+2348012345678',
+      billingAddress: { line1: '12 Station Road', city: 'Osogbo', country: 'NG' },
+      orderCurrency: 'NGN',
+    });
+
+    const fetchCalls = fetchMock.mock.calls as [string, RequestInit][];
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody).not.toHaveProperty('tracking_token');
+  });
+
   it('throws when DVA initialization is rejected', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: 'nope' }), { status: 400 })

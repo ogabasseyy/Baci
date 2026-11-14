@@ -8,15 +8,18 @@ import {
   Inter_900Black,
 } from '@expo-google-fonts/inter';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
 import { RootLayoutNav } from '@/components/navigation/RootLayoutNav';
-import { RootStartupError } from '@/components/navigation/RootStartupError';
+
+export { RootLayoutErrorBoundary as ErrorBoundary } from '@/components/navigation/RootLayoutErrorBoundary';
+
+import { StartupPlaceholder } from '@/components/navigation/StartupPlaceholder';
 import { StartupRecoveryScreen } from '@/components/navigation/StartupRecoveryScreen';
 import { useAppTrackingTransparency } from '@/hooks/use-app-tracking-transparency';
 import { useNativeSplashHandoff } from '@/hooks/use-native-splash-handoff';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
+import { useStartupTelemetryVerification } from '@/hooks/use-startup-telemetry-verification';
 import {
   installCrashDiagnostics,
   recordCrashBreadcrumb,
@@ -24,18 +27,10 @@ import {
 import { offlineQueue } from '@/lib/offline-queue';
 import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-order-handler';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
-import { shouldVerifyStartupTelemetry } from '@/lib/startup-telemetry-eligibility';
 import { markStartupTiming } from '@/lib/startup-timing';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
-import { verifyBenchmarkTelemetry } from '@/lib/verify-benchmark-telemetry';
 import { initAnalytics } from '@/services/analytics';
 import { useAuthStore } from '@/stores/auth-store';
-
-type ErrorBoundaryProps = { error: Error; retry: () => void };
-
-export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  return <RootStartupError error={error} retry={retry} />;
-}
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -109,27 +104,14 @@ export default function RootLayout() {
   } = usePushNotifications({
     navigationReady: !showSplash && loaded && isStorageReady && isInitialized,
   });
-  useEffect(() => {
-    if (
-      shouldVerifyStartupTelemetry({
-        appInitialized: isInitialized,
-        loaded,
-        nativeIntroSettled: shouldRenderApp,
-        showSplash,
-        storageReady: isStorageReady,
-        timedOut,
-      })
-    ) {
-      void verifyBenchmarkTelemetry();
-    }
-  }, [
-    showSplash,
-    timedOut,
-    shouldRenderApp,
+  useStartupTelemetryVerification({
+    appInitialized: isInitialized,
     loaded,
-    isInitialized,
-    isStorageReady,
-  ]);
+    nativeIntroSettled: shouldRenderApp,
+    showSplash,
+    storageReady: isStorageReady,
+    timedOut,
+  });
   const { isTrackingAuthorizationSettled } = useAppTrackingTransparency({
     enabled: !showSplash && isInitialized && isStorageReady,
   });
@@ -296,18 +278,7 @@ export default function RootLayout() {
   }
 
   if (!shouldRenderApp || timedOutStartupBlocked) {
-    return (
-      <View testID="startup-placeholder" style={styles.startupPlaceholder}>
-        {timedOutStartupBlocked ? (
-          <Text
-            accessibilityLiveRegion="polite"
-            style={styles.startupPlaceholderMessage}
-          >
-            Getting things ready…
-          </Text>
-        ) : null}
-      </View>
-    );
+    return <StartupPlaceholder showProgress={timedOutStartupBlocked} />;
   }
 
   if (!loaded) {
@@ -325,13 +296,3 @@ export default function RootLayout() {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  startupPlaceholder: {
-    alignItems: 'center',
-    backgroundColor: '#20000b',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  startupPlaceholderMessage: { color: '#fff', fontSize: 14 },
-});

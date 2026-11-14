@@ -56,6 +56,13 @@ That packaging gate does not verify dynamic symbol compatibility or prove that
 the libraries load at runtime. Physical-device installation and launch remain
 the runtime loadability check; the startup observations above cover ARM64 only.
 
+When upgrading React Native, Hermes, Nitro or SplashMotion, or changing the
+storefront ABI matrix, inspect a clean release AAB for the native libraries
+required by that dependency set and update the expected list and fixtures in
+`.github/scripts/android-native-library-check.mjs` and its tests. Keep the
+physical-device launch check: changing the expected list only updates the
+packaging contract and cannot establish symbol compatibility.
+
 ## Product-page performance remains open
 
 The preview-gated product page, cached-photo loading, image fade change and

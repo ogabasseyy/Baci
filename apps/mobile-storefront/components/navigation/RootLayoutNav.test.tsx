@@ -1,16 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react-native';
+import { render, screen, waitFor, within } from '@testing-library/react-native';
 import type React from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useStartupMotionEnabled } from '@/components/ui/useStartupMotionEnabled';
 import { CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET } from '@/constants/layout';
 import { getTemplateConfig } from '@/lib/templates';
+import { registerRootLayoutNavStartupTests } from '@/test-support/root-layout-nav-startup-test-cases';
 import { RootLayoutNav } from './RootLayoutNav';
 
 const mockGetTemplateConfig = getTemplateConfig as jest.MockedFunction<
@@ -178,15 +173,6 @@ jest.mock('@/lib/QueryProvider', () => ({
 }));
 
 describe('RootLayoutNav', () => {
-  it('reports a layout from the app shell', () => {
-    const onFirstLayout = jest.fn();
-    const { UNSAFE_getByProps } = render(
-      <RootLayoutNav onFirstLayout={onFirstLayout} />
-    );
-    fireEvent(UNSAFE_getByProps({ onLayout: onFirstLayout }), 'layout');
-    expect(onFirstLayout).toHaveBeenCalledTimes(1);
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
     mockQueryProvider.mockImplementation(renderMockQueryProvider);
@@ -196,6 +182,8 @@ describe('RootLayoutNav', () => {
   afterEach(() => {
     setPlatformOS(originalPlatformOS);
   });
+
+  registerRootLayoutNavStartupTests({ RootLayoutNav });
 
   it('asks the native stack to suspend covered routes while checkout or a product is active', () => {
     render(<RootLayoutNav />);
@@ -218,22 +206,6 @@ describe('RootLayoutNav', () => {
     expect(screen.getByText('negotiation-modal')).toBeTruthy();
     expect(screen.getByText('drawer-menu')).toBeTruthy();
     expect(mockUseAuthGuard).toHaveBeenCalledTimes(1);
-  });
-
-  it('mounts update prompts only after the native splash handoff', () => {
-    const view = render(<RootLayoutNav persistenceEnabled={false} />);
-    expect(screen.queryByText('update-controller')).toBeNull();
-
-    view.rerender(<RootLayoutNav persistenceEnabled />);
-    expect(screen.getByText('update-controller')).toBeTruthy();
-  });
-
-  it('pauses underlying motion until the native splash handoff', () => {
-    const view = render(<RootLayoutNav persistenceEnabled={false} />);
-    expect(screen.getByText('startup-motion:off')).toBeTruthy();
-
-    view.rerender(<RootLayoutNav persistenceEnabled />);
-    expect(screen.getByText('startup-motion:on')).toBeTruthy();
   });
 
   it('bugfix: puts the offline banner above the screens, so it pushes headers down instead of covering them', () => {

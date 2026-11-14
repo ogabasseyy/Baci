@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, render, waitFor } from '@testing-library/react-native';
+import { registerRouteResumeDiagnosticTests } from '@/test-support/route-resume-controller-diagnostics-test-cases';
 import {
   RouteResumeController,
   resetRouteResumeForTest,
@@ -47,6 +48,15 @@ describe('RouteResumeController', () => {
     mockNavigationState = { key: 'root' };
   });
 
+  registerRouteResumeDiagnosticTests({
+    RouteResumeController,
+    setRoute: (pathname, searchParams) => {
+      mockPathname = pathname;
+      mockSearchParams = searchParams;
+    },
+    mockReplace,
+  });
+
   it('restores the last checkout route when the root navigator remounts at home', async () => {
     mockPathname = '/checkout';
     const firstRender = render(<RouteResumeController shouldResume={false} />);
@@ -60,50 +70,6 @@ describe('RouteResumeController', () => {
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/checkout');
-    });
-  });
-
-  it('logs a coarse resume category without checkout parameters', async () => {
-    const log = jest.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      mockPathname = '/cart';
-      mockSearchParams = { secret: 'private-value' };
-      const firstRender = render(
-        <RouteResumeController shouldResume={false} />
-      );
-      firstRender.unmount();
-      mockPathname = '/';
-      mockSearchParams = {};
-      render(<RouteResumeController shouldResume />);
-      await waitFor(() => expect(mockReplace).toHaveBeenCalled());
-      expect(log).toHaveBeenCalledWith(
-        '[StartupRoute]',
-        'navigation_resume_requested'
-      );
-      expect(JSON.stringify(log.mock.calls)).not.toContain('private-value');
-    } finally {
-      log.mockRestore();
-    }
-  });
-
-  it('preserves payment route query params when restoring', async () => {
-    mockPathname = '/payment-gateway';
-    mockSearchParams = {
-      authorizationUrl: 'https://checkout.paystack.com/test',
-      orderId: 'order-123',
-    };
-    const firstRender = render(<RouteResumeController shouldResume={false} />);
-
-    firstRender.unmount();
-    mockPathname = '/';
-    mockSearchParams = {};
-
-    render(<RouteResumeController shouldResume />);
-
-    await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith(
-        '/payment-gateway?authorizationUrl=https%3A%2F%2Fcheckout.paystack.com%2Ftest&orderId=order-123'
-      );
     });
   });
 

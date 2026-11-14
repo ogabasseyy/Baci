@@ -135,7 +135,7 @@ export async function createWalletFundingAccount({
         }
         if (primary)
           throw new Error(
-            'Your BVN and consent are required for PiggyVest wallet setup. No bank account was created.'
+            'Your BVN and consent are required for wallet setup. No bank account was created.'
           );
       }
     } else if (await getPiggyvestPrimaryCapability(merchantId ?? '')) {

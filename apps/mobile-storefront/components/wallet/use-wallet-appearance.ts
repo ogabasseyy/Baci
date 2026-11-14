@@ -1,6 +1,12 @@
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
-import { getHomeContentBottomPadding } from '@/constants/layout';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+  CONTENT_OVERLAY_GAP,
+  getChatWidgetBottomOffset,
+  getHomeContentBottomPadding,
+} from '@/constants/layout';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
@@ -22,7 +28,20 @@ export function useWalletAppearance(presentation: WalletScreenPresentation) {
             insets.bottom,
             template.features?.chatWidget ?? true
           )
-        : SPACING.xl,
+        : // The chat button floats over pushed screens too (raised by the
+          // bottom safe area): keep the savings card's buttons able to
+          // scroll clear of it.
+          Math.max(
+            SPACING.xl,
+            template.features?.chatWidget === false
+              ? 0
+              : getChatWidgetBottomOffset(
+                  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+                  insets.bottom
+                ) +
+                  CHAT_WIDGET_FAB_SIZE +
+                  CONTENT_OVERLAY_GAP
+          ),
   });
 
   return { colors, scrollContentStyle };

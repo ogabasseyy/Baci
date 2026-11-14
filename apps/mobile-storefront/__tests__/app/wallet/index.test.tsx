@@ -74,8 +74,13 @@ import {
 import type { ReactNode } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { notifySavings } from '@/components/wallet/savings/savings-notice';
-import { SPACING } from '@/constants/Colors';
-import { getHomeContentBottomPadding } from '@/constants/layout';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+  CONTENT_OVERLAY_GAP,
+  getChatWidgetBottomOffset,
+  getHomeContentBottomPadding,
+} from '@/constants/layout';
 
 type MockStorefrontScreenShellProps = {
   children?: ReactNode;
@@ -590,9 +595,14 @@ describe('WalletScreen', () => {
     const walletContentProps = mockWalletContent.mock.calls[0]?.[0];
 
     expect(shellProps?.edges).toEqual(['top', 'bottom']);
+    // A pushed wallet keeps its buttons clear of the chat button, which sits
+    // higher by the 34pt home indicator (walk 18).
     expect(mockGetScrollContentStyle).toHaveBeenCalledWith({
       includeBottomInset: false,
-      paddingBottom: SPACING.xl,
+      paddingBottom:
+        getChatWidgetBottomOffset(CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET, 34) +
+        CHAT_WIDGET_FAB_SIZE +
+        CONTENT_OVERLAY_GAP,
     });
     expect(walletContentProps?.earningsBalance).toBe(125000);
     expect(walletContentProps?.totalBalance).toBe(125000);

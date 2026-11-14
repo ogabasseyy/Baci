@@ -19,6 +19,8 @@ const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
   'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
   // Refused before any GIG submission: the live cost exceeds the paid price.
   'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
+  // Refused before any GIG submission: shipping is neither prepaid nor wallet funded.
+  'GIGL_REQUIRES_PREPAID_OR_WALLET',
   'MERCHANT_NOT_FOUND',
   'MERCHANT_LOOKUP_FAILED',
   'MERCHANT_SENDER_REQUIRED',

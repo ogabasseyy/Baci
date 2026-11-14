@@ -52,4 +52,18 @@ describe('shouldReleaseBookingLock', () => {
       ).toBe(true);
     }
   });
+
+  it('releases the lock when GIG booking is refused before submission because shipping is not prepaid', () => {
+    // A Credit Direct order with no funding source is refused before GIG is
+    // called; keeping the lock left the order stuck as "in progress".
+    expect(
+      shouldReleaseBookingLock(
+        new OrderShipmentBookingError(
+          'GIGL shipping must be prepaid at checkout or funded from the merchant wallet before booking.',
+          400,
+          'GIGL_REQUIRES_PREPAID_OR_WALLET'
+        )
+      )
+    ).toBe(true);
+  });
 });

@@ -66,7 +66,12 @@ export function redirectSystemPath({
   try {
     const customSchemeUrl = new URL(path);
     if (customSchemeUrl.protocol.toLowerCase() === 'ogabassey:') {
-      if (customSchemeUrl.username || customSchemeUrl.password) return '/';
+      if (
+        customSchemeUrl.username ||
+        customSchemeUrl.password ||
+        customSchemeUrl.port
+      )
+        return '/';
       const route = customSchemeUrl.host
         ? `/${customSchemeUrl.host}${customSchemeUrl.pathname === '/' ? '' : customSchemeUrl.pathname}`
         : customSchemeUrl.pathname;
@@ -75,16 +80,24 @@ export function redirectSystemPath({
         trimmedRoute.toLowerCase() === '/cart' ? '/cart' : trimmedRoute;
       const searchParams = new URLSearchParams(customSchemeUrl.search);
       const fragmentParams = new URLSearchParams(customSchemeUrl.hash.slice(1));
-      const hasPairingSecret =
-        searchParams.has('handoff') ||
-        searchParams.has('hid') ||
-        fragmentParams.has('handoff') ||
-        fragmentParams.has('hid');
-      if (hasPairingSecret && routePath !== '/cart') {
-        searchParams.delete('handoff');
-        searchParams.delete('hid');
-        fragmentParams.delete('handoff');
-        fragmentParams.delete('hid');
+      const hasPairingSecret = (params: URLSearchParams) =>
+        [...params.keys()].some(
+          (key) =>
+            key.toLowerCase() === 'handoff' || key.toLowerCase() === 'hid'
+        );
+      const hasPairingMaterial =
+        hasPairingSecret(searchParams) || hasPairingSecret(fragmentParams);
+      if (hasPairingMaterial && routePath !== '/cart') {
+        for (const params of [searchParams, fragmentParams]) {
+          for (const key of [...params.keys()]) {
+            if (
+              key.toLowerCase() === 'handoff' ||
+              key.toLowerCase() === 'hid'
+            ) {
+              params.delete(key);
+            }
+          }
+        }
       }
       const searchValue = searchParams.toString();
       const fragmentValue = fragmentParams.toString();

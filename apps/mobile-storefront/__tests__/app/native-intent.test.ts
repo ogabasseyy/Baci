@@ -121,6 +121,16 @@ describe('redirectSystemPath', () => {
     expect(mockCapture).not.toHaveBeenCalled();
   });
 
+  it('rejects custom-scheme routes with a port', () => {
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://cart:123#handoff=token&hid=secret',
+        initial: true,
+      })
+    ).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
   it('preserves non-cart custom routes while stripping pairing secrets', () => {
     mockCapture.mockImplementationOnce((path) => path);
     expect(
@@ -133,6 +143,16 @@ describe('redirectSystemPath', () => {
       '/product/phone?color=blue#tab=details',
       expect.anything()
     );
+  });
+
+  it('strips case-insensitive pairing keys from non-cart custom routes', () => {
+    mockCapture.mockImplementationOnce((path) => path);
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://product/phone?Handoff=secret&color=blue#HID=token&tab=details',
+        initial: true,
+      })
+    ).toBe('/product/phone?color=blue#tab=details');
   });
 
   it('delegates to pairing capture with the configured merchant and platform root', () => {

@@ -136,6 +136,11 @@ CREATE TABLE piggyvest_primary.goal_cancel_interest_forfeits (
   -- the forfeit stays findable for its provider record (transaction id,
   -- settlement time) but settles into review instead of confirming.
   review_on_settle boolean NOT NULL DEFAULT false,
+  -- The last time the daily sweep listed this forfeit. Within a lane the
+  -- least recently listed row goes first, so a backlog larger than one batch
+  -- is worked through over successive sweeps instead of re-checking the same
+  -- oldest rows forever.
+  swept_at timestamptz,
   CONSTRAINT goal_cancel_forfeit_reference_key UNIQUE (reference),
   CHECK (source_wallet_id <> destination_wallet_id),
   CHECK (state = 'reserved' OR state = 'released' OR state = 'needs_review' OR dispatched_at IS NOT NULL),
@@ -1093,9 +1098,10 @@ $$;
 -- about) is returned with "alert": true until the sweep acknowledges the page
 -- (ack_goal_cancel_forfeit_alert_worker) after emitting it, so a lost answer
 -- or a crash before the page can never suppress it. Unsent and in-flight
--- work are taken in turn (each lane oldest first, already-paged stuck rows
--- last), so neither old stuck rows nor a backlog of unsent ones can starve
--- the rest.
+-- work are taken in turn (each lane least recently listed first, already-paged
+-- stuck rows last), and every listed row is stamped, so neither old stuck rows
+-- nor a backlog of unsent ones can starve the rest, and a backlog bigger than
+-- one batch is rotated through across sweeps.
 CREATE FUNCTION piggyvest_primary.list_goal_cancel_forfeit_work(
   integration_id uuid,
   environment text,
@@ -1120,7 +1126,8 @@ BEGIN
     -- turn, so neither can fill the whole batch and starve the other.
     SELECT pg_catalog.row_number() OVER (
              PARTITION BY forfeit.state
-             ORDER BY (forfeit.alerted_at IS NOT NULL), forfeit.reserved_at, forfeit.id) AS lane_rank,
+             ORDER BY (forfeit.alerted_at IS NOT NULL), forfeit.swept_at NULLS FIRST,
+                      forfeit.reserved_at, forfeit.id) AS lane_rank,
            forfeit.id, forfeit.cancel_operation_id, forfeit.state,
            -- Paged again each day it stays stuck: an acknowledgement a day
            -- old counts as no page.
@@ -1152,6 +1159,12 @@ BEGIN
       'operationId', work.cancel_operation_id, 'forfeitId', work.id, 'state', work.state,
       'alert', work.overdue) ORDER BY work.rank), '[]'::jsonb)
     INTO v_result FROM work;
+  -- Stamp what this sweep was handed, so the next one starts with the rows
+  -- it has not looked at (rotation within each lane).
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits AS listed
+     SET swept_at = pg_catalog.clock_timestamp()
+   WHERE listed.integration_id = v_binding.id
+     AND listed.id IN (SELECT (item ->> 'forfeitId')::uuid FROM pg_catalog.jsonb_array_elements(v_result) AS item);
   RETURN v_result;
 END;
 $$;

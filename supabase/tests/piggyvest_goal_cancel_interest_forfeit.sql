@@ -597,6 +597,7 @@ DECLARE
   v_scope jsonb := pg_temp.gc_scope();
   v_op text;
   v_forfeit text;
+  v_i integer;
 BEGIN
   DELETE FROM piggyvest_primary.goal_cancel_interest_forfeits;
   UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
@@ -962,6 +963,7 @@ DECLARE
   v_before numeric;
   v_forfeit text;
   v_result jsonb;
+  v_n integer;
 BEGIN
   UPDATE piggyvest_primary.goal_cancel_operations SET state = 'released'
    WHERE state IN ('confirmed', 'dispatched', 'reserved', 'needs_review');
@@ -1380,6 +1382,39 @@ BEGIN
       (SELECT voided_at IS NOT NULL FROM savings_notifications.events
         WHERE event_key = 'primary-interest:f3860000-0000-4000-8000-000000000006:gf-inflight'),
       'a delayed receipt recorded while the cancel was in flight left a live interest notice');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  -- Regression: a backlog bigger than one batch is rotated through across
+  -- sweeps; the same oldest rows were handed out every day, so a later row
+  -- was never checked.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('rotation');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'rotation split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'rotation principal');
+    FOR v_n IN 1..3 LOOP
+      INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+        cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+        source_wallet_id, destination_wallet_id, amount_kobo, reserved_at, alerted_at)
+      SELECT cancel.id, cancel.integration_id, cancel.intent_id, cancel.goal_id, 'needs_review',
+             piggyvest_primary.next_goal_cancel_forfeit_reference(cancel.goal_id),
+             cancel.source_wallet_id, 'reversed-after-forfeit', v_n,
+             pg_catalog.clock_timestamp() - pg_catalog.make_interval(mins => 10 - v_n),
+             pg_catalog.clock_timestamp() - interval '2 days'
+        FROM piggyvest_primary.goal_cancel_operations AS cancel
+       WHERE cancel.id = v_op::uuid;
+    END LOOP;
+    PERFORM pg_temp.gc_assert(
+      (SELECT pg_catalog.count(DISTINCT item ->> 'forfeitId') = 3
+         FROM (SELECT pg_catalog.jsonb_array_elements(
+                        piggyvest_primary.list_goal_cancel_forfeit_work('f3860000-0000-4000-8000-000000000006', 'staging', 2, false)) AS item
+               UNION ALL
+               SELECT pg_catalog.jsonb_array_elements(
+                        piggyvest_primary.list_goal_cancel_forfeit_work('f3860000-0000-4000-8000-000000000006', 'staging', 2, false))) AS listed),
+      'two successive sweeps did not cover a three-row backlog');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;

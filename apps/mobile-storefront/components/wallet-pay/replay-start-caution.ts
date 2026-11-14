@@ -44,5 +44,19 @@ export async function startWithReplayCaution<Result>(
       kind: 'outcome',
       outcome: { ...answer.outcome, maybePaid: true },
     };
+  // A replayed start refused for no stated reason (e.g. an unexpected 4xx)
+  // proves nothing about the earlier attempt, which may still be confirming:
+  // answered as not started and possibly paid, so the key is kept (Muse).
+  // A stated reason (check the details, the price changed) is definite.
+  if (
+    replayed &&
+    answer.kind === 'outcome' &&
+    answer.outcome.kind === 'failed' &&
+    answer.outcome.failedReason === undefined
+  )
+    return {
+      kind: 'outcome',
+      outcome: { kind: 'not_started', maybePaid: true },
+    };
   return answer;
 }

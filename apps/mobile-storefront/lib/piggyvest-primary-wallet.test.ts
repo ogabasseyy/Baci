@@ -71,7 +71,7 @@ describe('primary PiggyVest wallet API client', () => {
         bvn: '00000000000',
         consent: false,
       })
-    ).rejects.toThrow('accept wallet setup');
+    ).rejects.toThrow('Tick the box to agree');
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
   it('submits consent and BVN with CSRF and refreshes the provider account afterward', async () => {

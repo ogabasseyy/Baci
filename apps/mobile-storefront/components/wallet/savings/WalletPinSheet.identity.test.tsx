@@ -91,7 +91,7 @@ describe('bugfix: an old sign-in dead-ended PIN creation on "Please sign in agai
     expect(await screen.findByText("Confirm it's you")).toBeOnTheScreen();
     expect(
       screen.getByText(
-        "For your security, confirm it's you. We'll email a 6-digit code to ba***@example.com."
+        "To keep your wallet safe, we'll email a 6-digit code to ba***@example.com."
       )
     ).toBeOnTheScreen();
     expect(screen.getByText('Adding ₦2,500 to savings')).toBeOnTheScreen();

@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import * as Haptics from 'expo-haptics';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { notifySavings } from './savings/savings-notice';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return { notifySavings, savingsNotifier: () => notifySavings };
+});
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,
@@ -141,9 +144,10 @@ describe('success feedback is bound to confirmed contributions', () => {
       goal: { ...goal, current_amount: 1500 },
       rawAmount: '1000',
     });
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!"
+      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!",
+      'success'
     );
   });
 
@@ -161,9 +165,10 @@ describe('success feedback is bound to confirmed contributions', () => {
       goal: { ...goal, current_amount: 1500, target_amount: 2500 },
       rawAmount: '1000',
     });
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      "Nice! ₦1,000 added. You're 60% of the way to your iPhone 13. Keep it going!"
+      "Nice! ₦1,000 added. You're 60% of the way to your iPhone 13. Keep it going!",
+      'success'
     );
     // The reminder stays: the server says the goal is still active.
     expect(cancelSavingsReminder).not.toHaveBeenCalled();
@@ -191,9 +196,10 @@ describe('success feedback is bound to confirmed contributions', () => {
       rawAmount: '500',
     });
     expect(Haptics.notificationAsync).not.toHaveBeenCalled();
-    expect(Alert.alert).not.toHaveBeenCalledWith(
+    expect(notifySavings).not.toHaveBeenCalledWith(
       'Savings updated',
-      expect.any(String)
+      expect.any(String),
+      expect.anything()
     );
   });
 

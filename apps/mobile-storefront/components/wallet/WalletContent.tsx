@@ -1,103 +1,27 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
-import { type ReactNode, useState } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import { useState } from 'react';
 import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
-import type Colors from '@/constants/Colors';
+import { useRefetchOnRefocus } from '@/hooks/use-refetch-on-refocus';
+import { useUserPullRefresh } from '@/hooks/use-user-pull-refresh';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
-import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
-import type { Product } from '@/types/product';
+import { isPrimaryWallet } from './is-primary-wallet';
+import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
+import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
+import { useWalletPrimaryUnknown } from './use-wallet-primary-unknown';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
-import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
+import { WalletInlineNotices } from './WalletInlineNotices';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
-import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
-import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
+import { WalletSavingsPlanCardWithSetup } from './WalletSavingsPlanCardWithSetup';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
-import { WalletSavingsVariantResolutionModal } from './WalletSavingsVariantResolutionModal';
-import {
-  type WalletTransaction,
-  WalletTransactionHistory,
-} from './WalletTransactionHistory';
-import type { WalletDisplayFundingAccount } from './wallet.types';
+import { WalletTransactionHistory } from './WalletTransactionHistory';
+import type { WalletContentProps } from './wallet-content-props.types';
 
-type WalletColors = (typeof Colors)['light'];
-
-export interface WalletContentProps {
-  merchantId?: string;
-  hasSavedCards?: boolean;
-  activeSavingsGoal: WalletActiveSavingsGoal | null;
-  canCreateFundingAccount: boolean;
-  /** False while the route's persisted funding session is still being written. */
-  canResolveCreditBaseline?: boolean;
-  colors: WalletColors;
-  contentContainerStyle: StyleProp<ViewStyle>;
-  createFundingAccountUnavailableMessage?: string;
-  /** Scopes the persisted bank-transfer funding session the credit watch reads. */
-  customerId?: string;
-  earningsAvailable?: boolean;
-  earningsBalance: number | null;
-  fundAmount: string;
-  fundingAccount: WalletDisplayFundingAccount | null;
-  /** Sanitized deep-link for the post-credit "Return to your purchase" CTA. */
-  fundReturnTo?: WalletReturnHref;
-  isAddingSavingsContribution: boolean;
-  hasPendingSavingsContribution?: boolean;
-  goalAwaitingSettlement?: boolean;
-  /** The wallet query's last-updated time: re-reads the goal readiness gate. */
-  walletUpdatedAt?: number;
-  isCreatingFundingAccount: boolean;
-  isFundPending: boolean;
-  isRedeemPending: boolean;
-  isRefetching: boolean;
-  loyaltyPoints: number;
-  loyaltyTier?: string | null;
-  needsPhone: boolean;
-  primaryReady?: boolean;
-  onCreateFundingAccount: () => void;
-  onChangeFundAmount: (value: string) => void;
-  onChangeRedeemPoints: (value: string) => void;
-  onConfirmFund: () => void;
-  onConfirmRedeem: () => void;
-  onAddSavingsContribution: () => void;
-  onChangeSavingsDevice: (
-    product: Product,
-    variantId?: string | null
-  ) => Promise<boolean>;
-  onChangeSavingsContributionAmount: (value: string) => void;
-  onResolveSavingsVariant: (variantId: string) => Promise<boolean>;
-  onCloseSavingsProgress: () => void;
-  onManageCards: () => void;
-  onFundSavingsWallet: () => void;
-  onOpenFundPanel: () => void;
-  onOpenRedeemPanel: () => void;
-  onQuickSave: () => void;
-  onRefresh: () => void;
-  onResetFund: () => void;
-  /**
-   * The wallet PIN prompt. It is mounted inside the savings sheet while that
-   * sheet is open (iOS cannot stack sibling modals), and at the root otherwise.
-   */
-  pinPrompt?: ReactNode;
-  onResetRedeem: () => void;
-  onStartSavings: () => void;
-  onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
-  redeemPoints: string;
-  savingsContributionAmount: string;
-  savingsBalance: number;
-  spendableBalance?: number;
-  showSavingsProgress: boolean;
-  showQuickSave: boolean;
-  showFundPanel: boolean;
-  showRedeemPanel: boolean;
-  totalBalance: number;
-  /** Wallet ledger; the credit watch reads bank-transfer top-ups off it. */
-  transactions: WalletTransaction[];
-}
+export type { WalletContentProps } from './wallet-content-props.types';
 
 export function WalletContent(props: WalletContentProps) {
   const {
@@ -117,7 +41,6 @@ export function WalletContent(props: WalletContentProps) {
     isCreatingFundingAccount,
     isFundPending,
     isRedeemPending,
-    isRefetching,
     loyaltyPoints,
     loyaltyTier,
     needsPhone,
@@ -140,7 +63,7 @@ export function WalletContent(props: WalletContentProps) {
     redeemPoints,
     savingsContributionAmount,
     savingsBalance,
-    spendableBalance = 0,
+    walletBalance = 0,
     showSavingsProgress,
     showFundPanel,
     showRedeemPanel,
@@ -156,21 +79,19 @@ export function WalletContent(props: WalletContentProps) {
   });
   const [showSavingsVariantResolution, setShowSavingsVariantResolution] =
     useState(false);
-  const {
-    isChangingSavingsDevice,
-    isSavingsDeviceLoading,
-    resolveProduct,
-    savingsDeviceProducts,
-    savingsDeviceSearch,
-    setSavingsDeviceSearch,
-    setShowSavingsDeviceSwap,
-    showSavingsDeviceSwap,
-    handleSelectSavingsDevice,
-  } = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const swap = useSavingsDeviceSwap(
+    onChangeSavingsDevice,
+    activeSavingsGoal?.id
+  );
+  const pullRefresh = useUserPullRefresh(onRefresh);
+  useRefetchOnRefocus(onRefresh); // re-entry re-reads the wallet once
+  const primaryUnknown = useWalletPrimaryUnknown(
+    props.merchantId,
+    props.primaryUnreadable
+  );
   const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
-
   return (
-    <WalletPrimaryContext.Provider value={props.primaryReady === true}>
+    <WalletPrimaryContext.Provider value={isPrimaryWallet(props)}>
       <AppKeyboardAwareScrollView
         testID="wallet-scroll"
         contentContainerStyle={contentContainerStyle}
@@ -178,13 +99,10 @@ export function WalletContent(props: WalletContentProps) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl {...pullRefresh} tintColor={colors.primary} />
         }
       >
+        <PiggyvestSlowdownNotice inset hidden={savingsSheetOpen} />
         <WalletHeroSection
           canCreateFundingAccount={canCreateFundingAccount}
           createFundingAccountUnavailableMessage={
@@ -202,16 +120,28 @@ export function WalletContent(props: WalletContentProps) {
           onOpenFundPanel={onOpenFundPanel}
           onOpenRedeemPanel={onOpenRedeemPanel}
           onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
+          primaryBalanceReady={props.primaryReady === true}
+          primaryStale={props.primaryStale === true}
+          primaryUnknown={primaryUnknown}
           savingsBalance={savingsBalance}
+          savingsWalletBalance={walletBalance}
+          storeCreditBalance={props.storeCreditBalance}
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
         />
+        <WalletInlineNotices
+          colors={colors}
+          fundSheetOpen={props.showFundPanel}
+          goalId={activeSavingsGoal?.id}
+          savingsSheetOpen={savingsSheetOpen}
+        />
         {activeSavingsGoal ? (
-          <WalletSavingsPlanCard
+          <WalletSavingsPlanCardWithSetup
             colors={colors}
             awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}
             onOpen={onStartSavings}
+            pausePolling={savingsSheetOpen}
           />
         ) : null}
         <WalletActionsRow
@@ -244,7 +174,7 @@ export function WalletContent(props: WalletContentProps) {
             redeemPoints={redeemPoints}
           />
         ) : null}
-        <WalletTransactionHistory colors={colors} transactions={transactions} />
+        <WalletTransactionHistory {...props} />
       </AppKeyboardAwareScrollView>
       <WalletSavingsProgressModal
         addAmount={savingsContributionAmount}
@@ -256,38 +186,26 @@ export function WalletContent(props: WalletContentProps) {
         isFundPending={isFundPending}
         onAddAmountChange={onChangeSavingsContributionAmount}
         onAddSavings={onAddSavingsContribution}
-        onChangeDevice={() => setShowSavingsDeviceSwap(true)}
-        onClose={onCloseSavingsProgress}
+        onChangeDevice={() => swap.setShowSavingsDeviceSwap(true)}
+        onClose={() => {
+          swap.setShowSavingsDeviceSwap(false);
+          setShowSavingsVariantResolution(false);
+          onCloseSavingsProgress();
+        }}
         onFundWallet={onFundSavingsWallet}
         onRefreshWallet={async () => onRefresh()}
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
         overlay={savingsSheetOpen ? props.pinPrompt : null}
+        phoneSwapStep={renderWalletSavingsSheetStep({
+          colors,
+          goal: activeSavingsGoal,
+          showVariantPick: showSavingsVariantResolution,
+          onCloseVariantPick: () => setShowSavingsVariantResolution(false),
+          onResolveVariant: onResolveSavingsVariant,
+          swap,
+        })}
         visible={showSavingsProgress}
-        walletBalance={spendableBalance}
-      />
-      <WalletSavingsDeviceSwapModal
-        colors={colors}
-        currentAmount={activeSavingsGoal?.current_amount ?? 0}
-        isLoading={isSavingsDeviceLoading}
-        isPending={isChangingSavingsDevice}
-        onClose={() => setShowSavingsDeviceSwap(false)}
-        onSearchChange={setSavingsDeviceSearch}
-        onSelectDevice={handleSelectSavingsDevice}
-        resolveProduct={resolveProduct}
-        products={savingsDeviceProducts}
-        searchValue={savingsDeviceSearch}
-        visible={showSavingsDeviceSwap}
-      />
-      <WalletSavingsVariantResolutionModal
-        colors={colors}
-        onClose={() => setShowSavingsVariantResolution(false)}
-        onResolve={onResolveSavingsVariant}
-        options={activeSavingsGoal?.variant_resolution_options ?? []}
-        visible={
-          showSavingsVariantResolution &&
-          activeSavingsGoal?.status === 'completed' &&
-          activeSavingsGoal.selection_unresolved === true
-        }
+        walletBalance={walletBalance}
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
       {savingsSheetOpen ? null : props.pinPrompt}

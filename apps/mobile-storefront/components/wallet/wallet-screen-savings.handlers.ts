@@ -1,13 +1,10 @@
-import { Alert } from 'react-native';
 import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import {
-  resolveSavingsGoalVariant,
-  swapSavingsGoalDevice,
-} from '@/lib/customer-savings';
+import { swapSavingsGoalDevice } from '@/lib/customer-savings';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { readConfirmedContribution } from './read-confirmed-contribution';
+import { clearSavingsNotice, savingsNotifier } from './savings/savings-notice';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
 import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
@@ -42,30 +39,6 @@ interface ChangeSavingsGoalDeviceParams {
   variantId?: string | null;
 }
 
-interface ResolveSavingsGoalVariantParams {
-  activeMerchantId?: string;
-  activeMerchantSlug?: string;
-  goal: WalletActiveSavingsGoal | null;
-  refetchWallet: () => Promise<unknown>;
-  variantId: string;
-}
-
-export function createSavingsVariantResolutionHandler({
-  activeMerchantId,
-  activeMerchantSlug,
-  goal,
-  refetchWallet,
-}: Omit<ResolveSavingsGoalVariantParams, 'variantId'>) {
-  return async (variantId: string) =>
-    await resolveCompletedSavingsGoalVariant({
-      activeMerchantId,
-      activeMerchantSlug,
-      goal,
-      refetchWallet,
-      variantId,
-    });
-}
-
 export async function addSavingsContributionToGoal({
   activeMerchantId,
   activeMerchantSlug,
@@ -80,30 +53,34 @@ export async function addSavingsContributionToGoal({
   setIsAddingSavingsContribution,
   walletBalance,
 }: AddSavingsContributionParams): Promise<void> {
+  // Captured before any await: a result never reaches another account.
+  const notify = savingsNotifier();
   if (!goal) {
-    Alert.alert('No active savings goal', 'Start a savings goal first.');
+    notify('No active savings goal', 'Start a savings goal first.', 'warning');
     return;
   }
 
   const amount = Number(rawAmount);
   if (!Number.isFinite(amount) || amount <= 0) {
-    Alert.alert('Invalid amount', 'Enter the amount you want to save.');
+    notify('Invalid amount', 'Enter the amount you want to save.', 'warning');
     return;
   }
 
   const remainingAmount = Math.max(0, goal.target_amount - goal.current_amount);
   if (amount > remainingAmount) {
-    Alert.alert(
+    notify(
       'Amount too high',
-      `You only have ${formatNgnCurrency(remainingAmount)} left on this goal.`
+      `You only have ${formatNgnCurrency(remainingAmount)} left on this goal.`,
+      'warning'
     );
     return;
   }
 
   if (amount > walletBalance) {
-    Alert.alert(
+    notify(
       'Add money first',
-      `Your wallet has ${formatNgnCurrency(walletBalance)} available. Fund it before adding ${formatNgnCurrency(amount)} to savings.`
+      `Your wallet has ${formatNgnCurrency(walletBalance)} available. Fund it before adding ${formatNgnCurrency(amount)} to savings.`,
+      'warning'
     );
     return;
   }
@@ -124,9 +101,10 @@ export async function addSavingsContributionToGoal({
       contributionResult.status === 'pending'
     ) {
       await refetchWallet().catch(() => undefined);
-      Alert.alert(
+      notify(
         'Contribution pending',
-        'Your savings will update after PiggyVest confirms the transfer. Check its status before starting another contribution.'
+        'Your savings will update once PiggyVest confirms the transfer.',
+        'info'
       );
       return;
     }
@@ -142,9 +120,10 @@ export async function addSavingsContributionToGoal({
       // entered amount stays for the retry.
       clearIdempotencyKey?.();
       await refetchWallet().catch(() => undefined);
-      Alert.alert(
+      notify(
         'Contribution cancelled',
-        'The transfer was cancelled before submission and your reserved wallet funds were released.'
+        'The transfer was cancelled before submission and your reserved wallet funds were released.',
+        'info'
       );
       return;
     }
@@ -183,9 +162,9 @@ export async function addSavingsContributionToGoal({
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });
-    Alert.alert(success.title, success.message);
+    notify(success.title, success.message, 'success');
   } catch (error) {
-    reportContributionError(error, clearIdempotencyKey);
+    reportContributionError(error, clearIdempotencyKey, notify);
   } finally {
     setIsAddingSavingsContribution(false);
   }
@@ -199,20 +178,25 @@ export async function changeSavingsGoalDevice({
   refetchWallet,
   variantId,
 }: ChangeSavingsGoalDeviceParams): Promise<boolean> {
+  // Captured before any await: a result never reaches another account.
+  const notify = savingsNotifier();
   if (!goal) {
-    Alert.alert('No active savings goal', 'Start a savings goal first.');
+    notify('No active savings goal', 'Start a savings goal first.', 'warning');
     return false;
   }
 
   const choice = toSelectedProductChoice({ product, variantId });
   if (choice.price < goal.current_amount) {
-    Alert.alert(
+    notify(
       'Device price too low',
-      `You have already saved ${formatNgnCurrency(goal.current_amount)}. Choose a device priced at or above this amount.`
+      `You have already saved ${formatNgnCurrency(goal.current_amount)}. Choose a device priced at or above this amount.`,
+      'warning'
     );
     return false;
   }
 
+  // A retry must not leave the previous failure on screen after it works.
+  clearSavingsNotice();
   try {
     await swapSavingsGoalDevice({
       goalId: goal.id,
@@ -224,77 +208,24 @@ export async function changeSavingsGoalDevice({
     try {
       await refetchWallet();
     } catch {
-      Alert.alert(
+      notify(
         'Device updated',
-        'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.'
+        'Your savings device was updated, but wallet refresh failed. Pull to refresh your latest goal.',
+        'success'
       );
       return true;
     }
-    Alert.alert(
-      'Device updated',
-      `Your savings goal is now for ${choice.name}.`
-    );
+    // The savings sheet shows the new phone; no alert on top of it.
     return true;
   } catch (error) {
-    Alert.alert(
+    notify(
       'Unable to change device',
-      error instanceof Error ? error.message : 'Please try again in a moment.'
+      error instanceof Error ? error.message : 'Please try again in a moment.',
+      'warning'
     );
     return false;
   }
 }
 
-export async function resolveCompletedSavingsGoalVariant({
-  activeMerchantId,
-  activeMerchantSlug,
-  goal,
-  refetchWallet,
-  variantId,
-}: ResolveSavingsGoalVariantParams): Promise<boolean> {
-  const eligibleVariant = goal?.variant_resolution_options?.find(
-    (option) => option.id === variantId
-  );
-  if (
-    goal?.status !== 'completed' ||
-    !goal.selection_unresolved ||
-    !eligibleVariant
-  ) {
-    Alert.alert(
-      'Variant unavailable',
-      'Refresh your savings goal and try again.'
-    );
-    return false;
-  }
-
-  try {
-    await resolveSavingsGoalVariant({
-      goalId: goal.id,
-      merchantId: activeMerchantId,
-      merchantSlug: activeMerchantSlug,
-      variantId,
-    });
-    try {
-      await refetchWallet();
-    } catch {
-      Alert.alert(
-        'Variant resolved',
-        'Your device variant was saved, but the wallet could not refresh. Pull to refresh before buying.'
-      );
-      return true;
-    }
-    Alert.alert(
-      'Variant resolved',
-      `Your savings goal is now linked to ${eligibleVariant.label}.`
-    );
-    return true;
-  } catch (error) {
-    await refetchWallet().catch(() => undefined);
-    Alert.alert(
-      'Review savings goal',
-      error instanceof Error
-        ? error.message
-        : 'This savings goal changed. Refresh to review its current status.'
-    );
-    return false;
-  }
-}
+export { resolveCompletedSavingsGoalVariant } from './resolve-completed-savings-goal-variant';
+export { createSavingsVariantResolutionHandler } from './savings-variant-resolution.handlers';

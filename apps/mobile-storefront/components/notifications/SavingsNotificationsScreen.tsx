@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import type { ReactElement } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -10,9 +11,11 @@ import { SavingsNotificationPreferences } from './SavingsNotificationPreferences
 export function SavingsNotificationsScreen({
   merchantId,
   userId,
+  footer,
 }: {
   merchantId: string | null;
   userId: string | null;
+  footer?: ReactElement | null;
 }) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -63,6 +66,7 @@ export function SavingsNotificationsScreen({
             />
           ) : null
         }
+        footer={footer}
         isLoading={inbox.isLoading}
         notifications={inbox.notifications}
         onOpen={openNotification}

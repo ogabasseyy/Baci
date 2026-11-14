@@ -1,0 +1,95 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index 368fc7d2c..193a4c8cb 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -21,7 +21,10 @@ def isNewArchitectureEnabled() {
+ }
+
+ apply plugin: "com.android.library"
+-apply plugin: 'org.jetbrains.kotlin.android'
++def builtInKotlinEnabled = !project.hasProperty("android.builtInKotlin") || project.property("android.builtInKotlin").toString().toBoolean()
++if (!builtInKotlinEnabled) {
++  apply plugin: 'org.jetbrains.kotlin.android'
++}
+ apply from: "./fix-prefab.gradle"
+
+ if (isNewArchitectureEnabled()) {
+@@ -42,11 +45,11 @@ android {
+   namespace "com.margelo.nitro"
+
+   ndkVersion getExtOrDefault("ndkVersion")
+-  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
++  compileSdk getExtOrIntegerDefault("compileSdkVersion")
+
+   defaultConfig {
+-    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+-    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
++    minSdk getExtOrIntegerDefault("minSdkVersion")
++    targetSdk getExtOrIntegerDefault("targetSdkVersion")
+     buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+
+     externalNativeBuild {
+@@ -112,7 +115,7 @@ android {
+     }
+   }
+
+-  lintOptions {
++  lint {
+     disable "GradleCompatible"
+   }
+
+@@ -129,8 +132,13 @@ android {
+           "${project.buildDir}/generated/source/codegen/java",
+           "src/newarch"
+         ]
++        kotlin.srcDirs += [
++          "${project.buildDir}/generated/source/codegen/java",
++          "src/newarch"
++        ]
+       } else {
+         java.srcDirs += ["src/oldarch"]
++        kotlin.srcDirs += ["src/oldarch"]
+       }
+     }
+   }
+diff --git a/android/fix-prefab.gradle b/android/fix-prefab.gradle
+index d6c010ef7..985ad34d1 100644
+--- a/android/fix-prefab.gradle
++++ b/android/fix-prefab.gradle
+@@ -28,22 +28,28 @@ afterEvaluate {
+       return
+     }
+
+-    def variants = proj.android.hasProperty('applicationVariants') ? proj.android.applicationVariants : proj.android.libraryVariants
++    def variants
++    if (proj.android.metaClass.hasProperty(proj.android, 'applicationVariants')) {
++      variants = proj.android.applicationVariants
++    } else if (proj.android.metaClass.hasProperty(proj.android, 'libraryVariants')) {
++      variants = proj.android.libraryVariants
++    } else {
++      variants = proj.android.buildTypes
++    }
++
+     // Touch the prefab_config.json files to ensure that in ExternalNativeJsonGenerator.kt we will re-trigger the prefab CLI to
+     // generate a libnameConfig.cmake file that will contain our native library (.so).
+-    // See this condition: https://cs.android.com/android-studio/platform/tools/base/+/mirror-goog-studio-main:build-system/gradle-core/src/main/java/com/android/build/gradle/tasks/ExternalNativeJsonGenerator.kt;l=207-219?q=createPrefabBuildSystemGlue
+     variants.all { variant ->
+       def variantName = variant.name
+       abis.each { abi ->
+         def searchDir = new File(proj.projectDir, ".cxx/${variantName}")
+         if (!searchDir.exists()) return
+-        def matches = []
++
+         searchDir.eachDir { randomDir ->
+-          def prefabFile = new File(randomDir, "${abi}/prefab_config.json")
+-          if (prefabFile.exists()) matches << prefabFile
+-        }
+-        matches.each { prefabConfig ->
+-          prefabConfig.setLastModified(System.currentTimeMillis())
++          def prefabConfig = new File(randomDir, "${abi}/prefab_config.json")
++          if (prefabConfig.exists()) {
++            prefabConfig.setLastModified(System.currentTimeMillis())
++          }
+         }
+       }
+     }

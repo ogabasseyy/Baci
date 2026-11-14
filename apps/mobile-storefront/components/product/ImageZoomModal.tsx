@@ -26,7 +26,12 @@ interface ImageZoomModalProps {
   onIndexChange?: (index: number) => void;
 }
 
-export function ImageZoomModal({
+export function ImageZoomModal(props: ImageZoomModalProps) {
+  if (!props.visible) return null;
+  return <ActiveImageZoomModal {...props} />;
+}
+
+function ActiveImageZoomModal({
   visible,
   images,
   initialIndex,

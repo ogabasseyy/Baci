@@ -41,12 +41,74 @@ export function derivePlatformRootDomain(
   return PLATFORM_API_ROOTS[apiHostname];
 }
 
+/**
+ * Expo Router supplies `initial` for initial and live links. The launcher-root
+ * rewrite is intentionally the same in both cases, so this handler only reads
+ * `path` while retaining the framework's complete event shape.
+ */
 export function redirectSystemPath({
   path,
 }: {
   path: string;
   initial: boolean;
 }): string {
+  let normalizedPath = path;
+  // A custom-scheme launcher root has no route. Query/fragment-only roots
+  // still launch Home; a valid pairing link must include the /cart route.
+  const launcherRoot = path.split(/[?#]/, 1)[0].toLowerCase();
+  if (launcherRoot === 'ogabassey://' || launcherRoot === 'ogabassey:///')
+    return '/';
+
+  // Native callers encode routes as either a URL host (`ogabassey://cart`)
+  // or a path (`ogabassey:///cart`). Convert both forms to a relative route
+  // before pairing capture so custom-scheme secrets never reach its HTTPS
+  // allowlist as if they were an absolute pairing origin.
+  try {
+    const customSchemeUrl = new URL(path);
+    if (customSchemeUrl.protocol.toLowerCase() === 'ogabassey:') {
+      if (
+        customSchemeUrl.username ||
+        customSchemeUrl.password ||
+        customSchemeUrl.port
+      )
+        return '/';
+      const route = customSchemeUrl.host
+        ? `/${customSchemeUrl.host}${customSchemeUrl.pathname === '/' ? '' : customSchemeUrl.pathname}`
+        : customSchemeUrl.pathname;
+      const trimmedRoute = route === '/' ? '' : route.replace(/\/$/, '');
+      const routePath =
+        trimmedRoute.toLowerCase() === '/cart' ? '/cart' : trimmedRoute;
+      const searchParams = new URLSearchParams(customSchemeUrl.search);
+      const fragmentParams = new URLSearchParams(customSchemeUrl.hash.slice(1));
+      const hasPairingSecret = (params: URLSearchParams) =>
+        [...params.keys()].some(
+          (key) =>
+            key.toLowerCase() === 'handoff' || key.toLowerCase() === 'hid'
+        );
+      const hasPairingMaterial =
+        hasPairingSecret(searchParams) || hasPairingSecret(fragmentParams);
+      if (hasPairingMaterial && routePath !== '/cart') {
+        for (const params of [searchParams, fragmentParams]) {
+          for (const key of [...params.keys()]) {
+            if (
+              key.toLowerCase() === 'handoff' ||
+              key.toLowerCase() === 'hid'
+            ) {
+              params.delete(key);
+            }
+          }
+        }
+      }
+      const searchValue = searchParams.toString();
+      const fragmentValue = fragmentParams.toString();
+      const search = searchValue ? `?${searchValue}` : '';
+      const hash = fragmentValue ? `#${fragmentValue}` : '';
+      normalizedPath = `${routePath}${search}${hash}`;
+    }
+  } catch {
+    // Keep the original path; captureCartPairingLink handles malformed input.
+  }
+
   let apiHostname = '';
   try {
     apiHostname = new URL(EXPO_PUBLIC_API_URL).hostname;
@@ -57,7 +119,7 @@ export function redirectSystemPath({
   // substitute the production root for an underivable staging root.
   const platformRootDomain =
     derivePlatformRootDomain(apiHostname, EXPO_PUBLIC_ROOT_DOMAIN) ?? '';
-  return captureCartPairingLink(path, {
+  return captureCartPairingLink(normalizedPath, {
     merchantId: CONFIG.MERCHANT_ID,
     merchantSlug: CONFIG.MERCHANT_SLUG,
     merchantDomain: CONFIG.MERCHANT_DOMAIN,

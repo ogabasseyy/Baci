@@ -123,6 +123,63 @@ describe('usePushNotifications response handling', () => {
     jest.restoreAllMocks();
   });
 
+  it('defers a cold-launch notification until navigation is ready', async () => {
+    const response = createResponse(
+      'cold-ready',
+      { notification_type: 'promotion' },
+      1879
+    );
+    mockGetLastNotificationResponse.mockResolvedValue(response);
+    mockHandleNotificationResponse.mockImplementation(
+      (_response: unknown, navigate: (screen: string) => void) =>
+        navigate('utility-history')
+    );
+    const view = renderHook(
+      ({ navigationReady }: { navigationReady: boolean }) =>
+        usePushNotifications({ navigationReady }),
+      { initialProps: { navigationReady: false } }
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockGetLastNotificationResponse).not.toHaveBeenCalled();
+    await waitForResponseListener();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockClearLastNotificationResponse).not.toHaveBeenCalled();
+
+    view.rerender({ navigationReady: true });
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledTimes(1));
+    expect(mockGetLastNotificationResponse).toHaveBeenCalledTimes(1);
+    expect(mockClearLastNotificationResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues notification taps received during splash until navigation is ready', async () => {
+    mockHandleNotificationResponse.mockImplementation(
+      (_response: unknown, navigate: (screen: string) => void) =>
+        navigate('utility-history')
+    );
+    const view = renderHook(
+      ({ navigationReady }: { navigationReady: boolean }) =>
+        usePushNotifications({ navigationReady }),
+      { initialProps: { navigationReady: false } }
+    );
+    await waitForResponseListener();
+
+    const response = createResponse(
+      'tap-during-splash',
+      { notification_type: 'promotion' },
+      1880
+    );
+    act(() => mockNotificationResponseCallback?.(response));
+    expect(mockHandleNotificationResponse).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    view.rerender({ navigationReady: true });
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledTimes(1));
+    expect(mockHandleNotificationResponse).toHaveBeenCalledTimes(1);
+    expect(mockClearLastNotificationResponse).toHaveBeenCalledTimes(1);
+  });
+
   it('routes token-ready notification taps to utility history', async () => {
     mockHandleNotificationResponse.mockImplementation(
       (

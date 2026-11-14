@@ -975,7 +975,7 @@ BEGIN
   -- Regression: a balance above the ceiling whose legs both fit dispatches
   -- (it was refused outright, stranding a principal below the ceiling).
   BEGIN
-    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 99000000, cancelled_at = NULL
+    UPDATE public.customer_savings_goals SET status = 'active', target_amount = 200000000, current_amount = 99000000, cancelled_at = NULL
      WHERE id = c_goal;
     v_op := pg_temp.gc_reserved('ceiling-both-fit');
     v_result := pg_temp.gf_split(v_op, 10100000000);
@@ -1508,7 +1508,7 @@ BEGIN
   END;
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
-    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL
+    UPDATE public.customer_savings_goals SET status = 'active', target_amount = 200000000, current_amount = 100000000, cancelled_at = NULL
      WHERE id = c_goal;
     v_op := pg_temp.gc_reserved('ceiling-principal');
     v_result := pg_temp.gf_split(v_op, 10000000000);

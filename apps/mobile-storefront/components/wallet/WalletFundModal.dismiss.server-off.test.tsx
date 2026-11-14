@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
   clearObservedPiggyvestPrimaryCapability,
   observePiggyvestPrimaryCapability,
 } from '@/lib/piggyvest-primary-capability-cache';
+import { useWalletFundPromptStore } from './fund/wallet-fund-prompt-store';
 import { WalletFundModal } from './WalletFundModal';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { createWalletContentProps } from './wallet-content.test-utils';
@@ -22,12 +23,14 @@ jest.mock('@/lib/is-piggyvest-primary-merchant', () => {
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 let mockCanGoBack = true;
 let mockCapability: boolean | null = false;
 jest.mock('expo-router', () => ({
   router: {
     back: () => mockBack(),
     canGoBack: () => mockCanGoBack,
+    dismissTo: (href: string) => mockDismissTo(href),
     push: jest.fn(),
     replace: (href: string) => mockReplace(href),
   },
@@ -79,6 +82,7 @@ function renderModal(
 beforeEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockDismissTo.mockClear();
   mockCanGoBack = true;
   mockCapability = false;
 });
@@ -96,7 +100,7 @@ describe('bugfix: closing Add store credit strands the customer on a pushed wall
 
     // Assert
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
   });
 
   it('bugfix: opens the purchase when a deep link left no screen to go back to', () => {
@@ -109,8 +113,7 @@ describe('bugfix: closing Add store credit strands the customer on a pushed wall
 
     // Assert
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockReplace).toHaveBeenCalledWith('/utilities/airtime');
+    expect(mockDismissTo).toHaveBeenCalledWith('/utilities/airtime');
   });
 });
 
@@ -121,7 +124,7 @@ describe('server keeps PiggyVest off', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
 
     expect(onResetFund).toHaveBeenCalledTimes(1);
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 
   it('keeps a plain top-up on the wallet page', () => {
@@ -129,8 +132,7 @@ describe('server keeps PiggyVest off', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
 
-    expect(mockBack).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 });
 
@@ -145,7 +147,7 @@ describe('bugfix: unobserved rollout merchant with an unsettled wallet on a purc
 
     // Assert
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the plain sheet where the server rules PiggyVest out', () => {
@@ -167,7 +169,7 @@ describe('bugfix: restored legacy wallet before any PiggyVest verdict on a purch
 
     // Assert
     expect(screen.getByText('Add store credit')).toBeOnTheScreen();
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -260,5 +262,97 @@ describe('owner decision 2026-11-13: card funding held only for the Ogabassey pi
     );
 
     expect(screen.getAllByText(/card/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe('bugfix: rollback while the sheet was open stranded the customer', () => {
+  it('still returns to the purchase when the verdict rolls back before close', () => {
+    // Arrange: opened from IMEI as a PiggyVest store credit top-up.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const onResetFund = renderModal(false, '/imei-check');
+    expect(screen.getByText('Add store credit')).toBeOnTheScreen();
+
+    // Act: the verdict rolls back while the sheet is open, then it closes.
+    act(() => observePiggyvestPrimaryCapability('merchant-1', false));
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert
+    expect(onResetFund).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+describe('bugfix: purchase latch leaked into a later savings sheet', () => {
+  it('does not navigate back when a savings sheet opens after a programmatic close', () => {
+    // Arrange: opened from IMEI as a PiggyVest store credit top-up.
+    mockCapability = true;
+    observePiggyvestPrimaryCapability('merchant-1', true);
+    const onResetFund = jest.fn();
+    const view = (show: boolean, fundReturnTo: string) => (
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletFundModal
+          {...createWalletContentProps()}
+          creditWatch={creditWatch}
+          fundReturnTo={fundReturnTo as never}
+          fundingAccount={account}
+          merchantId="merchant-1"
+          onResetFund={onResetFund}
+          showFundPanel={show}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    const { rerender } = render(view(true, '/imei-check'));
+
+    // Act: the funding flow closes the sheet itself (resetFundPanel), then
+    // a savings funding opens the sheet and the customer dismisses it.
+    rerender(view(false, '/imei-check'));
+    rerender(view(true, '/wallet/savings/start'));
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert: the savings sheet just closes; no purchase navigation.
+    expect(onResetFund).toHaveBeenCalledTimes(1);
+    expect(mockDismissTo).not.toHaveBeenCalled();
+    clearObservedPiggyvestPrimaryCapability();
+  });
+});
+
+describe('bugfix: warm deep link returned to unrelated history', () => {
+  it('returns to the explicit purchase, not just the previous screen', () => {
+    // Arrange: the funding link opened over unrelated history.
+    mockCanGoBack = true;
+    renderModal(true, '/utilities/airtime');
+
+    // Act
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert: navigate to the purchase itself; never a bare back().
+    expect(mockDismissTo).toHaveBeenCalledWith('/utilities/airtime');
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: closing the sheet left its funding question unanswered', () => {
+  it('declines a waiting question when the sheet is dismissed', () => {
+    // Arrange: a funding question is waiting in the sheet.
+    const resolve = jest.fn();
+    useWalletFundPromptStore.setState({
+      prompt: {
+        title: 'Resume card payment?',
+        message: 'An earlier card payment is saved.',
+        confirmLabel: 'Resume',
+        scope: ':merchant-1',
+        resolve,
+      },
+    });
+    renderModal(false, '/imei-check');
+
+    // Act
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+
+    // Assert: settled as declined, so the funding can finish.
+    expect(resolve).toHaveBeenCalledWith(false);
+    expect(useWalletFundPromptStore.getState().prompt).toBeNull();
   });
 });

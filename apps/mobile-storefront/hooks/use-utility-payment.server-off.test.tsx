@@ -407,3 +407,57 @@ describe('bugfix: utility submit treats a stale PiggyVest cache as store credit 
     expect(verdict.walletIsStoreCredit).toBe(false);
   });
 });
+
+describe('bugfix: PiggyVest re-enabled before the cached ruling-out expired', () => {
+  afterEach(() => {
+    clearObservedPiggyvestPrimaryCapability();
+    mockCapability = null;
+  });
+
+  it('holds bank transfers when the live wallet is PiggyVest under a cached ruling-out', () => {
+    // Arrange: cache still says ruled out; the direct wallet read already
+    // returns a fresh PiggyVest balance.
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: true },
+    });
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0, primary_balance_kobo: 500_000 } },
+      getWalletVerdict: () => ({
+        walletIsStoreCredit: true,
+        walletPrimaryUnknown: false,
+      }),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    // Act
+    const verdict = result.current.getWalletVerdict?.();
+
+    // Assert: never the legacy bank-transfer prompt into savings.
+    expect(verdict).toEqual({
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: true,
+    });
+  });
+
+  it("keeps today's legacy verdict for a ruled-out legacy wallet", () => {
+    observePiggyvestPrimaryCapability('merchant-1', false);
+    mockCapability = false;
+    mockWalletQuery = {
+      ...baseWalletQuery(),
+      data: { wallet: { balance: 0 } },
+      getWalletVerdict: () => ({
+        walletIsStoreCredit: false,
+        walletPrimaryUnknown: false,
+      }),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.getWalletVerdict?.()).toEqual({
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    });
+  });
+});

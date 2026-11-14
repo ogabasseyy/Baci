@@ -4,6 +4,10 @@ import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 
 const mockGetCapability = jest.fn<(...args: unknown[]) => Promise<boolean>>();
 const mockReadObserved = jest.fn<(...args: unknown[]) => boolean | null>();
+// The account that started the top-up is still signed in.
+jest.mock('./is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('@/lib/piggyvest-primary-capability', () => {
   const actual = jest.requireActual(
     '@/lib/piggyvest-primary-capability'

@@ -64,7 +64,7 @@ describe('bugfix: store credit heading indented past the wallet cards', () => {
     expect(flat.paddingHorizontal).toBe(0);
   });
 
-  it('points to the PiggyVest wallet activity listed above', () => {
+  it('says the PiggyVest savings history is not shown here yet', () => {
     expect(STORE_CREDIT_SCOPE_COPY).toMatch(/older store credit/);
     expect(STORE_CREDIT_SCOPE_COPY).toMatch(/PiggyVest savings wallet/);
   });

@@ -14,7 +14,7 @@ describe('imeiCheckScreenActions', () => {
     imeiCheckScreenActions.fundWallet(999.2);
 
     expect(router.push).toHaveBeenCalledWith(
-      '/wallet?action=fund&requiredAmount=1000&returnTo=/imei-check'
+      '/wallet?action=fund&requiredAmount=1000&returnTo=%2Fimei-check'
     );
   });
 
@@ -48,10 +48,12 @@ describe('imeiCheckScreenActions.alertInvalidIdentifier', () => {
 
 describe('bugfix: IMEI shortfall below the card minimum', () => {
   it('prefills the card top-up minimum for a ₦50 store credit shortfall', () => {
-    imeiCheckScreenActions.fundWallet(50, true);
+    mockCapabilityNow = true;
+    imeiCheckScreenActions.fundWallet(50);
+    mockCapabilityNow = false;
 
     expect(router.push).toHaveBeenLastCalledWith(
-      '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
+      '/wallet?action=fund&requiredAmount=100&returnTo=%2Fimei-check'
     );
   });
 
@@ -59,7 +61,7 @@ describe('bugfix: IMEI shortfall below the card minimum', () => {
     imeiCheckScreenActions.fundWallet(50);
 
     expect(router.push).toHaveBeenLastCalledWith(
-      '/wallet?action=fund&requiredAmount=50&returnTo=/imei-check'
+      '/wallet?action=fund&requiredAmount=50&returnTo=%2Fimei-check'
     );
   });
 });
@@ -75,7 +77,40 @@ describe('bugfix: IMEI request settles after PiggyVest turned on', () => {
 
     // Assert: the wallet sheet will show the card-only store credit form.
     expect(router.push).toHaveBeenLastCalledWith(
-      '/wallet?action=fund&requiredAmount=100&returnTo=/imei-check'
+      '/wallet?action=fund&requiredAmount=100&returnTo=%2Fimei-check'
+    );
+  });
+});
+
+describe('bugfix: IMEI request settles after PiggyVest was switched off', () => {
+  it('keeps the exact shortfall when the live verdict rolled back mid-request', () => {
+    // Arrange: rendered as store credit (captured true); now ruled out.
+    mockCapabilityNow = false;
+
+    // Act
+    imeiCheckScreenActions.fundWallet(50);
+
+    // Assert: a legacy top-up of exactly what the check needs.
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=50&returnTo=%2Fimei-check'
+    );
+  });
+});
+
+describe('IMEI top-up while the Ogabassey verdict is still unknown', () => {
+  it('prefills the card minimum, matching the card-only store credit sheet it opens', () => {
+    // Arrange: no verdict yet at the pilot. The Add money sheet treats this
+    // purchase return as card-only store credit (never a bank transfer that
+    // could land in PiggyVest savings), so the amount must meet its minimum.
+    mockCapabilityNow = null;
+
+    // Act
+    imeiCheckScreenActions.fundWallet(50);
+    mockCapabilityNow = false;
+
+    // Assert
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/wallet?action=fund&requiredAmount=100&returnTo=%2Fimei-check'
     );
   });
 });

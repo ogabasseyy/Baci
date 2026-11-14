@@ -36,6 +36,8 @@ jest.mock('expo-router', () => ({
   Stack: {
     Screen: () => null,
   },
+  // The wallet PIN section refreshes when settings regains focus.
+  useNavigation: () => ({ addListener: () => () => undefined }),
 }));
 
 jest.mock('react-native-reanimated', () => {
@@ -131,6 +133,14 @@ describe('SettingsScreen', () => {
     });
     expect(screen.getByText('APPEARANCE')).toBeOnTheScreen();
     expect(screen.getByText('NOTIFICATIONS')).toBeOnTheScreen();
+  });
+
+  it('spaces the version footer away from the last settings card', () => {
+    render(<SettingsScreen />);
+
+    expect(screen.getByText(/v2\.4\.1$/)).toHaveStyle({
+      marginTop: SPACING.lg,
+    });
   });
 
   it('updates the appearance mode when a segment is pressed', () => {

@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import { formatNgnCurrency } from './format-ngn-currency';
 import { navigateToStoreCreditTopUp } from './navigate-to-store-credit-top-up';
 import type { WalletReturnHref } from './sanitize-wallet-return-to';
 import { WALLET_TOP_UP_MIN_AMOUNT } from './wallet-top-up-constants';
@@ -34,9 +35,11 @@ export function promptPiggyvestUtilityShortfall({
     // Card top-ups have a minimum, so quote what the sheet will prefill.
     const topUp = Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall));
     const message =
-      `This costs ₦${amount.toLocaleString()} and you have ` +
-      `₦${balance.toLocaleString()} store credit. Your savings wallet ` +
-      `can’t pay for this yet, so add ₦${topUp.toLocaleString()} ` +
+      // Shared NGN formatter (Muse): same grouping and kobo rules as the
+      // sheet prefill, whatever the device locale.
+      `This costs ${formatNgnCurrency(amount)} and you have ` +
+      `${formatNgnCurrency(balance)} store credit. Your savings wallet ` +
+      `can’t pay for this yet, so add ${formatNgnCurrency(topUp)} ` +
       'store credit by card.';
     Alert.alert(
       'Not enough store credit',

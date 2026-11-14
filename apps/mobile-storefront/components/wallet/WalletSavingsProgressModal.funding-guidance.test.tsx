@@ -74,7 +74,7 @@ describe('WalletSavingsProgressModal funding guidance', () => {
     );
 
     // Nothing saved yet: no progress card, just the device and funding.
-    expect(screen.queryByText('YOUR PROGRESS')).toBeNull();
+    expect(screen.queryByText('Your progress')).toBeNull();
     const condition = screen.getByLabelText('Device condition: New');
     expect(StyleSheet.flatten(condition.props.style)).toEqual(
       expect.objectContaining({

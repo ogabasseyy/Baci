@@ -7,7 +7,11 @@ import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.mock('./savings/savings-notice', () => {
   const notifySavings = jest.fn();
-  return { notifySavings, savingsNotifier: () => notifySavings };
+  return {
+    clearSavingsNotice: jest.fn(),
+    notifySavings,
+    savingsNotifier: () => notifySavings,
+  };
 });
 
 const goal: WalletActiveSavingsGoal = {
@@ -48,6 +52,29 @@ describe('buildSavingsSuccessMessage', () => {
         "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!",
       title: 'Savings updated',
     });
+  });
+
+  it('celebrates when the confirmed balance reaches the target', () => {
+    const result = buildSavingsSuccessMessage({
+      amount: 4500,
+      goal,
+      goalCompleted: false,
+      refreshFailed: false,
+      savedAfter: 5000,
+    });
+    expect(result.title).toBe('Goal reached! 🎉');
+  });
+
+  it('never says keep it going when the top-up may have finished the goal', () => {
+    const result = buildSavingsSuccessMessage({
+      amount: 4500,
+      goal,
+      goalCompleted: false,
+      mayHaveCompleted: true,
+      refreshFailed: false,
+    });
+    expect(result.message).toBe('Nice! ₦4,500 added to your iPhone 13.');
+    expect(result.message).not.toContain('Keep it going');
   });
 
   it('celebrates a completed goal', () => {

@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { useRef } from 'react';
 import {
   type LayoutChangeEvent,
   StatusBar,
@@ -88,6 +89,9 @@ export function HomeScreenView({
   shouldRenderDecorations,
   showSearchMinLengthHint,
 }: HomeScreenViewProps) {
+  const searchFocusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
   const colorScheme = useColorScheme();
   useHomeNavigationBarStyle(colorScheme, !isConfigLoading);
 
@@ -166,6 +170,7 @@ export function HomeScreenView({
             showSearch
             onSearchPress={onSearch}
             isSearchActive={searchVisible}
+            searchFocusTimer={searchFocusTimer}
             searchQuery={searchQuery}
             onSearchQueryChange={onSearchQueryChange}
             onSearchSubmit={onSearchSubmit}
@@ -218,6 +223,7 @@ export function HomeScreenView({
         onSeeAllResults={onSeeAllResults}
         showMinLengthHint={showSearchMinLengthHint}
         hideInput={true}
+        onProductSelectionStart={() => clearTimeout(searchFocusTimer.current)}
       />
     </View>
   );

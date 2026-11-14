@@ -141,6 +141,23 @@ describe('Complete goal inside the savings sheet, server off', () => {
     expect(screen.queryByText(/fully saved/)).toBeNull();
   });
 
+  it('does not celebrate when the saved principal is unknown', () => {
+    const { principal_amount: _p, ...noSplit } = goal;
+    render(
+      <GoalCompleteStep
+        colors={Colors.light}
+        flow={makeFlow()}
+        goal={{ ...noSplit, current_amount: 790000 }}
+        onDone={jest.fn()}
+        onNotNow={jest.fn()}
+        onSignIn={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByRole('header', { name: 'Your plan is ready' })
+    ).toBeTruthy();
+  });
+
   it('starts the PIN-protected complete, or steps back with Not now', () => {
     const flow = makeFlow();
     const handlers = {
@@ -183,6 +200,23 @@ describe('Complete goal inside the savings sheet, server off', () => {
         <GoalCompleteStep
           colors={Colors.light}
           flow={makeFlow('submitting')}
+          goal={goal}
+          onDone={jest.fn()}
+          onNotNow={jest.fn()}
+          onSignIn={jest.fn()}
+        />
+      </SavingsSheetLockContext.Provider>
+    );
+    expect(setLocked).toHaveBeenLastCalledWith(true);
+  });
+
+  it('keeps the sheet open while the first request is out', () => {
+    const setLocked = jest.fn();
+    render(
+      <SavingsSheetLockContext.Provider value={setLocked}>
+        <GoalCompleteStep
+          colors={Colors.light}
+          flow={makeFlow('issuing')}
           goal={goal}
           onDone={jest.fn()}
           onNotNow={jest.fn()}

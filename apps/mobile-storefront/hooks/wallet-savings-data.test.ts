@@ -434,4 +434,15 @@ describe('wallet savings data helpers', () => {
       })
     );
   });
+
+  it('carries the plan creation time when the row has one', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, created_at: '2026-11-12T08:00:00Z' },
+      })
+    ).toMatchObject({ created_at: '2026-11-12T08:00:00Z' });
+    expect(toActiveSavingsGoal({ goal: activeGoal })).not.toHaveProperty(
+      'created_at'
+    );
+  });
 });

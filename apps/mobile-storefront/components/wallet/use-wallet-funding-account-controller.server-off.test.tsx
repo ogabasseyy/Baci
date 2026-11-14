@@ -54,3 +54,40 @@ describe('bugfix: pilot rollback kept routing account creation to PiggyVest', ()
     expect(setShowFundPanel).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: account creation reopened PiggyVest setup after the rollback expired', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('neither opens PiggyVest setup nor provisions Paystack until a fresh verdict', async () => {
+    // Arrange: rolled back, then the 60-second ruling-out expires.
+    jest.useFakeTimers();
+    observePiggyvestPrimaryCapability(PILOT, false);
+    jest.advanceTimersByTime(61_000);
+    const setShowFundPanel = jest.fn();
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController({
+        activeMerchantId: PILOT,
+        createFundingAccount: jest.fn(async () => ({ account: null })),
+        customerPhone: '08012345678',
+        isPaymentSettingsError: false,
+        isPaymentSettingsPending: false,
+        paymentSettings: {
+          wallet_paystack_dva_enabled: true,
+        } as PaymentSettings,
+        setShowFundPanel,
+        updateProfile: jest.fn(async () => ({ success: true })),
+      })
+    );
+
+    // Act
+    await act(async () => {
+      await result.current.onCreateFundingAccount();
+    });
+
+    // Assert: still checking: no PiggyVest panel and no Paystack account.
+    expect(setShowFundPanel).not.toHaveBeenCalled();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});

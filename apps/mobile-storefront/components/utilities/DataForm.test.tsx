@@ -196,15 +196,14 @@ describe('DataForm', () => {
     expect(onSelectRecentRecipient).toHaveBeenCalledWith(recentRecipient);
   });
 
-  it('shows validation feedback when required data purchase fields are missing', () => {
+  it('keeps Pay disabled until a data bundle is chosen', () => {
     render(<DataForm onSuccess={jest.fn()} />);
 
-    fireEvent.press(screen.getByText('Pay ₦0'));
+    const payButton = screen.getByRole('button', { name: 'Pay ₦0' });
+    expect(payButton).toBeDisabled();
+    fireEvent.press(payButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Missing Information',
-      'Please enter a phone number and choose a data bundle.'
-    );
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
   it('shows loading state from the biller fetch', () => {
@@ -320,12 +319,8 @@ describe('DataForm', () => {
 
     fireEvent.changeText(screen.getByLabelText('Phone Number'), '08031234567');
     fireEvent.press(screen.getByText('MTN'));
-    fireEvent.press(screen.getByText('Pay ₦0'));
-
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Missing Information',
-      'Please enter a phone number and choose a data bundle.'
-    );
+    // A network with nested packages has no amount until a package is picked.
+    expect(screen.getByRole('button', { name: 'Pay ₦0' })).toBeDisabled();
 
     fireEvent.press(screen.getByLabelText('MTN 3.5GB Monthly - ₦3,500'));
     fireEvent.press(screen.getByText('Pay ₦3,500'));

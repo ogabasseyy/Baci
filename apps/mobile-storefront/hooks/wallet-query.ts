@@ -47,6 +47,8 @@ export interface WalletSavingsVariantResolutionOption {
 export interface WalletActiveSavingsGoal {
   contribution_amount: number;
   contribution_frequency: 'daily' | 'weekly' | 'monthly';
+  /** When the plan was created; its savings wallet setup starts then. */
+  created_at?: string;
   current_amount: number;
   id: string;
   maturity_date: string;

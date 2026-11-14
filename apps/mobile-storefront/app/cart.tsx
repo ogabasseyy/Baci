@@ -201,6 +201,7 @@ export default function CartScreen({
         colorScheme={colorScheme}
         colors={colors}
         isRetrying={isRetryingCartLoad}
+        onBack={handleReturnHome}
         onRetry={handleRetryCartLoad}
         onStartShopping={onStartShopping}
       />
@@ -214,6 +215,7 @@ export default function CartScreen({
       <CartEmptyState
         colorScheme={colorScheme}
         colors={colors}
+        onBack={handleReturnHome}
         onRetry={handleRetryCartLoad}
         onStartShopping={onStartShopping}
       />

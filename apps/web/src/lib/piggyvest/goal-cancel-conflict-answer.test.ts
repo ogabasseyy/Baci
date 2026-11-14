@@ -25,6 +25,15 @@ it('bugfix: names three or more rows too', () => {
   });
 });
 
+it('bugfix: reads upper-case ids and names them lower-case', () => {
+  expect(
+    readConflictAnswer(`conflict:${a.toUpperCase()},${b.toUpperCase()}`)
+  ).toEqual({
+    result: 'conflict',
+    reviewedIds: [a, b],
+  });
+});
+
 it.each([
   'confirmed',
   'conflict',

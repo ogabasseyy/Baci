@@ -1,3 +1,8 @@
+// The PiggyVest store's in-sheet notices are scoped to the signed-in
+// account; this test's auth store has no getState.
+jest.mock('@/components/wallet/savings/current-savings-notice-scope', () => ({
+  currentSavingsNoticeScope: () => 'user-1:merchant-1',
+}));
 jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
@@ -265,6 +270,7 @@ jest.mock('expo-router', () => ({
     Screen: () => null,
   },
   useLocalSearchParams: () => mockSearchParams,
+  useNavigation: () => ({ addListener: () => () => undefined }),
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -335,6 +341,10 @@ jest.mock('@/services/push-notifications', () => ({
     mockScheduleLocalNotification(...args),
 }));
 
+// The account that started a top-up is still signed in.
+jest.mock('@/components/wallet/is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (
     selector: (state: {
@@ -998,6 +1008,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1015,6 +1026,7 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -1400,8 +1412,13 @@ describe('WalletScreen', () => {
         variantId: 'variant-256',
       });
       expect(mockRefetch).toHaveBeenCalled();
-      // The savings sheet shows the new phone; no notice on top of it.
-      expect(noticeSpy).not.toHaveBeenCalled();
+      // Only the calm inline confirmation, never an error on top of it.
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        'Phone changed',
+        expect.stringContaining('Your savings now go towards'),
+        'success'
+      );
     } finally {
       noticeSpy.mockClear();
     }
@@ -1593,8 +1610,13 @@ describe('WalletScreen', () => {
         })
       );
       expect(mockRefetch).toHaveBeenCalled();
-      // The savings sheet shows the new phone; no notice on top of it.
-      expect(noticeSpy).not.toHaveBeenCalled();
+      // Only the calm inline confirmation, never an error on top of it.
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        'Phone changed',
+        expect.stringContaining('Your savings now go towards'),
+        'success'
+      );
     } finally {
       noticeSpy.mockClear();
     }
@@ -1622,6 +1644,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1643,6 +1666,7 @@ describe('WalletScreen', () => {
         merchantSlug: 'ogabassey',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(pushArg.params).not.toHaveProperty('merchantId');
@@ -1659,6 +1683,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 2500,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',
@@ -1680,6 +1705,7 @@ describe('WalletScreen', () => {
         merchantId: 'merchant-1',
         paymentKind: 'wallet',
         reference: 'WAL-123',
+        userId: 'user-1',
       },
     });
     expect(pushArg.params).not.toHaveProperty('merchantSlug');
@@ -1710,6 +1736,7 @@ describe('WalletScreen', () => {
 
     await waitFor(() => {
       expect(mockInitializeWalletTopUp).toHaveBeenCalledWith({
+        expectedUserId: 'user-1',
         amount: 1000,
         customerName: 'Ada Lovelace',
         customerPhone: '08012345678',

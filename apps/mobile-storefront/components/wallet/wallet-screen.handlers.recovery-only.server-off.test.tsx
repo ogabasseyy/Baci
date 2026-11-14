@@ -5,8 +5,18 @@ import { fundWallet } from './wallet-screen.handlers';
 const mockReadPending = jest.fn<() => Promise<unknown>>();
 const mockStart = jest.fn<() => Promise<unknown>>();
 const mockRecover = jest.fn<() => Promise<unknown>>();
+// The account that started the top-up is still signed in.
+// The PiggyVest store's in-sheet notices are scoped to the signed-in
+// account; this test's auth store has no getState.
+jest.mock('./savings/current-savings-notice-scope', () => ({
+  currentSavingsNoticeScope: () => 'user-1:merchant-1',
+}));
+jest.mock('./is-same-signed-in-user', () => ({
+  isSameSignedInUser: () => true,
+}));
 jest.mock('@/lib/primary-wallet-card', () => ({
   createPrimaryWalletCardFundingClient: () => ({
+    peekRaw: async () => null,
     readPending: () => mockReadPending(),
     recover: () => mockRecover(),
     start: () => mockStart(),

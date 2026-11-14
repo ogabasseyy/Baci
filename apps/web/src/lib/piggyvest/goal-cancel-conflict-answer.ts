@@ -11,10 +11,10 @@ export function readConflictAnswer(result: unknown): {
 } {
   const named =
     typeof result === 'string'
-      ? /^conflict:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*)$/.exec(
+      ? /^conflict:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*)$/i.exec(
           result
         )
       : null;
   if (!named) return { result, reviewedIds: [] };
-  return { result: 'conflict', reviewedIds: named[1].split(',') };
+  return { result: 'conflict', reviewedIds: named[1].toLowerCase().split(',') };
 }

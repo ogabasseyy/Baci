@@ -24,3 +24,13 @@ describe('isWalletPurchaseReturnHref', () => {
     );
   });
 });
+
+describe('bugfix: abandoned-checkout top-up routed to PiggyVest savings', () => {
+  it('treats a checkout return as a store credit purchase', () => {
+    expect(isWalletPurchaseReturnHref('/checkout')).toBe(true);
+  });
+
+  it('does not match look-alike checkout paths', () => {
+    expect(isWalletPurchaseReturnHref('/checkouts')).toBe(false);
+  });
+});

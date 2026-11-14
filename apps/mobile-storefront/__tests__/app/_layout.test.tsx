@@ -1,31 +1,20 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
-import type React from 'react';
-import { AppState } from 'react-native';
-import {
-  getCrashBreadcrumbsForTest,
-  resetCrashDiagnosticsForTest,
-} from '@/lib/crash-diagnostics';
+import { afterEach, beforeEach, describe, expect, jest } from '@jest/globals';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
+import { createRootLayoutAuthState } from '@/test-support/root-layout-auth-state';
+import { registerRootLayoutIntroTests } from '@/test-support/root-layout-intro-test-cases';
 import {
   mockActivateDueSavingsReminderNotification,
   mockBuildReminderScope,
   mockCancelScopeSavingsReminders,
 } from '@/test-support/root-layout-reminder-mock';
+import { registerRootLayoutReminderTests } from '@/test-support/root-layout-reminder-test-cases';
+import { registerRootLayoutSplashContractTests } from '@/test-support/root-layout-splash-contract-test-cases';
+import { registerRootLayoutSplashRecoveryTests } from '@/test-support/root-layout-splash-recovery-test-cases';
 
+const mockHideSplash = jest.fn<(options: unknown) => Promise<void>>();
+const mockIsSplashVisible = jest.fn<() => boolean>();
+const mockWaitForIntro = jest.fn<() => Promise<boolean>>();
 const mockInitializeStorage = jest.fn<() => Promise<void>>();
 const mockInitializeAuth = jest.fn<() => Promise<void>>();
 const mockCleanup = jest.fn();
@@ -35,46 +24,38 @@ const mockInitializeAdTrackingForStartup = jest.fn<() => Promise<void>>();
 const mockUseAppTrackingTransparency = jest.fn();
 const mockRootLayoutNavMount = jest.fn();
 const mockRootLayoutNavUnmount = jest.fn();
+const mockUsePushNotifications = jest.fn();
+const mockVerifyBenchmarkTelemetry = jest.fn<() => Promise<void>>();
+const mockMarkStartupTiming = jest.fn();
+let mockFontsLoaded = true;
 let mockTrackingAuthorizationSettled = true;
-const mockAuthState = {
-  cleanup: mockCleanup,
-  initialize: mockInitializeAuth,
-  isInitialized: true,
-  merchantId: null as string | null,
-  user: null as { id: string } | null,
-};
+let mockAutoLayout = true;
+let mockResolveSplashHide: () => void = () => {};
+
+async function finishNativeSplash() {
+  await waitFor(() => expect(mockHideSplash).toHaveBeenCalled());
+  await act(async () => mockResolveSplashHide());
+}
+const mockAuthState = createRootLayoutAuthState(
+  mockCleanup,
+  mockInitializeAuth
+);
 
 jest.mock('../../global.css', () => ({}));
+jest.mock('@/lib/startup-timing', () => ({
+  markStartupTiming: (...args: unknown[]) => mockMarkStartupTiming(...args),
+}));
 
 jest.mock('expo-font', () => ({
-  useFonts: () => [true, null],
+  useFonts: () => [mockFontsLoaded, null],
 }));
 
-jest.mock('expo-splash-screen', () => ({
-  hideAsync: jest.fn(() => Promise.resolve()),
-  preventAutoHideAsync: jest.fn(() => Promise.resolve()),
-}));
-
-jest.mock('@/components/AnimatedSplash', () => ({
-  AnimatedSplash: ({
-    children,
-    isVisible = true,
-    onAnimationEnd,
-  }: {
-    children: React.ReactNode;
-    isVisible?: boolean;
-    onAnimationEnd: () => void;
-  }) => {
-    const { Pressable, View } =
-      jest.requireActual<typeof import('react-native')>('react-native');
-    return (
-      <View testID="animated-splash-wrapper">
-        {children}
-        {isVisible ? (
-          <Pressable testID="animated-splash" onPress={onAnimationEnd} />
-        ) : null}
-      </View>
-    );
+jest.mock('react-native-splash-motion', () => ({
+  __esModule: true,
+  default: {
+    hide: (options: unknown) => mockHideSplash(options),
+    isVisible: () => mockIsSplashVisible(),
+    waitForIntro: () => mockWaitForIntro(),
   },
 }));
 
@@ -83,16 +64,22 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
     adTrackingReady,
     persistenceEnabled,
     shouldResumeNavigation,
+    onFirstLayout,
   }: {
     adTrackingReady?: boolean;
     persistenceEnabled: boolean;
     shouldResumeNavigation?: boolean;
+    onFirstLayout?: () => void;
   }) => {
     const { useEffect } = jest.requireActual<typeof import('react')>('react');
+    const { act } = jest.requireActual<
+      typeof import('@testing-library/react-native')
+    >('@testing-library/react-native');
     const { Text } =
       jest.requireActual<typeof import('react-native')>('react-native');
     useEffect(() => {
       mockRootLayoutNavMount();
+      if (mockAutoLayout) act(() => onFirstLayout?.());
       return () => {
         mockRootLayoutNavUnmount();
       };
@@ -100,6 +87,7 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
 
     return (
       <Text
+        onLayout={onFirstLayout}
         accessibilityLabel="Store navigation"
         accessibilityRole="text"
         testID="root-layout-nav"
@@ -112,17 +100,40 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
   },
 }));
 
+jest.mock(
+  '@/components/navigation/StartupRecoveryScreen',
+  () => ({
+    StartupRecoveryScreen: ({ onLayout }: { onLayout?: () => void }) => {
+      const { Text } =
+        jest.requireActual<typeof import('react-native')>('react-native');
+      return (
+        <Text testID="startup-recovery-screen" onLayout={onLayout}>
+          Startup recovery
+        </Text>
+      );
+    },
+  }),
+  { virtual: true }
+);
+
+jest.mock('@/lib/verify-benchmark-telemetry', () => ({
+  verifyBenchmarkTelemetry: () => mockVerifyBenchmarkTelemetry(),
+}));
+
 jest.mock('@/components/ErrorBoundary', () => ({
   ErrorFallback: () => null,
 }));
 
 jest.mock('@/hooks/use-push-notifications', () => ({
-  usePushNotifications: () => ({
-    isLoading: false,
-    isRegistered: false,
-    register: mockRegisterPushNotifications,
-    registeredUserId: null,
-  }),
+  usePushNotifications: (options: unknown) => {
+    mockUsePushNotifications(options);
+    return {
+      isLoading: false,
+      isRegistered: false,
+      register: mockRegisterPushNotifications,
+      registeredUserId: null,
+    };
+  },
 }));
 
 jest.mock('@/hooks/use-app-tracking-transparency', () => ({
@@ -187,41 +198,6 @@ jest.mock('@/stores/auth-store', () => ({
 const { default: RootLayout, resetRootLayoutBootstrapStateForTest } =
   require('@/app/_layout') as typeof import('@/app/_layout');
 
-// Same pattern as memory-warning-diagnostics.test.ts: the RN preset's
-// AppState.addEventListener does not return a working subscription here,
-// so install a per-test mock (restored afterwards) instead of spying.
-function mockAppStateListener() {
-  const original = AppState.addEventListener;
-  const addEventListener = jest.fn(
-    (_event: string, _handler: (state: string) => void) => ({
-      remove: jest.fn(),
-    })
-  );
-  Object.defineProperty(AppState, 'addEventListener', {
-    configurable: true,
-    value: addEventListener,
-  });
-  return {
-    addEventListener,
-    restoreAppState: () => {
-      Object.defineProperty(AppState, 'addEventListener', {
-        configurable: true,
-        value: original,
-      });
-    },
-  };
-}
-
-function latestChangeHandler(
-  addEventListener: ReturnType<typeof mockAppStateListener>['addEventListener']
-) {
-  const handlers = addEventListener.mock.calls
-    .filter(([event]) => event === 'change')
-    .map(([, handler]) => handler);
-  expect(handlers.length).toBeGreaterThan(0);
-  return handlers[handlers.length - 1];
-}
-
 describe('RootLayout storage boot gate', () => {
   beforeEach(() => {
     resetRootLayoutBootstrapStateForTest();
@@ -229,10 +205,21 @@ describe('RootLayout storage boot gate', () => {
     mockActivateDueSavingsReminderNotification.mockResolvedValue(null);
     mockCancelScopeSavingsReminders.mockResolvedValue(false);
     jest.useFakeTimers();
+    mockWaitForIntro.mockResolvedValue(true);
+    mockHideSplash.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          mockResolveSplashHide = resolve;
+        })
+    );
+    mockIsSplashVisible.mockReturnValue(false);
     mockInitializeAuth.mockResolvedValue(undefined);
     mockInitializeAdTrackingForStartup.mockResolvedValue(undefined);
     mockPrefetchStartupStorefrontData.mockResolvedValue(undefined);
     mockTrackingAuthorizationSettled = true;
+    mockAutoLayout = true;
+    mockFontsLoaded = true;
+    mockVerifyBenchmarkTelemetry.mockResolvedValue(undefined);
     mockAuthState.isInitialized = true;
     mockAuthState.merchantId = null;
     mockAuthState.user = null;
@@ -242,92 +229,52 @@ describe('RootLayout storage boot gate', () => {
     jest.useRealTimers();
   });
 
-  it('does not mount persisted navigation when the splash timeout fires before storage is ready', () => {
-    mockInitializeStorage.mockReturnValue(new Promise(() => undefined));
-
-    render(<RootLayout />);
-
-    expect(mockPrefetchStartupStorefrontData).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('animated-splash')).toBeOnTheScreen();
-    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
-
-    act(() => {
-      jest.advanceTimersByTime(8000);
-    });
-
-    expect(screen.queryByTestId('animated-splash')).toBeNull();
-    expect(screen.queryByTestId('root-layout-nav')).toBeNull();
+  registerRootLayoutIntroTests({
+    renderRoot: () => {
+      render(<RootLayout />);
+    },
+    mockWaitForIntro,
+    mockInitializeStorage,
+    mockPrefetchStartupStorefrontData,
+    mockRootLayoutNavMount,
+    mockHideSplash,
+    setFontsLoaded: (loaded) => {
+      mockFontsLoaded = loaded;
+    },
   });
 
-  it('keeps the global auth subscription alive when the root view unmounts', async () => {
-    mockInitializeStorage.mockResolvedValue(undefined);
-
-    const { unmount } = render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(mockInitializeStorage).toHaveBeenCalledTimes(1);
-    });
-
-    unmount();
-
-    expect(mockCleanup).not.toHaveBeenCalled();
+  registerRootLayoutSplashRecoveryTests({
+    RootLayout,
+    authState: mockAuthState,
+    initializeStorage: mockInitializeStorage,
+    prefetchStartupStorefrontData: mockPrefetchStartupStorefrontData,
+    hideSplash: mockHideSplash,
+    isSplashVisible: mockIsSplashVisible,
+    useAppTrackingTransparency: mockUseAppTrackingTransparency,
+    usePushNotifications: mockUsePushNotifications,
+    verifyBenchmarkTelemetry: mockVerifyBenchmarkTelemetry,
+    markStartupTiming: mockMarkStartupTiming,
+    rootLayoutNavMount: mockRootLayoutNavMount,
+    rootLayoutNavUnmount: mockRootLayoutNavUnmount,
+    setAutoLayout: (enabled) => {
+      mockAutoLayout = enabled;
+    },
+    finishNativeSplash,
   });
 
-  it('keeps the navigator mounted when the startup splash finishes', async () => {
-    mockInitializeStorage.mockResolvedValue(undefined);
-
-    render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
-      );
-    });
-    expect(mockRootLayoutNavMount).toHaveBeenCalledTimes(1);
-
-    fireEvent.press(screen.getByTestId('animated-splash'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('animated-splash')).toBeNull();
-    });
-    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:true;persistence:true;resume:true'
-    );
-    expect(mockRootLayoutNavMount).toHaveBeenCalledTimes(1);
-    expect(mockRootLayoutNavUnmount).not.toHaveBeenCalled();
-  });
-
-  it('keeps route navigation mounted while startup ad tracking finishes', async () => {
-    let resolveAdTrackingStartup: () => void = () => {};
-    mockInitializeStorage.mockResolvedValue(undefined);
-    mockInitializeAdTrackingForStartup.mockReturnValue(
-      new Promise<void>((resolve) => {
-        resolveAdTrackingStartup = resolve;
-      })
-    );
-
-    render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(mockInitializeAdTrackingForStartup).toHaveBeenCalledTimes(1);
-    });
-    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:false;persistence:false;resume:false'
-    );
-
-    await act(async () => {
-      resolveAdTrackingStartup();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
-      );
-    });
+  registerRootLayoutSplashContractTests({
+    RootLayout,
+    authState: mockAuthState,
+    initializeStorage: mockInitializeStorage,
+    hideSplash: mockHideSplash,
+    waitForIntro: mockWaitForIntro,
+    usePushNotifications: mockUsePushNotifications,
+    finishNativeSplash,
   });
 
   registerRootLayoutAttTests({
     RootLayout,
+    cleanupAuth: mockCleanup,
     authState: mockAuthState,
     initializeStorage: mockInitializeStorage,
     initializeAdTrackingForStartup: mockInitializeAdTrackingForStartup,
@@ -335,147 +282,17 @@ describe('RootLayout storage boot gate', () => {
     activateDueSavingsReminderNotification:
       mockActivateDueSavingsReminderNotification,
     useAppTrackingTransparency: mockUseAppTrackingTransparency,
+    finishNativeSplash,
     setTrackingAuthorizationSettled: (settled) => {
       mockTrackingAuthorizationSettled = settled;
     },
   });
 
-  it('does not replay the animated splash after a completed boot remount', async () => {
-    mockInitializeStorage.mockResolvedValue(undefined);
-
-    const firstRender = render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:false;resume:false'
-      );
-    });
-
-    fireEvent.press(screen.getByTestId('animated-splash'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('animated-splash')).toBeNull();
-    });
-    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-      'adTracking:true;persistence:true;resume:true'
-    );
-
-    firstRender.unmount();
-    render(<RootLayout />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
-        'adTracking:true;persistence:true;resume:true'
-      );
-    });
-    expect(screen.queryByTestId('animated-splash')).toBeNull();
-  });
-
-  it('activates due savings reminders when the app foregrounds', async () => {
-    mockAuthState.user = { id: 'customer-1' };
-    mockInitializeStorage.mockResolvedValue(undefined);
-    const { addEventListener, restoreAppState } = mockAppStateListener();
-
-    try {
-      render(<RootLayout />);
-      await waitFor(() => {
-        expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
-      });
-
-      const onChange = latestChangeHandler(addEventListener);
-      const before =
-        mockActivateDueSavingsReminderNotification.mock.calls.length;
-      act(() => {
-        onChange('active');
-      });
-      expect(mockActivateDueSavingsReminderNotification.mock.calls.length).toBe(
-        before + 1
-      );
-      act(() => {
-        onChange('background');
-      });
-      expect(mockActivateDueSavingsReminderNotification.mock.calls.length).toBe(
-        before + 1
-      );
-    } finally {
-      restoreAppState();
-    }
-  });
-
-  it('skips foreground reminder activation while logged out', async () => {
-    mockAuthState.user = null;
-    mockInitializeStorage.mockResolvedValue(undefined);
-    const { addEventListener, restoreAppState } = mockAppStateListener();
-
-    try {
-      render(<RootLayout />);
-      await waitFor(() => {
-        expect(addEventListener).toHaveBeenCalled();
-      });
-
-      mockActivateDueSavingsReminderNotification.mockClear();
-      act(() => {
-        latestChangeHandler(addEventListener)('active');
-      });
-      expect(mockActivateDueSavingsReminderNotification).not.toHaveBeenCalled();
-    } finally {
-      restoreAppState();
-    }
-  });
-
-  it('records a breadcrumb instead of throwing when foreground activation rejects', async () => {
-    mockAuthState.user = { id: 'customer-1' };
-    mockInitializeStorage.mockResolvedValue(undefined);
-    const { addEventListener, restoreAppState } = mockAppStateListener();
-
-    try {
-      render(<RootLayout />);
-      await waitFor(() => {
-        expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
-      });
-
-      // The boot effect already fired activation on mount; arm the
-      // rejection for the foreground call specifically.
-      mockActivateDueSavingsReminderNotification.mockClear();
-      mockActivateDueSavingsReminderNotification.mockRejectedValueOnce(
-        new Error('storage unavailable')
-      );
-      resetCrashDiagnosticsForTest();
-      await act(async () => {
-        latestChangeHandler(addEventListener)('active');
-        await Promise.resolve();
-      });
-
-      expect(
-        getCrashBreadcrumbsForTest().filter(
-          (crumb) =>
-            crumb.name === 'root_layout:savings_reminder_activation_failed'
-        )
-      ).toHaveLength(1);
-    } finally {
-      restoreAppState();
-    }
-  });
-
-  it('skips foreground reminder activation before boot is ready', async () => {
-    mockAuthState.user = { id: 'customer-1' };
-    mockAuthState.isInitialized = false;
-    mockInitializeStorage.mockResolvedValue(undefined);
-    const { addEventListener, restoreAppState } = mockAppStateListener();
-
-    try {
-      render(<RootLayout />);
-      await waitFor(() => {
-        expect(addEventListener).toHaveBeenCalled();
-      });
-
-      mockActivateDueSavingsReminderNotification.mockClear();
-      act(() => {
-        latestChangeHandler(addEventListener)('active');
-      });
-      expect(mockActivateDueSavingsReminderNotification).not.toHaveBeenCalled();
-    } finally {
-      restoreAppState();
-    }
+  registerRootLayoutReminderTests({
+    RootLayout,
+    authState: mockAuthState,
+    initializeStorage: mockInitializeStorage,
+    activateDueSavingsReminderNotification:
+      mockActivateDueSavingsReminderNotification,
   });
 });

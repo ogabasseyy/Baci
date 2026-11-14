@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import {
@@ -39,6 +40,7 @@ export function createWalletSavingsActions({
   savingsContributionAmount,
   walletBalance,
   startWalletTopUp,
+  submittingRef = { current: false },
   walletTopUp,
   setIsAddingSavingsContribution,
   setShowSavingsProgressModal,
@@ -67,6 +69,11 @@ export function createWalletSavingsActions({
   savingsContributionAmount: string;
   walletBalance: number;
   startWalletTopUp?: () => void;
+  /**
+   * True while this screen's own add is in flight: the operation id it just
+   * stored is not an earlier pending contribution (same scope as the id).
+   */
+  submittingRef?: { current: boolean };
   walletTopUp?: Pick<
     Parameters<typeof startSavingsWalletTopUp>[0],
     'customer' | 'user' | 'setIsFundPending'
@@ -134,7 +141,12 @@ export function createWalletSavingsActions({
   };
 
   const handleAddSavingsContribution = () => {
-    const isPrimary = isPiggyvestPrimaryMerchant(activeMerchantId);
+    // A live ruling-out picks legacy for a new contribution (Codex): the
+    // wallet shows legacy funds then, so the rail must match. A stored
+    // PiggyVest id is still kept, never moved (planWalletSavingsRail).
+    const isPrimary =
+      isPiggyvestPrimaryMerchant(activeMerchantId) &&
+      readPiggyvestCapabilityNow(activeMerchantId) !== false;
     const plan = planWalletSavingsRail({
       hasStoredId: idempotencyKeyRef.current !== null,
       isPrimary,
@@ -184,15 +196,20 @@ export function createWalletSavingsActions({
         },
       });
     }
-    // The server confirmed PiggyVest but the wallet shown is still the old
-    // one (Codex): the rail would debit an unseen PiggyVest balance against
-    // an amount checked on the legacy wallet. Hold a new contribution and
-    // reload. (A pilot with no verdict keeps its server-side fallback.)
+    // PiggyVest confirmed but not yet reclassified, or unknown after a
+    // ruling-out expired while the balance stays suppressed (Codex): the rail
+    // would debit an unseen PiggyVest balance against an amount checked on
+    // legacy funds. Hold a new contribution and reload. (A pilot with no
+    // verdict yet keeps its server-side fallback.)
+    const verdictNow = readPiggyvestCapabilityNow(activeMerchantId);
     if (
       plan.kind === 'submit' &&
       idempotencyKeyRef.current === null &&
       !primaryReady &&
-      readPiggyvestCapabilityNow(activeMerchantId) === true
+      (verdictNow === true ||
+        (plan.rail === 'primary' &&
+          !!activeMerchantId &&
+          wasPiggyvestLastRuledOut(activeMerchantId)))
     ) {
       savingsNotifier()(
         'Still checking',
@@ -246,7 +263,12 @@ export function createWalletSavingsActions({
       goal,
       rawAmount: savingsContributionAmount,
       refetchWallet,
-      setIsAddingSavingsContribution,
+      // Marked in the same call that re-renders the sheet, so the render that
+      // ends the add already knows whether its id is left unresolved.
+      setIsAddingSavingsContribution: (value: boolean) => {
+        submittingRef.current = value;
+        setIsAddingSavingsContribution(value);
+      },
       // An id bound to the legacy rail is validated against the legacy balance.
       walletBalance:
         rail === 'primary' ? walletBalance : (legacyBalance ?? walletBalance),
@@ -256,7 +278,8 @@ export function createWalletSavingsActions({
   return {
     hasPendingSavingsContribution:
       isPiggyvestPrimaryMerchant(activeMerchantId) &&
-      idempotencyKeyRef.current !== null,
+      idempotencyKeyRef.current !== null &&
+      !submittingRef.current,
     handleAddSavingsContribution,
     handleFundSavingsWallet,
     handleOpenSavings,

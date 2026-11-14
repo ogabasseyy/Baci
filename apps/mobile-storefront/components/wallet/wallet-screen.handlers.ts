@@ -1,22 +1,13 @@
-import { router } from 'expo-router';
 import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
-import { createLogger } from '@/lib/logger';
 import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-capability';
-import { initializeWalletTopUp } from '@/lib/wallet-top-up';
-import { trackError, trackEvent } from '@/services/analytics';
 import { walletOutcomeNotifier } from './fund/wallet-outcome-notifier';
 import {
   fundPrimaryWalletCard,
   NOTHING_TO_RECOVER,
 } from './fund-primary-wallet-card';
 import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
-import {
-  buildWalletTopUpGatewayParams,
-  getWalletCustomerName,
-  validateWalletTopUpAmount,
-} from './wallet-screen.helpers';
-
-const log = createLogger('Wallet');
+import { runExclusiveWalletFunding } from './run-exclusive-wallet-funding';
+import { startLegacyWalletTopUp } from './start-legacy-wallet-top-up';
 
 interface WalletHandlerCustomer {
   email?: string | null;
@@ -48,7 +39,12 @@ interface FundWalletParams {
 export { createWalletFundingAccount } from './create-wallet-funding-account';
 export { redeemWalletPoints } from './redeem-wallet-points';
 
-export async function fundWallet({
+export function fundWallet(params: FundWalletParams): Promise<void> {
+  const scope = `${params.activeMerchantId ?? ''}:${params.user?.id ?? ''}`;
+  return runExclusiveWalletFunding(scope, () => fundWalletOnce(params));
+}
+
+async function fundWalletOnce({
   activeMerchantId,
   activeMerchantSlug,
   customer,
@@ -116,66 +112,15 @@ export async function fundWallet({
         throw error;
     }
   }
-  const amount = Number(fundAmount);
-  const amountValidationError = validateWalletTopUpAmount(amount);
-  if (amountValidationError) {
-    notify(
-      {
-        title: 'Check the amount',
-        message: amountValidationError,
-        tone: 'warning',
-      },
-      { title: 'Invalid Amount', message: amountValidationError }
-    );
-    return;
-  }
-  setIsFundPending(true);
-  try {
-    const customerName = getWalletCustomerName(customer, user);
-    const result = await initializeWalletTopUp({
-      amount,
-      customerName,
-      customerPhone: customer?.phone,
-      merchantId: activeMerchantId,
-      merchantSlug: activeMerchantSlug,
-      // Persisted server-side so the wallet-credited push can deep-link the
-      // customer back to the interrupted purchase.
-      returnTo: walletReturnTo,
-    });
-    trackEvent('wallet_top_up_started', {
-      amount,
-      customer_id: customer?.id,
-      gateway: result.gateway,
-      merchant_id: activeMerchantId,
-      merchant_slug: activeMerchantSlug,
-    });
-    resetFundPanel();
-    router.push({
-      pathname: '/payment-gateway',
-      params: buildWalletTopUpGatewayParams({
-        activeMerchantId,
-        activeMerchantSlug,
-        amount,
-        result,
-        walletReturnTo,
-      }),
-    });
-  } catch (error) {
-    log.error('Wallet top-up initialization error:', error);
-    trackError(
-      'wallet_top_up_failed',
-      error instanceof Error ? error.message : 'Unknown error',
-      { amount, customer_id: customer?.id }
-    );
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Failed to start wallet top-up. Please try again.';
-    notify(
-      { title: 'Top-up didn’t start', message, tone: 'warning' },
-      { title: 'Top-up Failed', message }
-    );
-  } finally {
-    setIsFundPending(false);
-  }
+  await startLegacyWalletTopUp({
+    activeMerchantId,
+    activeMerchantSlug,
+    customer,
+    fundAmount,
+    resetFundPanel,
+    setIsFundPending,
+    user,
+    walletReturnTo,
+    notify,
+  });
 }

@@ -24,6 +24,7 @@ import {
 import { offlineQueue } from '@/lib/offline-queue';
 import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-order-handler';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
+import { shouldVerifyStartupTelemetry } from '@/lib/startup-telemetry-eligibility';
 import { markStartupTiming } from '@/lib/startup-timing';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
 import { verifyBenchmarkTelemetry } from '@/lib/verify-benchmark-telemetry';
@@ -109,8 +110,26 @@ export default function RootLayout() {
     navigationReady: !showSplash && loaded && isStorageReady && isInitialized,
   });
   useEffect(() => {
-    if (!showSplash) void verifyBenchmarkTelemetry();
-  }, [showSplash]);
+    if (
+      shouldVerifyStartupTelemetry({
+        appInitialized: isInitialized,
+        loaded,
+        nativeIntroSettled: shouldRenderApp,
+        showSplash,
+        storageReady: isStorageReady,
+        timedOut,
+      })
+    ) {
+      void verifyBenchmarkTelemetry();
+    }
+  }, [
+    showSplash,
+    timedOut,
+    shouldRenderApp,
+    loaded,
+    isInitialized,
+    isStorageReady,
+  ]);
   const { isTrackingAuthorizationSettled } = useAppTrackingTransparency({
     enabled: !showSplash && isInitialized && isStorageReady,
   });

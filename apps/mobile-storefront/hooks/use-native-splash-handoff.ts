@@ -100,7 +100,7 @@ export function useNativeSplashHandoff({
     if (!showSplash || !hideFailed) return;
     let active = true;
     recordCrashBreadcrumb('root_layout:native_splash_hide_recovery_requested');
-    hidePromiseRef.current = Promise.resolve()
+    const recoveryHidePromise = Promise.resolve()
       .then(() =>
         SplashMotion.hide({
           waitForLoop: false,
@@ -112,7 +112,7 @@ export function useNativeSplashHandoff({
         () => true,
         () => false
       );
-    void hidePromiseRef.current.then((hidden) => {
+    void recoveryHidePromise.then((hidden) => {
       if (!active) return;
       setRecoverySettled(true);
       if (hidden) {
@@ -122,7 +122,6 @@ export function useNativeSplashHandoff({
       } else {
         // Keep this as one bounded retry; a persistent native failure falls
         // through to StartupRecoveryScreen and the native watchdog.
-        hidePromiseRef.current = null;
         setNativeSplashVisible(readNativeSplashVisibility());
       }
     });

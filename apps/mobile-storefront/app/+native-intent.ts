@@ -52,11 +52,27 @@ export function redirectSystemPath({
   path: string;
   initial: boolean;
 }): string {
+  let normalizedPath = path;
   // A custom-scheme launcher root has no route. Query/fragment-only roots
   // still launch Home; a valid pairing link must include the /cart route.
   const launcherRoot = path.split(/[?#]/, 1)[0].toLowerCase();
   if (launcherRoot === 'ogabassey://' || launcherRoot === 'ogabassey:///')
     return '/';
+
+  // Android callers commonly encode the first route as the URL host
+  // (`ogabassey://cart`). Expo's native path parser moves that host into the
+  // route path, so normalize it here before applying the storefront guards.
+  try {
+    const customSchemeUrl = new URL(path);
+    if (
+      customSchemeUrl.protocol.toLowerCase() === 'ogabassey:' &&
+      customSchemeUrl.host
+    ) {
+      normalizedPath = `/${customSchemeUrl.host}${customSchemeUrl.pathname}${customSchemeUrl.search}${customSchemeUrl.hash}`;
+    }
+  } catch {
+    // Keep the original path; captureCartPairingLink handles malformed input.
+  }
 
   let apiHostname = '';
   try {
@@ -68,7 +84,7 @@ export function redirectSystemPath({
   // substitute the production root for an underivable staging root.
   const platformRootDomain =
     derivePlatformRootDomain(apiHostname, EXPO_PUBLIC_ROOT_DOMAIN) ?? '';
-  return captureCartPairingLink(path, {
+  return captureCartPairingLink(normalizedPath, {
     merchantId: CONFIG.MERCHANT_ID,
     merchantSlug: CONFIG.MERCHANT_SLUG,
     merchantDomain: CONFIG.MERCHANT_DOMAIN,

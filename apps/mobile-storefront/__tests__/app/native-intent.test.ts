@@ -80,6 +80,13 @@ describe('redirectSystemPath', () => {
     );
   });
 
+  it('normalizes a custom-scheme host into the storefront route path', () => {
+    expect(
+      redirectSystemPath({ path: 'ogabassey://cart', initial: true })
+    ).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

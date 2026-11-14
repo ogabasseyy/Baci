@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   classifyBookingFailure,
+  ProviderBookingTimeoutError,
   recordOrderShipmentBookingFailure,
   toBookingFailureResponseError,
 } from './order-shipment-booking-failure';
@@ -194,5 +195,23 @@ describe('bugfix: wrapped timeouts and long codes', () => {
   it('shortens a very long error code to fit the table limit', () => {
     const long = new OrderShipmentBookingError('x', 400, 'C'.repeat(100));
     expect(classifyBookingFailure(long).code).toHaveLength(64);
+  });
+});
+
+describe('bugfix: typed timeout and booked-but-not-saved', () => {
+  it('recognises the typed timeout whatever its message says', () => {
+    expect(
+      classifyBookingFailure(new ProviderBookingTimeoutError('anything'))
+        .outcome
+    ).toBe('provider_unconfirmed');
+  });
+
+  it('records a booked parcel that failed to save as booked_not_saved', () => {
+    const error = new OrderShipmentBookingError(
+      'x',
+      500,
+      'BOOKED_SHIPMENT_NOT_SAVED'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('booked_not_saved');
   });
 });

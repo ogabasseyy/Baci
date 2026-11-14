@@ -8,6 +8,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import {
+  BOOKED_SHIPMENT_NOT_SAVED_CODE,
   recordOrderShipmentBookingFailure,
   toBookingFailureResponseError,
 } from '@/lib/shipping/order-shipment-booking-failure';
@@ -181,13 +182,14 @@ export async function POST(request: NextRequest) {
         new OrderShipmentBookingError(
           `Provider booked ${persisted.trackingNumber ?? 'a shipment'} but saving it failed: ${persisted.error}`,
           persisted.status,
-          'BOOKED_SHIPMENT_NOT_SAVED'
+          BOOKED_SHIPMENT_NOT_SAVED_CODE
         ),
         true
       );
       return NextResponse.json(
         {
           error: persisted.error,
+          code: BOOKED_SHIPMENT_NOT_SAVED_CODE,
           trackingNumber: persisted.trackingNumber,
         },
         { status: persisted.status }

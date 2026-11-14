@@ -6,6 +6,7 @@ export type BookingFailureOutcome =
   | 'not_submitted'
   | 'provider_unconfirmed'
   | 'rejected'
+  | 'booked_not_saved'
   | 'unexpected';
 
 export type ClassifiedBookingFailure = {
@@ -34,6 +35,16 @@ const NEVER_REACHED_CODES = new Set([
 ]);
 
 /** True when the connection to the provider never opened, so nothing was booked. */
+/** Thrown by the GIG clients when their own booking deadline passes. */
+export class ProviderBookingTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderBookingTimeoutError';
+  }
+}
+
+export const BOOKED_SHIPMENT_NOT_SAVED_CODE = 'BOOKED_SHIPMENT_NOT_SAVED';
+
 export function isProviderNeverReachedError(error: unknown): boolean {
   // Node's fetch wraps the system error in `cause`, sometimes one level deeper.
   let current: unknown = error;
@@ -59,6 +70,7 @@ function isProviderTimeoutError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
     if (
+      current instanceof ProviderBookingTimeoutError ||
       current.message.startsWith(GIGL_BOOKING_TIMEOUT_MESSAGE) ||
       current.message.startsWith(GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE)
     ) {
@@ -77,7 +89,10 @@ export function classifyBookingFailure(
       code: error.code.slice(0, MAX_CODE_LENGTH),
       message: error.message.slice(0, MAX_MESSAGE_LENGTH),
       httpStatus: error.status,
-      outcome: 'rejected',
+      outcome:
+        error.code === BOOKED_SHIPMENT_NOT_SAVED_CODE
+          ? 'booked_not_saved'
+          : 'rejected',
     };
   }
   const message = (

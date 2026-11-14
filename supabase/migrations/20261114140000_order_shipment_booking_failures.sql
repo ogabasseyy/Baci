@@ -11,9 +11,10 @@ CREATE TABLE IF NOT EXISTS public.order_shipment_booking_failures (
   -- provider_unconfirmed: the request may have reached the provider; the
   --   order stays locked briefly to avoid booking the parcel twice.
   -- rejected: the provider or our checks refused the booking.
+  -- booked_not_saved: the provider booked the parcel but saving it here failed.
   -- unexpected: an error that is not a provider answer (a bug or database fault).
   outcome text NOT NULL CHECK (
-    outcome IN ('not_submitted', 'provider_unconfirmed', 'rejected', 'unexpected')
+    outcome IN ('not_submitted', 'provider_unconfirmed', 'rejected', 'booked_not_saved', 'unexpected')
   ),
   lock_retained boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()

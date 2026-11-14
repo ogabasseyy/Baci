@@ -25,6 +25,7 @@ import {
   createImeiWalletPayAdapter,
   type ImeiWalletPayResult,
 } from './imei-wallet-pay-adapter';
+import { normalizeImeiIdentifier } from './normalize-imei-identifier';
 
 /**
  * True when this check should be paid from the PiggyVest wallet: paying from
@@ -67,7 +68,7 @@ async function imeiWalletPayPurchase(
   const imeiHash = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     // One device, one key, however it was typed (spaces, case).
-    imei.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+    normalizeImeiIdentifier(imei)
   );
   return `imei|${userId}|${CONFIG.MERCHANT_ID ?? ''}|${device}|${tier}|${imeiHash}`;
 }
@@ -168,7 +169,10 @@ export function useImeiWalletPay({
         checkingKept.current = false;
       }
     },
-    open: async (tier: ImeiServiceTierKey, imei: string) => {
+    open: async (tier: ImeiServiceTierKey, typed: string) => {
+      // The key and every request body use one form of the IMEI, so a
+      // replay never sends a different typing under the same key (Muse).
+      const imei = normalizeImeiIdentifier(typed);
       // The build's merchant, never the hydrated one: that can still be
       // null at startup, and the key must match after a restart.
       const { user } = useAuthStore.getState();

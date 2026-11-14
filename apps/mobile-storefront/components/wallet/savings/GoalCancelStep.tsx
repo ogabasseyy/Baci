@@ -142,8 +142,16 @@ export function GoalCancelStep({
 
   const showBreakdown = known && !empty && !done;
   // The split is known and none of it is interest: the notes above stay
-  // silent, so say that any interest is not refunded.
-  const showInterestNote = body === COPY.savedBody;
+  // silent, so say that any interest is not refunded. Only while reviewing:
+  // a pending, cancelled-PIN, failed or done step shows its own message.
+  const reviewing = ![
+    'done',
+    'timed_out',
+    'pin_cancelled',
+    'failed',
+    'needs_review',
+  ].includes(flow.step);
+  const showInterestNote = known && !empty && forfeited <= 0 && reviewing;
   // Without the split, still show the goal's balance: a figure, not just a
   // sentence, and never presented as the refund.
   const showSaved = !known && !empty && !done;

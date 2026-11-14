@@ -80,6 +80,26 @@ it('requires a signed fresh single-use request and verifies the user and owner b
   expect((await f.handler(request(body()))).status).toBe(409);
   expect(f.launch).toHaveBeenCalledOnce();
 });
+
+it('accepts reordered wire fields signed using the validated schema order', async () => {
+  const f = fixture();
+  const original = body();
+  const signed = createHmac('sha256', key)
+    .update(`owner-preview/v1\n${JSON.stringify(original)}`)
+    .digest('hex');
+  const reordered = {
+    input: {
+      routeId: original.input.routeId,
+      buildId: original.input.buildId,
+      merchantId: original.input.merchantId,
+    },
+    accessToken: original.accessToken,
+    expiresAt: original.expiresAt,
+    nonce: original.nonce,
+    version: original.version,
+  };
+  expect((await f.handler(request(reordered, signed))).status).toBe(200);
+});
 it('rejects forged, expired and malformed requests before user or database access', async () => {
   const f = fixture();
   expect((await f.handler(request(body(), '0'.repeat(64)))).status).toBe(401);

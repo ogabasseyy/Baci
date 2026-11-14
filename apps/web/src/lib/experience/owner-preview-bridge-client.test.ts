@@ -87,6 +87,12 @@ it('forwards a verified user session over the fixed signed boundary and returns 
     credentials: 'omit',
   });
 });
+it('normalizes reordered preview input before signing and validates it on the bridge', async () => {
+  const f = fixture();
+  await expect(
+    f.client(f.owner as never, { routeId: 'home', buildId, merchantId })
+  ).resolves.toMatchObject({ bindingId, merchantId });
+});
 it('does not forward a missing or invalid user session', async () => {
   const f = fixture();
   f.owner.auth.getUser.mockResolvedValue({

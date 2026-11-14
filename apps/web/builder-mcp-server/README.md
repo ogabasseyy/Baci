@@ -37,6 +37,12 @@ if existing builder grants cannot be identified or safely reauthorized, keep
 the builder integration disabled. The issuer change is not a transparent
 dual-issuer migration.
 
+The owner-preview v1 signature covers the schema-normalized message, not raw
+wire JSON. The caller parses its nested input before serializing; the bridge
+parses the complete message using the matching ordered schema before verifying.
+The client/bridge tests cover reordered input and wire fields. Treat a schema
+ordering or signing-format change as a coordinated protocol rollout.
+
 Production ingress is not yet qualified: the internal owner routes share a
 loopback listener with public MCP, and a proxy's loopback address is not proof
 that a request is private. Require an independently verified ingress boundary

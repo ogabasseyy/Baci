@@ -12,6 +12,7 @@ const migrations = [
   '20261031130300_allow_fulfil_staff_wallet_reservation.sql',
   '20261031130400_allow_fulfil_staff_wallet_funding.sql',
   '20261031130500_allow_fulfil_staff_checkout_shipping_recovery.sql',
+  '20261114100000_bind_admin_gigl_quote_order_contact_fallback.sql',
 ].map((name) => resolve(directory, '../migrations', name));
 
 // Applies every fulfil-staff migration (columns, functions, policies and

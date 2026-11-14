@@ -63,6 +63,10 @@ GRANT SELECT, INSERT ON public.merchant_wallet_funding_account_requests TO authe
 GRANT SELECT ON public.merchant_wallet_payment_accounts TO authenticated;
 GRANT SELECT ON public.staff_members TO authenticated;
 
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS customer_name text,
+  ADD COLUMN IF NOT EXISTS customer_phone text;
+
 -- Merchant 1 (owner 2...1): a processing order ready to bind, and a
 -- wallet-funded order already bound to an attested quote.
 UPDATE public.orders SET shipping_funding_source = NULL, shipping_provider = 'GIGL',

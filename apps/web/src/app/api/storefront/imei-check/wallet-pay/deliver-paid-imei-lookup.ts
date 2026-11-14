@@ -1,0 +1,318 @@
+import 'server-only';
+import { NextResponse } from 'next/server';
+import type { ImeiAccessClient } from '@/lib/imei-access';
+import {
+  cacheLookupResponse,
+  cacheSuccessfulLookup,
+} from '../route-cache-helpers';
+import { errorBody, type ImeiLookupRow, json } from '../route-helpers';
+
+type ClaimAnswer =
+  | {
+      status: 'claimed' | 'reclaimed';
+      purpose: 'imei_check' | 'vtu';
+      purchaseRef: string;
+      amountKobo: number;
+      claimToken: string;
+    }
+  | {
+      status:
+        | 'not_found'
+        | 'not_confirmed'
+        | 'busy'
+        | 'fulfilled'
+        | 'refund_owed'
+        | 'refunded';
+    };
+
+// Only the fields of a prepared Sickw provider this step uses.
+interface PreparedProvider {
+  binding: { provider: string };
+  provider: { submit: (input: never) => Promise<unknown> };
+  serviceTier: { checksIncluded?: unknown; name?: unknown };
+}
+
+export interface DeliverPaidImeiLookupDeps {
+  claim: (operationId: string) => Promise<ClaimAnswer>;
+  // Only the current claimant (its token) may finish delivery.
+  finish: (
+    operationId: string,
+    outcome: 'fulfilled' | 'failed',
+    claimToken: string
+  ) => Promise<string>;
+  refund: (paymentId: string) => Promise<string>;
+  prepare: (
+    lookup: ImeiLookupRow
+  ) => Promise<PreparedProvider | { response: Response }>;
+  // The lookup's stored status, re-read to prove a result was persisted.
+  readStatus: (lookupId: string) => Promise<string | null>;
+}
+
+type Input = {
+  lookup: ImeiLookupRow;
+  operationId: string;
+  normalizedImei: string;
+  supabaseAdmin: ImeiAccessClient;
+  /** The payment the caller read for this operation (customer-scoped). */
+  payment: { purpose: string; purchaseRef: string; amountKobo: number };
+};
+type Outcome = {
+  body: Record<string, unknown>;
+  status: number;
+  notFound: boolean;
+  sickwStatus?: string;
+};
+
+const NOT_COMPLETED: Outcome = {
+  body: errorBody({
+    code: 'LOOKUP_NOT_COMPLETED',
+    error:
+      'The check could not be completed. Your payment is being returned to your PiggyVest wallet.',
+  }) as never,
+  status: 502,
+  notFound: false,
+};
+
+/** A definitive wrong-purchase answer (409), never a transient unknown. */
+export class WalletPaymentMismatchError extends Error {
+  constructor() {
+    super('Wallet payment does not belong to this IMEI lookup');
+    this.name = 'WalletPaymentMismatchError';
+  }
+}
+
+/** The lookup's recorded price in kobo (the price the payment must carry). */
+/**
+ * The lookup's price in whole kobo, exactly as the database guards read it
+ * (amount * 100 = trunc(amount * 100)). A price that is not a whole number of
+ * kobo is NaN, so every comparison fails closed instead of rounding one way
+ * here and being refused there (Muse).
+ */
+export const lookupPriceKobo = (lookup: Pick<ImeiLookupRow, 'amount_ngn'>) => {
+  const kobo = Number(lookup.amount_ngn) * 100;
+  const whole = Math.round(kobo);
+  return Number.isFinite(kobo) && Math.abs(kobo - whole) < 1e-6
+    ? whole
+    : Number.NaN;
+};
+
+const pending = (status: string) =>
+  NextResponse.json(
+    { status },
+    { status: 202, headers: { 'Cache-Control': 'no-store' } }
+  );
+
+/** A saved IMEI result names the device: never kept by a cache (Muse). */
+function noStore<R extends Response>(response: R): R {
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
+
+function cached(lookup: ImeiLookupRow) {
+  if (lookup.cached_response && lookup.cached_status)
+    return noStore(json(lookup.cached_response, lookup.cached_status));
+  return pending('delivering');
+}
+
+/** Caches the refunded outcome of a lookup whose PiggyVest refund is owed. */
+async function cacheRefunded(input: Input, outcome: Outcome) {
+  const body = {
+    ...outcome.body,
+    refund: 'piggyvest_wallet',
+    status: 'error' as const,
+  };
+  await cacheLookupResponse({
+    body: body as never,
+    lookupId: input.lookup.id,
+    sickwStatus: outcome.sickwStatus,
+    status: outcome.status,
+    supabaseAdmin: input.supabaseAdmin,
+    terminalStatus: outcome.notFound ? 'refunded_not_found' : 'refunded_error',
+  });
+  return noStore(json(body as never, outcome.status));
+}
+
+/**
+ * Fails the delivery: the payment's refund is opened FIRST (the IMEI money
+ * guard only accepts a refunded status once a PiggyVest refund is owed), the
+ * refund is sent (best effort; the drain retries), then the lookup is cached.
+ * Recording the failure is retried once; if it still fails the claim stays
+ * and a later reclaim refunds. A failed cache is retried by the next request,
+ * which finds the refund owed.
+ */
+async function failAndRefund(
+  input: Input,
+  deps: DeliverPaidImeiLookupDeps,
+  claimToken: string,
+  outcome: Outcome
+) {
+  const recorded = await deps
+    .finish(input.operationId, 'failed', claimToken)
+    .catch(() => deps.finish(input.operationId, 'failed', claimToken))
+    .catch(() => 'conflict');
+  // Only the current claimant opens the refund (Codex P2). A lost claim (a
+  // newer claimant holds it) or a refusal (a delivered check is never
+  // refunded) means another delivery decides: answer delivering, with no
+  // refund and no refunded cache.
+  if (recorded !== 'refund_owed' && recorded !== 'duplicate')
+    return pending('delivering');
+  await deps.refund(input.operationId).catch(() => 'pending');
+  return await cacheRefunded(input, outcome);
+}
+
+type SickwOutcome = {
+  kind: string;
+  body: Record<string, unknown>;
+  rawResponseText?: string;
+  providerStatus?: string;
+  status: number;
+  refundReason?: string;
+};
+
+/**
+ * IMEI check paid from the PiggyVest wallet, final step: run the lookup once
+ * the payment is CONFIRMED, exactly once (the database delivery claim), and
+ * refund exactly once if the lookup fails definitively. The caller has read
+ * the lookup and checked the re-sent IMEI against its stored hash.
+ */
+export async function deliverPaidImeiLookup(
+  input: Input,
+  deps: DeliverPaidImeiLookupDeps
+): Promise<Response> {
+  const { lookup, operationId } = input;
+  // A previous request saved the outcome but did not record the delivery:
+  // take the claim (its token) and record it, never a second lookup.
+  if (lookup.status === 'completed') {
+    const late = await deps.claim(operationId).catch(() => null);
+    // Only this lookup's own payment (same purchase and price) is recorded
+    // as delivered by it; another claimed payment is refused, as on every
+    // other branch (Muse), and its claim lapses for the drain.
+    if (late && (late.status === 'claimed' || late.status === 'reclaimed')) {
+      if (
+        late.purpose !== 'imei_check' ||
+        late.purchaseRef !== lookup.id ||
+        late.amountKobo !== lookupPriceKobo(lookup)
+      )
+        throw new WalletPaymentMismatchError();
+      await deps
+        .finish(operationId, 'fulfilled', late.claimToken)
+        .catch(() => 'conflict');
+    }
+    return cached(lookup);
+  }
+  // Refunded: retry any refund still owed (exactly once in the database),
+  // only for this lookup's own payment (same purchase and price), checked
+  // here too, as the other branches do (Muse).
+  if (
+    lookup.status === 'refunded_error' ||
+    lookup.status === 'refunded_not_found'
+  ) {
+    const { payment } = input;
+    if (
+      payment.purpose !== 'imei_check' ||
+      payment.purchaseRef !== lookup.id ||
+      payment.amountKobo !== lookupPriceKobo(lookup)
+    )
+      throw new WalletPaymentMismatchError();
+    await deps.refund(operationId).catch(() => 'pending');
+    return cached(lookup);
+  }
+  if (lookup.status !== 'pending') return cached(lookup);
+
+  const claim = await deps.claim(operationId);
+  if (claim.status === 'not_confirmed' || claim.status === 'not_found')
+    return pending('payment_pending');
+  if (claim.status === 'busy' || claim.status === 'fulfilled')
+    return pending('delivering');
+  // The refund is owed or sent, but caching the refunded outcome failed
+  // earlier: persist it now.
+  if (claim.status === 'refund_owed' || claim.status === 'refunded')
+    return await cacheRefunded(input, NOT_COMPLETED);
+  // A status this step does not know is raised (503), never hidden.
+  if (claim.status !== 'claimed' && claim.status !== 'reclaimed')
+    throw new Error('Unexpected wallet payment claim status');
+  if (
+    claim.purpose !== 'imei_check' ||
+    claim.purchaseRef !== lookup.id ||
+    claim.amountKobo !== lookupPriceKobo(lookup)
+  )
+    throw new WalletPaymentMismatchError();
+  // A previous delivery died mid-flight. Sickw has no lookup by reference,
+  // so re-submitting could buy the check twice: refund instead, unless it
+  // saved its result after this request read the lookup (Codex P1). Then
+  // record it delivered; the next poll answers the saved result.
+  if (claim.status === 'reclaimed') {
+    const now = await deps.readStatus(lookup.id);
+    if (now === 'completed') {
+      await deps
+        .finish(operationId, 'fulfilled', claim.claimToken)
+        .catch(() => 'conflict');
+      return pending('delivering');
+    }
+    if (now !== 'pending') return pending('delivering');
+    return await failAndRefund(input, deps, claim.claimToken, NOT_COMPLETED);
+  }
+
+  const prepared = await deps.prepare(lookup);
+  if ('response' in prepared || prepared.binding.provider !== 'sickw')
+    return await failAndRefund(input, deps, claim.claimToken, {
+      body: errorBody({
+        code: 'IMEI_TIER_NOT_AVAILABLE',
+        error: 'This check is not available right now.',
+      }) as never,
+      status: 502,
+      notFound: false,
+    });
+  const providerStartedAt = Date.now();
+  const outcome = (await prepared.provider.submit({
+    binding: prepared.binding,
+    checksIncluded: prepared.serviceTier.checksIncluded,
+    feedbackUrl: '',
+    identifier: input.normalizedImei,
+    referenceId: lookup.id,
+    tierName: prepared.serviceTier.name,
+  } as never)) as SickwOutcome;
+  if (outcome.kind === 'complete') {
+    const response = await cacheSuccessfulLookup({
+      amount: Number(lookup.amount_ngn),
+      customerId: lookup.customer_id,
+      latencyMs: Date.now() - providerStartedAt,
+      lookupId: lookup.id,
+      merchantId: lookup.merchant_id,
+      providerResult: {
+        body: outcome.body as never,
+        ok: true,
+        rawResponseText: outcome.rawResponseText ?? '',
+        sickwStatus: outcome.providerStatus,
+        status: outcome.status,
+      } as never,
+      supabaseAdmin: input.supabaseAdmin,
+      tier: lookup.tier,
+    });
+    // Recorded only once the result is durably saved (the helper answers 200
+    // even when saving failed). Unsaved, the result is never shown: the claim
+    // stays, and a later reclaim either finds it saved or refunds, so the
+    // customer never keeps both the result and the refund (Muse high).
+    const saved = await deps.readStatus(lookup.id).catch(() => null);
+    if (saved !== 'completed') return pending('delivering');
+    // A lost claim is honoured before the result is shown (Codex P2): only a
+    // recorded delivery returns it now; otherwise the next poll answers from
+    // the stored state (the saved result, which can no longer be refunded).
+    const recorded = await deps
+      .finish(operationId, 'fulfilled', claim.claimToken)
+      .catch(() => 'conflict');
+    if (recorded !== 'fulfilled' && recorded !== 'duplicate')
+      return pending('delivering');
+    return noStore(response);
+  }
+  // Anything but a definite failure (an unexpected non-terminal answer)
+  // delivered no result: refund rather than leave the claim stranded.
+  if (outcome.kind !== 'failure')
+    return await failAndRefund(input, deps, claim.claimToken, NOT_COMPLETED);
+  return await failAndRefund(input, deps, claim.claimToken, {
+    body: outcome.body,
+    status: outcome.status,
+    notFound: outcome.refundReason === 'not_found',
+    sickwStatus: outcome.providerStatus,
+  });
+}

@@ -181,6 +181,22 @@ describe('createWalletPayWorkerStore', () => {
       OP,
     ]);
   });
+  it('asks whether a claimed IMEI payment was already delivered', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(false)
+    );
+    const store = createWalletPayWorkerStore({
+      integrationId: INTEGRATION,
+      environment: 'staging',
+      execute,
+    });
+    await expect(store.isImeiDelivered(OP)).resolves.toBe(false);
+    expect(execute).toHaveBeenCalledWith(workerSql.imeiDelivered, [
+      INTEGRATION,
+      'staging',
+      OP,
+    ]);
+  });
   it('reads this customer payment for one purchase', async () => {
     const execute = vi.fn(
       async (_statement: string, _parameters: readonly string[]) =>
@@ -197,5 +213,25 @@ describe('createWalletPayWorkerStore', () => {
       JSON.stringify(scope),
       JSON.stringify({ purpose: 'imei_check', purchaseRef: 'lookup-1' }),
     ]);
+  });
+  it('asks whether a wallet payment was ever issued for one purchase', async () => {
+    const execute = vi.fn(
+      async (_statement: string, _parameters: readonly string[]) => rows(true)
+    );
+    const store = createWalletPayCustomerStore({ scope, execute });
+    await expect(store.wasAttempted('imei_check', 'lookup-1')).resolves.toBe(
+      true
+    );
+    expect(execute).toHaveBeenCalledWith(customerSql.attempted, [
+      JSON.stringify(scope),
+      JSON.stringify({ purpose: 'imei_check', purchaseRef: 'lookup-1' }),
+    ]);
+  });
+  it('refuses an attempted answer that is not a boolean', async () => {
+    const store = createWalletPayCustomerStore({
+      scope,
+      execute: vi.fn(async () => rows('yes')),
+    });
+    await expect(store.wasAttempted('vtu', 'tx-1')).rejects.toThrow();
   });
 });

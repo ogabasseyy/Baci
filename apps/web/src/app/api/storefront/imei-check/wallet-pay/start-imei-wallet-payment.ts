@@ -1,0 +1,289 @@
+import 'server-only';
+import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+import type { ImeiAccessClient } from '@/lib/imei-access';
+import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
+import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
+import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
+import {
+  findWalletPaymentForPurchase,
+  issueWalletPayment,
+  walletPaymentAttemptedForPurchase,
+} from '@/lib/piggyvest/wallet-pay-service';
+import {
+  errorBody,
+  findLookupByIdempotencyKey,
+  isUniqueViolation,
+  mapExistingLookup,
+} from '../route-helpers';
+import {
+  type resumePaidImeiWalletPayment,
+  resumeWhileSwitchedOff,
+} from './resume-paid-imei-wallet-payment';
+
+type Issue = typeof issueWalletPayment;
+export interface StartImeiWalletPaymentDeps {
+  readRuntime: typeof readWalletPayRuntime;
+  resolveIdentity: (input: {
+    supabase: SupabaseClient;
+    user: User;
+    merchantId: string;
+  }) => Promise<{
+    merchantId: string;
+    customerId: string;
+    userId: string;
+  } | null>;
+  issue: Issue;
+  findForPurchase: typeof findWalletPaymentForPurchase;
+  wasAttempted: typeof walletPaymentAttemptedForPurchase;
+  /** Resumes a paid replay while switched off (tests inject their own). */
+  resume?: typeof resumePaidImeiWalletPayment;
+}
+
+const defaultDeps: StartImeiWalletPaymentDeps = {
+  readRuntime: readWalletPayRuntime,
+  resolveIdentity: (input) =>
+    resolvePrimaryWalletIdentity({ ...input, forOnboarding: false }),
+  issue: issueWalletPayment,
+  findForPurchase: findWalletPaymentForPurchase,
+  wasAttempted: walletPaymentAttemptedForPurchase,
+};
+
+const CLEANUP_ATTEMPTS = 3;
+
+/** Removes the pending lookup; true once the database confirms it. */
+async function removePending(admin: ImeiAccessClient, lookupId: string) {
+  for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
+    const result = await (async () => admin.deletePending(lookupId))().catch(
+      () => null
+    );
+    if (result && !result.error) return true;
+  }
+  return false;
+}
+
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+function refuse(code: string, error: string, status: number) {
+  return NextResponse.json(errorBody({ code, error }), {
+    status,
+    headers: NO_STORE,
+  });
+}
+
+/**
+ * IMEI check paid from the PiggyVest main wallet, step 1: create the pending
+ * lookup and issue a payment of exactly the server price. Nothing is charged
+ * here; the customer confirms with their PIN on the wallet-pay route. Only
+ * Sickw (instant) tiers are offered: Petrock's debit lives in deeper database
+ * functions that do not know PiggyVest yet.
+ */
+export async function startImeiWalletPayment(
+  input: {
+    binding: { provider: string };
+    serviceTier: { price: number };
+    customer: { id: string };
+    merchantId: string;
+    idempotencyKey: string;
+    imeiHash: string;
+    deviceCategory?: ImeiDeviceCategory;
+    requestedTier: ImeiServiceTierKey;
+    replayContext: Parameters<typeof mapExistingLookup>[1];
+    supabase: SupabaseClient;
+    supabaseAdmin: ImeiAccessClient;
+    user: User;
+  },
+  deps: StartImeiWalletPaymentDeps = defaultDeps
+) {
+  let runtime: ReturnType<typeof readWalletPayRuntime>;
+  try {
+    runtime = deps.readRuntime();
+  } catch {
+    // Switched on but misconfigured: retryable, like the PIN and pay routes.
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
+  }
+  // Switched off (or the kill switch): retryable 503, like the PIN and pay
+  // steps, unless this is the replay of a start whose payment already moved
+  // money: that resumes on the recovery runtime, issuing nothing (Codex P2).
+  // Another merchant is a definitive 409.
+  if (!runtime)
+    return (
+      (await resumeWhileSwitchedOff(input, deps.resume)) ??
+      refuse(
+        'PIGGYVEST_PAY_UNAVAILABLE',
+        'Paying from your PiggyVest wallet is not available right now.',
+        503
+      )
+    );
+  if (runtime.merchantId !== input.merchantId)
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available yet.',
+      409
+    );
+  if (input.binding.provider !== 'sickw')
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER',
+      'This check can not be paid from your PiggyVest wallet yet.',
+      409
+    );
+  const identity = await deps.resolveIdentity({
+    supabase: input.supabase,
+    user: input.user,
+    merchantId: input.merchantId,
+  });
+  if (!identity || identity.customerId !== input.customer.id)
+    return refuse(
+      'PIGGYVEST_WALLET_NOT_READY',
+      'Finish setting up your PiggyVest wallet to pay from it.',
+      409
+    );
+
+  let amount = input.serviceTier.price;
+  let lookupId: string;
+  let created = false;
+  const inserted = await input.supabaseAdmin.insertPending({
+    amount_ngn: amount,
+    customer_id: input.customer.id,
+    idempotency_key: input.idempotencyKey,
+    imei_hash: input.imeiHash,
+    device_category: input.deviceCategory ?? null,
+    merchant_id: input.merchantId,
+    status: 'pending',
+    tier: input.requestedTier,
+  });
+  if (inserted.error) {
+    if (!isUniqueViolation(inserted.error))
+      throw new Error('IMEI pending insert failed');
+    const existing = await findLookupByIdempotencyKey(
+      input.supabaseAdmin,
+      input.idempotencyKey
+    );
+    // A replay of this same request re-asks for the same payment; anything
+    // else answers exactly as the store-credit path does.
+    if (!existing)
+      return refuse('IDEMPOTENCY_CONFLICT', 'Please try again.', 409);
+    if (
+      existing.status !== 'pending' ||
+      existing.customer_id !== input.customer.id ||
+      existing.imei_hash !== input.imeiHash ||
+      existing.tier !== input.requestedTier ||
+      (existing.device_category ?? null) !== (input.deviceCategory ?? null)
+    )
+      return mapExistingLookup(existing, input.replayContext);
+    // Only a lookup this wallet flow owns (a PiggyVest payment was issued for
+    // it) is re-asked: a concurrent store-credit request that won the insert
+    // must never also be paid from the wallet.
+    const purchase = {
+      runtime,
+      scope: walletPayScope(runtime, identity),
+      purpose: 'imei_check' as const,
+      purchaseRef: String(existing.id),
+    };
+    const owned = await deps.findForPurchase(purchase);
+    // No live wallet payment. Re-issue only when one was issued before (it
+    // expired unpaid): the lookup is positively this wallet flow's. Otherwise
+    // it may be a concurrent store-credit request's, or ours mid-issue, so the
+    // replay answers in flight exactly as the store-credit path does.
+    if (!owned) {
+      if (!(await deps.wasAttempted(purchase)))
+        return mapExistingLookup(existing, input.replayContext);
+    } else if (!['issued', 'reserved', 'dispatched'].includes(owned.state))
+      // Confirmed (or under review): never a second payment, but the
+      // operation is handed back so the client can re-check it and the
+      // check is delivered (Codex P2).
+      return NextResponse.json(
+        {
+          status:
+            owned.state === 'needs_review'
+              ? 'payment_review'
+              : 'payment_pending',
+          lookupId: String(existing.id),
+          operationId: owned.operationId,
+          amountKobo: Math.round(Number(existing.amount_ngn) * 100),
+        },
+        { status: 202, headers: NO_STORE }
+      );
+    lookupId = String(existing.id);
+    // The price recorded on the lookup, never today's tier price.
+    amount = Number(existing.amount_ngn);
+  } else {
+    if (!inserted.data) throw new Error('IMEI pending insert returned no row');
+    lookupId = String(inserted.data.id);
+    created = true;
+  }
+
+  let issued: Awaited<ReturnType<Issue>>;
+  try {
+    issued = await deps.issue({
+      runtime,
+      scope: walletPayScope(runtime, identity),
+      request: {
+        purpose: 'imei_check',
+        purchaseRef: lookupId,
+        amountKobo: Math.round(amount * 100),
+      },
+    });
+  } catch {
+    // The issue may or may not have committed (its answer may be lost after
+    // the payment was created). Removing the lookup succeeds only while no
+    // payment exists for it (the database refuses otherwise). Whether it was
+    // removed or kept, the answer is the same retryable one that keeps the
+    // key: a retry with it either issues afresh or finds the committed
+    // payment and resumes it. Never "start again with a new key", which
+    // could charge a second time while the first payment completes (Codex).
+    if (created) await removePending(input.supabaseAdmin, lookupId);
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
+  }
+  if (issued.status === 'unavailable') {
+    // No payment exists for the lookup this request just created: remove it
+    // (best effort; the database refuses once a payment exists) so a retry
+    // with the same key can issue instead of answering a conflict forever.
+    // If the lookup can not be removed, a retry with this key would find a
+    // lookup with no wallet attempt and wait forever: the client is told to
+    // start again with a new key instead (nothing was charged).
+    if (created && !(await removePending(input.supabaseAdmin, lookupId)))
+      return refuse(
+        'PAYMENT_NOT_COMPLETED',
+        'This payment did not go through. Please start again.',
+        409
+      );
+    return refuse(
+      'PIGGYVEST_PAY_UNAVAILABLE',
+      'Paying from your PiggyVest wallet is not available right now.',
+      503
+    );
+  }
+  if (issued.status === 'conflict' || !('operationId' in issued))
+    return refuse('PAYMENT_CONFLICT', 'Please refresh and try again.', 409);
+  if (issued.status === 'issued')
+    return NextResponse.json(
+      {
+        status: 'payment_required',
+        lookupId,
+        operationId: issued.operationId,
+        amountKobo: issued.amountKobo,
+        expiresAt: issued.expiresAt,
+      },
+      { status: 202, headers: NO_STORE }
+    );
+  return NextResponse.json(
+    {
+      status:
+        issued.status === 'needs_review' ? 'payment_review' : 'payment_pending',
+      lookupId,
+      operationId: issued.operationId,
+      amountKobo: issued.amountKobo,
+    },
+    { status: 202, headers: NO_STORE }
+  );
+}

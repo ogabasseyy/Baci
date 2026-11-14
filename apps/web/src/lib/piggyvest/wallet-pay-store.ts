@@ -72,6 +72,18 @@ export function createWalletPayCustomerStore(input: {
       ]);
       return schemas.forPurchaseRows.parse(result.rows)[0].result;
     },
+    // Whether this customer's wallet flow ever issued a payment for one
+    // purchase, expired or released attempts included.
+    async wasAttempted(purpose: 'imei_check' | 'vtu', purchaseRef: string) {
+      const result = await input.execute(customerSql.attempted, [
+        scope,
+        JSON.stringify({
+          purpose: schemas.purpose.parse(purpose),
+          purchaseRef: schemas.purchaseRef.parse(purchaseRef),
+        }),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
     async readStatus(operationId: string) {
       const result = await input.execute(customerSql.status, [
         scope,
@@ -133,6 +145,14 @@ export function createWalletPayWorkerStore(input: {
     // Releases a reservation that was never sent (older than 5 minutes).
     async releaseStale(operationId: string) {
       const result = await input.execute(workerSql.releaseStale, [
+        ...binding,
+        schemas.operationId.parse(operationId),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
+    // Whether the IMEI check this claimed payment bought was already saved.
+    async isImeiDelivered(operationId: string) {
+      const result = await input.execute(workerSql.imeiDelivered, [
         ...binding,
         schemas.operationId.parse(operationId),
       ]);

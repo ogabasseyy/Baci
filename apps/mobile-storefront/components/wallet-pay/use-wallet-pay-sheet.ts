@@ -41,7 +41,10 @@ export function useWalletPaySheet<Result>({
   const adapter = useRef<WalletPayAdapter<Result> | null>(null);
   const operationId = useRef<string | null>(null);
   // Bumped on every open and close: a late answer for an older sheet is
-  // dropped instead of changing the one on screen.
+  // dropped instead of changing the one on screen. Invariant: a bump while a
+  // call is out only ever happens in close(), which clears inFlight and busy
+  // itself; a stale answer therefore returns without touching them. Any new
+  // caller that bumps the generation must clear both the same way (Muse).
   const generation = useRef(0);
   // True while a start, PIN check or pay call is out: a second open, a
   // second submit or a re-check never overlaps it.

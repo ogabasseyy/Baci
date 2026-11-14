@@ -21,8 +21,7 @@ CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
 # tree may be changed but unrecorded (rollback failed, or the rollback
 # landed with unrecorded readers and a stuck barrier), so the
 # coordinator must HOLD the release lock for reconciliation instead of
-# auto-releasing it for a clean retry. Every other failure (including
-# a clean rollback that just needs a rerun) exits 1.
+# auto-releasing it for a clean retry. Every other failure exits 1.
 WORKER_UNRECONCILED_EXIT=42
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Refusing worker deployment from a dirty tracked checkout." >&2

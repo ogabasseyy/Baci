@@ -51,7 +51,9 @@ BEGIN
   SELECT error_message INTO v_message FROM public.vtu_transactions WHERE id = c_row;
   PERFORM pg_temp.wp_assert(
     (SELECT status FROM public.vtu_transactions WHERE id = c_row) = 'failed'
-      AND v_message LIKE '%PiggyVest wallet%', 'the pending purchase was not closed as failed');
+      AND v_message LIKE '%savings wallet%', 'the pending purchase was not closed as failed');
+  -- Customers never see the provider's name (owner 11-13).
+  PERFORM pg_temp.wp_assert(v_message NOT LIKE '%PiggyVest%', 'the closed purchase named the provider');
   PERFORM pg_temp.wp_assert((SELECT metadata ->> 'refundDestination' = 'piggyvest_wallet'
       AND (metadata ->> 'refundIssued')::boolean FROM public.vtu_transactions WHERE id = c_row),
     'the closed purchase does not record its PiggyVest refund');

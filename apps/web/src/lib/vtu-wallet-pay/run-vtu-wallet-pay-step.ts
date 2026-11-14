@@ -97,7 +97,11 @@ export async function runVtuWalletPayStep(
   }
   // Starting or paying needs wallet pay switched on; a re-check of money
   // already sent runs on the recovery runtime so nothing is stranded.
-  const start = { transactionId, isStart: operationId === undefined };
+  const start = {
+    transactionId,
+    merchantId: input.merchantId,
+    isStart: operationId === undefined,
+  };
   const refuse = (response: Response) =>
     refuseBeforeIssue(deps.closeUnissued, start, response);
   if (!live && !recheck)

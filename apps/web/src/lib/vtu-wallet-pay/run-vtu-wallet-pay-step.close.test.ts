@@ -190,14 +190,14 @@ describe('bugfix: a start refused before any payment left its purchase live (Cod
     await expect(response.json()).resolves.toMatchObject({
       code: 'PIGGYVEST_WALLET_NOT_READY',
     });
-    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN);
+    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN, 'merchant-1');
   });
 
   it('closes the purchase when wallet pay is off', async () => {
     deps.readRuntime.mockReturnValueOnce(null as never);
     const response = await runVtuWalletPayStep(base, deps as never);
     expect(response.status).toBe(503);
-    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN);
+    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN, 'merchant-1');
   });
 
   it('never closes on a re-check or payment refusal', async () => {

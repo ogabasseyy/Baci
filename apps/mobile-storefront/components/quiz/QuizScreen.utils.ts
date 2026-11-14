@@ -122,7 +122,7 @@ export function formatQuizClockWithDay(
   const clock = formatQuizClock(value, locale, timeZone);
   if (!value || Number.isNaN(Date.parse(value))) return clock;
   const resolvedLocale = locale || getFallbackLocale();
-  const dayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone });
+  const dayKey = (date: Date) => getGregorianDateKey(date, timeZone);
   const date = new Date(value);
   if (dayKey(date) === dayKey(new Date(nowMs))) return clock;
   const day = date.toLocaleDateString(resolvedLocale, {

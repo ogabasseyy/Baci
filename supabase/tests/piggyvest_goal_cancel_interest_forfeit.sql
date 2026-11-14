@@ -1364,6 +1364,38 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: payout A planned while the principal is dispatched follows
+  -- its interest through a release and the late success that recreates the
+  -- plan; after the recreated plan was sent, reversing A is review work.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    v_op := pg_temp.gc_reserved('late-lineage');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'late lineage split');
+    PERFORM pg_temp.gf_receipt('gf-latelin-a', 400);
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.manage_goal_cancel(pg_temp.gc_scope(), v_op::uuid, 'release', 0), 'late lineage release');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12400}'::jsonb) = 'confirmed', 'late lineage principal');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-latelin-' || id::text
+     WHERE cancel_operation_id = v_op::uuid AND state = 'reserved';
+    PERFORM pg_temp.gf_receipt('gf-latelin-b', 250);
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-latelin', 'gf-latelin-a', 150,
+      repeat('8', 64), 'synthetic-reversal-9');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal of interest sent through a recreated plan was treated as unsent');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- Regression: a delayed receipt (paid before the dispatch) recorded while the
   -- cancel is in flight has its notice voided when the cancel settles.
   BEGIN

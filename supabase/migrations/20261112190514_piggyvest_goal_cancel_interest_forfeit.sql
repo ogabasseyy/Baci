@@ -536,6 +536,7 @@ DECLARE
   v_owed bigint;
   v_owed_wallet text;
   v_last_wallet text;
+  v_new_forfeit uuid;
 BEGIN
   SELECT candidate.* INTO v_binding FROM piggyvest_primary.integrations AS candidate
     JOIN piggyvest_primary.inflow_authorities AS authority ON authority.integration_id = candidate.id
@@ -695,7 +696,15 @@ BEGIN
       VALUES (v_operation.id, v_operation.integration_id, v_operation.intent_id, v_operation.goal_id,
         CASE WHEN v_owed <= 9999999999 THEN 'reserved' ELSE 'needs_review' END,
         piggyvest_primary.next_goal_cancel_forfeit_reference(v_operation.goal_id),
-        v_operation.source_wallet_id, v_owed_wallet, LEAST(v_owed, 9999999999), v_now);
+        v_operation.source_wallet_id, v_owed_wallet, LEAST(v_owed, 9999999999), v_now)
+      RETURNING id INTO v_new_forfeit;
+      -- Payouts planned into the released rows follow the recreated plan, so
+      -- a later reversal sees where their interest actually went.
+      UPDATE piggyvest_primary.goal_cancel_late_interest_contributions AS added
+         SET forfeit_id = v_new_forfeit
+       WHERE added.cancel_operation_id = v_operation.id
+         AND added.forfeit_id IN (SELECT old.id FROM piggyvest_primary.goal_cancel_interest_forfeits AS old
+                                   WHERE old.cancel_operation_id = v_operation.id AND old.state = 'released');
     END IF;
   END IF;
   IF v_review THEN RETURN 'conflict'; END IF;

@@ -3,6 +3,9 @@ export function resolveChatwootCartProofExpiry(input: {
   existingProofExpiresAt: string;
   liveGrantExpiresAt?: string;
 }): string | null {
+  // The incoming proof must have a valid expiry, but a fresh live grant is
+  // authority to renew up to its current expiry (also bounded by cart expiry).
+  // Without a valid live-grant expiry, keep the incoming proof as the cap.
   const existingExpiry = Date.parse(input.existingProofExpiresAt);
   if (!Number.isFinite(existingExpiry)) return null;
 

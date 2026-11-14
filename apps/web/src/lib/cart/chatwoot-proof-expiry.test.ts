@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveChatwootCartProofExpiry } from './chatwoot-proof-expiry';
 
 describe('resolveChatwootCartProofExpiry', () => {
-  it('caps at the earlier finite grant or cart expiry', () => {
+  it('renews up to the current grant expiry, bounded by cart expiry', () => {
     expect(
       resolveChatwootCartProofExpiry({
         cartExpiresAt: '2026-12-01T00:00:00.000Z',

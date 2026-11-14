@@ -32,8 +32,10 @@ export function CartAssuranceRow({
   };
 
   return (
-    <div>
-      <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
+    // The width cap sits on this wrapper (the flex child of the extras row).
+    // On the label it resolved against a shrink-to-fit box and squeezed the copy.
+    <div className="max-w-[70%]">
+      <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70">
         <span className="relative flex items-center mt-0.5">
           <input
             ref={checkboxRef}

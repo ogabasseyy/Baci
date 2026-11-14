@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
+import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { vtuWalletPayApi } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { useVtuWalletPayHost } from './use-vtu-wallet-pay-host';
 import { openVtuWalletPay, useVtuWalletPayStore } from './vtu-wallet-pay-store';
@@ -238,5 +240,52 @@ describe('bugfix: a start that answered after the sheet closed stayed issued (Co
       })
     );
     hook.unmount();
+  });
+});
+
+describe('bugfix: a fresh start refused while wallet pay was rolled back kept its key (Codex P2)', () => {
+  const saved = async () =>
+    String(await AsyncStorage.getItem('baci.walletPay.openPurchases.v1'));
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    walletPayPurchaseKeys.resetMemory();
+  });
+
+  it('forgets a key minted by the refused tap', async () => {
+    start.mockResolvedValue({
+      httpStatus: 503,
+      body: { code: 'PIGGYVEST_PAY_UNAVAILABLE' },
+    });
+    renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    expect(await saved()).not.toContain('key-1');
+  });
+
+  it('keeps a reused key: its earlier attempt may have paid', async () => {
+    start.mockResolvedValueOnce({
+      httpStatus: 202,
+      body: {
+        status: 'payment_pending',
+        transactionId: '33333333-3333-4333-8333-333333333333',
+        operationId: '11111111-1111-4111-8111-111111111111',
+        amountKobo: 50_000,
+      },
+    });
+    start.mockResolvedValue({
+      httpStatus: 503,
+      body: { code: 'PIGGYVEST_PAY_UNAVAILABLE' },
+    });
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    act(() => hook.result.current.sheet.close());
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    expect(await saved()).toContain('key-1');
   });
 });

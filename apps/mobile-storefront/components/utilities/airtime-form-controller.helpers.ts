@@ -6,8 +6,22 @@ import { detectNetwork } from '@/lib/network-utils';
 const MIN_AIRTIME_AMOUNT = 50;
 const MAX_AIRTIME_AMOUNT = 50_000;
 
+/** A Nigerian mobile number in local form: 0 and ten digits. */
+export const LOCAL_PHONE_DIGITS = 11;
+
+/**
+ * The digits of a typed or pasted phone number, at most one local number
+ * long (Fable: the field took 18 digits when typed text arrived late). An
+ * international +234 number becomes its local 0 form first, so a paste is
+ * never cut to the wrong eleven digits.
+ */
 export function sanitizePhoneDigits(text: string): string {
-  return text.replace(/\D/g, '');
+  const digits = text.replace(/\D/g, '');
+  const local =
+    digits.startsWith('234') && digits.length > LOCAL_PHONE_DIGITS
+      ? `0${digits.slice(3)}`
+      : digits;
+  return local.slice(0, LOCAL_PHONE_DIGITS);
 }
 
 export function resolveAirtimeProvider(phoneNumber: string): string | null {

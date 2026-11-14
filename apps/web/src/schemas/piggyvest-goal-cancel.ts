@@ -21,10 +21,15 @@ const cancelReservation = z.strictObject({
 
 export const piggyvestGoalCancelSchemas = {
   httpRequest: z.discriminatedUnion('step', [
+    // interestForfeitAcknowledged: sent only by an app that showed the
+    // customer that an early cancel forfeits the goal's interest (owner
+    // decision 2026-11-12). Required on submit (see the route).
     z.strictObject({
       step: z.literal('issue'),
       merchantId: z.uuid(),
       goalId: z.uuid(),
+      // null counts as absent: an older client gets the update prompt.
+      interestForfeitAcknowledged: z.boolean().nullish(),
     }),
     z.strictObject({
       step: z.literal('submit'),
@@ -32,6 +37,8 @@ export const piggyvestGoalCancelSchemas = {
       goalId: z.uuid(),
       operationId: z.uuid(),
       pinProof: proof,
+      // null counts as absent: an older client gets the update prompt.
+      interestForfeitAcknowledged: z.boolean().nullish(),
     }),
   ]),
   statusRequest: z.strictObject({
@@ -70,6 +77,8 @@ export const piggyvestGoalCancelSchemas = {
           }),
           z.strictObject({ status: z.literal('busy') }),
           z.strictObject({ status: z.literal('needs_review') }),
+          // The goal's PiggyVest setup never finished: nothing to cancel.
+          z.strictObject({ status: z.literal('not_set_up') }),
         ]),
       })
     )

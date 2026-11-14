@@ -7,6 +7,12 @@ export const GOAL_CANCEL_STATEMENTS = {
     'SELECT piggyvest_primary.reserve_goal_cancel_with_pin($1::jsonb,$2::jsonb,$3::text) AS result',
   manage:
     'SELECT piggyvest_primary.manage_goal_cancel($1::jsonb,$2::uuid,$3::text,$4::bigint) AS result',
+  // Since 20261112190514 the only cancel dispatch: principal to the customer,
+  // interest planned for the forfeit leg (manage's 'dispatch' refuses).
+  splitDispatch:
+    'SELECT piggyvest_primary.dispatch_goal_cancel_split($1::jsonb,$2::uuid,$3::bigint) AS result',
+  amounts:
+    'SELECT piggyvest_primary.read_goal_cancel_amounts($1::jsonb,$2::uuid) AS result',
   status:
     'SELECT piggyvest_primary.read_goal_cancel_status($1::jsonb,$2::uuid) AS result',
   readDispatched:

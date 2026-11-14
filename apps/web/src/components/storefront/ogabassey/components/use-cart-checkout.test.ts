@@ -24,3 +24,18 @@ it('opens the identity choice after a stalled lookup and ignores a late session'
   await act(async () => { resolveLookup({ data: { user: { id: '1' } }, error: null }); });
   expect(mocks.push).not.toHaveBeenCalled();
 });
+
+it('captures checkoutError if navigation throws', async () => {
+  mocks.getUser.mockResolvedValue({ data: { user: { id: '1' } }, error: null });
+  mocks.push.mockImplementation(() => {
+    throw new Error('Navigation failed');
+  });
+  const close = vi.fn();
+  const { result } = renderHook(() => useCartCheckout(true, close, '/checkout'));
+  await act(async () => {
+    await result.current.handleCheckout();
+  });
+  expect(result.current.checkoutError).toBe('Unable to proceed to checkout. Please try again.');
+  expect(result.current.isCheckoutLoading).toBe(false);
+  expect(close).not.toHaveBeenCalled();
+});

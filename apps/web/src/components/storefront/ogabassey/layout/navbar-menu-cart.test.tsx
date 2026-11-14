@@ -230,4 +230,30 @@ describe('OgabasseyNavbar', () => {
       '.ogabassey-navbar__logo{height:2.25rem;max-width:clamp(4.5rem,calc(100vw - 15.5rem),18rem);width:auto}'
     );
   });
+
+  it('navigates directly to /cart on mobile viewports instead of opening the desktop cart drawer', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 767px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    try {
+      const user = userEvent.setup();
+      render(<OgabasseyNavbar storeSlug="/ogabassey" />);
+
+      await user.click(screen.getByRole('link', { name: /open cart/i }));
+
+      expect(mocks.setIsCartOpen).not.toHaveBeenCalled();
+      expect(mocks.push).toHaveBeenCalledWith('/ogabassey/cart');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveTrustedStorefrontRedirectUrl } from './oauth-redirect';
+import {
+  extractStorefrontOAuthCallbackNext,
+  resolveTrustedStorefrontRedirectUrl,
+} from './oauth-redirect';
 
 vi.mock('@/env', () => ({
   getAppUrl: () => 'https://usebaci.com',
@@ -36,13 +39,64 @@ describe('resolveTrustedStorefrontRedirectUrl', () => {
     ).toBe('https://ogabassey.usebaci.com/account/callback');
   });
 
-  it('allows the merchant configured custom-domain origin', () => {
+  it('allows the merchant configured custom-domain origin and its www variant', () => {
     expect(
       resolveTrustedStorefrontRedirectUrl(
         'https://ogabassey.com/account/callback',
         merchant
       )
     ).toBe('https://ogabassey.com/account/callback');
+    expect(
+      resolveTrustedStorefrontRedirectUrl(
+        'https://www.ogabassey.com/account/callback',
+        merchant
+      )
+    ).toBe('https://www.ogabassey.com/account/callback');
+  });
+
+  it('extracts ?next= from /account/callback so Supabase receives an exact callback URL', () => {
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://ogabassey.com/account/callback?next=%2Fcheckout'
+      )
+    ).toEqual({
+      redirectTo: 'https://ogabassey.com/account/callback',
+      nextTarget: '/checkout',
+    });
+  });
+
+  it('strips all query parameters from /account/callback when extracting nextTarget', () => {
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://ogabassey.com/account/callback?next=%2Fcheckout&source=banner'
+      )
+    ).toEqual({
+      redirectTo: 'https://ogabassey.com/account/callback',
+      nextTarget: '/checkout',
+    });
+  });
+
+  it('validates ?next= against expectedMerchantSlug when supplied', () => {
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://usebaci.com/ogabassey/account/callback?next=%2Fogabassey%2Fcheckout',
+        'ogabassey'
+      )
+    ).toEqual({
+      redirectTo: 'https://usebaci.com/ogabassey/account/callback',
+      nextTarget: '/ogabassey/checkout',
+    });
+
+    // Mismatched merchant slug is dropped from nextTarget
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://usebaci.com/ogabassey/account/callback?next=%2Fotherstore%2Fcheckout',
+        'ogabassey'
+      )
+    ).toEqual({
+      redirectTo: 'https://usebaci.com/ogabassey/account/callback',
+      nextTarget: null,
+    });
   });
 
   it('rejects unrelated absolute origins', () => {

@@ -19,7 +19,7 @@ export function CartPageMobileCheckoutBar({
   onOpenTotalNegotiation,
 }: CartPageMobileCheckoutBarProps) {
   return (
-    <div className={`fixed bottom-24 left-0 right-0 bg-white border-t border-gray-200 p-3 items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-40 ${styles.checkoutBar}`}>
+    <div className={`fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-40 ${styles.checkoutBar}`}>
       {hasPriceNegotiation && !hasNonNegotiableCartItem && (
         <button
           type="button"

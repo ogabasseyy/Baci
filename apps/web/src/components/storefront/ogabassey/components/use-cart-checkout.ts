@@ -14,6 +14,7 @@ export function useCartCheckout(isCartOpen: boolean, setIsCartOpen: (open: boole
   const router = useRouter();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const attempt = useRef(0);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export function useCartCheckout(isCartOpen: boolean, setIsCartOpen: (open: boole
       attempt.current += 1;
       setIsCheckoutLoading(false);
       setIsIdentityOpen(false);
+      setCheckoutError(null);
     }
     return () => { attempt.current += 1; };
   }, [isCartOpen]);
@@ -29,12 +31,14 @@ export function useCartCheckout(isCartOpen: boolean, setIsCartOpen: (open: boole
     attempt.current += 1;
     setIsCheckoutLoading(false);
     setIsIdentityOpen(false);
+    setCheckoutError(null);
     setIsCartOpen(false);
   };
 
   const handleCheckout = async () => {
     const currentAttempt = ++attempt.current;
     setIsCheckoutLoading(true);
+    setCheckoutError(null);
     let signedIn = Boolean(auth?.user);
     if (!signedIn) {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -55,9 +59,13 @@ export function useCartCheckout(isCartOpen: boolean, setIsCartOpen: (open: boole
       setIsIdentityOpen(true);
       return;
     }
-    closeCart();
-    router.push(asRoute(checkoutUrl));
+    try {
+      router.push(asRoute(checkoutUrl));
+      closeCart();
+    } catch {
+      setCheckoutError('Unable to proceed to checkout. Please try again.');
+    }
   };
 
-  return { closeCart, handleCheckout, isCheckoutLoading, isIdentityOpen, setIsIdentityOpen };
+  return { closeCart, handleCheckout, isCheckoutLoading, isIdentityOpen, setIsIdentityOpen, checkoutError };
 }

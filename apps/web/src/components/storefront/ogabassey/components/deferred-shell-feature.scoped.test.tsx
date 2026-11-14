@@ -103,4 +103,45 @@ describe('DeferredShellFeature scoped activation', () => {
 
     expect(screen.getByText('Scoped child')).toBeInTheDocument();
   });
+
+  it('ignores touch pointerdown and synthesized focusin when ignoreTouchInteraction is enabled, then activates on mouse or keyboard', async () => {
+    function TouchIgnoringHarness() {
+      const interactionTargetRef = useRef<HTMLElement | null>(null);
+
+      return (
+        <section aria-label="Touch-ignoring region" ref={interactionTargetRef}>
+          <button type="button">Inside trigger</button>
+          <DeferredShellFeature
+            timeoutMs={0}
+            activateOnIdle={false}
+            ignoreTouchInteraction
+            interactionTargetRef={interactionTargetRef}
+          >
+            <div>Fine-pointer child</div>
+          </DeferredShellFeature>
+        </section>
+      );
+    }
+
+    render(<TouchIgnoringHarness />);
+
+    const trigger = screen.getByRole('button', { name: 'Inside trigger' });
+    fireEvent.touchStart(trigger);
+    fireEvent.pointerDown(trigger, { pointerType: 'touch' });
+    fireEvent.focusIn(trigger);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('Fine-pointer child')).not.toBeInTheDocument();
+
+    fireEvent.pointerDown(trigger, { pointerType: 'mouse' });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Fine-pointer child')).toBeInTheDocument();
+  });
 });

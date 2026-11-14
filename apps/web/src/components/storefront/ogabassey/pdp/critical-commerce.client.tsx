@@ -16,7 +16,10 @@ import {
   type InitialCriticalVariantSelection,
 } from './critical-commerce-selection';
 import { RouteOfferMissingNotice } from '../pages/product-details-page/route-offer-missing-notice';
-import { AssuranceDefaultNote } from '../pages/product-details-page/assurance-default-note';
+import {
+  OgabasseyPdpCriticalCommerceControls,
+  type OgabasseyPdpCriticalCommerceControlsProps,
+} from './critical-commerce-controls.client';
 import {
   OgabasseyPdpCriticalCommerceProvider,
   useOgabasseyPdpCriticalCommerce,
@@ -24,11 +27,16 @@ import {
 } from './critical-commerce-state.client';
 import { OgabasseyPdpCriticalVariantSelectors } from './critical-variant-selectors.client';
 
+export { OgabasseyPdpCriticalCommerceControls } from './critical-commerce-controls.client';
 export {
   OgabasseyPdpCriticalCommerceConditionFact,
   OgabasseyPdpCriticalConditionBadge,
 } from './critical-commerce-condition.client';
-export { OgabasseyPdpCriticalCommerceProvider } from './critical-commerce-state.client';
+export {
+  OgabasseyPdpCriticalCommerceProvider,
+  useOgabasseyPdpCriticalCommerce,
+  useOptionalOgabasseyPdpCriticalCommerce,
+} from './critical-commerce-state.client';
 
 interface OgabasseyPdpCriticalCommerceClientProps {
   cartHref: Route;
@@ -40,11 +48,6 @@ interface OgabasseyPdpCriticalCommerceClientProps {
   variantAxes?: string[];
   variantAxisOptions?: Record<string, string[]>;
   variantCount: number;
-}
-
-interface OgabasseyPdpCriticalCommerceControlsProps {
-  cartHref: Route;
-  productName: string;
 }
 
 export function OgabasseyPdpCriticalProductImage({
@@ -150,77 +153,6 @@ export function OgabasseyPdpCriticalCommerceSummary() {
         />
       </div>
     </>
-  );
-}
-
-export function OgabasseyPdpCriticalCommerceControls({
-  cartHref,
-  productName,
-}: OgabasseyPdpCriticalCommerceControlsProps) {
-  const {
-    canAddToCart,
-    handleAddToCart,
-    isAtMaxQuantity,
-    maxQuantity,
-    quantity,
-    quantityInCart,
-    setQuantity,
-  } = useOgabasseyPdpCriticalCommerce();
-
-  return (
-    <div
-      data-ogabassey-pdp-commerce-controls
-      aria-label="Purchase controls"
-      role="group"
-    >
-      <div
-        data-ogabassey-pdp-commerce-quantity
-        aria-label="Quantity"
-      >
-        <button
-          aria-label={`Decrease quantity for ${productName}`}
-          disabled={quantity <= 1}
-          onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-          type="button"
-        >
-          -
-        </button>
-        <output aria-live="polite">{quantity}</output>
-        <button
-          aria-label={`Increase quantity for ${productName}`}
-          disabled={isAtMaxQuantity}
-          onClick={() =>
-            setQuantity((current) =>
-              maxQuantity === null
-                ? current + 1
-                : Math.min(maxQuantity, current + 1)
-            )
-          }
-          type="button"
-        >
-          +
-        </button>
-      </div>
-      <button
-        data-ogabassey-pdp-commerce-primary-action
-        disabled={!canAddToCart}
-        onClick={handleAddToCart}
-        type="button"
-      >
-        Add to cart
-      </button>
-      <AssuranceDefaultNote
-        canPurchase={canAddToCart}
-        quantityInCart={quantityInCart}
-      />
-      <Link
-        data-ogabassey-pdp-commerce-secondary-action
-        href={cartHref}
-        prefetch={false}
-      >
-        View cart
-      </Link>
-    </div>
   );
 }
 

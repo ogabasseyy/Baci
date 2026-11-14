@@ -135,39 +135,95 @@
     text-decoration: line-through;
   }
 
+  [data-ogabassey-pdp-commerce-in-cart-actions] {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
   [data-ogabassey-pdp-commerce-quantity] {
     align-items: center;
-    border: 1px solid
-      color-mix(in srgb, var(--store-background-text, #111827) 12%, transparent);
-    border-radius: 999px;
+    background: var(--store-surface, var(--store-background, #ffffff));
+    border: 2px solid var(--store-primary, #d62027);
+    border-radius: 0.75rem;
     display: grid;
-    grid-template-columns: 2.75rem 1fr 2.75rem;
-    min-height: 3rem;
+    grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+    min-height: 3.5rem;
     overflow: hidden;
   }
 
   [data-ogabassey-pdp-commerce-quantity] button {
+    align-items: center;
     background: transparent;
     border: 0;
-    color: var(--store-background-text, #111827);
+    color: var(--store-primary, #d62027);
+    display: inline-flex;
     font-size: 1.25rem;
-    min-height: 3rem;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 3.5rem;
+  }
+
+  [data-ogabassey-pdp-commerce-quantity] button:first-child {
+    border-right: 1px solid
+      color-mix(in srgb, var(--store-primary, #d62027) 15%, transparent);
+  }
+
+  [data-ogabassey-pdp-commerce-quantity] button:last-child {
+    border-left: 1px solid
+      color-mix(in srgb, var(--store-primary, #d62027) 15%, transparent);
+  }
+
+  [data-ogabassey-pdp-commerce-quantity] button:disabled {
+    color: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 28%,
+      transparent
+    );
+    cursor: not-allowed;
   }
 
   [data-ogabassey-pdp-commerce-quantity] output {
-    font-weight: 800;
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.1;
     text-align: center;
+  }
+
+  [data-ogabassey-pdp-commerce-in-cart-label] {
+    color: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 52%,
+      transparent
+    );
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  [data-ogabassey-pdp-commerce-in-cart-value] {
+    color: var(--store-background-text, #111827);
+    font-size: 1.125rem;
+    font-weight: 800;
   }
 
   [data-ogabassey-pdp-commerce-primary-action],
   [data-ogabassey-pdp-commerce-secondary-action] {
     align-items: center;
-    border-radius: 999px;
+    border-radius: 0.75rem;
     display: inline-flex;
     font-weight: 800;
+    gap: 0.5rem;
     justify-content: center;
-    min-height: 3rem;
+    min-height: 3.5rem;
     text-decoration: none;
+    transition:
+      background 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
   }
 
   [data-ogabassey-pdp-commerce-primary-action] {
@@ -177,9 +233,31 @@
   }
 
   [data-ogabassey-pdp-commerce-secondary-action] {
-    border: 1px solid
-      color-mix(in srgb, var(--store-primary, #d62027) 30%, transparent);
+    background: transparent;
+    border: 1.5px solid var(--store-primary, #d62027);
     color: var(--store-primary, #d62027);
+  }
+
+  [data-ogabassey-pdp-commerce-secondary-action]:hover {
+    background: color-mix(
+      in srgb,
+      var(--store-primary, #d62027) 8%,
+      transparent
+    );
+  }
+
+  [data-ogabassey-pdp-commerce-primary-action]:disabled {
+    background: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 10%,
+      transparent
+    );
+    color: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 45%,
+      transparent
+    );
+    cursor: not-allowed;
   }
 
   @media (min-width: 1024px) {

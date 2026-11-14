@@ -5,7 +5,11 @@ import type { Product as CartProduct } from '@/lib/products';
 import { OgabasseyPdpCriticalCommerceClient } from './critical-commerce.client';
 
 vi.mock('@/hooks/cart', () => ({
-  useCart: () => ({ addToCart: vi.fn(), setIsCartOpen: vi.fn() }),
+  useCart: () => ({
+    addToCart: vi.fn(),
+    cart: [{ condition: 'used', id: 'product-1', quantity: 1 }],
+    setIsCartOpen: vi.fn(),
+  }),
 }));
 vi.mock('next/link', () => ({
   default: ({ children, href, prefetch, ...props }: { children: ReactNode; href: string; prefetch?: boolean }) => (

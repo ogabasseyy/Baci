@@ -1,8 +1,10 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+import { STOREFRONT_OAUTH_NEXT_COOKIE } from '@/app/api/storefront/auth/oauth-redirect';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
+import { isDomainIdentifier } from '@/lib/validation';
 
 // Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
 // is deprecated and removed.
@@ -25,6 +27,13 @@ export async function GET(
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
   const { slug } = await params;
+  const isCustomDomain =
+    Boolean(request.headers.get('x-custom-domain')) || isDomainIdentifier(slug);
+  const basePath = slug && !isCustomDomain ? `/${slug}` : '';
+  const loginPath = `${basePath}/account/login`;
+
+  const cookieStore = await cookies();
+  const cookieNext = cookieStore.get?.(STOREFRONT_OAUTH_NEXT_COOKIE)?.value;
 
   // If there's an OAuth error from the provider
   if (error) {
@@ -42,7 +51,6 @@ export async function GET(
       description: safeDesc,
       slug,
     });
-    const loginPath = slug ? `/${slug}/account/login` : '/account/login';
     return NextResponse.redirect(
       `${origin}${loginPath}?error=${encodeURIComponent(errorDescription || error)}`
     );
@@ -54,14 +62,12 @@ export async function GET(
       message: 'No authorization code provided in OAuth callback',
       slug,
     });
-    const loginPath = slug ? `/${slug}/account/login` : '/account/login';
     return NextResponse.redirect(
       `${origin}${loginPath}?error=No authorization code provided`
     );
   }
 
   try {
-    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // Exchange the authorization code for a session
@@ -74,16 +80,18 @@ export async function GET(
         error: exchangeError.message,
         slug,
       });
-      const loginPath = slug ? `/${slug}/account/login` : '/account/login';
       return NextResponse.redirect(
         `${origin}${loginPath}?error=${encodeURIComponent(exchangeError.message)}`
       );
     }
 
-    // Success! Redirect to the account page
-    // Use the slug to maintain proper routing
-    const accountPath = slug ? `/${slug}/account` : '/account';
-    const next = searchParams.get('next');
+    if (cookieNext && typeof cookieStore.delete === 'function') {
+      cookieStore.delete(STOREFRONT_OAUTH_NEXT_COOKIE);
+    }
+
+    // Success! Redirect to the account page (or checkout-return when resuming checkout)
+    const accountPath = `${basePath}/account`;
+    const next = searchParams.get('next') ?? cookieNext ?? null;
     let destination = accountPath;
     if (next) {
       let parsed: URL | null = null;
@@ -95,10 +103,10 @@ export async function GET(
       if (
         parsed?.origin === origin &&
         (parsed.pathname === '/checkout' ||
-          parsed.pathname === `/${slug}/checkout`)
+          (!isCustomDomain && parsed.pathname === `/${slug}/checkout`))
       ) {
         const checkoutPath = `${parsed.pathname}${parsed.search}`;
-        destination = `/${slug}/account/checkout-return?next=${encodeURIComponent(checkoutPath)}`;
+        destination = `${basePath}/account/checkout-return?next=${encodeURIComponent(checkoutPath)}`;
       }
     }
 
@@ -115,7 +123,6 @@ export async function GET(
       error: err instanceof Error ? err.message : 'Unknown error',
       slug,
     });
-    const loginPath = slug ? `/${slug}/account/login` : '/account/login';
     return NextResponse.redirect(
       `${origin}${loginPath}?error=An unexpected error occurred`
     );

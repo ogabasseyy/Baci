@@ -252,4 +252,36 @@ describe('HomeProductGrid interaction/activation', () => {
 
     expect(loadInteractionBindings).not.toHaveBeenCalled();
   });
+
+  it('keeps clean static cards on mobile touch gestures without swapping in overlay chrome', async () => {
+    const loadInteractionBindings = vi
+      .fn()
+      .mockResolvedValue(createMockInteractionBindingsModule());
+    const loadInteractiveCard = vi
+      .fn()
+      .mockResolvedValue(createMockInteractiveCardModule());
+
+    render(
+      <HomeProductGrid
+        products={[createTestProduct(1)]}
+        loadInteractionBindings={loadInteractionBindings}
+        loadInteractiveCard={loadInteractiveCard}
+      />
+    );
+
+    const card = screen.getByRole('article');
+    fireEvent.touchStart(card);
+    fireEvent.pointerDown(card, { pointerType: 'touch' });
+    fireEvent.focusIn(card);
+    fireEvent.click(card);
+
+    await flushPostPaintActivation();
+
+    expect(loadInteractionBindings).not.toHaveBeenCalled();
+    expect(loadInteractiveCard).not.toHaveBeenCalled();
+    expect(screen.getByRole('article')).toHaveAttribute(
+      'data-card-variant',
+      'static'
+    );
+  });
 });

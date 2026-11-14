@@ -1,13 +1,9 @@
 import { canonicalizeCommerceVariantAxis } from '@baci/shared/lib/commerce-variant-axis';
 import { formatCanonicalProductConditionLabel } from '@baci/shared/lib/product-condition';
-
-interface VariantDetailsItem {
-  condition?: string;
-  selectedColor?: string;
-  selectedStorage?: string;
-  secondaryColor?: string;
-  variantAttributes?: Record<string, string>;
-}
+import {
+  resolveCartColorChipStyle,
+  type VariantDetailsItem,
+} from './cart-item-badge-style';
 
 /** Render the saved SKU selection consistently in carts and checkout. */
 export function CartVariantDetails({
@@ -31,11 +27,13 @@ export function CartVariantDetails({
   const conditionLabel = condition
     ? formatCanonicalProductConditionLabel(condition) || condition
     : '';
+  const explicitColorValue =
+    attributes.color_value || text(item.selectedColorValue) || undefined;
   const details = [
     ['Storage', attributes.storage || text(item.selectedStorage)],
     ['SIM type', attributes.sim_type],
-    ['Condition', conditionLabel],
     ['Colour', attributes.color || text(item.selectedColor)],
+    ['Condition', conditionLabel],
     ...Object.entries(attributes)
       .filter(
         ([axis]) =>
@@ -76,26 +74,44 @@ export function CartVariantDetails({
   return (
     <dl
       aria-label="Selected variant"
-      className={`${presentation === 'chips' ? 'mt-2 flex flex-wrap gap-1.5' : 'mt-1 space-y-0.5'} text-xs ${className}`}
+      className={`${presentation === 'chips' ? 'mt-1 flex flex-wrap gap-1' : 'mt-1 space-y-0.5'} text-xs ${className}`}
     >
-      {details.map(([label, value]) => (
-        <div
-          className={
-            presentation === 'chips'
-              ? 'inline-flex max-w-full items-center rounded-md bg-store-background-text/5 px-2 py-1 text-[11px] leading-tight ring-1 ring-inset ring-store-background-text/8'
-              : 'flex flex-wrap gap-x-1'
-          }
-          key={label}
-        >
-          <dt className={presentation === 'chips' ? 'sr-only' : undefined}>
-            {label}:
-          </dt>
-          <dd className="break-words">
-            {value}
-            {presentation === 'chips' && label === 'RAM' ? ' RAM' : ''}
-          </dd>
-        </div>
-      ))}
+      {details.map(([label, value]) => {
+        const isColorChip = presentation === 'chips' && label === 'Colour';
+        const colorChipStyle = isColorChip
+          ? resolveCartColorChipStyle(value, explicitColorValue)
+          : undefined;
+
+        return (
+          <div
+            className={
+              presentation === 'chips'
+                ? label === 'Condition'
+                  ? 'sr-only'
+                  : isColorChip
+                    ? 'inline-flex max-w-full items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-tight'
+                    : 'inline-flex max-w-full items-center rounded bg-store-background-text/5 px-1.5 py-0.5 text-[10px] font-medium leading-tight ring-1 ring-inset ring-store-background-text/8'
+                : 'flex flex-wrap gap-x-1'
+            }
+            style={colorChipStyle}
+            key={label}
+          >
+            <dt className={presentation === 'chips' ? 'sr-only' : undefined}>
+              {label}:
+            </dt>
+            {presentation === 'chips' && label === 'Condition' ? (
+              <dd>
+                <span className="sr-only">{value}</span>
+              </dd>
+            ) : (
+              <dd className="break-words">
+                {value}
+                {presentation === 'chips' && label === 'RAM' ? ' RAM' : ''}
+              </dd>
+            )}
+          </div>
+        );
+      })}
     </dl>
   );
 }

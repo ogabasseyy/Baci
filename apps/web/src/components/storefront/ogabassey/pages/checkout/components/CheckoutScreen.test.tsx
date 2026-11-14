@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiscountResult } from '@/components/storefront/checkout/discount-code-input';
 import type { CheckoutScreenProps } from './CheckoutScreen';
@@ -204,9 +204,11 @@ describe('CheckoutScreen', () => {
     expect(steps).toHaveClass('lg:col-span-8');
     expect(steps).toContainElement(screen.getByText('Delivery saved'));
     expect(steps).toContainElement(screen.getByText('Oxygen application'));
-    expect(
-      screen.getAllByText('Saved order').at(-1)?.parentElement
-    ).toHaveClass('lg:col-span-4');
+    const summaryWrapper = screen
+      .getAllByText('Saved order')
+      .at(-1)?.parentElement;
+    expect(summaryWrapper).toHaveClass('lg:col-span-4');
+    expect(summaryWrapper).not.toHaveClass('hidden');
   });
   it('keeps the saved Oxygen application and its summaries inside checkout', () => {
     render(
@@ -217,15 +219,29 @@ describe('CheckoutScreen', () => {
         oxygenMobileSummary={<aside aria-label="Mobile selected plan" />}
       />
     );
-    expect(
-      screen.getByRole('region', { name: 'Saved Oxygen application' })
-    ).toBeVisible();
-    expect(
-      screen.getByRole('complementary', { name: 'Selected payment plan' })
-    ).toBeVisible();
-    expect(
-      screen.getByRole('complementary', { name: 'Mobile selected plan' })
-    ).toBeVisible();
+    const oxygenStepRegion = screen.getByRole('region', {
+      name: 'Saved Oxygen application',
+    });
+    const oxygenSummaryRegion = screen.getByRole('complementary', {
+      name: 'Selected payment plan',
+    });
+    expect(oxygenStepRegion).toBeVisible();
+    expect(oxygenSummaryRegion).toBeVisible();
+    const mobileSummary = screen.getByRole('complementary', {
+      name: 'Mobile selected plan',
+    });
+    expect(mobileSummary).toBeVisible();
+    expect(mobileSummary.parentElement).toHaveClass('lg:hidden');
+    expect(oxygenStepRegion.parentElement).toHaveClass('lg:col-span-8');
+    expect(oxygenSummaryRegion.parentElement).toHaveClass(
+      'hidden',
+      'lg:block',
+      'lg:col-span-4'
+    );
+    expect(oxygenStepRegion.parentElement?.parentElement).toHaveClass(
+      'grid',
+      'lg:grid-cols-12'
+    );
     expect(screen.queryByTestId('steps')).not.toBeInTheDocument();
     expect(screen.queryByTestId('discount')).not.toBeInTheDocument();
     expect(screen.queryByTestId('mobile-summary')).not.toBeInTheDocument();

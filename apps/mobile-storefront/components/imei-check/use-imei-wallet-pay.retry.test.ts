@@ -184,6 +184,11 @@ describe('bugfix: two typings of one IMEI minted two keys (Muse)', () => {
       );
     });
     expect(keyOfCall(1)).toBe(keyOfCall(0));
+    // One key, one body: both starts send the same normalized IMEI (Muse).
+    const imeiOfCall = (n: number) =>
+      (start.mock.calls[n][1] as { imei: string }).imei;
+    expect(imeiOfCall(0)).toBe(IMEI);
+    expect(imeiOfCall(1)).toBe(IMEI);
   });
 });
 

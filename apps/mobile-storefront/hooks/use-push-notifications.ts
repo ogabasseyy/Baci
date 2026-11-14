@@ -75,6 +75,7 @@ export function usePushNotifications({
   );
   const notificationListener = useRef<EventSubscription | null>(null);
   const responseListener = useRef<EventSubscription | null>(null);
+  const mountedRef = useRef(false);
   const pendingResponses = useRef<NotificationResponse[]>([]);
   const coldStartResponseRequested = useRef(false);
   const liveResponseReceived = useRef(false);
@@ -82,6 +83,13 @@ export function usePushNotifications({
   navigationReadyRef.current = navigationReady;
   const registration = useSavingsPushRegistration();
   const activeMerchantId = pickMerchantId(merchantId, STOREFRONT_MERCHANT_ID);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const navigate = useEffectEvent(
     (
@@ -185,7 +193,7 @@ export function usePushNotifications({
       if (!coldStartResponseRequested.current) {
         coldStartResponseRequested.current = true;
         Notifications.getLastNotificationResponseAsync().then((response) => {
-          if (cancelledRef.current || !response) return;
+          if (!mountedRef.current || !response) return;
           if (
             !shouldHandleColdStartResponse(true, liveResponseReceived.current)
           ) {

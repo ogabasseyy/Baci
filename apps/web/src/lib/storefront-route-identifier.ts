@@ -1,7 +1,7 @@
 import type { headers } from 'next/headers';
 
 const getRootDomain = () =>
-  process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
+  process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com';
 
 export function resolveMerchantContextIdentifier(
   headersList: Awaited<ReturnType<typeof headers>>

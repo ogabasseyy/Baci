@@ -173,4 +173,38 @@ describe('GET /[slug]/blog/feed.xml', () => {
       '<atom:link href="https://ogabassey.com/blog/feed.xml" rel="self" type="application/rss+xml"/>'
     );
   });
+
+  it('canonicalizes self-link when the upstream <channel> element has attributes or whitespace', async () => {
+    mockResolveStorefrontSitemapContext.mockResolvedValue({
+      status: 'found',
+      context: {
+        merchant: {
+          slug: 'ogabassey',
+          feature_settings: { blog_enabled: true },
+        },
+        storeUrl: 'https://ogabassey.com',
+      },
+    });
+    mockGetMerchantBlogFeed.mockResolvedValue(
+      new NextResponse(
+        '<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel xml:lang="en" ><title>Ogabassey Blog</title></channel></rss>',
+        {
+          status: 200,
+          headers: { 'content-type': 'application/rss+xml; charset=utf-8' },
+        }
+      )
+    );
+
+    const response = await GET(
+      new NextRequest('https://ogabassey.com/blog/feed.xml'),
+      { params: Promise.resolve({ slug: 'ogabassey.com' }) }
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('xmlns:atom="http://www.w3.org/2005/Atom"');
+    expect(body).toContain(
+      '<channel xml:lang="en" >\n        <atom:link href="https://ogabassey.com/blog/feed.xml" rel="self" type="application/rss+xml"/>'
+    );
+  });
 });

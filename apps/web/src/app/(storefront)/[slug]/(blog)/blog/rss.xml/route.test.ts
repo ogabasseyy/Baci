@@ -20,7 +20,7 @@ describe('GET /[slug]/blog/rss.xml', () => {
     mockHeaders.mockResolvedValue(new Headers());
   });
 
-  it('permanently redirects to canonical /blog/feed.xml when blog is enabled', async () => {
+  it('temporarily redirects to canonical /blog/feed.xml when blog is enabled', async () => {
     mockResolveStorefrontSitemapContext.mockResolvedValue({
       status: 'found',
       context: {
@@ -37,7 +37,7 @@ describe('GET /[slug]/blog/rss.xml', () => {
       { params: Promise.resolve({ slug: 'ogabassey.com' }) }
     );
 
-    expect(response.status).toBe(308);
+    expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe(
       'https://ogabassey.com/blog/feed.xml'
     );

@@ -23,7 +23,8 @@ function withCanonicalRssSelfLink(
   xml: string,
   canonicalFeedUrl: string
 ): string {
-  if (!xml.includes('<channel>')) {
+  const channelOpenTagPattern = /<channel(?:\s[^>]*)?>/i;
+  if (!channelOpenTagPattern.test(xml)) {
     return xml;
   }
 
@@ -41,7 +42,7 @@ function withCanonicalRssSelfLink(
           );
           return `<atom:link${updatedAttrs}${selfClose}>`;
         }
-        return match.replace('<atom:link', `<atom:link href="${safeHref}"`);
+        return match.replace(/<atom:link\b/i, `<atom:link href="${safeHref}"`);
       }
     );
   }
@@ -54,8 +55,9 @@ function withCanonicalRssSelfLink(
         : `<rss${attrs} xmlns:atom="http://www.w3.org/2005/Atom">`
   );
   return xmlWithNamespace.replace(
-    '<channel>',
-    `<channel>\n        <atom:link href="${safeHref}" rel="self" type="application/rss+xml"/>`
+    channelOpenTagPattern,
+    (channelOpenTag) =>
+      `${channelOpenTag}\n        <atom:link href="${safeHref}" rel="self" type="application/rss+xml"/>`
   );
 }
 

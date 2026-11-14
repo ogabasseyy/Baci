@@ -9,8 +9,9 @@ export interface StorefrontBlogRssRouteContext {
 }
 
 /**
- * Permanently redirects `/blog/rss.xml` to the canonical `/blog/feed.xml` RSS URL
- * so requests do not fall through to the `[postSlug]` page route.
+ * Temporarily redirects `/blog/rss.xml` to the canonical `/blog/feed.xml` RSS URL
+ * so requests do not fall through to the `[postSlug]` page route while blog
+ * availability remains controlled by merchant feature settings.
  */
 export async function GET(
   request: Request,
@@ -39,6 +40,6 @@ export async function GET(
 
   return NextResponse.redirect(
     `${sitemapResult.context.storeUrl}/blog/feed.xml`,
-    308
+    307
   );
 }

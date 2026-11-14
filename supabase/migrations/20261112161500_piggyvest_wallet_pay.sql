@@ -788,9 +788,12 @@ AS $$
 BEGIN
   UPDATE piggyvest_primary.wallet_payment_refunds SET state = 'released' WHERE id = p_refund.id;
   -- A late refund success (or any other review reason) freezes retries: a
-  -- person decides whether anything is still owed.
+  -- person decides whether anything is still owed. A duplicate payment's own
+  -- reason does not: its refund is the whole point, so a rejected attempt
+  -- opens the next one like any other (Codex P1).
   IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
-              WHERE payment.id = p_refund.payment_id AND payment.review_reason IS NOT NULL) THEN
+              WHERE payment.id = p_refund.payment_id AND payment.review_reason IS NOT NULL
+                AND payment.review_reason <> 'duplicate_payment') THEN
     RETURN;
   END IF;
   IF p_refund.attempt >= 20 THEN
@@ -1250,7 +1253,13 @@ BEGIN
          provider_transaction_id = proof ->> 'providerTransactionId',
          settled_at = pg_catalog.clock_timestamp()
    WHERE id = v_refund.id;
-  UPDATE piggyvest_primary.wallet_payments SET fulfilment = 'refunded'
+  -- A fee-free refund settles a duplicate payment for good: its review
+  -- reason is cleared, so it leaves the review report and the customer
+  -- deletion fence (Codex P2).
+  UPDATE piggyvest_primary.wallet_payments
+     SET fulfilment = 'refunded',
+         review_reason = CASE WHEN v_fee = 0 AND review_reason = 'duplicate_payment'
+                              THEN NULL ELSE review_reason END
    WHERE id = v_refund.payment_id AND fulfilment = 'refund_owed';
   RETURN CASE WHEN v_fee > 0 THEN 'needs_review' ELSE 'confirmed' END;
 END;

@@ -124,3 +124,31 @@ describe('bugfix: account-change notice bound to the previous account', () => {
     alert.mockRestore();
   });
 });
+
+describe('bugfix: account switch during credential reads dropped the message', () => {
+  it('reports the initialize failure through a fresh notifier', async () => {
+    // Arrange: initialization rejects because another account signed in
+    // while getUser()/getSession() ran.
+    const staleNotify = jest.fn();
+    jest
+      .mocked(initializeWalletTopUp)
+      .mockRejectedValue(
+        new Error(
+          'You switched accounts. Start the top-up again from this account.'
+        )
+      );
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    // Act
+    await startLegacyWalletTopUp({ ...params, notify: staleNotify });
+
+    // Assert: shown to the account signed in now, never via the stale one.
+    expect(staleNotify).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith(
+      'Top-up Failed',
+      'You switched accounts. Start the top-up again from this account.'
+    );
+    expect(router.push).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+});

@@ -119,7 +119,10 @@ export async function startLegacyWalletTopUp({
       error instanceof Error
         ? error.message
         : 'Failed to start wallet top-up. Please try again.';
-    notify(
+    // A fresh notifier (Codex): the request may have failed because the
+    // account switched while credentials were read, so the one made before
+    // it can be bound to the previous account and its notice would vanish.
+    walletOutcomeNotifier(activeMerchantId)(
       { title: 'Top-up didn’t start', message, tone: 'warning' },
       { title: 'Top-up Failed', message }
     );

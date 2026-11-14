@@ -19,6 +19,7 @@ const NO_CHANGES = {
   mobile_storefront: 'false',
   quiz_db: 'false',
   test_plan_mode: 'targeted',
+  stage: 'full',
 };
 
 function lintRunner({ isPrivate, enabled, event, headRepository, repository }, field = 'runs-on') {

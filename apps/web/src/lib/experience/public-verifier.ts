@@ -44,6 +44,8 @@ function matchesJourney(
     const required = expected.journeySteps[index];
     if (!required || step.action !== required.action) return false;
     if (step.path === required.path) return true;
+    // Custom carts can open as overlays on declared storefront routes. The
+    // observer must still prove the action; a route match alone is not proof.
     return (
       (step.action === 'cart-add' ||
         step.action === 'cart-read' ||

@@ -27,6 +27,10 @@ Use isolated owners to test wrong tenant, removed ownership, revoked/expired gra
 
 The portable-homepage tool inventory is: `list_storefronts`, `get_storefront_status`, `create_storefront_draft`, `update_storefront_draft`, `get_storefront_operation`, `apply_storefront_operation`, `preview_storefront`, `publish_storefront`. The last tool requests approval; it never confirms on the model's behalf. When full-code experiences are enabled, the MCP registry also exposes the experience tools listed in `full-code-review-cases.md`; their presence in source does not establish that the deployed connection has them enabled or working.
 
+When background builds are enabled, `finalize_experience_build` reads the job
+status; queued or running does not mean the build is complete. Reconcile a
+disconnected response with `get_experience_operation` using the same job ID.
+
 ## Demo capture checklist
 
 Record a real journey in the qualified reviewer-accessible environment: linking/consent, synthetic new-store draft, edit/status/apply, exact preview and the owner-review step. Stop before publication, order creation or payment. Include one blocked-readiness example and capture viewport/host behavior without exposing credentials or synthetic account personal details. A local static fixture recording is not a substitute for this demo, and a recording from a test environment does not establish production OAuth or delivery.

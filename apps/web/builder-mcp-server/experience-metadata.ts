@@ -46,7 +46,7 @@ export const experienceToolDescriptions: Record<
   finalize_experience_build: {
     title: 'Qualify and finalize build',
     description:
-      'Run the queued immutable source through the selected isolated runtime and independent verification. Finalization retains a private candidate and never applies or publishes it. If the response times out or disconnects, do not assume failure or start another build: use get_experience_operation with the same jobId to inspect its status before deciding what to do.',
+      'Run the queued immutable source through the selected isolated runtime and independent verification. With background processing enabled, this reads the job status and it may still be queued; report a completed build only after its status confirms completion. Finalization retains a private candidate and never applies or publishes it. If the response times out or disconnects, do not assume failure or start another build: use get_experience_operation with the same jobId to inspect its status before deciding what to do.',
   },
   preview_experience: {
     title: 'Capture private experience preview',

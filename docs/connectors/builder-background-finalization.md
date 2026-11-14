@@ -75,8 +75,20 @@ passes one job to an injected executor. A local adapter rechecks the canonical
 grant, resolves a user-scoped client, and invokes the existing finalizer using
 the job ID as its stable idempotency key. Local synthetic tests cover this
 composition, connection isolation,
-revocation, role denial, invalid expiry and user mismatch. The discovery tick
-and adapter are not scheduled or wired into the production build service.
+revocation, role denial, invalid expiry and user mismatch. Production-start
+source can schedule the discovery worker when explicitly configured; its
+background setting defaults to disabled and has not been activated or
+qualified in production.
+
+Each worker starts at most one build per tick. Ticks are scheduled every five
+seconds, but a running tick suppresses later ticks until that build finishes;
+the five-second interval is therefore not a five-second per-build throughput
+guarantee. The cursor advances past the serviced connection and wraps after an
+empty page. A synthetic test covers traversal across 23 continuously
+backlogged connections, including the page boundary and wrap. It does not
+establish real-world queue latency, fairness across processes, or capacity.
+Measure and qualify those properties before admitting production traffic or
+raising concurrency.
 Local SQL now supports recovery of stale leases with a fresh attempt nonce,
 three automatic recoveries, a terminal failure after exhaustion, and a
 user-authorized lease-renewal RPC. The linked build supervisor now renews its

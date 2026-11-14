@@ -95,3 +95,39 @@ test('skips expired or invalid grants and refuses a mismatched user', async () =
   assert.equal((await discovery.runOnce()).failed, 1);
   assert.equal(executions, 0);
 });
+
+test('advances across backlogged merchants and wraps after reaching the end', async () => {
+  const ids = Array.from({ length: 23 }, () => randomUUID()).sort();
+  const actorUserId = randomUUID();
+  const merchantId = randomUUID();
+  const jobId = randomUUID();
+  const executed: string[] = [];
+  const discovery = createLinkedBuildDiscovery({
+    listConnections: async (after, limit) =>
+      ids.filter((id) => after === null || id > after).slice(0, limit),
+    readConnection: async (connectionId) => ({
+      connectionId,
+      actorUserId,
+      grantVersion: 1,
+      status: 'active',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      revokedAt: null,
+      scopes: ['storefront.write'],
+      allowedMerchantIds: [merchantId],
+    }),
+    resolveLinkedAccessToken: async () => 'synthetic-token',
+    resolveUser: async () => ({
+      actorUserId,
+      client: { rpc: async () => ({ data: [jobId], error: null }) },
+    }),
+    execute: async ({ connectionId }) => {
+      executed.push(connectionId);
+    },
+  });
+  let cursor: string | null = null;
+  for (let tick = 0; tick < ids.length + 2; tick++) {
+    const result = await discovery.runOnce(cursor);
+    cursor = result.cursor;
+  }
+  assert.deepEqual(executed, [...ids, ids[0]]);
+});

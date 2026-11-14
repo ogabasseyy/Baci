@@ -21,6 +21,8 @@ it('guides status reconciliation after an indeterminate finalization response', 
   expect(description).toContain('get_experience_operation');
   expect(description).toContain('same jobId');
   expect(description).toContain('do not assume failure');
+  expect(description).toContain('background processing');
+  expect(description).toContain('may still be queued');
 });
 it('guides localized commerce controls without replacing commerce operations', () => {
   const description =

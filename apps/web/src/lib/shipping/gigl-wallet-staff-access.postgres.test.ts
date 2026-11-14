@@ -150,6 +150,35 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       ).toThrow(/forbidden/);
     });
 
+    describe('bugfix: bind 409 when shipping_address lacks name/phone', () => {
+      const noContact = `RESET ROLE;
+        UPDATE public.orders SET customer_name='Ada', customer_phone='08000000000',
+          shipping_address='{"address":"12 Test Street","city":"Ikeja","state":"Lagos"}'
+          WHERE id='${bindOrderId}';`;
+      const bound = `RESET ROLE; SELECT shipping_funding_source FROM public.orders WHERE id='${bindOrderId}';`;
+
+      it('binds when name/phone only exist on customer_name/customer_phone', () => {
+        const out = run(`${noContact} ${actor(ownerId)} ${bind} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
+
+      it('still refuses when the stored address really changed', () => {
+        expect(() =>
+          run(`${noContact}
+            UPDATE public.orders SET shipping_address=shipping_address || '{"address":"99 Other Road"}' WHERE id='${bindOrderId}';
+            ${actor(ownerId)} ${bind}`)
+        ).toThrow(/stale_order_quote_inputs/);
+      });
+
+      it('still refuses when the customer phone differs from the quoted receiver', () => {
+        expect(() =>
+          run(`${noContact}
+            UPDATE public.orders SET customer_phone='09011111111' WHERE id='${bindOrderId}';
+            ${actor(ownerId)} ${bind}`)
+        ).toThrow(/stale_order_quote_inputs/);
+      });
+    });
+
     it('lets the owner and orders.fulfill + orders.edit staff bind the attested quote', () => {
       const bound = `RESET ROLE; SELECT shipping_funding_source || '|' || selected_quote_id
         FROM public.orders WHERE id='${bindOrderId}';`;

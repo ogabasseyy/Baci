@@ -176,4 +176,33 @@ BEGIN
   END IF;
 END $$;
 
+-- REGRESSION (Codex P1): a lookup that finished after the pay step read it
+-- as pending never takes a new payment; the PIN proof is not spent.
+SET LOCAL ROLE authenticated;
+SELECT set_config('test.late_lookup', pg_temp.new_lookup(), true);
+RESET ROLE;
+DO $$
+DECLARE
+  v_lookup text := current_setting('test.late_lookup');
+  v_op text := pg_temp.wp_issue(v_lookup, 50000) ->> 'operationId';
+  v_proof text := pg_temp.wp_proof('late-' || v_op, 'wallet_pay', 50000, pg_temp.wp_key(v_op, v_lookup));
+  v_refused boolean := false;
+BEGIN
+  UPDATE public.imei_lookups SET status = 'refunded_error' WHERE id = v_lookup::uuid;
+  BEGIN
+    PERFORM pg_temp.wp_reserve(v_op, v_proof);
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    v_refused := SQLERRM = 'imei_check_already_finished';
+  END;
+  IF NOT v_refused THEN RAISE EXCEPTION 'a finished IMEI check took a new payment'; END IF;
+  IF pg_temp.wp_state(v_op) <> 'issued' OR pg_temp.wp_spent('late-' || v_op) THEN
+    RAISE EXCEPTION 'a refused reservation moved the payment or spent the PIN proof';
+  END IF;
+  -- Still pending: the reservation goes through.
+  UPDATE public.imei_lookups SET status = 'pending' WHERE id = v_lookup::uuid;
+  IF pg_temp.wp_reserve(v_op, v_proof) ->> 'status' <> 'claimed' THEN
+    RAISE EXCEPTION 'a pending IMEI check could not be paid';
+  END IF;
+END $$;
+
 ROLLBACK;

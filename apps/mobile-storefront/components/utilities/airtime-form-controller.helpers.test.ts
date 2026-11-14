@@ -8,7 +8,8 @@ import {
 
 describe('airtime-form-controller.helpers', () => {
   it('normalizes phone and amount inputs', () => {
-    expect(sanitizePhoneDigits('+234 (803) 123-4567')).toBe('2348031234567');
+    // The local form, so the field holds one 11-digit number (Fable).
+    expect(sanitizePhoneDigits('+234 (803) 123-4567')).toBe('08031234567');
     expect(sanitizeAirtimeAmountInput('₦12,500.90')).toBe('1250090');
   });
 
@@ -66,5 +67,17 @@ describe('airtime-form-controller.helpers', () => {
       'jane@example.com'
     );
     expect(getAirtimeCustomerName(null)).toBe('Customer');
+  });
+});
+
+describe('bugfix: the phone field took 18 digits (Fable)', () => {
+  it('keeps at most one local number of digits', () => {
+    expect(sanitizePhoneDigits('080123456789999999')).toBe('08012345678');
+    expect(sanitizePhoneDigits('0801 234 5678')).toBe('08012345678');
+  });
+
+  it('turns a pasted +234 number into its local form', () => {
+    expect(sanitizePhoneDigits('+234 801 234 5678')).toBe('08012345678');
+    expect(sanitizePhoneDigits('2348012345678')).toBe('08012345678');
   });
 });

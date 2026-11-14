@@ -41,6 +41,24 @@ BEGIN
   PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) = 'needs_review', 'fee-charged failure state');
   PERFORM pg_temp.wp_assert(pg_temp.wp_release(pg_temp.wp_pay_proof(v_op, 'txn-rv-2') || '{"feeKobo":5000}'::jsonb) = 'duplicate',
     'fee-charged failure replay');
+  -- 2b. The same fee indexed only after the send was released (definitive
+  -- rejection, empty lookup) while a replacement is live: evidence is kept.
+  v_late := pg_temp.wp_dispatched('rv-2b');
+  PERFORM piggyvest_primary.manage_wallet_payment(v_scope, v_late::uuid, 'release');
+  v_op := pg_temp.wp_dispatched('rv-2b');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_release(pg_temp.wp_pay_proof(v_late, 'txn-rv-2b') || '{"feeKobo":5000}'::jsonb) = 'needs_review',
+    'a late fee on a released send was dropped as a duplicate');
+  PERFORM pg_temp.wp_assert((SELECT state = 'released' AND provider_transaction_id = 'txn-rv-2b'
+      AND review_reason = 'failed_with_fee' FROM piggyvest_primary.wallet_payments WHERE id = v_late::uuid),
+    'a late fee on a released send kept no evidence');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_state(v_op) = 'dispatched', 'the live replacement was disturbed');
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(
+      piggyvest_primary.read_wallet_pay_reconciliation(c_integration, 'staging', '{}') -> 'needsReview') AS item
+      WHERE item ->> 'operationId' = v_late), 'a late fee is not in the review report');
+  PERFORM pg_temp.wp_assert(NOT (piggyvest_primary.list_wallet_pay_work(c_integration, 'staging', 200) -> 'settle' ? v_late),
+    'a released send with fee evidence is still re-checked');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_release(pg_temp.wp_pay_proof(v_late, 'txn-rv-2b') || '{"feeKobo":5000}'::jsonb) = 'duplicate',
+    'late fee replay');
 
   -- 3. A late success decided while another attempt is in flight is durable.
   v_late := pg_temp.wp_dispatched('rv-3');

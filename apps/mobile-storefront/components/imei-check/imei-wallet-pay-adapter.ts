@@ -174,7 +174,10 @@ export function createImeiWalletPayAdapter(input: {
       // Another live payment holds this purchase (e.g. the PiggyVest account
       // changed): it may still settle, so the key stays (Codex P1).
       if (codeOf(reply) === 'PAYMENT_CONFLICT') return outcome('review');
-      return reply.httpStatus >= 500
+      // A rate-limited start (429) is refused before the key is even read,
+      // so it says nothing about an earlier attempt that may have paid:
+      // kept, like a server error (Codex P1).
+      return reply.httpStatus >= 500 || reply.httpStatus === 429
         ? outcome('not_started')
         : outcome('failed');
     },

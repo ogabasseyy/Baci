@@ -94,3 +94,29 @@ describe('bugfix: an invisible purchase was routed to the PiggyVest step (Muse)'
     expect(walletPay).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: a store credit request joined to a PiggyVest purchase waited forever (Codex P1)', () => {
+  it('answers from the PiggyVest purchase, never the plain fulfil', async () => {
+    const storeCreditJoin = vi.fn(
+      async () => new Response('{}', { status: 409 })
+    );
+    const client = supabase(true);
+    const response = await fulfillReplayVtuTransaction({
+      authSupabase: client,
+      input: {} as VtuWalletOnlyChargeInput,
+      keyRow: KEY_ROW,
+      supabase: client,
+      user: { id: 'user-1' } as never,
+      storeCreditJoin,
+    });
+    expect(response.status).toBe(409);
+    expect(storeCreditJoin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactionId: 'vtu-tx-winner',
+        merchantId: 'merchant-1',
+        customerId: 'customer-1',
+      })
+    );
+    expect(mocks.fulfill).not.toHaveBeenCalled();
+  });
+});

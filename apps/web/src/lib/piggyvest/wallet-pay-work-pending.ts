@@ -9,18 +9,13 @@ import { createWalletPayWorkerStore } from './wallet-pay-store';
  * alone. Used when the collection wallet is not configured: nothing waiting
  * means wallet pay was never used and the drain may idle; anything waiting
  * means recovery configuration went missing and the drain must page.
- * PiggyVest savings never installed: no wallet payment can exist. A broken
- * setting or a database failure throws (the caller pages).
+ * Absence of work is only ever proven by reading the database: settings that
+ * are missing or broken (every PIGGYVEST_PRIMARY_* removed in a rollback
+ * included) throw, and the caller pages (Codex P1).
  */
 export async function isWalletPayWorkPending(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<boolean> {
-  // Never installed (no PiggyVest savings setting at all): no wallet payment
-  // can exist. A setting that is present but broken (a rollback that removed
-  // part of it) proves nothing about work left behind, so it throws and the
-  // caller pages (Codex P2).
-  if (!Object.keys(env).some((name) => name.startsWith('PIGGYVEST_PRIMARY_')))
-    return false;
   const primary = readPrimaryWalletSavingsRecoveryRuntime(env);
   const worker = createWalletPayWorkerStore({
     integrationId: primary.configuration.integrationId,

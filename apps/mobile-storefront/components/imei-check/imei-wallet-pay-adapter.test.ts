@@ -377,3 +377,13 @@ describe('bugfix: an ambiguous 5xx start forgot its key (Codex P1)', () => {
     });
   });
 });
+
+describe('bugfix: a rate-limited replay forgot its key (Codex P1)', () => {
+  it('answers not started (key kept) for a 429 start', async () => {
+    api.start.mockResolvedValue(reply(429, { error: 'Too many requests' }));
+    await expect(adapter().start()).resolves.toEqual({
+      kind: 'outcome',
+      outcome: { kind: 'not_started' },
+    });
+  });
+});

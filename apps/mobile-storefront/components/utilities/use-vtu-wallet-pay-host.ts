@@ -177,6 +177,18 @@ export function useVtuWalletPayHost({
           started.start()
         );
         const issuedKey = purchase;
+        // Refused as unavailable on a key minted by this tap (e.g. wallet
+        // pay rolled back on the server): every such refusal comes before a
+        // payment is issued or after the purchase was closed, so nothing is
+        // left to recover. Forgotten, so later submits can use store credit
+        // instead of replaying the refusal forever (Codex P2). A reused key
+        // keeps it: its earlier attempt may have paid.
+        if (
+          minted &&
+          answer.kind === 'outcome' &&
+          answer.outcome.kind === 'unavailable'
+        )
+          await walletPayPurchaseKeys.forget(issuedKey).catch(() => undefined);
         if (answer.kind === 'pin') {
           const cancel = async () => {
             if (!issuedToken) return;

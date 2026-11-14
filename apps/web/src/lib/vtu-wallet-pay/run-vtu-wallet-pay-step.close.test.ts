@@ -209,3 +209,23 @@ describe('bugfix: a start refused before any payment left its purchase live (Cod
     expect(deps.closeUnissued).not.toHaveBeenCalled();
   });
 });
+
+describe('a cancel while wallet pay is switched off (Codex P2 4567616052)', () => {
+  it('answers the cancellation itself, so the app forgets the key', async () => {
+    // A cancel carries no PIN proof: it runs on the recovery runtime like a
+    // re-check, never the switched-off refusal.
+    deps.readRuntime.mockReturnValue(null as never);
+    const response = await runVtuWalletPayStep(
+      { ...base, operationId: OP, cancel: true },
+      deps as never
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+    expect(deps.closeUnpaid).toHaveBeenCalledWith(
+      expect.objectContaining({ cancelOperationId: OP })
+    );
+    deps.readRuntime.mockReturnValue(runtime as never);
+  });
+});

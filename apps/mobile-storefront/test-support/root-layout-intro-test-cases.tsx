@@ -66,7 +66,7 @@ export function registerRootLayoutIntroTests(context: IntroTestContext) {
       jest.advanceTimersByTime(8000);
       await Promise.resolve();
     });
-    expect(screen.getByTestId('startup-recovery')).toHaveTextContent(
+    expect(screen.getByTestId('startup-recovery-screen')).toHaveTextContent(
       'Startup recovery'
     );
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();

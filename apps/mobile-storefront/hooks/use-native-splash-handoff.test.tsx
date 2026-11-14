@@ -124,6 +124,8 @@ it('retries one more time after both native hide attempts fail', async () => {
 
 it('keeps persistent native hide failures bounded before exposing recovery', async () => {
   mockHide.mockRejectedValue(new Error('native hide unavailable'));
+  const isVisible = jest.mocked(SplashMotion.isVisible);
+  isVisible.mockReturnValue(true);
   const { result } = renderHook(() =>
     useNativeSplashHandoff({ initialVisible: true, ready: true })
   );
@@ -134,6 +136,14 @@ it('keeps persistent native hide failures bounded before exposing recovery', asy
 
   expect(result.current.showSplash).toBe(true);
   expect(result.current.hideFailed).toBe(true);
+  expect(result.current.shouldShowStartupRecovery).toBe(false);
+
+  // The native watchdog removes the overlay after persistent bridge failure.
+  isVisible.mockReturnValue(false);
+  await act(async () => jest.advanceTimersByTime(250));
+  await waitFor(() =>
+    expect(result.current.shouldShowStartupRecovery).toBe(true)
+  );
 });
 
 it('exposes startup recovery when native splash visibility cannot be read', async () => {

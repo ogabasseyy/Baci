@@ -34,16 +34,16 @@ export function registerRootLayoutPendingSplashRecoveryTest({
 
     await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(3));
     expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
     expect(rootLayoutNavUnmount).not.toHaveBeenCalled();
 
     act(() => jest.advanceTimersByTime(8_000));
     expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
 
     await act(async () => rejectRecovery(new Error('bounded recovery failed')));
     await waitFor(() =>
-      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
+      expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen()
     );
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
     expect(rootLayoutNavUnmount).toHaveBeenCalledTimes(1);

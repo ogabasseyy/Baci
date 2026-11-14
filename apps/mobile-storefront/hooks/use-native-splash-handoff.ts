@@ -166,6 +166,9 @@ export function useNativeSplashHandoff({
     hasLayout,
     hideFailed,
     nativeSplashVisible,
+    // Never place an interactive recovery screen above a native overlay that
+    // still intercepts touch. SplashMotion's native 15s watchdog removes that
+    // overlay if JS hide keeps failing; the visibility poll reveals recovery.
     shouldShowStartupRecovery:
       hideFailed && recoverySettled && !nativeSplashVisible,
   };

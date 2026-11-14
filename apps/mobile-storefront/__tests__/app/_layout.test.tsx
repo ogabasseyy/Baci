@@ -115,7 +115,7 @@ jest.mock(
       const { Text } =
         jest.requireActual<typeof import('react-native')>('react-native');
       return (
-        <Text testID="startup-recovery" onLayout={onLayout}>
+        <Text testID="startup-recovery-screen" onLayout={onLayout}>
           Startup recovery
         </Text>
       );
@@ -309,10 +309,10 @@ describe('RootLayout storage boot gate', () => {
     render(<RootLayout />);
     act(() => jest.advanceTimersByTime(8000));
     await waitFor(() =>
-      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
+      expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen()
     );
 
-    fireEvent(screen.getByTestId('startup-recovery'), 'layout');
+    fireEvent(screen.getByTestId('startup-recovery-screen'), 'layout');
 
     expect(mockMarkStartupTiming).toHaveBeenCalledWith('root_first_layout');
   });

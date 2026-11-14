@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { extname } from 'node:path';
 
 const [artifact, flag, abiArgument, ...rest] = process.argv.slice(2);
+// Keep this release matrix aligned with mobile-storefront's reactNativeArchitectures.
+// The AAB verifier checks every ABI configured for the storefront release.
 const knownAbis = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'];
 if (!artifact || rest.length || (flag && flag !== '--abis') || (flag && !abiArgument) || (!flag && abiArgument)) {
   console.error('Usage: node android-native-library-check.mjs <artifact.aab|artifact.apk> [--abis abi,abi]');

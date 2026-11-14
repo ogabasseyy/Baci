@@ -74,7 +74,7 @@ export function registerRootLayoutSplashRecoveryTests({
       minDuration: 0,
       fade: 220,
     });
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
     expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
       /resume:false/
     );
@@ -156,12 +156,12 @@ export function registerRootLayoutSplashRecoveryTests({
       minDuration: 0,
       fade: 0,
     });
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
     expect(rootLayoutNavUnmount).not.toHaveBeenCalled();
     isSplashVisible.mockReturnValue(false);
     act(() => jest.advanceTimersByTime(250));
     await waitFor(() =>
-      expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
+      expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen()
     );
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
     expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
@@ -183,10 +183,10 @@ export function registerRootLayoutSplashRecoveryTests({
     });
 
     await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(1));
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
     expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
     fireEvent(screen.getByTestId('root-layout-nav'), 'layout');
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
   });
 
   it('resumes navigation when delayed startup storage becomes ready', async () => {
@@ -203,14 +203,14 @@ export function registerRootLayoutSplashRecoveryTests({
       jest.advanceTimersByTime(8000);
     });
     await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
+    expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen();
 
     await act(async () => resolveStorage());
 
     await waitFor(() =>
       expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen()
     );
-    expect(screen.queryByTestId('startup-recovery')).toBeNull();
+    expect(screen.queryByTestId('startup-recovery-screen')).toBeNull();
   });
 
   it('shows recovery and releases the splash when startup storage is not ready', async () => {
@@ -228,7 +228,7 @@ export function registerRootLayoutSplashRecoveryTests({
 
     await waitFor(() => expect(hideSplash).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
-    expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen();
+    expect(screen.getByTestId('startup-recovery-screen')).toBeOnTheScreen();
   });
 
   it('keeps the navigator mounted when the startup splash finishes', async () => {

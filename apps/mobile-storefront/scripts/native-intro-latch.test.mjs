@@ -69,8 +69,13 @@ test('native splash watchdog releases the recovery screen within fifteen seconds
   );
   const ios = readFileSync(new URL('ios/SplashMotionController.swift', packageRoot), 'utf8');
   assert.match(android, /private const val WATCHDOG_MS = 15_000L/);
+  assert.match(android, /main\.postDelayed\(\{ if \(!terminated\) abort\(\) \}, WATCHDOG_MS\)/);
+  assert.match(android, /private fun abort\(\) \{[\s\S]*?finishDismiss\(\)/);
+  assert.match(android, /private fun finishDismiss\(\) \{[\s\S]*?visible = false/);
   assert.match(
     ios,
     /private static let watchdogSeconds: TimeInterval = 15\s*$/m
   );
+  assert.match(ios, /DispatchQueue\.main\.asyncAfter\(deadline: \.now\(\) \+ Self\.watchdogSeconds\) \{ \[weak self\] in[\s\S]*?self\.finishDismiss\(\)/);
+  assert.match(ios, /private func finishDismiss\(\)[\s\S]*?setVisible\(false\)/);
 });

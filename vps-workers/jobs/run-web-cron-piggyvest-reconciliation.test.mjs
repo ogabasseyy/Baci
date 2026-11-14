@@ -37,10 +37,10 @@ describe('web cron worker PiggyVest reconciliation', () => {
     assert.equal(calls[0].init.method, 'GET');
   });
 
-  it('allows the PiggyVest degraded-health cron endpoint', async () => {
+  it('allows the early-cancel interest forfeit sweep cron endpoint', async () => {
     const calls = [];
     const result = await runWebCron({
-      path: '/api/cron/piggyvest-degraded-health',
+      path: '/api/cron/piggyvest-goal-cancel-forfeit-sweep',
       env: {
         BACI_WEB_BASE_URL: 'https://ogabassey.com',
         CRON_SECRET: 'secret',
@@ -55,7 +55,7 @@ describe('web cron worker PiggyVest reconciliation', () => {
     assert.deepEqual(result, { status: 200, body: 'ok' });
     assert.equal(
       calls[0].url,
-      'https://ogabassey.com/api/cron/piggyvest-degraded-health'
+      'https://ogabassey.com/api/cron/piggyvest-goal-cancel-forfeit-sweep'
     );
   });
 });

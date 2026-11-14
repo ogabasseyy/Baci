@@ -2007,6 +2007,38 @@ BEGIN
         FROM piggyvest_primary.goal_cancel_operations AS cancel
        WHERE cancel.id = v_cancel_id;
     END IF;
+  ELSIF NOT FOUND THEN
+    -- A payout with no recorded contribution was inside the cancel's balance
+    -- snapshot (or never forfeited), so whether the reversal was already out
+    -- of that balance can not be told here: the forfeited total is kept. When
+    -- the cancel's interest was already sent, though, the reversed amount may
+    -- have reached Ogabassey's wallet, so it becomes review work (paged by
+    -- the sweep until a person settles it with PiggyVest), never invisible.
+    SELECT cancel.id INTO v_cancel_id FROM piggyvest_primary.goal_cancel_operations AS cancel
+     WHERE cancel.goal_id = v_goal_id AND cancel.integration_id = NEW.integration_id
+       AND cancel.state IN ('dispatched', 'confirmed')
+     ORDER BY cancel.dispatched_at DESC LIMIT 1;
+    IF FOUND THEN
+      PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        'primary-savings:' || (SELECT cancel.intent_id::text FROM piggyvest_primary.goal_cancel_operations AS cancel
+                                WHERE cancel.id = v_cancel_id), 0));
+      IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits AS sent
+                  WHERE sent.cancel_operation_id = v_cancel_id
+                    -- Already settled with the provider. One still in flight was
+                    -- flagged above (review_on_settle) and settles into review.
+                    AND (sent.state = 'confirmed'
+                         OR (sent.state = 'needs_review' AND sent.provider_transaction_id IS NOT NULL))) THEN
+        INSERT INTO piggyvest_primary.goal_cancel_interest_forfeits (
+          cancel_operation_id, integration_id, intent_id, goal_id, state, reference,
+          source_wallet_id, destination_wallet_id, amount_kobo, reserved_at)
+        SELECT cancel.id, cancel.integration_id, cancel.intent_id, cancel.goal_id, 'needs_review',
+               piggyvest_primary.next_goal_cancel_forfeit_reference(cancel.goal_id),
+               cancel.source_wallet_id, 'reversed-after-forfeit',
+               LEAST(NEW.amount_kobo, 9999999999), pg_catalog.clock_timestamp()
+          FROM piggyvest_primary.goal_cancel_operations AS cancel
+         WHERE cancel.id = v_cancel_id;
+      END IF;
+    END IF;
   END IF;
   RETURN NEW;
 END;

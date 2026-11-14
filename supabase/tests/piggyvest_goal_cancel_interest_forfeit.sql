@@ -1418,6 +1418,35 @@ BEGIN
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
+  -- Regression: a reversal of interest that was inside the balance snapshot,
+  -- arriving after the forfeit was sent, is review work (the reversed amount
+  -- may have reached Ogabassey) while the forfeited total is kept.
+  BEGIN
+    UPDATE public.customer_savings_goals SET status = 'active', current_amount = 2500, cancelled_at = NULL
+     WHERE id = c_goal;
+    PERFORM pg_temp.gf_receipt('gf-snapshot', 400, pg_catalog.clock_timestamp() - interval '1 hour');
+    v_op := pg_temp.gc_reserved('snapshot-reversal');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'snapshot split');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":12000}'::jsonb) = 'confirmed', 'snapshot principal');
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'confirmed', dispatched_at = pg_catalog.clock_timestamp(), posted_at = pg_catalog.clock_timestamp(),
+           provider_transaction_id = 'synthetic-snapshot-' || id::text
+     WHERE cancel_operation_id = v_op::uuid;
+    v_before := (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid);
+    INSERT INTO piggyvest_primary.paid_interest_reversals (integration_id, provider_reversal_id, payout_id,
+      amount_kobo, provider_evidence_sha256, evidence_reference)
+    VALUES ('f3860000-0000-4000-8000-000000000006', 'gf-reversal-snapshot', 'gf-snapshot', 150,
+      repeat('7', 64), 'synthetic-reversal-9');
+    PERFORM pg_temp.gc_assert(
+      (SELECT forfeited_interest_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = v_before
+      AND EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_interest_forfeits
+                   WHERE cancel_operation_id = v_op::uuid AND state = 'needs_review'
+                     AND destination_wallet_id = 'reversed-after-forfeit' AND amount_kobo = 150),
+      'a reversal of snapshot interest after the forfeit was sent left no review work');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- A principal above the ceiling can not be sent: released, nothing planned.
   BEGIN
     UPDATE public.customer_savings_goals SET status = 'active', current_amount = 100000000, cancelled_at = NULL

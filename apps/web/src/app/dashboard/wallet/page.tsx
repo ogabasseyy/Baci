@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { readWalletSpendableBreakdown } from '@/lib/wallet/wallet-spendable-breakdown';
 import {
   getTransactions,
   getWalletData,
@@ -61,6 +62,9 @@ export default async function WalletPage() {
     throw new Error('Failed to load wallet data');
   }
 
+  // Display-only: a failure here hides the cards, never the wallet page.
+  const spendable = await readWalletSpendableBreakdown(supabase, merchant.id);
+
   return (
     <WalletClient
       wallet={walletData?.wallet || null}
@@ -68,6 +72,7 @@ export default async function WalletPage() {
       transactions={transactions}
       merchantId={merchant.id}
       payoutCurrency={merchant.payout_currency || 'NGN'}
+      spendable={spendable.ok ? spendable : null}
     />
   );
 }

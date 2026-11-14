@@ -99,4 +99,59 @@ describe('WalletClient', () => {
     expect(screen.getByText('₦5,000')).toBeInTheDocument();
     expect(screen.queryByText(/₹|INR/)).not.toBeInTheDocument();
   });
+
+  it('shows spendable and settled-to-bank figures with a plain explanation', () => {
+    render(
+      <WalletClient
+        merchantId="merchant-1"
+        payoutCurrency="NGN"
+        spendable={{
+          spendableBalance: 1200,
+          settledToBankTotal: 9000,
+          pendingReconciliationTotal: 4000,
+        }}
+        wallet={{
+          id: 'wallet-1',
+          availableBalance: 10200,
+          pendingBalance: 0,
+          upcomingBalance: 0,
+          upcomingCount: 0,
+          totalEarned: 0,
+          totalWithdrawn: 0,
+          autoPayoutEnabled: false,
+          autoPayoutDay: 'monday',
+          minPayoutAmount: 1000,
+          lastPayoutAt: null,
+          lastPayoutAmount: null,
+          canWithdraw: false,
+          nextSettlementDate: null,
+          nextSettlementAmount: null,
+        }}
+        pendingSettlements={[]}
+        transactions={[]}
+      />
+    );
+    expect(screen.getByText('Spendable')).toBeInTheDocument();
+    expect(screen.getByText('₦1,200')).toBeInTheDocument();
+    expect(
+      screen.getByText('Settled to your bank by Paystack')
+    ).toBeInTheDocument();
+    expect(screen.getByText('₦9,000')).toBeInTheDocument();
+    expect(
+      screen.getByText(/already paid straight to your bank/i)
+    ).toBeInTheDocument();
+  });
+
+  it('hides the breakdown when it could not be loaded', () => {
+    render(
+      <WalletClient
+        merchantId="m"
+        wallet={null}
+        pendingSettlements={[]}
+        transactions={[]}
+        spendable={null}
+      />
+    );
+    expect(screen.queryByText('Spendable')).not.toBeInTheDocument();
+  });
 });

@@ -1,3 +1,4 @@
+import { OGABASSEY_BLACK_FRIDAY_DATE_LABEL } from '@baci/shared';
 import { Image } from 'expo-image';
 import { Link, Stack } from 'expo-router';
 import {
@@ -31,6 +32,20 @@ export default function BlackFridayScreen() {
               <Text accessibilityRole="header" style={styles.title}>
                 Black <Text style={styles.accent}>Friday</Text>
               </Text>
+              <Text
+                style={[
+                  styles.subtitle,
+                  { color: '#ffd5dc', fontWeight: '700' },
+                ]}
+              >
+                {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+              </Text>
+              {__DEV__ &&
+                process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN && (
+                  <Text style={styles.subtitle}>
+                    Local preview · Sample lineup
+                  </Text>
+                )}
               <Text style={styles.subtitle}>
                 Find your next upgrade in our Black Friday lineup.
               </Text>
@@ -38,7 +53,7 @@ export default function BlackFridayScreen() {
             <Image
               accessible={false}
               contentFit="cover"
-              contentPosition="bottom"
+              contentPosition="center"
               source={require('@/assets/images/campaigns/black-friday.webp')}
               style={styles.heroArtwork}
             />

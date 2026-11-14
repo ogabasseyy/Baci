@@ -16,6 +16,7 @@ import { ProfileQuizBadge } from './ProfileQuizBadge';
 interface ProfileHeaderProps {
   customer: Customer;
   loyaltyPoints?: number;
+  branded?: boolean;
 }
 
 function getTierInfo(tier?: string) {
@@ -35,7 +36,11 @@ function getTierInfo(tier?: string) {
   }
 }
 
-export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
+export function ProfileHeader({
+  customer,
+  loyaltyPoints,
+  branded = false,
+}: ProfileHeaderProps) {
   const tier = getTierInfo();
   const latestQuizBadge = useQuizBadgeStore((state) =>
     state.getMostRecentBadge(customer.user_id ?? customer.id)
@@ -52,62 +57,71 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
       : 'Store Member';
 
   return (
-    <Animated.View entering={FadeIn.duration(500)} style={styles.container}>
+    <Animated.View
+      entering={FadeIn.duration(500)}
+      style={[styles.container, branded && styles.brandedContainer]}
+    >
       <LinearGradient
-        colors={[BRAND.primary, BRAND.primaryDark, '#1a0505']}
+        colors={
+          branded
+            ? ['#200d16', '#3e1624', '#1a0c13']
+            : [BRAND.primary, BRAND.primaryDark, '#1a0505']
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Edit button */}
-      <Animated.View
-        entering={FadeInRight.delay(300).duration(400)}
-        style={styles.editWrap}
-      >
-        <Pressable
-          style={({ pressed }) => [
-            styles.editBtn,
-            pressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
-          ]}
-          onPress={() => router.push('/profile/edit' as Href)}
-          accessibilityRole="button"
-          accessibilityLabel="Edit profile"
+      <View style={branded ? styles.identityRow : undefined}>
+        {/* Edit button */}
+        <Animated.View
+          entering={FadeInRight.delay(300).duration(400)}
+          style={[styles.editWrap, branded && styles.inlineEdit]}
         >
-          <Ionicons name="create-outline" size={18} color="#FFFFFF" />
-        </Pressable>
-      </Animated.View>
+          <Pressable
+            style={({ pressed }) => [
+              styles.editBtn,
+              pressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
+            ]}
+            onPress={() => router.push('/profile/edit' as Href)}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+          >
+            <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+          </Pressable>
+        </Animated.View>
 
-      {/* Avatar + Name */}
-      <Animated.View
-        entering={FadeInDown.delay(150).duration(500)}
-        style={styles.row}
-      >
-        <View style={styles.avatarFallback}>
-          <Text style={styles.initials}>{initials}</Text>
-        </View>
-
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Text style={styles.email} numberOfLines={1}>
-            {customer.email}
-          </Text>
-          <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-            <Ionicons name="star" size={10} color={tier.color} />
-            <Text style={[styles.tierLabel, { color: tier.color }]}>
-              {tier.label}
-            </Text>
+        {/* Avatar + Name */}
+        <Animated.View
+          entering={FadeInDown.delay(150).duration(500)}
+          style={[styles.row, branded && styles.identityContent]}
+        >
+          <View style={styles.avatarFallback}>
+            <Text style={styles.initials}>{initials}</Text>
           </View>
-          {latestQuizBadge ? (
-            <ProfileQuizBadge
-              eventTitle={latestQuizBadge.eventTitle}
-              label={latestQuizBadge.label}
-            />
-          ) : null}
-        </View>
-      </Animated.View>
+
+          <View style={styles.info}>
+            <Text style={styles.name} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.email} numberOfLines={1}>
+              {customer.email}
+            </Text>
+            <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
+              <Ionicons name="star" size={10} color={tier.color} />
+              <Text style={[styles.tierLabel, { color: tier.color }]}>
+                {tier.label}
+              </Text>
+            </View>
+            {latestQuizBadge ? (
+              <ProfileQuizBadge
+                eventTitle={latestQuizBadge.eventTitle}
+                label={latestQuizBadge.label}
+              />
+            ) : null}
+          </View>
+        </Animated.View>
+      </View>
 
       {/* Loyalty points card */}
       {loyaltyPoints !== undefined && (
@@ -127,20 +141,13 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
             </View>
           </View>
           <Pressable
-            style={({ pressed }) => [
-              styles.redeemBtn,
-              pressed && { opacity: 0.8 },
-            ]}
+            style={styles.redeemBtn}
             onPress={() => router.push('/wallet' as Href)}
             accessibilityRole="button"
             accessibilityLabel="View wallet and redeem points"
           >
             <Text style={styles.redeemText}>Redeem</Text>
-            <Ionicons
-              name="arrow-forward"
-              size={14}
-              color={palette.amber[900]}
-            />
+            <Ionicons name="arrow-forward" size={14} color="#3a210b" />
           </Pressable>
         </Animated.View>
       )}
@@ -157,6 +164,10 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     paddingHorizontal: SPACING.lg,
   },
+  brandedContainer: { borderRadius: 20, paddingTop: 16 },
+  identityRow: { flexDirection: 'row-reverse', alignItems: 'flex-start' },
+  identityContent: { flex: 1, paddingRight: 8 },
+  inlineEdit: { position: 'relative', top: 0, right: 0 },
   editWrap: {
     position: 'absolute',
     top: SPACING.md,
@@ -243,6 +254,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   pointsLeft: {
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -272,7 +284,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: palette.amber[400],
+    backgroundColor: '#ffd783',
+    flexShrink: 0,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: RADIUS.full,
@@ -280,6 +293,6 @@ const styles = StyleSheet.create({
   redeemText: {
     fontSize: 12,
     fontWeight: '800',
-    color: palette.amber[900],
+    color: '#3a210b',
   },
 });

@@ -13,6 +13,11 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { BRAND, withAlpha } from '@/constants/Colors';
 
 const mockPush = jest.fn();
+const mockOrderShortcuts =
+  jest.fn<() => { receipts: boolean; tracking: boolean } | undefined>();
+jest.mock('@/hooks/use-home-order-shortcuts', () => ({
+  useHomeOrderShortcuts: () => mockOrderShortcuts(),
+}));
 const defaultDimensions = {
   screen: {
     fontScale: 1,
@@ -56,6 +61,7 @@ function findAncestorWithWidth(instance: ReactTestInstance, width: number) {
 describe('HomeServiceCards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOrderShortcuts.mockReturnValue(undefined);
     jest.spyOn(Animated, 'loop').mockReturnValue({
       reset: jest.fn(),
       start: jest.fn(),
@@ -170,6 +176,30 @@ describe('HomeServiceCards', () => {
 
     fireEvent.press(screen.getByRole('button', { name: /^Save & Earn/ }));
     expect(mockPush).toHaveBeenLastCalledWith('/wallet');
+  });
+
+  it('uses discovery tiles when there is no order history', () => {
+    render(<HomeServiceCards placement="underSearch" />);
+    expect(screen.queryByText('Receipts')).toBeNull();
+    expect(screen.queryByText('Track Order')).toBeNull();
+    expect(screen.getByText('Return Policy')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: /^Return Policy/ }));
+    expect(mockPush).toHaveBeenLastCalledWith('/returns');
+
+    fireEvent.press(screen.getByRole('button', { name: /^Device Protection/ }));
+    expect(mockPush).toHaveBeenLastCalledWith('/device-protection');
+  });
+
+  it('keeps receipts visible after shipment and hides the tracking shortcut', () => {
+    mockOrderShortcuts.mockReturnValue({ receipts: true, tracking: false });
+    const { rerender } = render(<HomeServiceCards placement="underSearch" />);
+    expect(screen.getByText('Receipts')).toBeTruthy();
+    expect(screen.queryByText('Track Order')).toBeNull();
+
+    mockOrderShortcuts.mockReturnValue({ receipts: true, tracking: true });
+    rerender(<HomeServiceCards placement="underSearch" />);
+    fireEvent.press(screen.getByRole('button', { name: /^Track Order/ }));
+    expect(mockPush).toHaveBeenCalledWith('/track-order');
   });
 
   it('routes each shortcut to its service screen', () => {

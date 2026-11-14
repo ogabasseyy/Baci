@@ -114,7 +114,11 @@ export function HomeScreenView({
   if (isConfigLoading) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
-        <Header showSearch useWarmDarkSurface={useWarmDarkSurface} />
+        <Header
+          showSearch
+          useScallopedSearch={nextDrop}
+          useWarmDarkSurface={useWarmDarkSurface}
+        />
         {nextDrop && <HomeServiceCards placement="underSearch" />}
         <HeroSkeleton />
         <ProductGridSkeleton count={4} fullWidth={nextDrop} />
@@ -176,6 +180,7 @@ export function HomeScreenView({
             onSearchSubmit={onSearchSubmit}
             onSearchCancel={onSearchCancel}
             isScrolled={isScrolled || nextDrop}
+            useScallopedSearch={nextDrop}
             useWarmDarkSurface={useWarmDarkSurface}
           />
 

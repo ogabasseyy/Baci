@@ -19,6 +19,10 @@ import Colors, {
   withAlpha,
 } from '@/constants/Colors';
 
+import { useHomeOrderShortcuts } from '@/hooks/use-home-order-shortcuts';
+
+import { ShortcutTileBackdrop } from './ShortcutTileBackdrop';
+
 type ServiceShortcut = {
   title: string;
   subtitle: string;
@@ -103,6 +107,22 @@ const HOME_FEATURES: ServiceShortcut[] = [
   SERVICE_SHORTCUTS[3],
 ];
 
+const returnsShortcut: ServiceShortcut = {
+  title: 'Return Policy',
+  subtitle: 'Read the Ogabassey return policy',
+  href: '/returns',
+  icon: 'return-down-back-outline',
+  accent: '#3158a7',
+};
+
+const protectionShortcut: ServiceShortcut = {
+  title: 'Device Protection',
+  subtitle: 'Learn about Ogabassey Assurance',
+  href: '/device-protection',
+  icon: 'shield-checkmark-outline',
+  accent: '#8a5232',
+};
+
 const CARD_HEIGHT = 42;
 const COMPACT_CARD_HEIGHT = 38;
 const COMPACT_BREAKPOINT = 360;
@@ -114,11 +134,24 @@ export function HomeServiceCards({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const isCompact = width < COMPACT_BREAKPOINT;
+  const orderShortcuts = useHomeOrderShortcuts(placement === 'underSearch');
 
   if (placement === 'underSearch') {
-    const tileWidth = (width - SPACING.md * 2 - CARD_GAP * 3) / 4;
+    const columns = Math.max(
+      2,
+      Math.min(4, Math.floor(width / (85 * fontScale)))
+    );
+    const tileWidth =
+      (width - SPACING.md * 2 - CARD_GAP * (columns - 1)) / columns;
+    const features = HOME_FEATURES.map((item) => {
+      if (item.href === '/receipts' && !orderShortcuts?.receipts)
+        return returnsShortcut;
+      if (item.href === '/track-order' && !orderShortcuts?.tracking)
+        return protectionShortcut;
+      return item;
+    });
     const isDark = colorScheme === 'dark';
 
     return (
@@ -130,21 +163,15 @@ export function HomeServiceCards({
           { backgroundColor: isDark ? '#181416' : colors.black },
         ]}
       >
-        {HOME_FEATURES.map((item) => (
+        {features.map((item) => (
           <Pressable
             key={item.title}
             accessibilityRole="button"
             accessibilityLabel={`${item.title}. ${item.subtitle}`}
             onPress={() => router.push(item.href)}
-            style={[
-              styles.featureTile,
-              {
-                width: tileWidth,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              },
-            ]}
+            style={[styles.featureTile, { width: tileWidth }]}
           >
+            <ShortcutTileBackdrop color={isDark ? colors.muted : colors.card} />
             <View
               style={[
                 styles.featureIcon,
@@ -156,7 +183,7 @@ export function HomeServiceCards({
               <Ionicons
                 name={item.icon}
                 size={20}
-                color={isDark ? '#ffc1c3' : item.accent}
+                color={isDark ? '#fff' : item.accent}
               />
             </View>
             <Text style={[styles.featureTitle, { color: colors.text }]}>
@@ -164,6 +191,16 @@ export function HomeServiceCards({
             </Text>
           </Pressable>
         ))}
+        <View style={styles.pointsRow}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={13}
+            color={isDark ? '#fff' : '#ffc1c3'}
+            accessible={false}
+            importantForAccessibility="no"
+          />
+          <Text style={styles.pointsTitle}>Ogabassey Never Disappoints!</Text>
+        </View>
       </View>
     );
   }
@@ -257,20 +294,34 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     gap: CARD_GAP,
   },
+  pointsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingTop: 5,
+    paddingBottom: 12,
+  },
+  pointsTitle: {
+    color: '#fff',
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
   featureTile: {
-    borderWidth: 1,
     minHeight: 73,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
-    paddingVertical: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 8,
     gap: 4,
-    borderRadius: 12,
   },
   featureIcon: {
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },

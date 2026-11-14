@@ -1,5 +1,7 @@
+import { OGABASSEY_BLACK_FRIDAY_DATE_LABEL } from '@baci/shared';
 import { Image } from 'expo-image';
-import { Link } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export function BlackFridayHeroSlide({
@@ -9,36 +11,52 @@ export function BlackFridayHeroSlide({
   width: number;
   height: number;
 }) {
+  const router = useRouter();
+
   return (
     <View style={[styles.slide, { width, height }]}>
-      <Link href="/black-friday" asChild>
-        <Pressable
-          accessibilityLabel="Shop Black Friday"
-          accessibilityRole="link"
-          style={styles.banner}
+      <Pressable
+        accessibilityLabel={`Shop Black Friday, ${OGABASSEY_BLACK_FRIDAY_DATE_LABEL}`}
+        accessibilityRole="button"
+        onPress={() => router.push('/black-friday')}
+        style={styles.banner}
+      >
+        <Image
+          accessible={false}
+          contentFit="contain"
+          source={require('@/assets/images/campaigns/black-friday.webp')}
+          style={styles.artwork}
+        />
+        <LinearGradient
+          colors={['#10090b', '#10090b', '#10090b00']}
+          locations={[0, 0.34, 0.57]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <Text
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          style={styles.title}
         >
-          <Image
-            accessible={false}
-            contentFit="cover"
-            source={require('@/assets/images/campaigns/black-friday.webp')}
-            style={styles.artwork}
-          />
-          <Text
-            accessibilityElementsHidden
-            importantForAccessibility="no"
-            style={styles.title}
-          >
-            Black <Text style={styles.accent}>Friday</Text>
-          </Text>
-          <Text
-            accessibilityElementsHidden
-            importantForAccessibility="no"
-            style={styles.action}
-          >
-            Shop the lineup →
-          </Text>
-        </Pressable>
-      </Link>
+          Black <Text style={styles.accent}>Friday</Text>
+        </Text>
+        <Text
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          style={styles.date}
+        >
+          {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+        </Text>
+        <Text
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          style={styles.action}
+        >
+          Shop the lineup →
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -51,7 +69,7 @@ const styles = StyleSheet.create({
     borderColor: '#4b2026',
     borderRadius: 18,
     borderWidth: 1,
-    gap: 12,
+    gap: 7,
     justifyContent: 'center',
     overflow: 'hidden',
     padding: 16,
@@ -60,7 +78,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
-    width: '48%',
+    width: '72%',
     height: '100%',
   },
   title: {
@@ -71,6 +89,7 @@ const styles = StyleSheet.create({
     maxWidth: '52%',
   },
   accent: { color: '#ff626d' },
+  date: { color: '#ffd5dc', fontSize: 13, fontWeight: '600', maxWidth: '51%' },
   action: {
     alignSelf: 'flex-start',
     backgroundColor: '#fff',

@@ -1,7 +1,7 @@
 export const BLACK_FRIDAY_PATH = '/black-friday';
 
 // Add approved catalog slugs in the order shoppers should see them.
-const approvedProductSlugs: readonly string[] = [];
+export const APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS: readonly string[] = [];
 const previewProductSlugs = [
   'iphone-18-pro-max',
   'samsung-galaxy-z-flip8',
@@ -14,7 +14,10 @@ const previewProductSlugs = [
 ] as const;
 
 export const IS_BLACK_FRIDAY_PREVIEW =
-  process.env.NODE_ENV === 'development' && approvedProductSlugs.length === 0;
+  process.env.NODE_ENV === 'development' &&
+  APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS.length === 0;
 
 export const BLACK_FRIDAY_PRODUCT_SLUGS: readonly string[] =
-  IS_BLACK_FRIDAY_PREVIEW ? previewProductSlugs : approvedProductSlugs;
+  IS_BLACK_FRIDAY_PREVIEW
+    ? previewProductSlugs
+    : APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS;

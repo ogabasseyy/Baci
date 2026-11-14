@@ -116,13 +116,13 @@ describe('BlockRenderer', () => {
     expect(screen.getByText(/Hero carousel/)).toBeTruthy();
   });
 
-  it('appends Black Friday to the selected carousel and keeps its existing slides', () => {
+  it('puts Black Friday first in the selected carousel and keeps its existing slides', () => {
     renderBlocks([configuredHeroBlock, emptyHeroBlock], {
       blackFridayHeroBlockId: configuredHeroBlock.props.id,
     });
 
     const carousel = screen.getByTestId('hero-carousel-with-ad');
-    expect(carousel).toHaveTextContent(/Featured phonesBlack Friday/);
+    expect(carousel).toHaveTextContent(/Black FridayFeatured phones/);
     expect(screen.getAllByText('Black Friday')).toHaveLength(1);
   });
 

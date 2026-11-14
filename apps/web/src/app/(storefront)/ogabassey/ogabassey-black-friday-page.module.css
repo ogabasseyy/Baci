@@ -70,8 +70,8 @@
 .heroArt {
   width: 100%;
   height: auto;
-  aspect-ratio: 3 / 2;
-  object-fit: cover;
+  aspect-ratio: 2 / 1;
+  object-fit: contain;
   object-position: center 50%;
   mask-image: linear-gradient(to bottom, transparent, #000 6%);
 }
@@ -145,7 +145,7 @@
     max-height: 35rem;
     aspect-ratio: 1;
     object-position: center;
-    mask-image: linear-gradient(to right, transparent, #000 22%);
+    mask-image: linear-gradient(to right, transparent, #000 8%);
   }
 }
 

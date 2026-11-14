@@ -7,7 +7,12 @@ import { blackFridayResponseSchema } from '@/schemas/black-friday';
 export const isOgabasseyApp = CONFIG.MERCHANT_SLUG === 'ogabassey';
 
 export async function fetchBlackFridayProducts(signal?: AbortSignal) {
-  const origin = resolveStorefrontApiBaseUrl(EXPO_PUBLIC_API_URL);
+  const previewOrigin = __DEV__
+    ? process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN
+    : undefined;
+  const origin = resolveStorefrontApiBaseUrl(
+    previewOrigin ?? EXPO_PUBLIC_API_URL
+  );
   const response = await fetch(`${origin}/api/storefront/black-friday`, {
     signal,
   });
@@ -19,7 +24,11 @@ export async function fetchBlackFridayProducts(signal?: AbortSignal) {
 
 export function useBlackFriday() {
   return useQuery({
-    queryKey: ['ogabassey', 'black-friday'],
+    queryKey: [
+      'ogabassey',
+      'black-friday',
+      __DEV__ ? process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN : undefined,
+    ],
     queryFn: ({ signal }) => fetchBlackFridayProducts(signal),
     enabled: isOgabasseyApp,
     staleTime: 60_000,

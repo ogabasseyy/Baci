@@ -43,27 +43,16 @@ export function HomeCategoryDiscovery() {
   const router = useRouter();
   const { data: catalogCategories = [] } = useCategories();
   const { colors, isDark } = useTheme();
-  const accent = isDark ? '#ff858a' : '#b91c1c';
+  const cardColors = {
+    backgroundColor: colors.card,
+    borderColor: isDark ? '#a65a68' : '#e89ba7',
+  };
 
   return (
     <View style={styles.section}>
-      <View style={styles.headingRow}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.heading, { color: colors.text }]}
-        >
-          Discover devices
-        </Text>
-        <Pressable
-          accessibilityRole="link"
-          onPress={() => router.push('/(tabs)/categories')}
-          style={styles.all}
-        >
-          <Text style={[styles.allLabel, { color: accent }]}>View all</Text>
-        </Pressable>
-      </View>
       <ScrollView
         horizontal
+        accessibilityLabel="Discover devices"
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.track}
       >
@@ -88,27 +77,26 @@ export function HomeCategoryDiscovery() {
                     : { pathname: '/search', params: { q: query } }
                 )
               }
-              style={styles.item}
+              style={[styles.item, cardColors]}
             >
-              <View
-                style={[
-                  styles.thumbnail,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
+              <View style={styles.thumbnail}>
                 {image ? (
                   <Image
                     accessible={false}
                     contentFit="contain"
                     source={createSafeBoundedImageSource({
                       uri: image,
-                      width: 72,
+                      width: 56,
                       height: 56,
                     })}
                     style={styles.image}
                   />
                 ) : (
-                  <Ionicons name={icon} size={25} color={accent} />
+                  <Ionicons
+                    name={icon}
+                    size={20}
+                    color={colors.textSecondary}
+                  />
                 )}
               </View>
               <Text style={[styles.label, { color: colors.text }]}>
@@ -117,33 +105,44 @@ export function HomeCategoryDiscovery() {
             </Pressable>
           );
         })}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="View all device categories"
+          onPress={() => router.push('/(tabs)/categories')}
+          style={[styles.item, cardColors]}
+        >
+          <Ionicons
+            name="grid-outline"
+            size={20}
+            color={colors.textSecondary}
+          />
+          <Text style={[styles.label, { color: colors.text }]}>View all</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { marginBottom: 12 },
-  headingRow: {
-    marginHorizontal: 16,
+  section: { marginBottom: 4 },
+  track: { paddingHorizontal: 16, gap: 8 },
+  item: {
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  heading: { fontSize: 18, fontWeight: '800' },
-  all: { minHeight: 44, justifyContent: 'center', paddingLeft: 12 },
-  allLabel: { fontSize: 13, fontWeight: '700' },
-  track: { paddingHorizontal: 16, gap: 12 },
-  item: { width: 76, gap: 6, alignItems: 'center' },
-  thumbnail: {
-    width: 72,
-    height: 56,
+    gap: 7,
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+  },
+  thumbnail: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   image: { width: '100%', height: '100%' },
-  label: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  label: { fontSize: 13, fontWeight: '700' },
 });

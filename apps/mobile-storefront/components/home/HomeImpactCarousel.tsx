@@ -52,7 +52,7 @@ export function HomeImpactCarousel() {
       <ScrollView
         horizontal
         accessibilityLabel="Stories about access and sustainability"
-        showsHorizontalScrollIndicator
+        showsHorizontalScrollIndicator={false}
         snapToInterval={cardWidth + 10}
         decelerationRate="fast"
         contentContainerStyle={styles.track}
@@ -70,6 +70,15 @@ export function HomeImpactCarousel() {
               “I got my first paycheck from my smartphone.”
             </Text>
           </View>
+        </View>
+        <View style={[styles.paycheckCard, { width: cardWidth }]}>
+          <Image
+            accessible
+            accessibilityLabel="Omoh if not for this laptop… how i wan take chop?"
+            source={require('@/assets/images/campaigns/laptop-story.webp')}
+            contentFit="contain"
+            style={StyleSheet.absoluteFill}
+          />
         </View>
         {stories.map((story) => (
           <View
@@ -136,7 +145,7 @@ const styles = StyleSheet.create({
   paycheckCard: {
     minHeight: 124,
     justifyContent: 'center',
-    backgroundColor: '#210b15',
+    backgroundColor: '#21050c',
     borderColor: '#512331',
     borderWidth: 1,
     borderRadius: 16,

@@ -1,4 +1,5 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
+import type { ImageSource } from 'expo-image';
 import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { type FlatListProps, useWindowDimensions, View } from 'react-native';
@@ -26,7 +27,9 @@ import { nextOffsetAfterAdToggle } from './launch-ad-offset';
 import { StandardSlide } from './StandardSlide';
 
 export interface HeroSlide {
-  campaign?: 'black-friday' | 'next-drop';
+  campaign?: 'black-friday';
+  artwork?: ImageSource;
+  showSavingsProvider?: boolean;
   title: string;
   subtitle: string;
   image: string;
@@ -62,7 +65,7 @@ export function Hero({
 }: HeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getHeroStyles(colors, isDark);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, fontScale } = useWindowDimensions();
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -156,7 +159,12 @@ export function Hero({
   });
 
   const getHeroHeight = () => {
-    if (template.heroVariant === 'parallax') return ELITE_HEIGHT;
+    if (template.heroVariant === 'parallax') {
+      const extraHeight = slides.some((slide) => slide.artwork)
+        ? Math.max(0, Math.min(fontScale, 1.5) - 1) * 160
+        : 0;
+      return ELITE_HEIGHT + Math.ceil(extraHeight);
+    }
     if (template.heroVariant === 'carousel') return CAROUSEL_HEIGHT;
     return STANDARD_HEIGHT;
   };
@@ -189,11 +197,13 @@ export function Hero({
         />
       );
     }
-    if (item.campaign === 'next-drop') {
+    if (item.artwork) {
       return (
         <NextDropHeroSlide
           width={screenWidth}
           height={getHeroHeight()}
+          artwork={item.artwork}
+          showSavingsProvider={item.showSavingsProvider}
           title={item.title}
           subtitle={item.subtitle}
           ctaText={item.ctaText}

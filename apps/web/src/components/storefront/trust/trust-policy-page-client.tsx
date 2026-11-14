@@ -1,3 +1,10 @@
+import {
+  Camera,
+  ClipboardCheck,
+  PackageCheck,
+  ShieldCheck,
+  Truck,
+} from 'lucide-react';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -7,7 +14,18 @@ import type {
 
 export type TrustPolicyKind = 'returns' | 'shipping' | 'warranty';
 
+import {
+  OGABASSEY_ASSURANCE_SUMMARY,
+  OGABASSEY_CARE_INTRO,
+  OGABASSEY_CHANGE_OF_MIND_BUYBACK,
+  OGABASSEY_QUALITY_CHECKS,
+  OGABASSEY_RETURN_HELP,
+  OGABASSEY_RETURN_SHIPPING,
+  OGABASSEY_WARRANTY_DETAILS,
+} from '@baci/shared';
+
 export interface TrustPolicyPageClientProps {
+  ogabasseyCare?: boolean;
   kind: TrustPolicyKind;
   merchantName: string;
   contactHref?: string;
@@ -219,9 +237,13 @@ export function TrustPolicyPageClient({
   merchantName,
   contactHref,
   trustProfile,
+  ogabasseyCare = false,
 }: TrustPolicyPageClientProps) {
   const summary = getPolicySummary(kind, trustProfile);
-  const facts = getPolicyFacts(kind, trustProfile);
+  const isOgabasseyReturns = ogabasseyCare && kind === 'returns';
+  const facts = getPolicyFacts(kind, trustProfile).filter(
+    (fact) => !isOgabasseyReturns || fact.label !== 'Return fees'
+  );
   const guidance = getPolicyGuidance(kind, merchantName, trustProfile);
 
   return (
@@ -233,22 +255,91 @@ export function TrustPolicyPageClient({
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-store-background-text sm:text-4xl">
           {getPolicyTitle(kind)}
         </h1>
+        {ogabasseyCare && kind === 'returns' && (
+          <p className="mt-4 leading-7 text-store-background-text/80">
+            {OGABASSEY_CARE_INTRO}
+          </p>
+        )}
         {summary ? (
           <p className="mt-4 text-base leading-7 text-store-background-text/70">
             {summary}
           </p>
         ) : null}
 
+        {ogabasseyCare && kind === 'returns' && (
+          <section className="mt-8 rounded-2xl border border-store-border p-5">
+            <h2 className="text-lg font-semibold">
+              Three checks before delivery
+            </h2>
+            <ol className="mt-4 space-y-4">
+              {OGABASSEY_QUALITY_CHECKS.map(({ title, body }, index) => (
+                <li
+                  key={title}
+                  className="flex gap-3 rounded-xl bg-store-background-text/5 p-3"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="font-bold text-store-primary"
+                  >
+                    {index === 0 ? (
+                      <ClipboardCheck size={18} />
+                    ) : index === 1 ? (
+                      <PackageCheck size={18} />
+                    ) : (
+                      <Camera size={18} />
+                    )}
+                  </span>
+                  <div>
+                    <h3 className="font-semibold">{title}</h3>
+                    <p>{body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {ogabasseyCare && kind === 'returns' && (
+          <aside className="mt-6 rounded-2xl border border-store-border p-5">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <ShieldCheck size={18} aria-hidden="true" />
+              Ogabassey Assurance
+            </h2>
+            <p className="mt-2 text-sm">{OGABASSEY_ASSURANCE_SUMMARY}</p>
+            <a href="./warranty" className="mt-2 inline-block underline">
+              See device coverage
+            </a>
+          </aside>
+        )}
         <section className="mt-6 rounded-2xl border border-store-border bg-store-background-text/5 p-4">
           <h2 className="text-lg font-semibold text-store-background-text">
             {guidance.heading}
           </h2>
           <div className="mt-3 space-y-3 text-sm leading-6 text-store-background-text/70 sm:text-base sm:leading-7">
-            {guidance.paragraphs.map((paragraph) => (
+            {(ogabasseyCare
+              ? kind === 'returns'
+                ? [OGABASSEY_RETURN_HELP]
+                : [OGABASSEY_WARRANTY_DETAILS, OGABASSEY_ASSURANCE_SUMMARY]
+              : guidance.paragraphs
+            ).map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
             ))}
           </div>
         </section>
+
+        {isOgabasseyReturns && (
+          <section className="mt-6 space-y-3 rounded-2xl border border-store-border p-5">
+            <h2 className="text-lg font-semibold">
+              <Truck
+                className="mr-2 inline-block"
+                size={18}
+                aria-hidden="true"
+              />
+              Return shipping and buybacks
+            </h2>
+            <p>{OGABASSEY_RETURN_SHIPPING}</p>
+            <p>{OGABASSEY_CHANGE_OF_MIND_BUYBACK}</p>
+          </section>
+        )}
 
         <dl className="mt-8 grid gap-4 sm:grid-cols-2">
           {facts.map((fact) => (
@@ -266,6 +357,14 @@ export function TrustPolicyPageClient({
           ))}
         </dl>
 
+        {ogabasseyCare && kind === 'returns' && (
+          <a
+            href="./warranty"
+            className="mt-5 inline-block font-semibold underline"
+          >
+            Read the warranty
+          </a>
+        )}
         {contactHref ? (
           <div className="mt-8">
             <a

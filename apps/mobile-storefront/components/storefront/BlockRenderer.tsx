@@ -1,5 +1,6 @@
 import type React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
+import { homeCampaignSlides } from '@/components/home/home-campaign-slides';
 import { useCategories } from '@/hooks';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
@@ -113,33 +114,24 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 ? heroBlock.props.slides
                 : [];
 
-              const slides: HeroSlide[] = configuredSlides.map((slide) => ({
-                title: slide.title,
-                subtitle: slide.subtitle,
-                image: slide.image,
-                ctaText: slide.ctaText,
-                ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
-              }));
+              const useCampaignStyle =
+                nextDropHeroBlockId === heroBlock.props.id;
 
-              if (
-                nextDropHeroBlockId &&
-                heroBlock.props.id === nextDropHeroBlockId
-              ) {
-                slides.unshift({
-                  campaign: 'next-drop',
-                  title: 'Earn interest while saving for your device',
-                  subtitle: 'Reach your goal faster.',
-                  image: '',
-                  ctaText: 'Explore savings',
-                  ctaLink: '/wallet',
-                });
-              }
+              const slides: HeroSlide[] = useCampaignStyle
+                ? [...homeCampaignSlides]
+                : configuredSlides.map((slide) => ({
+                    title: slide.title,
+                    subtitle: slide.subtitle,
+                    image: slide.image,
+                    ctaText: slide.ctaText,
+                    ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
+                  }));
 
               if (
                 blackFridayHeroBlockId &&
                 heroBlock.props.id === blackFridayHeroBlockId
               ) {
-                slides.push({
+                slides.unshift({
                   campaign: 'black-friday',
                   title: 'Black Friday',
                   subtitle: '',

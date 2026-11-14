@@ -1,0 +1,2 @@
+export const OGABASSEY_BLACK_FRIDAY_DATE = '2026-11-27';
+export const OGABASSEY_BLACK_FRIDAY_DATE_LABEL = 'Friday, 27 November 2026';

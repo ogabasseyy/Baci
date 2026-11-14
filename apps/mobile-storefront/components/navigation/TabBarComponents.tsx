@@ -3,6 +3,17 @@ import type React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
+import { CONFIG } from '@/lib/config';
+
+type TabIconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const FILLED_TAB_ICONS: Partial<Record<TabIconName, TabIconName>> = {
+  'home-outline': 'home',
+  'heart-outline': 'heart',
+  'cart-outline': 'cart',
+  'wallet-outline': 'wallet',
+  'person-outline': 'person',
+};
 
 export function TabBarLabel({
   focused,
@@ -36,25 +47,33 @@ export function TabBarIcon({
   badge,
   activeColor,
 }: {
-  name: React.ComponentProps<typeof Ionicons>['name'];
+  name: TabIconName;
   focused: boolean;
   badge?: number;
   activeColor?: string;
 }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const branded = CONFIG.MERCHANT_SLUG === 'ogabassey';
+  const useWhiteFill = branded && isDark;
+  const iconName = useWhiteFill ? (FILLED_TAB_ICONS[name] ?? name) : name;
+  const inactiveColor = branded
+    ? isDark
+      ? '#fff'
+      : '#685962'
+    : colors.tabIconDefault;
 
   return (
     <View style={styles.iconContainer}>
       <Animated.View testID="tab-bar-icon-inner" style={styles.iconInner}>
         <Ionicons
-          name={name}
+          name={iconName}
           size={22}
           color={
-            focused
+            focused && !useWhiteFill
               ? (activeColor ?? colors.tabIconSelected)
-              : colors.tabIconDefault
+              : inactiveColor
           }
-          style={{ opacity: focused ? 1 : 0.6 }}
+          style={{ opacity: focused || branded ? 1 : 0.6 }}
         />
         {badge !== undefined && badge > 0 && (
           <Animated.View

@@ -37,7 +37,6 @@ import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
 import { HomeImpactCarousel } from './HomeImpactCarousel';
 import { getHomeFeedSlices } from './home-feed-ad-owners';
-import { NextDropCollections } from './NextDropCollections';
 import { useHomeProductFeed } from './use-home-product-feed';
 
 export type HomeFeedListItem =
@@ -133,16 +132,16 @@ export function HomeFeedList({
   const heroBlocks = headerBlocks.filter(
     (block) => block.type === 'HeroCarousel'
   );
+  const nextDropHero = nextDrop ? heroBlocks[0] : undefined;
   const campaignHero =
     !isSearchOpen && !blackFridayError && blackFridayProducts?.length
-      ? (heroBlocks.find((block) => block.props.slides?.length) ??
+      ? (nextDropHero ??
+        heroBlocks.find((block) => block.props.slides?.length) ??
         heroBlocks[0])
       : undefined;
 
-  const nextDropHero = nextDrop ? heroBlocks[0] : undefined;
   const shoppingStories = !isSearchOpen && (
     <>
-      <NextDropCollections />
       <HomeCategoryDiscovery />
       <HomeImpactCarousel />
     </>

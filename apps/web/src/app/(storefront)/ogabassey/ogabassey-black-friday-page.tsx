@@ -1,3 +1,7 @@
+import {
+  OGABASSEY_BLACK_FRIDAY_DATE,
+  OGABASSEY_BLACK_FRIDAY_DATE_LABEL,
+} from '@baci/shared';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
@@ -27,6 +31,12 @@ export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
           <p className={styles.description}>
             Find your next upgrade in our Black Friday lineup.
           </p>
+          <time
+            dateTime={OGABASSEY_BLACK_FRIDAY_DATE}
+            className="block font-semibold text-rose-200"
+          >
+            {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+          </time>
           <a className={styles.heroLink} href="#black-friday-offers">
             Shop the lineup <span aria-hidden="true">↓</span>
           </a>
@@ -36,7 +46,7 @@ export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
           alt=""
           className={styles.heroArt}
           width={768}
-          height={768}
+          height={384}
           src="/campaigns/black-friday-hero-768.webp"
           srcSet="/campaigns/black-friday-hero-384.webp 384w, /campaigns/black-friday-hero-768.webp 768w"
           sizes="(min-width: 80rem) 616px, (min-width: 28rem) 50vw, calc(100vw - 2rem)"

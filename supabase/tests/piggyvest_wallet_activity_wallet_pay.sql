@@ -220,6 +220,23 @@ BEGIN
   PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
       WHERE NULLIF(row.label, '') IS NULL), 'an empty label was listed');
 
+  -- REGRESSION (Muse): a second verified customer of the same store sees
+  -- none of this customer's spends or refunds.
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.kind IN ('wallet_spend', 'wallet_refund')), 'the caller has no spends to leak');
+  INSERT INTO piggyvest_primary.onboarding_intents (
+    id, integration_id, merchant_id, customer_id, user_id, request_fingerprint, state,
+    provider_customer_id, provider_wallet_id)
+  VALUES ('f9a10000-0000-4000-8000-0000000000a7', 'f9a10000-0000-4000-8000-000000000006',
+    c_merchant, c_neighbour, c_neighbour_user, pg_catalog.repeat('d', 64), 'accepted',
+    'synthetic-walletpay-neighbour', 'synthetic-walletpay-neighbour-main');
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', c_neighbour_user::text, true);
+  PERFORM pg_catalog.set_config('request.jwt.claims', pg_catalog.jsonb_build_object(
+    'sub', c_neighbour_user, 'role', 'authenticated')::text, true);
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.kind IN ('wallet_spend', 'wallet_refund')),
+    'a neighbour in the same store saw another customer''s spends or refunds');
+
   -- Another user sees none of it.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'f9a10000-0000-4000-8000-0000000000ff', true);
   PERFORM pg_catalog.set_config('request.jwt.claims', pg_catalog.jsonb_build_object(

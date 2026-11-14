@@ -41,7 +41,7 @@ describe('BlogCrawlDiscoveryLinks', () => {
     );
     const page20 = screen.getByRole('link', { name: 'Blog page 20' });
     expect(page20).toHaveAttribute('href', '/blog?page=20');
-    expect(page20).toHaveAttribute('data-prefetch', 'false');
+    expect(page20).not.toHaveAttribute('data-prefetch');
     expect(screen.getByRole('link', { name: 'Blog page 36' })).toHaveAttribute(
       'href',
       '/blog?page=36'

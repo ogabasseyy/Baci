@@ -67,7 +67,11 @@ export function BvnField({
           onBlur={() => setFocused(false)}
           placeholder="11-digit BVN"
           placeholderTextColor={colors.placeholder}
-          style={[setupStyles.input, { color: colors.text }]}
+          // Space typed digits only: a spaced placeholder reads oddly (#4229).
+          style={[
+            setupStyles.input,
+            { color: colors.text, letterSpacing: value ? 2 : 0 },
+          ]}
         />
         <Text style={[setupStyles.counter, { color: colors.textSecondary }]}>
           {value.length}/11

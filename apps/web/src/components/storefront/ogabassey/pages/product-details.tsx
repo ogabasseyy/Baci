@@ -330,7 +330,12 @@ export const OgabasseyV2ProductDetails: React.FC<
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !isImeComposing(e)) {
+    if (e.key === 'Enter') {
+      if (isImeComposing(e)) {
+        // Cancel the composing Enter so a surrounding form cannot submit.
+        e.preventDefault();
+        return;
+      }
       (e.target as HTMLInputElement).blur();
     }
   };

@@ -16,6 +16,13 @@ describe('resolveAdSlotId', () => {
     );
   });
 
+  it('keeps the id a plain element id whatever the instance contains', () => {
+    expect(resolveAdSlotId(placement, 'row 4 #top')).toBe(
+      'div-gpt-ad-grid-mpu-row4top'
+    );
+    expect(resolveAdSlotId(placement, ' / ')).toBe('div-gpt-ad-grid-mpu');
+  });
+
   it('returns undefined for an unknown placement', () => {
     expect(resolveAdSlotId(undefined, 4)).toBeUndefined();
   });

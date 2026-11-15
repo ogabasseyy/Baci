@@ -10,9 +10,12 @@ export function resolveAdSlotId(
   slotInstance?: string | number
 ): string | undefined {
   if (!config) return undefined;
-  return slotInstance === undefined
-    ? config.id
-    : `${config.id}-${slotInstance}`;
+  if (slotInstance === undefined) return config.id;
+  // The id is looked up by GPT and must be a plain element id, so anything
+  // outside letters, digits, "-" and "_" is dropped. An instance left empty
+  // by that falls back to the placement id.
+  const suffix = String(slotInstance).replace(/[^a-zA-Z0-9_-]/g, '');
+  return suffix ? `${config.id}-${suffix}` : config.id;
 }
 
 /**

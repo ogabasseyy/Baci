@@ -491,7 +491,7 @@ export const EngineProductGrid: React.FC<EngineProductGridProps> = ({
                     <div className={`col-span-2 ${viewMode === 'grid' ? 'lg:col-span-4' : 'w-full'} flex items-center justify-center my-2 md:my-4`}>
                       <AdUnit
                         placementKey="PRODUCT_GRID_MPU"
-                        slotInstance={index + 1}
+                        slotInstance={`engine-${index + 1}`}
                       />
                     </div>
                   )}

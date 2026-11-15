@@ -121,9 +121,6 @@ export function CategoryPageResults({
                 onClearFilters={onClearFilters}
                 showPriceFilter={showPriceFilter}
               />
-              <div className="mt-6">
-                <AdUnit placementKey="PRODUCT_SIDEBAR" />
-              </div>
             </div>
           </div>
         )}
@@ -178,7 +175,7 @@ export function CategoryPageResults({
                       <div className="col-span-2 md:col-span-3 my-4">
                         <AdUnit
                           placementKey="PRODUCT_GRID_MPU"
-                          slotInstance={index + 1}
+                          slotInstance={`category-${index + 1}`}
                         />
                       </div>
                     )}
@@ -186,7 +183,7 @@ export function CategoryPageResults({
                       <div className="w-full my-4">
                         <AdUnit
                           placementKey="PRODUCT_GRID_MPU"
-                          slotInstance={index + 1}
+                          slotInstance={`category-${index + 1}`}
                         />
                       </div>
                     )}

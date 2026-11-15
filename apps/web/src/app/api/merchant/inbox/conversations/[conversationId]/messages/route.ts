@@ -71,7 +71,8 @@ export async function POST(
   const { conversationId: rawConversationId } = await context.params;
   const conversationId =
     merchantInboxConversationIdSchema.safeParse(rawConversationId);
-  // Streaming read with a byte cap enforced before the body is buffered.
+  // Shared streaming JSON reader: its 64 KB byte cap is enforced before the
+  // body is buffered. The reply's own limit is the 2,000-character schema.
   const rawBody = await readCartJsonBody(request);
   const body = merchantInboxReplySchema.safeParse(
     rawBody.ok ? rawBody.body : null

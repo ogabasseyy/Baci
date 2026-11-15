@@ -14,6 +14,7 @@ import {
   MOBILE_MENU_SUPPORT_ITEMS,
   type MobileMenuItem,
 } from './mobile-menu-constants';
+import styles from './mobile-menu.module.css';
 import { resolveActiveMobileMenuPath } from './resolve-active-mobile-menu-path';
 import { resolveMobileMenuBasePath } from './resolve-mobile-menu-base-path';
 import { useMobileMenuDialog } from './use-mobile-menu-dialog';
@@ -38,11 +39,6 @@ function getCanonicalNavigationCategories(
   }
   return result;
 }
-
-const SECTION_HEADING =
-  'mb-2 px-2 font-bold text-[11px] text-store-background-text/75 uppercase tracking-[0.14em]';
-const FOCUS_RING =
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-background-text';
 
 export interface MobileMenuProps {
   isOpen: boolean;
@@ -96,9 +92,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
   });
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
-    <div className="mb-6 px-4 last:mb-0">
-      <h2 className={SECTION_HEADING}>{title}</h2>
-      <ul className="space-y-1">
+    <div className={styles.section}>
+      <h2 className={styles.heading}>{title}</h2>
+      <ul className={styles.menuList}>
         {items.map((item) => {
           const isActive = item.path === activePath;
           return (
@@ -108,19 +104,11 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 prefetch={false}
                 onClick={() => onClose('navigate')}
                 aria-current={isActive ? 'page' : undefined}
-                className={`group flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-2 py-1 text-sm motion-safe:transition-colors ${FOCUS_RING} ${
-                  isActive
-                    ? 'border-store-primary/30 bg-store-primary/10 font-bold'
-                    : 'border-transparent font-medium hover:bg-store-background-text/5'
-                }`}
+                className={styles.menuLink}
               >
-                <span className="flex items-center gap-3">
+                <span className={styles.linkLabel}>
                   <span
-                    className={`grid size-8 shrink-0 place-items-center rounded-lg ${
-                      isActive
-                        ? 'bg-store-primary text-store-primary-text'
-                        : 'bg-store-background-text/5'
-                    }`}
+                    className={styles.iconTile}
                   >
                     <item.icon size={17} aria-hidden="true" />
                   </span>
@@ -128,13 +116,13 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 </span>
                 {item.path === '/swap' || item.path === '/repairs' ? (
                   <Leaf
-                    className="shrink-0 text-store-menu-sustainability"
+                    className={styles.leaf}
                     size={16}
                     aria-hidden="true"
                   />
                 ) : (
                   <ChevronRight
-                    className="shrink-0 text-store-background-text/60"
+                    className={styles.chevron}
                     size={15}
                     aria-hidden="true"
                   />
@@ -154,28 +142,28 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
       aria-modal="true"
       aria-label="Mobile menu"
       data-open="true"
-      className="fixed inset-0 z-100"
+      className={styles.dialog}
       ref={dialogRef}
     >
       {/* Backdrop */}
       <div
         role="presentation"
-        className="absolute inset-0 bg-black/60 motion-safe:fade-in motion-safe:animate-in motion-safe:duration-200"
+        className={styles.backdrop}
         onClick={() => onClose('dismiss')}
       />
 
       {/* Sidebar */}
-      <div className="absolute inset-y-0 left-0 flex w-[calc(100%_-_2rem)] max-w-[360px] flex-col border-store-border border-r bg-store-menu-surface text-store-background-text shadow-2xl motion-safe:slide-in-from-left motion-safe:animate-in motion-safe:duration-300">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-store-border border-b bg-store-menu-header px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className={styles.panel}>
+        <div className={styles.header}>
           <Logo
-            className="h-6 w-auto min-w-0 text-store-background-text"
+            className={styles.logo}
             color="current"
           />
           <button
             type="button"
             ref={closeButtonRef}
             onClick={() => onClose('dismiss')}
-            className={`grid size-11 shrink-0 place-items-center rounded-full border border-store-background-text/20 bg-store-background hover:bg-store-background-text/10 motion-safe:transition-colors ${FOCUS_RING}`}
+            className={styles.close}
             aria-label="Close menu"
           >
             <X size={20} aria-hidden="true" />
@@ -184,14 +172,14 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
         <nav
           aria-label="Mobile storefront navigation"
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-5"
+          className={styles.navigation}
         >
           {renderSection('Shop & Services', MOBILE_MENU_SHOP_ITEMS)}
 
           {normalizedCategories.length > 0 && (
-            <div className="mb-6 px-4">
-              <h2 className={SECTION_HEADING}>Categories</h2>
-              <ul className="flex flex-wrap gap-1.5 px-1">
+            <div className={styles.categorySection}>
+              <h2 className={styles.heading}>Categories</h2>
+              <ul className={styles.categories}>
                 {normalizedCategories.map((category) => (
                   <li key={category.slug}>
                     <Link
@@ -200,7 +188,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                       )}
                       prefetch={false}
                       onClick={() => onClose('navigate')}
-                      className={`inline-flex min-h-9 items-center rounded-full border border-store-background-text/20 bg-store-background px-3 font-semibold text-xs hover:border-store-primary/50 hover:bg-store-primary/10 motion-safe:transition-colors ${FOCUS_RING}`}
+                      className={styles.categoryLink}
                     >
                       {category.name}
                     </Link>
@@ -215,17 +203,17 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         </nav>
 
         {/* Footer */}
-        <div className="shrink-0 border-store-border border-t bg-store-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className={styles.footer}>
           <Link
             href={asRoute(buildHref('/account/login'))}
             prefetch={false}
             onClick={() => onClose('navigate')}
-            className={`flex min-h-11 items-center justify-center gap-2 rounded-full bg-store-primary px-4 py-2 font-bold text-sm text-store-primary-text motion-safe:transition-transform motion-safe:active:scale-[0.98] ${FOCUS_RING}`}
+            className={styles.login}
           >
             Login / Register
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
-          <p className="mt-3 text-center text-store-background-text/75 text-xs">
+          <p className={styles.copyright}>
             &copy; {businessName}
           </p>
         </div>

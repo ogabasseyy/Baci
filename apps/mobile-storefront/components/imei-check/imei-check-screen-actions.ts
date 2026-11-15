@@ -1,20 +1,17 @@
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 
 const IMEI_CHECK_RETURN_HREF = '/imei-check';
 
 export const imeiCheckScreenActions = {
-  alertInvalidIdentifier(identifier: 'imei' | 'serial' | 'both') {
-    Alert.alert(
-      identifier === 'serial' ? 'Invalid serial' : 'Invalid number',
-      identifier === 'serial'
-        ? 'Please enter a valid device serial number.'
-        : identifier === 'imei'
-          ? 'Please enter a valid 15-digit IMEI number.'
-          : 'Please enter a valid IMEI or serial number.'
-    );
+  /** Shown inline above the number field: no iOS alert interrupts. */
+  invalidIdentifierMessage(identifier: 'imei' | 'serial' | 'both') {
+    return identifier === 'serial'
+      ? 'Please enter a valid device serial number.'
+      : identifier === 'imei'
+        ? 'Please enter a valid 15-digit IMEI number.'
+        : 'Please enter a valid IMEI or serial number.';
   },
   fundWallet(
     amount: number,

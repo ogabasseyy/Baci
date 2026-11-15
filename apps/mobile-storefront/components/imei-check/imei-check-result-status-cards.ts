@@ -5,6 +5,8 @@ import type { ImeiCheckerColors } from './imei-check.types';
 
 export interface ImeiResultStatusCard {
   cleanAware?: boolean;
+  /** Read with the shared blacklist rules ("Not Blacklisted" is clean). */
+  blacklist?: boolean;
   icon: IoniconsIconName;
   label: string;
   tint?: string;
@@ -25,6 +27,7 @@ export function getImeiResultStatusCards(
   return [
     included.has('blacklistStatus')
       ? {
+          blacklist: true,
           cleanAware: true,
           icon: 'shield-checkmark' as const,
           label: 'Blacklist Status',

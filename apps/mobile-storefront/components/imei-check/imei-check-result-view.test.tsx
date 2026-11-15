@@ -249,11 +249,11 @@ describe('ImeiCheckResultView', () => {
     expect(screen.getByText('Clean')).toBeTruthy();
   });
 
-  it('invokes onReset when the user taps "Check Another Device"', () => {
+  it('invokes onReset when the user taps "Check another device"', () => {
     const onReset = jest.fn();
     render(<ImeiCheckResultView {...baseProps} onReset={onReset} />);
 
-    fireEvent.press(screen.getByText('Check Another Device'));
+    fireEvent.press(screen.getByText('Check another device'));
 
     expect(onReset).toHaveBeenCalledTimes(1);
   });
@@ -271,13 +271,58 @@ describe('ImeiCheckResultView', () => {
     expect(screen.getByText(/unlock offer for 11111111/i)).toBeTruthy();
   });
 
-  it('returns to the checker via onReset from the header back button (never pops to home)', () => {
-    const onReset = jest.fn();
-    render(<ImeiCheckResultView {...baseProps} onReset={onReset} />);
+  it.each([
+    ['safe', 'Looks safe to buy'],
+    ['caution', 'Check before you buy'],
+    ['danger', 'Do not buy yet'],
+  ] as const)('leads with a %s verdict headline in its own colour', (type, headline) => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{ ...cleanResult, verdictType: type, verdict: 'Verdict copy' }}
+      />
+    );
+    expect(screen.getByRole('header', { name: headline })).toHaveStyle({
+      color: getVerdictColors(type, Colors.light).text,
+    });
+    expect(screen.getByText('Verdict copy')).toBeTruthy();
+  });
 
-    fireEvent.press(screen.getByLabelText('Back'));
+  it('bugfix: "Out Of Warranty" is a neutral fact, never painted green (owner walk)', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{ ...cleanResult, warranty: 'Out Of Warranty' }}
+      />
+    );
+    expect(screen.getByText('Out Of Warranty')).toHaveStyle({
+      color: Colors.light.text,
+    });
+    expect(screen.getByText('Not Blacklisted')).toHaveStyle({
+      color: getVerdictColors('safe', Colors.light).text,
+    });
+  });
 
-    expect(onReset).toHaveBeenCalledTimes(1);
+  it('shows an unknown pass/fail finding as caution, not as a failure', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          blacklistStatus: 'Unknown',
+          status: 'Unknown',
+        }}
+      />
+    );
+    expect(screen.getByText('Unknown')).toHaveStyle({
+      color: getVerdictColors('caution', Colors.light).text,
+    });
+  });
+
+  it('leaves the header to the screen (its title follows the step)', () => {
+    render(<ImeiCheckResultView {...baseProps} />);
+
+    expect(screen.queryByLabelText('Back')).toBeNull();
     expect(jest.mocked(router.back)).not.toHaveBeenCalled();
   });
 

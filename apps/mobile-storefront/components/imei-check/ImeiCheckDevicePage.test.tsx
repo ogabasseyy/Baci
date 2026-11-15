@@ -133,7 +133,7 @@ describe('runtime capability selection', () => {
         onVerify={onVerify}
       />
     );
-    fireEvent.press(screen.getByText('More checks'));
+    fireEvent.press(screen.getByText('See all checks'));
     expect(screen.queryByText('eSIM Compatibility')).toBeNull();
     mockAvailableKeys = ['full', 'esimCompatibility'];
     rerender(
@@ -172,7 +172,7 @@ describe('runtime capability selection', () => {
   it('offers retry after capability errors while keeping provider-only checks hidden', () => {
     mockAvailabilityFailed = true;
     render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
-    fireEvent.press(screen.getByText('More checks'));
+    fireEvent.press(screen.getByText('See all checks'));
     expect(
       screen.queryByRole('radio', { name: /eSIM Compatibility/ })
     ).toBeNull();
@@ -198,7 +198,7 @@ describe('runtime capability selection', () => {
   it('filters an advertised Apple phone check after switching brand', () => {
     mockAvailableKeys = ['full', 'esimCompatibility'];
     render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
-    fireEvent.press(screen.getByText('More checks'));
+    fireEvent.press(screen.getByText('See all checks'));
     fireEvent.press(screen.getByRole('radio', { name: /eSIM Compatibility/ }));
     fireEvent.press(screen.getByText('Samsung'));
     expect(screen.queryByText('eSIM Compatibility')).toBeNull();

@@ -128,7 +128,9 @@ export default function ImeiCheckerScreen() {
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
     if (!isValidDeviceIdentifier(imei, serviceTier.identifier)) {
-      imeiCheckScreenActions.alertInvalidIdentifier(serviceTier.identifier);
+      setError(
+        imeiCheckScreenActions.invalidIdentifierMessage(serviceTier.identifier)
+      );
       return;
     }
     const decision = await decideImeiVerify({
@@ -244,7 +246,11 @@ export default function ImeiCheckerScreen() {
       edges={['left', 'right']}
       style={{ backgroundColor: colors.background }}
     >
-      <ImeiCheckScreenHeader textColor={colors.text} />
+      <ImeiCheckScreenHeader
+        step={result ? 'report' : 'pick'}
+        textColor={colors.text}
+        onBackFromReport={handleReset}
+      />
       <WalletPaySheet colors={colors} {...walletPay.sheetProps} />
 
       {result ? (

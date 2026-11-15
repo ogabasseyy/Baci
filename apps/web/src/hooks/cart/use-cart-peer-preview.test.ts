@@ -103,11 +103,19 @@ function tabs() {
 }
 
 const peerEdit = {
+  sender: 'tab-a',
   cartId: 'c',
   kind: 'edit',
   lines: [{ id: 'l1', quantity: 3 }],
   merchantId: 'm',
   version: 2,
+};
+
+const settledBy = {
+  cartId: 'c',
+  kind: 'settled',
+  merchantId: 'm',
+  sender: 'tab-a',
 };
 
 afterEach(() => {
@@ -134,6 +142,7 @@ describe('cart peer preview', () => {
           { id: 'l2', quantity: 1 },
         ],
         merchantId: 'm',
+        sender: expect.any(String),
         version: 2,
       },
     ]);
@@ -143,6 +152,7 @@ describe('cart peer preview', () => {
       cartId: 'c',
       kind: 'settled',
       merchantId: 'm',
+      sender: expect.any(String),
       version: 3,
     });
   });
@@ -169,9 +179,7 @@ describe('cart peer preview', () => {
     act(() => t.deliver(peerEdit));
     expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
 
-    act(() =>
-      t.deliver({ cartId: 'c', kind: 'settled', merchantId: 'm', version: 3 })
-    );
+    act(() => t.deliver({ ...settledBy, version: 3 }));
     // Still waiting for this tab's own authorized refetch.
     expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
 
@@ -183,9 +191,7 @@ describe('cart peer preview', () => {
     const t = tabs();
     const { result } = renderHook(() => useCartPeerPreview(context(), t.open));
     act(() => t.deliver(peerEdit));
-    act(() =>
-      t.deliver({ cartId: 'c', kind: 'settled', merchantId: 'm', version: 2 })
-    );
+    act(() => t.deliver({ ...settledBy, version: 2 }));
     expect(result.current).toBeNull();
   });
 
@@ -319,6 +325,30 @@ describe('cart peer preview', () => {
     expect(watching.result.current).not.toBeNull();
   });
 
+  it('keeps a third tab’s pending edit when another tab settles', () => {
+    const t = tabs();
+    const { result } = renderHook(() => useCartPeerPreview(context(), t.open));
+    act(() => t.deliver(peerEdit));
+    act(() =>
+      t.deliver({
+        ...peerEdit,
+        lines: [{ id: 'l1', quantity: 5 }],
+        sender: 'tab-b',
+      })
+    );
+    // Tab A's edit was rejected: it settles at the unchanged version.
+    act(() =>
+      t.deliver({
+        cartId: 'c',
+        kind: 'settled',
+        merchantId: 'm',
+        sender: 'tab-a',
+        version: 2,
+      })
+    );
+    expect(result.current).toEqual([{ id: 'l1', quantity: 5 }]);
+  });
+
   it('gives up after ten seconds if the other tab never settles', () => {
     vi.useFakeTimers();
     const t = tabs();
@@ -342,9 +372,7 @@ describe('cart peer preview', () => {
     act(() => {
       vi.advanceTimersByTime(9000);
     });
-    act(() =>
-      t.deliver({ cartId: 'c', kind: 'settled', merchantId: 'm', version: 3 })
-    );
+    act(() => t.deliver({ ...settledBy, version: 3 }));
     expect(result.current).not.toBeNull();
     act(() => {
       vi.advanceTimersByTime(1000);

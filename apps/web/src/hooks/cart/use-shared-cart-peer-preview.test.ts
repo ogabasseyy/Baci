@@ -1,6 +1,7 @@
 import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { Product } from '@/lib/products';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
@@ -34,6 +35,25 @@ class TabChannel {
   close(): void {
     TabChannel.open.delete(this);
   }
+}
+
+function product(): Product {
+  return {
+    brand: 'Brand',
+    description: '',
+    gtin: '',
+    id: 'prod-1',
+    image: '/prod-1.png',
+    imageHint: 'product',
+    imageLarge: '/prod-1-large.png',
+    manage_stock: false,
+    mpn: '',
+    name: 'Phone',
+    price: 100,
+    slug: 'phone',
+    status: 'active',
+    stock: 10,
+  } as Product;
 }
 
 function snapshot(quantity: number, version: number): CartSnapshot {
@@ -114,4 +134,62 @@ it('shows a quantity change in the second tab before the save returns', async ()
   expect(sendSharedCartCommand).toHaveBeenCalledTimes(1);
   expect(watching.result.current.syncStatus).toBe('pending');
   expect(watching.result.current.version).toBe(3);
+});
+
+it('lets the second tab add when the previewed cart has room', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot(10, 3),
+    warnings: [],
+  });
+  const editing = openTab();
+  const watching = openTab();
+  await waitFor(() => {
+    expect(editing.result.current.cart[0]?.quantity).toBe(10);
+    expect(watching.result.current.cart[0]?.quantity).toBe(10);
+    expect(editing.result.current.importStatus).not.toBe('pending');
+    expect(watching.result.current.importStatus).not.toBe('pending');
+  });
+  vi.mocked(sendSharedCartCommand).mockReturnValue(new Promise(() => {}));
+  const line = editing.result.current.cart[0];
+  if (!line) throw new Error('expected a line');
+
+  // The line sits at the per-line cap; the editing tab drops it to 1.
+  act(() => {
+    editing.result.current.updateQuantity(line.cartItemId, 1);
+  });
+  await waitFor(() =>
+    expect(watching.result.current.cart[0]?.quantity).toBe(1)
+  );
+
+  // The shopper sees room for one more, so the add must not be dropped.
+  act(() => {
+    watching.result.current.addToCart(product(), 1);
+  });
+  await waitFor(() =>
+    expect(
+      watching.result.current.cart.some((item) => item.pendingTempId != null)
+    ).toBe(true)
+  );
+});
+
+it('shows a second tab the higher quantity when a unit is added to a line', async () => {
+  const editing = openTab();
+  const watching = openTab();
+  await waitFor(() => {
+    expect(editing.result.current.cart[0]?.serverLineId).toBe('line-1');
+    expect(watching.result.current.cart[0]?.serverLineId).toBe('line-1');
+    expect(editing.result.current.importStatus).not.toBe('pending');
+    expect(watching.result.current.importStatus).not.toBe('pending');
+  });
+  vi.mocked(sendSharedCartCommand).mockReturnValue(new Promise(() => {}));
+
+  act(() => {
+    editing.result.current.addToCart(product(), 1);
+  });
+
+  await waitFor(() =>
+    expect(watching.result.current.cart[0]?.quantity).toBe(2)
+  );
+  expect(watching.result.current.cart).toHaveLength(1);
 });

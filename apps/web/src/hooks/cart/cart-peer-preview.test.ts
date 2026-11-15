@@ -31,6 +31,7 @@ describe('cart peer preview messages', () => {
         kind: 'edit',
         lines: [{ id: 'l1', quantity: 2 }],
         merchantId: 'm',
+        sender: 'tab-a',
         version: 3,
       })
     ).toEqual({
@@ -38,6 +39,7 @@ describe('cart peer preview messages', () => {
       kind: 'edit',
       lines: [{ id: 'l1', quantity: 2 }],
       merchantId: 'm',
+      sender: 'tab-a',
       version: 3,
     });
     expect(
@@ -45,25 +47,47 @@ describe('cart peer preview messages', () => {
         cartId: 'c',
         kind: 'settled',
         merchantId: 'm',
+        sender: 'tab-a',
         version: 4,
       })
-    ).toEqual({ cartId: 'c', kind: 'settled', merchantId: 'm', version: 4 });
+    ).toEqual({
+      cartId: 'c',
+      kind: 'settled',
+      merchantId: 'm',
+      sender: 'tab-a',
+      version: 4,
+    });
   });
 
   it.each([
     null,
     'edit',
-    { kind: 'other', cartId: 'c', merchantId: 'm', version: 1 },
-    { kind: 'settled', cartId: '', merchantId: 'm', version: 1 },
-    { kind: 'settled', cartId: 'c', merchantId: 'm', version: 1.5 },
-    { kind: 'settled', cartId: 'c', merchantId: 'm', version: -1 },
-    { kind: 'settled', cartId: 'c', merchantId: 'm', version: 0 },
-    { kind: 'edit', cartId: 'c', merchantId: 'm', version: 1 },
-    { kind: 'settled', cartId: 'c', merchantId: 'm', version: 1, lines: [] },
+    { kind: 'settled', cartId: 'c', merchantId: 'm', version: 1 },
+    { kind: 'other', cartId: 'c', merchantId: 'm', sender: 's', version: 1 },
+    { kind: 'settled', cartId: '', merchantId: 'm', sender: 's', version: 1 },
+    {
+      kind: 'settled',
+      cartId: 'c',
+      merchantId: 'm',
+      sender: 's',
+      version: 1.5,
+    },
+    { kind: 'settled', cartId: 'c', merchantId: 'm', sender: 's', version: -1 },
+    { kind: 'settled', cartId: 'c', merchantId: 'm', sender: 's', version: 0 },
+    { kind: 'edit', cartId: 'c', merchantId: 'm', sender: 's', version: 1 },
+    {
+      kind: 'settled',
+      cartId: 'c',
+      merchantId: 'm',
+      sender: 's',
+      version: 1,
+      lines: [],
+    },
     {
       kind: 'edit',
       cartId: 'c',
       merchantId: 'm',
+      sender: 's',
       version: 1,
       lines: [{ id: 'l1', quantity: 0 }],
     },
@@ -71,6 +95,7 @@ describe('cart peer preview messages', () => {
       kind: 'edit',
       cartId: 'c',
       merchantId: 'm',
+      sender: 's',
       version: 1,
       lines: [{ id: 'l1', quantity: 11 }],
     },
@@ -78,6 +103,7 @@ describe('cart peer preview messages', () => {
       kind: 'edit',
       cartId: 'c',
       merchantId: 'm',
+      sender: 's',
       version: 1,
       lines: [{ id: 7, quantity: 1 }],
     },
@@ -85,14 +111,17 @@ describe('cart peer preview messages', () => {
     expect(readCartPeerMessage(value)).toBeNull();
   });
 
-  it('sends only confirmed server lines', () => {
+  it('sends every line the server knows, including one with an add merged in', () => {
     expect(
       buildCartPeerLines([
         line('l1', 2),
         line(undefined, 1),
         line('l3', 1, { pendingTempId: 'temp-1' }),
       ])
-    ).toEqual([{ id: 'l1', quantity: 2 }]);
+    ).toEqual([
+      { id: 'l1', quantity: 2 },
+      { id: 'l3', quantity: 1 },
+    ]);
   });
 });
 

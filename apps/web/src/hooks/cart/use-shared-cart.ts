@@ -64,7 +64,25 @@ export function useSharedCart(
     realtimeConnected: runtime.realtimeConnected || connected,
   });
   useCartSendQueue({ ...runtime, ...snapshots, ...provisioning });
-  const actions = createCartActions(runtime);
+  // While a sibling's edit is shown, actions read the same cart the shopper
+  // sees: a capacity check against the unpreviewed lines could silently
+  // drop an add that the visible cart has room for.
+  const actions = createCartActions(
+    peerLines
+      ? {
+          ...runtime,
+          stateRef: {
+            get current() {
+              const own = runtime.stateRef.current;
+              return {
+                ...own,
+                display: applyCartPeerPreview(own.display, peerLines),
+              };
+            },
+          },
+        }
+      : runtime
+  );
   const recovery = createCartRecovery({
     ...runtime,
     ...snapshots,

@@ -15,6 +15,8 @@ export interface CartPeerLine {
 export type CartPeerMessage =
   | {
       kind: 'edit';
+      /** Random per-tab id, so a settle only ends that tab's preview. */
+      sender: string;
       merchantId: string;
       cartId: string;
       /** The sender's confirmed cart version the edit was made on. */
@@ -23,6 +25,7 @@ export type CartPeerMessage =
     }
   | {
       kind: 'settled';
+      sender: string;
       merchantId: string;
       cartId: string;
       /** The sender's confirmed version once nothing is pending. */
@@ -75,11 +78,12 @@ function readLines(value: unknown): CartPeerLine[] | null {
  */
 export function readCartPeerMessage(value: unknown): CartPeerMessage | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { kind, merchantId, cartId, version, lines } = value as Record<
+  const { kind, sender, merchantId, cartId, version, lines } = value as Record<
     string,
     unknown
   >;
   if (
+    !isId(sender) ||
     !isId(merchantId) ||
     !isId(cartId) ||
     typeof version !== 'number' ||
@@ -88,19 +92,27 @@ export function readCartPeerMessage(value: unknown): CartPeerMessage | null {
   )
     return null;
   if (kind === 'settled')
-    return lines === undefined ? { cartId, kind, merchantId, version } : null;
+    return lines === undefined
+      ? { cartId, kind, merchantId, sender, version }
+      : null;
   if (kind !== 'edit') return null;
   const parsed = readLines(lines);
-  return parsed ? { cartId, kind, lines: parsed, merchantId, version } : null;
+  return parsed
+    ? { cartId, kind, lines: parsed, merchantId, sender, version }
+    : null;
 }
 
-/** Only lines the server has confirmed: an unsaved add has no shared id. */
+/**
+ * Every line the server already knows. That includes a line with an unsaved
+ * add merged into it (it keeps its server id): leaving it out would read as
+ * a removal. A brand-new unsaved line has no shared id and is not sent.
+ */
 export function buildCartPeerLines(
   display: SharedCartDisplayItem[]
 ): CartPeerLine[] {
   const lines: CartPeerLine[] = [];
   for (const line of display) {
-    if (line.serverLineId && line.pendingTempId == null)
+    if (line.serverLineId)
       lines.push({ id: line.serverLineId, quantity: line.quantity });
   }
   return lines;

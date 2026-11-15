@@ -18,6 +18,8 @@ export type CartPeerPreviewContext = Pick<
 >;
 
 interface PeerPreview {
+  /** The tab that announced the edit. */
+  sender: string;
   lines: CartPeerLine[];
   /** Confirmed cart version the editing tab made the edit on. */
   baseVersion: number;
@@ -57,6 +59,7 @@ export function useCartPeerPreview(
   /** The last edit announced in this run of pending work, if any. */
   const lastPosted = useRef<string | null>(null);
   const lastEdit = useRef<CartPeerMessage | null>(null);
+  const [sender] = useState(() => crypto.randomUUID());
   // Advance only after commit so a message never reads an abandoned render.
   useEffect(() => {
     latest.current = context;
@@ -94,7 +97,10 @@ export function useCartPeerPreview(
       const ownVersion = own.confirmed?.version ?? 0;
       if (message.kind === 'settled') {
         setPreview((current) => {
-          if (current === null || ownVersion >= message.version) return null;
+          // Another tab finishing must not end a third tab's pending edit.
+          if (current === null || current.sender !== message.sender)
+            return current;
+          if (ownVersion >= message.version) return null;
           return { ...current, settledVersion: message.version };
         });
         return;
@@ -113,6 +119,7 @@ export function useCartPeerPreview(
       setPreview({
         baseVersion: message.version,
         lines: message.lines,
+        sender: message.sender,
         settledVersion: null,
       });
     });
@@ -136,7 +143,7 @@ export function useCartPeerPreview(
     if (!pending) {
       // Nothing was announced for an edit that changed no quantity.
       if (lastPosted.current !== null)
-        channel.post({ cartId, kind: 'settled', merchantId, version });
+        channel.post({ cartId, kind: 'settled', merchantId, sender, version });
       lastPosted.current = null;
       lastEdit.current = null;
       return;
@@ -151,7 +158,14 @@ export function useCartPeerPreview(
     const key = JSON.stringify([version, lines]);
     if (key === lastPosted.current) return;
     lastPosted.current = key;
-    lastEdit.current = { cartId, kind: 'edit', lines, merchantId, version };
+    lastEdit.current = {
+      cartId,
+      kind: 'edit',
+      lines,
+      merchantId,
+      sender,
+      version,
+    };
     channel.post(lastEdit.current);
   }, [ready, pending, state.confirmed, state.display]);
 

@@ -71,7 +71,7 @@ it('creates and lists an unpublished synthetic store through the co-located gate
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'builder', typ: 'at+jwt' })
       .setIssuer('https://builder-auth.usebaci.com')
-      .setAudience('https://mcp.usebaci.com/builder/mcp')
+      .setAudience('https://builder-mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')
       .sign(builder.privateKey);
@@ -91,7 +91,7 @@ it('creates and lists an unpublished synthetic store through the co-located gate
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'builder', typ: 'at+jwt' })
       .setIssuer('https://builder-auth.usebaci.com')
-      .setAudience('https://mcp.usebaci.com/builder/mcp')
+      .setAudience('https://builder-mcp.usebaci.com/builder/mcp')
       .setSubject(otherActor)
       .setExpirationTime('5m')
       .sign(builder.privateKey);

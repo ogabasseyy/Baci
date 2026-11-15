@@ -6,7 +6,7 @@ import { builderError } from '@/lib/builder-connector/errors';
 import { createBuilderGateway } from '@/lib/builder-gateway/gateway';
 
 const issuer = 'https://auth.usebaci.com';
-const audience = 'https://mcp.usebaci.com/builder/mcp';
+const audience = 'https://builder-mcp.usebaci.com/builder/mcp';
 export async function POST(
   request: Request,
   context: { params: Promise<{ tool: string }> }

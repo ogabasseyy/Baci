@@ -16,7 +16,7 @@ import { createTestBrowser, requireString } from './test-browser.ts';
 import { databaseFixture } from './test-fixtures.ts';
 
 const actor = '10000000-0000-4000-8000-000000000001';
-const resource = 'https://mcp.usebaci.com/builder/mcp';
+const resource = 'https://builder-mcp.usebaci.com/builder/mcp';
 const callback = 'https://chatgpt.com/new-builder-callback';
 for (const viaBridge of [false, true])
   test(`real broker redirects, consent and token isolation (bridge: ${viaBridge})`, {

@@ -109,7 +109,7 @@ it('routes a signed builder request through the installed host and denies a revo
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'synthetic', typ: 'at+jwt' })
       .setIssuer('https://builder-auth.usebaci.com')
-      .setAudience('https://mcp.usebaci.com/builder/mcp')
+      .setAudience('https://builder-mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')
       .sign(key.privateKey);

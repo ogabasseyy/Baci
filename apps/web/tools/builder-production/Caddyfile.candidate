@@ -17,11 +17,15 @@
 	}
 }
 
-{$BACI_MCP_ORIGIN_HOST} {
-	@mcp path /builder/mcp /.well-known/oauth-protected-resource/builder/mcp
-	handle @mcp {
+builder-mcp.usebaci.com {
+	@builder {
+		host builder-mcp.usebaci.com
+		expression {http.request.uri}.split('?')[0] in ['/builder/mcp', '/.well-known/oauth-protected-resource/builder/mcp']
+	}
+	handle @builder {
+		header Cache-Control "no-store"
 		reverse_proxy 127.0.0.1:{$BACI_MCP_PORT} {
-			header_up Host mcp.usebaci.com
+			header_up Host builder-mcp.usebaci.com
 			header_up X-Forwarded-For {remote_host}
 		}
 	}

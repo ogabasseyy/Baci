@@ -7,7 +7,7 @@ const actor = '10000000-0000-4000-8000-000000000001';
 const id = '20000000-0000-4000-8000-000000000001';
 const merchant = '30000000-0000-4000-8000-000000000001';
 const issuer = 'https://auth.usebaci.com';
-const audience = 'https://mcp.usebaci.com/builder/mcp';
+const audience = 'https://builder-mcp.usebaci.com/builder/mcp';
 let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 beforeAll(async () => {
   keys = await generateKeyPair('ES256');

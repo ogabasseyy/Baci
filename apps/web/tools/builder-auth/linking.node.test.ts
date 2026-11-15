@@ -8,7 +8,7 @@ test('consent rejects forged target, missing read, CSRF and non-builder scopes',
     ownedMerchantId: null,
     requestedScopes: ['storefront.read', 'storefront.write'],
     csrf: 'trusted-unguessable-csrf',
-    resource: 'https://mcp.usebaci.com/builder/mcp',
+    resource: 'https://builder-mcp.usebaci.com/builder/mcp',
   };
   assert.deepEqual(
     buildConsentDecision(
@@ -62,7 +62,7 @@ test('declined or unselected create consent cannot provision and owner target is
     ownedMerchantId: 'store',
     requestedScopes: ['storefront.read'],
     csrf: 'csrf',
-    resource: 'https://mcp.usebaci.com/builder/mcp',
+    resource: 'https://builder-mcp.usebaci.com/builder/mcp',
   };
   assert.deepEqual(
     buildConsentDecision(

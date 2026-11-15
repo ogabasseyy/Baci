@@ -24,7 +24,7 @@ export async function syntheticOAuth(
   ownedMerchantId: string | null = f.merchantId
 ) {
   const issuer = 'https://builder-auth.usebaci.com';
-  const resource = 'https://mcp.usebaci.com/builder/mcp';
+  const resource = 'https://builder-mcp.usebaci.com/builder/mcp';
   const upstreamExpiresAt =
     z.number().parse(decodeJwt(f.owner.accessToken).exp) * 1000;
   const callback = 'https://chatgpt.com/new-builder-callback';

@@ -31,7 +31,7 @@ route only the intended broker endpoints. The listener is not started by
 importing or constructing the runtime and does not provision an ingress.
 
 The candidate's dedicated issuer is `https://builder-auth.usebaci.com`, while
-its protected MCP resource remains `https://mcp.usebaci.com/builder/mcp`.
+its protected MCP resource remains `https://builder-mcp.usebaci.com/builder/mcp`.
 The fixed auth loopback presents the builder-auth host to the private broker.
 Do not route the existing commerce issuer or the root discovery routes on
 `mcp.usebaci.com` to this broker. This is source configuration, not evidence

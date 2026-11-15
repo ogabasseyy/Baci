@@ -90,7 +90,7 @@ describe('stateless builder Streamable HTTP', () => {
       ]) {
         expect(r.status).toBe(401);
         expect(r.headers.get('www-authenticate')).toContain(
-          'resource_metadata'
+          'resource_metadata="https://builder-mcp.usebaci.com/.well-known/oauth-protected-resource/builder/mcp"'
         );
       }
       expect(f.executeBuilderTool).not.toHaveBeenCalled();

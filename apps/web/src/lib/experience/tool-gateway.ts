@@ -1,3 +1,4 @@
+import { BUILDER_METADATA_URL } from '@/lib/builder-connector/resource';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import { createBuilderThrottle } from '@/lib/builder-gateway/throttle';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
@@ -28,7 +29,7 @@ export function createExperienceGateway(deps: {
           'Cache-Control': 'no-store',
           ...(status === 401 || status === 403
             ? {
-                'WWW-Authenticate': `Bearer resource_metadata="https://mcp.usebaci.com/.well-known/oauth-protected-resource/builder/mcp", scope="${isExperienceTool(name) ? experienceToolPolicy[name].scopes.join(' ') : 'storefront.read'}", error="${status === 403 ? 'insufficient_scope' : 'invalid_token'}"`,
+                'WWW-Authenticate': `Bearer resource_metadata="${BUILDER_METADATA_URL}", scope="${isExperienceTool(name) ? experienceToolPolicy[name].scopes.join(' ') : 'storefront.read'}", error="${status === 403 ? 'insufficient_scope' : 'invalid_token'}"`,
               }
             : {}),
         },

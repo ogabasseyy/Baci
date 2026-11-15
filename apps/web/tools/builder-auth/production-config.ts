@@ -1,5 +1,9 @@
 import { isAbsolute, normalize } from 'node:path';
 import { z } from 'zod';
+import {
+  BUILDER_ISSUER,
+  BUILDER_RESOURCE,
+} from '../../src/lib/builder-connector/resource.ts';
 
 const bytes32 = z
   .string()
@@ -119,13 +123,12 @@ export function parseProductionAuthConfig(input: unknown) {
       )
     )
       throw Error();
-    const issuer = 'https://builder-auth.usebaci.com';
     return {
       databaseUrl: config.databaseUrl,
       socketPath: config.socketPath,
       provider: {
-        issuer,
-        resource: 'https://mcp.usebaci.com/builder/mcp',
+        issuer: BUILDER_ISSUER,
+        resource: BUILDER_RESOURCE,
         callback: config.callback,
         clientId: config.clientId,
         cookieKeys: config.cookieKeys,
@@ -134,7 +137,7 @@ export function parseProductionAuthConfig(input: unknown) {
       vault: { activeKeyId: config.vault.activeKeyId, keys },
       upstream: {
         ...config.upstream,
-        redirectUri: `${issuer}/upstream/callback`,
+        redirectUri: `${BUILDER_ISSUER}/upstream/callback`,
       },
       supabase: { url: supabase.origin, anonKey: config.supabase.anonKey },
       connectionTtlSeconds: config.connectionTtlSeconds,

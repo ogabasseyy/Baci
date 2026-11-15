@@ -20,7 +20,11 @@ it('serves discovery on a real loopback listener and shuts down cleanly', async 
     expect(response.status).toBe(200);
     const metadata = (await response.json()) as {
       authorization_servers: string[];
+      resource: string;
     };
+    expect(metadata.resource).toBe(
+      'https://builder-mcp.usebaci.com/builder/mcp'
+    );
     expect(metadata.authorization_servers).toEqual([
       'https://builder-auth.usebaci.com',
     ]);
@@ -277,7 +281,7 @@ it('does not expose the owner preview route by default', async () => {
           path: '/internal/owner/preview',
           method: 'POST',
           headers: {
-            host: 'mcp.usebaci.com',
+            host: 'builder-mcp.usebaci.com',
             'content-type': 'application/json',
           },
         },

@@ -22,12 +22,12 @@ origin are constants, not tool arguments. No listener starts merely by importing
 The builder authorization server's issuer is `https://builder-auth.usebaci.com`; its
 OAuth discovery, authorization, token, JWKS, interaction and callback paths
 must be routed to the separately deployed builder auth service. The MCP path
-and protected-resource metadata route on `https://mcp.usebaci.com` go to the
-MCP listener. The existing
+and protected-resource metadata route on `https://builder-mcp.usebaci.com` go
+straight through Contabo Caddy to the MCP listener. The existing
 `auth.usebaci.com` service remains the upstream Supabase identity provider.
 
-The dedicated builder issuer is a breaking change for any previously issued
-builder tokens. Before enabling it, inventory any live builder clients and
+The dedicated builder issuer and resource invalidate previously issued builder
+tokens with old claims. Before activation, inventory any live builder clients and
 grants, configure and verify the new issuer and callback, and coordinate
 re-authorization and token reissue where needed. This listener accepts only
 the configured builder issuer; it does not accept commerce connector tokens.

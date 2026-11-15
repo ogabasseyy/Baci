@@ -165,7 +165,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
   const provider = createBuilderProvider(
     {
       issuer: 'https://builder-auth.usebaci.com',
-      resource: 'https://mcp.usebaci.com/builder/mcp',
+      resource: 'https://builder-mcp.usebaci.com/builder/mcp',
       callback: 'https://chatgpt.com/approved-callback',
       clientId: 'synthetic-client',
       cookieKeys: ['fixture-cookie-key-with-more-than-32-bytes'],
@@ -233,7 +233,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
       state: 'synthetic-state',
       code_challenge: 'x'.repeat(43),
       code_challenge_method: 'plain',
-      resource: 'https://mcp.usebaci.com/builder/mcp',
+      resource: 'https://builder-mcp.usebaci.com/builder/mcp',
     });
     const errorRedirect = await new Promise<{
       status: number;

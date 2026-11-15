@@ -5,7 +5,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import {
   BUILDER_ISSUER,
   BUILDER_RESOURCE,
-} from '../../builder-mcp-server/metadata.ts';
+} from '../../src/lib/builder-connector/resource.ts';
 import { parseProductionAuthConfig } from './production-config.ts';
 
 async function fixture() {
@@ -40,7 +40,10 @@ async function fixture() {
 test('binds a production broker to the dedicated resource and verified upstream', async () => {
   const config = parseProductionAuthConfig(await fixture());
   assert.equal(config.provider.issuer, 'https://builder-auth.usebaci.com');
-  assert.equal(config.provider.resource, 'https://mcp.usebaci.com/builder/mcp');
+  assert.equal(
+    config.provider.resource,
+    'https://builder-mcp.usebaci.com/builder/mcp'
+  );
   assert.equal(config.provider.issuer, BUILDER_ISSUER);
   assert.equal(config.provider.resource, BUILDER_RESOURCE);
   assert.equal(

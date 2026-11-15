@@ -2,7 +2,7 @@
 """Disposable loopback-only routing/TLS test; requires caddy, curl and openssl.
 
 No production hostnames, credentials, listeners, DNS or services are changed.
-This does not qualify Vercel rewrites, provider timeouts or production rollout.
+This does not qualify public DNS, production TLS, OAuth or rollout.
 """
 import http.server
 import os
@@ -54,15 +54,16 @@ def main():
             servers.append(server)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             env[f'BACI_{label}_PORT'] = str(server.server_port)
-        names = {'BACI_AUTH_HOST': 'auth.localhost', 'BACI_MCP_ORIGIN_HOST': 'mcp.localhost', 'BACI_OWNER_HOST': 'owner.localhost', 'BACI_EXECUTION_HOST': 'output.localhost'}
+        names = {'BACI_AUTH_HOST': 'auth.localhost', 'BACI_OWNER_HOST': 'owner.localhost', 'BACI_EXECUTION_HOST': 'output.localhost'}
         for name, host in names.items():
             env[name] = f'https://{host}:{proxy_port}'
-        # Host header on the delivery backend is the configured hostname, not a site URL.
+        # Keep the actual downstream delivery Host when using a test site URL.
         text = Path(__file__).with_name('Caddyfile.candidate').read_text()
-        text = text.replace('  admin off', '  admin off\n  skip_install_trust\n  default_bind 127.0.0.1')
-        for variable in ('BACI_AUTH_HOST', 'BACI_MCP_ORIGIN_HOST', 'BACI_EXECUTION_HOST'):
+        text = text.replace('\tadmin off', '\tadmin off\n\tauto_https disable_redirects\n\tskip_install_trust\n\tdefault_bind 127.0.0.1')
+        for variable in ('BACI_AUTH_HOST', 'BACI_EXECUTION_HOST'):
             text = text.replace('{$' + variable + '} {', '{$' + variable + '} {\n  tls internal', 1)
-        text = text.replace('  tls {\n    client_auth', '  tls internal {\n    client_auth', 1)
+        text = text.replace('builder-mcp.usebaci.com {', f'https://builder-mcp.usebaci.com:{proxy_port} {{\n\ttls internal', 1)
+        text = text.replace('\ttls {\n\t\tclient_auth', '\ttls internal {\n\t\tclient_auth', 1)
         text = text.replace('header_up Host {$BACI_EXECUTION_HOST}', 'header_up Host output.localhost')
         config = root / 'Caddyfile'
         config.write_text(text)
@@ -83,8 +84,8 @@ def main():
                 raise RuntimeError('Caddy did not become ready')
             assert ready.stdout.startswith('AUTH|builder-auth.usebaci.com|127.0.0.1\n200')
             assert curl('auth.localhost', '/internal/owner/preview').stdout.endswith('\n404')
-            assert curl('mcp.localhost', '/builder/mcp', '-H', 'X-Forwarded-For: 198.51.100.1').stdout.startswith('MCP|mcp.usebaci.com|127.0.0.1\n200')
-            assert curl('mcp.localhost', '/internal/owner/preview').stdout.endswith('\n404')
+            assert curl('builder-mcp.usebaci.com', '/builder/mcp', '-H', 'X-Forwarded-For: 198.51.100.1').stdout.startswith('MCP|builder-mcp.usebaci.com|127.0.0.1\n200')
+            assert curl('builder-mcp.usebaci.com', '/internal/owner/preview').stdout.endswith('\n404')
             assert curl('output.localhost', '/resource/synthetic').stdout.startswith('DELIVERY|output.localhost|127.0.0.1\n200')
             assert curl('output.localhost', '/resource/synthetic', '-X', 'POST').stdout.endswith('\n404')
             assert curl('owner.localhost', '/internal/owner/preview').returncode != 0

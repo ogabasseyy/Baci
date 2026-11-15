@@ -87,7 +87,7 @@ it('uses the same live connection and user-scoped RLS resolution for experience 
     })
       .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
       .setIssuer('https://builder-auth.usebaci.com')
-      .setAudience('https://mcp.usebaci.com/builder/mcp')
+      .setAudience('https://builder-mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')
       .sign(keys.privateKey);

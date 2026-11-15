@@ -3,6 +3,11 @@ import {
   hostHeaderValidation,
   NodeStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/node';
+import {
+  BUILDER_MCP_HOST,
+  BUILDER_MCP_ORIGIN,
+  BUILDER_MCP_PATH,
+} from '../src/lib/builder-connector/resource';
 import { builderAuthChallenge } from '../src/lib/builder-connector/tool-policy';
 import {
   createRateLimiter,
@@ -19,7 +24,7 @@ import { createBuilderMcpServer } from './server';
 const allowedOrigins = new Set([
   'https://chatgpt.com',
   'https://usebaci.com',
-  'https://mcp.usebaci.com',
+  BUILDER_MCP_ORIGIN,
 ]);
 export function createBuilderMcpHttpHandler(
   deps: Pick<BuilderMcpDependencies, 'executeBuilderTool' | 'experience'> & {
@@ -35,7 +40,7 @@ export function createBuilderMcpHttpHandler(
     maxPerIp: 120,
   });
   const validHost = hostHeaderValidation([
-    'mcp.usebaci.com',
+    BUILDER_MCP_HOST,
     '127.0.0.1',
     'localhost',
     '[::1]',
@@ -70,7 +75,7 @@ export function createBuilderMcpHttpHandler(
       }
       if (!validHost(req, res)) return;
       const url = new URL(req.url ?? '/', BUILDER_RESOURCE);
-      if (url.origin !== new URL(BUILDER_RESOURCE).origin || url.search) {
+      if (url.origin !== BUILDER_MCP_ORIGIN || url.search) {
         reply(res, 404, 'Not found');
         return;
       }
@@ -96,7 +101,7 @@ export function createBuilderMcpHttpHandler(
         res.end(JSON.stringify(builderProtectedResource));
         return;
       }
-      if (url.pathname !== '/builder/mcp') {
+      if (url.pathname !== BUILDER_MCP_PATH) {
         reply(res, 404, 'Not found');
         return;
       }

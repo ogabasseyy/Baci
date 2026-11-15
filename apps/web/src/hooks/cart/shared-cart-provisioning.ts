@@ -4,6 +4,7 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 import { saveSharedCartImportReceipt } from './cart-storage';
+import { resolveUnsettledCartAdoption } from './shared-cart-adoption-wait';
 import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
 import { createImportFinisher } from './shared-cart-import-finish';
@@ -109,14 +110,10 @@ export function createCartProvisioning(
       createRequestRef.current = null;
       importOpIdsRef.current = new Set();
     }
-    // Defensive: the sender only runs once linked, so adoption has
-    // settled by the time these paths are reachable.
-    const unsettled = {
-      code: 'temporarily_unavailable' as const,
-      ok: false as const,
-      retryable: true,
-    };
-    if (adoptOutcomeRef.current === 'unknown') return unsettled;
+    if (adoptOutcomeRef.current === 'unknown')
+      return resolveUnsettledCartAdoption(adoptOutcomeRef, live, () =>
+        ensureCartOnce(canProceed)
+      );
     if (
       adoptOutcomeRef.current === 'none' ||
       adoptOutcomeRef.current === 'expired'

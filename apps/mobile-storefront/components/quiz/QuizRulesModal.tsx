@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
-import { useTheme } from '@/hooks/useTheme';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 interface QuizRulesModalProps {
   eventTitle: string;
@@ -32,7 +32,7 @@ export function QuizRulesModal({
   timePerQuestionSeconds,
   visible,
 }: QuizRulesModalProps) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizLobbyStyles(colors);
   const insets = useSafeAreaInsets();
   const [accepted, setAccepted] = useState(false);

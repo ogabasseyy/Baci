@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { QuizRulesModal } from './QuizRulesModal';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 jest.mock('@react-native-vector-icons/ionicons', () => 'Ionicons');
 jest.mock('react-native-safe-area-context', () => ({
@@ -115,7 +116,7 @@ describe('QuizRulesModal', () => {
       );
 
       expect(screen.getByText('Accept & play')).toHaveStyle({
-        color: Colors.light.textSecondary,
+        color: QUIZ_STAGE_COLORS.textSecondary,
       });
 
       fireEvent.press(

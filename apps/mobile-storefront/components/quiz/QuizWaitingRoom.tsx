@@ -1,15 +1,17 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useQuizRewardedBadge } from '@/hooks/use-quiz-rewarded-badge';
-import { useTheme } from '@/hooks/useTheme';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useAuthStore } from '@/stores/auth-store';
 import { QuizRewardedBadgeOffer } from './QuizRewardedBadgeOffer';
 import { QuizRulesModal } from './QuizRulesModal';
 import { formatQuizClock, formatRemainingTime } from './QuizScreen.utils';
+import { QuizTicketBackdrop } from './QuizTicketBackdrop';
 import { createQuizWaitingRoomStyles } from './QuizWaitingRoom.styles';
+import { QUIZ_STAGE_COLORS, QUIZ_TILE } from './quiz-stage-colors';
 import {
   type QuizWaitingRoomState,
   useQuizWaitingRoom,
@@ -32,7 +34,7 @@ export function QuizWaitingRoom({
   onStart,
   refresh,
 }: QuizWaitingRoomProps) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizWaitingRoomStyles(colors);
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const [rulesVisible, setRulesVisible] = useState(false);
@@ -101,12 +103,21 @@ export function QuizWaitingRoom({
         <View style={styles.card}>
           <Text style={styles.eyebrow}>Waiting room</Text>
           <Text style={styles.title}>{currentEvent.title}</Text>
-          <Text style={styles.prize}>Win {currentEvent.prizeName}</Text>
           <View>
             <Text style={styles.countdownLabel}>Starts in</Text>
             <Text accessibilityRole="timer" style={styles.countdown}>
               {formatRemainingTime(waitingRoom.remainingSeconds)}
             </Text>
+          </View>
+          <View style={styles.prizeTicket}>
+            <QuizTicketBackdrop color={QUIZ_TILE.background} />
+            <Ionicons color="#D97706" name="trophy" size={26} />
+            <View style={styles.prizeTicketCopy}>
+              <Text style={styles.prizeTicketLabel}>The prize</Text>
+              <Text numberOfLines={2} style={styles.prize}>
+                Win {currentEvent.prizeName}
+              </Text>
+            </View>
           </View>
           <View style={styles.meta}>
             <Text style={styles.metaText}>

@@ -47,6 +47,9 @@ export function inboxPreview(
   message: Pick<MerchantInboxMessage, 'sender' | 'text'>
 ): string {
   const line = message.text.replace(/\s+/g, ' ').trim();
+  if (!line) {
+    return `${previewPrefix(message.sender)}Attachment or unsupported message`;
+  }
   const short =
     line.length > PREVIEW_MAX_LENGTH
       ? `${sliceWholeCharacters(line, PREVIEW_MAX_LENGTH).trimEnd()}…`

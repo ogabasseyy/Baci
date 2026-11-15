@@ -110,6 +110,9 @@ export function useMerchantInbox() {
 
   function selectConversation(conversationId: number | null) {
     selectedIdRef.current = conversationId;
+    // Cleared together with the selection, so an error from the previous
+    // conversation never renders in the next one.
+    setSendError(null);
     setSelectedId(conversationId);
   }
 

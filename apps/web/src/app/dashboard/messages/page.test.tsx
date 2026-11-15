@@ -166,6 +166,20 @@ describe('MessagesPage', () => {
     expect(box).toHaveValue('');
   });
 
+  it.each([
+    ['unauthorized', /sign in again to reply/i],
+    ['forbidden', /do not have permission to reply/i],
+  ])('explains a %s reply failure', (sendError, text) => {
+    inbox.value = state({
+      selectedId: 7,
+      selectedConversation: conversations[0],
+      threadState: 'ready',
+      sendError,
+    });
+    render(<MessagesPage />);
+    expect(screen.getByRole('alert')).toHaveTextContent(text);
+  });
+
   it('warns before a resend when delivery is unknown', () => {
     inbox.value = state({
       selectedId: 7,

@@ -380,4 +380,25 @@ describe('useMerchantInbox', () => {
       await pending;
     });
   });
+
+  it('clears a reply error in the same update that opens another conversation', async () => {
+    api.sendMerchantInboxReply.mockResolvedValue({
+      ok: false,
+      code: 'delivery_unknown',
+    });
+    const { result } = renderHook(() => useMerchantInbox());
+    await waitFor(() => expect(result.current.listState).toBe('ready'));
+    act(() => result.current.selectConversation(7));
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+    await act(async () => {
+      await result.current.sendReply('hello');
+    });
+    expect(result.current.sendError).toBe('delivery_unknown');
+
+    const seen: unknown[] = [];
+    act(() => result.current.selectConversation(8));
+    seen.push(result.current.sendError);
+    expect(seen).toEqual([null]);
+    expect(result.current.selectedId).toBe(8);
+  });
 });

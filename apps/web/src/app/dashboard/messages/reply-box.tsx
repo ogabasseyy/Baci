@@ -17,7 +17,10 @@ function errorText(code: MerchantInboxApiErrorCode): string {
   if (code === 'delivery_unknown') {
     return 'We could not confirm this reply was sent. Check the conversation before sending it again.';
   }
-  if (code === 'forbidden' || code === 'unauthorized') {
+  if (code === 'unauthorized') {
+    return 'Your session has ended. Sign in again to reply.';
+  }
+  if (code === 'forbidden') {
     return 'You do not have permission to reply to customers.';
   }
   if (code === 'not_found') return 'This conversation is no longer available.';

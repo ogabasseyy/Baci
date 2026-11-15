@@ -63,3 +63,11 @@ describe('inboxPreview emoji safety', () => {
     expect(preview).toBe(`${'a'.repeat(119)}…`);
   });
 });
+
+describe('inboxPreview fallback', () => {
+  it('describes an empty message instead of a bare prefix', () => {
+    expect(inboxPreview({ sender: 'store', text: '   ' })).toBe(
+      'You: Attachment or unsupported message'
+    );
+  });
+});

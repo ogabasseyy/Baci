@@ -43,6 +43,16 @@ type AttestWaybillOwnership = (
 const UNRECOGNIZED_LIFECYCLE_ERROR =
   'GIGL tracking result has no recognized lifecycle event';
 
+// GIG's batch tracking returns nothing for a booked waybill until the rider
+// scans it at pickup. That is "not visible yet", not a failure: the database
+// recognises this exact marker on record_gigl_tracking_failure as a quiet
+// poll (no failure count, no error alert), and its back-off ladder then lets
+// the monitor go dormant until a GIG webhook or the safety check wakes it.
+// Reusing the existing lease-bound RPC keeps the worker's capability set
+// unchanged. Keep this text in sync with the migration
+// 20261115120000_gigl_tracking_trigger_driven_polling.sql.
+export const GIGL_WAYBILL_NOT_YET_VISIBLE = 'GIGL waybill not yet visible';
+
 // The database refunds a merchant-wallet GIGL charge on GIG's cancellation
 // only when this worker marks the cancellation events "account_attested":
 // GIG's preshipment record shows the waybill belongs to Baci's own GIG
@@ -115,6 +125,22 @@ async function recordFailure(
     }
   );
   if (rpcError) throw rpcError;
+}
+
+async function recordNotYetVisible(
+  supabase: WorkerSupabase,
+  monitor: ClaimedGiglTrackingMonitor,
+  workerId: string
+) {
+  const { error } = await supabase.rpc('record_gigl_tracking_failure', {
+    p_error: GIGL_WAYBILL_NOT_YET_VISIBLE,
+    p_shipment_id: monitor.shipment_id,
+    p_tracking_epoch_id: monitor.tracking_epoch_id,
+    p_worker_id: workerId,
+  });
+  if (error) {
+    throw new Error('Failed to record GIGL waybill as not yet visible');
+  }
 }
 
 async function applyResult(
@@ -234,8 +260,10 @@ export async function processClaimedGiglTrackingMonitors(
             );
           }
         }
-        if (!result)
-          throw new Error('GIGL batch tracking omitted claimed waybill');
+        if (!result) {
+          await recordNotYetVisible(supabase, monitor, workerId);
+          return;
+        }
         if (result.hasRecognizedLifecycleEvent === false) {
           const paused = await pauseMonitor(supabase, monitor, workerId);
           if (paused) {

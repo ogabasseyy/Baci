@@ -216,6 +216,13 @@ describe('ImeiCheckerScreen', () => {
       clientCapabilities: ['imei-async-v1'],
       device: 'smartphone',
     });
+    // One tap sends one check: a double submit would show a second POST.
+    const posts = jest
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([, init]) => (init as RequestInit)?.method === 'POST'
+      );
+    expect(posts).toHaveLength(1);
     // Real polling after an asynchronous saved-key check: slow on a busy
     // runner, so more than the default five seconds.
   }, 15_000);

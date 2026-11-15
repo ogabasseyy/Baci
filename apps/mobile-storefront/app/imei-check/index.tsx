@@ -132,7 +132,7 @@ export default function ImeiCheckerScreen() {
       return;
     }
     const decision = await decideImeiVerify({
-      retainedStoreCredit: requestIdentity.retains(tier, imei),
+      retainedStoreCredit: requestIdentity.retains(tier, imei, selectedDevice),
       retainsPiggyvest: () => walletPay.retains(tier, imei),
       ownerAtTap: useAuthStore.getState().user?.id ?? null,
       currentOwner: () => useAuthStore.getState().user?.id ?? null,
@@ -158,7 +158,7 @@ export default function ImeiCheckerScreen() {
     setError(null);
     setResult(null);
 
-    const idempotencyKey = requestIdentity.get(tier, imei);
+    const idempotencyKey = requestIdentity.get(tier, imei, selectedDevice);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
 

@@ -1,6 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
+import { type StyleProp, StyleSheet, type ViewStyle } from 'react-native';
 import Colors from '@/constants/Colors';
+import { CHAT_WIDGET_FAB_SIZE } from '@/constants/layout';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import {
   STORE_CREDIT_SCOPE_COPY,
@@ -64,9 +66,41 @@ describe('bugfix: store credit heading indented past the wallet cards', () => {
     expect(flat.paddingHorizontal).toBe(0);
   });
 
-  it('says the PiggyVest savings history is not shown here yet', () => {
-    expect(STORE_CREDIT_SCOPE_COPY).toMatch(/older store credit/);
-    expect(STORE_CREDIT_SCOPE_COPY).toMatch(/PiggyVest savings wallet/);
+  it('points to the wallet activity listed above, without a provider name', () => {
+    expect(STORE_CREDIT_SCOPE_COPY).toBe(
+      'Only older store credit, for purchases. Your wallet activity is listed above.'
+    );
+    expect(STORE_CREDIT_SCOPE_COPY).not.toMatch(
+      /piggyvest|kuda|monnify|paystack/i
+    );
+  });
+});
+
+const flatStyle = (
+  node: { props: { style?: StyleProp<ViewStyle> } } | null | undefined
+) => StyleSheet.flatten(node?.props.style) ?? {};
+
+describe('bugfix: store credit amounts ran to the screen edge', () => {
+  it('keeps amounts clear of the AI button, like the activity list above', () => {
+    renderHistory(true);
+
+    const section = screen.getByText('Older store credit').parent?.parent;
+    expect(flatStyle(section).paddingRight).toBe(CHAT_WIDGET_FAB_SIZE + 8);
+  });
+
+  it('centres the empty state on the screen, not on the narrowed list', () => {
+    renderHistory(true);
+
+    const empty = screen.getByText('No store credit activity yet').parent
+      ?.parent;
+    expect(flatStyle(empty).paddingLeft).toBe(CHAT_WIDGET_FAB_SIZE + 8);
+  });
+
+  it('leaves the plain Recent Transactions layout alone', () => {
+    renderHistory(false);
+
+    const section = screen.getByText('Recent Transactions').parent?.parent;
+    expect(flatStyle(section).paddingRight).toBeUndefined();
   });
 });
 

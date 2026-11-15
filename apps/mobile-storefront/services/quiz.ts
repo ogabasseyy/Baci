@@ -82,7 +82,7 @@ function getQuizEventsPath(
 }
 
 export async function fetchQuizEvents(
-  options: QuizServiceOptions = {}
+  options: QuizServiceOptions & { stopAtEventId?: string } = {}
 ): Promise<QuizEvent[]> {
   const events: QuizEvent[] = [];
   let offset = 0;
@@ -103,6 +103,13 @@ export async function fetchQuizEvents(
       }))
     );
 
+    // Callers that need one event can stop paging once it has arrived.
+    if (
+      options.stopAtEventId &&
+      payload.events.some((event) => event.id === options.stopAtEventId)
+    ) {
+      return events;
+    }
     if (
       !payload.pagination?.hasMore ||
       payload.pagination.nextOffset === null

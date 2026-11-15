@@ -194,4 +194,28 @@ describe('quiz event list paging and receipt clock', () => {
       )
     ).toBe('1');
   });
+
+  it('stops paging once the requested event has arrived', async () => {
+    mockFetch.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            contractVersion: 2,
+            entryMode: 'free-v1',
+            events: [v2EventFixture],
+            pagination: { hasMore: true, limit: 50, nextOffset: 50, offset: 0 },
+            serverNow: '2026-05-20T10:00:00.000Z',
+          }),
+          { status: 200 }
+        )
+    );
+
+    const events = await fetchQuizEvents({
+      baseUrl: 'https://example.com',
+      stopAtEventId: v2EventFixture.id,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });

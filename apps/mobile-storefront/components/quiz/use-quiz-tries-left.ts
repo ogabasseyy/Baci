@@ -27,7 +27,7 @@ export function useQuizTriesLeft(
       return;
     }
     let active = true;
-    fetchQuizEvents()
+    fetchQuizEvents({ stopAtEventId: eventId })
       .then((events) => {
         if (!active) return;
         // Both numbers come from the same fresh payload, never the cached list.

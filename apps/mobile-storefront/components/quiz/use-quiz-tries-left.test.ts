@@ -31,7 +31,7 @@ describe('useQuizTriesLeft', () => {
     const { result } = renderHook(() => useQuizTriesLeft('event-1', true));
     expect(result.current).toBeNull();
     await waitFor(() => expect(result.current).toBe(1));
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith({ stopAtEventId: 'event-1' });
   });
 
   it('stays null when the server sends no count', async () => {

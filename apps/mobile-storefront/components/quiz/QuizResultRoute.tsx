@@ -68,7 +68,8 @@ export function QuizResultRoute({
   );
   const triesLeft = useQuizTriesLeft(
     terminalContext?.eventId,
-    lifecycle === 'pending_results'
+    // A known single-attempt event can never show a count; unknown events fetch.
+    lifecycle === 'pending_results' && (event?.maxAttempts ?? 2) > 1
   );
   const returnToLobby = () => {
     if (lifecycle === 'pending_results' && !canPlayAgain) return;

@@ -152,6 +152,48 @@ describe('QuizResultRoute', () => {
     expect(screen.getByText('tries:1')).toBeTruthy();
   });
 
+  it('skips the fresh count for a known single-attempt event', async () => {
+    jest.mocked(fetchQuizEvents).mockClear();
+    render(
+      <QuizResultRoute
+        backHandlerRef={{ current: null }}
+        dismissRecovery={jest.fn()}
+        events={[
+          {
+            endsAt: '2026-08-16T12:05:00.000Z',
+            id: 'event-1',
+            maxAttempts: 1,
+            prizeName: 'Phone',
+            questionCount: 1,
+            startsAt: '2026-08-16T12:00:00.000Z',
+            status: 'active',
+            title: 'Live quiz',
+          },
+        ]}
+        expectedUserId="user-1"
+        lifecycle="pending_results"
+        onReset={jest.fn()}
+        onRetryRecovery={jest.fn()}
+        result={null}
+        styles={styles}
+        terminalContext={{
+          attemptId: 'attempt-1',
+          eventEndsAt: '2026-08-16T12:05:00.000Z',
+          eventId: 'event-1',
+          serverNow: '2026-08-16T12:04:00.000Z',
+          contractVersion: 2,
+        }}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'pending',
+          availableAt: null,
+        }}
+      />
+    );
+    await act(async () => {});
+    expect(fetchQuizEvents).not.toHaveBeenCalled();
+  });
+
   it('removes play again when the universal event deadline advances past the player', () => {
     jest.useFakeTimers();
     jest.setSystemTime(0);

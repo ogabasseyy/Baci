@@ -135,6 +135,7 @@ it.each([[404, 'PETROCK_REJECTED'], [502, 'PETROCK_REJECTED'], [502, 'PETROCK_UN
   const outcome = resolveImeiCheckFailure({ ...baseInput, responseStatus, payload: { code } });
   expect(outcome.shouldClearIdempotencyKey).toBe(true);
   expect(outcome.shouldPreserveIdempotencyKey).toBe(false);
+  expect(outcome.shouldRefetchWallet).toBe(true);
 });
 
 it('retires the key only for an explicitly confirmed no-debit failure', () => {

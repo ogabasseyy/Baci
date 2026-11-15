@@ -17,6 +17,7 @@ import {
   useState,
 } from 'react';
 import { Keyboard } from 'react-native';
+import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
 import { clearImeiRecoveryKey } from '@/lib/imei-request-recovery';
 import { createLogger } from '@/lib/logger';
@@ -29,6 +30,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import {
   handleImeiCheckFailure,
   handleImeiPreparationFailure,
+  handleImeiTerminalRecovery,
   imeiReportScopeKey,
   validateImeiCheckInput,
 } from './handle-imei-check-failure';
@@ -72,20 +74,15 @@ export function useImeiCheckFlow(
     setResultLookupId(null);
     setError(null);
   }, [scope]);
-
   const walletBalance = walletQuery.data?.wallet.balance ?? 0;
+  const walletIsStoreCredit = useStoreCreditPurchaseCopy(
+    merchantId,
+    walletQuery.data?.wallet
+  );
 
   const handlePendingTerminal = useEffectEvent(
     (terminal: NonNullable<typeof pendingLookup.terminal>) => {
-      if (
-        (terminal.kind === 'complete' || terminal.confirmedRefund === true) &&
-        terminal.recovery
-      ) {
-        void clearImeiRecoveryKey(
-          terminal.recovery.storageKey,
-          terminal.recovery.idempotencyKey
-        ).catch(() => undefined);
-      }
+      handleImeiTerminalRecovery(terminal, walletQuery.refetch);
       setIsLoading(false);
       if (terminal.kind === 'complete') {
         setError(null);
@@ -160,7 +157,10 @@ export function useImeiCheckFlow(
       });
       if (scopeRef.current !== submittedScope) return;
       if (preparation.kind !== 'ready') {
-        handleImeiPreparationFailure(preparation, setError);
+        handleImeiPreparationFailure(preparation, setError, {
+          merchantId,
+          walletIsStoreCredit,
+        });
         return;
       }
       const { recovery } = preparation;
@@ -186,6 +186,7 @@ export function useImeiCheckFlow(
           walletBalance,
           recovery,
           refetchWallet: walletQuery.refetch,
+          merchantId,
           setError,
           onPreviousReport: (id) =>
             lastSeen.current.set(
@@ -276,6 +277,7 @@ export function useImeiCheckFlow(
     pendingLookup,
     walletQuery,
     walletBalance,
+    walletIsStoreCredit,
     handleVerify,
     handleReset,
     clearError() {

@@ -26,7 +26,12 @@ export async function prepareImeiAttempt({
       [scope, tier, identifier],
       createKey
     );
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === 'Invalid stored recovery key'
+    )
+      return { kind: 'recovery_corrupt' as const };
     return { kind: 'storage_error' as const };
   }
   // Keep a newly prepared key even if local balance checks fail: another

@@ -4,6 +4,9 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 let mockUserId = 'user-a';
 let mockWalletBalance = 5000;
+const mockWalletRefetch = jest
+  .fn<() => Promise<void>>()
+  .mockResolvedValue(undefined);
 const mockSecureEntries = new Map<string, string>();
 let mockSecureFailure = false;
 jest.mock('expo-secure-store', () => ({
@@ -37,7 +40,7 @@ jest.mock('@/hooks/use-wallet', () => ({
     data: { wallet: { balance: mockWalletBalance } },
     isLoading: false,
     isError: false,
-    refetch: jest.fn(),
+    refetch: mockWalletRefetch,
   }),
 }));
 jest.mock('@/stores/auth-store', () => ({
@@ -523,6 +526,7 @@ it.each([
     useImeiCheckFlow('smartphone', 'https://test.invalid')
   );
   await waitFor(() => expect(result.current.error).toBe('Check failed'));
+  expect(mockWalletRefetch).toHaveBeenCalledTimes(confirmedRefund ? 1 : 0);
   if (confirmedRefund)
     await waitFor(() =>
       expect(mockSecureEntries.has(recovery.storageKey)).toBe(false)

@@ -25,4 +25,13 @@ describe('IMEI request recovery', () => {
     await expect(acquireImeiRecoveryKey(['scope', 'blacklist', '490154203237518'], () => 'key')).rejects.toThrow();
     vi.restoreAllMocks();
   });
+  it('never replaces an empty saved recovery identity with a new one', async () => {
+    const create = vi.fn(() => '11111111-1111-4111-8111-111111111111');
+    const identity = ['scope', 'blacklist', '490154203237518'];
+    const first = await acquireImeiRecoveryKey(identity, create);
+    localStorage.setItem(first.storageKey, '');
+    await expect(acquireImeiRecoveryKey(identity, create)).rejects.toThrow('Invalid stored recovery key');
+    expect(localStorage.getItem(first.storageKey)).toBe('');
+    expect(create).toHaveBeenCalledTimes(1);
+  });
 });

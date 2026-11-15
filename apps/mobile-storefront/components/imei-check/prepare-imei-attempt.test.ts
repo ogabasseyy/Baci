@@ -39,3 +39,7 @@ it('does not start a new attempt with insufficient funds', async () => {
     shortfall: 700,
   });
 });
+it('preserves a damaged recovery key and requests support rather than creating a charge', async () => {
+  mockAcquire.mockRejectedValueOnce(new Error('Invalid stored recovery key'));
+  expect(await prepareImeiAttempt(base)).toEqual({ kind: 'recovery_corrupt' });
+});

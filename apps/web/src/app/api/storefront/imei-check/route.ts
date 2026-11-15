@@ -12,7 +12,10 @@ import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
 import { createImeiCapabilitiesHandler } from './capabilities-handler';
-import { claimImeiAttempt, reconcileExistingImeiAttempt } from './claim-imei-attempt';
+import {
+  claimImeiAttempt,
+  reconcileExistingImeiAttempt,
+} from './claim-imei-attempt';
 import { imeiProviderConfiguration } from './imei-provider-configuration';
 import { prepareImeiProvider } from './prepare-imei-provider';
 import { resolveImeiIdentifier } from './resolve-imei-identifier';
@@ -24,10 +27,7 @@ import {
   mapExistingTerminalLookupWithoutImeiHash,
   UUID_PATTERN,
 } from './route-helpers';
-import {
-  continuesWalletPayment,
-  runImeiLookup,
-} from './run-imei-lookup';
+import { continuesWalletPayment, runImeiLookup } from './run-imei-lookup';
 import { resumePaidImeiWalletPayment } from './wallet-pay/resume-paid-imei-wallet-payment';
 
 const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<string>(
@@ -218,19 +218,29 @@ export async function POST(request: NextRequest) {
       supabaseAdmin,
       idempotencyKey
     );
-    if (existingLookup && !continuesWalletPayment(bodyParse.data, existingLookup)) {
-      return reconcileExistingImeiAttempt({ access: supabaseAdmin, context: replayContext, requestedKey: idempotencyKey, existing: existingLookup });
+    if (
+      existingLookup &&
+      !continuesWalletPayment(bodyParse.data, existingLookup)
+    ) {
+      return reconcileExistingImeiAttempt({
+        access: supabaseAdmin,
+        context: replayContext,
+        requestedKey: idempotencyKey,
+        existing: existingLookup,
+      });
     }
 
-    const claim = existingLookup ? { canonicalKey: idempotencyKey, response: null } : await claimImeiAttempt({
-      access: supabaseAdmin,
-      context: replayContext,
-      requestedKey: idempotencyKey,
-      previousLookupId: bodyParse.data.previousLookupId,
-      supportsRepeat: bodyParse.data.clientCapabilities.includes(
-        'imei-attempt-coordination-v1'
-      ),
-    });
+    const claim = existingLookup
+      ? { canonicalKey: idempotencyKey, response: null }
+      : await claimImeiAttempt({
+          access: supabaseAdmin,
+          context: replayContext,
+          requestedKey: idempotencyKey,
+          previousLookupId: bodyParse.data.previousLookupId,
+          supportsRepeat: bodyParse.data.clientCapabilities.includes(
+            'imei-attempt-coordination-v1'
+          ),
+        });
     if (claim.response) return claim.response;
     const canonicalKey = claim.canonicalKey;
     const prepared = await prepareImeiProvider({

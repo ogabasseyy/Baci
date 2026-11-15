@@ -21,14 +21,17 @@ export async function acquireImeiRecoveryKey(
   const storageKey = `${PREFIX}${digest}`;
   return serialize(async () => {
     const existing = await SecureStore.getItemAsync(storageKey);
-    if (existing) {
+    if (existing !== null) {
+      const normalized = existing.trim().toLowerCase();
       if (
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-          existing
+          normalized
         )
       )
         throw new Error('Invalid stored recovery key');
-      return { storageKey, idempotencyKey: existing, isExisting: true };
+      if (normalized !== existing)
+        await SecureStore.setItemAsync(storageKey, normalized);
+      return { storageKey, idempotencyKey: normalized, isExisting: true };
     }
     const idempotencyKey = createKey();
     await SecureStore.setItemAsync(storageKey, idempotencyKey);

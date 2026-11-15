@@ -8,6 +8,7 @@ import {
   imeiReportScopeKey,
   validateImeiCheckInput,
 } from './handle-imei-check-failure';
+import { imeiCheckScreenActions } from './imei-check-screen-actions';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/lib/imei-request-recovery', () => ({
@@ -44,6 +45,7 @@ describe('handleImeiCheckFailure', () => {
   it.each([
     [404, 'PETROCK_REJECTED'],
     [502, 'PETROCK_UNAVAILABLE'],
+    [502, 'PETROCK_NOT_SUBMITTED'],
     [502, 'SICKW_UNAVAILABLE'],
   ])('clears the saved key for a confirmed refund (%s %s)', async (status, code) => {
     await handle(status, {
@@ -56,6 +58,7 @@ describe('handleImeiCheckFailure', () => {
       'saved-key',
       'attempt-key'
     );
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
   });
   it.each([
     [502, 'REFUND_PENDING'],
@@ -99,7 +102,7 @@ describe('handleImeiCheckFailure', () => {
       required: 700,
     });
     expect(router.push).toHaveBeenCalledWith(
-      '/wallet?action=fund&requiredAmount=500&returnTo=/imei-check'
+      '/wallet?action=fund&requiredAmount=500&returnTo=%2Fimei-check'
     );
     expect(clearImeiRecoveryKey).toHaveBeenCalledWith(
       'saved-key',
@@ -138,12 +141,39 @@ describe('input and preparation handling', () => {
       setError
     );
     expect(router.push).toHaveBeenCalledWith(
-      '/wallet?action=fund&requiredAmount=400&returnTo=/imei-check'
+      '/wallet?action=fund&requiredAmount=400&returnTo=%2Fimei-check'
     );
     handleImeiPreparationFailure({ kind: 'storage_error' }, setError);
     expect(setError).toHaveBeenCalledWith(
       expect.stringContaining('cannot save check recovery')
     );
+  });
+  it('preserves the merchant scope when routing wallet funding', () => {
+    const fund = jest
+      .spyOn(imeiCheckScreenActions, 'fundWallet')
+      .mockImplementation(() => undefined);
+    handleImeiPreparationFailure(
+      { kind: 'insufficient', shortfall: 400 },
+      setError,
+      { merchantId: 'merchant-a', walletIsStoreCredit: true }
+    );
+    expect(fund).toHaveBeenCalledWith(400, 'merchant-a');
+    fund.mockRestore();
+  });
+  it('uses store-credit language when the account needs it', () => {
+    handleImeiPreparationFailure({ kind: 'wallet_error' }, setError, {
+      walletIsStoreCredit: true,
+    });
+    expect(setError).toHaveBeenCalledWith(
+      expect.stringContaining('Store credit unavailable')
+    );
+  });
+  it('directs customers to support when a saved recovery identity is damaged', () => {
+    handleImeiPreparationFailure({ kind: 'recovery_corrupt' }, setError);
+    expect(setError).toHaveBeenCalledWith(
+      expect.stringContaining('contact support')
+    );
+    expect(router.push).not.toHaveBeenCalled();
   });
   it('scopes report identities and normalizes their identifiers', () => {
     expect(imeiReportScopeKey('merchant:user', 'blacklist', ' ab12 ')).toBe(

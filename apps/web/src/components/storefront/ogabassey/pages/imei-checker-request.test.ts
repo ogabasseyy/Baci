@@ -193,3 +193,14 @@ it('marks a polled Petrock rejection as a confirmed refund', async () => {
   mockFetchWithCsrf.mockResolvedValue({ ok: false, status: 404, json: async () => ({ success: false, status: 'error', code: 'PETROCK_REJECTED', error: 'Refunded' }) });
   expect(await pollImeiCheck('lookup-1', 'ogabassey')).toMatchObject({ kind: 'error', confirmedRefund: true });
 });
+
+it('does not submit a paid request if the report validator cannot load', async () => {
+  const loader = await import('./imei-checker-schema-loader');
+  const failure = vi.spyOn(loader, 'loadImeiResultSchema').mockRejectedValueOnce(new Error('chunk unavailable'));
+  mockFetchWithCsrf.mockReset();
+  const outcome = await performImeiCheck('490154203237518', 'blacklist', 700, '11111111-1111-4111-8111-111111111111', 'ogabassey');
+  expect(mockFetchWithCsrf).not.toHaveBeenCalled();
+  expect(outcome.keepRequestIdentity).toBe(true);
+  expect(outcome.error).toBeTruthy();
+  failure.mockRestore();
+});

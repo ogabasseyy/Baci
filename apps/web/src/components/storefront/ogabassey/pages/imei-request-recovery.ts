@@ -11,7 +11,7 @@ export async function acquireImeiRecoveryKey(identity: readonly string[], create
   if (!navigator.locks) throw new Error('Safe recovery is unavailable');
   return navigator.locks.request(storageKey, () => {
     const existing = localStorage.getItem(storageKey);
-    if (existing) {
+    if (existing !== null) {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(existing)) throw new Error('Invalid stored recovery key');
       return { storageKey, idempotencyKey: existing };
     }

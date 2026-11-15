@@ -34,3 +34,34 @@ it('reuses an uncertain request after restart and rotates after completion', asy
     '22222222-2222-4222-8222-222222222222'
   );
 });
+
+it('repairs only whitespace and casing while retaining the same saved UUID', async () => {
+  const identity = ['merchant:customer:user', 'blacklist', '490154203237518'];
+  const create = jest.fn(() => '11111111-1111-4111-8111-111111111111');
+  const first = await acquireImeiRecoveryKey(identity, create);
+  mockEntries.set(
+    first.storageKey,
+    `  ${first.idempotencyKey.toUpperCase()}  `
+  );
+  const recovered = await acquireImeiRecoveryKey(identity, create);
+  expect(recovered).toMatchObject({
+    idempotencyKey: first.idempotencyKey,
+    isExisting: true,
+  });
+  expect(create).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  'damaged-unknown-key',
+  '',
+])('does not discard corrupted request identity %s', async (corrupt) => {
+  const identity = ['merchant:customer:user', 'blacklist', '490154203237518'];
+  const create = jest.fn(() => '11111111-1111-4111-8111-111111111111');
+  const first = await acquireImeiRecoveryKey(identity, create);
+  mockEntries.set(first.storageKey, corrupt);
+  await expect(acquireImeiRecoveryKey(identity, create)).rejects.toThrow(
+    'Invalid stored recovery key'
+  );
+  expect(mockEntries.get(first.storageKey)).toBe(corrupt);
+  expect(create).toHaveBeenCalledTimes(1);
+});

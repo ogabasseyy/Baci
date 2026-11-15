@@ -4,6 +4,7 @@ import {
   DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
   resolveImeiCheckFailure,
 } from './imei-checker-resolve-failure';
+import { loadImeiResultSchema } from './imei-checker-schema-loader';
 import type { ImeiResult } from './imei-checker-types';
 
 const currencyFormatter = new Intl.NumberFormat('en-NG', {
@@ -70,6 +71,8 @@ export async function performImeiCheck(
   previousLookupId?: string
 ): Promise<ImeiCheckOutcome> {
   try {
+    // If the lazy validator chunk is unavailable, do not send a paid request.
+    const ImeiResultSchema = await loadImeiResultSchema();
     const response = await fetchWithCsrf('/api/storefront/imei-check', {
       method: 'POST',
       headers: {
@@ -130,7 +133,6 @@ export async function performImeiCheck(
       };
     }
 
-    const { ImeiResultSchema } = await import('@baci/shared/imei');
     const parsedResult = ImeiResultSchema.safeParse(data.data);
     if (!parsedResult.success) {
       return { result: null, error: 'The check response was incomplete. Please retry.', keepRequestIdentity: true, lookupId: null, needsSignIn: false, needsWalletFunding: false, pending: null };

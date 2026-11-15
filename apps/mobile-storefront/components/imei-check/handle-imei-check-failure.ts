@@ -8,6 +8,7 @@ import { Alert } from 'react-native';
 import { clearImeiRecoveryKey } from '@/lib/imei-request-recovery';
 import { ImeiCheckApiResponseSchema } from '@/lib/validation';
 import { imeiCheckScreenActions } from './imei-check-screen-actions';
+import { getImeiWalletCopy } from './imei-wallet-copy';
 import { resolveImeiCheckFailure } from './resolve-imei-check-failure';
 
 export function validateImeiCheckInput(
@@ -35,6 +36,7 @@ export async function handleImeiCheckFailure({
   refetchWallet,
   setError,
   onPreviousReport,
+  merchantId,
 }: {
   rawData: unknown;
   responseStatus: number;
@@ -44,6 +46,7 @@ export async function handleImeiCheckFailure({
   refetchWallet?: () => Promise<unknown>;
   setError: (value: string) => void;
   onPreviousReport: (id: string) => void;
+  merchantId?: string;
 }) {
   const failure = ImeiCheckApiResponseSchema.safeParse(rawData);
   if (
@@ -71,7 +74,7 @@ export async function handleImeiCheckFailure({
     return;
   }
   if (outcome.topUpAmount !== null) {
-    imeiCheckScreenActions.fundWallet(outcome.topUpAmount);
+    imeiCheckScreenActions.fundWallet(outcome.topUpAmount, merchantId);
     return;
   }
   if (outcome.shouldRefetchWallet) await refetchWallet?.();
@@ -85,18 +88,23 @@ export function handleImeiPreparationFailure(
     >,
     { kind: 'ready' }
   >,
-  setError: (value: string) => void
+  setError: (value: string) => void,
+  options: { merchantId?: string; walletIsStoreCredit?: boolean } = {}
 ) {
   if (preparation.kind === 'insufficient') {
-    imeiCheckScreenActions.fundWallet(preparation.shortfall);
+    imeiCheckScreenActions.fundWallet(
+      preparation.shortfall,
+      options.merchantId
+    );
   } else {
+    const walletCopy = getImeiWalletCopy(options.walletIsStoreCredit ?? false);
     const messages = {
+      recovery_corrupt:
+        'We could not safely resume your earlier check. Please contact support before trying again.',
       storage_error:
         'This device cannot save check recovery. Please try again.',
-      wallet_loading:
-        'Loading wallet balance. Please wait a moment and try again.',
-      wallet_error:
-        'Wallet balance unavailable. Refresh your wallet and try again.',
+      wallet_loading: `${walletCopy.loading} Please try again in a moment.`,
+      wallet_error: walletCopy.unavailable,
     };
     setError(messages[preparation.kind]);
   }
@@ -108,4 +116,24 @@ export function imeiReportScopeKey(
   imei: string
 ) {
   return JSON.stringify([scope, tier, imei.trim().toUpperCase()]);
+}
+
+export function handleImeiTerminalRecovery(
+  terminal: {
+    kind: 'complete' | 'error';
+    confirmedRefund?: boolean;
+    recovery?: { storageKey: string; idempotencyKey: string };
+  },
+  refetchWallet: () => Promise<unknown>
+) {
+  if (
+    (terminal.kind === 'complete' || terminal.confirmedRefund) &&
+    terminal.recovery
+  )
+    void clearImeiRecoveryKey(
+      terminal.recovery.storageKey,
+      terminal.recovery.idempotencyKey
+    ).catch(() => undefined);
+  if (terminal.kind === 'error' && terminal.confirmedRefund)
+    void refetchWallet().catch(() => undefined);
 }

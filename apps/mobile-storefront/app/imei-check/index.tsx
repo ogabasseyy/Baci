@@ -15,9 +15,8 @@ import { useImeiDeviceNavigation } from '@/components/imei-check/use-imei-device
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
-import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
-import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import Colors, { SPACING } from '@/constants/Colors';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
 
 const API_BASE_URL = resolveStorefrontApiBaseUrl(
@@ -50,14 +49,15 @@ export default function ImeiCheckerScreen() {
     pendingLookup,
     walletQuery,
     walletBalance,
+    walletIsStoreCredit,
     handleVerify,
     handleReset,
     openReport,
     clearError,
   } = useImeiCheckFlow(selectedDevice, API_BASE_URL);
-  const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, walletQuery.data?.wallet);
   const topUpCardOnly = usePiggyvestCapabilityNow(merchantId) !== false;
-  const fundWallet = (amount: number) => imeiCheckScreenActions.fundWallet(amount, merchantId);
+  const fundWallet = (amount: number) =>
+    imeiCheckScreenActions.fundWallet(amount, merchantId);
   usePreventRemove(result !== null, () => {
     if (isLoading || pendingLookup.pending) return;
     handleReset();

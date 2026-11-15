@@ -112,11 +112,7 @@ export function resolveImeiCheckFailure(
     };
   }
 
-  if (
-    (input.responseStatus === 404 &&
-      (code === 'SICKW_NOT_FOUND' || code === 'PETROCK_REJECTED')) ||
-    (input.responseStatus === 502 && code === 'SICKW_UNAVAILABLE')
-  ) {
+  if (isConfirmedImeiRefund(input.responseStatus, code)) {
     return {
       errorMessage: 'Lookup failed; your wallet was refunded.',
       shouldClearIdempotencyKey,

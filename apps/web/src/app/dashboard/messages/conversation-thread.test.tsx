@@ -32,8 +32,9 @@ function layoutThread() {
     scrollTop: {
       configurable: true,
       get: () => scrollTop,
+      // Browsers clamp scrollTop to the furthest scrollable position.
       set: (value: number) => {
-        scrollTop = value;
+        scrollTop = Math.min(value, AT_BOTTOM);
       },
     },
   });
@@ -56,7 +57,7 @@ describe('ConversationThread scrolling', () => {
     rerender(
       <ConversationThread state="ready" messages={[message(1), message(2)]} />
     );
-    expect(thread.position()).toBe(SCROLL_HEIGHT);
+    expect(thread.position()).toBe(AT_BOTTOM);
     expect(
       screen.queryByRole('button', { name: /new messages/i })
     ).not.toBeInTheDocument();
@@ -77,7 +78,7 @@ describe('ConversationThread scrolling', () => {
     await userEvent.click(
       screen.getByRole('button', { name: /new messages/i })
     );
-    expect(thread.position()).toBe(SCROLL_HEIGHT);
+    expect(thread.position()).toBe(AT_BOTTOM);
     expect(
       screen.queryByRole('button', { name: /new messages/i })
     ).not.toBeInTheDocument();
@@ -95,7 +96,7 @@ describe('ConversationThread scrolling', () => {
         messages={[message(1), message(2, 'store')]}
       />
     );
-    expect(thread.position()).toBe(SCROLL_HEIGHT);
+    expect(thread.position()).toBe(AT_BOTTOM);
   });
 
   it('clears the jump button once the merchant scrolls back down', () => {

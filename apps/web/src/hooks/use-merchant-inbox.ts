@@ -113,7 +113,6 @@ export function useMerchantInbox() {
 
   function selectConversation(conversationId: number | null) {
     selectedIdRef.current = conversationId;
-    pendingReplies.current = [];
     // Cleared together with the selection, so an error from the previous
     // conversation never renders in the next one.
     setSendError(null);
@@ -168,17 +167,21 @@ export function useMerchantInbox() {
       if (result.ok) {
         const polledIds = new Set(result.messages.map((message) => message.id));
         const now = Date.now();
-        // Stop tracking a reply once the server returns it, or after a bound.
+        // Stop tracking this conversation's replies once the server returns
+        // them, and any reply after a bound. Other conversations' pending
+        // replies are kept, so switching away and back cannot drop one.
         pendingReplies.current = pendingReplies.current.filter(
           (pending) =>
-            pending.conversationId === conversationId &&
-            !polledIds.has(pending.message.id) &&
-            now - pending.sentAt < PENDING_REPLY_TTL_MS
+            now - pending.sentAt < PENDING_REPLY_TTL_MS &&
+            (pending.conversationId !== conversationId ||
+              !polledIds.has(pending.message.id))
         );
         setMessages(
           mergePolledMessages(
             result.messages,
-            pendingReplies.current.map((pending) => pending.message)
+            pendingReplies.current
+              .filter((pending) => pending.conversationId === conversationId)
+              .map((pending) => pending.message)
           )
         );
         setThreadState('ready');
@@ -218,12 +221,12 @@ export function useMerchantInbox() {
       if (stillOpen) setSendError(result.code);
       return false;
     }
+    pendingReplies.current.push({
+      conversationId,
+      message: result.message,
+      sentAt: Date.now(),
+    });
     if (stillOpen) {
-      pendingReplies.current.push({
-        conversationId,
-        message: result.message,
-        sentAt: Date.now(),
-      });
       setMessages((current) => mergeMessage(current, result.message));
     }
     return true;

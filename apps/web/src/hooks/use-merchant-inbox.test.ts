@@ -455,4 +455,26 @@ describe('useMerchantInbox', () => {
     });
     expect(result.current.messages.map((m) => m.id)).toEqual([30]);
   });
+
+  it('keeps a pending reply when the merchant opens another chat and comes back', async () => {
+    api.fetchMerchantInboxThread.mockImplementation((id: number) =>
+      Promise.resolve({ ok: true, messages: [message(id === 7 ? 30 : 80)] })
+    );
+    const { result } = renderHook(() => useMerchantInbox());
+    await waitFor(() => expect(result.current.listState).toBe('ready'));
+    act(() => result.current.selectConversation(7));
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+    await act(async () => {
+      await result.current.sendReply('In stock');
+    });
+
+    act(() => result.current.selectConversation(8));
+    await waitFor(() =>
+      expect(result.current.messages.map((m) => m.id)).toEqual([80])
+    );
+    act(() => result.current.selectConversation(7));
+    await waitFor(() =>
+      expect(result.current.messages.map((m) => m.id)).toEqual([30, 31])
+    );
+  });
 });

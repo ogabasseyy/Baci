@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react-native';
 import type { CartItem } from '@/stores/cart-store';
 import { CheckoutTopNotices } from './CheckoutTopNotices';
 
-const prizeLine = {
+const prizeLine: CartItem = {
   id: 'prize-1',
   name: 'iPhone XR',
   price: 0,
@@ -11,7 +11,7 @@ const prizeLine = {
   slug: 'iphone-xr',
   voucher_award_id: 'award-1',
   voucher_token: 'token-1',
-} as CartItem;
+};
 
 const idleReview = { retry: jest.fn(), review: null, status: 'idle' as const };
 

@@ -30,6 +30,7 @@ const statements = new Set([
   GOAL_COMPLETE_STATEMENTS.markPurchaseAlerted,
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.read_credit_gap_ledger($1::uuid,$2::text,$3::jsonb) AS result',
+  'SELECT piggyvest_primary.read_goal_wallet_setup_health($1::uuid,$2::text,$3::jsonb) AS result',
 ]);
 // Statements whose third parameter is an operation id (not JSON).
 const operationIdStatements = new Set<string>([

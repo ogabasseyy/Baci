@@ -4,6 +4,10 @@ import { act, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import {
+  rememberGoalSetupPhase,
+  resetGoalSetupMemory,
+} from './savings/goal-setup-memory';
 import type { PrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
@@ -70,30 +74,55 @@ function renderSection(walletPrimaryReady: boolean) {
 }
 
 // Opening Add to savings never waits on a repeat of answers the wallet
-// screen already has: the main wallet comes from the screen, and the
-// plan's own savings wallet is confirmed in the background.
+// screen already has: the main wallet comes from the screen. The plan's own
+// savings wallet must be known ready before the amount form shows, but a
+// plan this app already saw ready shows it at once while that is re-read.
 describe('Add to savings opens without a loading state', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetGoalSetupMemory();
     mockGate.mockReturnValue('checking');
     act(() => {
       useAuthStore.setState({ user: authUser, merchantId: 'merchant-1' });
     });
   });
 
-  it.each([
-    'idle',
-    'loading',
-    'ready',
-  ])('shows the amount form at once when the wallet already confirmed the main wallet (goal wallet %s)', (phase) => {
+  const planPhase = (phase: string) =>
     mockPlanFunding.mockReturnValue({
       planFundingPhase: phase,
       fetchExistingPlanFunding: jest.fn(),
       failExistingPlanFunding: jest.fn(),
     });
+
+  it('shows the amount form at once when the goal wallet is ready', () => {
+    planPhase('ready');
     renderSection(true);
     expect(screen.queryByText('Almost ready')).toBeNull();
     expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+  });
+
+  it.each([
+    'idle',
+    'loading',
+  ])('shows the amount form at once for a goal wallet last seen ready (goal wallet %s)', (phase) => {
+    rememberGoalSetupPhase(
+      JSON.stringify(['user-a', 'merchant-1', 'g1']),
+      'ready'
+    );
+    planPhase(phase);
+    renderSection(true);
+    expect(screen.queryByText('Almost ready')).toBeNull();
+    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+  });
+
+  it.each([
+    'idle',
+    'loading',
+  ])('never shows a live amount form before the goal wallet is first known (goal wallet %s)', (phase) => {
+    planPhase(phase);
+    renderSection(true);
+    expect(screen.getByText('Almost ready')).toBeOnTheScreen();
+    expect(screen.queryByText('wallet-contribution')).toBeNull();
   });
 
   it('still waits when the wallet has not confirmed the main wallet', () => {

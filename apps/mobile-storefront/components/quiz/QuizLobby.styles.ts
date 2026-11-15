@@ -95,9 +95,10 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
     },
     eventPrize: {
       color: colors.text,
-      fontSize: 27,
+      fontSize: 22,
       fontWeight: '900',
-      letterSpacing: -0.7,
+      letterSpacing: -0.5,
+      lineHeight: 27,
     },
     prizeCondition: {
       alignSelf: 'flex-start',

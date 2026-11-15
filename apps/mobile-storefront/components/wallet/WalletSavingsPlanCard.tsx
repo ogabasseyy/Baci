@@ -11,6 +11,8 @@ import { getSavingsProgress } from './get-savings-progress';
 import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
 import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
+import { planCardView } from './savings/plan-card-view';
+import type { GoalCardSetupState } from './savings/use-goal-card-setup-state';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
@@ -18,6 +20,8 @@ type WalletSavingsPlanCardProps = {
   awaitingSettlement?: boolean;
   goal: WalletActiveSavingsGoal;
   onOpen: () => void;
+  /** The plan's savings wallet is not ready: show that, not "add money". */
+  setupState?: GoalCardSetupState;
 };
 
 export function WalletSavingsPlanCard({
@@ -25,6 +29,7 @@ export function WalletSavingsPlanCard({
   colors: themeColors,
   goal,
   onOpen,
+  setupState = null,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
   // This is the Ogabassey app: savings actions retain its brand across appearance modes.
@@ -43,23 +48,9 @@ export function WalletSavingsPlanCard({
   const { colour, details, storage } = getSavingsVariantPresentation(
     goal.product_variant_label
   );
-  const hasStarted = goal.current_amount > 0;
-  const actionLabel = goal.selection_unresolved
-    ? 'Choose exact variant'
-    : awaitingSettlement
-      ? 'Move your savings'
-      : goal.status === 'completed'
-        ? 'Start another plan'
-        : goal.status === 'paused' || goal.source_mode !== 'manual'
-          ? 'View plan'
-          : 'Add to savings';
+  const view = planCardView({ goal, awaitingSettlement, setupState });
+  const { actionLabel, footerLine, heading } = view;
   const hasSavingsGlow = actionLabel === 'Add to savings';
-  const heading =
-    goal.status === 'completed'
-      ? 'Plan complete'
-      : goal.status === 'paused'
-        ? 'Plan paused'
-        : null;
 
   return (
     <View
@@ -77,7 +68,7 @@ export function WalletSavingsPlanCard({
         />
         <View style={styles.titleBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
-            YOUR NEXT UPGRADE
+            {view.eyebrow}
           </Text>
           <Text
             style={[styles.title, { color: colors.cardForeground }]}
@@ -108,27 +99,34 @@ export function WalletSavingsPlanCard({
               {heading}
             </Text>
           ) : null}
-          <View style={styles.amountRow}>
-            <Text
-              style={[styles.savedAmount, { color: colors.cardForeground }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {formatNgnCurrency(goal.current_amount)}
-              <Text
-                style={[styles.targetAmount, { color: colors.textSecondary }]}
-              >
-                {' / '}
-                {formatNgnCurrency(goal.target_amount)}
-              </Text>
-            </Text>
-          </View>
-          <SavingsProgressMeter
-            accessibilityLabel="Savings plan progress"
-            colors={colors}
-            height={9}
-            percent={progress}
-          />
+          {view.showProgress ? (
+            <>
+              <View style={styles.amountRow}>
+                <Text
+                  style={[styles.savedAmount, { color: colors.cardForeground }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {formatNgnCurrency(goal.current_amount)}
+                  <Text
+                    style={[
+                      styles.targetAmount,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {' / '}
+                    {formatNgnCurrency(goal.target_amount)}
+                  </Text>
+                </Text>
+              </View>
+              <SavingsProgressMeter
+                accessibilityLabel="Savings plan progress"
+                colors={colors}
+                height={9}
+                percent={progress}
+              />
+            </>
+          ) : null}
         </View>
         {colour ? (
           <View
@@ -146,12 +144,12 @@ export function WalletSavingsPlanCard({
         ) : null}
       </View>
       <View style={styles.footer}>
-        {!hasStarted ? (
+        {footerLine ? (
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            Start with your first contribution
+            {footerLine}
           </Text>
         ) : null}
-        {goal.maturity_date ? (
+        {view.showEndDate && goal.maturity_date ? (
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
             Ends {formatDateTimeDisplay(goal.maturity_date, 'date')}
           </Text>
@@ -229,9 +227,8 @@ const styles = StyleSheet.create({
   },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },
   eyebrow: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 12,
+    fontWeight: '600',
   },
   title: { fontSize: 16, fontWeight: '700' },
   storageTag: {

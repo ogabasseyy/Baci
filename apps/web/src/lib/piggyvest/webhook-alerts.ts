@@ -95,6 +95,11 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // differ. Deduped (never credited twice); paged so a reused pvb_reference
   // or provider bug is seen instead of silently acked.
   'PIGGYVEST_CREDIT_AUDIT_DRIFT',
+  // The degraded-health check (read-only, counts only) saw 3 or more savings
+  // transfers still unconfirmed after ten minutes, 3 or more goal-wallet
+  // setups not enrolled ten minutes after they started, or could not read
+  // either at all.
+  'PIGGYVEST_DEGRADED',
 ] as const;
 
 export type PiggyvestWebhookAlertCode =

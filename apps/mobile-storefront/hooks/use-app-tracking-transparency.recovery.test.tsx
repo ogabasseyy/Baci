@@ -39,6 +39,11 @@ jest.mock('@/services/analytics', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }));
 
+// The consent step ahead of the prompt has its own suite; here ads are off.
+jest.mock('@/services/consent-before-tracking', () => ({
+  gatherConsentBeforeTracking: async () => 'skipped',
+}));
+
 describe('bugfix: iOS silently discards ATT requests made during the launch transition (2.1.512 App Store rejection)', () => {
   const flushAttFlow = async () => {
     await act(async () => {

@@ -174,10 +174,10 @@ export function useLoginScreenController() {
   const handleToggleAuthMethod = () => {
     const next = resolveAuthMethodToggle(authMethod, email);
     setAuthMethod(next.authMethod);
+    setEmailError(null);
     if (!next.passwordEmail) return;
     // Dismiss only when the step advances; else they still need to type.
     dismissKeyboard();
-    setEmailError(null);
     setEmail(next.passwordEmail);
     setStep('password');
   };

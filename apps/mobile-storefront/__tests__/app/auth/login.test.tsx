@@ -470,6 +470,23 @@ describe('LoginScreen', () => {
       expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
     });
 
+    it('clears a stale email error when toggling back to the code method', async () => {
+      render(<LoginScreen />);
+      const { validateLoginEmailInput } = await import(
+        '@/components/auth/login-screen-controller.helpers'
+      );
+      const emailRequired = validateLoginEmailInput('').error;
+      if (!emailRequired) throw new Error('expected an email-required error');
+
+      fireEvent.press(screen.getByText('Use password instead'));
+      fireEvent.press(screen.getByText('Continue with Password'));
+      expect(screen.getByText(emailRequired)).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByText('Use verification code instead'));
+
+      expect(screen.queryByText(emailRequired)).toBeNull();
+    });
+
     it('switches back to the code method from the email step', () => {
       render(<LoginScreen />);
 

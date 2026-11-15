@@ -7,6 +7,7 @@ import {
 } from '@/lib/tracking-transparency';
 import { requestTrackingPermission } from '@/services/ad-tracking';
 import { trackEvent } from '@/services/analytics';
+import { gatherConsentBeforeTracking } from '@/services/consent-before-tracking';
 
 interface UseAppTrackingTransparencyOptions {
   enabled: boolean;
@@ -169,6 +170,18 @@ export function useAppTrackingTransparency({
         if (status !== 'undetermined') {
           settle();
           return;
+        }
+
+        // Google's consent message carries the explainer for this prompt,
+        // so it goes first. Only a shopper who has not decided yet waits on
+        // it, and it never rejects or hangs: whatever the outcome, the
+        // request below still runs through the active-state and retry path.
+        const consentOutcome = await gatherConsentBeforeTracking();
+        if (cancelled) return;
+        if (consentOutcome !== 'skipped') {
+          recordAttLifecycleEvent('ATT Consent Gate', 'att:consent_gate', {
+            outcome: consentOutcome,
+          });
         }
 
         requestWhenActive();

@@ -68,6 +68,27 @@ describe('postChatwootBridgeJson', () => {
     ).resolves.toEqual({ httpStatus: 502 });
   });
 
+  it('keeps the HTTP status of a JSON gateway failure when opted in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(response({ error: 'Bad Gateway' }, false, 502))
+    );
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a', undefined, {
+        allowNonOkResponse: true,
+      })
+    ).resolves.toEqual({ error: 'Bad Gateway', httpStatus: 502 });
+  });
+
+  it('does not add a status to successful responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ok: 1 })));
+
+    await expect(
+      postChatwootBridgeJson('/cart', {}, 'store-a')
+    ).resolves.toEqual({ ok: 1 });
+  });
+
   it('returns null when the request transport fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
 

@@ -18,6 +18,8 @@ export type CartPeerPreviewContext = Pick<
 
 interface PeerPreview {
   lines: CartPeerLine[];
+  /** Confirmed cart version the editing tab made the edit on. */
+  baseVersion: number;
   /** Version at which the editing tab finished; null while it is saving. */
   settledVersion: number | null;
 }
@@ -28,8 +30,9 @@ const PREVIEW_TIMEOUT_MS = 10000;
 /**
  * Announces this tab's pending edits to its sibling tabs and returns the
  * quantities a sibling is currently editing, or null. The preview ends when
- * this tab's own authorized snapshot reaches the sibling's saved version,
- * when this tab starts an edit of its own, or after a timeout.
+ * this tab's own authorized snapshot moves past the version the edit was
+ * made on or reaches the sibling's saved version, when this tab starts an
+ * edit of its own, or after a timeout.
  */
 export function useCartPeerPreview(
   context: CartPeerPreviewContext,
@@ -40,6 +43,7 @@ export function useCartPeerPreview(
   const latest = useRef(context);
   const channelRef = useRef<CartPeerChannel | null>(null);
   const wasPending = useRef(false);
+  const lastPosted = useRef<string | null>(null);
   // Advance only after commit so a message never reads an abandoned render.
   useEffect(() => {
     latest.current = context;
@@ -61,6 +65,7 @@ export function useCartPeerPreview(
   useEffect(() => {
     setPreview(null);
     wasPending.current = false;
+    lastPosted.current = null;
     if (!ready || cartId === null) return;
     const channel = open(merchantId, (value) => {
       const message = readCartPeerMessage(value);
@@ -88,7 +93,11 @@ export function useCartPeerPreview(
         message.version < ownVersion
       )
         return;
-      setPreview({ lines: message.lines, settledVersion: null });
+      setPreview({
+        baseVersion: message.version,
+        lines: message.lines,
+        settledVersion: null,
+      });
     });
     channelRef.current = channel;
     return () => {
@@ -105,14 +114,16 @@ export function useCartPeerPreview(
       return;
     }
     if (pending) {
-      channel.post({
-        cartId,
-        kind: 'edit',
-        lines: buildCartPeerLines(state.display),
-        merchantId,
-        version,
-      });
+      const lines = buildCartPeerLines(state.display);
+      // Display churn that changes no shared quantity (product details
+      // loading, an assurance toggle) is not worth another message.
+      const key = JSON.stringify([version, lines]);
+      if (key !== lastPosted.current) {
+        lastPosted.current = key;
+        channel.post({ cartId, kind: 'edit', lines, merchantId, version });
+      }
     } else if (wasPending.current) {
+      lastPosted.current = null;
       channel.post({ cartId, kind: 'settled', merchantId, version });
     }
     wasPending.current = pending;
@@ -132,12 +143,11 @@ export function useCartPeerPreview(
     };
   }, [preview]);
 
-  if (preview === null || !ready || pending) return null;
-  if (
-    preview.settledVersion !== null &&
-    version !== null &&
-    version >= preview.settledVersion
-  )
+  if (preview === null || !ready || pending || version === null) return null;
+  // This tab's snapshot has moved past the cart the edit was made on, so
+  // the hint no longer describes it (it may hold lines the editor never saw).
+  if (version > preview.baseVersion) return null;
+  if (preview.settledVersion !== null && version >= preview.settledVersion)
     return null;
   return preview.lines;
 }

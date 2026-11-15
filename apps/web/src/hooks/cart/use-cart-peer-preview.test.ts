@@ -228,6 +228,40 @@ describe('cart peer preview', () => {
     expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
   });
 
+  it('lets go when this tab’s cart moves past the one the edit was made on', () => {
+    const t = tabs();
+    const { result, rerender } = renderHook(
+      (p) => useCartPeerPreview(p, t.open),
+      { initialProps: context() }
+    );
+    act(() => t.deliver(peerEdit));
+    expect(result.current).not.toBeNull();
+
+    // Another device added a line: the editing tab never saw it.
+    rerender(
+      context({ display: [line('l1', 1), line('l2', 1), line('l3', 1)] }, 3)
+    );
+    expect(result.current).toBeNull();
+  });
+
+  it('does not repeat an edit when nothing shared changed', () => {
+    const t = tabs();
+    const display = [line('l1', 3), line('l2', 1)];
+    const { rerender } = renderHook((p) => useCartPeerPreview(p, t.open), {
+      initialProps: context({ display, queue: [edit] }),
+    });
+    expect(t.posted).toHaveLength(1);
+
+    // Same quantities in a new array, as after product details load.
+    rerender(context({ display: [...display], queue: [edit] }));
+    expect(t.posted).toHaveLength(1);
+
+    rerender(
+      context({ display: [line('l1', 4), line('l2', 1)], queue: [edit] })
+    );
+    expect(t.posted).toHaveLength(2);
+  });
+
   it('gives up after ten seconds if the other tab never settles', () => {
     vi.useFakeTimers();
     const t = tabs();

@@ -183,6 +183,7 @@ describe('cached merchant entity normalization', () => {
   });
 
   it('normalizes the OgaBassey slug merchant away from stale fashion business type', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     harness.mockRpc.mockResolvedValueOnce(
       resolvedStorefrontMerchantRpcResult(
         {
@@ -196,6 +197,7 @@ describe('cached merchant entity normalization', () => {
 
     const merchant = await getCachedMerchant('ogabassey');
 
+    expect(logSpy).not.toHaveBeenCalled();
     expect(cacheTag).toHaveBeenCalledWith(`features-${mockMerchant.id}`);
     expect(merchant).toEqual(
       expect.objectContaining({
@@ -248,6 +250,7 @@ describe('cached merchant entity normalization', () => {
   });
 
   it('normalizes the OgaBassey domain merchant away from stale fashion business type', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     harness.mockRpc.mockResolvedValueOnce({
       data: [
         {
@@ -265,6 +268,8 @@ describe('cached merchant entity normalization', () => {
     });
 
     const merchant = await getCachedMerchantByDomain('ogabassey.com');
+
+    expect(logSpy).not.toHaveBeenCalled();
 
     expect(harness.mockRpc).toHaveBeenCalledWith(
       'resolve_storefront_public_snapshot_v2',

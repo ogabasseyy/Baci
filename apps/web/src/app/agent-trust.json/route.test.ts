@@ -109,6 +109,7 @@ describe('GET /agent-trust.json', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.com');
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', 'test-places-key');
 
     mockGetMerchantByIdentifier.mockResolvedValue(merchant());
     mockGetCachedOpenAIFeedData.mockResolvedValue({
@@ -353,11 +354,46 @@ describe('GET /agent-trust.json', () => {
     const body = await response.json();
 
     expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
+      'public, s-maxage=300, stale-while-revalidate=3600'
+    );
     expect(body.error).toBe(
       'Agent trust readiness is only available on storefront hosts'
     );
     expect(mockGetCachedOpenAIFeedData).not.toHaveBeenCalled();
     expect(mockGetCachedGoogleMerchantFeedData).not.toHaveBeenCalled();
+  });
+
+  it('skips Google Places enrichment cleanly when GOOGLE_PLACES_API_KEY is missing', async () => {
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '');
+    mockGetMerchantByIdentifier.mockResolvedValueOnce({
+      ...merchant(),
+      feature_settings: {
+        google_place_id: 'ChIJ1234',
+        google_reviews_enabled: true,
+      },
+    });
+
+    const { GET } = await import('./route');
+    const response = await GET(
+      new Request('https://ogabassey.com/agent-trust.json', {
+        headers: { host: 'ogabassey.com' },
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
+      'public, s-maxage=300, stale-while-revalidate=3600'
+    );
+    expect(mockGetCachedGooglePlacesReviews).not.toHaveBeenCalled();
+    expect(mockLoggerError).not.toHaveBeenCalled();
+    expect(body.trust.merchantReviewAuthority).toMatchObject({
+      placeId: 'ChIJ1234',
+      source: 'google_maps',
+    });
   });
 
   it('returns 404 on platform hosts', async () => {
@@ -370,6 +406,10 @@ describe('GET /agent-trust.json', () => {
     const body = await response.json();
 
     expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
+      'public, s-maxage=300, stale-while-revalidate=3600'
+    );
     expect(body.error).toBe(
       'Agent trust readiness is only available on storefront hosts'
     );
@@ -395,6 +435,7 @@ describe('GET /agent-trust.json', () => {
       const body = await response.json();
 
       expect(response.status).toBe(500);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
       expect(body.error).toBe('Failed to build agent trust readiness');
     } finally {
       errorSpy.mockRestore();

@@ -202,4 +202,49 @@ describe('API security stage', () => {
     expect(response?.status).toBe(403);
     expect(checkRateLimit).toHaveBeenCalledTimes(1);
   });
+
+  it('does not exempt cross-origin mutations with spoofed x-supabase-auth-token or mobile User-Agent headers', async () => {
+    const request = new NextRequest('https://usebaci.com/api/orders', {
+      method: 'POST',
+      headers: {
+        origin: 'https://evil.example',
+        'content-type': 'application/json',
+        'x-supabase-auth-token': 'forged-token',
+        'user-agent': 'BaciStorefront/1.0 Expo/52.0',
+      },
+    });
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/orders', 'usebaci.com', 'POST')
+    );
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toEqual({
+      error: 'Cross-origin request blocked',
+    });
+  });
+
+  it('still rate-limits requests carrying spoofed Authorization, x-supabase-auth-token, or mobile User-Agent headers', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: false,
+      limit: 50,
+      remaining: 0,
+      resetTime: Date.now(),
+    });
+    const request = new NextRequest('https://usebaci.com/api/orders', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer fake-token',
+        'x-supabase-auth-token': 'forged-token',
+        'user-agent': 'BaciStorefront/1.0 Expo/52.0',
+        'content-type': 'application/json',
+      },
+    });
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/orders', 'usebaci.com', 'POST')
+    );
+    expect(checkRateLimit).toHaveBeenCalledWith(request, '/api/orders');
+    expect(response?.status).toBe(429);
+  });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, Leaf, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
@@ -38,6 +38,11 @@ function getCanonicalNavigationCategories(
   }
   return result;
 }
+
+const SECTION_HEADING =
+  'mb-2 px-2 font-bold text-[11px] text-store-background-text/75 uppercase tracking-[0.14em]';
+const FOCUS_RING =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-background-text';
 
 export interface MobileMenuProps {
   isOpen: boolean;
@@ -91,8 +96,8 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
   });
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
-    <div className="mb-5 px-4 last:mb-0">
-      <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
+    <div className="mb-6 px-4 last:mb-0">
+      <h2 className={SECTION_HEADING}>
         {title}
       </h2>
       <ul className="space-y-1">
@@ -105,24 +110,37 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 prefetch={false}
                 onClick={() => onClose('navigate')}
                 aria-current={isActive ? 'page' : undefined}
-                className={`group flex w-full items-center justify-between rounded-xl p-2.5 text-sm transition-colors ${
+                className={`group flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-2 py-1 text-sm motion-safe:transition-colors ${FOCUS_RING} ${
                   isActive
-                    ? 'bg-store-primary/10 font-bold text-store-primary'
-                    : 'font-medium text-store-background-text/80 hover:bg-store-background-text/5'
+                    ? 'border-store-primary/30 bg-store-primary/10 font-bold'
+                    : 'border-transparent font-medium hover:bg-store-background-text/5'
                 }`}
               >
                 <span className="flex items-center gap-3">
-                  <item.icon
-                    size={18}
-                    aria-hidden="true"
-                    className={
+                  <span
+                    className={`grid size-8 shrink-0 place-items-center rounded-lg ${
                       isActive
-                        ? 'text-store-primary'
-                        : 'text-store-background-text/50 group-hover:text-store-primary'
-                    }
-                  />
+                        ? 'bg-store-primary text-store-primary-text'
+                        : 'bg-store-background-text/5'
+                    }`}
+                  >
+                    <item.icon size={17} aria-hidden="true" />
+                  </span>
                   {item.label}
                 </span>
+                {item.path === '/swap' || item.path === '/repairs' ? (
+                  <Leaf
+                    className="shrink-0 text-[color:color-mix(in_srgb,#27804b_60%,var(--store-background-text))]"
+                    size={16}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ChevronRight
+                    className="shrink-0 text-store-background-text/60"
+                    size={15}
+                    aria-hidden="true"
+                  />
+                )}
               </Link>
             </li>
           );
@@ -144,22 +162,22 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
       {/* Backdrop */}
       <div
         role="presentation"
-        className="fade-in absolute inset-0 animate-in bg-black/60 duration-200 backdrop-blur-xs"
+        className="absolute inset-0 bg-black/60 motion-safe:fade-in motion-safe:animate-in motion-safe:duration-200"
         onClick={() => onClose('dismiss')}
       />
 
       {/* Sidebar */}
-      <div className="slide-in-from-left absolute inset-y-0 left-0 flex w-[85%] max-w-[320px] flex-col border-store-border border-r bg-store-background text-store-background-text shadow-2xl animate-in duration-300">
-        <div className="flex items-center justify-between border-store-border border-b px-4 py-4">
+      <div className="absolute inset-y-0 left-0 flex w-[calc(100%-2rem)] max-w-[360px] flex-col border-store-border border-r bg-[color:color-mix(in_srgb,var(--store-background)_97%,#c78257)] text-store-background-text shadow-2xl motion-safe:slide-in-from-left motion-safe:animate-in motion-safe:duration-300">
+        <div className="flex shrink-0 items-center justify-between border-store-border border-b bg-[color:color-mix(in_srgb,var(--store-background)_90%,#f5ac79)] px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <Logo
-            className="h-8 w-auto text-store-background-text"
+            className="h-6 w-auto text-store-background-text"
             color="current"
           />
           <button
             type="button"
             ref={closeButtonRef}
             onClick={() => onClose('dismiss')}
-            className="rounded-full p-2 text-store-background-text/70 transition-colors hover:bg-store-background-text/10 hover:text-store-background-text"
+            className={`grid size-11 shrink-0 place-items-center rounded-full border border-store-background-text/20 bg-store-background hover:bg-store-background-text/10 motion-safe:transition-colors ${FOCUS_RING}`}
             aria-label="Close menu"
           >
             <X size={20} aria-hidden="true" />
@@ -168,13 +186,13 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
         <nav
           aria-label="Mobile storefront navigation"
-          className="hide-scrollbar flex-1 overflow-y-auto py-4"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-5"
         >
           {renderSection('Shop & Services', MOBILE_MENU_SHOP_ITEMS)}
 
           {normalizedCategories.length > 0 && (
-            <div className="mb-5 px-4">
-              <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
+            <div className="mb-6 px-4">
+              <h2 className={SECTION_HEADING}>
                 Categories
               </h2>
               <ul className="flex flex-wrap gap-1.5 px-1">
@@ -186,7 +204,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                       )}
                       prefetch={false}
                       onClick={() => onClose('navigate')}
-                      className="inline-flex items-center rounded-full bg-store-background-text/10 px-3 py-1.5 font-medium text-store-background-text/80 text-xs transition-colors hover:bg-store-primary/10 hover:text-store-primary"
+                      className={`inline-flex min-h-9 items-center rounded-full border border-store-background-text/20 bg-store-background px-3 font-semibold text-xs hover:border-store-primary/50 hover:bg-store-primary/10 motion-safe:transition-colors ${FOCUS_RING}`}
                     >
                       {category.name}
                     </Link>
@@ -201,16 +219,17 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         </nav>
 
         {/* Footer */}
-        <div className="border-store-border border-t bg-store-background-text/5 p-4">
+        <div className="shrink-0 border-store-border border-t bg-store-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Link
             href={asRoute(buildHref('/account/login'))}
             prefetch={false}
             onClick={() => onClose('navigate')}
-            className="block w-full rounded-xl bg-store-primary py-3.5 text-center font-bold text-store-primary-text shadow-lg transition-transform active:scale-95"
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-full bg-store-primary px-4 py-2 font-bold text-sm text-store-primary-text motion-safe:transition-transform motion-safe:active:scale-[0.98] ${FOCUS_RING}`}
           >
             Login / Register
+            <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
-          <p className="mt-3 text-center text-store-background-text/60 text-xs">
+          <p className="mt-3 text-center text-store-background-text/75 text-xs">
             &copy; {businessName}
           </p>
         </div>

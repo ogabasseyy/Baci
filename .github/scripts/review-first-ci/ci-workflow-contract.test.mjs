@@ -5,6 +5,7 @@
 // a skipped job as passed, so a skipped "Build" or "Quality Gate" would let a pull
 // request merge before Codex has looked at it. (The nudge workflow has its own file.)
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 const launcher = readFileSync(new URL('./launch-stage.sh', import.meta.url), 'utf8');
 import { describe, it } from 'node:test';
@@ -69,8 +70,8 @@ describe('heavy jobs wait for the full stage, quick jobs do not', () => {
     'needs.changes.outputs.test_plan_mode': 'full-affected',
     'github.event_name': 'pull_request',
   };
-  const HEAVY = ['cwv-runner-contracts', 'quality-test', 'quality-test-web', 'quality-db-replay', 'quality-disposable-sql'];
-  const QUICK = ['quality-lint', 'quality-typecheck', 'quality-misc', 'silent-revert-guard'];
+  const HEAVY = ['cwv-runner-contracts', 'quality-test', 'quality-test-web', 'quality-repo-scans', 'quality-db-replay', 'quality-disposable-sql'];
+  const QUICK = ['quality-lint', 'quality-typecheck', 'quality-typecheck-build', 'quality-misc', 'quality-migration-applier', 'silent-revert-guard'];
 
   for (const jobId of HEAVY) {
     it(`${jobId} runs only in the full stage`, () => {
@@ -98,6 +99,46 @@ describe('heavy jobs wait for the full stage, quick jobs do not', () => {
 
   it('every job that the aggregate waits for exists', () => {
     for (const need of ci.jobs.quality.needs) assert.ok(ci.jobs[need], `missing job ${need}`);
+  });
+});
+
+describe('split speed jobs (2026-11-15) still gate the Quality Gate aggregate', () => {
+  const SPLIT = {
+    'quality-typecheck-build': 'TYPECHECK_BUILD_RESULT',
+    'quality-repo-scans': 'REPO_SCANS_RESULT',
+    'quality-migration-applier': 'MIGRATION_APPLIER_RESULT',
+  };
+  const verify = ci.jobs.quality.steps.find((step) => step.name === 'Verify split quality gate results');
+  const runAggregate = (overrides) => {
+    const results = Object.fromEntries(Object.keys(verify.env).filter((name) => name.endsWith('_RESULT')).map((name) => [name, 'success']));
+    return spawnSync('bash', [new URL('../verify-quality-gate.sh', import.meta.url).pathname], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, ...results, QUIZ_DB_CHANGED: 'false', WEB_CHANGED: 'true', MOBILE_ADMIN_CHANGED: 'false', MOBILE_STOREFRONT_CHANGED: 'false', TEST_PLAN_MODE: 'targeted-web-vitest', ...overrides },
+    });
+  };
+
+  for (const [jobId, envName] of Object.entries(SPLIT)) {
+    it(`${jobId} is awaited and a failure fails the aggregate`, () => {
+      assert.ok(ci.jobs.quality.needs.includes(jobId));
+      assert.equal(verify.env[envName], `\${{ needs['${jobId}'].result }}`);
+      assert.equal(runAggregate({}).status, 0);
+      for (const bad of ['failure', 'cancelled']) assert.notEqual(runAggregate({ [envName]: bad }).status, 0, `${jobId} ${bad}`);
+    });
+  }
+
+  it('the split-out jobs run exactly when the jobs they came from run', () => {
+    assert.equal(ci.jobs['quality-typecheck-build'].if, ci.jobs['quality-typecheck'].if);
+    assert.equal(ci.jobs['quality-migration-applier'].if, ci.jobs['quality-misc'].if);
+    assert.equal(ci.jobs['quality-misc'].steps.some((step) => step.name === 'Test Migration Applier Collision Handling'), false);
+  });
+
+  it('the repository scans job hydrates blobs and the test jobs skip the scans', () => {
+    const checkout = ci.jobs['quality-repo-scans'].steps[0];
+    assert.equal(checkout.with['fetch-depth'], 0);
+    assert.equal(checkout.with.filter, '');
+    assert.equal(checkout.with['persist-credentials'], false);
+    for (const jobId of ['quality-test', 'quality-test-web']) assert.equal(ci.jobs[jobId].env.BACI_VITEST_EXCLUDE_REPOSITORY_SCANS, '1', jobId);
+    assert.equal(ci.jobs['quality-repo-scans'].env?.BACI_VITEST_EXCLUDE_REPOSITORY_SCANS, undefined);
   });
 });
 

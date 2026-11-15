@@ -67,9 +67,7 @@ describe('server keeps PiggyVest off', () => {
         onRetry={jest.fn()}
       />
     );
-    expect(
-      screen.getByRole('button', { name: 'Try setup again' })
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(retrySavingsGoalSetup).not.toHaveBeenCalled();
     expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { AdSlot } from './AdSlot';
@@ -63,6 +63,12 @@ function setAdsEnabled(value: string | undefined) {
   }
 }
 
+function measureSlot(testID: string, width: number) {
+  fireEvent(screen.getByTestId(testID), 'layout', {
+    nativeEvent: { layout: { height: 60, width, x: 0, y: 0 } },
+  });
+}
+
 describe('AdSlot', () => {
   it('renders nothing while ads are disabled', () => {
     setAdsEnabled(undefined);
@@ -74,7 +80,13 @@ describe('AdSlot', () => {
   it('renders the sponsored banner slot for a placement', () => {
     setAdsEnabled('true');
     render(<AdSlot placement="CART_MPU" />);
+    measureSlot('ad-slot-cart-mpu', 320);
     expect(screen.getByLabelText('Sponsored advertisement')).toBeTruthy();
+    // The slot must not be a single accessibility element: that would
+    // hide the native banner's own content from screen readers.
+    expect(
+      screen.getByLabelText('Sponsored advertisement').props.accessible
+    ).not.toBe(true);
     expect(screen.getByText('Sponsored')).toBeTruthy();
     expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
     setAdsEnabled(ORIGINAL_ENV);
@@ -101,13 +113,80 @@ describe('AdSlot', () => {
     setAdsEnabled(ORIGINAL_ENV);
   });
 
+  describe('bugfix: banner cropped inside hosts narrower than the device', () => {
+    it('requests no banner until the slot width is measured', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('is not announced to screen readers until it is measured', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      expect(screen.queryByLabelText('Sponsored advertisement')).toBeNull();
+      measureSlot('ad-slot-footer-anchor', 320);
+      expect(screen.getByLabelText('Sponsored advertisement')).toBeTruthy();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('shows no Sponsored label until the slot width is measured', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      expect(screen.queryByText('Sponsored')).toBeNull();
+      measureSlot('ad-slot-footer-anchor', 320);
+      expect(screen.getByText('Sponsored')).toBeTruthy();
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('keeps the same banner when the width only jitters by a few points', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      measureSlot('ad-slot-footer-anchor', 320);
+      measureSlot('ad-slot-footer-anchor', 323);
+
+      const banner = screen.UNSAFE_getByType('BannerAd' as never);
+      expect((banner.props as { width: number }).width).toBe(320);
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+
+    it('sizes the banner to the measured slot width, not the device width', () => {
+      setAdsEnabled('true');
+      render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+      measureSlot('ad-slot-footer-anchor', 321.6);
+
+      const banner = screen.UNSAFE_getByType('BannerAd' as never);
+      expect((banner.props as { width: number }).width).toBe(321);
+      setAdsEnabled(ORIGINAL_ENV);
+    });
+  });
+
+  it('remounts the banner with a fresh request when the slot width changes', () => {
+    setAdsEnabled('true');
+    render(<AdSlot placement="FOOTER_ANCHOR" />);
+
+    measureSlot('ad-slot-footer-anchor', 320);
+    const first = screen.UNSAFE_getByType('BannerAd' as never);
+    measureSlot('ad-slot-footer-anchor', 402);
+    const second = screen.UNSAFE_getByType('BannerAd' as never);
+
+    expect(second).not.toBe(first);
+    expect((second.props as { width: number }).width).toBe(402);
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
   it('unmounts the slot when the banner fails to load instead of keeping a blank frame', () => {
     // Regression: a no-fill or load error must remove the whole slot
     // (label and reserved frame), not just record telemetry.
     setAdsEnabled('true');
     render(<AdSlot placement="CART_MPU" />);
 
-    expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
+    measureSlot('ad-slot-cart-mpu', 320);
     const banner = screen.UNSAFE_getByType('BannerAd' as never);
     act(() => {
       (

@@ -8,6 +8,7 @@ import { View } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import { ImeiCheckDevicePage } from './ImeiCheckDevicePage';
 import type { ImeiCheckerColors } from './imei-check.types';
+import type { ImeiWalletPayView } from './imei-check-form-view';
 
 interface ImeiCheckPagerProps {
   colors: ImeiCheckerColors;
@@ -19,6 +20,10 @@ interface ImeiCheckPagerProps {
   pagerRef: RefObject<PagerView | null>;
   visitedDevices: Record<ImeiDeviceCategory, boolean>;
   walletBalance: number;
+  walletIsStoreCredit?: boolean;
+  /** True when the second wallet can pay this check (see use-imei-wallet-pay). */
+  walletPay?: ImeiWalletPayView;
+  topUpCardOnly?: boolean;
   onPageSelected: (event: { nativeEvent: { position: number } }) => void;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
@@ -34,6 +39,9 @@ export function ImeiCheckPager({
   pagerRef,
   visitedDevices,
   walletBalance,
+  walletIsStoreCredit,
+  walletPay,
+  topUpCardOnly,
   onPageSelected,
   onVerify,
   onTopUpWallet,
@@ -57,6 +65,9 @@ export function ImeiCheckPager({
               isWalletError={isWalletError}
               isWalletLoading={isWalletLoading}
               walletBalance={walletBalance}
+              walletIsStoreCredit={walletIsStoreCredit}
+              walletPay={walletPay}
+              topUpCardOnly={topUpCardOnly}
               onVerify={onVerify}
               onTopUpWallet={onTopUpWallet}
             />

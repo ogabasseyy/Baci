@@ -5,15 +5,16 @@ import { RADIUS, SPACING } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { getSavingsEncouragement } from './get-savings-encouragement';
+import { getSavingsPace } from './get-savings-pace';
 import { getSavingsProgress } from './get-savings-progress';
 import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
-import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
 import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
 
 /**
  * Top of the savings sheet: what is being saved for, how far along it is, a
- * cheer that matches the progress, and a weekly pace when the goal has a date.
+ * cheer that matches the progress, and the plan's own pace (its contribution
+ * and frequency).
  * The progress card shows only once something has been saved; before that,
  * only the weekly pace is shown.
  */
@@ -39,7 +40,9 @@ export function SavingsGoalSummary({
   const nudge =
     goal.status === 'completed'
       ? null
-      : getWeeklySavingsNudge({
+      : getSavingsPace({
+          contributionAmount: goal.contribution_amount,
+          frequency: goal.contribution_frequency,
           maturityDate: goal.maturity_date,
           remaining: amountLeft,
         });
@@ -152,7 +155,7 @@ export function SavingsGoalSummary({
             />
             {nudge ? (
               <Text style={[styles.detail, { color: colors.textSecondary }]}>
-                {`${nudge.due ? `${formatNgnCurrency(nudge.amountPerWeek)} due` : `${formatNgnCurrency(nudge.amountPerWeek)} a week`} · ${nudge.due ? 'by' : 'until'} ${nudge.endsOn}`}
+                {nudge.short}
               </Text>
             ) : null}
           </View>
@@ -169,7 +172,7 @@ export function SavingsGoalSummary({
           ]}
         >
           <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
-            YOUR PROGRESS
+            Your progress
           </Text>
           <View style={styles.amountRow}>
             <Text style={[styles.saved, { color: colors.text }]}>
@@ -218,7 +221,7 @@ export function SavingsGoalSummary({
 }
 
 const styles = StyleSheet.create({
-  eyebrow: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5 },
+  eyebrow: { fontSize: 12, fontWeight: '600' },
   encouragement: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   encouragementCopy: { flex: 1, gap: 3 },
   accentDot: { width: 7, height: 7, borderRadius: 4, marginTop: 7 },

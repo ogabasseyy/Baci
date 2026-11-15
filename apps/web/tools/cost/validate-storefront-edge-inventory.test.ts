@@ -67,7 +67,7 @@ describe('validateStorefrontEdgeInventory', () => {
     expect(result).toEqual({
       inventorySha256: artifact.inventorySha256,
       rowCount: artifact.rows.length,
-      storefrontEntrypointCount: 80,
+      storefrontEntrypointCount: 82,
     });
   });
 

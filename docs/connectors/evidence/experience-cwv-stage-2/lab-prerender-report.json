@@ -40,17 +40,9 @@
     ]
   },
   "load": {
-    "before": [
-      149.9619140625,
-      156.49169921875,
-      161.16796875
-    ],
+    "before": [149.9619140625, 156.49169921875, 161.16796875],
     "cpuCount": 12,
-    "after": [
-      149.708984375,
-      155.72119140625,
-      160.63232421875
-    ]
+    "after": [149.708984375, 155.72119140625, 160.63232421875]
   },
   "qualification": "diagnostic-only; one cold sample per viewport; no field INP, video or production-host qualification"
 }

@@ -21,7 +21,7 @@ jest.mock('@/stores/auth-store', () => ({
 }));
 
 const reviewCopy =
-  'Your PiggyVest wallet setup needs review. Please contact support before trying again.';
+  'Your wallet setup needs review. Please contact support before trying again.';
 const pending = {
   provisioningStatus: 'pending' as const,
   requiresConsent: false,

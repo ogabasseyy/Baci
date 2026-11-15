@@ -1,0 +1,177 @@
+name: Storefront edge inventory refresh
+
+# The repository snapshot test binds
+# docs/superpowers/evidence/storefront-edge/task-1a-inventory.json (digest and
+# row count) to every app route and ~240 routing inputs. When two route-touching
+# PRs land together, each passes on its own but main ends up with a stale
+# snapshot, and every later PR inherits the failure. This workflow regenerates
+# the snapshot after each push to main and, only when its content drifted,
+# opens a DRAFT refresh PR (never auto-merged). PRs that change routes keep
+# failing loudly on their own diff; unrelated PRs stop inheriting a broken main.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'docs/superpowers/evidence/storefront-edge/**'
+      - '.github/workflows/storefront-edge-inventory-refresh.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Queue rather than cancel: a cancelled write job could leave a pushed branch
+# without its PR. GitHub keeps only the newest pending run, so the latest main
+# always wins.
+concurrency:
+  group: storefront-edge-inventory-refresh
+  cancel-in-progress: false
+
+env:
+  BRANCH_PREFIX: automation/storefront-edge-inventory-
+  INVENTORY_PATH: docs/superpowers/evidence/storefront-edge/task-1a-inventory.json
+  TEST_PATH: apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
+
+jobs:
+  # Install dependencies and run repository code here, with a read-only token
+  # and no persisted credentials. Only the two regenerated files cross into the
+  # write job, as an artifact.
+  regenerate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.refresh.outputs.changed }}
+      digest: ${{ steps.refresh.outputs.digest }}
+      row_count: ${{ steps.refresh.outputs.row_count }}
+      previous_row_count: ${{ steps.refresh.outputs.previous_row_count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Regenerate the inventory snapshot from this main commit
+        id: refresh
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          result="$(pnpm --dir apps/web exec tsx tools/cost/refresh-storefront-edge-inventory-snapshot.ts \
+            --repo-root "$GITHUB_WORKSPACE" --source-sha "$SOURCE_SHA")"
+          echo "$result"
+          {
+            echo "changed=$(jq -r '.changed' <<<"$result")"
+            echo "digest=$(jq -r '.contentDigest' <<<"$result")"
+            echo "row_count=$(jq -r '.rowCount // ""' <<<"$result")"
+            echo "previous_row_count=$(jq -r '.previousRowCount // ""' <<<"$result")"
+          } >> "$GITHUB_OUTPUT"
+          # The refresher may only touch the snapshot and its test.
+          unexpected="$(git diff --name-only | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::refresh touched unexpected files:" >&2
+            printf '%s\n' "$unexpected" >&2
+            exit 1
+          fi
+      - name: Stage the regenerated files
+        if: steps.refresh.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p refreshed
+          cp "$INVENTORY_PATH" refreshed/task-1a-inventory.json
+          cp "$TEST_PATH" refreshed/storefront-edge-inventory-snapshot.repository.test.ts
+      - name: Upload the regenerated files
+        if: steps.refresh.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storefront-edge-inventory-refresh
+          path: refreshed
+          if-no-files-found: error
+          retention-days: 3
+
+  open-refresh-pr:
+    needs: regenerate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the regenerated files
+        if: needs.regenerate.outputs.changed == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: storefront-edge-inventory-refresh
+          path: ${{ runner.temp }}/refreshed
+      - name: Open a draft refresh PR or close superseded ones
+        env:
+          # PRs created with GITHUB_TOKEN do not trigger pull_request workflows.
+          # Configure BACI_AUTOMATION_PR_TOKEN (contents + pull-requests write)
+          # so the draft gets CI and reviewers without a manual close/reopen.
+          GH_TOKEN: ${{ secrets.BACI_AUTOMATION_PR_TOKEN || github.token }}
+          CHANGED: ${{ needs.regenerate.outputs.changed }}
+          DIGEST: ${{ needs.regenerate.outputs.digest }}
+          ROW_COUNT: ${{ needs.regenerate.outputs.row_count }}
+          PREVIOUS_ROW_COUNT: ${{ needs.regenerate.outputs.previous_row_count }}
+          SOURCE_SHA: ${{ github.sha }}
+          REFRESHED_DIR: ${{ runner.temp }}/refreshed
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          open_heads="$(gh pr list --state open --base main --limit 200 \
+            --json headRefName,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository == false) | .headRefName' \
+            | grep -F "$BRANCH_PREFIX" || true)"
+          keep=""
+          if [ "$CHANGED" = "true" ]; then
+            if ! printf '%s\n' "$DIGEST" | grep -Eqx '[a-f0-9]{64}'; then
+              echo "::error::invalid content digest" >&2
+              exit 1
+            fi
+            prefix="${BRANCH_PREFIX}${DIGEST:0:12}-"
+            keep="$(printf '%s\n' "$open_heads" | grep -F "$prefix" | head -n1 || true)"
+            if [ -n "$keep" ]; then
+              echo "An open refresh PR for this content already exists on $keep."
+            else
+              branch="${prefix}${SOURCE_SHA:0:12}"
+              cp "$REFRESHED_DIR/task-1a-inventory.json" "$INVENTORY_PATH"
+              cp "$REFRESHED_DIR/storefront-edge-inventory-snapshot.repository.test.ts" "$TEST_PATH"
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git switch -c "$branch"
+              git add -- "$INVENTORY_PATH" "$TEST_PATH"
+              git commit -m "fix(ci): refresh storefront edge inventory snapshot" \
+                -m "Regenerated from main ${SOURCE_SHA} by ${RUN_URL}."
+              git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+                push origin "HEAD:refs/heads/$branch"
+              body="$(printf '%s\n' \
+                "Automated refresh: main's storefront edge inventory snapshot no longer matches the committed routes, so \`storefront-edge-inventory-snapshot.repository.test.ts\` fails on main and on every PR synced with it." \
+                "" \
+                "- Regenerated from main \`${SOURCE_SHA}\` with \`apps/web/tools/cost/refresh-storefront-edge-inventory-snapshot.ts\`" \
+                "- Row count: ${PREVIOUS_ROW_COUNT:-?} → ${ROW_COUNT}" \
+                "- Run: ${RUN_URL}" \
+                "" \
+                "Only the snapshot JSON and the expected digest/row count in the test change. Review the row diff before marking ready: a new route must land on the intended edge decision. Never auto-merged; a newer refresh closes this PR as superseded.")"
+              keep="$branch"
+              gh pr create --draft --base main --head "$branch" \
+                --title "fix(ci): refresh storefront edge inventory snapshot" \
+                --body "$body"
+            fi
+          else
+            echo "Snapshot content matches main; nothing to refresh."
+          fi
+          # Close refresh PRs that main or a newer refresh made obsolete.
+          new_url=""
+          if [ -n "$keep" ]; then new_url="$(gh pr view "$keep" --json url --jq .url)"; fi
+          printf '%s\n' "$open_heads" | while IFS= read -r head; do
+            if [ -z "$head" ] || [ "$head" = "$keep" ]; then continue; fi
+            reason="Main now matches the regenerated snapshot."
+            if [ -n "$new_url" ]; then reason="Superseded by $new_url."; fi
+            gh pr close "$head" --delete-branch --comment "$reason (closed by $RUN_URL)"
+          done

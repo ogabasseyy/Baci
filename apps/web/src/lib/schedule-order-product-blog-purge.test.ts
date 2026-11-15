@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockEnrichProductPurgeEntries = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
+const mockPurgeStorefrontProductConfirmed = vi.fn().mockResolvedValue(true);
 const mockScheduleStorefrontHostnamePurge = vi.fn();
+const mockPurgeStorefrontHostnameConfirmed = vi.fn().mockResolvedValue(true);
 const mockExpireProductBlogCacheReliable = vi.fn().mockResolvedValue(true);
 const mockRevalidateSlugs = vi.fn();
 const mockRevalidateProducts = vi.fn();
@@ -18,10 +20,14 @@ vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
+  purgeStorefrontProductConfirmed: (...args: unknown[]) =>
+    mockPurgeStorefrontProductConfirmed(...args),
 }));
 vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
   scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
     mockScheduleStorefrontHostnamePurge(...args),
+  purgeStorefrontHostnameConfirmed: (...args: unknown[]) =>
+    mockPurgeStorefrontHostnameConfirmed(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache-reliable', () => ({
   expireProductBlogCacheReliable: (...args: unknown[]) =>
@@ -312,5 +318,35 @@ describe('scheduleOrderProductBlogPurge', () => {
     } finally {
       consoleSpy.mockRestore();
     }
+  });
+
+  it('awaits confirmed edge eviction and returns false when Cloudflare confirmation fails', async () => {
+    const { supabase } = makeSupabase({});
+    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
+
+    const failed = await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+      confirmEdgeEviction: true,
+    });
+    expect(failed).toBe(false);
+    expect(mockPurgeStorefrontProductConfirmed).toHaveBeenCalledTimes(1);
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+
+    mockPurgeStorefrontHostnameConfirmed.mockResolvedValueOnce(false);
+    const failedHostname = await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+      targetSweepIncomplete: true,
+      confirmEdgeEviction: true,
+    });
+    expect(failedHostname).toBe(false);
+    expect(mockPurgeStorefrontHostnameConfirmed).toHaveBeenCalledWith(
+      'ogabassey'
+    );
   });
 });

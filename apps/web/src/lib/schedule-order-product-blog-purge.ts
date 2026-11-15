@@ -9,8 +9,14 @@ import {
   buildInternalProductPurgeEntries,
   collectResolvedProductSlugs,
 } from '@/lib/internal-product-purge-entries';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
+import {
+  purgeStorefrontProductConfirmed,
+  scheduleStorefrontProductPurge,
+} from '@/lib/storefront-product-purge';
+import {
+  purgeStorefrontHostnameConfirmed,
+  scheduleStorefrontHostnamePurge,
+} from '@/lib/storefront-product-purge-hostnames';
 
 interface ScheduleOrderProductBlogPurgeInput {
   merchantId: string;
@@ -23,6 +29,11 @@ interface ScheduleOrderProductBlogPurgeInput {
    * fallback replaces the product-scoped purge.
    */
   targetSweepIncomplete?: boolean;
+  /**
+   * When true, await confirmed Cloudflare edge eviction and return `false` if
+   * provider confirmation fails (used by background sweep workers).
+   */
+  confirmEdgeEviction?: boolean;
 }
 
 /**
@@ -41,6 +52,7 @@ export async function scheduleOrderProductBlogPurge({
   productIds,
   supabase,
   targetSweepIncomplete = false,
+  confirmEdgeEviction = false,
 }: ScheduleOrderProductBlogPurgeInput): Promise<boolean> {
   const normalizedProductIds = Array.from(
     new Set(
@@ -151,8 +163,16 @@ export async function scheduleOrderProductBlogPurge({
     // The purge scope is unknown (failed article lookup or truncated
     // caller sweep): evict the hostname (a superset of the product purge)
     // rather than leaving affected URLs stale until TTL.
+    if (confirmEdgeEviction) {
+      return await purgeStorefrontHostnameConfirmed(merchantSlug);
+    }
     scheduleStorefrontHostnamePurge(merchantSlug);
   } else if (blogPostSlugs.length > 0) {
+    if (confirmEdgeEviction) {
+      return await purgeStorefrontProductConfirmed(merchantSlug, entries, {
+        blogPostSlugs,
+      });
+    }
     scheduleStorefrontProductPurge(merchantSlug, entries, {
       blogPostSlugs,
     });
@@ -160,6 +180,9 @@ export async function scheduleOrderProductBlogPurge({
     // The relationship lookup can legitimately find no published article,
     // but the order still changed the product PDP/listing. Keep the core
     // purge in that case so those pages cannot remain stale until TTL.
+    if (confirmEdgeEviction) {
+      return await purgeStorefrontProductConfirmed(merchantSlug, entries);
+    }
     scheduleStorefrontProductPurge(merchantSlug, entries);
   }
   return true;

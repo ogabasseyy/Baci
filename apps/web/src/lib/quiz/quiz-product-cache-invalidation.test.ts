@@ -28,11 +28,13 @@ describe('invalidateQuizProductCaches', () => {
       merchantId: 'merchant-1',
       productIds: ['product-1'],
       supabase: client,
+      confirmEdgeEviction: true,
     });
     expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
       merchantId: 'merchant-2',
       productIds: ['product-2'],
       supabase: client,
+      confirmEdgeEviction: true,
     });
     expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledTimes(2);
   });
@@ -48,6 +50,7 @@ describe('invalidateQuizProductCaches', () => {
       merchantId: 'merchant-3',
       productIds: ['product-3'],
       supabase: client,
+      confirmEdgeEviction: true,
     });
   });
 
@@ -124,6 +127,7 @@ describe('invalidateQuizProductCaches', () => {
         merchantId: 'merchant-3',
         productIds: expectedIds,
         supabase: client,
+        confirmEdgeEviction: true,
         targetSweepIncomplete: true,
       });
       expect(warnSpy).toHaveBeenCalledWith(
@@ -153,6 +157,7 @@ describe('invalidateQuizProductCaches', () => {
       merchantId: 'merchant-2',
       productIds: ['product-2'],
       supabase: client,
+      confirmEdgeEviction: true,
     });
     expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalledWith(
       expect.objectContaining({ targetSweepIncomplete: true })

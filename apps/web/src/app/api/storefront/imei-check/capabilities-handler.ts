@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   getAvailableImeiTierKeys,
+  getWalletPayableImeiTierKeys,
   type ImeiCapabilitiesConfiguration,
 } from '@/lib/imei-capabilities';
 import { imeiCapabilitiesQuerySchema } from '@/schemas/imei-capabilities';
@@ -48,6 +49,10 @@ export function createImeiCapabilitiesHandler(
     return NextResponse.json(
       {
         availableTierKeys: getAvailableImeiTierKeys({
+          configuration,
+          ...parsed.data,
+        }),
+        walletPayableTierKeys: getWalletPayableImeiTierKeys({
           configuration,
           ...parsed.data,
         }),

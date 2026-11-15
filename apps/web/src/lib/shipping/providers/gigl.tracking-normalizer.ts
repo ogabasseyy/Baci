@@ -92,6 +92,11 @@ function isMshc(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
 }
 
+/** Equal-timestamp precedence for the current status: delivered > MSHC > rest. */
+function currentStatusRank(candidate: Guardable): number {
+  return candidate.recognizedStatus === 'delivered' ? 2 : isMshc(candidate);
+}
+
 /**
  * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
  * run, and an arrival scan also marks the parcel reaching its destination.
@@ -251,7 +256,7 @@ export function normalizeGiglTrackingShipment(
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
       right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
-      isMshc(right) - isMshc(left)
+      currentStatusRank(right) - currentStatusRank(left)
   );
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null

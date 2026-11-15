@@ -159,3 +159,24 @@ describe('bugfix: equal-timestamp MSHC and arrival', () => {
     expect(result.status).toBe('out_for_delivery');
   });
 });
+
+describe('bugfix: equal-timestamp delivery scan outranks MSHC', () => {
+  it.each([
+    ['delivery first', ['SHD', 'MSHC']],
+    ['MSHC first', ['MSHC', 'SHD']],
+  ])('keeps delivered when SHD and MSHC share a timestamp (%s)', (_label, codes) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W20',
+        MobileShipmentTrackings: [
+          event('ARF', '09:00:00'),
+          ...codes.map((code) => event(code, '11:00:00')),
+        ],
+      },
+      'W20',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+    expect(result.actualDelivery).toBeInstanceOf(Date);
+  });
+});

@@ -81,12 +81,15 @@ export function SavingsHowYouSaveSection({ colors, controller }: Props) {
             selected={controller.interestChoice}
             onSelect={controller.setInterestChoice}
           />
-          <SavingsIconLabel
-            icon="information-circle-outline"
-            text={EARLY_CANCEL_INTEREST_NOTE}
-            color={colors.textSecondary}
-            variant="note"
-          />
+          {/* A savings-only plan has no interest to lose. */}
+          {controller.interestChoice === false ? null : (
+            <SavingsIconLabel
+              icon="information-circle-outline"
+              text={EARLY_CANCEL_INTEREST_NOTE}
+              color={colors.textSecondary}
+              variant="note"
+            />
+          )}
         </View>
       ) : null}
       <SavingsTerms colors={colors} controller={controller} />

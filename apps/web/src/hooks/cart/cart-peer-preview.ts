@@ -35,7 +35,7 @@ export interface CartPeerChannel {
 }
 
 export type OpenCartPeerChannel = (
-  merchantId: string,
+  scope: { merchantId: string; cartId: string },
   onMessage: (value: unknown) => void
 ) => CartPeerChannel | null;
 
@@ -69,7 +69,10 @@ function readLines(value: unknown): CartPeerLine[] | null {
   return lines;
 }
 
-/** Anything not exactly a known message is dropped. */
+/**
+ * Drops unknown kinds, malformed fields, and a settled message that carries
+ * lines. Other extra fields are ignored. Cart versions start at 1.
+ */
 export function readCartPeerMessage(value: unknown): CartPeerMessage | null {
   if (typeof value !== 'object' || value === null) return null;
   const { kind, merchantId, cartId, version, lines } = value as Record<
@@ -81,7 +84,7 @@ export function readCartPeerMessage(value: unknown): CartPeerMessage | null {
     !isId(cartId) ||
     typeof version !== 'number' ||
     !Number.isSafeInteger(version) ||
-    version < 0
+    version < 1
   )
     return null;
   if (kind === 'settled')
@@ -121,17 +124,17 @@ export function applyCartPeerPreview(
 }
 
 /** Browsers without BroadcastChannel keep the server-driven update. */
-export const openCartPeerChannel: OpenCartPeerChannel = (
-  merchantId,
-  onMessage
-) => {
+export const openCartPeerChannel: OpenCartPeerChannel = (scope, onMessage) => {
   if (
     typeof window === 'undefined' ||
     typeof window.BroadcastChannel !== 'function'
   )
     return null;
   try {
-    const channel = new window.BroadcastChannel(`baci-cart-peer:${merchantId}`);
+    const channel = new window.BroadcastChannel(
+      // One channel per cart: tabs on another cart are never woken.
+      `baci-cart-peer:${scope.merchantId}:${scope.cartId}`
+    );
     channel.onmessage = (event: MessageEvent<unknown>) => {
       onMessage(event.data);
     };

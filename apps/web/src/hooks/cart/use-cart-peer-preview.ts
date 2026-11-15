@@ -4,6 +4,7 @@ import {
   buildCartPeerLines,
   type CartPeerChannel,
   type CartPeerLine,
+  type CartPeerMessage,
   type OpenCartPeerChannel,
   openCartPeerChannel,
   readCartPeerMessage,
@@ -35,6 +36,8 @@ function matchesConfirmed(
 
 /** A tab that closes mid-edit never settles: stop trusting its hint. */
 const PREVIEW_TIMEOUT_MS = 10000;
+/** A slow save repeats its announcement so siblings keep the preview. */
+const REANNOUNCE_MS = 4000;
 
 /**
  * Announces this tab's pending edits to its sibling tabs and returns the
@@ -53,6 +56,7 @@ export function useCartPeerPreview(
   const channelRef = useRef<CartPeerChannel | null>(null);
   /** The last edit announced in this run of pending work, if any. */
   const lastPosted = useRef<string | null>(null);
+  const lastEdit = useRef<CartPeerMessage | null>(null);
   // Advance only after commit so a message never reads an abandoned render.
   useEffect(() => {
     latest.current = context;
@@ -74,8 +78,9 @@ export function useCartPeerPreview(
   useEffect(() => {
     setPreview(null);
     lastPosted.current = null;
+    lastEdit.current = null;
     if (!ready || cartId === null) return;
-    const channel = open(merchantId, (value) => {
+    const channel = open({ cartId, merchantId }, (value) => {
       const message = readCartPeerMessage(value);
       const own = latest.current.state;
       if (
@@ -96,6 +101,10 @@ export function useCartPeerPreview(
       }
       // This tab's own unsaved edit wins; an edit made on an older cart
       // than this tab already holds is resolved by the server instead.
+      // An edit made on a newer cart is kept: the editor's list is that
+      // newer confirmed cart plus its edit, which is where this tab is
+      // heading, and refusing it would flash the old quantity between
+      // rapid edits.
       if (
         own.queue.some((entry) => !entry.silent) ||
         message.version < ownVersion
@@ -120,6 +129,7 @@ export function useCartPeerPreview(
     const confirmed = state.confirmed;
     if (!ready || !channel || cartId === null || confirmed === null) {
       lastPosted.current = null;
+      lastEdit.current = null;
       return;
     }
     const version = confirmed.version;
@@ -128,6 +138,7 @@ export function useCartPeerPreview(
       if (lastPosted.current !== null)
         channel.post({ cartId, kind: 'settled', merchantId, version });
       lastPosted.current = null;
+      lastEdit.current = null;
       return;
     }
     const lines = buildCartPeerLines(state.display);
@@ -140,11 +151,19 @@ export function useCartPeerPreview(
     const key = JSON.stringify([version, lines]);
     if (key === lastPosted.current) return;
     lastPosted.current = key;
-    channel.post({ cartId, kind: 'edit', lines, merchantId, version });
+    lastEdit.current = { cartId, kind: 'edit', lines, merchantId, version };
+    channel.post(lastEdit.current);
   }, [ready, pending, state.confirmed, state.display]);
 
   useEffect(() => {
-    if (pending) setPreview(null);
+    if (!pending) return;
+    setPreview(null);
+    const timer = setInterval(() => {
+      if (lastEdit.current) channelRef.current?.post(lastEdit.current);
+    }, REANNOUNCE_MS);
+    return () => {
+      clearInterval(timer);
+    };
   }, [pending]);
 
   useEffect(() => {

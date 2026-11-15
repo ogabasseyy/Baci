@@ -80,7 +80,7 @@ function context(
 function tabs() {
   const listeners = new Set<(value: unknown) => void>();
   const posted: unknown[] = [];
-  const open: OpenCartPeerChannel = (_merchantId, onMessage) => {
+  const open: OpenCartPeerChannel = (_scope, onMessage) => {
     listeners.add(onMessage);
     return {
       close: () => {
@@ -281,6 +281,42 @@ describe('cart peer preview', () => {
       context({ display: [line('l1', 4), line('l2', 1)], queue: [edit] })
     );
     expect(t.posted).toHaveLength(2);
+  });
+
+  it('keeps an edit made on a newer cart than this tab holds', () => {
+    const t = tabs();
+    const { result, rerender } = renderHook(
+      (p) => useCartPeerPreview(p, t.open),
+      { initialProps: context() }
+    );
+    // The editing tab saved its first edit (version 3) and has a second
+    // pending; this tab has not refetched yet.
+    act(() => t.deliver({ ...peerEdit, version: 3 }));
+    expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
+
+    // Catching up to version 3 keeps the second edit on screen.
+    rerender(context({}, 3));
+    expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
+  });
+
+  it('repeats a slow save’s announcement so the other tab keeps it', () => {
+    vi.useFakeTimers();
+    const t = tabs();
+    const watching = renderHook(() => useCartPeerPreview(context(), t.open));
+    renderHook(() =>
+      useCartPeerPreview(
+        context({ display: [line('l1', 3), line('l2', 1)], queue: [edit] }),
+        t.open
+      )
+    );
+    expect(watching.result.current).toEqual([
+      { id: 'l1', quantity: 3 },
+      { id: 'l2', quantity: 1 },
+    ]);
+    act(() => {
+      vi.advanceTimersByTime(25000);
+    });
+    expect(watching.result.current).not.toBeNull();
   });
 
   it('gives up after ten seconds if the other tab never settles', () => {

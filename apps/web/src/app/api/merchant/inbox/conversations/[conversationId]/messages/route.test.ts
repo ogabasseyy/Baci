@@ -171,6 +171,16 @@ describe('POST /api/merchant/inbox/conversations/[conversationId]/messages', () 
     expect((await reply('7', { content: 'hello' })).status).toBe(401);
   });
 
+  it.each([
+    'abc',
+    '0',
+    '-4',
+  ])('rejects conversation id %s without sending', async (id) => {
+    const response = await reply(id, { content: 'hello' });
+    expect(response.status).toBe(400);
+    expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
   it('does not send for a caller without edit permission', async () => {
     mocks.resolve.mockResolvedValue({
       ok: false,

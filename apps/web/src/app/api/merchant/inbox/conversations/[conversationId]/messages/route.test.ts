@@ -80,10 +80,19 @@ describe('GET /api/merchant/inbox/conversations/[conversationId]/messages', () =
     ['0', ''],
     ['-4', ''],
     ['7', '?before=x'],
-  ])('rejects id %s %s before authenticating', async (id, query) => {
+  ])('rejects id %s %s for a signed-in merchant', async (id, query) => {
     const response = await call(id, query);
     expect(response.status).toBe(400);
-    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.listMessages).not.toHaveBeenCalled();
+  });
+
+  it('answers an unauthenticated caller the same for valid and invalid ids', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: false,
+      response: NextResponse.json({ code: 'unauthorized' }, { status: 401 }),
+    });
+    expect((await call('abc')).status).toBe(401);
+    expect((await call('7')).status).toBe(401);
   });
 
   it('returns 404 for a conversation outside the merchant inbox', async () => {
@@ -140,8 +149,22 @@ describe('POST /api/merchant/inbox/conversations/[conversationId]/messages', () 
   ])('rejects %s as a client error', async (_label, body, raw) => {
     const response = await reply('7', body, raw);
     expect(response.status).toBe(400);
-    expect(mocks.resolve).not.toHaveBeenCalled();
     expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body over the byte cap even without a content-length', async () => {
+    const response = await reply('7', { content: 'é'.repeat(40_000) });
+    expect(response.status).toBe(400);
+    expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
+  it('answers an unauthenticated caller the same for valid and invalid bodies', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: false,
+      response: NextResponse.json({ code: 'unauthorized' }, { status: 401 }),
+    });
+    expect((await reply('7', '{nope', true)).status).toBe(401);
+    expect((await reply('7', { content: 'hello' })).status).toBe(401);
   });
 
   it('does not send for a caller without edit permission', async () => {

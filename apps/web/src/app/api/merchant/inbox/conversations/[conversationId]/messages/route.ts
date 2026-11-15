@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { readCartJsonBody } from '@/lib/cart/request-context';
 import {
   listMerchantInboxMessages,
   sendMerchantInboxReply,
@@ -20,6 +21,10 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ conversationId: string }> }
 ) {
+  // Authenticate first: an unauthenticated caller learns nothing about input.
+  const resolved = await resolveMerchantInboxRequest('view');
+  if (!resolved.ok) return resolved.response;
+
   const { conversationId: rawConversationId } = await context.params;
   const conversationId =
     merchantInboxConversationIdSchema.safeParse(rawConversationId);
@@ -29,9 +34,6 @@ export async function GET(
   if (!conversationId.success || !query.success) {
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
-
-  const resolved = await resolveMerchantInboxRequest('view');
-  if (!resolved.ok) return resolved.response;
 
   const result = await listMerchantInboxMessages(resolved.binding, {
     conversationId: conversationId.data,
@@ -52,20 +54,6 @@ export async function GET(
   });
 }
 
-const REPLY_BODY_MAX_BYTES = 16 * 1024;
-
-async function readReplyBody(request: NextRequest): Promise<unknown | null> {
-  const declared = Number(request.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > REPLY_BODY_MAX_BYTES) return null;
-  try {
-    const text = await request.text();
-    if (text.length > REPLY_BODY_MAX_BYTES) return null;
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
 /** Sends the merchant's reply to a customer in their own inbox. */
 export async function POST(
   request: NextRequest,
@@ -74,16 +62,21 @@ export async function POST(
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid) return merchantInboxError(403, 'Forbidden', 'forbidden');
 
+  // Authenticate before reading input, as the GET handlers do.
+  const resolved = await resolveMerchantInboxRequest('edit');
+  if (!resolved.ok) return resolved.response;
+
   const { conversationId: rawConversationId } = await context.params;
   const conversationId =
     merchantInboxConversationIdSchema.safeParse(rawConversationId);
-  const body = merchantInboxReplySchema.safeParse(await readReplyBody(request));
+  // Streaming read with a byte cap enforced before the body is buffered.
+  const rawBody = await readCartJsonBody(request);
+  const body = merchantInboxReplySchema.safeParse(
+    rawBody.ok ? rawBody.body : null
+  );
   if (!conversationId.success || !body.success) {
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
-
-  const resolved = await resolveMerchantInboxRequest('edit');
-  if (!resolved.ok) return resolved.response;
 
   const result = await sendMerchantInboxReply(resolved.binding, {
     conversationId: conversationId.data,

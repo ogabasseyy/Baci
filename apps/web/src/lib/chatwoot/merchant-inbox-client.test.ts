@@ -86,7 +86,25 @@ describe('listMerchantInboxConversations', () => {
     });
   });
 
-  it('reports more pages when the provider page is full', async () => {
+  it.each([
+    [1, 26, true],
+    [1, 25, false],
+    [2, 26, false],
+  ])('page %i of %i conversations has more: %s (provider total)', async (page, total, expected) => {
+    stubFetch(() => ({
+      body: {
+        data: {
+          meta: { all_count: total },
+          payload: Array.from({ length: 25 }, (_, i) => conversation(i + 1)),
+        },
+      },
+    }));
+    await expect(
+      listMerchantInboxConversations(binding, { page, status: 'all' })
+    ).resolves.toMatchObject({ ok: true, hasMore: expected });
+  });
+
+  it('falls back to a full page meaning more when no total is given', async () => {
     stubFetch(() => ({
       body: {
         data: {

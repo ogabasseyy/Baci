@@ -31,7 +31,7 @@ function env(overrides: Record<string, string | undefined> = {}) {
       },
     ]),
     ...overrides,
-  } as NodeJS.ProcessEnv;
+  } as unknown as NodeJS.ProcessEnv;
 }
 
 describe('getMerchantInboxBinding', () => {

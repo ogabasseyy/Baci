@@ -34,6 +34,9 @@ export const providerInboxConversationSchema = z.object({
 
 export const providerInboxConversationListSchema = z.object({
   data: z.object({
+    meta: z
+      .object({ all_count: z.number().int().nonnegative().safe().nullish() })
+      .nullish(),
     payload: z.array(z.unknown()).max(200),
   }),
 });

@@ -126,12 +126,22 @@ export async function startImeiWalletPayment(
       'Paying from your PiggyVest wallet is not available yet.',
       409
     );
-  if (input.binding.provider !== 'sickw')
+  if (input.binding.provider !== 'sickw') {
+    // A key that already has a lookup (an attempt made while this check ran
+    // on Sickw) is answered from it, exactly as the store-credit path does.
+    // The refusal is reserved for a key with nothing behind it, so the app
+    // can safely drop that key and fall back (walk 2026-11-15, H2).
+    const existing = await findLookupByIdempotencyKey(
+      input.supabaseAdmin,
+      input.idempotencyKey
+    );
+    if (existing) return mapExistingLookup(existing, input.replayContext);
     return refuse(
       'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER',
       'This check can not be paid from your PiggyVest wallet yet.',
       409
     );
+  }
   const identity = await deps.resolveIdentity({
     supabase: input.supabase,
     user: input.user,

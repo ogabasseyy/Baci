@@ -80,6 +80,13 @@ export async function handleChatwootInlineCartQuantity(input: {
   // supersede the reply while this mutation still commits successfully.
   const refreshRequired = mutation?.code === 'refresh_required';
   const cartExpired = mutation?.code === 'cart_expired';
+  const definitiveRejection =
+    refreshRequired ||
+    cartExpired ||
+    mutation?.code === 'invalid_context' ||
+    mutation?.code === 'forbidden' ||
+    mutation?.code === 'invalid_request' ||
+    mutation?.code === 'quota_exceeded';
   const accepted =
     mutation?.accepted === true && mutation.operationId === requestId;
   const acceptedResponseMismatch =
@@ -88,7 +95,8 @@ export async function handleChatwootInlineCartQuantity(input: {
     mutation === null ||
     acceptedResponseMismatch ||
     (typeof mutation?.httpStatus === 'number' &&
-      Number.isSafeInteger(mutation.httpStatus));
+      Number.isSafeInteger(mutation.httpStatus) &&
+      !definitiveRejection);
   if (
     accepted &&
     mutation !== null &&

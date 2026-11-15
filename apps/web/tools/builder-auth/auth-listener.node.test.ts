@@ -166,7 +166,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
     {
       issuer: 'https://builder-auth.usebaci.com',
       resource: 'https://builder-mcp.usebaci.com/builder/mcp',
-      callback: 'https://chatgpt.com/approved-callback',
+      callback: 'https://chatgpt.com/connector_platform_oauth_redirect',
       clientId: 'synthetic-client',
       cookieKeys: ['fixture-cookie-key-with-more-than-32-bytes'],
       jwks: {
@@ -227,7 +227,7 @@ test('the actual provider advertises the HTTPS issuer through the private listen
     );
     const params = new URLSearchParams({
       client_id: 'synthetic-client',
-      redirect_uri: 'https://chatgpt.com/approved-callback',
+      redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect',
       response_type: 'code',
       scope: 'openid',
       state: 'synthetic-state',
@@ -260,7 +260,10 @@ test('the actual provider advertises the HTTPS issuer through the private listen
     });
     assert.equal(errorRedirect.status, 303);
     const location = new URL(errorRedirect.location ?? '');
-    assert.equal(location.origin, 'https://chatgpt.com');
+    assert.equal(
+      location.origin + location.pathname,
+      'https://chatgpt.com/connector_platform_oauth_redirect'
+    );
     assert.equal(
       location.searchParams.get('iss'),
       'https://builder-auth.usebaci.com'

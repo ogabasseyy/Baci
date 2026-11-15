@@ -32,8 +32,14 @@ are outside this qualification.
    the dedicated database URL, a socket path, separate cookie/signing/vault
    keys and the connection lifetime. Set `clientId` to
    `baci-chatgpt-builder-v1` and copy the exact callback assigned by the
-   ChatGPT draft. Keep tokens, private config and query strings out of logs
-   and evidence.
+   ChatGPT draft. For isolated broker qualification before that screen is
+   available, the documented RFC 9207 callback for an eligible ChatGPT MCP
+   server is `https://chatgpt.com/connector_platform_oauth_redirect`.
+   Verify the discovery flag, exact issuer match and `iss` on both success
+   and error redirects. Confirm the portal's actual redirect URI before the
+   draft's first OAuth flow. Keep tokens, private config and query strings
+   out of logs and evidence.
+   [ChatGPT callback requirements](https://developers.openai.com/plugins/build/auth#redirect-url)
 4. On the approved Linux host, install the isolated package with its frozen
    lockfile in the candidate checkout. Run as the dedicated non-root service
    account with the reviewed Node runtime. Use an idle socket path and coordinate
@@ -60,6 +66,8 @@ curl --unix-socket "${BACI_AUTH_SOCKET:?set configured socket path}" \
   --silent --show-error --fail --max-time 10 \
   http://builder-auth.usebaci.com/.well-known/openid-configuration |
   jq -e '.issuer == "https://builder-auth.usebaci.com" and
+    .authorization_response_iss_parameter_supported == true and
+    (.code_challenge_methods_supported | index("S256")) != null and
     .authorization_endpoint == "https://builder-auth.usebaci.com/auth" and
     .token_endpoint == "https://builder-auth.usebaci.com/token" and
     .jwks_uri == "https://builder-auth.usebaci.com/jwks"' >/dev/null
@@ -75,6 +83,24 @@ curl --unix-socket "$BACI_AUTH_SOCKET" \
 
 A pass confirms role and upstream discovery checks at startup and the issuer's
 local metadata and keys. It takes no user through authorization.
+
+## Loopback qualification
+
+As the dedicated non-root service identity, start the same real broker and the
+existing auth bridge together. Stop the private-only entrypoint first if it is
+running. Choose the distinct loopback port assigned by the operator.
+
+```sh
+node apps/web/tools/builder-production/auth-qualification-main.ts "${BACI_AUTH_PORT:?set the operator-approved loopback port}"
+curl --fail --silent --show-error --max-time 10 \
+  "http://127.0.0.1:${BACI_AUTH_PORT}/.well-known/openid-configuration" |
+  jq -e '.issuer == "https://builder-auth.usebaci.com" and
+    .authorization_response_iss_parameter_supported == true' >/dev/null
+```
+
+Run the probe from another terminal while the service is running. When changing
+to the full stack, stop the standalone process before reusing its port and
+private socket.
 
 ## Public qualification gates
 

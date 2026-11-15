@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { exportJWK, generateKeyPair, jwtVerify } from 'jose';
-import { startAuthLoopback } from '../builder-production/auth-loopback.ts';
+import { startAuthQualification } from '../builder-production/auth-qualification.ts';
 import { listenPrivateAuth } from './auth-listener.ts';
 import { createBuilderProvider } from './provider.ts';
 import { createBuilderAuthHandler } from './server.ts';
@@ -17,7 +17,7 @@ import { databaseFixture } from './test-fixtures.ts';
 
 const actor = '10000000-0000-4000-8000-000000000001';
 const resource = 'https://builder-mcp.usebaci.com/builder/mcp';
-const callback = 'https://chatgpt.com/new-builder-callback';
+const callback = 'https://chatgpt.com/connector_platform_oauth_redirect';
 for (const viaBridge of [false, true])
   test(`real broker redirects, consent and token isolation (bridge: ${viaBridge})`, {
     timeout: 90000,
@@ -25,10 +25,7 @@ for (const viaBridge of [false, true])
     const db = await databaseFixture();
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'baci-builder-auth-')));
     let server: ReturnType<typeof createServer> | undefined;
-    let privateListener:
-      | Awaited<ReturnType<typeof listenPrivateAuth>>
-      | undefined;
-    let bridge: Awaited<ReturnType<typeof startAuthLoopback>> | undefined;
+    let bridge: Awaited<ReturnType<typeof startAuthQualification>> | undefined;
     const observed: string[] = [];
     try {
       await db.pool.query('INSERT INTO auth.users VALUES($1)', [actor]);
@@ -182,16 +179,20 @@ for (const viaBridge of [false, true])
       });
       if (viaBridge) {
         const socketPath = join(dir, 'broker.sock');
-        privateListener = await listenPrivateAuth({
+        bridge = await startAuthQualification(0, async () => ({
           socketPath,
-          issuer,
-          provider,
-          handler: async (req, res) => {
-            observed.push(`broker:${new URL(req.url ?? '/', issuer).pathname}`);
-            await handle(req, res);
-          },
-        });
-        bridge = await startAuthLoopback({ socketPath, port: 0 });
+          ...(await listenPrivateAuth({
+            socketPath,
+            issuer,
+            provider,
+            handler: async (req, res) => {
+              observed.push(
+                `broker:${new URL(req.url ?? '/', issuer).pathname}`
+              );
+              await handle(req, res);
+            },
+          })),
+        }));
       }
       const { jar, send } = createTestBrowser(
         issuer,
@@ -350,7 +351,6 @@ for (const viaBridge of [false, true])
     } finally {
       if (server) await new Promise<void>((r) => server?.close(() => r()));
       await bridge?.close();
-      await privateListener?.close();
       await db.close();
       rmSync(dir, { recursive: true, force: true });
     }

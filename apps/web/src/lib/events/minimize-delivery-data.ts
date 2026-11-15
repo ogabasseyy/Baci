@@ -1,6 +1,6 @@
 import type { DomainEventV1 } from '@baci/shared/contracts';
 import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
-import { toClientAnalyticsDomainEventName } from './client-analytics-domain-event-name';
+import { toClientAnalyticsDomainEventName } from './event-route-registry';
 
 /**
  * Shopper fields that exist only so an ad platform can match a conversion.

@@ -7,49 +7,13 @@ import {
   listMerchantInboxConversations,
   listMerchantInboxMessages,
 } from './merchant-inbox-client';
-import type { MerchantInboxBinding } from './merchant-inbox-config';
-
-const binding: MerchantInboxBinding = {
-  merchantId: '11111111-1111-4111-8111-111111111111',
-  accountId: 2,
-  inboxId: 20,
-  apiAccessToken: 'synthetic-agent-token-aaaa',
-  apiOrigin: 'https://chat.example.test',
-};
-
-const CREATED = 1_794_720_151;
-
-function conversation(id: number, inboxId = 20) {
-  return { id, inbox_id: inboxId, status: 'open', last_activity_at: CREATED };
-}
-
-function message(id: number, overrides: Record<string, unknown> = {}) {
-  return {
-    id,
-    content: `message ${id}`,
-    message_type: 0,
-    created_at: CREATED,
-    content_type: 'text',
-    ...overrides,
-  };
-}
-
-function stubFetch(
-  handler: (url: URL) => { status?: number; body?: unknown } | Error
-) {
-  const fetchMock = vi.fn(async (input: URL | string, _init?: RequestInit) => {
-    const result = handler(new URL(String(input)));
-    if (result instanceof Error) throw result;
-    const status = result.status ?? 200;
-    return {
-      ok: status >= 200 && status < 300,
-      status,
-      json: async () => result.body,
-    };
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
+import {
+  binding,
+  CREATED,
+  conversation,
+  message,
+  stubFetch,
+} from './merchant-inbox-client.test-support';
 
 afterEach(() => vi.unstubAllGlobals());
 

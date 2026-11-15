@@ -197,3 +197,72 @@ export async function listMerchantInboxMessages(
     nextBefore: hasOlder ? Math.min(...rawIds) : null,
   };
 }
+
+/**
+ * Sends the merchant's reply into a bound conversation. A timeout or network
+ * loss after submission is reported as `delivery_unknown`: the message may
+ * have been accepted, so nothing is retried here.
+ */
+export async function sendMerchantInboxReply(
+  binding: MerchantInboxBinding,
+  input: { conversationId: number; content: string }
+): Promise<
+  | { ok: true; message: MerchantInboxMessage }
+  | MerchantInboxFailure
+  | { ok: false; code: 'delivery_unknown' }
+> {
+  const owned = await getMerchantInboxConversation(
+    binding,
+    input.conversationId
+  );
+  if (!owned.ok) return owned;
+
+  const url = new URL(
+    `/api/v1/accounts/${binding.accountId}/conversations/${input.conversationId}/messages`,
+    binding.apiOrigin
+  );
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        api_access_token: binding.apiAccessToken,
+      },
+      body: JSON.stringify({
+        content: input.content,
+        message_type: 'outgoing',
+        private: false,
+      }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    return { ok: false, code: 'delivery_unknown' };
+  }
+  if (!response.ok) {
+    // 5xx, a request timeout and throttling do not prove the message was
+    // refused. Only another 4xx is a definite rejection: nothing was sent.
+    return response.status >= 500 ||
+      response.status === 408 ||
+      response.status === 429
+      ? { ok: false, code: 'delivery_unknown' }
+      : failure(response);
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, code: 'delivery_unknown' };
+  }
+  const message = projectMerchantInboxMessage(body);
+  // Accepted by the provider, but the echo was unreadable: do not invite a
+  // resend that would duplicate the customer-visible message.
+  // The echo must also be the reply itself, not some other row.
+  if (message?.sender !== 'store') {
+    return { ok: false, code: 'delivery_unknown' };
+  }
+  return { ok: true, message };
+}

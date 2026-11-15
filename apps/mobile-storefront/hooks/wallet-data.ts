@@ -27,6 +27,7 @@ import {
 } from './wallet-savings-interest';
 import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
 import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
+import { WALLET_TRANSACTION_FETCH_LIMIT } from './wallet-transaction-limits';
 import {
   coerceDatabaseNumber,
   normalizeWalletTransaction,
@@ -237,7 +238,7 @@ export async function fetchWalletDataUnbounded(
       .eq('wallet_id', walletResult.data.id)
       .eq('merchant_id', merchantId)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(WALLET_TRANSACTION_FETCH_LIMIT);
 
     if (txResult.error) {
       throw txResult.error;

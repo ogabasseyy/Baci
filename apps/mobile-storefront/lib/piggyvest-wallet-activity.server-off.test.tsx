@@ -35,6 +35,18 @@ describe('PiggyVest wallet activity client with the server keeping PiggyVest off
     });
   });
 
+  it('passes a shorter timeout through to the client when asked', async () => {
+    mockFetchJson.mockResolvedValue({ items: [], nextCursor: null });
+    await fetchPiggyvestWalletActivity({
+      merchantId: MERCHANT,
+      cursor: 'c2',
+      timeoutMs: 20_000,
+    });
+    expect(mockFetchJson).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: 20_000 })
+    );
+  });
+
   it('rejects an answer carrying internal fields', async () => {
     mockFetchJson.mockResolvedValue({
       items: [

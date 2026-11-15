@@ -186,3 +186,48 @@ No fixed installation path, sudo policy, service, firewall or DNS changed.
 This directory records the earlier source commit. The subsequent PR head
 `bdcd99f14444e770e4cffb5175684c0e168d5f27` needs its own assembly comparison
 before rollout.
+
+## Exact runner crash and restart trial, 15 November 2026
+
+The updated runner SHA-256
+`efa5b759faa459ee016cce9f4bcfe03fa7d9d0506ae7bc389474d80e8c0d1ef2`
+passed a two-generation test on Contabo. The preflight, privileged helper and
+browser observer still matched the corresponding hashes above. The first
+generation opened its private socket and loopback listener 541 seconds after
+invocation, after checking the complete v2 pin. It returned the expected
+signed synthetic compile with the same build digest as the earlier trial.
+A targeted SIGKILL left the socket on disk and closed the loopback listener.
+The second generation of the same bundle reopened both listeners after the
+replay hold and full protected preflight. It reached readiness in 319 seconds
+with a warm filesystem cache and returned the same signed compile digest.
+Both checks rejected unsigned requests and exact replays within each
+generation. This trial covers socket recovery and does not measure replay
+across generations.
+
+Focused local checks confirmed that the recovery helper preserves a symlink,
+its target, a regular file and a live socket at the configured path. Recovery
+requires one startup owner for that path. The trial held an exclusive kernel
+lock, and the service operator must reserve the runtime directory to one
+systemd unit, with no overlapping standalone, full-stack or qualification
+startup. The inode recheck followed by unlink is not an atomic cross-process
+operation.
+
+The root-only receipt
+`/var/tmp/baci-runner-crash-20261115.Mh1ik8QG/qualification.log` has SHA-256
+`93b7b003a01500b92b589fdb315edce4ac6a29262dbd2560c138155af6dd3a7f`.
+The wrapper exited zero. A separate SSH check confirmed both CI units active,
+the task listener and fixed fixture paths removed, the temporary account and
+sudo rule removed, and identical job-directory entries before and after.
+No permanent service, DNS, firewall, paid AI, order, payment, publication
+or submission was involved.
+
+The full operator assembly for commit
+`e975c5c86fcd4a14db38a07e44dca14605176af8` was staged with root-only permissions
+at `/root/baci-builder-candidates/e975c5c86f`. All 13 transfer checksums matched.
+The assembly manifest SHA-256 is
+`d2ca5edcac7a714f54bdc94bc8448047a41fbce053052280faed6fa8e60d0d80`
+and the transfer manifest SHA-256 is
+`db9da656e1b153188cb24417a9e91a1671b5143ae243c83cb38d86846d1b5fdc`.
+The staged runner, helper, preflight and observer are byte-for-byte equivalent
+to the crash trial artifacts. The full operator package remains an unqualified
+assembly. The transfer installed no fixed-path files and started no services.

@@ -50,8 +50,12 @@ Codex and Muse returned quota notices rather than clean current-head reviews.
 Muse reported 16 November 2026 00:00 UTC (01:00 Lagos) as its reset. Keep the
 PR draft until both exact-head/base reviews satisfy repository policy.
 
-The updated runner requires its own Contabo crash/restart receipt. Earlier
-runner bundle hashes do not cover the changed socket recovery code.
+The updated runner passed a two-generation Contabo crash/restart trial; see
+[the exact runner receipt](runner-next-install-20261115.md). Both generations
+compiled synthetic code and denied unsigned/replayed requests. The complete
+operator package at e975c5c86f was staged root-only, but was not activated or
+qualified as a full production stack. Affected-package lint and typechecks
+passed after the final source changes; GitHub checks still need the new head.
 
 Live OAuth requires the dedicated consent route deployment, upstream OAuth
 activation and client registration, the exact client UUID configuration, the

@@ -141,7 +141,11 @@ export function useQuizWaitingRoom({
       // the interstitial onClosed handler or the start-hold hook). The
       // rewarded prop arrives via a passive effect after the tap, so also
       // read the synchronously claimed ownership: a refresh resolving in
-      // that window must still hold.
+      // that window must still hold. The 1.5 s ad-break notice needs no
+      // hold of its own: the request fires only with more than 30 s left
+      // and cancels at 30 s or less, so a natural boundary cannot land
+      // inside the notice, and an early server-side start unmounts the
+      // lobby, which cancels the pending present.
       if (
         isFullscreenAdActiveRef.current ||
         isStartBlockedRef.current ||

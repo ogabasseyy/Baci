@@ -207,5 +207,45 @@ describe('QuizRulesModal', () => {
         expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
       );
     });
+
+    it('measures room against the backdrop height, not the window height', () => {
+      // Regression: banner y is relative to the backdrop, so a backdrop
+      // shorter than the window must shrink the cap by the same amount.
+      render(modal(true));
+      const backdrop = screen.getByTestId('quiz-rules-modal-backdrop', {
+        includeHiddenElements: true,
+      });
+      fireEvent(backdrop, 'layout', {
+        nativeEvent: { layout: { height: 800, width: 390, x: 0, y: 0 } },
+      });
+      measure(78);
+
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ maxHeight: 800 - 153 - 24 }),
+        ])
+      );
+    });
+
+    it('does not mount the ad slot when even the shortest banner cannot fit', () => {
+      // Regression: the slot used to mount (and request an ad) before the
+      // first measurement, then get dropped when too tall.
+      render(modal(true));
+      expect(banner().props.children).not.toBeNull();
+
+      const backdrop = screen.getByTestId('quiz-rules-modal-backdrop', {
+        includeHiddenElements: true,
+      });
+      // 59 + 16 + 50 + 24 + 320 = 469 is the least that fits.
+      fireEvent(backdrop, 'layout', {
+        nativeEvent: { layout: { height: 468, width: 390, x: 0, y: 0 } },
+      });
+      expect(banner().props.children).toBeNull();
+
+      fireEvent(backdrop, 'layout', {
+        nativeEvent: { layout: { height: 469, width: 390, x: 0, y: 0 } },
+      });
+      expect(banner().props.children).not.toBeNull();
+    });
   });
 });

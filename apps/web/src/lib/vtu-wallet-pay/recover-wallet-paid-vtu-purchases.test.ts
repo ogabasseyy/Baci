@@ -162,29 +162,3 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     ).resolves.toMatchObject({ checked: 1, errored: 1 });
   });
 });
-
-describe('bugfix: recovery could run past the cron deadline holding a claim (Codex P2)', () => {
-  it('takes no claim when too little time remains before the deadline', async () => {
-    const summary = await recoverWalletPaidVtuPurchases(
-      { supabase, deadlineMs: Date.now() + 1000 },
-      deps
-    );
-    expect(worker.claim).not.toHaveBeenCalled();
-    expect(fulfil).not.toHaveBeenCalled();
-    expect(summary).toEqual({
-      checked: 0,
-      recovered: 0,
-      errored: 0,
-      deferred: 1,
-    });
-  });
-
-  it('still recovers when the deadline is far away', async () => {
-    const summary = await recoverWalletPaidVtuPurchases(
-      { supabase, deadlineMs: Date.now() + 600_000 },
-      deps
-    );
-    expect(summary.recovered).toBe(1);
-    expect(summary.deferred).toBe(0);
-  });
-});

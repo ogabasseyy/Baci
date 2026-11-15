@@ -38,20 +38,23 @@ const mockUseWallet = jest.fn(() => ({
 }));
 const mockUseAuthStore = jest.fn(() => mockAuthState);
 const mockSetSavingsAmount = jest.fn();
-const mockDeriveWalletDisplayData = jest.fn(() => ({
-  activeSavingsGoal: mockGoal,
-  earningsAvailable: false,
-  earningsBalance: 0,
-  fundingAccount: null,
-  savingsBalance: 0,
-  showQuickSave: false,
-  spendableBalance: 0,
-  totalBalance: 0,
-}));
+const mockDeriveWalletDisplayData = jest.fn<() => Record<string, unknown>>(
+  () => ({
+    activeSavingsGoal: mockGoal,
+    earningsAvailable: false,
+    earningsBalance: 0,
+    fundingAccount: null,
+    savingsBalance: 0,
+    showQuickSave: false,
+    walletBalance: 0,
+    totalBalance: 0,
+  })
+);
 
 jest.mock('expo-router', () => ({
   Redirect: () => null,
   router: { push: jest.fn() },
+  useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
 }));
 jest.mock('zustand/react/shallow', () => ({
   useShallow: (selector: unknown) => selector,
@@ -141,9 +144,10 @@ describe('WalletScreen PiggyVest main wallet', () => {
     earningsBalance: 0,
     fundingAccount: null,
     primaryReady: true,
+    savingsPrimary: true,
     savingsBalance: 0,
     showQuickSave: false,
-    spendableBalance: 1234.56,
+    walletBalance: 1234.56,
     totalBalance: 1234.56,
   });
 
@@ -162,7 +166,12 @@ describe('WalletScreen PiggyVest main wallet', () => {
     mockDeriveWalletDisplayData.mockReturnValue(
       primaryReady
         ? primaryDisplay()
-        : { ...primaryDisplay(), primaryReady: false, spendableBalance: 5000 }
+        : {
+            ...primaryDisplay(),
+            primaryReady: false,
+            savingsPrimary: undefined,
+            walletBalance: 5000,
+          }
     );
     render(<WalletScreen />);
     const controller = () =>
@@ -182,7 +191,7 @@ describe('WalletScreen PiggyVest main wallet', () => {
   it('funds savings from the PiggyVest balance and routes a short balance to Add money', () => {
     const { controller, contentProps } = mountWith(true);
 
-    expect(controller()?.spendableBalance).toBe(1234.56);
+    expect(controller()?.walletBalance).toBe(1234.56);
     expect(controller()?.primaryReady).toBe(true);
     expect(contentProps()?.primaryReady).toBe(true);
     expect(contentProps()?.showFundPanel).toBe(false);

@@ -128,15 +128,28 @@ describe('start savings helpers', () => {
     ).toBe(0);
   });
 
-  it('uses the contribution amount as the transfer-funded first deposit', () => {
-    expect(
-      getEffectiveInitialContribution({
-        contributionAmount: 20000,
-        fundingOption: 'bank_transfer',
-        initialContributionAmount: 0,
-        initialContributionEnabled: false,
-      })
-    ).toBe(20000);
+  describe('bugfix: a hidden bank-transfer choice moved money with the head start off', () => {
+    it('takes nothing up front when the head start is off', () => {
+      expect(
+        getEffectiveInitialContribution({
+          contributionAmount: 20000,
+          fundingOption: 'bank_transfer',
+          initialContributionAmount: 5000,
+          initialContributionEnabled: false,
+        })
+      ).toBe(0);
+    });
+
+    it('uses the head start when it is on, whatever the funding choice', () => {
+      expect(
+        getEffectiveInitialContribution({
+          contributionAmount: 20000,
+          fundingOption: 'bank_transfer',
+          initialContributionAmount: 5000,
+          initialContributionEnabled: true,
+        })
+      ).toBe(5000);
+    });
   });
 
   it('uses the explicit initial wallet contribution when enabled', () => {

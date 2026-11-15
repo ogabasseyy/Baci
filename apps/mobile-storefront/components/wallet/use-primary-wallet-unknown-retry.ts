@@ -1,6 +1,7 @@
 // useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { onLatePrimaryAnswer } from '@/hooks/primary-funding-account-memory';
+import { useReportPiggyvestSlow } from '@/hooks/use-piggyvest-slowdown';
 
 export const PRIMARY_UNKNOWN_RETRY_DELAY_MS = 4000;
 export const PRIMARY_UNKNOWN_RETRY_LIMIT = 3;
@@ -39,6 +40,12 @@ export function usePrimaryWalletUnknownRetry({
   if (state.scopeKey !== scopeKey || (!unknown && state.attempts !== 0)) {
     setState({ scopeKey, attempts: 0 });
   }
+  // Still unknown after the quick re-checks: PiggyVest is slow right now, so
+  // the wallet and savings screens show one calm shared notice.
+  useReportPiggyvestSlow(
+    'wallet-read',
+    unknown && attempts >= PRIMARY_UNKNOWN_RETRY_LIMIT
+  );
   // The ref blocks a second start within one tick; the state re-arms the
   // timer once any reload (even an older account's) has settled.
   const inFlight = useRef(false);

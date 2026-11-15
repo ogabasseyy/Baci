@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { StyleSheet, Text } from 'react-native';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
 import {
   formatSavingsNotificationTimestamp,
@@ -13,11 +14,13 @@ jest.mock('@shopify/flash-list', () => ({
     data,
     ListEmptyComponent,
     ListHeaderComponent,
+    ListFooterComponent,
     renderItem,
   }: {
     data: Array<{ id: string }>;
     ListEmptyComponent: () => ReactNode;
     ListHeaderComponent: ReactNode;
+    ListFooterComponent?: ReactNode;
     renderItem: (input: { item: { id: string } }) => ReactNode;
   }) => {
     const { View } = require('react-native') as typeof import('react-native');
@@ -29,6 +32,7 @@ jest.mock('@shopify/flash-list', () => ({
           : data.map((item) => (
               <View key={item.id}>{renderItem({ item })}</View>
             ))}
+        {ListFooterComponent}
       </View>
     );
   },
@@ -75,6 +79,22 @@ describe('SavingsNotificationList', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('puts the footer after the empty state, inside the list', () => {
+    render(
+      <SavingsNotificationList
+        header={null}
+        footer={<Text>orders-footer</Text>}
+        isLoading={false}
+        notifications={[]}
+        onOpen={jest.fn()}
+        onRetry={jest.fn()}
+        requestError={null}
+      />
+    );
+    expect(screen.getByText('No savings updates yet')).toBeTruthy();
+    expect(screen.getByText('orders-footer')).toBeTruthy();
+  });
+
   it('opens a server-issued notification', () => {
     const onOpen = jest.fn<(item: SavingsNotification) => void>();
     render(
@@ -98,6 +118,28 @@ describe('SavingsNotificationList', () => {
     );
 
     expect(onOpen).toHaveBeenCalledWith(notification);
+  });
+
+  it('lays each notification out as a card row with a plain style, not a press-time style function', () => {
+    render(
+      <SavingsNotificationList
+        header={null}
+        isLoading={false}
+        notifications={[notification]}
+        onOpen={jest.fn<(item: SavingsNotification) => void>()}
+        onRetry={jest.fn<() => void>()}
+        requestError={null}
+      />
+    );
+
+    const card = screen.getByTestId('savings-notification-card');
+    expect(typeof card.props.style).not.toBe('function');
+    expect(StyleSheet.flatten(card.props.style)).toEqual(
+      expect.objectContaining({
+        flexDirection: 'row',
+        borderWidth: expect.any(Number),
+      })
+    );
   });
 
   it('labels duplicate titles distinctly using the pinned-locale timestamp', () => {

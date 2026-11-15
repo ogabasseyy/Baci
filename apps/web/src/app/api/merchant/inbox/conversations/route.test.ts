@@ -65,10 +65,19 @@ describe('GET /api/merchant/inbox/conversations', () => {
     '?page=0',
     '?page=abc',
     '?status=deleted',
-  ])('rejects %s before authenticating', async (query) => {
+  ])('rejects %s for a signed-in merchant without calling the provider', async (query) => {
     const response = await GET(request(query));
     expect(response.status).toBe(400);
-    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+
+  it('answers an unauthenticated caller the same for valid and invalid input', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: false,
+      response: NextResponse.json({ code: 'unauthorized' }, { status: 401 }),
+    });
+    expect((await GET(request('?page=abc'))).status).toBe(401);
+    expect((await GET(request())).status).toBe(401);
   });
 
   it('returns the authorization failure untouched', async () => {

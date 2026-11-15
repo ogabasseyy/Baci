@@ -25,7 +25,12 @@ export function JustLaunchedSkeleton({
   title,
 }: JustLaunchedSkeletonProps) {
   return (
-    <View style={styles.container}>
+    // Same opaque surface as the loaded carousel, so the heading stays
+    // readable on a dark backdrop and loading does not shift the layout.
+    <View
+      style={[styles.container, { backgroundColor: colors.background }]}
+      testID="just-launched-skeleton-surface"
+    >
       <Text
         accessibilityRole="header"
         style={[styles.heading, { color: colors.text }]}
@@ -65,7 +70,7 @@ export function JustLaunchedSkeleton({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
+    paddingVertical: 12,
   },
   heading: {
     fontSize: 18,

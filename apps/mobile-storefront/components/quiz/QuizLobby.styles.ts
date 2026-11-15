@@ -105,7 +105,7 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       color: QUIZ_TILE.text,
       fontSize: 22,
       fontWeight: '900',
-      letterSpacing: -0.4,
+      letterSpacing: -0.5,
       lineHeight: 27,
     },
     prizeCondition: {

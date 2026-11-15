@@ -1,10 +1,4 @@
-import {
-  type CryptoKey,
-  createRemoteJWKSet,
-  type JWTVerifyGetKey,
-  jwtVerify,
-  type KeyObject,
-} from 'jose';
+import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from 'jose';
 
 const APP_CHECK_JWKS_URL = 'https://firebaseappcheck.googleapis.com/v1/jwks';
 
@@ -28,7 +22,7 @@ export type QuizAppCheckResult =
 
 type KeyResolver = (
   ...args: Parameters<JWTVerifyGetKey>
-) => Promise<CryptoKey | KeyObject | Uint8Array>;
+) => ReturnType<JWTVerifyGetKey>;
 
 let remoteKeys: JWTVerifyGetKey | undefined;
 

@@ -8,14 +8,11 @@ afterEach(() => {
 
 import { CustomerFormFields } from './OxygenCustomerFormFields';
 
-vi.mock('./OxygenBankFields', () => ({
-  OxygenBankFields: () => (
-    <>
-      <input name="account_name" value="Test Customer" readOnly />
-      <input name="bank_name" value="Test bank" readOnly />
-      <input name="bank_code" value="058" readOnly />
-      <input name="account_number" value="0000000000" readOnly />
-    </>
+vi.mock('@/lib/api-client', () => ({
+  fetchWithCsrf: vi.fn(async (_url: string, options: RequestInit) =>
+    JSON.parse(String(options.body)).action === 'banks'
+      ? Response.json({ banks: [{ code: '058', name: 'Test bank' }] })
+      : Response.json({ accountName: 'Test Customer' })
   ),
 }));
 vi.mock('@/components/address-autocomplete', () => ({
@@ -54,6 +51,8 @@ it('collects the checkout address and proof beside income, without sending them 
           nin: '12345678901',
           date_of_birth: '1990-01-01',
           birth_date_entry: '01/01/1990',
+          bank_code: '058',
+          account_number: '0000000000',
           salary_amount: '500000',
           salary_date: '25',
           name_of_employer: 'Example',
@@ -65,6 +64,7 @@ it('collects the checkout address and proof beside income, without sending them 
       saveBlocked={false}
     />
   );
+  await screen.findByText('Account verified');
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue to income details' })
   );
@@ -118,16 +118,23 @@ it('focuses and highlights the missing payday instead of the error banner', asyn
     <CustomerFormFields
       busy={false}
       phone="08000000001"
+      workflowId="60000000-0000-4000-8000-000000000001"
       submit={vi.fn()}
       initialDraft={{
         step: 2,
-        fields: { salary_amount: '500000', salary_date: '' },
+        fields: {
+          bank_code: '058',
+          account_number: '0000000000',
+          salary_amount: '500000',
+          salary_date: '',
+        },
       }}
       saveDraft={vi.fn()}
       flushDraft={async () => true}
       saveBlocked={false}
     />
   );
+  await screen.findByText('Account verified');
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue to income details' })
   );

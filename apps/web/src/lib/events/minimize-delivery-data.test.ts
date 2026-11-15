@@ -59,18 +59,43 @@ describe('bugfix: shopper data stored regardless of consent', () => {
     });
   });
 
-  it('keeps every field for a consented conversion event', () => {
-    const data = full(true, false);
+  it('keeps every field when both consents are granted on a conversion event', () => {
+    const data = full(true, true);
     expect(
       minimizeDeliveryData(data, 'begin_checkout', 'tenant_verified_client')
     ).toEqual(data);
   });
 
-  it('keeps every field when only marketing consent is granted', () => {
-    const data = full(false, true);
-    expect(
-      minimizeDeliveryData(data, 'search', 'tenant_verified_client')
-    ).toEqual(data);
+  it('drops TikTok and Snapchat ids when only analytics consent is granted', () => {
+    const result = minimizeDeliveryData(
+      full(true, false),
+      'begin_checkout',
+      'tenant_verified_client'
+    );
+    expect(result).toMatchObject({
+      fbp: 'fbp.1',
+      fbc: 'fb.1.click',
+      ip: '203.0.113.1',
+    });
+    expect(result).not.toHaveProperty('ttp');
+    expect(result).not.toHaveProperty('ttclid');
+    expect(result).not.toHaveProperty('sccid');
+  });
+
+  it('drops Facebook cookie ids when only marketing consent is granted', () => {
+    const result = minimizeDeliveryData(
+      full(false, true),
+      'search',
+      'tenant_verified_client'
+    );
+    expect(result).toMatchObject({
+      ttp: 'ttp.1',
+      ttclid: 'tt.1',
+      sccid: 'snap.1',
+      ip: '203.0.113.1',
+    });
+    expect(result).not.toHaveProperty('fbp');
+    expect(result).not.toHaveProperty('fbc');
   });
 
   it('drops personal fields for client purchase, which has no destination', () => {

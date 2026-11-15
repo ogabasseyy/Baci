@@ -11,6 +11,18 @@
 -- OWNER DECISION: v_personal_data_retention (90 days) is the single place the
 -- period is set.
 
+-- Partial indexes hold only rows that still carry the personal block, so the
+-- scrub finds its work without scanning rows that were already cleaned.
+CREATE INDEX IF NOT EXISTS idx_event_deliveries_personal_data_created
+  ON public.event_deliveries (created_at)
+  WHERE payload #> '{data,delivery_user_data}' IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_domain_event_ledger_personal_data_created
+  ON public.domain_event_ledger (created_at)
+  WHERE envelope #> '{data,delivery_user_data}' IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_domain_event_failures_personal_data_failed
+  ON public.domain_event_failures (first_failed_at)
+  WHERE original_envelope #> '{data,delivery_user_data}' IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION public.cleanup_domain_event_pipeline_v1(
   p_delivered_attempt_retention interval DEFAULT interval '30 days',
   p_queue_archive_retention interval DEFAULT interval '30 days'
@@ -27,6 +39,8 @@ DECLARE
   v_personal_data_retention CONSTANT interval := interval '90 days';
   v_attempts_deleted bigint;
   v_archive_deleted bigint;
+  v_batch bigint;
+  v_deadline timestamptz := clock_timestamp() + interval '20 seconds';
 BEGIN
   IF COALESCE((SELECT auth.role()), '') <> 'service_role' THEN
     RAISE EXCEPTION 'forbidden: cleanup_domain_event_pipeline_v1 requires service_role'
@@ -68,56 +82,84 @@ BEGIN
   WHERE archive.ctid = expired.ctid;
   GET DIAGNOSTICS v_archive_deleted = ROW_COUNT;
 
+  -- Each scrub works in batches of 10,000 until nothing is left or the time
+  -- budget is used, so a busy day cannot leave a backlog behind. Rows are
+  -- locked (SKIP LOCKED) and the status test is repeated in the UPDATE, so a
+  -- delivery replayed at the same moment is never scrubbed while active.
+
   -- Finished deliveries: remove the shopper block from the per-destination copy.
-  WITH expired_deliveries AS (
-    SELECT delivery.id
-    FROM public.event_deliveries AS delivery
-    WHERE delivery.status IN
-        ('delivered', 'skipped', 'shadowed', 'dead_letter', 'delivery_unknown')
-      AND delivery.created_at < now() - v_personal_data_retention
-      AND delivery.payload #> '{data,delivery_user_data}' IS NOT NULL
-    ORDER BY delivery.created_at
-    LIMIT 10000
-  )
-  UPDATE public.event_deliveries AS delivery
-  SET payload = delivery.payload #- '{data,delivery_user_data}'
-  FROM expired_deliveries AS expired
-  WHERE delivery.id = expired.id;
+  LOOP
+    WITH expired_deliveries AS (
+      SELECT delivery.id
+      FROM public.event_deliveries AS delivery
+      WHERE delivery.status IN
+          ('delivered', 'skipped', 'shadowed', 'dead_letter', 'delivery_unknown')
+        AND delivery.created_at < now() - v_personal_data_retention
+        AND delivery.payload #> '{data,delivery_user_data}' IS NOT NULL
+      ORDER BY delivery.created_at
+      LIMIT 10000
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.event_deliveries AS delivery
+    SET payload = delivery.payload #- '{data,delivery_user_data}'
+    FROM expired_deliveries AS expired
+    WHERE delivery.id = expired.id
+      AND delivery.status IN
+        ('delivered', 'skipped', 'shadowed', 'dead_letter', 'delivery_unknown');
+    GET DIAGNOSTICS v_batch = ROW_COUNT;
+    EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
+  END LOOP;
 
   -- Ledger rows with no unfinished delivery work left.
-  WITH expired_ledger AS (
-    SELECT ledger.domain_event_id
-    FROM public.domain_event_ledger AS ledger
-    WHERE ledger.status <> 'queued'
-      AND ledger.created_at < now() - v_personal_data_retention
-      AND ledger.envelope #> '{data,delivery_user_data}' IS NOT NULL
+  LOOP
+    WITH expired_ledger AS (
+      SELECT ledger.domain_event_id
+      FROM public.domain_event_ledger AS ledger
+      WHERE ledger.status <> 'queued'
+        AND ledger.created_at < now() - v_personal_data_retention
+        AND ledger.envelope #> '{data,delivery_user_data}' IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.event_deliveries AS open_delivery
+          WHERE open_delivery.domain_event_id = ledger.domain_event_id
+            AND open_delivery.status IN ('pending', 'claimed', 'retry')
+        )
+      ORDER BY ledger.created_at
+      LIMIT 10000
+      FOR UPDATE OF ledger SKIP LOCKED
+    )
+    UPDATE public.domain_event_ledger AS ledger
+    SET envelope = ledger.envelope #- '{data,delivery_user_data}'
+    FROM expired_ledger AS expired
+    WHERE ledger.domain_event_id = expired.domain_event_id
       AND NOT EXISTS (
         SELECT 1
         FROM public.event_deliveries AS open_delivery
         WHERE open_delivery.domain_event_id = ledger.domain_event_id
           AND open_delivery.status IN ('pending', 'claimed', 'retry')
-      )
-    ORDER BY ledger.created_at
-    LIMIT 10000
-  )
-  UPDATE public.domain_event_ledger AS ledger
-  SET envelope = ledger.envelope #- '{data,delivery_user_data}'
-  FROM expired_ledger AS expired
-  WHERE ledger.domain_event_id = expired.domain_event_id;
+      );
+    GET DIAGNOSTICS v_batch = ROW_COUNT;
+    EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
+  END LOOP;
 
   -- Dead-letter evidence rows.
-  WITH expired_failures AS (
-    SELECT failure.id
-    FROM public.domain_event_failures AS failure
-    WHERE failure.first_failed_at < now() - v_personal_data_retention
-      AND failure.original_envelope #> '{data,delivery_user_data}' IS NOT NULL
-    ORDER BY failure.first_failed_at
-    LIMIT 10000
-  )
-  UPDATE public.domain_event_failures AS failure
-  SET original_envelope = failure.original_envelope #- '{data,delivery_user_data}'
-  FROM expired_failures AS expired
-  WHERE failure.id = expired.id;
+  LOOP
+    WITH expired_failures AS (
+      SELECT failure.id
+      FROM public.domain_event_failures AS failure
+      WHERE failure.first_failed_at < now() - v_personal_data_retention
+        AND failure.original_envelope #> '{data,delivery_user_data}' IS NOT NULL
+      ORDER BY failure.first_failed_at
+      LIMIT 10000
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.domain_event_failures AS failure
+    SET original_envelope = failure.original_envelope #- '{data,delivery_user_data}'
+    FROM expired_failures AS expired
+    WHERE failure.id = expired.id;
+    GET DIAGNOSTICS v_batch = ROW_COUNT;
+    EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
+  END LOOP;
 
   RETURN QUERY SELECT v_attempts_deleted, v_archive_deleted;
 END;

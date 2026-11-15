@@ -87,6 +87,16 @@ BEGIN
        #> '{data,delivery_user_data}' IS NULL THEN
     RAISE EXCEPTION 'recent failure row lost its personal data early';
   END IF;
+
+  -- Partial indexes keep the daily scrub from rescanning cleaned rows.
+  IF (SELECT count(*) FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname IN (
+          'idx_event_deliveries_personal_data_created',
+          'idx_domain_event_ledger_personal_data_created',
+          'idx_domain_event_failures_personal_data_failed')) <> 3 THEN
+    RAISE EXCEPTION 'personal-data partial indexes missing';
+  END IF;
 END;
 $$ LANGUAGE plpgsql;
 

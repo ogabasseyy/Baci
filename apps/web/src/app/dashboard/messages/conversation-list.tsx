@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { MerchantInboxConversation } from '@/schemas/merchant-inbox';
-import { formatInboxTime, previewPrefix } from './inbox-format';
+import { formatInboxTime, inboxPreview } from './inbox-format';
 
 type ConversationListProps = {
   conversations: MerchantInboxConversation[];
@@ -51,7 +51,7 @@ export function ConversationList({
               </span>
               <span className="flex items-center justify-between gap-3">
                 <span className="truncate text-sm text-muted-foreground">
-                  {last ? `${previewPrefix(last.sender)}${last.text}` : '—'}
+                  {last ? inboxPreview(last) : '—'}
                 </span>
                 {conversation.unreadCount > 0 && (
                   <Badge

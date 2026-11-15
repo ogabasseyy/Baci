@@ -74,6 +74,8 @@ describe('useMerchantInbox', () => {
   it.each([
     ['inbox_unavailable', 'not_set_up'],
     ['forbidden', 'forbidden'],
+    ['unauthorized', 'signed_out'],
+    ['not_found', 'not_set_up'],
     ['temporarily_unavailable', 'unavailable'],
   ])('shows %s as %s on first load', async (code, state) => {
     api.fetchMerchantInboxConversations.mockResolvedValue({ ok: false, code });
@@ -189,5 +191,121 @@ describe('useMerchantInbox', () => {
       await result.current.sendReply('   ');
     });
     expect(api.sendMerchantInboxReply).not.toHaveBeenCalled();
+  });
+
+  it('sends once when submit fires twice before the first render', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    api.sendMerchantInboxReply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        })
+    );
+    const { result } = renderHook(() => useMerchantInbox());
+    await waitFor(() => expect(result.current.listState).toBe('ready'));
+    act(() => result.current.selectConversation(7));
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+
+    let first: Promise<boolean> = Promise.resolve(false);
+    let second: Promise<boolean> = Promise.resolve(true);
+    act(() => {
+      first = result.current.sendReply('In stock');
+      second = result.current.sendReply('In stock');
+    });
+    await expect(second).resolves.toBe(false);
+    await act(async () => {
+      release({ ok: true, message: message(31, 'store') });
+      await first;
+    });
+    expect(api.sendMerchantInboxReply).toHaveBeenCalledOnce();
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 31]);
+  });
+
+  it('never shows a reply or its error in a conversation opened meanwhile', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    api.sendMerchantInboxReply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        })
+    );
+    api.fetchMerchantInboxThread.mockImplementation((id: number) =>
+      Promise.resolve({ ok: true, messages: [message(id === 7 ? 30 : 80)] })
+    );
+    const { result } = renderHook(() => useMerchantInbox());
+    await waitFor(() => expect(result.current.listState).toBe('ready'));
+    act(() => result.current.selectConversation(7));
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+
+    let pending: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      pending = result.current.sendReply('For conversation seven');
+    });
+    act(() => result.current.selectConversation(8));
+    await waitFor(() =>
+      expect(result.current.messages.map((m) => m.id)).toEqual([80])
+    );
+    await act(async () => {
+      release({ ok: true, message: message(31, 'store') });
+      await pending;
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([80]);
+
+    act(() => {
+      pending = result.current.sendReply('For conversation eight');
+    });
+    act(() => result.current.selectConversation(7));
+    await act(async () => {
+      release({ ok: false, code: 'delivery_unknown' });
+      await pending;
+    });
+    expect(result.current.sendError).toBeNull();
+  });
+
+  it('keeps a just-sent reply when the next poll does not include it yet', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useMerchantInbox());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => result.current.selectConversation(7));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await result.current.sendReply('In stock');
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 31]);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_THREAD_POLL_MS);
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 31]);
+
+    api.fetchMerchantInboxThread.mockResolvedValue({
+      ok: true,
+      messages: [message(30), message(31, 'store'), message(32)],
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_THREAD_POLL_MS);
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 31, 32]);
+  });
+
+  it('refreshes at once when the tab becomes visible again', async () => {
+    const { result } = renderHook(() => useMerchantInbox());
+    await waitFor(() => expect(result.current.listState).toBe('ready'));
+    act(() => result.current.selectConversation(7));
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+    const lists = api.fetchMerchantInboxConversations.mock.calls.length;
+    const threads = api.fetchMerchantInboxThread.mock.calls.length;
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(api.fetchMerchantInboxConversations).toHaveBeenCalledTimes(
+      lists + 1
+    );
+    expect(api.fetchMerchantInboxThread).toHaveBeenCalledTimes(threads + 1);
   });
 });

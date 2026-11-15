@@ -1,4 +1,9 @@
-import type { MerchantInboxSender } from '@/schemas/merchant-inbox';
+import type {
+  MerchantInboxMessage,
+  MerchantInboxSender,
+} from '@/schemas/merchant-inbox';
+
+const PREVIEW_MAX_LENGTH = 120;
 
 const SAME_DAY = new Intl.DateTimeFormat('en-NG', {
   hour: 'numeric',
@@ -33,4 +38,16 @@ export function previewPrefix(sender: MerchantInboxSender): string {
   if (sender === 'store') return 'You: ';
   if (sender === 'assistant') return 'Assistant: ';
   return '';
+}
+
+/** One-line list preview, shortened in content and not only by CSS. */
+export function inboxPreview(
+  message: Pick<MerchantInboxMessage, 'sender' | 'text'>
+): string {
+  const line = message.text.replace(/\s+/g, ' ').trim();
+  const short =
+    line.length > PREVIEW_MAX_LENGTH
+      ? `${line.slice(0, PREVIEW_MAX_LENGTH).trimEnd()}…`
+      : line;
+  return `${previewPrefix(message.sender)}${short}`;
 }

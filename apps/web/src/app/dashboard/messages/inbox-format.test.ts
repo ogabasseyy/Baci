@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatInboxTime, previewPrefix, senderLabel } from './inbox-format';
+import {
+  formatInboxTime,
+  inboxPreview,
+  previewPrefix,
+  senderLabel,
+} from './inbox-format';
 
 describe('formatInboxTime', () => {
   const now = new Date('2026-11-15T18:00:00');
@@ -26,5 +31,18 @@ describe('sender wording', () => {
     expect(previewPrefix('store')).toBe('You: ');
     expect(previewPrefix('assistant')).toBe('Assistant: ');
     expect(previewPrefix('customer')).toBe('');
+  });
+});
+
+describe('inboxPreview', () => {
+  it('keeps a short message on one line with its prefix', () => {
+    expect(inboxPreview({ sender: 'store', text: 'Yes,\nwe  deliver.' })).toBe(
+      'You: Yes, we deliver.'
+    );
+  });
+
+  it('shortens long text', () => {
+    const preview = inboxPreview({ sender: 'customer', text: 'a'.repeat(500) });
+    expect(preview).toBe(`${'a'.repeat(120)}…`);
   });
 });

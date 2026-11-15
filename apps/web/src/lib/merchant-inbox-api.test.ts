@@ -73,6 +73,28 @@ describe('fetchMerchantInboxConversations', () => {
     });
   });
 
+  it.each([
+    [401, 'unauthorized'],
+    [403, 'forbidden'],
+    [404, 'not_found'],
+    [500, 'temporarily_unavailable'],
+  ])('classifies a %i with no readable code by status', async (status, code) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status,
+        json: async () => {
+          throw new Error('not json');
+        },
+      }))
+    );
+    await expect(fetchMerchantInboxConversations()).resolves.toEqual({
+      ok: false,
+      code,
+    });
+  });
+
   it('treats a malformed success body as unavailable', async () => {
     stubFetch({ body: { conversations: [{ id: 'x' }] } });
     await expect(fetchMerchantInboxConversations()).resolves.toEqual({

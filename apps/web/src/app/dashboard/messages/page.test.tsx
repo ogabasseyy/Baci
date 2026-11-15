@@ -60,6 +60,7 @@ describe('MessagesPage', () => {
     ['loading', 'status', /loading your messages/i],
     ['not_set_up', 'alert', /not set up for this store/i],
     ['forbidden', 'alert', /do not have permission/i],
+    ['signed_out', 'alert', /sign in again/i],
     ['unavailable', 'alert', /temporarily unavailable/i],
   ])('explains the %s state', (listState, role, text) => {
     inbox.value = state({ listState, conversations: [] });
@@ -191,5 +192,41 @@ describe('MessagesPage', () => {
       'hello'
     );
     expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  });
+
+  it('does not carry a draft into another conversation', async () => {
+    const open = (selectedId: number, index: number) =>
+      state({
+        selectedId,
+        selectedConversation: conversations[index],
+        threadState: 'ready',
+      });
+    inbox.value = open(7, 0);
+    const { rerender } = render(<MessagesPage />);
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Reply to customer' }),
+      'Meant for Ada'
+    );
+
+    inbox.value = open(8, 1);
+    rerender(<MessagesPage />);
+    expect(
+      screen.getByRole('textbox', { name: 'Reply to customer' })
+    ).toHaveValue('');
+  });
+
+  it('shortens a long preview in the content itself', () => {
+    inbox.value = state({
+      conversations: [
+        {
+          ...conversations[0],
+          lastMessage: message(30, 'customer', `${'long '.repeat(400)}end`),
+        },
+      ],
+    });
+    render(<MessagesPage />);
+    const button = screen.getByRole('button', { name: /Ada Synthetic/ });
+    expect(button.textContent?.length).toBeLessThan(220);
+    expect(button).toHaveTextContent('…');
   });
 });

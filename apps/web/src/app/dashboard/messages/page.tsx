@@ -12,6 +12,7 @@ import { ReplyBox } from './reply-box';
 const STATE_MESSAGES = {
   loading: 'Loading your messages…',
   not_set_up: 'Messages are not set up for this store yet.',
+  signed_out: 'Your session has ended. Sign in again to see your messages.',
   forbidden: 'You do not have permission to view customer messages.',
   unavailable:
     'Messages are temporarily unavailable. This page will retry automatically.',
@@ -84,7 +85,9 @@ export default function MessagesPage() {
                     state={inbox.threadState}
                   />
                 </div>
+                {/* Keyed so a draft never carries into another conversation. */}
                 <ReplyBox
+                  key={inbox.selectedId}
                   error={inbox.sendError}
                   sending={inbox.sending}
                   onSend={inbox.sendReply}

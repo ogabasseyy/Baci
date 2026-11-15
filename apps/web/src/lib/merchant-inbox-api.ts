@@ -40,13 +40,15 @@ async function failureFrom(
   } catch {
     code = null;
   }
-  return {
-    ok: false,
-    code:
-      typeof code === 'string' && KNOWN_CODES.has(code)
-        ? (code as MerchantInboxApiErrorCode)
-        : 'temporarily_unavailable',
-  };
+  if (typeof code === 'string' && KNOWN_CODES.has(code)) {
+    return { ok: false, code: code as MerchantInboxApiErrorCode };
+  }
+  // No readable code (empty or HTML body): classify by status so a request
+  // that can never succeed is not reported as a retryable outage.
+  if (response.status === 401) return { ok: false, code: 'unauthorized' };
+  if (response.status === 403) return { ok: false, code: 'forbidden' };
+  if (response.status === 404) return { ok: false, code: 'not_found' };
+  return { ok: false, code: 'temporarily_unavailable' };
 }
 
 async function request<Schema extends z.ZodType>(

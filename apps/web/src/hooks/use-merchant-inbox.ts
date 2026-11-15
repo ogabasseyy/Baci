@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { compareMerchantInboxMessages } from '@/lib/chatwoot/merchant-inbox-projection';
 import {
   fetchMerchantInboxConversations,
   fetchMerchantInboxThread,
@@ -19,14 +20,18 @@ export type MerchantInboxListState =
   | 'loading'
   | 'ready'
   | 'not_set_up'
+  | 'signed_out'
   | 'forbidden'
   | 'unavailable';
 
 export type MerchantInboxThreadState = 'idle' | 'loading' | 'ready' | 'error';
 
 function listStateFor(code: MerchantInboxApiErrorCode): MerchantInboxListState {
-  if (code === 'inbox_unavailable') return 'not_set_up';
-  if (code === 'forbidden' || code === 'unauthorized') return 'forbidden';
+  if (code === 'inbox_unavailable' || code === 'not_found') {
+    return 'not_set_up';
+  }
+  if (code === 'unauthorized') return 'signed_out';
+  if (code === 'forbidden') return 'forbidden';
   return 'unavailable';
 }
 
@@ -36,7 +41,47 @@ function mergeMessage(
 ): MerchantInboxMessage[] {
   return messages.some((existing) => existing.id === message.id)
     ? messages
-    : [...messages, message].sort((left, right) => left.id - right.id);
+    : [...messages, message].sort(compareMerchantInboxMessages);
+}
+
+/**
+ * Applies a polled page without dropping a reply this tab just sent: a store
+ * message newer than everything the server returned is kept until a later
+ * poll includes it.
+ */
+function mergePolledMessages(
+  current: MerchantInboxMessage[],
+  polled: MerchantInboxMessage[]
+): MerchantInboxMessage[] {
+  const polledIds = new Set(polled.map((message) => message.id));
+  const newestPolledId = polled.reduce(
+    (newest, message) => Math.max(newest, message.id),
+    0
+  );
+  const unconfirmed = current.filter(
+    (message) =>
+      message.sender === 'store' &&
+      message.id > newestPolledId &&
+      !polledIds.has(message.id)
+  );
+  return unconfirmed.length === 0
+    ? polled
+    : [...polled, ...unconfirmed].sort(compareMerchantInboxMessages);
+}
+
+/** Polls while visible and refreshes at once when the tab is shown again. */
+function startVisiblePolling(load: () => void, intervalMs: number): () => void {
+  const timer = window.setInterval(() => {
+    if (!document.hidden) load();
+  }, intervalMs);
+  const onVisibilityChange = () => {
+    if (!document.hidden) load();
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  return () => {
+    window.clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  };
 }
 
 /**
@@ -57,6 +102,14 @@ export function useMerchantInbox() {
   const [sendError, setSendError] = useState<MerchantInboxApiErrorCode | null>(
     null
   );
+  // Synchronous guards: state read inside an async handler can be stale.
+  const sendInFlight = useRef(false);
+  const selectedIdRef = useRef<number | null>(null);
+
+  function selectConversation(conversationId: number | null) {
+    selectedIdRef.current = conversationId;
+    setSelectedId(conversationId);
+  }
 
   useEffect(() => {
     let active = true;
@@ -74,12 +127,10 @@ export function useMerchantInbox() {
       );
     }
     void load();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void load();
-    }, INBOX_LIST_POLL_MS);
+    const stop = startVisiblePolling(() => void load(), INBOX_LIST_POLL_MS);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      stop();
     };
   }, []);
 
@@ -98,36 +149,43 @@ export function useMerchantInbox() {
       const result = await fetchMerchantInboxThread(conversationId);
       if (!active) return;
       if (result.ok) {
-        setMessages(result.messages);
+        setMessages((current) => mergePolledMessages(current, result.messages));
         setThreadState('ready');
         return;
       }
       setThreadState((current) => (current === 'ready' ? current : 'error'));
     }
     void load();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void load();
-    }, INBOX_THREAD_POLL_MS);
+    const stop = startVisiblePolling(() => void load(), INBOX_THREAD_POLL_MS);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      stop();
     };
   }, [selectedId]);
 
   /** Resolves true when the reply was accepted, so the composer can clear. */
   async function sendReply(content: string): Promise<boolean> {
-    const conversationId = selectedId;
+    const conversationId = selectedIdRef.current;
     const trimmed = content.trim();
-    if (conversationId === null || !trimmed || sending) return false;
+    if (conversationId === null || !trimmed || sendInFlight.current) {
+      return false;
+    }
+    sendInFlight.current = true;
     setSending(true);
     setSendError(null);
     const result = await sendMerchantInboxReply(conversationId, trimmed);
+    sendInFlight.current = false;
     setSending(false);
+    // The merchant may have opened another conversation while this was in
+    // flight: never show this reply, or its error, in a different thread.
+    const stillOpen = selectedIdRef.current === conversationId;
     if (!result.ok) {
-      setSendError(result.code);
+      if (stillOpen) setSendError(result.code);
       return false;
     }
-    setMessages((current) => mergeMessage(current, result.message));
+    if (stillOpen) {
+      setMessages((current) => mergeMessage(current, result.message));
+    }
     return true;
   }
 
@@ -135,7 +193,7 @@ export function useMerchantInbox() {
     conversations,
     listState,
     messages,
-    selectConversation: setSelectedId,
+    selectConversation,
     selectedConversation:
       conversations.find((conversation) => conversation.id === selectedId) ??
       null,

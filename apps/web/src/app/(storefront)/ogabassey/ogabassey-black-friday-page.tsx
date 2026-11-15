@@ -107,7 +107,8 @@ export async function BlackFridayOffers({
   filters,
   lineup = getBlackFridayProducts(),
 }: BlackFridayPageProps & { lineup?: Lineup }) {
-  const products = await lineup;
+  const loadedProducts = await lineup.catch(() => null);
+  const products = loadedProducts ?? [];
   const { products: matchingProducts, ...selection } = getBlackFridayLineupView(
     products,
     (await filters) ?? {}
@@ -168,7 +169,11 @@ export async function BlackFridayOffers({
     </>
   ) : (
     <div className={styles.emptyOffers}>
-      <p>Our Black Friday lineup will appear here when it’s ready.</p>
+      <p>
+        {loadedProducts === null
+          ? 'Black Friday offers couldn’t load. Please try again later.'
+          : 'Our Black Friday lineup will appear here when it’s ready.'}
+      </p>
       <Link
         className="mt-3 inline-block font-semibold underline"
         href={asRoute(`${pathPrefix}/products`)}

@@ -90,7 +90,9 @@ const FilterSection: React.FC<FilterSectionProps> = ({
                     <span
                       className={`text-sm ${isSelected ? 'text-gray-900 font-medium' : 'text-gray-600'}`}
                     >
-                      {option}
+                      {title === 'Condition' && option === 'refurbished'
+                        ? 'Refurbished'
+                        : option}
                     </span>
                   </label>
                 );

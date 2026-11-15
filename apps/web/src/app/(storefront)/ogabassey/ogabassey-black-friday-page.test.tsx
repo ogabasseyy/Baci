@@ -257,6 +257,15 @@ describe('Black Friday storefront page', () => {
     ).toEqual(['MacBook']);
   });
 
+  it('offers a catalog fallback when fetching the campaign lineup fails', async () => {
+    getBlackFridayProducts.mockRejectedValue(new Error('catalog unavailable'));
+    render(await BlackFridayOffers({ pathPrefix: '/ogabassey' }));
+    expect(screen.getByText(/offers couldn’t load/i)).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Browse all products' })
+    ).toHaveAttribute('href', '/ogabassey/products');
+  });
+
   it('shows the browse link for an empty lineup', async () => {
     getBlackFridayProducts.mockReturnValue(Promise.resolve([]));
     render(await BlackFridayOffers({ pathPrefix: '' }));

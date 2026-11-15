@@ -240,6 +240,7 @@ export function HomeProductGrid({
                 <div className="col-span-2 lg:col-span-4 flex items-center justify-center my-2 md:my-4">
                   <DeferredAdUnit
                     placementKey="PRODUCT_GRID_MPU"
+                    slotInstance={`home-${index + 1}`}
                     timeoutMs={1}
                   />
                 </div>

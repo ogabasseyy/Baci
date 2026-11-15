@@ -21,10 +21,10 @@ import { useCartCheckoutSnapshot } from '@/hooks/use-cart-checkout-snapshot';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
-import { CartCheckoutReviewNotice } from './CartCheckoutReviewNotice';
 import { CheckoutOverlays } from './CheckoutOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
-import { CheckoutSimulationBanner } from './CheckoutSimulationBanner';
+import { CheckoutTopNotices } from './CheckoutTopNotices';
+import { isPrizeOnlyCheckout } from './checkout-prize-display';
 import type { CheckoutScreenViewProps } from './checkout-prize-simulation.types';
 import type { AppliedDiscount } from './DiscountCodeInput';
 import { isCheckoutContinueReady } from './is-checkout-address-continue-ready';
@@ -209,13 +209,10 @@ export function CheckoutScreenView({
         <AppKeyboardContainer
           style={[styles.contentShell, { backgroundColor: 'transparent' }]}
         >
-          {prizeSimulation ? (
-            <CheckoutSimulationBanner colors={colors} />
-          ) : null}
-          <CartCheckoutReviewNotice
-            status={cartReview.status}
-            review={cartReview.review}
-            onRetry={cartReview.retry}
+          <CheckoutTopNotices
+            cartReview={cartReview}
+            items={items}
+            simulation={Boolean(prizeSimulation)}
             textColor={colors.text}
           />
           <CheckoutStepper
@@ -276,6 +273,7 @@ export function CheckoutScreenView({
             onContinue={handleContinue}
             onPlaceOrder={handlePlaceOrder}
             selectedPayment={selectedPayment}
+            prizeCheckout={!prizeSimulation && isPrizeOnlyCheckout(items)}
             prizeSimulation={Boolean(prizeSimulation)}
             step={step}
             total={discountedCheckoutTotal(total, compatibleDiscount)}

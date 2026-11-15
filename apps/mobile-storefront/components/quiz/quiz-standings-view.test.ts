@@ -134,6 +134,13 @@ describe('buildQuizStandingsView', () => {
     ]);
   });
 
+  it('bugfix: a tie that leaves fewer than ten players in the top ten hid the gap', () => {
+    const me = entry(12, { isCurrentCustomer: true, score: 80 });
+    const ranks = [1, 2, 3, 4, 5, 6, 7, 8, 8, 11, 12];
+    const view = buildQuizStandingsView(board(ranks, me));
+    expect(view.pointsBehindTopTen).toBe(12);
+  });
+
   it('never reports a negative gap to the top ten', () => {
     const me = entry(11, { isCurrentCustomer: true, score: 95 });
     const ranks = Array.from({ length: 12 }, (_, index) => index + 1);

@@ -72,12 +72,20 @@ export function buildQuizStandingsView(
     ...neighbours,
     { ...currentPlayer, isCurrentCustomer: true },
   ].sort((a, b) => a.rank - b.rank);
-  // The tenth player on the board, not "rank 10": ties can skip that rank
-  // (two players at 9, then 11) and the gap must still be reported.
-  const tenth = entries[TOP_TEN_RANK - 1];
+  // The lowest-placed player still inside the top ten, not "rank 10": ties
+  // can skip that rank (8, 8, 11 or 9, 9, 11) and the gap must still be
+  // reported. Only a board that lists past the top ten can tell.
+  const lastInTopTen = entries
+    .filter((entry) => entry.rank <= TOP_TEN_RANK)
+    .at(-1);
+  const boardCoversTopTen = entries.some(
+    (entry) => entry.rank > TOP_TEN_RANK && !isSameEntry(entry, currentPlayer)
+  );
   const pointsBehindTopTen =
-    tenth && tenth.rank <= TOP_TEN_RANK && currentPlayer.rank > TOP_TEN_RANK
-      ? Math.max(0, tenth.score - currentPlayer.score)
+    lastInTopTen &&
+    (boardCoversTopTen || entries.length >= TOP_TEN_RANK) &&
+    currentPlayer.rank > TOP_TEN_RANK
+      ? Math.max(0, lastInTopTen.score - currentPlayer.score)
       : null;
   return { podium, rows, pointsBehindTopTen };
 }

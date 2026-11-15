@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import {
   ActivityQueryWrapper,
@@ -87,12 +93,14 @@ describe('bugfix: "Show more" re-read page 1 without the cursor', () => {
       finishPageTwo(secondPage);
     });
 
-    expect(await screen.findByText('Page two row')).toBeOnTheScreen();
-    expect(screen.getByText('Page one row')).toBeOnTheScreen();
-    // Only then the deferred refresh re-reads both pages, each with its own
-    // cursor; page 2 is never asked for without one.
-    expect(cursors().slice(0, 2)).toEqual([null, 'cursor-page-2']);
-    expect(pageTwoCalls).toBeGreaterThanOrEqual(1);
+    // Only then the deferred refresh runs. It reloads page 1 alone (page 2
+    // is dropped first), so page 2 is never re-read, with or without a cursor.
+    await waitFor(() =>
+      expect(cursors()).toEqual([null, 'cursor-page-2', null])
+    );
+    expect(await screen.findByText('Page one row')).toBeOnTheScreen();
+    expect(screen.queryByText('Page two row')).toBeNull();
+    expect(pageTwoCalls).toBe(1);
   });
 
   it('keeps the rows and offers Try again when "Show more" fails', async () => {
@@ -108,7 +116,7 @@ describe('bugfix: "Show more" re-read page 1 without the cursor', () => {
 
     fireEvent.press(await screen.findByRole('button', { name: 'Show more' }));
 
-    // One automatic retry (about a second) runs before the message shows.
+    // "Show more" gets one short attempt and no retry.
     expect(
       await screen.findByText(
         'We couldn’t load more activity.',

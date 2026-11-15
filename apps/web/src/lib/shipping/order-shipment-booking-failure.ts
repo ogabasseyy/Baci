@@ -169,6 +169,14 @@ export function toBookingFailureResponseError(
 ): unknown {
   const { outcome } = classifyBookingFailure(error);
   if (outcome === 'not_submitted') {
+    if (options.walletFunded) {
+      // The charge was refunded, so the old quote cannot be reused.
+      return new OrderShipmentBookingError(
+        'We could not reach GIG just now. Nothing was booked and your wallet charge was refunded. Please get a new shipping quote and book again.',
+        503,
+        'PROVIDER_UNREACHABLE'
+      );
+    }
     return new OrderShipmentBookingError(
       'We could not reach GIG just now. Nothing was booked; please try again.',
       503,

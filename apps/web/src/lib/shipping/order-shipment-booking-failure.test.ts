@@ -215,3 +215,16 @@ describe('bugfix: typed timeout and booked-but-not-saved', () => {
     expect(classifyBookingFailure(error).outcome).toBe('booked_not_saved');
   });
 });
+
+describe('bugfix: wallet-funded unreachable booking asks for a new quote', () => {
+  it('tells the merchant the charge was refunded and a new quote is needed', () => {
+    const error = Object.assign(new Error('connect ECONNREFUSED'), {
+      code: 'ECONNREFUSED',
+    });
+    const mapped = toBookingFailureResponseError(error, {
+      walletFunded: true,
+    }) as { message: string; code?: string };
+    expect(mapped.code).toBe('PROVIDER_UNREACHABLE');
+    expect(mapped.message).toMatch(/new shipping quote/);
+  });
+});

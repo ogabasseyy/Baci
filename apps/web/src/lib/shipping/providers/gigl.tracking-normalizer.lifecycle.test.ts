@@ -180,3 +180,39 @@ describe('bugfix: equal-timestamp delivery scan outranks MSHC', () => {
     expect(result.actualDelivery).toBeInstanceOf(Date);
   });
 });
+
+describe('bugfix: equal-timestamp MPIK vs demoted MSHC, and repeated origin scans', () => {
+  it.each([
+    ['MPIK first', ['MPIK', 'MSHC']],
+    ['MSHC first', ['MSHC', 'MPIK']],
+  ])('keeps picked_up when MPIK and a demoted MSHC share a timestamp (%s)', (_l, codes) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W21',
+        MobileShipmentTrackings: codes.map((c) => event(c, '10:00:00')),
+      },
+      'W21',
+      OBSERVED_AT
+    );
+    expect(result.status).not.toBe('pickup_scheduled');
+  });
+
+  it('does not treat a repeated origin scan as arrival for a same-city shipment', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W22',
+        Origin: 'ABUJA',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('MSVC', '10:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+          event('MSVC', '11:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+        ],
+      },
+      'W22',
+      OBSERVED_AT
+    );
+    expect(
+      result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
+    ).toBe(false);
+  });
+});

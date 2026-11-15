@@ -92,9 +92,12 @@ function isMshc(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
 }
 
-/** Equal-timestamp precedence for the current status: delivered > MSHC > rest. */
+/** Equal-timestamp precedence for the current status: delivered > MSHC (still out for delivery) > rest. */
 function currentStatusRank(candidate: Guardable): number {
-  return candidate.recognizedStatus === 'delivered' ? 2 : isMshc(candidate);
+  if (candidate.recognizedStatus === 'delivered') return 3;
+  // A demoted (pickup-run) MSHC must not outrank a completed pickup.
+  if (candidate.recognizedStatus === 'pickup_scheduled') return 0;
+  return isMshc(candidate) ? 2 : 1;
 }
 
 /**
@@ -123,6 +126,9 @@ function applyLifecycleGuards(
   );
   let arrived = false;
   let movedThroughNetwork = false;
+  // Same-city shipments: only a scan away from the destination name proves
+  // the parcel left the origin centre (repeat origin scans prove nothing).
+  let leftDestinationCentre = false;
   for (const candidate of ordered) {
     const { event } = candidate;
     const raw = candidate.providerStatus.trim().toUpperCase();
@@ -131,7 +137,7 @@ function applyLifecycleGuards(
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
         !/DEPART/i.test(event.description) &&
-        (!sameCity || movedThroughNetwork) &&
+        (!sameCity || leftDestinationCentre) &&
         matchesDestination(event.location, destination));
     if (isArrival) {
       arrived = true;
@@ -147,6 +153,9 @@ function applyLifecycleGuards(
       candidate.recognizedStatus === 'failed'
     ) {
       movedThroughNetwork = true;
+      if (!matchesDestination(event.location, destination)) {
+        leftDestinationCentre = true;
+      }
     }
   }
 }

@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ImeiResult } from '@/lib/validation';
-import { ImeiTicketNotch } from './imei-care-look';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { reportStyles as styles } from './imei-check-report.styles';
 import { getImeiResultStatusCards } from './imei-check-result-status-cards';
@@ -72,7 +71,6 @@ export function ImeiCheckResultView({
           { backgroundColor: colors.card, borderColor: colors.border },
         ]}
       >
-        <ImeiTicketNotch colors={colors} />
         <DeviceImage result={result} colors={colors} />
         <View style={styles.deviceInfo}>
           <Text style={[styles.tierName, { color: colors.textSecondary }]}>

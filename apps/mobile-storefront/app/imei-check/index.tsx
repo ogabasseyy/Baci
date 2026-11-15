@@ -265,19 +265,13 @@ export default function ImeiCheckerScreen() {
         />
       ) : (
         <AppKeyboardContainer style={{ flex: 1 }}>
-          <View
-            style={{
-              paddingHorizontal: SPACING.md,
-              paddingTop: SPACING.sm,
-            }}
-          >
-            <HeroCard colors={colors} />
+          <HeroCard colors={colors}>
             <ImeiDeviceTabs
               colors={colors}
               selected={selectedDevice}
               onSelect={handleDeviceTab}
             />
-          </View>
+          </HeroCard>
           {pendingLookup.pending ? (
             <ImeiCheckPending colors={colors} paused={pendingLookup.paused} />
           ) : null}

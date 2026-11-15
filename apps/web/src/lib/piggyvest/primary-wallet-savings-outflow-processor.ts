@@ -48,6 +48,8 @@ export async function reconcileSavingsOutflowReferences(
   envelope?: unknown
 ): Promise<'confirmed' | 'cancelled' | 'unmatched'> {
   const references = withEnvelopeReference(eventReferences, envelope);
+  // Nothing to attribute (no reference in the event or its envelope).
+  if (references.length === 0) return 'unmatched';
   const savings =
     deps.savingsRuntime === undefined
       ? readSavingsRuntimeForOutflow()

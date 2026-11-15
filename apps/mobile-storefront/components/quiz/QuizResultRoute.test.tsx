@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { fetchQuizEvents } from '@/services/quiz';
 import { QuizResultRoute } from './QuizResultRoute';
 import { createQuizStyles } from './QuizScreen.styles';
 
@@ -117,6 +118,38 @@ describe('QuizResultRoute', () => {
     expect(dismissRecovery).toHaveBeenCalledWith('event-1');
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(onRetryRecovery).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches the fresh count even when the cached event list is empty', async () => {
+    jest.mocked(fetchQuizEvents).mockClear();
+    render(
+      <QuizResultRoute
+        backHandlerRef={{ current: null }}
+        dismissRecovery={jest.fn()}
+        events={[]}
+        expectedUserId="user-1"
+        lifecycle="pending_results"
+        onReset={jest.fn()}
+        onRetryRecovery={jest.fn()}
+        result={null}
+        styles={styles}
+        terminalContext={{
+          attemptId: 'attempt-1',
+          eventEndsAt: '2026-08-16T12:05:00.000Z',
+          eventId: 'event-1',
+          serverNow: '2026-08-16T12:04:00.000Z',
+          contractVersion: 2,
+        }}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'pending',
+          availableAt: null,
+        }}
+      />
+    );
+    await act(async () => {});
+    expect(fetchQuizEvents).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('tries:1')).toBeTruthy();
   });
 
   it('removes play again when the universal event deadline advances past the player', () => {

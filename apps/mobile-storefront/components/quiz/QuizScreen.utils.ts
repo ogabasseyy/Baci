@@ -109,6 +109,37 @@ export function formatQuizClock(
   });
 }
 
+/**
+ * Clock time for a quiz window edge, with the day added when that edge is not
+ * today: a bare "Closed 12:34 AM" cannot tell a shopper which day it was.
+ */
+export function formatQuizClockWithDay(
+  value: string | null,
+  locale?: string,
+  timeZone?: string,
+  nowMs: number = Date.now()
+): string {
+  const clock = formatQuizClock(value, locale, timeZone);
+  if (!value || Number.isNaN(Date.parse(value))) return clock;
+  const resolvedLocale = locale || getFallbackLocale();
+  const dayKey = (date: Date) => getGregorianDateKey(date, timeZone);
+  const date = new Date(value);
+  if (dayKey(date) === dayKey(new Date(nowMs))) return clock;
+  const yearOf = (target: Date) =>
+    getGregorianDateKey(target, timeZone).slice(0, 4);
+  const day = date.toLocaleDateString(resolvedLocale, {
+    // Same calendar as the day comparison above: a locale whose default
+    // calendar is not Gregorian must not show a different day or year.
+    calendar: 'gregory',
+    day: 'numeric',
+    month: 'short',
+    timeZone,
+    // A quiz from another year would be ambiguous without it.
+    ...(yearOf(date) === yearOf(new Date(nowMs)) ? {} : { year: 'numeric' }),
+  });
+  return `${day}, ${clock}`;
+}
+
 export function getPrizeMomentLabel(
   event: QuizEvent,
   serverNow = new Date().toISOString(),

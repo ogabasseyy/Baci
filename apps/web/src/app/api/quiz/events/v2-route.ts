@@ -37,7 +37,9 @@ function wantsAttemptsUsed(request: NextRequest): boolean {
 
 // Installed apps validate events with a strict schema, so the opt-in field is
 // removed unless the client asked for it.
-function omitAttemptsUsed<T extends { events: object[] }>(payload: T): T {
+function omitAttemptsUsed<T extends { events: object[] }>(
+  payload: T
+): Omit<T, 'events'> & { events: object[] } {
   return {
     ...payload,
     events: payload.events.map((event) => {

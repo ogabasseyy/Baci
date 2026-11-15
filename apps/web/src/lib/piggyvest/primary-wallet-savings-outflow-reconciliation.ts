@@ -2,6 +2,7 @@ import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { runGoalCancelForfeitOutflowReconciliation } from './goal-cancel-forfeit-reconciliation';
 import { runGoalCancelOutflowReconciliation } from './goal-cancel-reconciliation';
 import { runGoalCompleteOutflowReconciliation } from './goal-complete-reconciliation';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
@@ -19,6 +20,12 @@ const GOAL_TRANSFER_KINDS = [
     name: 'complete',
     prefix: 'pvb-complete-',
     reconcile: runGoalCompleteOutflowReconciliation,
+  },
+  {
+    // The interest leg of an early cancel (Ogabassey's interest wallet).
+    name: 'cancel interest forfeit',
+    prefix: 'pvb-forfeit-',
+    reconcile: runGoalCancelForfeitOutflowReconciliation,
   },
 ] as const;
 

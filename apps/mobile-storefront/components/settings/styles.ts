@@ -104,6 +104,8 @@ export const styles = StyleSheet.create({
     letterSpacing: 2,
     fontWeight: '700',
     opacity: 0.4,
+    // Breathing room so the version line does not sit on the last card.
+    marginTop: SPACING.lg,
     paddingBottom: SPACING.sm,
   },
 });

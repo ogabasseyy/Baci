@@ -1,3 +1,4 @@
+import { readConflictAnswer } from './goal-cancel-conflict-answer';
 import 'server-only';
 import { piggyvestGoalCancelSchemas as schemas } from '@/schemas/piggyvest-goal-cancel';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
@@ -35,7 +36,10 @@ export class GoalBalanceMismatchError extends Error {
 /** The four evidence statements a goal cancel or goal complete settles with. */
 export type GoalEvidenceStatements = Readonly<
   Record<'readDispatched' | 'findByReference' | 'settle' | 'release', string>
->;
+> & {
+  // Optional: records an emitted page so the forfeit sweep does not repeat it.
+  readonly ack?: string;
+};
 
 type Execute = (
   statement: string,
@@ -81,13 +85,27 @@ export function createGoalCancelEvidenceStore(input: {
   // (for example a late success while a newer attempt is live). The money may
   // have moved, so a person is paged and the status path is told.
   let conflicted = false;
-  function flagConflict(reason: string, proof: object) {
+  async function flagConflict(
+    reason: string,
+    proof: object,
+    // Other rows this one page covers (a forfeit replacement that went to
+    // review as its own row, or replacements a late success froze).
+    reviewedIds: readonly string[] = []
+  ) {
     conflicted = true;
     const { operationId } = proof as { operationId?: unknown };
     emitPiggyvestWebhookAlert(alertCode, {
       reason,
       ...(typeof operationId === 'string' ? { operationId } : {}),
     });
+    // Acknowledged only after the page; a failure just means it repeats.
+    const acknowledged = [
+      ...(typeof operationId === 'string' ? [operationId] : []),
+      ...reviewedIds,
+    ];
+    if (statements.ack)
+      for (const id of acknowledged)
+        await run(statements.ack, id).catch(() => undefined);
   }
   // Reads the goal wallet balance left after a verified transfer. A transient
   // failure (network, provider jitter) is NOT a settlement conflict: it is
@@ -106,7 +124,7 @@ export function createGoalCancelEvidenceStore(input: {
       return Number.isSafeInteger(residual) && residual > 0 ? residual : 0;
     } catch (error) {
       if (error instanceof GoalBalanceMismatchError)
-        flagConflict('settle_balance_mismatch', receipt);
+        await flagConflict('settle_balance_mismatch', receipt);
       throw error;
     }
   }
@@ -132,15 +150,18 @@ export function createGoalCancelEvidenceStore(input: {
       if (residual > 0) body = { ...receipt, residualKobo: residual };
     }
     let result: unknown;
+    let reviewedIds: readonly string[] = [];
     try {
       result = await run(statement, JSON.stringify(body));
+      ({ result, reviewedIds } = readConflictAnswer(result));
       if (!allowed.includes(result as T))
         throw new Error('Goal cancel settlement unavailable');
     } catch (error) {
-      flagConflict(`${kind}_failed`, receipt);
+      await flagConflict(`${kind}_failed`, receipt);
       throw error;
     }
-    if (result === 'conflict') flagConflict(`${kind}_conflict`, receipt);
+    if (result === 'conflict')
+      await flagConflict(`${kind}_conflict`, receipt, reviewedIds);
     return result as T;
   }
   return {

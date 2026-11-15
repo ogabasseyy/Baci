@@ -1,7 +1,8 @@
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { BRAND, SPACING } from '@/constants/Colors';
+import { SPACING } from '@/constants/Colors';
 import { dataFormStyles } from './data-form.styles';
+import { UtilityPayButton } from './UtilityPayButton';
 
 interface DataFormFooterProps {
   bottomInset: number;
@@ -36,25 +37,14 @@ export function DataFormFooter({
         },
       ]}
     >
-      <Pressable
-        style={[
-          dataFormStyles.payButton,
-          {
-            backgroundColor: BRAND.primary,
-            opacity: isSubmitting ? 0.7 : 1,
-          },
-        ]}
+      <UtilityPayButton
+        amount={planAmount}
+        buttonStyle={dataFormStyles.payButton}
+        isBusy={isSubmitting}
+        label={`Pay ₦${planAmount ? planAmount.toLocaleString() : '0'}`}
         onPress={onPress}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <Text style={dataFormStyles.payButtonText}>
-            {`Pay ₦${planAmount ? planAmount.toLocaleString() : '0'}`}
-          </Text>
-        )}
-      </Pressable>
+        textStyle={dataFormStyles.payButtonText}
+      />
     </View>
   );
 }

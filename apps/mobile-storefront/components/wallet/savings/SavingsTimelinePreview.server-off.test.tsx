@@ -18,7 +18,7 @@ describe('SavingsTimelinePreview (server off)', () => {
     );
 
     expect(screen.getByText('10 monthly contributions')).toBeOnTheScreen();
-    expect(screen.getByText(/About 9 months/)).toBeOnTheScreen();
+    expect(screen.queryByText(/About \d+ months?/)).toBeNull();
     expect(screen.getByText(/Estimated completion/)).toBeOnTheScreen();
   });
 

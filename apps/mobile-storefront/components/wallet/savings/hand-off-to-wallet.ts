@@ -7,6 +7,9 @@ export const SIGN_IN_TO_START_SAVINGS_MESSAGE =
   'Sign in to start a savings plan.';
 export const PLAN_ALREADY_CREATED_MESSAGE =
   'Your plan is already created. Open your wallet to add the head start, or leave this screen to start a different plan.';
+/** A plan created on this screen whose flow was cut short (no head start). */
+export const PLAN_CREATED_OPEN_WALLET_MESSAGE =
+  'Your plan is already created. Open your wallet to see it, or leave this screen to start a different plan.';
 
 type HandOffInput = {
   effectiveInitialContribution: number;

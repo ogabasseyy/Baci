@@ -223,4 +223,24 @@ describe('handleChatwootInlineCartAdd', () => {
       code: 'idempotency_conflict',
     });
   });
+
+  it.each([
+    ['cart_locked', 409],
+    ['cart_expired', 410],
+  ])('refreshes the cart when the server reports %s', async (code, status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ accepted: false, code }, false, status))
+    );
+    const value = input();
+
+    await handleChatwootInlineCartAdd(value);
+
+    expect(value.refreshSharedCart).toHaveBeenCalledOnce();
+    expect(value.post).toHaveBeenCalledWith({
+      requestId: 'add-request-01',
+      accepted: false,
+      code,
+    });
+  });
 });

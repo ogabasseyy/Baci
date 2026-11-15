@@ -150,6 +150,14 @@ describe('projectMerchantInboxConversation', () => {
     });
   });
 
+  it('does not split an emoji at the end of a long name', () => {
+    const projected = projectMerchantInboxConversation(
+      { ...conversation, meta: { sender: { name: `${'n'.repeat(79)}😀x` } } },
+      2
+    );
+    expect(projected?.customerName).toBe('n'.repeat(79));
+  });
+
   it('rejects an unknown status', () => {
     expect(
       projectMerchantInboxConversation({ ...conversation, status: 'weird' }, 2)

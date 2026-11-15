@@ -57,6 +57,12 @@ export const merchantInboxConversationIdSchema = z.coerce
   .positive()
   .safe();
 
+export const MERCHANT_INBOX_REPLY_MAX_LENGTH = 2_000;
+
+export const merchantInboxReplySchema = z.strictObject({
+  content: z.string().trim().min(1).max(MERCHANT_INBOX_REPLY_MAX_LENGTH),
+});
+
 export type MerchantInboxSender = 'customer' | 'store' | 'assistant' | 'system';
 
 export type MerchantInboxMessage = {

@@ -145,3 +145,66 @@ export async function listMerchantInboxMessages(
     .sort((left, right) => left.id - right.id);
   return { ok: true, conversation: owned.conversation, messages };
 }
+
+/**
+ * Sends the merchant's reply into a bound conversation. A timeout or network
+ * loss after submission is reported as `delivery_unknown`: the message may
+ * have been accepted, so nothing is retried here.
+ */
+export async function sendMerchantInboxReply(
+  binding: MerchantInboxBinding,
+  input: { conversationId: number; content: string }
+): Promise<
+  | { ok: true; message: MerchantInboxMessage }
+  | MerchantInboxFailure
+  | { ok: false; code: 'delivery_unknown' }
+> {
+  const owned = await getMerchantInboxConversation(
+    binding,
+    input.conversationId
+  );
+  if (!owned.ok) return owned;
+
+  const url = new URL(
+    `/api/v1/accounts/${binding.accountId}/conversations/${input.conversationId}/messages`,
+    binding.apiOrigin
+  );
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        api_access_token: binding.apiAccessToken,
+      },
+      body: JSON.stringify({
+        content: input.content,
+        message_type: 'outgoing',
+        private: false,
+      }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    return { ok: false, code: 'delivery_unknown' };
+  }
+  if (!response.ok) {
+    // A definite provider rejection: nothing was sent.
+    return response.status >= 500
+      ? { ok: false, code: 'delivery_unknown' }
+      : failure(response);
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, code: 'delivery_unknown' };
+  }
+  const message = projectMerchantInboxMessage(body);
+  // Accepted by the provider, but the echo was unreadable: do not invite a
+  // resend that would duplicate the customer-visible message.
+  if (!message) return { ok: false, code: 'delivery_unknown' };
+  return { ok: true, message };
+}

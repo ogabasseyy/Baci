@@ -61,6 +61,12 @@ const WEB_CRON_CONFIG = new Map([
     { method: 'GET', timeoutMs: 6 * 60_000 },
   ],
   [
+    // PiggyVest wallet pay drain: settles, delivers and refunds payments a
+    // customer request left behind. Not configured = a 200 no-op.
+    '/api/cron/piggyvest-wallet-pay-drain',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
+  [
     // Read-only PiggyVest degraded-health check (counts only); inert until
     // PIGGYVEST_DEGRADED_ALERTS_ENABLED=true. Two short reads, so 2 minutes.
     '/api/cron/piggyvest-degraded-health',

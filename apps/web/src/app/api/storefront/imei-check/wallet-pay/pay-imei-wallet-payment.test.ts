@@ -1,5 +1,5 @@
-import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { hashImei } from '../route-helpers';
 import { WalletPaymentMismatchError } from './deliver-paid-imei-lookup';
 import { payImeiWalletPayment } from './pay-imei-wallet-payment';
 
@@ -10,7 +10,7 @@ const LOOKUP = '11111111-1111-4111-8111-111111111111';
 const OP = '5b0f2a40-1c1d-4e6b-9a51-2f3c4d5e6f70';
 const IMEI = '356938035643809';
 const SALT = 'test-salt';
-const hash = (v: string) => createHmac('sha256', SALT).update(v).digest('hex');
+const hash = (v: string) => hashImei(v, SALT);
 const runtime = {
   merchantId: 'm',
   businessId: 'b',

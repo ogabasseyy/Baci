@@ -11,6 +11,7 @@ import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { useWalletPrimaryUnknown } from './use-wallet-primary-unknown';
 import { WalletActionsRow } from './WalletActionsRow';
+import { WalletActivitySection } from './WalletActivitySection';
 import { WalletFundModal } from './WalletFundModal';
 import { WalletHeroSection } from './WalletHeroSection';
 import { WalletInlineNotices } from './WalletInlineNotices';
@@ -18,7 +19,6 @@ import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsPlanCardWithSetup } from './WalletSavingsPlanCardWithSetup';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
-import { WalletTransactionHistory } from './WalletTransactionHistory';
 import type { WalletContentProps } from './wallet-content-props.types';
 
 export type { WalletContentProps } from './wallet-content-props.types';
@@ -174,7 +174,7 @@ export function WalletContent(props: WalletContentProps) {
             redeemPoints={redeemPoints}
           />
         ) : null}
-        <WalletTransactionHistory {...props} />
+        <WalletActivitySection {...props} />
       </AppKeyboardAwareScrollView>
       <WalletSavingsProgressModal
         addAmount={savingsContributionAmount}

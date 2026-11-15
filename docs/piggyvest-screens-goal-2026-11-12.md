@@ -24,7 +24,7 @@ Rules that apply throughout:
 | Fund | Add money sheet + transfer instructions | `WalletFundModal`, `WalletFundPanel` | Built in #4230 (no alerts); Fable-walked 11-13: pass; low fixes done in 00c334bab7 (PiggyVest merchant only) |
 | Fund | PiggyVest onboarding (BVN, consent, pending) | `PiggyvestWalletSetupPanel`, `PrimaryWalletSetupPending` | Built in #4230; walk owed with a fresh account (onboarding only shows before setup) |
 | Fund | Credit arrives ("Money received") | `use-primary-wallet-credit-poll` | Built in #4230; checked on the mock 11-13: inline "Money received" notice, balance updated |
-| Fund | Wallet activity under the card | `WalletTransactionHistory` | Retitled "Older store credit" in #4230; the PiggyVest activity list is #4232 |
+| Fund | Wallet activity under the card | `activity/PiggyvestWalletActivity`, `list_piggyvest_wallet_activity` | Built in #4232 (stacked on #4230): deposits, contributions, goal refunds and completions. **Owed:** IMEI/VTU spends from the wallet are not recorded anywhere yet (pay-from-wallet #4225/#4227 must record them before they can be listed) |
 | Save | Start Savings, Check your plan | `StartSavingsScreen` and modals | Redesigned in #4223 |
 | Save | Add to savings + PIN step | `WalletSavingsProgressModal`, `WalletPinSheet` | Done (#4215) |
 | Save | Goal setup pending / retry / slow notice | `SavingsPlanStatusNote` | Done in #4223 |

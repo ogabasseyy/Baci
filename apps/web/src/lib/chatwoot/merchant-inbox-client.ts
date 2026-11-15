@@ -198,8 +198,11 @@ export async function sendMerchantInboxReply(
     return { ok: false, code: 'delivery_unknown' };
   }
   if (!response.ok) {
-    // A definite provider rejection: nothing was sent.
-    return response.status >= 500
+    // 5xx, a request timeout and throttling do not prove the message was
+    // refused. Only another 4xx is a definite rejection: nothing was sent.
+    return response.status >= 500 ||
+      response.status === 408 ||
+      response.status === 429
       ? { ok: false, code: 'delivery_unknown' }
       : failure(response);
   }

@@ -248,6 +248,8 @@ describe('sendMerchantInboxReply', () => {
   it.each([
     ['a network loss after submission', () => new Error('socket closed')],
     ['a provider 5xx', () => ({ status: 503 })],
+    ['a provider request timeout', () => ({ status: 408 })],
+    ['provider throttling', () => ({ status: 429 })],
     ['an unreadable accepted response', () => ({ body: { nope: true } })],
   ])('reports unknown delivery on %s without retrying', async (_l, post) => {
     const fetchMock = stubFetch((_url, init) =>

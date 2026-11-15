@@ -118,8 +118,7 @@ export async function commitChatwootCartAdd(input: {
       return unavailable(409, 'cart_locked');
     }
     const status =
-      code === 'version_conflict' ||
-      code === 'idempotency_conflict'
+      code === 'version_conflict' || code === 'idempotency_conflict'
         ? 409
         : code === 'unauthorized'
           ? 403

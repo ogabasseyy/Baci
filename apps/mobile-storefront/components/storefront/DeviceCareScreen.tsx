@@ -71,7 +71,7 @@ export function DeviceCareScreen({
             { color: colors.text },
           ]}
         >
-          Three checks before delivery
+          Checks before delivery
         </Text>
       )}
       {sections.map((section, index) => (

@@ -34,6 +34,7 @@ it('shows the check timeline and opens related device care pages', () => {
       links={[{ label: 'Read the warranty', href: '/warranty' }]}
     />
   );
+  expect(screen.getByText('Checks before delivery')).toBeTruthy();
   expect(screen.getByText('Check 1 of 1')).toBeTruthy();
   fireEvent.press(screen.getByRole('link', { name: 'Read the warranty' }));
   expect(mockPush).toHaveBeenCalledWith('/warranty');

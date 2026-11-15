@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getBlackFridayProducts } from '@/lib/ogabassey-black-friday';
 
+// Public Ogabassey campaign feed. It serves the same published catalog
+// lineup to every caller and does not use the request host or customer session.
 export async function GET() {
   try {
     const products = await getBlackFridayProducts();

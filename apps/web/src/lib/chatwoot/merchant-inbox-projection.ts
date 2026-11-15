@@ -116,7 +116,7 @@ export function projectMerchantInboxConversation(
     id: conversation.id,
     status: conversation.status as MerchantInboxConversation['status'],
     unreadCount: conversation.unread_count ?? 0,
-    customerName: (name || 'Customer').slice(0, MAX_NAME_LENGTH),
+    customerName: truncateByCodePoint(name || 'Customer', MAX_NAME_LENGTH),
     lastActivityAt: toIso(
       conversation.last_activity_at ?? conversation.created_at
     ),

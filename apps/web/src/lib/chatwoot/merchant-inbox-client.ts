@@ -14,8 +14,6 @@ import {
 } from './merchant-inbox-projection';
 
 const REQUEST_TIMEOUT_MS = 8_000;
-/** Used only when the provider gives no total: its default page size. */
-export const MERCHANT_INBOX_PAGE_SIZE = 25;
 /** The provider returns at most this many messages per thread page. */
 export const MERCHANT_INBOX_MESSAGE_PAGE_SIZE = 20;
 
@@ -90,16 +88,16 @@ export async function listMerchantInboxConversations(
     .filter((value): value is MerchantInboxConversation => value !== null);
   // The provider's page size is a server setting it does not let a caller
   // pin, so nothing here assumes one. With a total, a page this long repeated
-  // `page` times that still falls short of the total means more exists; a
-  // partial last page costs at most one empty follow-up fetch and never skips
-  // a page. Fullness is measured on the provider's page, not on the rows kept
-  // for this inbox, because that is what decides whether a next page exists.
+  // `page` times that still falls short of the total means more exists.
+  // Without a total, any non-empty page may have a successor. Either way a
+  // page is never skipped, paging ends on an empty page, and the worst case
+  // is one empty follow-up fetch. Fullness is measured on the provider's
+  // page, not on the rows kept for this inbox, because that is what decides
+  // whether a next page exists.
   const total = meta?.all_count;
   const hasMore =
     payload.length > 0 &&
-    (typeof total === 'number'
-      ? input.page * payload.length < total
-      : payload.length >= MERCHANT_INBOX_PAGE_SIZE);
+    (typeof total !== 'number' || input.page * payload.length < total);
   return { ok: true, conversations, hasMore };
 }
 

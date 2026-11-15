@@ -1,6 +1,7 @@
 'use client';
 
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import { applyCartPeerPreview } from './cart-peer-preview';
 import { createCartActions } from './shared-cart-actions';
 import { createExperiencePortForCart } from './shared-cart-experience-runtime';
 import {
@@ -14,6 +15,7 @@ import { createCartRecovery } from './shared-cart-recovery';
 import { deriveSyncStatus } from './shared-cart-reducer';
 import { createCartSnapshotActions } from './shared-cart-snapshots';
 import { useCartLinkLifecycle } from './use-cart-link-lifecycle';
+import { useCartPeerPreview } from './use-cart-peer-preview';
 import { useCartSendQueue } from './use-cart-send-queue';
 import { useCartSubscription } from './use-cart-subscription';
 import { useSharedCartRuntime } from './use-shared-cart-runtime';
@@ -43,6 +45,12 @@ export function useSharedCart(
           entry.operationId === operationId && entry.state === 'sending'
       ),
   });
+  // A sibling tab's edit shows here at once; this tab's own authorized
+  // refetch still replaces it.
+  const peerLines = useCartPeerPreview(runtime);
+  const visible = peerLines
+    ? applyCartPeerPreview(state.display, peerLines)
+    : state.display;
   const provisioning = createCartProvisioning({ ...runtime, ...snapshots });
   useCartLinkLifecycle({
     ...runtime,
@@ -73,12 +81,12 @@ export function useSharedCart(
     resolveImportConflicts,
   } = recovery;
 
-  const cartCount = state.display.reduce(
+  const cartCount = visible.reduce(
     (sum, line) => sum + (Number.isFinite(line.quantity) ? line.quantity : 0),
     0
   );
 
-  const cartTotal = state.display.reduce((sum, item) => {
+  const cartTotal = visible.reduce((sum, item) => {
     // Mirror the server: a negotiated price counts only once accepted;
     // pending/rejected proposals total at catalog.
     const unitPrice =
@@ -136,7 +144,7 @@ export function useSharedCart(
   return {
     experienceCommandPort: createExperiencePortForCart(runtime),
     addToCart,
-    cart: state.display,
+    cart: visible,
     cartCount,
     cartId: state.cartId,
     cartTotal,

@@ -182,8 +182,8 @@ describe('listMerchantInboxMessages', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      hasOlder: false,
-      nextBefore: null,
+      hasOlder: true,
+      nextBefore: 29,
       conversation: { id: 7 },
       messages: [
         { id: 29, sender: 'store' },
@@ -215,6 +215,22 @@ describe('listMerchantInboxMessages', () => {
     });
     expect(result).toMatchObject({ ok: true, hasOlder: true, nextBefore: 100 });
     if (result.ok) expect(result.messages).toHaveLength(19);
+  });
+
+  it('ends paging on an empty page', async () => {
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? { body: { payload: [] } }
+        : { body: conversation(7) }
+    );
+    await expect(
+      listMerchantInboxMessages(binding, { conversationId: 7, before: 29 })
+    ).resolves.toMatchObject({
+      ok: true,
+      messages: [],
+      hasOlder: false,
+      nextBefore: null,
+    });
   });
 
   it('is unavailable when the message read fails', async () => {

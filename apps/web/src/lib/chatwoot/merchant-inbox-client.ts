@@ -14,8 +14,6 @@ import {
 } from './merchant-inbox-projection';
 
 const REQUEST_TIMEOUT_MS = 8_000;
-/** The provider returns at most this many messages per thread page. */
-export const MERCHANT_INBOX_MESSAGE_PAGE_SIZE = 20;
 
 export type MerchantInboxFailure = {
   ok: false;
@@ -171,9 +169,9 @@ export async function listMerchantInboxMessages(
       (id): id is number =>
         typeof id === 'number' && Number.isSafeInteger(id) && id > 0
     );
-  const hasOlder =
-    rawIds.length > 0 &&
-    parsed.data.payload.length >= MERCHANT_INBOX_MESSAGE_PAGE_SIZE;
+  // As with conversations, no provider page size is assumed: any non-empty
+  // page may have an older one, and paging ends on an empty page.
+  const hasOlder = rawIds.length > 0;
   return {
     ok: true,
     conversation: owned.conversation,

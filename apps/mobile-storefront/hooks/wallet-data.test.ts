@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fetchWalletData } from './wallet-data';
+import {
+  STORE_CREDIT_ROW_LIMIT,
+  WALLET_TRANSACTION_FETCH_LIMIT,
+} from './wallet-transaction-limits';
 
 type QueryResult = {
   data: unknown;
@@ -58,6 +62,7 @@ function setupSupabaseTables(
   };
   const tableCalls: string[] = [];
   const selectCalls: Record<string, string[]> = {};
+  const limitCalls: Record<string, number> = {};
 
   // Interest RPC fails by default so tests pin the explicit unavailable
   // marker; success-path tests override per case.
@@ -94,7 +99,10 @@ function setupSupabaseTables(
     const query = {
       eq: jest.fn(() => query),
       in: jest.fn(() => query),
-      limit: jest.fn(async () => tableResults[table]),
+      limit: jest.fn(async (count?: number) => {
+        if (typeof count === 'number') limitCalls[table] = count;
+        return tableResults[table];
+      }),
       maybeSingle: jest.fn(async () => tableResults[table]),
       order: jest.fn(() =>
         table === 'customer_savings_goals'
@@ -111,7 +119,7 @@ function setupSupabaseTables(
     return query;
   });
 
-  return { selectCalls, tableCalls };
+  return { limitCalls, selectCalls, tableCalls };
 }
 
 describe('fetchWalletData', () => {
@@ -214,6 +222,19 @@ describe('fetchWalletData', () => {
     expect(result.wallet.loyalty_points).toBe(1200.5);
     expect(result.wallet.balance).toBe(0);
     expect(result.transactions).toEqual([]);
+  });
+
+  it('bugfix: reads more ledger rows than the list shows, so hidden mirrored rows cannot starve it', async () => {
+    const { limitCalls } = setupSupabaseTables();
+
+    await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(limitCalls.customer_wallet_transactions).toBe(
+      WALLET_TRANSACTION_FETCH_LIMIT
+    );
+    expect(WALLET_TRANSACTION_FETCH_LIMIT).toBeGreaterThan(
+      STORE_CREDIT_ROW_LIMIT
+    );
   });
 
   it('selects and preserves the ledger source_type that identifies wallet top-ups', async () => {

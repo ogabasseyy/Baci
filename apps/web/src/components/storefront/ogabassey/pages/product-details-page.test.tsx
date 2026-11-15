@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -168,6 +168,21 @@ vi.mock('../providers/v2-saved-context', () => ({
 // Mock the remaining component dependencies
 vi.mock('../components/AdUnit', () => ({
   AdUnit: () => null,
+}));
+vi.mock('../components/deferred-ad-unit', () => ({
+  DeferredAdUnit: ({
+    placementKey,
+    slotInstance,
+  }: {
+    placementKey: string;
+    slotInstance?: string | number;
+  }) => (
+    <div
+      data-placement={placementKey}
+      data-slot-instance={slotInstance ?? ''}
+      data-testid="ad-unit"
+    />
+  ),
 }));
 vi.mock('../components/BannerCarousel', () => ({
   BannerCarousel: () => null,
@@ -589,5 +604,42 @@ describe('ProductDetailsPage', () => {
     expect(
       screen.getByRole('link', { name: 'Shop more Smartphones' })
     ).toBeInTheDocument();
+  });
+
+  describe('phone product-page ad', () => {
+    const product = {
+      id: 'p-ad',
+      name: 'Ad Product',
+      price: '₦5,000',
+      image: 'https://example.com/img.jpg',
+      description: 'A test product',
+      condition: 'new' as const,
+      colors: [],
+      storage: [],
+      images: ['https://example.com/img.jpg'],
+    };
+
+    it('gives phones their own instance of the sidebar unit, hidden from 768px up', () => {
+      render(<ProductDetailsPage product={product} />);
+
+      const wrapper = screen.getByTestId('product-mobile-ad');
+      expect(wrapper).toHaveClass('md:hidden');
+      const unit = within(wrapper).getByTestId('ad-unit');
+      expect(unit).toHaveAttribute('data-placement', 'SIDEBAR_HALF_PAGE');
+      // Its own slot, so it never collides with the desktop sidebar ad.
+      expect(unit).toHaveAttribute('data-slot-instance', 'mobile');
+    });
+
+    it('is left out of commerce mode, so the split page renders it once', () => {
+      render(<ProductDetailsPage mode="commerce" product={product} />);
+
+      expect(screen.queryByTestId('product-mobile-ad')).not.toBeInTheDocument();
+    });
+
+    it('is rendered by the below-the-fold half of the split page, which is what live product pages use', () => {
+      render(<ProductDetailsPage mode="belowFold" product={product} />);
+
+      expect(screen.getByTestId('product-mobile-ad')).toBeInTheDocument();
+    });
   });
 });

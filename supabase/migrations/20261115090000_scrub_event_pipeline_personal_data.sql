@@ -14,6 +14,16 @@
 --
 -- OWNER DECISION: v_personal_data_retention (90 days) is the single place the
 -- period is set.
+--
+-- POLICY (documented, not an oversight):
+-- * Replaying a dead_letter or delivery_unknown delivery after the period is
+--   intentionally unsupported: ad platforms reject events older than about 7
+--   days, so a replay that late could not succeed even with the shopper ids.
+--   The row, its status and the rest of the payload stay for reconciliation.
+-- * A ledger row still queued after the period is a dead message by policy
+--   (the queue archive itself is purged at 30 days); it is scrubbed like any
+--   other row. A stuck live queue message older than the period would be an
+--   operational alert in its own right, not a retention case.
 
 -- Partial indexes hold only rows that still carry personal data (any key in
 -- delivery_user_data besides the two consent flags, or a stray user agent), so

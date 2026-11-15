@@ -43,7 +43,7 @@ DECLARE
   v_attempts_deleted bigint;
   v_archive_deleted bigint;
   v_batch bigint;
-  v_deadline timestamptz := clock_timestamp() + interval '20 seconds';
+  v_deadline timestamptz;
 BEGIN
   IF COALESCE((SELECT auth.role()), '') <> 'service_role' THEN
     RAISE EXCEPTION 'forbidden: cleanup_domain_event_pipeline_v1 requires service_role'
@@ -85,12 +85,16 @@ BEGIN
   WHERE archive.ctid = expired.ctid;
   GET DIAGNOSTICS v_archive_deleted = ROW_COUNT;
 
-  -- Each scrub works in batches of 10,000 until nothing is left or the time
-  -- budget is used, so a busy day cannot leave a backlog behind. Rows are
-  -- locked (SKIP LOCKED) and the status test is repeated in the UPDATE, so a
-  -- delivery replayed at the same moment is never scrubbed while active.
+  -- Each scrub works in batches of 10,000 until nothing is left or its own
+  -- 8 second budget is used (three scrubs plus the deletes above stay inside
+  -- the 30 second statement limit). Anything left over carries to the next
+  -- daily run, so a very large backlog drains over days, never in one rolled
+  -- back run. Rows are locked (SKIP LOCKED) and the status test is repeated in
+  -- the UPDATE, so a delivery replayed at the same moment is never scrubbed
+  -- while active.
 
   -- Finished deliveries: remove the shopper block from the per-destination copy.
+  v_deadline := clock_timestamp() + interval '8 seconds';
   LOOP
     WITH expired_deliveries AS (
       SELECT delivery.id
@@ -114,6 +118,7 @@ BEGIN
   END LOOP;
 
   -- Ledger rows with no unfinished delivery work left.
+  v_deadline := clock_timestamp() + interval '8 seconds';
   LOOP
     WITH expired_ledger AS (
       SELECT ledger.domain_event_id
@@ -145,6 +150,7 @@ BEGIN
   END LOOP;
 
   -- Dead-letter evidence rows.
+  v_deadline := clock_timestamp() + interval '8 seconds';
   LOOP
     WITH expired_failures AS (
       SELECT failure.id

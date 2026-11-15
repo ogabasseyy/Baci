@@ -19,6 +19,8 @@ interface ImeiCheckPagerProps {
   pagerRef: RefObject<PagerView | null>;
   visitedDevices: Record<ImeiDeviceCategory, boolean>;
   walletBalance: number;
+  walletIsStoreCredit?: boolean;
+  topUpCardOnly?: boolean;
   onPageSelected: (event: { nativeEvent: { position: number } }) => void;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
@@ -34,6 +36,8 @@ export function ImeiCheckPager({
   pagerRef,
   visitedDevices,
   walletBalance,
+  walletIsStoreCredit,
+  topUpCardOnly,
   onPageSelected,
   onVerify,
   onTopUpWallet,
@@ -57,6 +61,8 @@ export function ImeiCheckPager({
               isWalletError={isWalletError}
               isWalletLoading={isWalletLoading}
               walletBalance={walletBalance}
+              walletIsStoreCredit={walletIsStoreCredit}
+              topUpCardOnly={topUpCardOnly}
               onVerify={onVerify}
               onTopUpWallet={onTopUpWallet}
             />

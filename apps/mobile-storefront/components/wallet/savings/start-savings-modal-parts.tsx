@@ -9,12 +9,15 @@ export function FundingOptionCard({
   active,
   colors,
   description,
+  disabled = false,
   label,
   onPress,
 }: {
   active: boolean;
   colors: StartSavingsColors;
   description: string;
+  /** No change of how to pay while the plan is being created. */
+  disabled?: boolean;
   label: string;
   onPress: () => void;
 }) {
@@ -22,6 +25,8 @@ export function FundingOptionCard({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled, selected: active }}
+      disabled={disabled}
       onPress={onPress}
       style={[
         styles.fundingOptionCard,
@@ -51,11 +56,14 @@ export function FundingOptionCard({
 export function SavedPaymentMethodCard({
   active,
   colors,
+  disabled = false,
   method,
   onPress,
 }: {
   active: boolean;
   colors: StartSavingsColors;
+  /** No change of card while the plan is being created or a card added. */
+  disabled?: boolean;
   method: CustomerPaymentMethod;
   onPress: () => void;
 }) {
@@ -71,6 +79,8 @@ export function SavedPaymentMethodCard({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Select ${method.label}`}
+      accessibilityState={{ disabled, selected: active }}
+      disabled={disabled}
       onPress={onPress}
       style={[
         styles.savedPaymentMethodCard,

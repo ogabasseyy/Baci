@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fetchWalletData } from './wallet-data';
+import {
+  STORE_CREDIT_ROW_LIMIT,
+  WALLET_TRANSACTION_FETCH_LIMIT,
+} from './wallet-transaction-limits';
 
 type QueryResult = {
   data: unknown;
@@ -58,6 +62,7 @@ function setupSupabaseTables(
   };
   const tableCalls: string[] = [];
   const selectCalls: Record<string, string[]> = {};
+  const limitCalls: Record<string, number> = {};
 
   // Interest RPC fails by default so tests pin the explicit unavailable
   // marker; success-path tests override per case.
@@ -94,7 +99,10 @@ function setupSupabaseTables(
     const query = {
       eq: jest.fn(() => query),
       in: jest.fn(() => query),
-      limit: jest.fn(async () => tableResults[table]),
+      limit: jest.fn(async (count?: number) => {
+        if (typeof count === 'number') limitCalls[table] = count;
+        return tableResults[table];
+      }),
       maybeSingle: jest.fn(async () => tableResults[table]),
       order: jest.fn(() =>
         table === 'customer_savings_goals'
@@ -111,7 +119,7 @@ function setupSupabaseTables(
     return query;
   });
 
-  return { selectCalls, tableCalls };
+  return { limitCalls, selectCalls, tableCalls };
 }
 
 describe('fetchWalletData', () => {
@@ -216,6 +224,19 @@ describe('fetchWalletData', () => {
     expect(result.transactions).toEqual([]);
   });
 
+  it('bugfix: reads more ledger rows than the list shows, so hidden mirrored rows cannot starve it', async () => {
+    const { limitCalls } = setupSupabaseTables();
+
+    await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(limitCalls.customer_wallet_transactions).toBe(
+      WALLET_TRANSACTION_FETCH_LIMIT
+    );
+    expect(WALLET_TRANSACTION_FETCH_LIMIT).toBeGreaterThan(
+      STORE_CREDIT_ROW_LIMIT
+    );
+  });
+
   it('selects and preserves the ledger source_type that identifies wallet top-ups', async () => {
     const { selectCalls } = setupSupabaseTables({
       customer_wallet_transactions: createResult([
@@ -247,7 +268,7 @@ describe('fetchWalletData', () => {
       {
         amount: 2500,
         created_at: '2026-07-13T10:00:00.000Z',
-        description: 'Wallet top-up via paystack',
+        description: 'Wallet top-up', // the provider is never shown
         id: 'tx-topup',
         source_type: 'wallet_topup',
         type: 'credit',
@@ -352,6 +373,8 @@ describe('fetchWalletData', () => {
         product_condition: 'Used',
         product_image: 'https://cdn.example.com/iphone.jpg',
         product_variant_label: 'Color: Black · Storage: 256GB',
+        product_id: 'product-1',
+        variant_id: 'variant-1',
         selection_unresolved: false,
         source_mode: 'manual',
         status: 'active',
@@ -380,6 +403,8 @@ describe('fetchWalletData', () => {
           product_condition: 'Used',
           product_image: 'https://cdn.example.com/iphone.jpg',
           product_variant_label: 'Color: Black · Storage: 256GB',
+          product_id: 'product-1',
+          variant_id: 'variant-1',
           selection_unresolved: false,
           source_mode: 'manual',
           status: 'active',
@@ -395,6 +420,8 @@ describe('fetchWalletData', () => {
           product_condition: null,
           product_image: null,
           product_variant_label: null,
+          product_id: 'product-2',
+          variant_id: null,
           selection_unresolved: false,
           source_mode: 'manual',
           status: 'paused',
@@ -418,7 +445,7 @@ describe('fetchWalletData', () => {
       {
         amount: 2500,
         created_at: '2026-05-21T10:00:00.000Z',
-        description: '',
+        description: 'Transaction',
         id: 'tx-1',
         type: 'credit',
       },

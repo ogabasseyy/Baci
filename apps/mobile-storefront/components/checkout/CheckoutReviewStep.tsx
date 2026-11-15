@@ -18,8 +18,9 @@ import type { DeliveryMethod, ShippingQuote } from './types';
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
   uba_redvault: 'Pay with UBA — review final price before payment',
-  paystack: 'Card Payment (Paystack)',
-  korapay: 'Card Payment (Korapay)',
+  // Same words the Payment step shows; the gateway name is not shopper-facing.
+  paystack: 'Pay with Card',
+  korapay: 'Pay with Card',
   bank_transfer: 'Bank Transfer',
   pay_on_delivery: 'Pay on Delivery',
   credpal: 'CredPal (Installments)',
@@ -42,13 +43,14 @@ function getReviewAddressText(
       : merchantPickupLocation?.address || address.address;
   }
 
-  if (deliveryMethod === 'airport') {
-    return [address.address, `${address.city}, ${address.state}`]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  return address.address;
+  // Door and airport delivery both need the city and state on review, not
+  // just the street line.
+  return [
+    address.address,
+    [address.city, address.state].filter(Boolean).join(', '),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 type CheckoutReviewStepProps = {
@@ -150,6 +152,15 @@ export function CheckoutReviewStep({
           <Text style={[styles.reviewTitle, { color: colors.text }]}>
             Delivery Address
           </Text>
+          <Pressable
+            accessibilityLabel="Edit delivery address"
+            accessibilityRole="button"
+            onPress={onEditAddress}
+          >
+            <Text style={[styles.editLink, { color: colors.primary }]}>
+              Edit
+            </Text>
+          </Pressable>
         </View>
         <Text style={[styles.reviewText, { color: colors.text }]}>
           {address.firstName} {address.lastName}
@@ -184,7 +195,17 @@ export function CheckoutReviewStep({
             </Pressable>
           ) : null}
         </View>
-        <Text style={[styles.reviewText, { color: colors.textSecondary }]}>
+        {/* Both card gateways read "Pay with Card" (customers never see
+            provider names), so the testID keeps the gateway for screenshots,
+            E2E and support triage without showing or speaking it. */}
+        <Text
+          style={[styles.reviewText, { color: colors.textSecondary }]}
+          testID={
+            selectedPayment && !prizeSimulation
+              ? `review-payment-method-${selectedPayment}`
+              : undefined
+          }
+        >
           {prizeSimulation
             ? 'Quiz prize · no payment required'
             : selectedPayment

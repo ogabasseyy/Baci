@@ -1,10 +1,20 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { styles } from './wallet.styles';
+import { walletListLayout } from './wallet-list-layout';
+
+// Says what this list covers: the wallet has its own list above. Never
+// names the provider (owner rule).
+export const STORE_CREDIT_SCOPE_COPY =
+  'Only older store credit, for purchases. Your wallet activity is listed above.';
+
+/** The list's heading for PiggyVest customers: the older balance only. */
+export const STORE_CREDIT_HISTORY_TITLE = 'Older store credit';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -32,6 +42,8 @@ export interface WalletTransaction {
 
 interface WalletTransactionHistoryProps {
   colors: WalletColors;
+  /** Older store credit balance; undefined when unknown. */
+  storeCreditBalance?: number;
   transactions: WalletTransaction[];
 }
 
@@ -61,19 +73,43 @@ function formatWalletDate(dateString: string) {
 
 export function WalletTransactionHistory({
   colors,
+  storeCreditBalance,
   transactions,
 }: WalletTransactionHistoryProps) {
+  // PiggyVest customers: this list is store credit only. Savings wallet
+  // credits are not in it yet, so never imply it is the whole history.
+  const primaryReady = useWalletPrimaryReady();
+  // A PiggyVest customer with no older store credit (none left, none ever)
+  // has nothing to see here (Fable walk). Unknown balance keeps the list.
+  if (primaryReady && transactions.length === 0 && storeCreditBalance === 0)
+    return null;
   return (
     <Animated.View
       entering={FadeIn.duration(400).delay(200)}
-      style={[styles.historySection, { backgroundColor: colors.card }]}
+      style={[
+        styles.historySection,
+        { backgroundColor: colors.card },
+        // Aligned with the card edges above it (walk-through).
+        primaryReady && localStyles.alignedSection,
+        primaryReady && walletListLayout.aligned,
+      ]}
     >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        Recent Transactions
+        {primaryReady ? STORE_CREDIT_HISTORY_TITLE : 'Recent Transactions'}
       </Text>
+      {primaryReady ? (
+        <Text style={[localStyles.scope, { color: colors.textSecondary }]}>
+          {STORE_CREDIT_SCOPE_COPY}
+        </Text>
+      ) : null}
 
       {transactions.length === 0 ? (
-        <View style={styles.emptyTransactions}>
+        <View
+          style={[
+            styles.emptyTransactions,
+            primaryReady && walletListLayout.centred,
+          ]}
+        >
           <Ionicons
             accessible={false}
             importantForAccessibility="no"
@@ -82,7 +118,9 @@ export function WalletTransactionHistory({
             color={colors.textSecondary}
           />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No transactions yet
+            {primaryReady
+              ? 'No store credit activity yet'
+              : 'No transactions yet'}
           </Text>
         </View>
       ) : (
@@ -157,3 +195,8 @@ export function WalletTransactionHistory({
     </Animated.View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  alignedSection: { paddingHorizontal: 0 },
+  scope: { fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -8 },
+});

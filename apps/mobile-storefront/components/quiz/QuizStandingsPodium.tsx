@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native';
 import type { QuizLeaderboardEntry } from '@/services/quiz-types';
+import { formatQuizStandingTime } from './format-quiz-standing-time';
 import { QuizPlayerAvatar } from './QuizPlayerAvatar';
 import { QUIZ_PODIUM_MEDALS } from './QuizResults.styles';
 import type { createQuizStyles } from './QuizScreen.styles';
@@ -9,6 +10,8 @@ type QuizStyles = ReturnType<typeof createQuizStyles>;
 interface QuizStandingsPodiumProps {
   /** Ranks 1 to 3, in rank order. */
   entries: QuizLeaderboardEntry[];
+  /** Show each player's finish time, the tie-breaker, under their score. */
+  showFinishTime?: boolean;
   styles: QuizStyles;
 }
 
@@ -17,6 +20,7 @@ const PODIUM_ORDER = [1, 0, 2] as const;
 
 export function QuizStandingsPodium({
   entries,
+  showFinishTime = false,
   styles,
 }: QuizStandingsPodiumProps) {
   if (entries.length < 3) return null;
@@ -31,6 +35,9 @@ export function QuizStandingsPodium({
         const entry = entries[position];
         if (!entry) return null;
         const medal = QUIZ_PODIUM_MEDALS[position] as string;
+        const finishTime = showFinishTime
+          ? formatQuizStandingTime(entry.totalTimeSeconds)
+          : null;
         return (
           <View
             key={position}
@@ -57,6 +64,9 @@ export function QuizStandingsPodium({
               {entry.isCurrentCustomer ? 'You' : entry.displayName}
             </Text>
             <Text style={styles.podiumScore}>{entry.score} pts</Text>
+            {finishTime ? (
+              <Text style={styles.podiumScore}>{finishTime}</Text>
+            ) : null}
             <View
               style={[
                 styles.podiumStep,

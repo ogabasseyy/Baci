@@ -57,4 +57,22 @@ describe('QuizStandingsPodium', () => {
       backgroundColor: QUIZ_STAGE_COLORS.primaryLowOpacity,
     });
   });
+
+  it('shows finish times only when asked to', () => {
+    const entries = [
+      entry(1, { totalTimeSeconds: 12.5 }),
+      entry(2, { totalTimeSeconds: 81.49 }),
+      entry(3, { totalTimeSeconds: null }),
+    ];
+    const { rerender } = render(
+      <QuizStandingsPodium entries={entries} styles={styles} />
+    );
+    expect(screen.queryByText('12.50s')).toBeNull();
+
+    rerender(
+      <QuizStandingsPodium entries={entries} showFinishTime styles={styles} />
+    );
+    expect(screen.getByText('12.50s')).toBeTruthy();
+    expect(screen.getByText('1:21.49')).toBeTruthy();
+  });
 });

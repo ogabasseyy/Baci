@@ -120,7 +120,11 @@ export function QuizLeaderboardScreen() {
         <FlatList
           contentContainerStyle={styles.content}
           data={rows}
-          keyExtractor={(entry) => `${entry.rank}-${entry.displayName}`}
+          // Entries carry no id and tied players can share a name and rank,
+          // so the position keeps every key distinct.
+          keyExtractor={(entry, index) =>
+            `${entry.rank}-${entry.displayName}-${index}`
+          }
           ListHeaderComponent={
             <View style={styles.boardHeader}>
               <Pressable
@@ -172,7 +176,11 @@ export function QuizLeaderboardScreen() {
               {leaderboard?.status === 'published' ? (
                 <Text style={styles.boardTitle}>Final standings</Text>
               ) : null}
-              <QuizStandingsPodium entries={podium} styles={podiumStyles} />
+              <QuizStandingsPodium
+                entries={podium}
+                showFinishTime
+                styles={podiumStyles}
+              />
             </View>
           }
           ListEmptyComponent={

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { blogPostSchema, sanitizeBlogPostData } from './blog';
+import { blogPostSchema, createPostSchema, sanitizeBlogPostData } from './blog';
 
 // Mock sanitizeHtml to avoid pulling in the full sanitizer
 vi.mock('@/lib/sanitize', () => ({
@@ -288,5 +288,16 @@ describe('sanitizeBlogPostData', () => {
     expect(result.featured_image_width).toBeNull();
     expect(result.featured_image_height).toBeNull();
     expect(result.featured_image_variants).toEqual({});
+  });
+
+  it('accepts scheduled status in createPostSchema', () => {
+    const parsed = createPostSchema.safeParse({
+      author_name: 'Editor',
+      content: 'Scheduled post body',
+      slug: 'scheduled-post',
+      status: 'scheduled',
+      title: 'Scheduled Post',
+    });
+    expect(parsed.success).toBe(true);
   });
 });

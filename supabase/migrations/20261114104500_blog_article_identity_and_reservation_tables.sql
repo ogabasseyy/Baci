@@ -14,6 +14,9 @@ COMMENT ON COLUMN public.blog_posts.article_identity IS
 COMMENT ON COLUMN public.blog_posts.requested_publish_at IS
   'Originally requested publication timestamp; preserved when blog_posts.published_at records actual DB publication time or deferred evaluation.';
 
+CREATE UNIQUE INDEX IF NOT EXISTS blog_posts_id_merchant_id_key
+  ON public.blog_posts (id, merchant_id);
+
 -- 2. Private reservation table
 CREATE TABLE IF NOT EXISTS private.blog_release_reservations (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),

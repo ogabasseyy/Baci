@@ -108,7 +108,7 @@ export const createPostSchema = z.object({
   author_title: z.string().max(100).optional(),
   author_image_url: z.url().optional().nullable(),
   author_bio: z.string().max(500).optional(),
-  status: z.enum(['draft', 'published', 'archived']).optional(),
+  status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
   seo_title: z.string().max(70).optional(),
   seo_description: z.string().max(160).optional(),
   focus_keyword: z.string().max(50).optional().nullable(),

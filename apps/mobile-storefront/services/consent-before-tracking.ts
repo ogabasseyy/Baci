@@ -1,14 +1,21 @@
 import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
-import { prepareQuizMobileAdsConsent } from './initialize-quiz-mobile-ads';
+import {
+  getQuizMobileAdsConsentStage,
+  prepareQuizMobileAdsConsent,
+} from './initialize-quiz-mobile-ads';
 
 /**
- * Upper bound on the consent step that runs ahead of Apple's tracking
- * prompt. Generous on purpose: the step includes the time a shopper spends
- * reading Google's message, and a prompt arriving on top of that message is
- * worse than a late one. It exists so a hung consent call can never keep
- * the tracking prompt (and the startup work waiting on it) from running.
+ * While the consent request is only updating over the network nothing is on
+ * screen, so a stall there must not hold the tracking prompt for long.
  */
-export const CONSENT_BEFORE_TRACKING_TIMEOUT_MS = 60_000;
+export const CONSENT_UPDATE_WATCHDOG_MS = 10_000;
+
+/**
+ * Once Google's message may be showing, a person is reading it and the
+ * prompt waits for them. This backstop only exists so a wedged native call
+ * can never hold the prompt (and the startup work behind it) forever.
+ */
+export const CONSENT_FORM_BACKSTOP_MS = 300_000;
 
 export type ConsentBeforeTrackingOutcome =
   | 'done'
@@ -35,9 +42,11 @@ function areMobileAdsEnabled(): boolean {
  * off or the ads module is missing, so the tracking prompt always runs.
  */
 export async function gatherConsentBeforeTracking(
-  timeoutMs: number = CONSENT_BEFORE_TRACKING_TIMEOUT_MS
+  updateWatchdogMs: number = CONSENT_UPDATE_WATCHDOG_MS,
+  formBackstopMs: number = CONSENT_FORM_BACKSTOP_MS
 ): Promise<ConsentBeforeTrackingOutcome> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let watchdog: ReturnType<typeof setTimeout> | null = null;
+  let backstop: ReturnType<typeof setTimeout> | null = null;
   try {
     if (!areMobileAdsEnabled() || !isQuizMobileAdsAvailable()) {
       return 'skipped';
@@ -45,12 +54,25 @@ export async function gatherConsentBeforeTracking(
     return await Promise.race<ConsentBeforeTrackingOutcome>([
       prepareQuizMobileAdsConsent().then(() => 'done' as const),
       new Promise<ConsentBeforeTrackingOutcome>((resolve) => {
-        timer = setTimeout(() => resolve('timeout'), timeoutMs);
+        watchdog = setTimeout(() => {
+          // Nothing on screen yet: give up. Otherwise a person may be
+          // reading the message, so keep waiting up to the backstop.
+          const stage = getQuizMobileAdsConsentStage();
+          if (stage === 'idle' || stage === 'updating') {
+            resolve('timeout');
+            return;
+          }
+          backstop = setTimeout(
+            () => resolve('timeout'),
+            Math.max(formBackstopMs - updateWatchdogMs, 0)
+          );
+        }, updateWatchdogMs);
       }),
     ]);
   } catch {
     return 'error';
   } finally {
-    if (timer !== null) clearTimeout(timer);
+    if (watchdog !== null) clearTimeout(watchdog);
+    if (backstop !== null) clearTimeout(backstop);
   }
 }

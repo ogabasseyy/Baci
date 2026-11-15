@@ -1,19 +1,25 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
 import {
-  CONSENT_BEFORE_TRACKING_TIMEOUT_MS,
+  CONSENT_FORM_BACKSTOP_MS,
+  CONSENT_UPDATE_WATCHDOG_MS,
   gatherConsentBeforeTracking,
 } from './consent-before-tracking';
-import { prepareQuizMobileAdsConsent } from './initialize-quiz-mobile-ads';
+import {
+  getQuizMobileAdsConsentStage,
+  prepareQuizMobileAdsConsent,
+} from './initialize-quiz-mobile-ads';
 
 jest.mock('@/components/quiz/is-quiz-mobile-ads-available', () => ({
   isQuizMobileAdsAvailable: jest.fn(() => true),
 }));
 jest.mock('./initialize-quiz-mobile-ads', () => ({
   prepareQuizMobileAdsConsent: jest.fn(async () => undefined),
+  getQuizMobileAdsConsentStage: jest.fn(() => 'updating'),
 }));
 
 const mockIsAvailable = jest.mocked(isQuizMobileAdsAvailable);
+const mockStage = jest.mocked(getQuizMobileAdsConsentStage);
 const mockPrepareConsent = jest.mocked(prepareQuizMobileAdsConsent);
 const ORIGINAL_ADS = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
 const ORIGINAL_QUIZ_ADS = process.env.EXPO_PUBLIC_QUIZ_ADS_ENABLED;
@@ -29,6 +35,7 @@ describe('gatherConsentBeforeTracking', () => {
   afterEach(() => {
     jest.useRealTimers();
     mockIsAvailable.mockReturnValue(true);
+    mockStage.mockReturnValue('updating');
     mockPrepareConsent.mockReset();
     mockPrepareConsent.mockResolvedValue(undefined);
     setEnv(ORIGINAL_ADS, ORIGINAL_QUIZ_ADS);
@@ -75,13 +82,49 @@ describe('gatherConsentBeforeTracking', () => {
     await expect(gatherConsentBeforeTracking()).resolves.toBe('error');
   });
 
-  it('gives up after the timeout so a hung consent call cannot block', async () => {
+  it('gives up after the short watchdog while the consent update stalls with nothing on screen', async () => {
     jest.useFakeTimers();
     setEnv('true', undefined);
+    mockStage.mockReturnValue('updating');
     mockPrepareConsent.mockReturnValue(new Promise<void>(() => undefined));
 
     const pending = gatherConsentBeforeTracking();
-    await jest.advanceTimersByTimeAsync(CONSENT_BEFORE_TRACKING_TIMEOUT_MS);
+    await jest.advanceTimersByTimeAsync(CONSENT_UPDATE_WATCHDOG_MS);
+
+    await expect(pending).resolves.toBe('timeout');
+  });
+
+  it('keeps waiting past the watchdog while the consent form is on screen', async () => {
+    jest.useFakeTimers();
+    setEnv('true', undefined);
+    mockStage.mockReturnValue('form');
+    let finish!: () => void;
+    mockPrepareConsent.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      })
+    );
+
+    const outcomes: string[] = [];
+    const pending = gatherConsentBeforeTracking().then((outcome) => {
+      outcomes.push(outcome);
+      return outcome;
+    });
+    await jest.advanceTimersByTimeAsync(CONSENT_UPDATE_WATCHDOG_MS * 3);
+    expect(outcomes).toEqual([]);
+
+    finish();
+    await expect(pending).resolves.toBe('done');
+  });
+
+  it('stops waiting at the long backstop even if the form never closes', async () => {
+    jest.useFakeTimers();
+    setEnv('true', undefined);
+    mockStage.mockReturnValue('form');
+    mockPrepareConsent.mockReturnValue(new Promise<void>(() => undefined));
+
+    const pending = gatherConsentBeforeTracking();
+    await jest.advanceTimersByTimeAsync(CONSENT_FORM_BACKSTOP_MS);
 
     await expect(pending).resolves.toBe('timeout');
   });

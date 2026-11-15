@@ -30,6 +30,7 @@ export function useQuizResultsLeaderboard({
   const [leaderboard, setLeaderboard] = useState<QuizLeaderboard | null>(null);
   const [leaderboardError, setLeaderboardError] = useState(false);
   const [participantCount, setParticipantCount] = useState<number | null>(null);
+  const [liveBoardHidden, setLiveBoardHidden] = useState(false);
   const currentUserIdRef = useRef(getCurrentUserId);
   useLayoutEffect(() => {
     currentUserIdRef.current = getCurrentUserId;
@@ -58,6 +59,7 @@ export function useQuizResultsLeaderboard({
       boardStatus.current = null;
     }
     setLeaderboardError(false);
+    setLiveBoardHidden(false);
     if (!enabled || !eventId || !expectedUserId) {
       setLeaderboard(null);
       setParticipantCount(null);
@@ -110,10 +112,12 @@ export function useQuizResultsLeaderboard({
         ) {
           setLeaderboard(null);
           setParticipantCount(null);
+          setLiveBoardHidden(true);
           hasLeaderboard.current = false;
           boardStatus.current = null;
         }
         if (result.status === 'published' || result.status === 'live') {
+          setLiveBoardHidden(false);
           setLeaderboard(result);
           boardStatus.current = result.status;
           hasLeaderboard.current = true;
@@ -180,6 +184,7 @@ export function useQuizResultsLeaderboard({
   return {
     leaderboard: showBoard ? leaderboard : null,
     leaderboardError: visible && leaderboardError,
+    liveBoardHidden: visible && liveBoardHidden,
     participantCount: showBoard ? participantCount : null,
   };
 }

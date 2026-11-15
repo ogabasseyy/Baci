@@ -406,17 +406,30 @@ describe('LoginScreen', () => {
       expect(mockSignInWithOtp).not.toHaveBeenCalled();
     });
 
-    it('stays on the email step without an error when no valid email is typed yet', () => {
+    it('stays on the email step without an error when no valid email is typed yet', async () => {
       render(<LoginScreen />);
 
       fireEvent.press(screen.getByText('Use password instead'));
 
       expect(screen.getByText('Continue with Password')).toBeOnTheScreen();
       expect(screen.queryByPlaceholderText('••••••••')).toBeNull();
-      expect(screen.queryByRole('alert')).toBeNull();
+      // The email error is plain text, so assert on the message itself.
+      // Imported here, not at the top: the helpers load expo-router, which
+      // must see the mocks registered above.
+      const { validateLoginEmailInput } = await import(
+        '@/components/auth/login-screen-controller.helpers'
+      );
+      const emailRequired = validateLoginEmailInput('').error as string;
+      expect(emailRequired).toBeTruthy();
+      expect(screen.queryByText(emailRequired)).toBeNull();
       expect(
         screen.getByText('Use verification code instead')
       ).toBeOnTheScreen();
+
+      // Positive control: the same message does appear once the shopper
+      // actually tries to continue.
+      fireEvent.press(screen.getByText('Continue with Password'));
+      expect(screen.getByText(emailRequired)).toBeOnTheScreen();
     });
 
     it('switches back to the code method from the email step', () => {

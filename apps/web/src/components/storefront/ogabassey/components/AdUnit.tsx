@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { AD_CONFIG } from '../config/ads';
 import { AdSlotShell } from './ad-slot-shell';
-import { defineGptAdSlot, resolveAdSlotId } from './ad-unit-slot';
+import { defineGptAdSlot } from './define-gpt-ad-slot';
 import {
   registerPubAdsSlotRenderListener,
   type GoogleSlotRenderEndedEvent,
@@ -15,6 +15,7 @@ import {
   ensureGoogleAdManagerBoot,
   ensureGoogleTag,
 } from './google-ad-bootstrap';
+import { resolveAdSlotId } from './resolve-ad-slot-id';
 
 // GPT teardown must run before React removes the slot element, but this client
 // component is also pre-rendered by Next.js. Keep the ordering guarantee in

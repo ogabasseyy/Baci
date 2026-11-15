@@ -26,7 +26,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
-import { AdUnit } from '../components/AdUnit';
+import { CartInFeedAd } from './cart-in-feed-ad';
 import {
   deriveCartLineNegotiationProps,
   NegotiationModal,
@@ -311,7 +311,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
               })}
 
               {/* In-feed Ad */}
-              <AdUnit placementKey="PRODUCT_GRID_MPU" slotInstance="cart" />
+              <CartInFeedAd />
             </div>
 
             {/* Right Column: Summary */}

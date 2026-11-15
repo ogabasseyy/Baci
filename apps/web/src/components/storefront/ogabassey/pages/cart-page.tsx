@@ -15,7 +15,7 @@ import {
 import { asRoute } from '@/lib/routes';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import { isProductNegotiable } from '@baci/shared/lib';
-import { AdUnit } from '../components/AdUnit';
+import { CartInFeedAd } from './cart-in-feed-ad';
 import { CheckoutIdentityModal } from '../components/CheckoutIdentityModal';
 import {
   deriveCartLineNegotiationProps,
@@ -222,7 +222,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                   )}
                 />
               ))}
-              <AdUnit placementKey="PRODUCT_GRID_MPU" slotInstance="cart" />
+              <CartInFeedAd />
             </div>
 
             <CartPageSummaryPanel

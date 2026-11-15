@@ -20,7 +20,7 @@ import { storefrontProductFilters } from '@/lib/storefront-product-filters';
 import { products as mockProducts } from '../data/products';
 import { useV2Saved } from '../providers/v2-saved-context';
 import type { Product } from '../types';
-import { AdUnit } from './AdUnit';
+import { ProductGridAdBreak } from './product-grid-ad-break';
 import { useDeferredActivation } from './deferred-shell-feature';
 import type { Particle } from './FloatingParticles';
 import { ProductGridItem } from './ProductGridItem';
@@ -488,12 +488,10 @@ export const EngineProductGrid: React.FC<EngineProductGridProps> = ({
                   )}
 
                   {adBreakpoints.includes(index + 1) && (
-                    <div className={`col-span-2 ${viewMode === 'grid' ? 'lg:col-span-4' : 'w-full'} flex items-center justify-center my-2 md:my-4`}>
-                      <AdUnit
-                        placementKey="PRODUCT_GRID_MPU"
-                        slotInstance={`engine-${index + 1}`}
-                      />
-                    </div>
+                    <ProductGridAdBreak
+                      slotInstance={`engine-${index + 1}`}
+                      viewMode={viewMode}
+                    />
                   )}
                 </React.Fragment>
               );

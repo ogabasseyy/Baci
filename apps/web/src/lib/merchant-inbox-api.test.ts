@@ -95,6 +95,16 @@ describe('fetchMerchantInboxConversations', () => {
     });
   });
 
+  it('accepts a page of 150 conversations from a larger provider page', async () => {
+    const many = Array.from({ length: 150 }, (_, index) => ({
+      ...conversation,
+      id: index + 1,
+    }));
+    stubFetch({ body: { conversations: many, hasMore: true, page: 1 } });
+    const result = await fetchMerchantInboxConversations();
+    expect(result.ok && result.conversations).toHaveLength(150);
+  });
+
   it('treats a malformed success body as unavailable', async () => {
     stubFetch({ body: { conversations: [{ id: 'x' }] } });
     await expect(fetchMerchantInboxConversations()).resolves.toEqual({

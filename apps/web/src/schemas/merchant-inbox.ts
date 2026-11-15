@@ -34,12 +34,20 @@ export const providerInboxConversationSchema = z.object({
   last_non_activity_message: providerInboxMessageSchema.nullish(),
 });
 
+/**
+ * Most conversations one page can hold. The provider schema and Baci's own
+ * browser response share this limit so they cannot drift apart.
+ */
+export const MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE = 200;
+
 export const providerInboxConversationListSchema = z.object({
   data: z.object({
     meta: z
       .object({ all_count: z.number().int().nonnegative().safe().nullish() })
       .nullish(),
-    payload: z.array(z.unknown()).max(200),
+    payload: z
+      .array(z.unknown())
+      .max(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE),
   }),
 });
 
@@ -108,7 +116,9 @@ export const merchantInboxConversationSchema = z.object({
 }) satisfies z.ZodType<MerchantInboxConversation>;
 
 export const merchantInboxConversationsResponseSchema = z.object({
-  conversations: z.array(merchantInboxConversationSchema).max(100),
+  conversations: z
+    .array(merchantInboxConversationSchema)
+    .max(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE),
   hasMore: z.boolean(),
   page: z.number().int().positive(),
 });
@@ -121,3 +131,6 @@ export const merchantInboxThreadResponseSchema = z.object({
 export const merchantInboxReplyResponseSchema = z.object({
   message: merchantInboxMessageSchema,
 });
+
+/** The code of an error response from Baci's inbox API. */
+export const merchantInboxErrorPayloadSchema = z.object({ code: z.string() });

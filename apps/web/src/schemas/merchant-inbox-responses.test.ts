@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   merchantInboxConversationSchema,
   merchantInboxConversationsResponseSchema,
+  merchantInboxErrorPayloadSchema,
   merchantInboxMessageSchema,
   merchantInboxReplyResponseSchema,
   merchantInboxThreadResponseSchema,
@@ -146,14 +147,14 @@ describe('merchantInboxConversationsResponseSchema', () => {
     expect(ok({ ...valid, conversations: [] })).toBe(true);
   });
 
-  it('allows 100 conversations and rejects 101', () => {
+  it('allows 200 conversations, the most a server page can hold, and rejects 201', () => {
     const many = (count: number) =>
       Array.from({ length: count }, (_, index) => ({
         ...conversation,
         id: index + 1,
       }));
-    expect(ok({ ...valid, conversations: many(100) })).toBe(true);
-    expect(ok({ ...valid, conversations: many(101) })).toBe(false);
+    expect(ok({ ...valid, conversations: many(200) })).toBe(true);
+    expect(ok({ ...valid, conversations: many(201) })).toBe(false);
   });
 
   it('requires a boolean hasMore and a positive integer page', () => {
@@ -212,5 +213,24 @@ describe('merchantInboxReplyResponseSchema', () => {
     expect(ok({ message: { ...message, text: 'a'.repeat(4_001) } })).toBe(
       false
     );
+  });
+});
+
+describe('merchantInboxErrorPayloadSchema', () => {
+  const ok = accepts(merchantInboxErrorPayloadSchema);
+
+  it('accepts any string code', () => {
+    expect(ok({ code: 'unauthorized' })).toBe(true);
+    expect(ok({ code: 'something_new', error: 'x' })).toBe(true);
+  });
+
+  it.each([
+    {},
+    { code: 5 },
+    { code: null },
+    'text',
+    null,
+  ])('rejects %j', (payload) => {
+    expect(ok(payload)).toBe(false);
   });
 });

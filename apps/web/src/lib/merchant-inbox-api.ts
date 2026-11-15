@@ -1,9 +1,10 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import {
   type MerchantInboxConversation,
   type MerchantInboxMessage,
   merchantInboxConversationsResponseSchema,
+  merchantInboxErrorPayloadSchema,
   merchantInboxReplyResponseSchema,
   merchantInboxThreadResponseSchema,
 } from '@/schemas/merchant-inbox';
@@ -36,8 +37,6 @@ const API_CODES = new Set<string>([
   'temporarily_unavailable',
 ]);
 
-const errorPayloadSchema = z.object({ code: z.string() });
-
 function isKnownCode(code: string | null): code is MerchantInboxApiErrorCode {
   return code !== null && KNOWN_CODES.has(code);
 }
@@ -50,7 +49,9 @@ async function failureFrom(
 ): Promise<MerchantInboxApiFailure> {
   let code: string | null = null;
   try {
-    const parsed = errorPayloadSchema.safeParse(await response.json());
+    const parsed = merchantInboxErrorPayloadSchema.safeParse(
+      await response.json()
+    );
     code = parsed.success ? parsed.data.code : null;
   } catch {
     code = null;

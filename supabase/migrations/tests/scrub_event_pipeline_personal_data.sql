@@ -12,7 +12,7 @@ DECLARE
     'data', jsonb_build_object(
       'event_type', 'add_to_cart',
       'event_data', jsonb_build_object('user_agent', 'Agent/1.0', 'session_id', 's1'),
-      'delivery_user_data', jsonb_build_object('ip', '203.0.113.1', 'email', 'a@example.com')
+      'delivery_user_data', jsonb_build_object('analytics_consent', true, 'marketing_consent', false, 'ip', '203.0.113.1', 'email', 'a@example.com')
     )
   );
   v_old_done uuid := '00000000-0000-4000-8000-00000000e101';
@@ -86,8 +86,12 @@ BEGIN
     RAISE EXCEPTION 'minimised row was rewritten by the scrub';
   END IF;
 
+  IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_done)
+       #>> '{data,delivery_user_data,analytics_consent}' IS DISTINCT FROM 'true' THEN
+    RAISE EXCEPTION 'scrub removed the consent flags it should keep';
+  END IF;
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_queued)
-       #> '{data,delivery_user_data}' IS NOT NULL THEN
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old queued ledger row kept personal data';
   END IF;
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_done)
@@ -103,7 +107,7 @@ BEGIN
 
   -- Old + finished: scrubbed in ledger and delivery, rest of the row kept.
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_done)
-       #> '{data,delivery_user_data}' IS NOT NULL THEN
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old finished ledger row kept personal data';
   END IF;
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_done)
@@ -111,7 +115,7 @@ BEGIN
     RAISE EXCEPTION 'scrub removed more than the personal block';
   END IF;
   IF (SELECT payload FROM public.event_deliveries WHERE domain_event_id = v_old_done)
-       #> '{data,delivery_user_data}' IS NOT NULL THEN
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old finished delivery payload kept personal data';
   END IF;
 
@@ -133,7 +137,7 @@ BEGIN
 
   -- Failure rows follow the same age rule.
   IF (SELECT original_envelope FROM public.domain_event_failures WHERE queue_message_id = 9301001)
-       #> '{data,delivery_user_data}' IS NOT NULL THEN
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old failure row kept personal data';
   END IF;
   IF (SELECT original_envelope FROM public.domain_event_failures WHERE queue_message_id = 9301002)

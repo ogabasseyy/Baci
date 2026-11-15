@@ -1,6 +1,7 @@
 import type { DomainEventV1 } from '@baci/shared/contracts';
 import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
 import { toClientAnalyticsDomainEventName } from './event-route-registry';
+import { CLIENT_OBSERVATION_ONLY_EVENTS } from './event-route-resolution';
 
 /**
  * Shopper fields that exist only so an ad platform can match a conversion.
@@ -24,12 +25,6 @@ export type DeliveryData = {
   marketing_consent: boolean;
 } & Partial<Record<PersonalDeliveryField, string | undefined>>;
 
-/** Client event names the router resolves to "no destination". */
-const OBSERVATION_ONLY_NAMES = new Set([
-  'analytics.client.observed.v1',
-  'analytics.purchase.observed.v1',
-]);
-
 /**
  * Data minimisation at ingest: keep the shopper's personal matching fields
  * only when the event can fan out to an ad platform (a conversion-class event)
@@ -50,7 +45,7 @@ export function minimizeDeliveryData(
   };
   const canBeUsed =
     isConversionEvent(eventType) &&
-    !OBSERVATION_ONLY_NAMES.has(
+    !CLIENT_OBSERVATION_ONLY_EVENTS.has(
       toClientAnalyticsDomainEventName(eventType, trustLevel)
     );
   if (!canBeUsed) return minimal;

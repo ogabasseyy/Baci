@@ -104,7 +104,7 @@ const EVENT_ROUTES: Record<string, RouteDefinition> = {
   },
 };
 
-const CLIENT_OBSERVATION_ONLY_EVENTS = new Set([
+export const CLIENT_OBSERVATION_ONLY_EVENTS = new Set([
   'analytics.client.observed.v1',
   'analytics.page_view.v1',
   'analytics.purchase.observed.v1',

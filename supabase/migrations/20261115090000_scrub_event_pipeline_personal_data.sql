@@ -7,7 +7,8 @@
 -- and return columns, so the VPS worker and generated types are unchanged):
 -- once a row is older than v_personal_data_retention and its delivery work is
 -- finished, only that personal block (and the stray data.event_data.user_agent)
--- is removed; the rest of the row stays. Ledger rows still queued after the
+-- is removed (the two consent flags stay as the record of what was allowed);
+-- the rest of the row stays. Ledger rows still queued after the
 -- whole period are dead messages and are scrubbed too; failure rows follow
 -- their latest failure, not the first.
 --
@@ -94,7 +95,7 @@ BEGIN
   GET DIAGNOSTICS v_archive_deleted = ROW_COUNT;
 
   -- Each scrub works in batches of 10,000 until nothing is left or its own
-  -- 8 second budget is used (three scrubs plus the deletes above stay inside
+  -- 6 second budget is used (three scrubs plus the deletes above stay inside
   -- the 30 second statement limit). Anything left over carries to the next
   -- daily run, so a very large backlog drains over days, never in one rolled
   -- back run. Rows are locked (SKIP LOCKED) and the status test is repeated in
@@ -102,7 +103,7 @@ BEGIN
   -- while active.
 
   -- Finished deliveries: remove the shopper block from the per-destination copy.
-  v_deadline := clock_timestamp() + interval '8 seconds';
+  v_deadline := clock_timestamp() + interval '6 seconds';
   LOOP
     WITH expired_deliveries AS (
       SELECT delivery.id
@@ -118,7 +119,15 @@ BEGIN
       FOR UPDATE SKIP LOCKED
     )
     UPDATE public.event_deliveries AS delivery
-    SET payload = delivery.payload #- '{data,delivery_user_data}' #- '{data,event_data,user_agent}'
+    SET payload = CASE WHEN delivery.payload #> '{data,delivery_user_data}' IS NULL
+        THEN delivery.payload #- '{data,event_data,user_agent}'
+        ELSE jsonb_set(
+          delivery.payload #- '{data,event_data,user_agent}',
+          '{data,delivery_user_data}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'analytics_consent', delivery.payload #> '{data,delivery_user_data,analytics_consent}',
+            'marketing_consent', delivery.payload #> '{data,delivery_user_data,marketing_consent}'))
+        ) END
     FROM expired_deliveries AS expired
     WHERE delivery.id = expired.id
       AND delivery.status IN
@@ -128,7 +137,7 @@ BEGIN
   END LOOP;
 
   -- Ledger rows with no unfinished delivery work left.
-  v_deadline := clock_timestamp() + interval '8 seconds';
+  v_deadline := clock_timestamp() + interval '6 seconds';
   LOOP
     WITH expired_ledger AS (
       SELECT ledger.domain_event_id
@@ -148,7 +157,15 @@ BEGIN
       FOR UPDATE OF ledger SKIP LOCKED
     )
     UPDATE public.domain_event_ledger AS ledger
-    SET envelope = ledger.envelope #- '{data,delivery_user_data}' #- '{data,event_data,user_agent}'
+    SET envelope = CASE WHEN ledger.envelope #> '{data,delivery_user_data}' IS NULL
+        THEN ledger.envelope #- '{data,event_data,user_agent}'
+        ELSE jsonb_set(
+          ledger.envelope #- '{data,event_data,user_agent}',
+          '{data,delivery_user_data}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'analytics_consent', ledger.envelope #> '{data,delivery_user_data,analytics_consent}',
+            'marketing_consent', ledger.envelope #> '{data,delivery_user_data,marketing_consent}'))
+        ) END
     FROM expired_ledger AS expired
     WHERE ledger.domain_event_id = expired.domain_event_id
       AND NOT EXISTS (
@@ -162,7 +179,7 @@ BEGIN
   END LOOP;
 
   -- Dead-letter evidence rows.
-  v_deadline := clock_timestamp() + interval '8 seconds';
+  v_deadline := clock_timestamp() + interval '6 seconds';
   LOOP
     WITH expired_failures AS (
       SELECT failure.id
@@ -177,9 +194,19 @@ BEGIN
       FOR UPDATE SKIP LOCKED
     )
     UPDATE public.domain_event_failures AS failure
-    SET original_envelope = failure.original_envelope #- '{data,delivery_user_data}' #- '{data,event_data,user_agent}'
+    SET original_envelope = CASE WHEN failure.original_envelope #> '{data,delivery_user_data}' IS NULL
+        THEN failure.original_envelope #- '{data,event_data,user_agent}'
+        ELSE jsonb_set(
+          failure.original_envelope #- '{data,event_data,user_agent}',
+          '{data,delivery_user_data}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'analytics_consent', failure.original_envelope #> '{data,delivery_user_data,analytics_consent}',
+            'marketing_consent', failure.original_envelope #> '{data,delivery_user_data,marketing_consent}'))
+        ) END
     FROM expired_failures AS expired
-    WHERE failure.id = expired.id;
+    WHERE failure.id = expired.id
+      AND failure.first_failed_at < now() - v_personal_data_retention
+      AND failure.last_failed_at < now() - v_personal_data_retention;
     GET DIAGNOSTICS v_batch = ROW_COUNT;
     EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
   END LOOP;

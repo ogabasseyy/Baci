@@ -1,9 +1,13 @@
 import { describe, expect, it } from '@jest/globals';
 import { dehydrate, QueryClient } from '@tanstack/react-query';
-import { persistQueryClientRestore } from '@tanstack/react-query-persist-client';
 import {
-  dropNeverPersistedQueries,
+  type PersistedClient,
+  type Persister,
+  persistQueryClientRestore,
+} from '@tanstack/react-query-persist-client';
+import {
   shouldPersistQuery,
+  withoutNeverPersistedQueries,
 } from './should-persist-query';
 
 const query = (queryKey: unknown[], status = 'success') =>
@@ -25,34 +29,48 @@ describe('bugfix: the expanded wallet activity list survived an app relaunch', (
 });
 
 describe('bugfix: an older saved snapshot restored every activity page', () => {
-  it('removes the restored activity list and keeps other queries', async () => {
-    const saved = new QueryClient();
-    const activityKey = ['piggyvest-wallet-activity', 'm', 'u'];
-    saved.setQueryData(activityKey, {
+  const activityKey = ['piggyvest-wallet-activity', 'm', 'u'];
+  const persisterFor = (saved?: PersistedClient): Persister =>
+    withoutNeverPersistedQueries({
+      persistClient: async () => undefined,
+      removeClient: async () => undefined,
+      restoreClient: async () => saved,
+    });
+
+  it('restores other queries but not the saved activity list', async () => {
+    const old = new QueryClient();
+    old.setQueryData(activityKey, {
       pages: [{ items: [1] }, { items: [2] }, { items: [3] }],
       pageParams: [null, 'c2', 'c3'],
     });
-    saved.setQueryData(['products'], ['p1']);
+    old.setQueryData(['products'], ['p1']);
     // An older build saved everything, with no filter.
-    const clientState = dehydrate(saved);
+    const saved = {
+      buster: '',
+      timestamp: Date.now(),
+      clientState: dehydrate(old),
+    };
     const restored = new QueryClient();
+
     await persistQueryClientRestore({
       queryClient: restored,
-      persister: {
-        persistClient: async () => undefined,
-        removeClient: async () => undefined,
-        restoreClient: async () => ({
-          buster: '',
-          timestamp: Date.now(),
-          clientState,
-        }),
-      },
+      persister: persisterFor(saved),
     });
-    expect(restored.getQueryData(activityKey)).toBeDefined();
-
-    dropNeverPersistedQueries(restored);
 
     expect(restored.getQueryData(activityKey)).toBeUndefined();
     expect(restored.getQueryData(['products'])).toEqual(['p1']);
+  });
+
+  it('leaves a live activity list alone when nothing was saved', async () => {
+    const client = new QueryClient();
+    const live = { pages: [{ items: [1] }], pageParams: [null] };
+    client.setQueryData(activityKey, live);
+
+    await persistQueryClientRestore({
+      queryClient: client,
+      persister: persisterFor(undefined),
+    });
+
+    expect(client.getQueryData(activityKey)).toEqual(live);
   });
 });

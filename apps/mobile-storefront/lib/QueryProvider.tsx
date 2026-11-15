@@ -20,8 +20,8 @@ import { useEffect, useRef, useState } from 'react';
 import { createLogger } from './logger';
 import { queryClient, queryPersister } from './query-client';
 import {
-  dropNeverPersistedQueries,
   shouldPersistQuery,
+  withoutNeverPersistedQueries,
 } from './should-persist-query';
 
 const log = createLogger('QueryProvider');
@@ -39,7 +39,7 @@ const PERSIST_MAX_AGE_MS = 1000 * 60 * 60 * 24;
 
 const persistOptions = {
   queryClient,
-  persister: queryPersister,
+  persister: withoutNeverPersistedQueries(queryPersister),
   maxAge: PERSIST_MAX_AGE_MS,
   dehydrateOptions: {
     shouldDehydrateQuery: shouldPersistQuery,
@@ -49,7 +49,6 @@ const persistOptions = {
 async function restorePersistedQueryCache(onSettled: () => void) {
   try {
     await persistQueryClientRestore(persistOptions);
-    dropNeverPersistedQueries(queryClient);
     log.debug('Cache hydrated from persisted storage');
   } catch (error) {
     log.warn('Cache hydration failed, continuing without restore', error);

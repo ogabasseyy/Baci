@@ -8,7 +8,6 @@ import { Text } from 'react-native';
 
 const mockRestore = jest.fn().mockResolvedValue(undefined);
 const mockSubscribe = jest.fn().mockReturnValue(jest.fn());
-const mockRemoveQueries = jest.fn();
 
 jest.mock('@tanstack/react-query-persist-client', () => ({
   persistQueryClientRestore: (...args: unknown[]) => mockRestore(...args),
@@ -33,7 +32,6 @@ jest.mock('./query-client', () => ({
     setDefaultOptions: jest.fn(),
     getQueryDefaults: jest.fn(() => undefined),
     getMutationDefaults: jest.fn(() => undefined),
-    removeQueries: (...args: unknown[]) => mockRemoveQueries(...args),
   },
   queryPersister: {
     persistClient: jest.fn(),
@@ -182,20 +180,34 @@ describe('QueryProvider', () => {
     expect(shouldDehydrate({ state: { status: 'pending' } })).toBe(false);
   });
 
-  it('bugfix: drops wallet activity a restored snapshot brought back', async () => {
+  it('bugfix: restores through a persister that drops saved wallet activity', async () => {
+    const { queryPersister } = jest.requireMock('./query-client') as {
+      queryPersister: { restoreClient: jest.Mock };
+    };
+    queryPersister.restoreClient.mockResolvedValue({
+      buster: '',
+      timestamp: 0,
+      clientState: {
+        mutations: [],
+        queries: [
+          { queryKey: ['piggyvest-wallet-activity', 'm', 'u'] },
+          { queryKey: ['products'] },
+        ],
+      },
+    });
     render(
       <QueryProvider>
         <TestChild />
       </QueryProvider>
     );
-
     await waitFor(() => {
-      expect(mockRemoveQueries).toHaveBeenCalledWith({
-        queryKey: ['piggyvest-wallet-activity'],
-      });
+      expect(mockRestore).toHaveBeenCalledTimes(1);
     });
-    expect(mockRestore.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRemoveQueries.mock.invocationCallOrder[0]
-    );
+
+    const saved = await mockRestore.mock.calls[0][0].persister.restoreClient();
+
+    expect(
+      saved.clientState.queries.map((q: { queryKey: unknown[] }) => q.queryKey)
+    ).toEqual([['products']]);
   });
 });

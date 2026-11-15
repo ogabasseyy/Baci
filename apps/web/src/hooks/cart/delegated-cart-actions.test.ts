@@ -101,7 +101,7 @@ it('keeps the group deal when the matching line is already at the quantity cap',
     { id: 'capped', manage_stock: false, stock: 10 } as never,
     1
   );
-  expect(accepted).toBe(false);
+  expect(accepted).toBe(0);
   expect(s.shared.addToCart).not.toHaveBeenCalled();
   expect(s.shared.repriceLine).not.toHaveBeenCalled();
   expect(s.active.current).toBe(true);
@@ -123,7 +123,7 @@ it('keeps the group deal when its own negotiated line is at the cap after the vo
     { id: 'p', manage_stock: false, stock: 10 } as never,
     1
   );
-  expect(accepted).toBe(false);
+  expect(accepted).toBe(0);
   expect(s.shared.addToCart).not.toHaveBeenCalled();
   expect(s.shared.repriceLine).not.toHaveBeenCalled();
   expect(s.active.current).toBe(true);
@@ -135,7 +135,9 @@ it('forwards only the post-void headroom for a partially capped negotiated line'
     { id: 'p', manage_stock: false, stock: 10 } as never,
     2
   );
-  expect(accepted).toBe(true);
+  // Regression: the provider tracks this return, so it must be the
+  // clamped quantity (1), not the requested 2.
+  expect(accepted).toBe(1);
   expect(s.shared.addToCart).toHaveBeenCalledWith(
     expect.objectContaining({ id: 'p' }),
     1,

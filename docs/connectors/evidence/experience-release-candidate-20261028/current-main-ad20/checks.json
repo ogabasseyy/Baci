@@ -1,0 +1,185 @@
+{
+  "base": "ad20cb5c4974eb303183c5440d35dc1554721a21",
+  "previousBase": "225f6a0a69dc0299fd9323c699302da59d75075a",
+  "candidateCommit": null,
+  "reviewed": false,
+  "releaseQualified": false,
+  "integration": {
+    "method": "fast-forward base then restore task stash",
+    "recoveryStash": "230760e6f0a87fa802c85512ac4d1e097e320625",
+    "conflicts": 0,
+    "upstream": "Anonymous cart quotas use client credential; merged cart request preserves credential headers and attempt-policy admission."
+  },
+  "checks": {
+    "monorepoLint": {
+      "status": "passed",
+      "tasks": 6,
+      "log": "/tmp/experience-candidate-ad20-static.log"
+    },
+    "monorepoTypecheck": {
+      "status": "passed",
+      "tasks": 8,
+      "log": "/tmp/experience-candidate-ad20-types-final.log",
+      "fix": "Diagnostic worker test fixture now contextually typed to runCheckpointB input; previous broad types gate caught widened route/capability literals."
+    },
+    "shared": {
+      "status": "passed",
+      "files": 304,
+      "tests": 2000,
+      "log": "/tmp/experience-candidate-ad20-shared-tests.log"
+    },
+    "cart": {
+      "status": "passed",
+      "files": 191,
+      "tests": 1167,
+      "log": "/tmp/experience-candidate-ad20-cart-tests.log"
+    },
+    "runner": {
+      "status": "passed",
+      "files": 37,
+      "tests": 114,
+      "log": "/tmp/experience-candidate-ad20-runner-tests.log"
+    },
+    "browserMatrix": {
+      "status": "passed",
+      "tests": 113,
+      "durationMinutes": 15.7,
+      "log": "/tmp/experience-candidate-ad20-browser-matrix.log",
+      "reportSha256": "b495651a21c45590457385ec1a091f3262afa16d66db1cf96853fc775ed0a81a",
+      "stats": {
+        "startTime": "2026-10-28T15:50:19.750Z",
+        "duration": 942734.279,
+        "expected": 113,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "scope": "Chromium/Firefox/WebKit isolated custom-runtime desktop/mobile, route/interactions, native-link/SEO/assets, adversarial/infinite-render/flood checks. Native Baci checkout is separately verified after rebuild; cart receipt patch is outside the isolated frame harness."
+    },
+    "otherPackages": {
+      "status": "partial",
+      "passedTasks": 6,
+      "failedTasks": 1,
+      "log": "/tmp/experience-candidate-ad20-other-package-tests.log",
+      "failure": "Concurrent Turbo invocation of mobile-storefront Jest ended in SIGSEGV. Separate complete package invocation passed all 1624 suites plus64 checks; do not represent the Turbo invocation as passed."
+    },
+    "previewRebuild": {
+      "status": "passed-before-final-boundary-budget-followup",
+      "log": "/tmp/experience-candidate-ad20-production-build.log",
+      "note": "Cold Next TypeScript check completed; final incremental build applies the existing10s channel binding budget, preserving5s HTTP deadlines."
+    },
+    "fullWeb": {
+      "status": "pending",
+      "note": "225f6a0 frozen attempt interrupted after detecting newer upstream; not a current-main result."
+    },
+    "freeReviewHooks": {
+      "status": "completed-with-one-major-fixed",
+      "files": 33,
+      "issues": 1,
+      "log": "/tmp/experience-candidate-ad20-review-hooks.ndjson",
+      "followupStatus": "completed-one-minor-fixed",
+      "followupLog": "/tmp/experience-candidate-ad20-review-hooks-postfix.ndjson"
+    },
+    "cartPostReview": {
+      "status": "passed",
+      "files": 192,
+      "tests": 1170,
+      "log": "/tmp/experience-candidate-ad20-cart-postfix.log"
+    },
+    "receiptConflictRegression": {
+      "status": "passed",
+      "redTests": 3,
+      "greenTests": 19,
+      "redLog": "/tmp/experience-candidate-ad20-receipt-red.log",
+      "greenLog": "/tmp/experience-candidate-ad20-receipt-green.log",
+      "issue": "Durable operation ID conflict after reload could throw during cancellation and stall queue.",
+      "resolution": "Reject ordinary submit against existing durable receipt; preserve original envelope; persistence failure cannot prevent lifecycle settlement. Reconciliation remains explicit."
+    },
+    "mobileStorefront": {
+      "status": "passed",
+      "suites": 1624,
+      "tests": 10079,
+      "nativeConfigChecks": 64,
+      "log": "/tmp/experience-candidate-ad20-mobile-storefront-tests.log"
+    },
+    "cleanPerformancePreflight": {
+      "status": "blocked-host-load",
+      "observedLoad1": 19.47021484375,
+      "logicalCpus": 12,
+      "load1PerCpu": 1.6225179036458333,
+      "threshold": 0.8,
+      "qualified": false,
+      "action": "Do not repeat a known-contaminated benchmark as release qualification."
+    },
+    "sqlRls": {
+      "status": "passed",
+      "sqlTests": 6,
+      "normalAuthDataApiTests": 1,
+      "log": "/tmp/experience-candidate-ad20-sql.log",
+      "scope": "Disposable local PostgreSQL17 only; normal role policies and caller auth upload, no hosted migrations."
+    },
+    "reviewDatabase": {
+      "status": "completed-under-triage",
+      "issues": 3,
+      "major": 2,
+      "trivial": 1,
+      "log": "/tmp/experience-candidate-ad20-review-database.ndjson"
+    },
+    "reviewComponents": {
+      "status": "completed-under-triage",
+      "issues": 7,
+      "major": 2,
+      "minor": 2,
+      "trivial": 3,
+      "log": "/tmp/experience-candidate-ad20-review-components.ndjson"
+    },
+    "queueExitRegression": {
+      "status": "passed",
+      "redFailed": 2,
+      "redPassed": 1,
+      "greenTests": 10,
+      "redLog": "/tmp/experience-candidate-ad20-queue-exits-red.log",
+      "greenLog": "/tmp/experience-candidate-ad20-queue-exits-green.log"
+    },
+    "lifecycle": {
+      "status": "passed-before-new-quota-migration",
+      "files": 9,
+      "tests": 14,
+      "durationSeconds": 418.85,
+      "log": "/tmp/experience-candidate-ad20-lifecycle.log",
+      "note": "Includes two real offline builds and20 captures for rolled-back retention, private prerender and HTTP MCP. New quota and structural checks separately verified afterward."
+    },
+    "privateTablePoliciesAndCatalog": {
+      "status": "passed",
+      "files": 2,
+      "tests": 4,
+      "log": "/tmp/experience-candidate-ad20-private-policies-green.log",
+      "beforeFixLog": "/tmp/experience-candidate-ad20-private-policies-red.log"
+    },
+    "componentClientFallback": {
+      "status": "passed",
+      "files": 2,
+      "tests": 4,
+      "log": "/tmp/experience-candidate-ad20-client-fallback-tests.log"
+    },
+    "frameAndWatcher": {
+      "status": "passed",
+      "files": 3,
+      "tests": 15,
+      "scope": "Delayed initial published binding, fresh single-flight reads, fail-closed denial/revocation, renewed host expiry and private preview expiry. Luna owner result; final package suite will verify again."
+    },
+    "finalPreviewRebuild": {
+      "status": "running",
+      "log": "/tmp/experience-candidate-ad20-production-final.log"
+    }
+  },
+  "boundaries": {
+    "localOnly": true,
+    "syntheticOnly": true,
+    "normalAuthRls": true,
+    "published": false,
+    "ordersCreated": 0,
+    "paymentsSubmitted": false,
+    "paidReviews": false
+  }
+}

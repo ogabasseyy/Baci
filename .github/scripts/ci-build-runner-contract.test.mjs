@@ -8,6 +8,25 @@ import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 const job = workflow.jobs.build;
 
+test('only hosted web builds restore the Next.js cache', () => {
+  const restore = job.steps.find((step) => step.id === 'next-cache');
+  assert.ok(restore);
+  for (const [environment, web, plan, expected] of [
+    ['github-hosted', 'true', 'full-affected', true],
+    ['github-hosted', 'false', 'full-affected', false],
+    ['github-hosted', 'true', 'config-smoke', false],
+    ['self-hosted', 'true', 'full-affected', false],
+    ['', 'true', 'full-affected', false],
+  ]) {
+    const condition = restore.if
+      .replaceAll('runner.environment', JSON.stringify(environment))
+      .replaceAll('needs.changes.outputs.web', JSON.stringify(web))
+      .replaceAll('needs.changes.outputs.test_plan_mode', JSON.stringify(plan));
+    assert.match(condition, /^[\s()'"\w=!&|.\-]+$/);
+    assert.equal(Function(`"use strict"; return (${condition});`)(), expected);
+  }
+});
+
 test('self-hosted builds cannot save the shared Next.js cache', () => {
   const save = job.steps.find(
     (step) => step.name === 'Save Next.js build cache (main branch only)'

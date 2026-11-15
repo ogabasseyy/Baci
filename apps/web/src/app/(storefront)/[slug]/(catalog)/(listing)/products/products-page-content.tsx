@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import type { BreadcrumbList, CollectionPage } from 'schema-dts';
 import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { StorefrontPagination } from '@/components/storefront/ogabassey/components/StorefrontPagination';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import {
@@ -140,146 +141,152 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
       : rangeStart + currentProductIndex.products.length - 1;
 
   return (
-    <>
-      <JsonLd data={collectionSchema} />
-      <JsonLd data={breadcrumbSchema} />
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path="/products"
+      fallback={
+        <>
+          <JsonLd data={collectionSchema} />
+          <JsonLd data={breadcrumbSchema} />
 
-      <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6">
-        <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-2 text-sm text-store-background-text/55"
-          >
-            <ol className="flex flex-wrap items-center gap-2">
-              <li>
-                <Link
-                  href={asRoute(pathPrefix || '/')}
-                  prefetch={false}
-                  className="transition-colors hover:text-store-primary"
-                >
-                  Home
-                </Link>
-              </li>
-              <li className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="text-store-background-text/40"
-                >
-                  /
-                </span>
-                <span
-                  aria-current="page"
-                  className="font-medium text-store-background-text"
-                >
-                  Products
-                </span>
-              </li>
-            </ol>
-          </nav>
-
-          <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold text-store-background-text md:text-4xl">
-                Products
-              </h1>
-              <p className="max-w-2xl text-sm text-store-background-text/60 md:text-base">
-                {description}
-              </p>
-            </div>
-
-            <p
-              aria-live="polite"
-              className="text-sm text-store-background-text/50"
-            >
-              Showing {rangeStart}-{rangeEnd} of{' '}
-              {currentProductIndex.totalCount} products
-            </p>
-          </div>
-
-          {displayCategories.length > 0 && (
-            <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-store-background-text">
-                Browse Categories
-              </h2>
-              <div className="mt-4 flex flex-wrap gap-3">
-                {displayCategories.map((category) => (
-                  <Link
-                    key={category.id}
-                    href={asRoute(`${pathPrefix}/${category.slug}`)}
-                    prefetch={false}
-                    className="rounded-full border border-store-background-text/10 bg-store-background px-4 py-2 text-sm font-medium text-store-background-text transition-colors hover:border-store-primary hover:text-store-primary"
-                  >
-                    {category.name}
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {currentProductIndex.products.length === 0 ? (
-            <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-              <h2 className="text-xl font-semibold text-store-background-text">
-                No products available
-              </h2>
-              <p className="mt-2 text-sm text-store-background-text/55">
-                This storefront does not have any published products yet.
-              </p>
-            </div>
-          ) : (
-            <>
-              <section
-                aria-labelledby="products-catalog-heading"
-                className="mt-10"
+          <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6">
+            <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+              <nav
+                aria-label="Breadcrumb"
+                className="flex items-center gap-2 text-sm text-store-background-text/55"
               >
-                <h2 id="products-catalog-heading" className="sr-only">
-                  Product Catalog
-                </h2>
-                {/* biome-ignore lint/a11y/useSemanticElements: WAI-ARIA group container for product cards with aria-posinset and aria-setsize */}
-                <div
-                  role="group"
-                  aria-labelledby="products-catalog-heading"
-                  className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
-                >
-                  {currentProductIndex.products.map((product, index) => (
-                    <ProductIndexCard
-                      key={product.id}
-                      formattedPrice={formatProductPrice(product.price)}
-                      pathPrefix={pathPrefix}
-                      posInSet={rangeStart + index}
-                      product={product}
-                      setSize={currentProductIndex.totalCount}
-                    />
-                  ))}
-                </div>
-              </section>
+                <ol className="flex flex-wrap items-center gap-2">
+                  <li>
+                    <Link
+                      href={asRoute(pathPrefix || '/')}
+                      prefetch={false}
+                      className="transition-colors hover:text-store-primary"
+                    >
+                      Home
+                    </Link>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="text-store-background-text/40"
+                    >
+                      /
+                    </span>
+                    <span
+                      aria-current="page"
+                      className="font-medium text-store-background-text"
+                    >
+                      Products
+                    </span>
+                  </li>
+                </ol>
+              </nav>
 
-              <StorefrontPagination
-                ariaLabel="Products pagination"
-                basePath={`${pathPrefix}/products`}
-                crawlDiscoveryAllPagesThreshold={20}
-                crawlDiscoveryLabel="Browse product index pages"
-                crawlDiscoveryMaxLinks={24}
-                crawlDiscoveryPageLabel="Products page"
-                currentPage={currentPage}
-                totalPages={totalPages}
-              />
-            </>
-          )}
-          {/* These links are independently streamed SEO enrichment. Keep them
+              <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-2">
+                  <h1 className="text-3xl font-bold text-store-background-text md:text-4xl">
+                    Products
+                  </h1>
+                  <p className="max-w-2xl text-sm text-store-background-text/60 md:text-base">
+                    {description}
+                  </p>
+                </div>
+
+                <p
+                  aria-live="polite"
+                  className="text-sm text-store-background-text/50"
+                >
+                  Showing {rangeStart}-{rangeEnd} of{' '}
+                  {currentProductIndex.totalCount} products
+                </p>
+              </div>
+
+              {displayCategories.length > 0 && (
+                <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
+                  <h2 className="text-lg font-semibold text-store-background-text">
+                    Browse Categories
+                  </h2>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {displayCategories.map((category) => (
+                      <Link
+                        key={category.id}
+                        href={asRoute(`${pathPrefix}/${category.slug}`)}
+                        prefetch={false}
+                        className="rounded-full border border-store-background-text/10 bg-store-background px-4 py-2 text-sm font-medium text-store-background-text transition-colors hover:border-store-primary hover:text-store-primary"
+                      >
+                        {category.name}
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {currentProductIndex.products.length === 0 ? (
+                <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
+                  <h2 className="text-xl font-semibold text-store-background-text">
+                    No products available
+                  </h2>
+                  <p className="mt-2 text-sm text-store-background-text/55">
+                    This storefront does not have any published products yet.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <section
+                    aria-labelledby="products-catalog-heading"
+                    className="mt-10"
+                  >
+                    <h2 id="products-catalog-heading" className="sr-only">
+                      Product Catalog
+                    </h2>
+                    {/* biome-ignore lint/a11y/useSemanticElements: WAI-ARIA group container for product cards with aria-posinset and aria-setsize */}
+                    <div
+                      role="group"
+                      aria-labelledby="products-catalog-heading"
+                      className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
+                    >
+                      {currentProductIndex.products.map((product, index) => (
+                        <ProductIndexCard
+                          key={product.id}
+                          formattedPrice={formatProductPrice(product.price)}
+                          pathPrefix={pathPrefix}
+                          posInSet={rangeStart + index}
+                          product={product}
+                          setSize={currentProductIndex.totalCount}
+                        />
+                      ))}
+                    </div>
+                  </section>
+
+                  <StorefrontPagination
+                    ariaLabel="Products pagination"
+                    basePath={`${pathPrefix}/products`}
+                    crawlDiscoveryAllPagesThreshold={20}
+                    crawlDiscoveryLabel="Browse product index pages"
+                    crawlDiscoveryMaxLinks={24}
+                    crawlDiscoveryPageLabel="Products page"
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                  />
+                </>
+              )}
+              {/* These links are independently streamed SEO enrichment. Keep them
               after the catalog so their late arrival cannot push painted cards. */}
-          {showMaintainedLinkModules && currentPage === 1 && (
-            <Suspense fallback={null}>
-              <ProductsPageDeferredLinkModules
-                baseUrl={baseUrl}
-                categories={displayCategories}
-                merchantId={merchant.id}
-                pathPrefix={pathPrefix}
-                productTotalPages={totalPages}
-              />
-            </Suspense>
-          )}
-        </div>
-      </div>
-    </>
+              {showMaintainedLinkModules && currentPage === 1 && (
+                <Suspense fallback={null}>
+                  <ProductsPageDeferredLinkModules
+                    baseUrl={baseUrl}
+                    categories={displayCategories}
+                    merchantId={merchant.id}
+                    pathPrefix={pathPrefix}
+                    productTotalPages={totalPages}
+                  />
+                </Suspense>
+              )}
+            </div>
+          </div>
+        </>
+      }
+    />
   );
 }

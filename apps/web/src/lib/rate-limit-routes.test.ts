@@ -136,3 +136,12 @@ describe('rate-limit route matching', () => {
     ).not.toBe('/api/storefront/customer/wallet-pin');
   });
 });
+
+it('keeps anonymous experience reads in their own public bucket', () => {
+  expect(
+    getRateLimitConfig('/api/storefront/experience/catalog')
+  ).toMatchObject({
+    pattern: '/api/storefront/experience',
+    config: { maxRequests: 240, windowMs: 60000 },
+  });
+});

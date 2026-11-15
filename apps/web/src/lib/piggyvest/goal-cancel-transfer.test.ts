@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { submitGoalCancel } from './goal-cancel-transfer';
 
@@ -224,6 +224,58 @@ it('still dispatches a balance exactly at the ceiling', async () => {
     request.operationId,
     9_999_999_999
   );
+});
+
+describe('bugfix: the ceiling applies to each cancel transfer, not the goal balance', () => {
+  const bigWallet = (balance: number) => async (id: string) => ({
+    id,
+    api_customer_id: 'customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: id === 'goal-wallet' ? balance : 50,
+  });
+
+  it('sends the principal when the balance is above the ceiling but both legs fit', async () => {
+    const p = ports();
+    p.retrieveWallet.mockImplementation(bigWallet(10_100_000_000));
+    const splitDispatch = vi.fn().mockResolvedValue({
+      status: 'dispatched',
+      principalKobo: 9_900_000_000,
+      forfeitedInterestKobo: 200_000_000,
+    });
+    expect(await submitGoalCancel(request, { ...p, splitDispatch })).toEqual({
+      status: 'pending',
+    });
+    expect(splitDispatch).toHaveBeenCalledWith(
+      request.operationId,
+      10_100_000_000
+    );
+    expect(p.transfer).toHaveBeenCalledWith(
+      expect.objectContaining({ amountKobo: 9_900_000_000 })
+    );
+  });
+
+  it('answers too_large, sending nothing, when the database refuses the principal', async () => {
+    const p = ports();
+    p.retrieveWallet.mockImplementation(bigWallet(10_000_000_001));
+    const splitDispatch = vi.fn().mockResolvedValue({ status: 'too_large' });
+    expect(await submitGoalCancel(request, { ...p, splitDispatch })).toEqual({
+      status: 'too_large',
+    });
+    expect(p.transfer).not.toHaveBeenCalled();
+  });
+
+  it('releases without asking the database for a balance beyond any split', async () => {
+    const p = ports();
+    p.retrieveWallet.mockImplementation(bigWallet(1_000_000_000_000_000));
+    const splitDispatch = vi.fn();
+    expect(await submitGoalCancel(request, { ...p, splitDispatch })).toEqual({
+      status: 'too_large',
+    });
+    expect(splitDispatch).not.toHaveBeenCalled();
+    expect(p.cancelBeforeDispatch).toHaveBeenCalledWith(request.operationId);
+  });
 });
 
 // A thrown release must not leave the attempt reserved with the PIN spent

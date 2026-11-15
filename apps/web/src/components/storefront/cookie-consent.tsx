@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
+import styles from './cookie-consent.module.css';
 import { useCookieConsentController } from './use-cookie-consent-controller';
 
 export { isCookieAllowed } from './is-cookie-allowed';
@@ -33,6 +34,7 @@ export function CookieConsent() {
   return (
     <div
       className={cn(
+        styles.banner,
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
@@ -65,6 +67,7 @@ export function CookieConsent() {
           padding: '1rem',
         }}
         className={cn(
+          styles.panel,
           'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
           'transition-[opacity,transform] duration-300 ease-in-out'
         )}
@@ -77,7 +80,12 @@ export function CookieConsent() {
         )}
         {!showDetails ? (
           // Simple View - Horizontal Floating Bar
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+          <div
+            className={cn(
+              styles.content,
+              'flex flex-col md:flex-row items-center gap-4 md:gap-6'
+            )}
+          >
             <div className="flex items-center gap-4 flex-1 w-full md:w-auto">
               <div className="hidden sm:flex items-center justify-center size-10 rounded-full bg-primary/10 shrink-0">
                 <Cookie className="size-5 text-primary" />

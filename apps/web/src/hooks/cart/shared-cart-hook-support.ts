@@ -6,11 +6,8 @@ import {
   type CartSnapshot,
   cartLineIdentity,
 } from '@baci/shared/cart';
-
 import type { CartMergeConflict } from '@/lib/cart/merge';
-
 import type { Product } from '@/lib/products';
-
 import type {
   AddToCartOptions,
   CartItem,
@@ -18,6 +15,7 @@ import type {
   SharedCartImportStatus,
   SharedCartSyncStatus,
 } from './cart-types';
+import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 import {
   cartItemToIdentity,
@@ -39,6 +37,7 @@ export interface UseSharedCartOptions {
 }
 
 export interface UseSharedCartResult {
+  experienceCommandPort?: ExperienceCartHostPort;
   cart: SharedCartDisplayItem[];
   cartId: string | null;
   version: number | null;

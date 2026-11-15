@@ -8,6 +8,7 @@ export function delegatedCartValue(
 ): Partial<CartContextType> {
   if (!delegated) return {};
   return {
+    experienceCommandPort: shared.experienceCommandPort,
     syncStatus: shared.syncStatus,
     syncError: shared.syncError,
     retryPendingSync: shared.retryPendingSync,

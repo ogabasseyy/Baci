@@ -2,6 +2,7 @@
 
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { createCartActions } from './shared-cart-actions';
+import { createExperiencePortForCart } from './shared-cart-experience-runtime';
 import {
   noop,
   type UseSharedCartOptions,
@@ -36,6 +37,11 @@ export function useSharedCart(
     version: state.confirmed?.version ?? 0,
     generation: runtime.sessionGeneration,
     onRefresh: () => snapshots.refreshNow(true),
+    isOwnOperation: (operationId) =>
+      runtime.stateRef.current.queue.some(
+        (entry) =>
+          entry.operationId === operationId && entry.state === 'sending'
+      ),
   });
   const provisioning = createCartProvisioning({ ...runtime, ...snapshots });
   useCartLinkLifecycle({
@@ -128,6 +134,7 @@ export function useSharedCart(
   }
 
   return {
+    experienceCommandPort: createExperiencePortForCart(runtime),
     addToCart,
     cart: state.display,
     cartCount,

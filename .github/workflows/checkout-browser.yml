@@ -16,8 +16,49 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Review-first CI (docs/runbooks/review-first-ci.md): the browser regression is part of the
+  # full stage, so a pull request from this repository runs it only after Codex reports no
+  # major findings for the exact head commit (or ci-now / the timeout applies). Every other run
+  # (push, merge_group, manual, fork, switch off) is a plain full run and runs no script here.
+  stage:
+    name: Review-first CI stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      stage: ${{ steps.stage_review.outputs.stage || steps.stage_full.outputs.stage }}
+    steps:
+      - name: Resolve CI stage (full CI)
+        id: stage_full
+        if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot')) }}
+        run: echo "stage=full" >> "$GITHUB_OUTPUT"
+      - name: Check out the stage scripts
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot') }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history on purpose: the stage step runs the BASE commit's copy of the scripts
+          # (git archive), which needs that commit's objects; only the scripts are checked out.
+          fetch-depth: 0
+          sparse-checkout: .github/scripts/review-first-ci
+          persist-credentials: false
+      - name: Resolve CI stage (quick checks now, full CI after Codex review)
+        id: stage_review
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot') }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BACI_REVIEW_FIRST_CI: ${{ vars.BACI_REVIEW_FIRST_CI }}
+          BACI_CODEX_WAIT_TIMEOUT_MINUTES: ${{ vars.BACI_CODEX_WAIT_TIMEOUT_MINUTES }}
+        run: bash .github/scripts/review-first-ci/launch-stage.sh
+
   checkout-browser:
     name: Checkout - Chromium and WebKit
+    needs: [stage]
+    if: ${{ needs.stage.outputs.stage == 'full' }}
     runs-on: ubuntu-24.04
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble

@@ -1,0 +1,298 @@
+{
+  "label": "current",
+  "buildId": "34c30e6e-b8a8-46c5-b695-33dc95f2dc10",
+  "buildDigest": "92ae7162c76f2cc9e72426f24a080e4ab7c3061fea095bc8ce6b363af09fb8f8",
+  "artifactId": "c5d2005e-b6e1-4c3e-bfc0-346bb7a51a18",
+  "sourceDigest": "3fa27d6c408077d9fec17f0bbc6901f688a5edad20f96b856c5e89e0c6cf1aef",
+  "toolchain": {
+    "digest": "341def06a35cd1eddad8079191afe82439a6826e75074fa0bfc8a0c1dd3947af",
+    "profile": {
+      "workers": {
+        "browser-checks.mjs": "f7a10cd2765339538fb276a17d481553f7d30d8e678a26056045380c5a1b690d",
+        "bundle-source.mjs": "15cc0b1d8a61dba2fea77fd7b23944c6f1b562ff3cc17ab8567d3be3e648282c",
+        "capture-worker.mjs": "64cb733009ef4f4353122c6b6fcaba40030bdd343bd92fa64e58f1bed7d34a71"
+      },
+      "hostShell": "96970c816b8755ce4f28b1614c65f21eb7bc10a60cc0ea285a61599b62a12991",
+      "platformFiles": "300fb2864ef65a1b0e330d9795c7c92f32bbc4a4ed0c0c129461a160bb0dc234",
+      "policy": "ef7df42d7654cabe3e82d850f6ba415305b92b3048364db1b7195bbf232b618e",
+      "compilerNode": "24.21.0",
+      "captureNode": "24.20.0",
+      "playwright": "1.63.0",
+      "browserManifest": "sha256:a0f4498920a5dbac63196d9140ed738ef00470f27e2e74029abd8850b7bd5717",
+      "runsc": "release-20261019.0"
+    }
+  },
+  "manifest": {
+    "format": "baci.experience/v2",
+    "runtime": "react-browser-sandbox/v1",
+    "sdkVersion": "commerce-bridge/v1",
+    "entry": "app.tsx",
+    "files": [
+      {
+        "path": "app.tsx",
+        "content": "import {useState} from 'react'; import {useCommerce} from '@baci/experience-sdk'; export default function Store({route,catalog}){const commerce=useCommerce();const[n,setN]=useState(0);return <main><h1>Synthetic rollback current</h1><p>{route.canonicalPath}</p><p>{catalog.products[0].name}</p><button onClick={()=>setN(n+1)}>Count {n}</button><nav>{['/','/collections/all','/products/device','/pages/story'].map(path=><button key={path} onClick={()=>commerce.navigation.go(path)}>{path}</button>)}</nav></main>}"
+      }
+    ],
+    "packages": [
+      {
+        "name": "react",
+        "versionRef": "platform-pinned"
+      },
+      {
+        "name": "@baci/experience-sdk",
+        "versionRef": "platform-pinned"
+      }
+    ],
+    "routes": [
+      {
+        "path": "/",
+        "view": "home"
+      },
+      {
+        "path": "/collections/all",
+        "view": "collection"
+      },
+      {
+        "path": "/products/device",
+        "view": "product"
+      },
+      {
+        "path": "/pages/story",
+        "view": "editorial"
+      }
+    ],
+    "assets": [],
+    "capabilities": ["catalog.read", "navigation"]
+  },
+  "outputs": [
+    {
+      "path": "app.js",
+      "digest": "b5fd0cf1d534eb32f37762317cba3787ab3ea4cab496cbeec1d47f55852f9ce0"
+    },
+    {
+      "path": "app.css",
+      "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "independentProofs": [
+    {
+      "jobId": "baci-experience-a277db45-1891-4414-8643-e0e0eaf6f4b7",
+      "engine": "chromium",
+      "width": 390,
+      "screenshotDigest": "2769bd265ea4a420cd826830b71c3c6dd181e545c507d81a055838df71d94b84"
+    },
+    {
+      "jobId": "baci-experience-03d20812-4070-44cf-8041-f995627b7753",
+      "engine": "chromium",
+      "width": 1440,
+      "screenshotDigest": "60e6f511aaa84ec5ba3c3d293aa4ec26e6e1ef5102b5ac34def417309b5074e0"
+    },
+    {
+      "jobId": "baci-experience-fa71bf54-2e12-4449-821c-1e64932840cf",
+      "engine": "firefox",
+      "width": 390,
+      "screenshotDigest": "d94d5cf83b4ee194754e894f9b4efddfff1e1cce4fa40003d25a1a221f2b2714"
+    },
+    {
+      "jobId": "baci-experience-240166ec-44ca-4b95-9aa3-0d2bad9f5223",
+      "engine": "firefox",
+      "width": 1440,
+      "screenshotDigest": "0cd984dda320702bc2820de8a5e103a123576d80e35f6319a8fb30cf9dfd866c"
+    },
+    {
+      "jobId": "baci-experience-bc56d3cc-427a-4288-86f3-3cab2ec64a8b",
+      "engine": "webkit",
+      "width": 390,
+      "screenshotDigest": "af6305b7beee486ecdc9d742f088136d81bb0b82c60bd42659520adb97b8ea26"
+    },
+    {
+      "jobId": "baci-experience-994b44c0-d88f-48ba-8abd-de1720e6b437",
+      "engine": "webkit",
+      "width": 1440,
+      "screenshotDigest": "0f286c39b46bdbebffa887713588489ee995e1afe4fc796f8431bf7cceb9216b"
+    }
+  ],
+  "captures": [
+    {
+      "path": "/",
+      "file": "home.png",
+      "pngDigest": "15e76631c7526812465050228d347a70af15b07db9462246f5c6f61ce051181c",
+      "snapshot": {
+        "key": {
+          "build": "92ae7162c76f2cc9e72426f24a080e4ab7c3061fea095bc8ce6b363af09fb8f8",
+          "assets": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "catalog": "synthetic-1",
+          "path": "/",
+          "viewport": "390",
+          "locale": "en-NG",
+          "browser": "chromium",
+          "state": "default"
+        },
+        "consumesCatalog": true,
+        "nodes": [
+          {
+            "tag": "h1",
+            "children": [
+              {
+                "text": "Synthetic rollback current"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "/"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "Synthetic QA Device"
+              }
+            ]
+          }
+        ]
+      },
+      "jobId": "baci-experience-c2641e9a-ac04-41bc-a719-ef4b9a597e14"
+    },
+    {
+      "path": "/collections/all",
+      "file": "collection.png",
+      "pngDigest": "75910f3e385ce4b7b0a0ba0df16645f10423c36efa7902178edf0f9a99b998cf",
+      "snapshot": {
+        "key": {
+          "build": "92ae7162c76f2cc9e72426f24a080e4ab7c3061fea095bc8ce6b363af09fb8f8",
+          "assets": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "catalog": "synthetic-1",
+          "path": "/collections/all",
+          "viewport": "390",
+          "locale": "en-NG",
+          "browser": "chromium",
+          "state": "default"
+        },
+        "consumesCatalog": true,
+        "nodes": [
+          {
+            "tag": "h1",
+            "children": [
+              {
+                "text": "Synthetic rollback current"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "/collections/all"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "Synthetic QA Device"
+              }
+            ]
+          }
+        ]
+      },
+      "jobId": "baci-experience-08c65a6c-dce7-431a-b457-ef0ac43db13d"
+    },
+    {
+      "path": "/products/device",
+      "file": "product.png",
+      "pngDigest": "d254fe15adcb0dea970e2cefbe5f5eeb5a28ece392211887f7bbad794f440a53",
+      "snapshot": {
+        "key": {
+          "build": "92ae7162c76f2cc9e72426f24a080e4ab7c3061fea095bc8ce6b363af09fb8f8",
+          "assets": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "catalog": "synthetic-1",
+          "path": "/products/device",
+          "viewport": "390",
+          "locale": "en-NG",
+          "browser": "chromium",
+          "state": "default"
+        },
+        "consumesCatalog": true,
+        "nodes": [
+          {
+            "tag": "h1",
+            "children": [
+              {
+                "text": "Synthetic rollback current"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "/products/device"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "Synthetic QA Device"
+              }
+            ]
+          }
+        ]
+      },
+      "jobId": "baci-experience-ccbc380e-eea2-471a-9f1a-db7cf3a5fe50"
+    },
+    {
+      "path": "/pages/story",
+      "file": "editorial.png",
+      "pngDigest": "77cc817720e249cb556ecf933a3d00ae16a77f70910a2ed65efbbc70430fe88c",
+      "snapshot": {
+        "key": {
+          "build": "92ae7162c76f2cc9e72426f24a080e4ab7c3061fea095bc8ce6b363af09fb8f8",
+          "assets": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "catalog": "synthetic-1",
+          "path": "/pages/story",
+          "viewport": "390",
+          "locale": "en-NG",
+          "browser": "chromium",
+          "state": "default"
+        },
+        "consumesCatalog": true,
+        "nodes": [
+          {
+            "tag": "h1",
+            "children": [
+              {
+                "text": "Synthetic rollback current"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "/pages/story"
+              }
+            ]
+          },
+          {
+            "tag": "p",
+            "children": [
+              {
+                "text": "Synthetic QA Device"
+              }
+            ]
+          }
+        ]
+      },
+      "jobId": "baci-experience-2b1793e6-d838-4b16-88c9-2927cf38db1f"
+    }
+  ],
+  "normalOwnerRlsReads": true
+}

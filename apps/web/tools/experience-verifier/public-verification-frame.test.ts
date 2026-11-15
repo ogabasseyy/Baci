@@ -19,9 +19,11 @@ const integrity = (digest: string) =>
   `sha256-${Buffer.from(digest, 'hex').toString('base64')}`;
 const html = `<!doctype html><html data-baci-experience-build="${build}"><head><link rel="stylesheet" href="${base}/app.css" integrity="${integrity(css)}" crossorigin="anonymous"></head><body><div id="root" inert>Store</div><script id="baci-prerender-bootstrap" type="application/json">{}</script><script type="module" src="${base}/app.js" integrity="${integrity(script)}" crossorigin="anonymous"></script></body></html>`;
 const resolve = async () => [{ address: '8.8.8.8', family: 4 }];
+const legacyCsp =
+  "default-src 'none';script-src 'self';style-src 'self' 'unsafe-inline';img-src 'self';font-src 'self';connect-src 'none';worker-src 'none';form-action 'none';base-uri 'none';frame-ancestors https://shop.example";
 const response = (
   body: string,
-  csp = "default-src 'none';script-src 'self';style-src 'self' 'unsafe-inline';img-src 'self';font-src 'self';connect-src 'none';worker-src 'none';form-action 'none';base-uri 'none';frame-ancestors https://shop.example"
+  csp = `${legacyCsp}; sandbox allow-scripts`
 ) => ({
   response: new Response(body, {
     headers: {
@@ -52,6 +54,8 @@ it('rejects unbound builds, missing integrity, altered policy, and private DNS',
     response(html.replace(build, 'd'.repeat(64))),
     response(html.replace(integrity(script), integrity(css))),
     response(html, 'default-src *'),
+    response(html, legacyCsp),
+    response(html, `${legacyCsp}; sandbox allow-scripts allow-same-origin`),
     response(
       html.replace(
         '</body>',

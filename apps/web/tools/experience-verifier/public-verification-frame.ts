@@ -2,6 +2,10 @@ import { JSDOM } from 'jsdom';
 import { z } from 'zod';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
+import {
+  deliveryDocumentSandbox,
+  publishedDeliveryPolicy,
+} from '../experience-runner/delivery-document-policy';
 import { createBoundPublicFetcher } from './public-fetch';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -45,7 +49,7 @@ export async function fetchPublicFrames(
   });
   const integrity = (value: string) =>
     `sha256-${Buffer.from(value, 'hex').toString('base64')}`;
-  const policy = `default-src 'none';script-src 'self';style-src 'self' 'unsafe-inline';img-src 'self';font-src 'self';connect-src 'none';worker-src 'none';form-action 'none';base-uri 'none';frame-ancestors ${origins.hostOrigins[0]}`;
+  const policy = `${publishedDeliveryPolicy(origins.hostOrigins[0])}; ${deliveryDocumentSandbox}`;
   const frames = [];
   for (const url of urls) {
     const response = await fetchBound(url);

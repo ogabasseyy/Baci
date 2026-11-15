@@ -2,6 +2,15 @@
 # Hostnames, distinct loopback ports and the owner CA are operator-controlled.
 {
 	admin off
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+			}
+		}
+	}
 }
 
 {$BACI_AUTH_HOST} {

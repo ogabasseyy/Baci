@@ -2,6 +2,8 @@ import { authorizePreviewResource } from '../../src/lib/experience/preview-resou
 import type { PreviewVault } from '../../src/lib/experience/preview-service';
 import { productionDeliveryOrigins } from '../../src/lib/experience/production-origins';
 
+import { deliveryDocumentSandbox } from './delivery-document-policy';
+
 /** Output-only HTTPS ingress. The shared vault rechecks normal anon RLS liveness
  * on every resource; this handler cannot create launches or execute source. */
 export function createProductionPreviewDelivery(config: {
@@ -49,6 +51,11 @@ export function createProductionPreviewDelivery(config: {
         headers: {
           ...headers,
           'Content-Type': file.mime,
+          ...(file.mime === 'text/html'
+            ? {
+                'Content-Security-Policy': `${headers['Content-Security-Policy']}; ${deliveryDocumentSandbox}`,
+              }
+            : {}),
           // Sandboxed module/font requests carry the opaque Origin: null.
           // Documents never grant CORS read access; ordinary foreign origins are rejected.
           ...(file.mime !== 'text/html' && origin

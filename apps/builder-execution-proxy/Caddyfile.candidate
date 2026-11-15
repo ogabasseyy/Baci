@@ -1,0 +1,34 @@
+# If combining with the builder candidate, retain its identical global logger.
+{
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+			}
+		}
+	}
+}
+
+# Output-only upstream. Keep this on a separate vhost from builder auth/MCP/owner.
+builder-output-origin.usebaci.com {
+	@delivery {
+		method GET
+		path /resource/* /published/*
+		expression `"{$BACI_EXECUTION_ORIGIN_KEY}".matches("^[A-Za-z0-9_-]{43}$") && {http.request.header.X-Baci-Execution-Origin-Key} == "{$BACI_EXECUTION_ORIGIN_KEY}"`
+	}
+	handle @delivery {
+		header Cache-Control "private, no-store"
+		reverse_proxy 127.0.0.1:{$BACI_DELIVERY_PORT} {
+			header_up Host baci-builder-output.ogabassey-ai.workers.dev
+			header_up -X-Baci-Execution-Origin-Key
+			header_up -Authorization
+			header_up -Cookie
+		}
+	}
+	handle {
+		header Cache-Control "private, no-store"
+		respond 404
+	}
+}

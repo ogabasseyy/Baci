@@ -1,0 +1,16 @@
+{
+  "name": "baci-builder-output",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-15",
+  "compatibility_flags": ["enable_request_signal"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "logpush": false,
+  "secrets": { "required": ["EXECUTION_ORIGIN_KEY"] },
+  "observability": {
+    "enabled": false,
+    "logs": { "enabled": false, "invocation_logs": false },
+    "traces": { "enabled": false }
+  },
+  "cache": { "enabled": false }
+}

@@ -55,6 +55,12 @@ it('serves immutable output on a separate HTTPS site, rechecking revocation and 
   expect(hostile.headers.has('access-control-allow-origin')).toBe(false);
   const document = await serve(new Request(launch.src));
   expect(document.status).toBe(200);
+  expect(document.headers.get('content-security-policy')).toContain(
+    '; sandbox allow-scripts'
+  );
+  expect(opaque.headers.get('content-security-policy')).not.toContain(
+    'sandbox'
+  );
   expect(document.headers.has('access-control-allow-origin')).toBe(false);
   expect(response.headers.has('set-cookie')).toBe(false);
   expect(response.headers.has('access-control-allow-credentials')).toBe(false);

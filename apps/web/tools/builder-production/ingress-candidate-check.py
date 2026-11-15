@@ -5,6 +5,7 @@ No production hostnames, credentials, listeners, DNS or services are changed.
 This does not qualify public DNS, production TLS, OAuth or rollout.
 """
 import http.server
+import json
 import os
 from pathlib import Path
 import socket
@@ -67,7 +68,8 @@ def main():
         text = text.replace('header_up Host {$BACI_EXECUTION_HOST}', 'header_up Host output.localhost')
         config = root / 'Caddyfile'
         config.write_text(text)
-        process = subprocess.Popen(['caddy', 'run', '--config', str(config), '--adapter', 'caddyfile'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        log = (root / 'caddy.log').open('w+')
+        process = subprocess.Popen(['caddy', 'run', '--config', str(config), '--adapter', 'caddyfile'], env=env, stdout=log, stderr=log)
 
         def curl(host, path, *extra):
             return subprocess.run(['curl', '--silent', '--show-error', '--insecure', '--noproxy', '*', '--resolve', f'{host}:{proxy_port}:127.0.0.1', '--max-time', '5', *extra, '-w', '\n%{http_code}', f'https://{host}:{proxy_port}{path}'], capture_output=True, text=True)
@@ -95,10 +97,27 @@ def main():
             owner = curl('owner.localhost', '/internal/owner/preview', '--cert', str(client), '--key', str(client_key))
             assert owner.stdout.startswith('OWNER|mcp.usebaci.com|127.0.0.1\n200'), owner.stderr
             assert curl('owner.localhost', '/builder/mcp', '--cert', str(client), '--key', str(client_key)).stdout.endswith('\n404')
-            print('Synthetic HTTPS routing and owner mTLS checks passed.')
+            for server in (servers[0], servers[3]):
+                server.shutdown()
+                server.server_close()
+            callback = '/upstream/callback?code=synthetic-code-sensitive&state=synthetic-state-sensitive'
+            referer = 'synthetic-reference-sensitive'
+            ticket = 'c' * 64
+            assert curl('auth.localhost', callback, '-H', f'Referer: https://usebaci.com/?value={referer}').stdout.endswith('\n502')
+            assert curl('output.localhost', f'/resource/{ticket}/index.html').stdout.endswith('\n502')
+            log.seek(0)
+            runtime = [json.loads(line) for line in log if line.startswith('{')]
+            failures = [record for record in runtime if record.get('logger') == 'http.log.error']
+            assert len(failures) >= 2, 'Expected dead-upstream runtime error logging'
+            assert all('headers' not in event['request'] and 'uri' not in event['request']
+                       for event in failures)
+            logs = json.dumps(runtime)
+            assert all(marker not in logs for marker in (callback, referer, ticket, 'synthetic-code-sensitive', 'synthetic-state-sensitive'))
+            print('Synthetic HTTPS routing, owner mTLS and runtime log checks passed.')
         finally:
             process.terminate()
             process.wait(timeout=10)
+            log.close()
             for server in servers:
                 server.shutdown()
                 server.server_close()

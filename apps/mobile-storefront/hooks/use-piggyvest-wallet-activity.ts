@@ -4,7 +4,7 @@ import {
   useInfiniteQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchPiggyvestWalletActivity } from '@/lib/piggyvest-wallet-activity';
 import type { PiggyvestWalletActivityPage } from '@/schemas/piggyvest-wallet-activity';
 import { useAuthStore } from '@/stores/auth-store';
@@ -27,15 +27,19 @@ function keepFirstPage(
   merchantId?: string,
   userId?: string
 ) {
+  const key = activityKey(merchantId, userId);
+  const data = queryClient.getQueryData<ActivityData>(key);
+  if (!data || data.pages.length <= 1) return;
+  // Keep the read's own time, so trimming never makes old rows look fresh
+  // and skip the next reload (CodeRabbit, #4259).
+  const updatedAt = queryClient.getQueryState(key)?.dataUpdatedAt;
   queryClient.setQueryData<ActivityData>(
-    activityKey(merchantId, userId),
-    (data) =>
-      data && data.pages.length > 1
-        ? {
-            pages: data.pages.slice(0, 1),
-            pageParams: data.pageParams.slice(0, 1),
-          }
-        : data
+    key,
+    {
+      pages: data.pages.slice(0, 1),
+      pageParams: data.pageParams.slice(0, 1),
+    },
+    { updatedAt }
   );
 }
 
@@ -100,17 +104,39 @@ export function usePiggyvestWalletActivity({
     merchantId,
     userId,
   ]);
-  // Leaving the screen collapses the list to page 1 for the next visit.
+  // Leaving the screen collapses the list to page 1 for the next visit. A
+  // "Show more" still loading is cancelled first, so its late answer cannot
+  // write the extra page back (Codex, #4259).
   useEffect(
-    () => () => keepFirstPage(queryClient, merchantId, userId),
+    () => () => {
+      keepFirstPage(queryClient, merchantId, userId);
+      void queryClient
+        .cancelQueries({ queryKey: activityKey(merchantId, userId) })
+        .finally(() => keepFirstPage(queryClient, merchantId, userId));
+    },
     [queryClient, merchantId, userId]
   );
   // A deposit made while away shows on return, without a pull to refresh.
+  // A return while a read is running is kept and done once it ends.
+  const [focusPending, setFocusPending] = useState(false);
   useRefetchOnRefocus(() => {
-    if (!enabled || isFetching) return;
+    if (enabled) setFocusPending(true);
+  });
+  useEffect(() => {
+    if (!focusPending || isFetching) return;
+    setFocusPending(false);
+    if (!enabled) return;
     keepFirstPage(queryClient, merchantId, userId);
     void refetch({ cancelRefetch: false });
-  });
+  }, [
+    focusPending,
+    isFetching,
+    enabled,
+    queryClient,
+    merchantId,
+    userId,
+    refetch,
+  ]);
   return {
     items: query.data?.pages.flatMap((page) => page.items) ?? [],
     isLoading: query.isPending && query.fetchStatus !== 'idle',

@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import { mockFetchWithTimeout } from '@/lib/wallet-top-up.test-utils';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
@@ -35,6 +35,24 @@ describe('storefront customer API client', () => {
     expect(mockFetchWithTimeout.mock.calls[1][1]).toEqual(
       expect.objectContaining({ timeout: 30_000 })
     );
+  });
+
+  it('bugfix: a caller timeout also covers a stalled response body', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchWithTimeout.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => undefined),
+      });
+      const client = createStorefrontCustomerApiClient();
+      const pending = client.fetchJson({ path: '/api/x', timeoutMs: 20_000 });
+      const outcome = expect(pending).rejects.toThrow('timed out after 20000');
+      await jest.advanceTimersByTimeAsync(20_000);
+      await outcome;
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('sends authenticated PATCH JSON with the requested CSRF token', async () => {

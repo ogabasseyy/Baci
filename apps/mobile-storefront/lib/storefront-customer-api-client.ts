@@ -1,6 +1,10 @@
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { DEFAULT_TIMEOUT, fetchWithTimeout } from '@/lib/fetch-with-timeout';
+import {
+  DEFAULT_TIMEOUT,
+  fetchWithTimeout,
+  TimeoutError,
+} from '@/lib/fetch-with-timeout';
 import { supabase } from '@/lib/supabase';
 import { StorefrontCsrfTokenSchema } from '@/schemas/storefront-csrf-token';
 
@@ -73,6 +77,29 @@ async function parseJsonResponse(response: Response) {
   }
 
   return data;
+}
+
+/**
+ * Holds a body read to the same deadline as its request: a server that sends
+ * headers then stalls the body still fails on time (CodeRabbit, #4259).
+ */
+async function withinDeadline<T>(
+  work: Promise<T>,
+  deadlineMs: number,
+  timeoutMs: number
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new TimeoutError(timeoutMs)),
+      Math.max(deadlineMs - Date.now(), 0)
+    );
+  });
+  try {
+    return await Promise.race([work, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function buildMerchantIdentifiers({
@@ -187,6 +214,7 @@ export function createStorefrontCustomerApiClient() {
         await parseJsonResponse(csrfResponse)
       ).token;
     }
+    const deadlineMs = timeoutMs ? Date.now() + timeoutMs : undefined;
     const queryString = query ? buildQueryString(query) : '';
     const url = `${EXPO_PUBLIC_API_URL}${path}${queryString ? `?${queryString}` : ''}`;
     const response = await fetchWithTimeout(url, {
@@ -199,9 +227,12 @@ export function createStorefrontCustomerApiClient() {
       method,
       signal,
       timeout: timeoutMs ?? DEFAULT_TIMEOUT,
+      ...(deadlineMs ? { deadlineMs } : {}),
     });
 
-    return parseJsonResponse(response);
+    return deadlineMs && timeoutMs
+      ? withinDeadline(parseJsonResponse(response), deadlineMs, timeoutMs)
+      : parseJsonResponse(response);
   };
 
   return {

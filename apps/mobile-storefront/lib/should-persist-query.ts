@@ -1,4 +1,4 @@
-import type { Query } from '@tanstack/react-query';
+import type { Query, QueryClient } from '@tanstack/react-query';
 
 // Never written to device storage: the PiggyVest wallet activity list is
 // money history that grows with "Show more" and must start from one page.
@@ -12,4 +12,15 @@ export function shouldPersistQuery(query: Query): boolean {
   }
   // Don't persist failed or pending queries
   return query.state.status === 'success';
+}
+
+/**
+ * Drops never-persisted queries from a restored cache. Saving filters them
+ * out, but restore does not, so a snapshot saved by an older build would
+ * otherwise bring back every page it held (CodeRabbit, #4259).
+ */
+export function dropNeverPersistedQueries(client: QueryClient): void {
+  for (const root of NEVER_PERSISTED_QUERY_KEYS) {
+    client.removeQueries({ queryKey: [root] });
+  }
 }

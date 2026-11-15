@@ -49,7 +49,7 @@ function setup() {
         }),
       { wrapper, initialProps: { key: refreshKey } }
     );
-  return { render };
+  return { render, client };
 }
 
 describe('bugfix: reopening the wallet re-read every loaded page', () => {
@@ -85,6 +85,71 @@ describe('bugfix: reopening the wallet re-read every loaded page', () => {
 
     await waitFor(() => expect(cursors()).toEqual([null, 'c2', null]));
     await waitFor(() => expect(second.result.current.items).toHaveLength(1));
+  });
+
+  it('a "Show more" still loading when the wallet is left cannot restore the extra page', async () => {
+    let finishPage2: (page: unknown) => void = () => undefined;
+    mockFetch.mockResolvedValueOnce(page1).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishPage2 = resolve;
+      })
+    );
+    const env = setup();
+    const first = env.render();
+    await waitFor(() => expect(first.result.current.items).toHaveLength(1));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(first.result.current.isLoadingMore).toBe(true));
+
+    first.unmount();
+    await act(async () => finishPage2(page2));
+
+    const cached = env.client.getQueryData<{ pages: unknown[] }>([
+      'piggyvest-wallet-activity',
+      MERCHANT,
+      'customer-1',
+    ]);
+    expect(cached?.pages).toHaveLength(1);
+  });
+
+  it('trimming the list on leave keeps the time page 1 was read', async () => {
+    mockFetch.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    const env = setup();
+    const first = env.render();
+    await waitFor(() => expect(first.result.current.items).toHaveLength(1));
+    act(() => first.result.current.loadMore());
+    await waitFor(() => expect(first.result.current.items).toHaveLength(2));
+    const key = ['piggyvest-wallet-activity', MERCHANT, 'customer-1'];
+    const readAt = env.client.getQueryState(key)?.dataUpdatedAt;
+
+    first.unmount();
+
+    await waitFor(() =>
+      expect(
+        env.client.getQueryData<{ pages: unknown[] }>(key)?.pages
+      ).toHaveLength(1)
+    );
+    expect(env.client.getQueryState(key)?.dataUpdatedAt).toBe(readAt);
+  });
+
+  it('a return to the screen during "Show more" re-reads page 1 once it ends', async () => {
+    let finishPage2: (page: unknown) => void = () => undefined;
+    mockFetch.mockResolvedValueOnce(page1).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishPage2 = resolve;
+      })
+    );
+    mockFetch.mockResolvedValue(page1);
+    const { result } = setup().render();
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    act(() => mockFocus.current()); // the mount focus is skipped
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.isLoadingMore).toBe(true));
+
+    act(() => mockFocus.current());
+    expect(cursors()).toEqual([null, 'c2']);
+    await act(async () => finishPage2(page2));
+
+    await waitFor(() => expect(cursors()).toEqual([null, 'c2', null]));
   });
 
   it('re-reads the first page when the wallet screen regains focus', async () => {

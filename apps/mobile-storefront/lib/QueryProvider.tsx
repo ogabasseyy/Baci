@@ -19,7 +19,10 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createLogger } from './logger';
 import { queryClient, queryPersister } from './query-client';
-import { shouldPersistQuery } from './should-persist-query';
+import {
+  dropNeverPersistedQueries,
+  shouldPersistQuery,
+} from './should-persist-query';
 
 const log = createLogger('QueryProvider');
 
@@ -46,6 +49,7 @@ const persistOptions = {
 async function restorePersistedQueryCache(onSettled: () => void) {
   try {
     await persistQueryClientRestore(persistOptions);
+    dropNeverPersistedQueries(queryClient);
     log.debug('Cache hydrated from persisted storage');
   } catch (error) {
     log.warn('Cache hydration failed, continuing without restore', error);

@@ -8,6 +8,7 @@ import { Text } from 'react-native';
 
 const mockRestore = jest.fn().mockResolvedValue(undefined);
 const mockSubscribe = jest.fn().mockReturnValue(jest.fn());
+const mockRemoveQueries = jest.fn();
 
 jest.mock('@tanstack/react-query-persist-client', () => ({
   persistQueryClientRestore: (...args: unknown[]) => mockRestore(...args),
@@ -32,6 +33,7 @@ jest.mock('./query-client', () => ({
     setDefaultOptions: jest.fn(),
     getQueryDefaults: jest.fn(() => undefined),
     getMutationDefaults: jest.fn(() => undefined),
+    removeQueries: (...args: unknown[]) => mockRemoveQueries(...args),
   },
   queryPersister: {
     persistClient: jest.fn(),
@@ -178,5 +180,22 @@ describe('QueryProvider', () => {
     expect(shouldDehydrate({ state: { status: 'success' } })).toBe(true);
     expect(shouldDehydrate({ state: { status: 'error' } })).toBe(false);
     expect(shouldDehydrate({ state: { status: 'pending' } })).toBe(false);
+  });
+
+  it('bugfix: drops wallet activity a restored snapshot brought back', async () => {
+    render(
+      <QueryProvider>
+        <TestChild />
+      </QueryProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockRemoveQueries).toHaveBeenCalledWith({
+        queryKey: ['piggyvest-wallet-activity'],
+      });
+    });
+    expect(mockRestore.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRemoveQueries.mock.invocationCallOrder[0]
+    );
   });
 });

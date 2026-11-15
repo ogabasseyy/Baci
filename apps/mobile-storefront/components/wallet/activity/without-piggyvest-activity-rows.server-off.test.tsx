@@ -7,6 +7,8 @@ describe('bugfix: PiggyVest movements listed twice under wallet activity', () =>
       { id: 'a', source_type: 'piggyvest_primary_savings' },
       { id: 'b', source_type: 'piggyvest_goal_cancel' },
       { id: 'c', source_type: 'piggyvest_goal_complete' },
+      { id: 'g', source_type: 'piggyvest_primary_inflow' },
+      { id: 'h', source_type: 'piggyvest_primary_card_custody' },
       { id: 'd', source_type: 'refund' },
       { id: 'e', source_type: null },
       { id: 'f' },

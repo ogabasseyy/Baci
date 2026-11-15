@@ -228,6 +228,44 @@ BEGIN
      WHERE refund.payment_id = v_imei::uuid AND refund.attempt = 0),
     'a fee-only refund failure was listed as money in');
 
+  -- REGRESSION (walk 19): a held (reserved) savings add moved nothing and may
+  -- still be cancelled: it is listed only once the money is on its way.
+  INSERT INTO piggyvest_primary.savings_operations (
+    id, integration_id, intent_id, goal_id, amount_kobo, source_wallet_id,
+    destination_wallet_id, reference, state, created_at)
+  VALUES ('f9a10000-0000-4000-8000-0000000000e1', 'f9a10000-0000-4000-8000-000000000006',
+    'f9a10000-0000-4000-8000-000000000007', c_goal, 200000, 'synthetic-walletpay-main',
+    'synthetic-walletpay-goal', 'pvb-save-activity-held', 'reserved', now() - interval '3 hours');
+  PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = 'f9a10000-0000-4000-8000-0000000000e1'), 'a held savings add was listed as money out');
+  UPDATE piggyvest_primary.savings_operations SET state = 'dispatched'
+   WHERE id = 'f9a10000-0000-4000-8000-0000000000e1';
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = 'f9a10000-0000-4000-8000-0000000000e1' AND row.kind = 'savings_contribution'
+        AND row.status = 'pending'), 'a dispatched savings add was not listed');
+  -- REGRESSION (Muse): a goal completion held for review credited only the
+  -- transferred amount and left the goal open: it reads as a return, and
+  -- only a confirmed completion says "Goal completed".
+  INSERT INTO piggyvest_primary.goal_complete_operations (
+    id, integration_id, intent_id, goal_id, state, reference, source_wallet_id,
+    destination_wallet_id, amount_kobo, provider_transaction_id, issued_at, expires_at,
+    reserved_at, dispatched_at, settled_at)
+  VALUES ('f9a10000-0000-4000-8000-0000000000e2', 'f9a10000-0000-4000-8000-000000000006',
+    'f9a10000-0000-4000-8000-000000000007', c_goal, 'needs_review', 'pvb-complete-' || c_goal::text,
+    'synthetic-walletpay-goal', 'synthetic-walletpay-main', 30000, 'synthetic-complete-tx',
+    c_dispatched - interval '10 minutes', c_dispatched + interval '1 hour',
+    c_dispatched - interval '10 minutes', c_dispatched - interval '5 minutes', now());
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = 'f9a10000-0000-4000-8000-0000000000e2' AND row.kind = 'goal_refund'
+        AND row.label = 'Returned from a savings goal' AND row.status = 'completed'),
+    'a review-held goal completion read as completed');
+  UPDATE piggyvest_primary.goal_complete_operations SET state = 'confirmed'
+   WHERE id = 'f9a10000-0000-4000-8000-0000000000e2';
+  PERFORM pg_temp.wp_assert(EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
+      WHERE row.id = 'f9a10000-0000-4000-8000-0000000000e2' AND row.kind = 'goal_completed'
+        AND row.label LIKE 'Goal completed:%' AND row.status = 'completed'),
+    'a confirmed goal completion lost its label');
+
   -- REGRESSION (Muse): a corrupt amount drops its own row, never the page.
   EXECUTE (SELECT pg_catalog.string_agg(pg_catalog.format(
       'ALTER TABLE piggyvest_primary.wallet_payments DROP CONSTRAINT %I', con.conname), '; ')

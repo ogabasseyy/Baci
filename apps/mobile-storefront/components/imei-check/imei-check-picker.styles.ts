@@ -6,14 +6,21 @@ export const pickerStyles = StyleSheet.create({
   groups: { gap: SPACING.md, marginBottom: SPACING.md },
   group: { gap: SPACING.xs },
   groupHeader: {
-    alignItems: 'baseline',
+    alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: SPACING.sm,
     paddingHorizontal: 2,
   },
-  groupTitle: { fontFamily: 'Inter_700Bold', fontSize: 15 },
+  groupIcon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  groupTitle: { flex: 1, fontSize: 16, fontWeight: '800' },
   groupMeta: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-  card: { borderRadius: RADIUS['2xl'], borderWidth: 1, overflow: 'hidden' },
+  card: { borderRadius: 15, borderWidth: 1, overflow: 'hidden' },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -56,7 +63,7 @@ export const pickerStyles = StyleSheet.create({
   moreNames: { fontSize: 12 },
   allChecks: {
     alignItems: 'center',
-    borderRadius: RADIUS['2xl'],
+    borderRadius: 15,
     borderWidth: 1.5,
     flexDirection: 'row',
     gap: SPACING.sm,
@@ -69,7 +76,12 @@ export const pickerStyles = StyleSheet.create({
   allChecksHint: { fontSize: 12 },
   detailsTagline: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   detailsBody: { fontSize: 13, lineHeight: 19 },
-  detailsList: { gap: 8 },
+  detailsList: {
+    borderRadius: 12,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   detailsItem: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   detailsItemText: { flex: 1, fontSize: 13 },
 });

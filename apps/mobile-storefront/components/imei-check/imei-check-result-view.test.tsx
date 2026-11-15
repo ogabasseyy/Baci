@@ -271,11 +271,11 @@ describe('ImeiCheckResultView', () => {
     expect(screen.getByText(/unlock offer for 11111111/i)).toBeTruthy();
   });
 
-  it.each([
+  it.each<['safe' | 'caution' | 'danger', string]>([
     ['safe', 'Looks safe to buy'],
     ['caution', 'Check before you buy'],
     ['danger', 'Do not buy yet'],
-  ] as const)('leads with a %s verdict headline in its own colour', (type, headline) => {
+  ])('leads with a %s verdict headline in its own colour', (type, headline) => {
     render(
       <ImeiCheckResultView
         {...baseProps}

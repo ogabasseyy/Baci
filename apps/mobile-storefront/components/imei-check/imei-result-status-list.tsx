@@ -3,6 +3,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Text, View } from 'react-native';
 import { withAlpha } from '@/constants/Colors';
 import { getVerdictColors, type ImeiVerdictType } from './get-verdict-colors';
+import { ImeiTicketNotch } from './imei-care-look';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { reportStyles as styles } from './imei-check-report.styles';
 import type { ImeiResultStatusCard } from './imei-check-result-status-cards';
@@ -42,6 +43,7 @@ export function ImeiResultStatusList({
         { backgroundColor: colors.card, borderColor: colors.border },
       ]}
     >
+      <ImeiTicketNotch colors={colors} />
       {cards.map((card, index) => {
         const tone = imeiStatusTone(card);
         const palette =

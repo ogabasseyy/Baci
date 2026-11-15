@@ -12,7 +12,7 @@ export const reportStyles = StyleSheet.create({
     padding: SPACING.md,
   },
   verdictTop: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  verdictHeadline: { flex: 1, fontFamily: 'Inter_700Bold', fontSize: 18 },
+  verdictHeadline: { flex: 1, fontSize: 20, fontWeight: '800' },
   verdictBody: { fontSize: 13, lineHeight: 19 },
   score: {
     alignItems: 'center',
@@ -30,7 +30,7 @@ export const reportStyles = StyleSheet.create({
   },
   device: {
     alignItems: 'center',
-    borderRadius: RADIUS['2xl'],
+    borderRadius: 15,
     borderWidth: 1,
     flexDirection: 'row',
     gap: SPACING.md,
@@ -57,12 +57,12 @@ export const reportStyles = StyleSheet.create({
   deviceMeta: { fontSize: 12 },
   imei: { fontFamily: IMEI_MONOSPACE_FONT, fontSize: 12 },
   sectionTitle: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 15,
+    fontSize: 18,
+    fontWeight: '800',
     marginBottom: -SPACING.xs,
     paddingHorizontal: 2,
   },
-  list: { borderRadius: RADIUS['2xl'], borderWidth: 1, overflow: 'hidden' },
+  list: { borderRadius: 15, borderWidth: 1, overflow: 'hidden' },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -83,7 +83,7 @@ export const reportStyles = StyleSheet.create({
   rowValue: { fontFamily: 'Inter_700Bold', fontSize: 14 },
   again: {
     alignItems: 'center',
-    borderRadius: RADIUS['2xl'],
+    borderRadius: RADIUS.full,
     flexDirection: 'row',
     gap: SPACING.sm,
     justifyContent: 'center',

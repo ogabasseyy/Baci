@@ -66,13 +66,7 @@ export function ImeiServiceDetailsSheet({
           <Text style={[styles.detailsBody, { color: colors.textSecondary }]}>
             {tier.detail}
           </Text>
-          <View
-            style={[
-              sheetStyles.context,
-              styles.detailsList,
-              { backgroundColor: colors.muted, alignItems: 'stretch' },
-            ]}
-          >
+          <View style={[styles.detailsList, { backgroundColor: colors.muted }]}>
             {tier.features.map((feature) => (
               <View key={feature} style={styles.detailsItem}>
                 <Ionicons

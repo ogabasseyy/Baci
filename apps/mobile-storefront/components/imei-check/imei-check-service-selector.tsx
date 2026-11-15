@@ -3,14 +3,28 @@ import {
   IMEI_SERVICE_TIERS,
   type ImeiServiceTierKey,
 } from '@baci/shared/imei';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons, {
+  type IoniconsIconName,
+} from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BRAND, withAlpha } from '@/constants/Colors';
+import { ImeiTicketNotch, imeiCareIcon } from './imei-care-look';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { pickerStyles as styles } from './imei-check-picker.styles';
 import { ImeiCheckTierRow } from './imei-check-tier-row';
 import { ImeiServiceDetailsSheet } from './imei-service-details-sheet';
+
+const GROUP_ICONS: Record<string, IoniconsIconName> = {
+  details: 'phone-portrait-outline',
+  blacklist: 'shield-outline',
+  network: 'cellular-outline',
+  ownership: 'lock-closed-outline',
+  history: 'time-outline',
+  finance: 'card-outline',
+  advanced: 'construct-outline',
+  reports: 'document-text-outline',
+};
 
 interface ImeiCheckServiceSelectorProps {
   colors: ImeiCheckerColors;
@@ -41,6 +55,7 @@ export function ImeiCheckServiceSelector({
   const [detailsTier, setDetailsTier] = useState<ImeiServiceTierKey | null>(
     null
   );
+  const careIcon = imeiCareIcon(colors);
   const groups = groupImeiServices(
     displayedTierKeys,
     selectedTier ?? displayedTierKeys[0] ?? 'full'
@@ -61,6 +76,18 @@ export function ImeiCheckServiceSelector({
           return (
             <View key={group.id} style={styles.group}>
               <View style={styles.groupHeader}>
+                <View
+                  style={[
+                    styles.groupIcon,
+                    { backgroundColor: careIcon.background },
+                  ]}
+                >
+                  <Ionicons
+                    name={GROUP_ICONS[group.id] ?? 'checkmark-done-outline'}
+                    size={16}
+                    color={careIcon.color}
+                  />
+                </View>
                 <Text
                   accessibilityRole="header"
                   style={[styles.groupTitle, { color: colors.text }]}
@@ -81,6 +108,7 @@ export function ImeiCheckServiceSelector({
                   { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
               >
+                <ImeiTicketNotch colors={colors} />
                 {rows.map((tierKey, index) => (
                   <ImeiCheckTierRow
                     key={tierKey}

@@ -21,7 +21,7 @@ export const footerStyles = StyleSheet.create({
   hint: { fontSize: 12, marginTop: -4, paddingHorizontal: 4 },
   payButton: {
     alignItems: 'center',
-    borderRadius: RADIUS['2xl'],
+    borderRadius: RADIUS.full,
     flexDirection: 'row',
     gap: SPACING.sm,
     justifyContent: 'center',

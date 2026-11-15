@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getRootDomain } from '@/env';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { deviceGradingAiResultSchema } from '@/schemas/device-grading';
 import { estimateTradeInValue } from './estimate-trade-in-value';
@@ -51,14 +52,24 @@ async function gradeDevice(parts: DeviceMediaPart[]): Promise<unknown> {
 }
 
 /**
- * POST /api/ai/grade-device — anonymous storefront device check.
- *
- * No CSRF token is required: the route reads no cookie or session, and the
- * mobile app calls it without one. Abuse is bounded by the per-IP budget the
- * proxy enforces for this path (see rate-limit-routes.ts).
+ * POST /api/ai/grade-device — anonymous storefront device check, called by
+ * the web storefront (cookies + CSRF token) and the mobile app (neither).
+ * The proxy enforces this path's per-IP budget (see rate-limit-routes.ts).
  */
 export async function POST(request: NextRequest) {
   try {
+    // Double-submit CSRF only when the request carries cookies, mirroring
+    // /api/search/assist: the native app posts no cookies and has no ambient
+    // authority to abuse, while a cross-site page must not deputize a
+    // shopper's browser into spending the AI budget. The web page sends the
+    // token via fetchWithCsrf.
+    if (request.headers.get('cookie')) {
+      const { valid, response } = await checkCsrfProtection(request);
+      if (!valid) {
+        return response ?? errorResponse('CSRF validation failed', 403);
+      }
+    }
+
     let formData: FormData;
     try {
       formData = await request.formData();

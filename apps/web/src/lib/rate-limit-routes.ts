@@ -22,7 +22,8 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // per-IP budget as quiz generation instead of the generic 50/min default.
   '/api/search/assist': { maxRequests: 5, windowMs: 60_000 },
   // Anonymous device check (swap): each call is a multimodal AI request and
-  // the route has no CSRF/session gate, so this budget is its abuse bound.
+  // cookie-less callers (the mobile app) pass no CSRF gate, so this budget
+  // is the abuse bound.
   // Fail closed without Redis: per-instance memory counters would not bound
   // paid AI calls.
   '/api/ai/grade-device': {

@@ -50,7 +50,7 @@ describe('rate-limit route matching', () => {
     });
   });
 
-  it('caps the anonymous swap device check, which has no CSRF or session gate', () => {
+  it('caps the anonymous swap device check and fails closed without Redis', () => {
     expect(getRateLimitConfig('/api/ai/grade-device')).toMatchObject({
       pattern: '/api/ai/grade-device',
       config: {

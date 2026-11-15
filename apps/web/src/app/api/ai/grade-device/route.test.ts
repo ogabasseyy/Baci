@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   generateContent: vi.fn(),
+  checkCsrf: vi.fn(),
   resolveMerchant: vi.fn(),
   productQuery: {
     eq: vi.fn(),
@@ -21,6 +22,8 @@ vi.mock('@google/generative-ai', () => ({
 }));
 
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
+
+vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.checkCsrf }));
 
 vi.mock('@/lib/storefront-merchant', () => ({
   resolveStorefrontMerchantFromRequest: mocks.resolveMerchant,
@@ -95,6 +98,7 @@ function post(body: FormData): NextRequest {
 describe('POST /api/ai/grade-device', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.checkCsrf.mockResolvedValue({ valid: true });
     vi.stubEnv('GEMINI_API_KEY', 'test-key');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     aiAnswers({
@@ -118,6 +122,7 @@ describe('POST /api/ai/grade-device', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mocks.checkCsrf).not.toHaveBeenCalled();
     expect(body).toEqual({
       success: true,
       data: {
@@ -130,6 +135,32 @@ describe('POST /api/ai/grade-device', () => {
         matchedProduct: 'Apple iPhone 13 Pro 256GB',
       },
     });
+  });
+
+  it('rejects a browser request that carries cookies but no valid CSRF token', async () => {
+    mocks.checkCsrf.mockResolvedValue({ valid: false });
+    const request = new NextRequest(
+      'https://ogabassey.com/api/ai/grade-device',
+      { method: 'POST', body: videoUpload(), headers: { cookie: 'sid=abc' } }
+    );
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'CSRF validation failed' });
+    expect(mocks.generateContent).not.toHaveBeenCalled();
+  });
+
+  it('grades a browser request whose CSRF token is valid', async () => {
+    const request = new NextRequest(
+      'https://ogabassey.com/api/ai/grade-device',
+      { method: 'POST', body: videoUpload(), headers: { cookie: 'sid=abc' } }
+    );
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mocks.checkCsrf).toHaveBeenCalledWith(request);
   });
 
   it('prices only against the resolved store’s active products', async () => {

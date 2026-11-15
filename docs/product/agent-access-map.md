@@ -1,9 +1,11 @@
 # Baci capabilities and agent access
 
-Reviewed 14 November 2026 against source revision
-`15036c967826cbd3e68c50b750627ee4aa1ad7ff`; the full-code integration and
-Linux runner changes were re-reviewed while the other audited claims were
-retained. The mobile-admin follow-up queue no longer treats
+Reviewed 15 November 2026 against source revision
+`12000464d631c2ea343f51981f1d17e886de6546`; the changed production integration and preview delivery were re-reviewed
+for request-local cancellation, normal RLS and sandboxed HTML delivery. Other
+cited source files remain unchanged from the prior reviewed revision; their
+audited claims were retained. Temporary runner qualification does not establish
+full-stack activation or a live ChatGPT flow. The mobile-admin follow-up queue no longer treats
 stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment

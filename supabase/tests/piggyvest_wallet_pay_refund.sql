@@ -117,12 +117,17 @@ BEGIN
   PERFORM pg_temp.wp_assert(v_result -> 'refund' ? v_late, 'the drain misses an owed refund: ' || v_result::text);
 
   -- 8. Customer deletion waits for an owed refund.
+  -- Only this guard is armed: other triggers on public.customers raise their
+  -- own errors on the real schema before ours would run.
+  ALTER TABLE public.customers DISABLE TRIGGER USER;
+  ALTER TABLE public.customers ENABLE TRIGGER primary_wallet_pay_block_unsettled_customer_deletion;
   BEGIN
     DELETE FROM public.customers WHERE id = 'f9a10000-0000-4000-8000-000000000003';
     RAISE EXCEPTION 'a customer with an owed refund was deleted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM NOT LIKE 'cannot delete customer with unsettled wallet payments%' THEN RAISE; END IF;
   END;
+  ALTER TABLE public.customers ENABLE TRIGGER USER;
 
   -- 9. REGRESSION (Codex P1/P2): a duplicate payment's refund keeps retrying
   -- when an attempt is rejected (its own review reason does not freeze it),

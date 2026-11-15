@@ -220,7 +220,12 @@ export function JustLaunchedCarousel({
   };
 
   return (
-    <View style={styles.container}>
+    // Opaque surface: the home list is transparent, so on templates with a
+    // dark backdrop (Elite) the dark heading sat on black and was unreadable.
+    <View
+      style={[styles.container, { backgroundColor: colors.background }]}
+      testID="just-launched-surface"
+    >
       <Text
         accessibilityRole="header"
         style={[styles.heading, { color: colors.text }]}
@@ -254,7 +259,7 @@ export function JustLaunchedCarousel({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
+    paddingVertical: 12,
   },
   heading: {
     fontSize: 18,

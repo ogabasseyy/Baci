@@ -20,6 +20,7 @@ export type ChatEventPushInput = {
 
 export type ChatEventPushResult =
   | { status: 'sent'; sent: number; failed: number }
+  | { status: 'partial'; sent: number; failed: number }
   | { status: 'skipped'; reason: 'not_configured' | 'already_claimed' }
   | { status: 'failed' };
 
@@ -62,7 +63,15 @@ export async function sendChatEventPush(
       { type: 'customer_message', conversation_id: input.conversationId },
       'general'
     );
-    return { status: 'sent', sent: result.sent, failed: result.failed };
+    // The delivery layer reports provider failures as counts and errors
+    // instead of throwing, so the status has to be derived from them.
+    const failed = Math.max(result.failed, result.errors.length > 0 ? 1 : 0);
+    if (failed > 0) {
+      return result.sent > 0
+        ? { status: 'partial', sent: result.sent, failed }
+        : { status: 'failed' };
+    }
+    return { status: 'sent', sent: result.sent, failed: 0 };
   } catch {
     return { status: 'failed' };
   }

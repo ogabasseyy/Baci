@@ -105,6 +105,42 @@ describe('sendChatEventPush', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it('reports failed when every delivery was rejected without throwing', async () => {
+    mocks.notify.mockResolvedValue({
+      sent: 0,
+      failed: 2,
+      errors: ['Expo request failed'],
+    });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'failed',
+    });
+  });
+
+  it('reports failed when the provider returned errors and nothing was sent', async () => {
+    mocks.notify.mockResolvedValue({ sent: 0, failed: 0, errors: ['boom'] });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'failed',
+    });
+  });
+
+  it('reports a partial delivery when only some devices were reached', async () => {
+    mocks.notify.mockResolvedValue({ sent: 1, failed: 1, errors: ['x'] });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'partial',
+      sent: 1,
+      failed: 1,
+    });
+  });
+
+  it('treats a store with no registered devices as nothing to deliver, not a failure', async () => {
+    mocks.notify.mockResolvedValue({ sent: 0, failed: 0, errors: [] });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'sent',
+      sent: 0,
+      failed: 0,
+    });
+  });
+
   it('reports a failure instead of throwing when delivery throws', async () => {
     mocks.notify.mockRejectedValue(new Error('expo down'));
     await expect(sendChatEventPush(input, env)).resolves.toEqual({

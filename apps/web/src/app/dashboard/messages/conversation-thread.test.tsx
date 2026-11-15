@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { MerchantInboxMessage } from '@/schemas/merchant-inbox';
 import { ConversationThread } from './conversation-thread';
 
@@ -17,39 +17,46 @@ function message(
   };
 }
 
-const scrollIntoView = vi.fn();
-const original = Element.prototype.scrollIntoView;
+const SCROLL_HEIGHT = 2_000;
+const CLIENT_HEIGHT = 400;
+const AT_BOTTOM = SCROLL_HEIGHT - CLIENT_HEIGHT;
 
-/** Simulates the merchant's scroll position inside the thread. */
-function scrollThreadTo(distanceFromBottom: number) {
+/** Gives the thread scroller a layout and a tracked scroll position. */
+function layoutThread() {
   const scroller = screen.getByRole('list', { name: 'Messages' })
     .parentElement as HTMLElement;
+  let scrollTop = AT_BOTTOM;
   Object.defineProperties(scroller, {
-    scrollHeight: { configurable: true, value: 2_000 },
-    clientHeight: { configurable: true, value: 400 },
-    scrollTop: { configurable: true, value: 1_600 - distanceFromBottom },
+    scrollHeight: { configurable: true, value: SCROLL_HEIGHT },
+    clientHeight: { configurable: true, value: CLIENT_HEIGHT },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    },
   });
-  fireEvent.scroll(scroller);
+  return {
+    position: () => scrollTop,
+    scrollTo(distanceFromBottom: number) {
+      scrollTop = AT_BOTTOM - distanceFromBottom;
+      fireEvent.scroll(scroller);
+    },
+  };
 }
-
-beforeEach(() => {
-  scrollIntoView.mockClear();
-  Element.prototype.scrollIntoView = scrollIntoView;
-});
-afterEach(() => {
-  Element.prototype.scrollIntoView = original;
-});
 
 describe('ConversationThread scrolling', () => {
   it('follows a new message while the merchant is at the latest message', () => {
     const { rerender } = render(
       <ConversationThread state="ready" messages={[message(1)]} />
     );
-    scrollIntoView.mockClear();
+    const thread = layoutThread();
+    thread.scrollTo(20);
     rerender(
       <ConversationThread state="ready" messages={[message(1), message(2)]} />
     );
-    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(thread.position()).toBe(SCROLL_HEIGHT);
     expect(
       screen.queryByRole('button', { name: /new messages/i })
     ).not.toBeInTheDocument();
@@ -59,18 +66,18 @@ describe('ConversationThread scrolling', () => {
     const { rerender } = render(
       <ConversationThread state="ready" messages={[message(1)]} />
     );
-    scrollThreadTo(900);
-    scrollIntoView.mockClear();
+    const thread = layoutThread();
+    thread.scrollTo(900);
 
     rerender(
       <ConversationThread state="ready" messages={[message(1), message(2)]} />
     );
-    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(thread.position()).toBe(AT_BOTTOM - 900);
 
     await userEvent.click(
       screen.getByRole('button', { name: /new messages/i })
     );
-    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(thread.position()).toBe(SCROLL_HEIGHT);
     expect(
       screen.queryByRole('button', { name: /new messages/i })
     ).not.toBeInTheDocument();
@@ -80,31 +87,44 @@ describe('ConversationThread scrolling', () => {
     const { rerender } = render(
       <ConversationThread state="ready" messages={[message(1)]} />
     );
-    scrollThreadTo(900);
-    scrollIntoView.mockClear();
+    const thread = layoutThread();
+    thread.scrollTo(900);
     rerender(
       <ConversationThread
         state="ready"
         messages={[message(1), message(2, 'store')]}
       />
     );
-    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(thread.position()).toBe(SCROLL_HEIGHT);
   });
 
   it('clears the jump button once the merchant scrolls back down', () => {
     const { rerender } = render(
       <ConversationThread state="ready" messages={[message(1)]} />
     );
-    scrollThreadTo(900);
+    const thread = layoutThread();
+    thread.scrollTo(900);
     rerender(
       <ConversationThread state="ready" messages={[message(1), message(2)]} />
     );
     expect(
       screen.getByRole('button', { name: /new messages/i })
     ).toBeInTheDocument();
-    scrollThreadTo(10);
+    thread.scrollTo(10);
     expect(
       screen.queryByRole('button', { name: /new messages/i })
     ).not.toBeInTheDocument();
+  });
+
+  it('moves only its own scroller, never the page', () => {
+    const before = window.scrollY;
+    const { rerender } = render(
+      <ConversationThread state="ready" messages={[message(1)]} />
+    );
+    layoutThread();
+    rerender(
+      <ConversationThread state="ready" messages={[message(1), message(2)]} />
+    );
+    expect(window.scrollY).toBe(before);
   });
 });

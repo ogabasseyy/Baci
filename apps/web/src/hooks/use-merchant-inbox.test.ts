@@ -402,4 +402,57 @@ describe('useMerchantInbox', () => {
     expect(seen).toEqual([null]);
     expect(result.current.selectedId).toBe(8);
   });
+
+  it('keeps a just-sent reply when the poll already holds a newer customer message', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useMerchantInbox());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => result.current.selectConversation(7));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await result.current.sendReply('In stock');
+    });
+
+    api.fetchMerchantInboxThread.mockResolvedValue({
+      ok: true,
+      messages: [message(30), message(32)],
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_THREAD_POLL_MS);
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 31, 32]);
+
+    // Once the server returns it, it is shown once.
+    api.fetchMerchantInboxThread.mockResolvedValue({
+      ok: true,
+      messages: [message(30), message(31, 'store'), message(32)],
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_THREAD_POLL_MS);
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 31, 32]);
+  });
+
+  it('stops showing an unconfirmed reply after a bounded time', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useMerchantInbox());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => result.current.selectConversation(7));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await result.current.sendReply('In stock');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30]);
+  });
 });

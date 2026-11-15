@@ -20,15 +20,16 @@ export function ConversationThread({
   state,
 }: ConversationThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const last = messages.at(-1);
   const lastId = last?.id;
   const lastIsMine = last?.sender === 'store';
 
+  /** Moves only the thread's own scroller, never the page around it. */
   function scrollToLatest() {
-    endRef.current?.scrollIntoView?.({ block: 'end' });
+    const element = scrollRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
     nearBottomRef.current = true;
     setHasNewBelow(false);
   }
@@ -50,7 +51,8 @@ export function ConversationThread({
   useEffect(() => {
     if (lastId === undefined) return;
     if (nearBottomRef.current || lastIsMine) {
-      endRef.current?.scrollIntoView?.({ block: 'end' });
+      const element = scrollRef.current;
+      if (element) element.scrollTop = element.scrollHeight;
       nearBottomRef.current = true;
       setHasNewBelow(false);
     } else {
@@ -121,7 +123,6 @@ export function ConversationThread({
         className="h-full overflow-y-auto"
       >
         {body}
-        <div ref={endRef} />
       </div>
       {hasNewBelow && (
         <Button

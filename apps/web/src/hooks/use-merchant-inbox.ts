@@ -44,29 +44,30 @@ function mergeMessage(
     : [...messages, message].sort(compareMerchantInboxMessages);
 }
 
+/** How long an accepted reply is kept on screen while a poll omits it. */
+const PENDING_REPLY_TTL_MS = 60_000;
+
+type PendingReply = {
+  conversationId: number;
+  message: MerchantInboxMessage;
+  sentAt: number;
+};
+
 /**
- * Applies a polled page without dropping a reply this tab just sent: a store
- * message newer than everything the server returned is kept until a later
- * poll includes it.
+ * Applies a polled page without dropping a reply this tab just sent. Replies
+ * accepted by the server are tracked explicitly until a poll returns them,
+ * so one still missing is kept even when the poll already holds a newer
+ * customer message.
  */
 function mergePolledMessages(
-  current: MerchantInboxMessage[],
-  polled: MerchantInboxMessage[]
+  polled: MerchantInboxMessage[],
+  pending: MerchantInboxMessage[]
 ): MerchantInboxMessage[] {
   const polledIds = new Set(polled.map((message) => message.id));
-  const newestPolledId = polled.reduce(
-    (newest, message) => Math.max(newest, message.id),
-    0
-  );
-  const unconfirmed = current.filter(
-    (message) =>
-      message.sender === 'store' &&
-      message.id > newestPolledId &&
-      !polledIds.has(message.id)
-  );
-  return unconfirmed.length === 0
+  const missing = pending.filter((message) => !polledIds.has(message.id));
+  return missing.length === 0
     ? polled
-    : [...polled, ...unconfirmed].sort(compareMerchantInboxMessages);
+    : [...polled, ...missing].sort(compareMerchantInboxMessages);
 }
 
 /** Polls while visible and refreshes at once when the tab is shown again. */
@@ -108,9 +109,11 @@ export function useMerchantInbox() {
   // blocks nor shows as "sending" in another conversation.
   const sendInFlight = useRef(new Set<number>());
   const selectedIdRef = useRef<number | null>(null);
+  const pendingReplies = useRef<PendingReply[]>([]);
 
   function selectConversation(conversationId: number | null) {
     selectedIdRef.current = conversationId;
+    pendingReplies.current = [];
     // Cleared together with the selection, so an error from the previous
     // conversation never renders in the next one.
     setSendError(null);
@@ -163,7 +166,21 @@ export function useMerchantInbox() {
       const result = await fetchMerchantInboxThread(conversationId);
       if (!active || sequence !== latest) return;
       if (result.ok) {
-        setMessages((current) => mergePolledMessages(current, result.messages));
+        const polledIds = new Set(result.messages.map((message) => message.id));
+        const now = Date.now();
+        // Stop tracking a reply once the server returns it, or after a bound.
+        pendingReplies.current = pendingReplies.current.filter(
+          (pending) =>
+            pending.conversationId === conversationId &&
+            !polledIds.has(pending.message.id) &&
+            now - pending.sentAt < PENDING_REPLY_TTL_MS
+        );
+        setMessages(
+          mergePolledMessages(
+            result.messages,
+            pendingReplies.current.map((pending) => pending.message)
+          )
+        );
         setThreadState('ready');
         return;
       }
@@ -202,6 +219,11 @@ export function useMerchantInbox() {
       return false;
     }
     if (stillOpen) {
+      pendingReplies.current.push({
+        conversationId,
+        message: result.message,
+        sentAt: Date.now(),
+      });
       setMessages((current) => mergeMessage(current, result.message));
     }
     return true;

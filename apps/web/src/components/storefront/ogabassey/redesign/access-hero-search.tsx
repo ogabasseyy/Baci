@@ -1,5 +1,6 @@
 import { ArrowUpRight, Search } from 'lucide-react';
 import { STOREFRONT_SEARCH_MAX_QUERY_LENGTH } from '@/lib/storefront-search-params';
+import { AccessSearchDock } from './access-search-dock';
 import { AccessSearchStyles } from './access-search-styles';
 
 export function AccessHeroSearch({
@@ -21,6 +22,7 @@ export function AccessHeroSearch({
   return (
     <>
       <AccessSearchStyles />
+      <AccessSearchDock>
       <search aria-label="Find your next device">
         <form
           className="oa-hero-search"
@@ -43,6 +45,7 @@ export function AccessHeroSearch({
           </button>
         </form>
       </search>
+      </AccessSearchDock>
     </>
   );
 }

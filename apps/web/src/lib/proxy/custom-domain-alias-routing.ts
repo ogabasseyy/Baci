@@ -3,48 +3,54 @@ import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import type { CustomDomainContext } from '@/lib/proxy/custom-domain-context';
 import { isValidSubdomain } from '@/lib/proxy/host';
 import { normalizeStorefrontTermsAliasPath } from '@/lib/proxy/terms-redirects';
-import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+
+export function getCustomDomainAliasPrefix(
+  method: string,
+  segments: string[]
+): string | null {
+  const prefix = segments[0]?.toLowerCase();
+  if (
+    !prefix ||
+    (method !== 'GET' && method !== 'HEAD') ||
+    segments[1]?.toLowerCase() === 'api' ||
+    !isValidSubdomain(prefix) ||
+    !storefrontRouteSegments.shouldStripRetiredSlugPrefix(
+      prefix,
+      segments.length
+    )
+  ) {
+    return null;
+  }
+  return prefix;
+}
 
 /** Applies custom-domain slug-prefix canonicalization before API routing. */
-export async function runCustomDomainAliasRouting(
+export function runCustomDomainAliasRouting(
   request: NextRequest,
   pathname: string,
   context: CustomDomainContext
-): Promise<NextResponse | null> {
-  const { domain, domainMerchantSlug, domainPathSegments } = context;
+): NextResponse | null {
+  const {
+    domain,
+    domainMerchantSlug,
+    domainPathSegments,
+    pathAliasCurrentSlug,
+  } = context;
   const firstSegment = domainPathSegments[0];
-  const isSafeMethod = request.method === 'GET' || request.method === 'HEAD';
-
+  const prefix = getCustomDomainAliasPrefix(request.method, domainPathSegments);
   if (
-    domainMerchantSlug &&
-    firstSegment &&
-    domainPathSegments[1]?.toLowerCase() !== 'api' &&
-    isSafeMethod
+    !prefix ||
+    !domainMerchantSlug ||
+    prefix === domainMerchantSlug.toLowerCase() ||
+    pathAliasCurrentSlug?.toLowerCase() !== domainMerchantSlug.toLowerCase()
   ) {
-    const aliasPrefix = firstSegment.toLowerCase();
-    if (
-      aliasPrefix !== domainMerchantSlug.toLowerCase() &&
-      isValidSubdomain(aliasPrefix) &&
-      storefrontRouteSegments.shouldStripRetiredSlugPrefix(
-        aliasPrefix,
-        domainPathSegments.length
-      )
-    ) {
-      const currentSlug = await getCurrentSlugForAlias(aliasPrefix);
-      if (
-        currentSlug &&
-        currentSlug.toLowerCase() === domainMerchantSlug.toLowerCase()
-      ) {
-        const stripped = pathname.slice(`/${firstSegment}`.length) || '/';
-        return NextResponse.redirect(
-          `https://${domain}${normalizeStorefrontTermsAliasPath(stripped)}${request.nextUrl.search}`,
-          301
-        );
-      }
-    }
+    return null;
   }
-
-  return null;
+  const stripped = pathname.slice(`/${firstSegment}`.length) || '/';
+  return NextResponse.redirect(
+    `https://${domain}${normalizeStorefrontTermsAliasPath(stripped)}${request.nextUrl.search}`,
+    301
+  );
 }
 
 /** Canonicalizes a current slug prefix after machine-readable paths pass through. */

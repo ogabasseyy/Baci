@@ -2,12 +2,18 @@ export const OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_MEDIA = '(max-width: 767.98px)';
 
 export const OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_MEDIA = '(min-width: 768px)';
 
-export const OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES = 'calc(100vw - 32px)';
+// The editorial gallery reserves 2rem on each side of the image. Both preload
+// and rendered srcset hints must describe the content box, not the outer frame.
+export const OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES = 'calc(100vw - 96px)';
 
 export const OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_SIZES =
-  '(max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) calc(52.38vw - 131px), 636px';
+  '(max-width: 1023px) calc(100vw - 112px), (max-width: 1439px) calc(52.38vw - 195px), 572px';
 
 export const OGABASSEY_PDP_PRIMARY_IMAGE_SIZES = `${OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_MEDIA} ${OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES}, ${OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_SIZES}`;
+
+// The non-editorial fallback gallery fills its frame without the inset.
+export const OGABASSEY_PDP_FULL_FRAME_IMAGE_SIZES =
+  '(max-width: 767.98px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) calc(52.38vw - 131px), 636px';
 
 export const OGABASSEY_PDP_PRIMARY_IMAGE_QUALITY = 35;
 

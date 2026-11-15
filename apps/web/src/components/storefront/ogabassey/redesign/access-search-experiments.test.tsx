@@ -15,6 +15,23 @@ vi.mock('next/link', () => ({
 }));
 
 describe('hero search experiments', () => {
+  it('keeps the navbar search hidden while the inert homepage reserve is visible', () => {
+    render(
+      <>
+        <div
+          className="ogabassey-navbar__search-wrap"
+          data-testid="navbar-search"
+        >
+          Search
+        </div>
+        <Hero slides={[]} reserve />
+      </>
+    );
+    expect(getComputedStyle(screen.getByTestId('navbar-search')).display).toBe(
+      'none'
+    );
+  });
+
   it.each([
     'above-description',
     'below-description',

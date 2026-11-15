@@ -22,9 +22,9 @@ describe('OgaBassey PDP product media config', () => {
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_MEDIA).toBe(
       '(min-width: 768px)'
     );
-    expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES).toBe('calc(100vw - 32px)');
+    expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES).toBe('calc(100vw - 96px)');
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_SIZES).toBe(
-      '(max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) calc(52.38vw - 131px), 636px'
+      '(max-width: 1023px) calc(100vw - 112px), (max-width: 1439px) calc(52.38vw - 195px), 572px'
     );
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_WIDTHS).toEqual([
       256, 384, 640, 750,

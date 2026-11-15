@@ -8,7 +8,7 @@ import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { DeferredShellFeature } from '@/components/storefront/ogabassey/components/deferred-shell-feature';
 import {
   OGABASSEY_PDP_PRIMARY_IMAGE_QUALITY,
-  OGABASSEY_PDP_PRIMARY_IMAGE_SIZES,
+  OGABASSEY_PDP_FULL_FRAME_IMAGE_SIZES,
 } from '@/components/storefront/ogabassey/config/product-media';
 import type {
   ConditionType,
@@ -107,7 +107,7 @@ export function ProductMediaGallery({
             alt={productData.name}
             fill
             className="object-cover"
-            sizes={OGABASSEY_PDP_PRIMARY_IMAGE_SIZES}
+            sizes={OGABASSEY_PDP_FULL_FRAME_IMAGE_SIZES}
             preload
             decoding="sync"
             quality={OGABASSEY_PDP_PRIMARY_IMAGE_QUALITY}

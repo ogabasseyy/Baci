@@ -72,11 +72,7 @@ async function runCustomDomainRoutingInternal(
     normalizedRequestHost,
     requestHostHadWww,
   } = context;
-  const aliasResponse = await runCustomDomainAliasRouting(
-    request,
-    pathname,
-    context
-  );
+  const aliasResponse = runCustomDomainAliasRouting(request, pathname, context);
   if (aliasResponse) return aliasResponse;
   if (pathname === '/favicon.ico')
     return buildStorefrontFaviconRewriteResponse({

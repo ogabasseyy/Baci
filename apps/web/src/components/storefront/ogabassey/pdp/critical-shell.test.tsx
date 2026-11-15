@@ -49,7 +49,7 @@ describe('OgabasseyPdpCriticalShell', () => {
     expect(document.querySelectorAll('source')).toHaveLength(1);
     expect(productImage).toHaveAttribute(
       'sizes',
-      '(max-width: 767.98px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) calc(52.38vw - 131px), 636px'
+      '(max-width: 767.98px) calc(100vw - 96px), (max-width: 1023px) calc(100vw - 112px), (max-width: 1439px) calc(52.38vw - 195px), 572px'
     );
     expect(screen.getByRole('link', { name: 'Laptops' })).toHaveAttribute(
       'href',

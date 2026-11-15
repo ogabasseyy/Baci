@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OGABASSEY_PDP_PRIMARY_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/product-media';
+import { OGABASSEY_PDP_FULL_FRAME_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/product-media';
 import type { NormalizedProductDetails } from './product-details-helpers';
 import { ProductMediaGallery } from './product-media-gallery';
 
@@ -92,7 +92,7 @@ describe('ProductMediaGallery', () => {
     expect(screen.getByAltText('Test Product')).toBeInTheDocument();
     expect(screen.getByAltText('Test Product')).toHaveAttribute(
       'sizes',
-      OGABASSEY_PDP_PRIMARY_IMAGE_SIZES,
+      OGABASSEY_PDP_FULL_FRAME_IMAGE_SIZES,
     );
     // `preload` (Next 16's replacement for the deprecated `priority`) injects
     // the SSR <link rel="preload"> for LCP; the next/image mock surfaces it as

@@ -17,6 +17,7 @@ describe('custom-domain API routing', () => {
       {
         domain: 'shop.example',
         domainMerchantSlug: 'shop',
+        pathAliasCurrentSlug: null,
         domainPathSegments: ['shop', 'api', 'orders'],
         normalizedRequestHost: 'shop.example',
         requestHostHadWww: false,
@@ -37,6 +38,7 @@ describe('custom-domain API routing', () => {
         {
           domain: 'shop.example',
           domainMerchantSlug: 'shop',
+          pathAliasCurrentSlug: null,
           domainPathSegments: ['products'],
           normalizedRequestHost: 'shop.example',
           requestHostHadWww: false,
@@ -56,6 +58,7 @@ describe('custom-domain API routing', () => {
       {
         domain: 'shop.example',
         domainMerchantSlug: 'shop',
+        pathAliasCurrentSlug: null,
         domainPathSegments: ['unlock-orders', 'api', 'storefront', 'customer'],
         normalizedRequestHost: 'shop.example',
         requestHostHadWww: false,

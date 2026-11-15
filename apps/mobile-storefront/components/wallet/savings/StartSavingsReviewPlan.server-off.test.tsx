@@ -32,6 +32,37 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
     expect(screen.queryByText(/interest/i)).toBeNull();
   });
 
+  describe('bugfix: a long plan read "Yours in about 15188 days"', () => {
+    it('says years for a plan over two years', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            contributionValue: 500,
+            startDate: '2026-11-12',
+            maturityDate: '2068-06-15',
+          })}
+        />
+      );
+      expect(screen.getByText('Yours in about 42 years')).toBeOnTheScreen();
+      expect(screen.queryByText(/days/)).toBeNull();
+    });
+
+    it('says months for a plan between six months and two years', () => {
+      render(
+        <StartSavingsReviewPlan
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            contributionValue: 25000,
+            startDate: '2026-11-12',
+            maturityDate: '2027-09-12',
+          })}
+        />
+      );
+      expect(screen.getByText('Yours in about 10 months')).toBeOnTheScreen();
+    });
+  });
+
   describe('bugfix: the "Yours in" line ignored a later start date', () => {
     it('counts from today to the end date, including the wait to start', () => {
       render(

@@ -3,11 +3,13 @@ import type { QuizEvent } from '@/services/quiz';
 import { QuizServiceError } from '@/services/quiz-types';
 import {
   canPlayAnotherQuizAttempt,
+  formatQuizTriesLeft,
   formatRemainingTime,
   formatTimeRange,
   getEventStartButtonText,
   getPrizeMomentLabel,
   getQuizErrorMessage,
+  getQuizTriesLeft,
   isQuizRecoveryCurrent,
   shouldShowEventList,
 } from './QuizScreen.utils';
@@ -178,5 +180,36 @@ describe('QuizScreen utils', () => {
     expect(
       isQuizRecoveryCurrent({ selectedEventId: null, status: 'ready' })
     ).toBe(true);
+  });
+});
+
+describe('getQuizTriesLeft', () => {
+  it('subtracts attempts used from the limit', () => {
+    expect(getQuizTriesLeft({ attemptsUsed: 1, maxAttempts: 3 })).toBe(2);
+  });
+
+  it('never goes negative', () => {
+    expect(getQuizTriesLeft({ attemptsUsed: 5, maxAttempts: 3 })).toBe(0);
+  });
+
+  it('is null when the count or limit is unknown', () => {
+    expect(getQuizTriesLeft(undefined)).toBeNull();
+    expect(getQuizTriesLeft({ maxAttempts: 3 })).toBeNull();
+    expect(getQuizTriesLeft({ attemptsUsed: 1 })).toBeNull();
+    expect(
+      getQuizTriesLeft({ attemptsUsed: Number.NaN, maxAttempts: 3 })
+    ).toBeNull();
+  });
+});
+
+describe('formatQuizTriesLeft', () => {
+  it('uses singular and plural wording', () => {
+    expect(formatQuizTriesLeft(1)).toBe('1 try left');
+    expect(formatQuizTriesLeft(3)).toBe('3 tries left');
+  });
+
+  it('shows nothing when unknown or exhausted', () => {
+    expect(formatQuizTriesLeft(null)).toBeNull();
+    expect(formatQuizTriesLeft(0)).toBeNull();
   });
 });

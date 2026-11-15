@@ -6,7 +6,11 @@ import {
   quizEventsResponseSchema,
   quizResultSchema,
 } from '@/schemas/quiz-schemas';
-import { requestQuiz, requestQuizV2 } from '@/services/quiz-request';
+import {
+  QUIZ_ATTEMPTS_USED_HEADER,
+  requestQuiz,
+  requestQuizV2,
+} from '@/services/quiz-request';
 import { getOptionalString } from '@/services/quiz-service-utils';
 import type {
   QuizAttempt,
@@ -21,6 +25,7 @@ import { QuizServiceError } from '@/services/quiz-types';
 export {
   getQuizApiBaseUrl,
   getQuizAppMetadata,
+  QUIZ_ATTEMPTS_USED_HEADER,
   QUIZ_CONTRACT_HEADER,
   QUIZ_CONTRACT_VERSION,
   QUIZ_REQUEST_TIMEOUT_MS,
@@ -85,7 +90,7 @@ export async function fetchQuizEvents(
   for (;;) {
     const payload = await requestQuizV2(
       getQuizEventsPath({ limit: QUIZ_EVENTS_PAGE_LIMIT, offset }),
-      { method: 'GET' },
+      { headers: { [QUIZ_ATTEMPTS_USED_HEADER]: '1' }, method: 'GET' },
       quizEventsResponseSchema,
       options
     );

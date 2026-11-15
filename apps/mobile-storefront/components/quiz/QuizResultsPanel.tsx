@@ -46,6 +46,7 @@ interface QuizResultsPanelProps {
   submittedAt?: string | null;
   simulatedPrize?: QuizPrizeProduct | null;
   styles: QuizStyles;
+  triesLeft?: number | null;
   v2Result: QuizV2Result | null;
 }
 
@@ -62,6 +63,7 @@ export function QuizResultsPanel({
   submittedAt = null,
   simulatedPrize = null,
   styles,
+  triesLeft = null,
   v2Result,
 }: QuizResultsPanelProps) {
   const { offsetMs } = useQuizServerClock(serverNow);
@@ -222,6 +224,7 @@ export function QuizResultsPanel({
           }
           showHistory={v2Result?.availability === 'final'}
           styles={styles}
+          triesLeft={triesLeft}
         />
       </View>
     );

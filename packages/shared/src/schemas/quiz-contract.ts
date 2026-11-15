@@ -53,6 +53,8 @@ export const quizV2QuestionSchema = z.strictObject({
 
 export const quizV2EventSchema = z
   .strictObject({
+    /** Caller's counted attempts; present only for clients that opt in. */
+    attemptsUsed: z.int().min(0).max(QUIZ_TEST_MAX_MAX_ATTEMPTS).optional(),
     contractVersion: quizContractVersionSchema,
     endsAt: quizDateTimeSchema,
     id: quizIdSchema,

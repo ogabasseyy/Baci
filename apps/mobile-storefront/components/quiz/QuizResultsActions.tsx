@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import type { createQuizStyles } from './QuizScreen.styles';
+import { formatQuizTriesLeft } from './QuizScreen.utils';
 
 type QuizStyles = ReturnType<typeof createQuizStyles>;
 
@@ -10,6 +11,8 @@ interface QuizResultsActionsProps {
   returnLabel: 'Back to quizzes' | 'Play again';
   showHistory: boolean;
   styles: QuizStyles;
+  /** Shown beside "Play again" only when known. */
+  triesLeft?: number | null;
 }
 
 export function QuizResultsActions({
@@ -17,8 +20,12 @@ export function QuizResultsActions({
   returnLabel,
   showHistory,
   styles,
+  triesLeft = null,
 }: QuizResultsActionsProps) {
   const router = useRouter();
+  const triesText =
+    returnLabel === 'Play again' ? formatQuizTriesLeft(triesLeft) : null;
+  const visibleLabel = triesText ? `Play again · ${triesText}` : returnLabel;
   if (!showHistory && !onReturnToQuizList) return null;
 
   return (
@@ -52,7 +59,7 @@ export function QuizResultsActions({
             accessibilityRole="button"
             accessibilityLabel={
               returnLabel === 'Play again'
-                ? 'Play again'
+                ? visibleLabel
                 : 'Return to quiz list'
             }
             onPress={onReturnToQuizList}
@@ -68,7 +75,7 @@ export function QuizResultsActions({
               numberOfLines={1}
               style={styles.secondaryButtonText}
             >
-              {returnLabel}
+              {visibleLabel}
             </Text>
           </Pressable>
         </View>

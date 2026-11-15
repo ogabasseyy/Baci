@@ -8,6 +8,8 @@ export type QuizEventStatus =
   | 'cancelled';
 
 export interface QuizEvent {
+  /** Caller's counted attempts; only sent to clients that opt in. */
+  attemptsUsed?: number;
   contractVersion?: 1 | 2;
   id: string;
   title: string;

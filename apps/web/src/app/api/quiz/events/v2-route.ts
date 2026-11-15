@@ -1,4 +1,7 @@
-import { QUIZ_FREE_ENTRY_MODE } from '@baci/shared/constants';
+import {
+  QUIZ_ATTEMPTS_USED_HEADER,
+  QUIZ_FREE_ENTRY_MODE,
+} from '@baci/shared/constants';
 import { quizV2EventsResponseSchema } from '@baci/shared/schemas';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
@@ -25,6 +28,24 @@ function normalizeEventsProjection(value: unknown): unknown {
   return {
     ...(value as Record<string, unknown>),
     entryMode: QUIZ_FREE_ENTRY_MODE,
+  };
+}
+
+function wantsAttemptsUsed(request: NextRequest): boolean {
+  return request.headers.get(QUIZ_ATTEMPTS_USED_HEADER) === '1';
+}
+
+// Installed apps validate events with a strict schema, so the opt-in field is
+// removed unless the client asked for it.
+function omitAttemptsUsed<T extends { events: object[] }>(payload: T): T {
+  return {
+    ...payload,
+    events: payload.events.map((event) => {
+      const { attemptsUsed: _omitted, ...rest } = event as {
+        attemptsUsed?: unknown;
+      };
+      return rest;
+    }),
   };
 }
 
@@ -80,5 +101,7 @@ export async function getQuizEventsV2(request: NextRequest) {
     return rpcErrorResponse();
   }
 
-  return NextResponse.json(parsed.data);
+  return NextResponse.json(
+    wantsAttemptsUsed(request) ? parsed.data : omitAttemptsUsed(parsed.data)
+  );
 }

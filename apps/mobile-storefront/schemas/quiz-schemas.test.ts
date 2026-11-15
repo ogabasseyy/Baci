@@ -8,7 +8,10 @@ import {
   quizQuestionSchema,
   quizResultSchema,
 } from './quiz-schemas';
-import { validLegacyQuizEvent as validEvent } from './quiz-schemas.test-support';
+import {
+  validLegacyQuizEvent as validEvent,
+  validV2QuizEvent,
+} from './quiz-schemas.test-support';
 
 const validOption = {
   id: 'option-1',
@@ -294,5 +297,22 @@ describe('quiz response schemas', () => {
         question: validQuestion,
       }).success
     ).toBe(true);
+  });
+
+  it('accepts an optional non-negative attemptsUsed on v2 events', () => {
+    expect(quizEventSchema.parse(validV2QuizEvent)).not.toHaveProperty(
+      'attemptsUsed'
+    );
+    expect(
+      quizEventSchema.parse({ ...validV2QuizEvent, attemptsUsed: 3 })
+    ).toMatchObject({ attemptsUsed: 3 });
+    expect(
+      quizEventSchema.safeParse({ ...validV2QuizEvent, attemptsUsed: -1 })
+        .success
+    ).toBe(false);
+    expect(
+      quizEventSchema.safeParse({ ...validV2QuizEvent, attemptsUsed: 1.5 })
+        .success
+    ).toBe(false);
   });
 });

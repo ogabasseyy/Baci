@@ -181,3 +181,28 @@ export function canPlayAnotherQuizAttempt(
   const now = Date.parse(authoritativeNow);
   return !Number.isNaN(now) && endsAt > now;
 }
+
+/**
+ * Attempts the player has left on an event, or null when it cannot be known
+ * (no count from the server, or the event has no attempt limit). Never negative.
+ */
+export function getQuizTriesLeft(
+  event: Pick<QuizEvent, 'attemptsUsed' | 'maxAttempts'> | undefined
+): number | null {
+  const used = event?.attemptsUsed;
+  const max = event?.maxAttempts;
+  if (
+    typeof used !== 'number' ||
+    typeof max !== 'number' ||
+    !Number.isFinite(used) ||
+    !Number.isFinite(max)
+  ) {
+    return null;
+  }
+  return Math.max(0, max - used);
+}
+
+export function formatQuizTriesLeft(triesLeft: number | null): string | null {
+  if (triesLeft === null || triesLeft < 1) return null;
+  return `${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left`;
+}

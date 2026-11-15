@@ -35,6 +35,12 @@ export const QUIZ_CONTRACT_VERSION = 2 as const;
 
 /** HTTP header used by web and mobile clients to declare quiz support. */
 export const QUIZ_CONTRACT_HEADER = 'X-Baci-Quiz-Contract' as const;
+/**
+ * Opt-in for the events list: only clients sending this header with value
+ * "1" receive `attemptsUsed`. Installed apps bundle a strict event schema, so
+ * the field must never reach them unasked.
+ */
+export const QUIZ_ATTEMPTS_USED_HEADER = 'X-Baci-Quiz-Attempts-Used' as const;
 
 /** Quiz modes supported by the versioned event contract. */
 export const QUIZ_MODES = ['test', 'live'] as const;

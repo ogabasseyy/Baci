@@ -47,11 +47,18 @@ const projection = {
   serverNow: '2026-08-05T10:00:01.000Z',
 };
 
-function request() {
+function request(extraHeaders: Record<string, string> = {}) {
   return new NextRequest(
     `https://shop.test/api/quiz/events?merchantId=${MERCHANT_ID}`,
-    { headers: { 'X-Baci-Quiz-Contract': '2' } }
+    { headers: { 'X-Baci-Quiz-Contract': '2', ...extraHeaders } }
   );
+}
+
+function withAttemptsUsed(attemptsUsed: number) {
+  return {
+    ...projection,
+    events: projection.events.map((event) => ({ ...event, attemptsUsed })),
+  };
 }
 
 function authenticated(
@@ -107,6 +114,33 @@ describe('v2 quiz events route', () => {
       p_merchant_id: MERCHANT_ID,
       p_offset: 0,
     });
+  });
+
+  it('sends attemptsUsed to clients that opt in', async () => {
+    authenticated({ data: withAttemptsUsed(2), error: null });
+    const response = await getQuizEventsV2(
+      request({ 'X-Baci-Quiz-Attempts-Used': '1' })
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.events[0].attemptsUsed).toBe(2);
+  });
+
+  it('strips attemptsUsed for installed apps that did not opt in', async () => {
+    authenticated({ data: withAttemptsUsed(2), error: null });
+    const response = await getQuizEventsV2(request());
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.events[0]).not.toHaveProperty('attemptsUsed');
+    expect(body).toEqual({ ...projection, entryMode: 'free-v1' });
+  });
+
+  it('rejects a malformed attemptsUsed projection', async () => {
+    authenticated({ data: withAttemptsUsed(-1), error: null });
+    const response = await getQuizEventsV2(
+      request({ 'X-Baci-Quiz-Attempts-Used': '1' })
+    );
+    expect(response.status).toBe(500);
   });
 
   it('maps a cross-tenant projection refusal without exposing data', async () => {

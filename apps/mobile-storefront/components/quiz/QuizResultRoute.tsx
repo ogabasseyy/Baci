@@ -12,6 +12,7 @@ import type { createQuizStyles } from './QuizScreen.styles';
 import { canPlayAnotherQuizAttempt } from './QuizScreen.utils';
 import { useQuizEventTimer } from './use-quiz-event-timer';
 import { useQuizServerClock } from './use-quiz-server-clock';
+import { useQuizTriesLeft } from './use-quiz-tries-left';
 import {
   type QuizBackHandlerRef,
   useQuizBackHandler,
@@ -65,6 +66,11 @@ export function QuizResultRoute({
       ? (terminalContext?.eventEndsAt ?? event?.endsAt)
       : terminalContext?.serverNow
   );
+  const triesLeft = useQuizTriesLeft(
+    terminalContext?.eventId,
+    canPlayAgain,
+    event?.maxAttempts
+  );
   const returnToLobby = () => {
     if (lifecycle === 'pending_results' && !canPlayAgain) return;
     if (terminalContext?.eventId) dismissRecovery(terminalContext.eventId);
@@ -92,6 +98,7 @@ export function QuizResultRoute({
           : null
       }
       styles={styles}
+      triesLeft={triesLeft}
       v2Result={v2Result}
     />
   );

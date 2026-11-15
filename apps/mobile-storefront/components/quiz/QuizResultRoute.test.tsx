@@ -3,13 +3,21 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { QuizResultRoute } from './QuizResultRoute';
 import { createQuizStyles } from './QuizScreen.styles';
 
+jest.mock('@/services/quiz', () => ({
+  fetchQuizEvents: jest.fn(async () => [
+    { attemptsUsed: 1, id: 'event-1', maxAttempts: 2 },
+  ]),
+}));
+
 jest.mock('./QuizResultsPanel', () => ({
   QuizResultsPanel: ({
     allowPendingResultsExit,
+    triesLeft,
     onReturnToQuizList,
     simulatedPrize,
   }: {
     allowPendingResultsExit: boolean;
+    triesLeft?: number | null;
     onReturnToQuizList: () => void;
     simulatedPrize?: { name: string } | null;
   }) => {
@@ -21,6 +29,7 @@ jest.mock('./QuizResultsPanel', () => ({
       React.Fragment,
       null,
       React.createElement(Text, null, String(allowPendingResultsExit)),
+      React.createElement(Text, null, `tries:${String(triesLeft)}`),
       simulatedPrize
         ? React.createElement(
             Text,
@@ -56,7 +65,7 @@ describe('QuizResultRoute', () => {
     jest.useRealTimers();
   });
 
-  it('dismisses the retained result only when another attempt is available', () => {
+  it('dismisses the retained result only when another attempt is available', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-16T12:04:00.000Z'));
     const dismissRecovery = jest.fn();
@@ -101,6 +110,9 @@ describe('QuizResultRoute', () => {
     );
 
     expect(screen.getByText('true')).toBeTruthy();
+    // Count comes from a fresh fetch (1 used of 2), not the cached event.
+    await act(async () => {});
+    expect(screen.getByText('tries:1')).toBeTruthy();
     act(() => backHandlerRef.current?.());
     expect(dismissRecovery).toHaveBeenCalledWith('event-1');
     expect(onReset).toHaveBeenCalledTimes(1);

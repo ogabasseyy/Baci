@@ -73,4 +73,63 @@ describe('QuizResultsActions', () => {
 
     expect(screen.getByRole('button', { name: 'Play again' })).toBeTruthy();
   });
+
+  it('shows the tries left beside Play again when known', () => {
+    render(
+      <QuizResultsActions
+        onReturnToQuizList={jest.fn()}
+        returnLabel="Play again"
+        showHistory={false}
+        styles={createQuizStyles(colors)}
+        triesLeft={2}
+      />
+    );
+
+    expect(screen.getByText('Play again · 2 tries left')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Play again · 2 tries left' })
+    ).toBeTruthy();
+  });
+
+  it('uses the singular for one try left', () => {
+    render(
+      <QuizResultsActions
+        onReturnToQuizList={jest.fn()}
+        returnLabel="Play again"
+        showHistory={false}
+        styles={createQuizStyles(colors)}
+        triesLeft={1}
+      />
+    );
+
+    expect(screen.getByText('Play again · 1 try left')).toBeTruthy();
+  });
+
+  it('keeps plain Play again when the count is unknown', () => {
+    render(
+      <QuizResultsActions
+        onReturnToQuizList={jest.fn()}
+        returnLabel="Play again"
+        showHistory={false}
+        styles={createQuizStyles(colors)}
+        triesLeft={null}
+      />
+    );
+
+    expect(screen.getByText('Play again')).toBeTruthy();
+  });
+
+  it('never adds a count to Back to quizzes', () => {
+    render(
+      <QuizResultsActions
+        onReturnToQuizList={jest.fn()}
+        returnLabel="Back to quizzes"
+        showHistory={false}
+        styles={createQuizStyles(colors)}
+        triesLeft={2}
+      />
+    );
+
+    expect(screen.getByText('Back to quizzes')).toBeTruthy();
+  });
 });

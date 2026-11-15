@@ -7,6 +7,7 @@ import {
   it,
   jest,
 } from '@jest/globals';
+import { validV2QuizEvent } from '@/schemas/quiz-schemas.test-support';
 import {
   legacyQuizEventDefaults,
   mockFetch,
@@ -16,6 +17,7 @@ import {
 } from './quiz.test-support';
 
 const { fetchQuizEvents } = quizService;
+const v2EventFixture = validV2QuizEvent;
 
 // Paging and server-clock receipt coverage for fetchQuizEvents; the rest of
 // the event service lives in quiz.test.ts.
@@ -162,5 +164,34 @@ describe('quiz event list paging and receipt clock', () => {
         'X-Baci-Quiz-Contract'
       )
     ).toBe('2');
+  });
+
+  it('opts in to attemptsUsed and keeps it on the mapped event', async () => {
+    mockFetch.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            contractVersion: 2,
+            entryMode: 'free-v1',
+            events: [
+              {
+                attemptsUsed: 2,
+                ...v2EventFixture,
+              },
+            ],
+            serverNow: '2026-05-20T10:00:00.000Z',
+          }),
+          { status: 200 }
+        )
+    );
+
+    const events = await fetchQuizEvents({ baseUrl: 'https://example.com' });
+
+    expect(events[0]?.attemptsUsed).toBe(2);
+    expect(
+      new Headers(mockFetch.mock.calls[0]?.[1]?.headers).get(
+        'X-Baci-Quiz-Attempts-Used'
+      )
+    ).toBe('1');
   });
 });

@@ -15,6 +15,8 @@ import { QuizServiceError } from '@/services/quiz-types';
 export const QUIZ_REQUEST_TIMEOUT_MS = 15_000;
 export const QUIZ_CONTRACT_HEADER = 'X-Baci-Quiz-Contract';
 export const QUIZ_CONTRACT_VERSION = '2';
+/** Opt-in so the events list includes `attemptsUsed`; older servers ignore it. */
+export const QUIZ_ATTEMPTS_USED_HEADER = 'X-Baci-Quiz-Attempts-Used';
 
 export function getQuizApiBaseUrl(configuredUrl?: string): string {
   const extra = getExpoExtraConfig(Constants.expoConfig?.extra);

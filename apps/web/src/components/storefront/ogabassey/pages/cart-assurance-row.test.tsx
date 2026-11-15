@@ -79,4 +79,30 @@ describe('CartAssuranceRow', () => {
     );
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
+
+  it('caps the width on the wrapper, not the label, and frees it for the removal message', () => {
+    function CartLine() {
+      const [enabled, setEnabled] = useState(true);
+      return (
+        <CartAssuranceRow
+          hasAssurance={enabled}
+          assuranceCost={2000}
+          cartItemId="ci-1"
+          onToggle={() => setEnabled(!enabled)}
+        />
+      );
+    }
+    render(<CartLine />);
+    const row = screen.getByTestId('cart-assurance-row');
+    const label = screen.getByRole('checkbox').closest('label');
+
+    // A percentage cap on the label resolved against a shrink-to-fit
+    // wrapper and squeezed the copy into a narrow column.
+    expect(row).toHaveClass('max-w-[70%]');
+    expect(label).not.toHaveClass('max-w-[70%]');
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(row).toHaveClass('w-full');
+    expect(row).not.toHaveClass('max-w-[70%]');
+  });
 });

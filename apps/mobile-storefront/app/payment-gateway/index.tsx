@@ -80,9 +80,11 @@ export default function PaymentGatewayScreen() {
     // persisted-record check below is the authority for every launch.
     // Gated on auth hydration: an unresolved user must not flash the
     // account-changed dead end on a legitimate checkout.
+    // Legacy (store credit) wallet checkouts carry the same stamp (Codex).
     if (
       authReady &&
-      controller.paymentKind === 'primary_wallet_card' &&
+      (controller.paymentKind === 'primary_wallet_card' ||
+        controller.paymentKind === 'wallet') &&
       controller.validatedParams.data?.userId &&
       user?.id !== controller.validatedParams.data.userId
     ) {

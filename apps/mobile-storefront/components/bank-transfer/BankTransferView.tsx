@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { styles } from './bank-transfer.styles';
@@ -9,6 +10,7 @@ import {
   getDisplayStatusCopy,
   type WalletFundingStatus,
 } from './bank-transfer-view.helpers';
+import { WalletTransferFallbackNotice } from './WalletTransferFallbackNotice';
 
 interface BankTransferViewProps {
   accountName?: string;
@@ -29,6 +31,8 @@ interface BankTransferViewProps {
   orderNumber?: string;
   pollingTimedOut?: boolean;
   remainingAmount?: number;
+  /** The final check switched "Bank transfer to wallet" to this transfer. */
+  walletTransferFallback?: WalletTransferFallback;
   walletFundingStatus?: WalletFundingStatus;
 }
 
@@ -85,6 +89,7 @@ export function BankTransferView({
   orderNumber,
   pollingTimedOut = false,
   remainingAmount,
+  walletTransferFallback,
   walletFundingStatus,
 }: BankTransferViewProps) {
   const isWalletFunded = mode === 'wallet_funded';
@@ -129,7 +134,16 @@ export function BankTransferView({
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {walletTransferFallback ? (
+          <WalletTransferFallbackNotice
+            colors={colors}
+            reason={walletTransferFallback}
+          />
+        ) : null}
         <View
           style={[styles.amountCard, { backgroundColor: BRAND.primaryAlpha06 }]}
         >
@@ -234,7 +248,7 @@ export function BankTransferView({
             </View>
           </View>
         ) : null}
-      </View>
+      </ScrollView>
 
       <View style={styles.actions}>
         <Pressable

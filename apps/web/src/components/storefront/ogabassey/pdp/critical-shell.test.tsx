@@ -1,10 +1,9 @@
 import './critical-shell.test-fixtures';
 import { render, screen } from '@testing-library/react';
-import { OgabasseyPdpCriticalShell } from './critical-shell';
 import { describe, expect, it } from 'vitest';
+import { OgabasseyPdpCriticalShell } from './critical-shell';
 import {
   defaultProduct,
-  isBefore,
   renderCriticalShell,
 } from './critical-shell.test-fixtures';
 
@@ -41,9 +40,7 @@ describe('OgabasseyPdpCriticalShell', () => {
     expect(productImage).toHaveAttribute('loading', 'eager');
     const picture = productImage.closest('picture');
     expect(picture).not.toBeNull();
-    expect(
-      picture?.querySelector('source[type="image/avif"]')
-    ).not.toBeNull();
+    expect(picture?.querySelector('source[type="image/avif"]')).not.toBeNull();
     expect(productImage).not.toHaveAttribute('loader');
     expect(productImage).not.toHaveAttribute('priority');
     expect(productImage).not.toHaveAttribute('quality');
@@ -52,7 +49,7 @@ describe('OgabasseyPdpCriticalShell', () => {
     expect(document.querySelectorAll('source')).toHaveLength(1);
     expect(productImage).toHaveAttribute(
       'sizes',
-      '(max-width: 767.98px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) 40vw, 560px'
+      '(max-width: 767.98px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) calc(52.38vw - 131px), 636px'
     );
     expect(screen.getByRole('link', { name: 'Laptops' })).toHaveAttribute(
       'href',
@@ -189,5 +186,4 @@ describe('OgabasseyPdpCriticalShell', () => {
     expect(screen.getByText('5 Reviews')).toBeInTheDocument();
     expect(screen.queryByText('12 Ratings')).not.toBeInTheDocument();
   });
-
 });

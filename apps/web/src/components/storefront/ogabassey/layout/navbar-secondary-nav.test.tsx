@@ -32,9 +32,7 @@ describe('NavbarSecondaryNav', () => {
       />
     );
 
-    await user.click(
-      screen.getByRole('button', { name: /shop by category/i })
-    );
+    await user.click(screen.getByRole('button', { name: /shop by category/i }));
 
     expect(await screen.findByRole('link', { name: 'Phones' })).toHaveAttribute(
       'href',
@@ -44,6 +42,9 @@ describe('NavbarSecondaryNav', () => {
       'href',
       '/ogabassey/imei-check'
     );
+    expect(
+      screen.getByRole('link', { name: /swap \/ trade-in/i })
+    ).toHaveAttribute('href', '/ogabassey/swap');
     expect(screen.getByRole('link', { name: /blog/i })).toHaveAttribute(
       'href',
       '/ogabassey/blog'
@@ -82,9 +83,7 @@ describe('NavbarSecondaryNav', () => {
       />
     );
 
-    await user.click(
-      screen.getByRole('button', { name: /shop by category/i })
-    );
+    await user.click(screen.getByRole('button', { name: /shop by category/i }));
 
     expect(await screen.findByRole('link', { name: 'Phones' })).toHaveAttribute(
       'href',
@@ -94,6 +93,9 @@ describe('NavbarSecondaryNav', () => {
       'href',
       '/ogabassey/imei-check'
     );
+    expect(
+      screen.getByRole('link', { name: /swap \/ trade-in/i })
+    ).toHaveAttribute('href', '/ogabassey/swap');
     expect(screen.getByRole('link', { name: /blog/i })).toHaveAttribute(
       'href',
       '/ogabassey/blog'
@@ -105,9 +107,7 @@ describe('NavbarSecondaryNav', () => {
 
     render(<NavbarSecondaryNav basePath="/ogabassey" categories={[]} />);
 
-    await user.click(
-      screen.getByRole('button', { name: /shop by category/i })
-    );
+    await user.click(screen.getByRole('button', { name: /shop by category/i }));
 
     expect(await screen.findByText('Loading categories…')).toBeInTheDocument();
   });
@@ -122,14 +122,16 @@ describe('NavbarSecondaryNav', () => {
       />
     );
 
-    await user.click(
-      screen.getByRole('button', { name: /shop by category/i })
-    );
-    expect(await screen.findByRole('link', { name: 'Phones' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /shop by category/i }));
+    expect(
+      await screen.findByRole('link', { name: 'Phones' })
+    ).toBeInTheDocument();
 
     await user.click(document.body);
 
-    expect(screen.queryByRole('link', { name: 'Phones' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Phones' })
+    ).not.toBeInTheDocument();
   });
 
   it('renders the decorative background pattern as an inline SVG tile, not a background-image div', () => {

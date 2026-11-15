@@ -1,3 +1,4 @@
+import { AccessStyles } from '@/components/storefront/ogabassey/redesign/access-styles';
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OGABASSEY_HOME_CAROUSEL_CRITICAL_CSS } from './ogabassey-home-carousel-critical-css';
 import { OGABASSEY_HOME_FOOTER_CHROME_CRITICAL_CSS } from './ogabassey-home-chrome-critical-css';
@@ -7,6 +8,7 @@ import { OGABASSEY_HOME_LCP_CRITICAL_CSS } from './ogabassey-home-lcp-critical-c
 export function OgabasseyHomeCriticalShell() {
   return (
     <>
+      <AccessStyles />
       <style href="ogabassey-home-lcp" precedence="high">
         {OGABASSEY_HOME_LCP_CRITICAL_CSS}
       </style>

@@ -69,6 +69,8 @@
     "test:experience:lifecycle": "vitest run --config vitest.experience-lifecycle.config.ts"
   },
   "dependencies": {
+    "@ui-sdk/core": "0.1.0-beta.1",
+    "@ui-sdk/react": "0.1.0-beta.1",
     "@ai-sdk/cerebras": "^2.0.62",
     "@ai-sdk/google": "^3.0.82",
     "@ai-sdk/groq": "^3.0.47",

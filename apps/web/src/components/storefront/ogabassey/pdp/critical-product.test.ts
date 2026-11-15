@@ -6,6 +6,32 @@ import {
 } from './critical-product';
 
 describe('buildOgabasseyPdpCriticalProduct', () => {
+  it('omits stale listed prices from the intro while retaining product prose', () => {
+    const product = buildOgabasseyPdpCriticalProduct({
+      id: 'tablet',
+      name: 'A tablet',
+      price: 200000,
+      description:
+        'A portable canvas for your ideas. Current listed price is NGN 100,000. Enjoy your next chapter.',
+    });
+    expect(product.descriptionExcerpt).toBe(
+      'A portable canvas for your ideas. Enjoy your next chapter.'
+    );
+    expect(product.price).toBe(200000);
+  });
+  it('derives the intro from catalog prose and does not manufacture missing copy', () => {
+    const source = { id: 'tablet', name: 'A tablet' };
+    expect(
+      buildOgabasseyPdpCriticalProduct({
+        ...source,
+        description:
+          '<p>Take your ideas further with a portable canvas for everyday work.</p>',
+      }).descriptionExcerpt
+    ).toBe('Take your ideas further with a portable canvas for everyday work.');
+    expect(buildOgabasseyPdpCriticalProduct(source).descriptionExcerpt).toBe(
+      ''
+    );
+  });
   it('maps cached product fields without requiring a review_count column', () => {
     const product = buildOgabasseyPdpCriticalProduct({
       brand: 'Lenovo',

@@ -1,4 +1,5 @@
 import type { ProductSpecSection } from '@/components/storefront/ogabassey/types';
+import { ProductDesignHighlights } from './product-design-highlights';
 
 interface OgabasseyPdpServerPrimaryDetailsProps {
   detailedSpecs: ProductSpecSection[];
@@ -56,12 +57,12 @@ export function OgabasseyPdpServerPrimaryDetails({
       aria-label={`${productName} overview and specifications`}
       data-ogabassey-pdp-server-details
     >
-
+      <ProductDesignHighlights
+        specs={specSections.flatMap((section) => section.items)}
+      />
       {specSections.length > 0 ? (
         <div data-ogabassey-pdp-server-details-card>
-          <p data-ogabassey-pdp-server-details-eyebrow>
-            Technical details
-          </p>
+          <p data-ogabassey-pdp-server-details-eyebrow>Technical details</p>
           <h2
             id="ogabassey-pdp-server-specifications-title"
             data-ogabassey-pdp-server-details-title
@@ -73,15 +74,12 @@ export function OgabasseyPdpServerPrimaryDetails({
               const headingId = getSpecHeadingId(section.category, index);
 
               return (
-                <div
+                <section
                   key={headingId}
                   aria-labelledby={headingId}
                   data-ogabassey-pdp-server-spec-section
                 >
-                  <h3
-                    id={headingId}
-                    data-ogabassey-pdp-server-spec-heading
-                  >
+                  <h3 id={headingId} data-ogabassey-pdp-server-spec-heading>
                     {section.category}
                   </h3>
                   <dl data-ogabassey-pdp-server-spec-list>
@@ -95,7 +93,7 @@ export function OgabasseyPdpServerPrimaryDetails({
                       </div>
                     ))}
                   </dl>
-                </div>
+                </section>
               );
             })}
           </div>

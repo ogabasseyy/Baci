@@ -1,3 +1,4 @@
+import { AccessFooterIntro } from '../redesign/access-footer-intro';
 import type { MerchantData } from '@/hooks/merchant/types';
 import { asRoute } from '@/lib/routes';
 import { normalizeSocialUrl } from '@/lib/social';
@@ -133,6 +134,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
 
   return (
     <footer className="ogabassey-footer border-t border-store-border/40 pt-10 pb-16 md:pb-10 relative overflow-hidden font-sans">
+      <AccessFooterIntro merchant={merchant} basePath={basePath} />
       <h2 className="sr-only">{businessName} footer</h2>
       <GadgetPattern className="ogabassey-footer__pattern" opacity={0.1} />
 
@@ -147,7 +149,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
               <Logo className="h-8 w-auto" />
             </Link>
             <p className="text-current/65 text-xs leading-relaxed max-w-xs">
-              Making Smartphones Accessible and Affordable
+              Making smartphones, laptops and gadgets more accessible. Learn, create and earn. Your way.
             </p>
             <div className="flex items-center gap-4 flex-wrap">
               {renderSocialLink(

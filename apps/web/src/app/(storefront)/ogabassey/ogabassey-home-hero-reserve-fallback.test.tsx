@@ -1,118 +1,30 @@
-import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  HERO_MOBILE_CONTROLS_ROW_CLASSES,
-  HERO_MOBILE_PANEL_CLASSES,
-  HERO_MOBILE_WRAPPER_CLASSES,
-} from '@/components/storefront/ogabassey/components/hero-mobile-geometry';
+import { render } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 
-vi.mock('next/link', () => ({
-  default: ({
-    children,
-    href,
-    ...rest
-  }: { children: React.ReactNode; href: string } & Record<string, unknown>) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
-
-function firstClass(token: string): string {
-  const first = token.split(' ')[0] ?? token;
-  // Escape Tailwind variant separators (e.g. `md:hidden`) for querySelector.
-  return first.replace(/:/g, '\\:');
-}
-
 describe('OgabasseyHomeHeroReserveFallback', () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn(() => ({ matches: false }))
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('reserves the streamed mobile hero geometry (panel + controls row)', () => {
+  it('is invisible and non-interactive before publication resolves', () => {
     const { container } = render(<OgabasseyHomeHeroReserveFallback />);
-
-    const root = container.querySelector(
-      '[data-ogabassey-home-hero-reserve-fallback="true"]'
+    const reserve = container.querySelector(
+      '[data-ogabassey-home-hero-reserve-fallback]'
     );
-    expect(root).not.toBeNull();
-    expect(root).toHaveAttribute('aria-hidden', 'true');
-
-    // Same section wrapper the real Hero renders, so offsets match.
-    const section = root?.querySelector('section');
-    expect(section?.className).toContain('max-w-[1400px]');
-
-    const wrapper = root?.querySelector(
-      '[data-ogabassey-home-hero-reserve-mobile="true"]'
-    );
-    expect(wrapper).not.toBeNull();
-    expect(wrapper).toHaveClass(
-      ...HERO_MOBILE_WRAPPER_CLASSES.split(' ').map((c) => c.replace(/\\/g, ''))
-    );
-    expect(
-      wrapper?.querySelector(`.${firstClass(HERO_MOBILE_PANEL_CLASSES)}`)
-    ).not.toBeNull();
-    expect(
-      wrapper?.querySelector(`.${firstClass(HERO_MOBILE_CONTROLS_ROW_CLASSES)}`)
-    ).not.toBeNull();
+    expect(reserve).toHaveAttribute('aria-hidden', 'true');
+    expect(reserve).toHaveAttribute('inert');
+    expect(reserve?.querySelector('.oa-reserve')).not.toBeNull();
+    expect(reserve?.querySelector('a, button, img, h1')).toBeNull();
   });
-
-  it('reserves the desktop hero skeleton and the utility panel', () => {
+  it('uses the actual hero structure to reserve both viewport layouts', () => {
     const { container } = render(<OgabasseyHomeHeroReserveFallback />);
-
-    const desktop = container.querySelector(
-      '[data-ogabassey-home-hero-reserve-fallback="true"] .hidden.md\\:grid'
-    );
-    expect(desktop).not.toBeNull();
-    // The utility panel renders for real (exact height on both viewports).
-    expect(
-      container.querySelector('[data-ogabassey-hero-utility="true"]')
-    ).not.toBeNull();
+    expect(container.querySelector('.oa-hero .oa-intro')).not.toBeNull();
+    expect(container.querySelector('.oa-hero .oa-showcase')).not.toBeNull();
+    expect(container.querySelector('.oa-categories')).not.toBeNull();
   });
-
-  it('keeps the reserved utility panel visually hidden until publication resolves', () => {
-    // This fallback renders while the request-scoped publication check is
-    // still pending: visibility:hidden reserves the exact geometry without
-    // showing shopping UI for an unpublished store or tenant mismatch.
-    const { container } = render(<OgabasseyHomeHeroReserveFallback />);
-
-    const reservedUtility = container.querySelector(
-      '[data-ogabassey-home-hero-reserve-utility="true"]'
-    );
-    expect(reservedUtility).not.toBeNull();
-    expect(reservedUtility).toHaveClass('invisible');
-    expect(
-      reservedUtility?.querySelector('[data-ogabassey-hero-utility="true"]')
-    ).not.toBeNull();
-  });
-
-  it('omits the mobile skeleton when the mobile carousel is omitted', () => {
+  it('preserves the alternate mobile omission', () => {
     const { container } = render(
       <OgabasseyHomeHeroReserveFallback omitMobileCarousel />
     );
-
-    expect(
-      container.querySelector(
-        '[data-ogabassey-home-hero-reserve-mobile="true"]'
-      )
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-ogabassey-hero-utility="true"]')
-    ).not.toBeNull();
-  });
-
-  it('exposes no links or headings even to crawlers (aria-hidden is not crawler-hidden)', () => {
-    render(<OgabasseyHomeHeroReserveFallback />);
-
-    expect(screen.queryByRole('link', { hidden: true })).toBeNull();
-    expect(screen.queryByRole('heading', { hidden: true })).toBeNull();
+    expect(container.querySelector('[data-ogabassey-access-hero]')).toHaveClass(
+      'oa-hide-mobile'
+    );
   });
 });

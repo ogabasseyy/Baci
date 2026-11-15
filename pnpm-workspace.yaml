@@ -1,5 +1,8 @@
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
+  # Owner-requested UI SDK beta evaluation for the Ogabassey redesign.
+  - '@ui-sdk/core@0.1.0-beta.1'
+  - '@ui-sdk/react@0.1.0-beta.1'
   # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-06-15.
   - ws@5.2.5 || 6.2.4 || 7.5.11 || 8.21.0
   - protobufjs@7.6.5

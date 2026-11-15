@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 
-vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
+vi.mock('@/components/storefront/ogabassey/redesign/access-home-hero', () => ({
   Hero: ({
     omitDocumentHeading,
     omitMobileCarousel,

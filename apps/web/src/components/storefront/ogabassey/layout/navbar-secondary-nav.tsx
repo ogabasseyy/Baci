@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowLeftRight,
   ChevronDown,
   LayoutGrid,
   Newspaper,
@@ -128,7 +129,10 @@ export function NavbarSecondaryNav({
 
       <div className="ogabassey-navbar-secondary__inner">
         <div className="ogabassey-navbar-secondary__list">
-          <div className="ogabassey-navbar-secondary__category" ref={categoryRef}>
+          <div
+            className="ogabassey-navbar-secondary__category"
+            ref={categoryRef}
+          >
             <button
               type="button"
               onClick={() => setShowCategoryDropdown((current) => !current)}
@@ -190,6 +194,15 @@ export function NavbarSecondaryNav({
           >
             <Wallet size={18} aria-hidden="true" />
             Wallet
+          </Link>
+
+          <Link
+            href={`${basePath}/swap` as `/${string}`}
+            prefetch={false}
+            className="ogabassey-navbar-secondary__link"
+          >
+            <ArrowLeftRight size={18} aria-hidden="true" />
+            Swap / Trade-in
           </Link>
 
           <div className="ogabassey-navbar-secondary__divider" />

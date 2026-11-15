@@ -19,9 +19,13 @@ function readStorefrontFile(fileName: string): string {
 
 describe('critical PDP description geometry', () => {
   it('omits redundant visible-summary and selection-hint rules from critical summary CSS', () => {
-    const summaryCss = readStorefrontFile(
-      'storefront-pdp-critical-summary.css'
-    );
+    const summaryCss = [
+      'storefront-pdp-critical-summary.css',
+      'storefront-pdp-critical-commerce.css',
+      'storefront-pdp-editorial.css',
+    ]
+      .map(readStorefrontFile)
+      .join('\n');
 
     expect(summaryCss).not.toMatch(/\[data-ogabassey-pdp-visible-summary\]/);
     expect(summaryCss).not.toMatch(

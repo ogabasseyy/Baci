@@ -2,6 +2,23 @@ import { oxygenIntegrationSuites } from './runtime-contract-oxygen-integration-s
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
   ...oxygenIntegrationSuites,
+  'apps/web/src/components/storefront/ogabassey/redesign/access-benefits.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-home.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/access-home-hero.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-home.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/ownership-sections.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-home.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/access-styles.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-home.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/access-search-styles.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-search-experiments.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/access-hero-search.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-search-experiments.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/access-service-nav.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-search-experiments.test.tsx',
+  'apps/web/src/components/storefront/ogabassey/redesign/ownership-dialog.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/ownership-compare.test.tsx',
+
   'apps/web/src/lib/proxy/oxygen-payment-surface.ts':
     'apps/web/src/lib/proxy/response-headers.test.ts',
   'apps/web/src/app/api/shipping/quotes/load-public-merchant-rates.ts':

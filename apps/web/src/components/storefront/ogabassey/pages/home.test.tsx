@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { isValidElement, type ReactNode, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
@@ -37,7 +43,7 @@ const mockHero = vi.hoisted(() =>
 vi.mock('@baci/shared', () => ({
   prioritizeSmartphoneProducts: vi.fn((products: unknown[]) => products),
 }));
-vi.mock('../components/Hero', () => ({
+vi.mock('../redesign/access-home-hero', () => ({
   Hero: (props: { slides?: Array<{ href?: string; ctaLabel?: string }> }) =>
     mockHero(props),
 }));
@@ -47,6 +53,14 @@ vi.mock('../components/HomeProductGrid', () => ({
 }));
 vi.mock('../components/deferred-ad-unit', () => ({
   DeferredAdUnit: (props: Record<string, unknown>) => mockDeferredAdUnit(props),
+}));
+
+vi.mock('next/link', () => import('./home-link.test-support'));
+vi.mock('../components/hero-utility-panel-gate', () => ({
+  HeroUtilityPanelGate: () => <div>Utility services</div>,
+}));
+vi.mock('../components/hero-utility-panel-static', () => ({
+  HeroUtilityPanelStatic: () => <div>Utility services</div>,
 }));
 
 import { OgabasseyHomePage } from './home';

@@ -3,14 +3,17 @@ import { LAUNCH_CAROUSEL_LIMIT } from '@baci/shared/storefront/launch-carousel';
 import type React from 'react';
 import { Suspense } from 'react';
 import { normalizeRouteBasePath } from '@/lib/routes';
-import type { Product } from '../types';
 import { buildLaunchSlides } from '../components/build-launch-slides';
 import { DeferredAdUnit } from '../components/deferred-ad-unit';
+import { HeroUtilityPanelGate } from '../components/hero-utility-panel-gate';
+import { HeroUtilityPanelStatic } from '../components/hero-utility-panel-static';
 import { HomeProductGridGate } from '../components/home-product-grid-gate';
 import { HomeProductGridStaticFallback } from '../components/home-product-grid-static-fallback';
 import { OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY } from '../components/home-section-reserve-geometry';
-import { Hero } from '../components/Hero';
 import { HOMEPAGE_STRIP_AD_BOOT_DELAY_MS } from '../config/ads';
+import { Hero } from '../redesign/access-home-hero';
+import { OwnershipSections } from '../redesign/ownership-sections';
+import type { Product } from '../types';
 
 // Define the expected props
 interface HomePageProps {
@@ -38,29 +41,16 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
   // generic storefront renderer) still render a product carousel rather than an
   // empty slot now that the old promo banner is gone.
   const launchSlides = renderHero
-    ? buildLaunchSlides(
-        launchProducts ?? products ?? [],
-        routeBasePath
-      ).slice(0, LAUNCH_CAROUSEL_LIMIT)
+    ? buildLaunchSlides(launchProducts ?? products ?? [], routeBasePath).slice(
+        0,
+        LAUNCH_CAROUSEL_LIMIT
+      )
     : [];
 
   return (
     <>
-      {/* Product-driven hero: the big slot + side cards surface real launch
-          devices (pinned A27 / Power 80, then newest), each deep-linking to its
-          PDP. Replaces the old hardcoded promo banner. The first hero image is
-          the eager LCP element; see Hero/hero-desktop-grid. */}
-      {renderHero && <Hero slides={launchSlides} />}
-
-      {/* Ad Placement: Homepage Strip */}
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-4">
-        <DeferredAdUnit
-          activateOnInteraction
-          placementKey="HOMEPAGE_STRIP"
-          bootDelayMs={HOMEPAGE_STRIP_AD_BOOT_DELAY_MS}
-          timeoutMs={0}
-        />
-      </div>
+      {/* Mission-led hero reuses the published first product and LCP image descriptor. */}
+      {renderHero && <Hero basePath={routeBasePath} slides={launchSlides} />}
 
       {/* Suspense boundary keeps the featured-products client gate chunks out
           of <head> (~31 KB JS saved from the critical path). An explicit
@@ -100,6 +90,19 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
           }
         />
       </Suspense>
+      <OwnershipSections basePath={routeBasePath} />
+      <Suspense fallback={<HeroUtilityPanelStatic />}>
+        <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />} />
+      </Suspense>
+      {/* Ad Placement: Homepage Strip */}
+      <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-4">
+        <DeferredAdUnit
+          activateOnInteraction
+          placementKey="HOMEPAGE_STRIP"
+          bootDelayMs={HOMEPAGE_STRIP_AD_BOOT_DELAY_MS}
+          timeoutMs={0}
+        />
+      </div>
     </>
   );
 };

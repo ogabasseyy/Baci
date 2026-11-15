@@ -1,3 +1,4 @@
+@layer ui-sdk;
 @import 'tailwindcss';
 
 @config '../../tailwind.config.mjs';
@@ -1426,5 +1427,13 @@
     background: var(--store-background, #fff);
     color: var(--store-background-text, #111827);
     font: inherit;
+  }
+}
+
+@layer base {
+  :root {
+    --ogabassey-gallery-accent: #f5ac79;
+    --ogabassey-sustainability-surface: #dbeccc;
+    --ogabassey-sustainability-text: #234936;
   }
 }

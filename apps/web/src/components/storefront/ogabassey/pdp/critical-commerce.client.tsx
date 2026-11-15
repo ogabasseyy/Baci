@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ProductFixedOptions } from './product-fixed-options';
 import type { Route } from 'next';
 import { useState } from 'react';
 import { resolveVariantSelection } from '@baci/shared/lib';
@@ -140,6 +141,7 @@ export function OgabasseyPdpCriticalCommerceSummary() {
           {formatCriticalPrice(productForCart.price, currency)}
         </span>
       </div>
+      <ProductFixedOptions variants={variants} selectableAxes={renderableVariantAxes} />
       <div data-ogabassey-pdp-summary-variant-slot>
         <OgabasseyPdpCriticalVariantSelectors
           onAttributeSelection={handleAttributeSelection}

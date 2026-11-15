@@ -6,7 +6,13 @@ const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
   record: vi.fn(),
   push: vi.fn(),
+  after: vi.fn(),
 }));
+
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual('next/server');
+  return { ...actual, after: mocks.after };
+});
 
 vi.mock('@/lib/chatwoot/chat-webhook-config', () => ({
   getChatWebhookBinding: mocks.getBinding,
@@ -83,7 +89,15 @@ beforeEach(() => {
     duplicate: false,
   });
   mocks.push.mockResolvedValue({ status: 'sent', sent: 1, failed: 0 });
+  // Run the deferred push the way the framework does once the response is out.
+  mocks.after.mockImplementation((work: () => Promise<void>) => {
+    pending.push(work());
+  });
+  pending.length = 0;
 });
+
+const pending: Promise<void>[] = [];
+const settle = () => Promise.all(pending);
 
 describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
   it('records a signed customer message for the bound store', async () => {
@@ -213,6 +227,7 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
 
   it('pushes once for a newly notified message', async () => {
     await call(payload());
+    await settle();
     expect(mocks.push).toHaveBeenCalledOnce();
     expect(mocks.push).toHaveBeenCalledWith({
       merchantId: binding.merchantId,
@@ -231,13 +246,16 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
   ])('does not push for %s', async (_label, outcome) => {
     mocks.record.mockResolvedValue({ ok: true, ...outcome });
     const response = await call(payload());
+    await settle();
     expect(response.status).toBe(200);
     expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
   });
 
   it('still acknowledges the webhook when the push fails', async () => {
     mocks.push.mockRejectedValue(new Error('expo down'));
     const response = await call(payload());
+    await settle();
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       received: true,
@@ -256,6 +274,7 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.push.mockResolvedValue(push);
     const response = await call(payload());
+    await settle();
 
     expect(response.status).toBe(200);
     expect(warn).toHaveBeenCalledWith('Chat message push was not sent', {
@@ -271,6 +290,7 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.push.mockRejectedValue(new Error('expo down'));
     await call(payload());
+    await settle();
     expect(warn).toHaveBeenCalledWith(
       'Chat message push was not sent',
       expect.objectContaining({ status: 'failed' })
@@ -288,6 +308,7 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.push.mockResolvedValue(push);
     await call(payload());
+    await settle();
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -295,6 +316,20 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
   it('does not push when the notification could not be recorded', async () => {
     mocks.record.mockResolvedValue({ ok: false, code: 'unavailable' });
     await call(payload());
+    await settle();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('answers 200 even when the push never settles', async () => {
+    mocks.push.mockReturnValue(new Promise(() => undefined));
+    const response = await call(payload());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      received: true,
+      handled: true,
+    });
+    // The push was only scheduled, not awaited by the handler.
+    expect(mocks.after).toHaveBeenCalledOnce();
+    expect(mocks.push).toHaveBeenCalledOnce();
   });
 });

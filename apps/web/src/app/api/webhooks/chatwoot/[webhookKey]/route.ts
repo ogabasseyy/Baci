@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 import {
   CHAT_EVENT_NAME_MAX_LENGTH,
   CHAT_EVENT_PREVIEW_MAX_LENGTH,
@@ -18,6 +18,29 @@ const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
 function respond(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
+}
+
+type ChatEvent = Parameters<typeof sendChatEventPush>[0];
+
+async function pushChatMessage(chatEvent: ChatEvent) {
+  let pushStatus = 'failed';
+  try {
+    const push = await sendChatEventPush(chatEvent);
+    pushStatus =
+      push.status === 'skipped' ? `skipped:${push.reason}` : push.status;
+  } catch {
+    // Swallowed on purpose; see the caller.
+  }
+  // Losing the claim to a concurrent delivery is normal. Anything else that
+  // stopped the push is logged, without customer text or secrets, so a
+  // broken push path is visible even though the webhook still succeeds.
+  if (pushStatus !== 'sent' && pushStatus !== 'skipped:already_claimed') {
+    console.warn('Chat message push was not sent', {
+      eventKey: chatEvent.eventKey,
+      merchantId: chatEvent.merchantId,
+      status: pushStatus,
+    });
+  }
 }
 
 /**
@@ -111,28 +134,12 @@ export async function POST(
       code: 'temporarily_unavailable',
     });
   }
-  // Push only for a newly created notification. It is best effort and at
-  // most once (the database hands out one claim per event), and it never
-  // changes the answer: the notification itself is already recorded.
+  // Push only for a newly created notification. It runs after the response
+  // so the sender's 200 never waits on the push provider; it is best effort
+  // and at most once (the database hands out one claim per event), and it
+  // never changes the answer: the notification itself is already recorded.
   if (result.outcome === 'notified' && !result.duplicate) {
-    let pushStatus = 'failed';
-    try {
-      const push = await sendChatEventPush(chatEvent);
-      pushStatus =
-        push.status === 'skipped' ? `skipped:${push.reason}` : push.status;
-    } catch {
-      // Swallowed on purpose; see above.
-    }
-    // Losing the claim to a concurrent delivery is normal. Anything else that
-    // stopped the push is logged, without customer text or secrets, so a
-    // broken push path is visible even though the webhook still succeeds.
-    if (pushStatus !== 'sent' && pushStatus !== 'skipped:already_claimed') {
-      console.warn('Chat message push was not sent', {
-        eventKey: chatEvent.eventKey,
-        merchantId: chatEvent.merchantId,
-        status: pushStatus,
-      });
-    }
+    after(() => pushChatMessage(chatEvent));
   }
   return respond(200, { received: true, handled: true });
 }

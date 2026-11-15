@@ -94,6 +94,19 @@ describe('createChatEventPushStore', () => {
     });
   });
 
+  it('reports malformed token rows as the same sanitized read error', async () => {
+    rpc.mockResolvedValue({
+      data: [{ token: 'ExponentPushToken[a]' }],
+      error: null,
+    });
+    await expect(
+      store().fetchMerchantTokens({ merchantId: scope.merchantId })
+    ).resolves.toEqual({
+      data: null,
+      error: { message: 'Chat push tokens unavailable' },
+    });
+  });
+
   it('never serves customer tokens', async () => {
     await expect(store().fetchCustomerTokens({ userId: 'u' })).resolves.toEqual(
       { data: [], error: null }

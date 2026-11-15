@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getExpoClient } from '@/lib/expo-client';
 import type { PushDelivery } from '@/lib/expo-push-types';
+import { chatEventPushTokenRowsSchema } from '@/schemas/chat-event-push';
 
 export type ChatEventPushScope = {
   merchantId: string;
@@ -57,8 +58,6 @@ export function chatEventPushArgs(
   };
 }
 
-type TokenRows = { token: string; platform: string }[];
-
 /**
  * Push store for one claimed chat event, backed by the proof-and-claim
  * database wrappers. The store, the app and the eligible users are derived
@@ -101,7 +100,16 @@ export function createChatEventPushStore(
           error: { message: 'Chat push tokens unavailable' },
         };
       }
-      return { data: (data ?? []) as TokenRows, error: null };
+      // Check the shape at the boundary; a malformed answer is reported as
+      // the same sanitized read error, never passed on to delivery.
+      const rows = chatEventPushTokenRowsSchema.safeParse(data);
+      if (!rows.success) {
+        return {
+          data: null,
+          error: { message: 'Chat push tokens unavailable' },
+        };
+      }
+      return { data: rows.data, error: null };
     },
     // This store only ever serves a merchant-app push.
     fetchCustomerTokens: async () => ({ data: [], error: null }),

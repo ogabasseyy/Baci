@@ -30,7 +30,7 @@ INSERT INTO public.quiz_event_testers(event_id, merchant_id, user_id) VALUES
   ('76000000-0000-4000-8000-000000000001',
    '76000000-0000-4000-8000-000000000002',
    '76000000-0000-4000-8000-000000000012');
--- Customer 1: one submitted, one in progress and one test_reset attempt.
+-- Customer 1: one submitted, one started and one test_reset attempt.
 -- Customer 2: no attempts.
 INSERT INTO public.quiz_attempts(
   id, event_id, customer_id, status, attempt_number, score,
@@ -39,12 +39,12 @@ INSERT INTO public.quiz_attempts(
   ('76000000-0000-4000-8000-000000000021',
    '76000000-0000-4000-8000-000000000001',
    '76000000-0000-4000-8000-000000000011',
-   'completed', 1, 1, 'triesproof', 'attempts-v2',
+   'submitted', 1, 1, 'triesproof', 'attempts-v2',
    pg_catalog.clock_timestamp(), 'migration-test', 'web'),
   ('76000000-0000-4000-8000-000000000022',
    '76000000-0000-4000-8000-000000000001',
    '76000000-0000-4000-8000-000000000011',
-   'in_progress', 2, 0, 'triesproof', 'attempts-v2',
+   'started', 2, 0, 'triesproof', 'attempts-v2',
    pg_catalog.clock_timestamp(), 'migration-test', 'web'),
   ('76000000-0000-4000-8000-000000000023',
    '76000000-0000-4000-8000-000000000001',

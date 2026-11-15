@@ -121,7 +121,9 @@ function readRpcMutationError(
     error?.code === '40001' ||
     error?.message?.includes('daily_cap_exceeded') ||
     error?.message?.includes('fast_track_cap_exceeded') ||
+    error?.message?.includes('evergreen_reserve_required') ||
     error?.message?.includes('evergreen_reserve_protected') ||
+    error?.message?.includes('min_spacing_conflict') ||
     error?.message?.includes('min_spacing_active') ||
     error?.message?.includes('reschedule_request_digest_mismatch')
   ) {

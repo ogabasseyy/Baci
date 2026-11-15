@@ -295,4 +295,28 @@ describe('updateBlogPost release reservation handling', () => {
       })
     );
   });
+
+  it('rejects scheduling a draft without a published_at timestamp', async () => {
+    const supabase = createUpdateSupabaseMock();
+    mocks.authenticate.mockResolvedValue({ supabase, user: { id: 'user-1' } });
+    mocks.loadPost.mockResolvedValue({
+      kind: 'found',
+      post: makeExistingPost({
+        id: 'post-draft-sched',
+        published_at: null,
+        status: 'draft',
+      }),
+    });
+
+    const response = await updateBlogPost(
+      new NextRequest(
+        'http://localhost/api/merchant/blog/posts/post-draft-sched?merchantId=merchant-1',
+        { body: JSON.stringify({ status: 'scheduled' }), method: 'PATCH' }
+      ),
+      { params: Promise.resolve({ id: 'post-draft-sched' }) }
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.persistBlogPostMutation).not.toHaveBeenCalled();
+  });
 });

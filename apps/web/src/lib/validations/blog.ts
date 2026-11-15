@@ -30,90 +30,114 @@ const embeddedProductIdsSchema = z
     }
   });
 
-export const blogPostSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
-  slug: z
-    .string()
-    .min(1, 'Slug cannot be empty')
-    .max(200, 'Slug is too long')
-    .regex(
-      /^[a-z0-9-]+$/,
-      'Slug must contain only lowercase letters, numbers, and hyphens'
-    )
-    .optional(),
-  content: z.string().min(1, 'Content cannot be empty').optional(),
-  excerpt: z.string().max(300, 'Excerpt is too long').optional().nullable(),
-  featured_image_url: z.url().optional().nullable().or(z.literal('')),
-  featured_image_width: featuredImageDimensionSchema,
-  featured_image_height: featuredImageDimensionSchema,
-  featured_image_variants: featuredImageVariantsSchema.optional(),
-  featured_image_alt: z.string().max(200).optional().nullable(),
-  intent: z.enum(BLOG_INTENTS).optional().nullable(),
-  intent_source: z.string().max(100).optional().nullable(),
-  category: z.string().max(100).optional().nullable(),
-  tags: z.array(z.string()).optional(),
-  keywords: z.array(z.string()).optional(),
-  author_name: z
-    .string()
-    .min(1, 'Author name cannot be empty')
-    .max(100)
-    .optional(),
-  author_title: z.string().max(100).optional().nullable(),
-  author_image_url: z.url().optional().nullable().or(z.literal('')),
-  author_bio: z.string().max(500).optional().nullable(),
-  status: z.enum(['draft', 'scheduled', 'published', 'archived']).optional(),
-  published_at: z.iso.datetime({ offset: true }).nullable().optional(),
-  seo_title: z
-    .string()
-    .max(70, 'SEO title must be 70 characters or less')
-    .optional()
-    .nullable(),
-  seo_description: z
-    .string()
-    .max(160, 'Meta description must be 160 characters or less')
-    .optional()
-    .nullable(),
-  focus_keyword: z
-    .string()
-    .max(50, 'Focus keyword must be 50 characters or less')
-    .optional()
-    .nullable(),
-  embedded_products: embeddedProductIdsSchema.optional(),
-});
+export const blogPostSchema = z
+  .object({
+    title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
+    slug: z
+      .string()
+      .min(1, 'Slug cannot be empty')
+      .max(200, 'Slug is too long')
+      .regex(
+        /^[a-z0-9-]+$/,
+        'Slug must contain only lowercase letters, numbers, and hyphens'
+      )
+      .optional(),
+    content: z.string().min(1, 'Content cannot be empty').optional(),
+    excerpt: z.string().max(300, 'Excerpt is too long').optional().nullable(),
+    featured_image_url: z.url().optional().nullable().or(z.literal('')),
+    featured_image_width: featuredImageDimensionSchema,
+    featured_image_height: featuredImageDimensionSchema,
+    featured_image_variants: featuredImageVariantsSchema.optional(),
+    featured_image_alt: z.string().max(200).optional().nullable(),
+    intent: z.enum(BLOG_INTENTS).optional().nullable(),
+    intent_source: z.string().max(100).optional().nullable(),
+    category: z.string().max(100).optional().nullable(),
+    tags: z.array(z.string()).optional(),
+    keywords: z.array(z.string()).optional(),
+    author_name: z
+      .string()
+      .min(1, 'Author name cannot be empty')
+      .max(100)
+      .optional(),
+    author_title: z.string().max(100).optional().nullable(),
+    author_image_url: z.url().optional().nullable().or(z.literal('')),
+    author_bio: z.string().max(500).optional().nullable(),
+    status: z.enum(['draft', 'scheduled', 'published', 'archived']).optional(),
+    published_at: z.iso.datetime({ offset: true }).nullable().optional(),
+    seo_title: z
+      .string()
+      .max(70, 'SEO title must be 70 characters or less')
+      .optional()
+      .nullable(),
+    seo_description: z
+      .string()
+      .max(160, 'Meta description must be 160 characters or less')
+      .optional()
+      .nullable(),
+    focus_keyword: z
+      .string()
+      .max(50, 'Focus keyword must be 50 characters or less')
+      .optional()
+      .nullable(),
+    embedded_products: embeddedProductIdsSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === 'scheduled' && data.published_at === null) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'published_at cannot be null when status is scheduled',
+        path: ['published_at'],
+      });
+    }
+  });
 
 /**
  * Schema for creating a new post.
  * More strict than the general update schema.
  */
-export const createPostSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200),
-  slug: z
-    .string()
-    .min(1)
-    .max(200)
-    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
-  content: z.string().min(1, 'Content is required'),
-  excerpt: z.string().max(300).optional(),
-  featured_image_url: z.url().optional().nullable(),
-  featured_image_width: featuredImageDimensionSchema,
-  featured_image_height: featuredImageDimensionSchema,
-  featured_image_variants: featuredImageVariantsSchema.optional(),
-  featured_image_alt: z.string().max(200).optional(),
-  intent: z.enum(BLOG_INTENTS).optional().nullable(),
-  intent_source: z.string().max(100).optional().nullable(),
-  category: z.string().max(100).optional(),
-  tags: z.array(z.string()).optional(),
-  keywords: z.array(z.string()).optional(),
-  author_name: z.string().min(1, 'Author name is required').max(100),
-  author_title: z.string().max(100).optional(),
-  author_image_url: z.url().optional().nullable(),
-  author_bio: z.string().max(500).optional(),
-  status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
-  seo_title: z.string().max(70).optional(),
-  seo_description: z.string().max(160).optional(),
-  focus_keyword: z.string().max(50).optional().nullable(),
-  embedded_products: embeddedProductIdsSchema.optional(),
-});
+export const createPostSchema = z
+  .object({
+    title: z.string().min(1, 'Title is required').max(200),
+    slug: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(
+        /^[a-z0-9-]+$/,
+        'Slug must be lowercase alphanumeric with hyphens'
+      ),
+    content: z.string().min(1, 'Content is required'),
+    excerpt: z.string().max(300).optional(),
+    featured_image_url: z.url().optional().nullable(),
+    featured_image_width: featuredImageDimensionSchema,
+    featured_image_height: featuredImageDimensionSchema,
+    featured_image_variants: featuredImageVariantsSchema.optional(),
+    featured_image_alt: z.string().max(200).optional(),
+    intent: z.enum(BLOG_INTENTS).optional().nullable(),
+    intent_source: z.string().max(100).optional().nullable(),
+    category: z.string().max(100).optional(),
+    tags: z.array(z.string()).optional(),
+    keywords: z.array(z.string()).optional(),
+    author_name: z.string().min(1, 'Author name is required').max(100),
+    author_title: z.string().max(100).optional(),
+    author_image_url: z.url().optional().nullable(),
+    author_bio: z.string().max(500).optional(),
+    status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
+    published_at: z.iso.datetime({ offset: true }).nullable().optional(),
+    seo_title: z.string().max(70).optional(),
+    seo_description: z.string().max(160).optional(),
+    focus_keyword: z.string().max(50).optional().nullable(),
+    embedded_products: embeddedProductIdsSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === 'scheduled' && !data.published_at) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'published_at is required when status is scheduled',
+        path: ['published_at'],
+      });
+    }
+  });
 
 export type BlogPostInput = z.infer<typeof blogPostSchema>;
 

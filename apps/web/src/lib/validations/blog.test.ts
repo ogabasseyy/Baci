@@ -290,14 +290,25 @@ describe('sanitizeBlogPostData', () => {
     expect(result.featured_image_variants).toEqual({});
   });
 
-  it('accepts scheduled status in createPostSchema', () => {
-    const parsed = createPostSchema.safeParse({
-      author_name: 'Editor',
-      content: 'Scheduled post body',
-      slug: 'scheduled-post',
-      status: 'scheduled',
-      title: 'Scheduled Post',
-    });
-    expect(parsed.success).toBe(true);
+  it('requires published_at when status is scheduled in createPostSchema', () => {
+    expect(
+      createPostSchema.safeParse({
+        author_name: 'Editor',
+        content: 'Scheduled post body',
+        slug: 'scheduled-post',
+        status: 'scheduled',
+        title: 'Scheduled Post',
+      }).success
+    ).toBe(false);
+    expect(
+      createPostSchema.safeParse({
+        author_name: 'Editor',
+        content: 'Scheduled post body',
+        published_at: '2026-11-16T10:00:00.000Z',
+        slug: 'scheduled-post',
+        status: 'scheduled',
+        title: 'Scheduled Post',
+      }).success
+    ).toBe(true);
   });
 });

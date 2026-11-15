@@ -199,6 +199,16 @@ export async function updateBlogPost(
       );
     }
     if (
+      targetStatus === 'scheduled' &&
+      !updateData.published_at &&
+      !existingPost.published_at
+    ) {
+      return blogPostError(
+        'published_at is required when status is scheduled',
+        400
+      );
+    }
+    if (
       existingPost.status === 'published' &&
       targetStatus === 'published' &&
       (updateData.published_at !== undefined ||
@@ -224,9 +234,14 @@ export async function updateBlogPost(
     });
     if (
       persistence.post === null &&
-      persistence.code === 'scheduled_reservation_requires_reschedule_rpc' &&
-      typeof updateData.published_at === 'string'
+      persistence.code === 'scheduled_reservation_requires_reschedule_rpc'
     ) {
+      if (typeof updateData.published_at !== 'string') {
+        return blogPostError(
+          'Reserved scheduled posts require a valid published_at timestamp to reschedule',
+          409
+        );
+      }
       const { published_at: newRequestedPublishAt, ...remainingUpdateData } =
         updateData;
       persistence = await persistBlogPostMutation({

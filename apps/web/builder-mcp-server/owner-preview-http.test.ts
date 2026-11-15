@@ -208,6 +208,7 @@ async function send(
     body?: string;
     signature?: string | null;
     cookie?: string;
+    signal?: AbortSignal;
   } = {}
 ) {
   return await new Promise<{
@@ -221,6 +222,7 @@ async function send(
         port,
         path: options.path ?? '/internal/owner/preview',
         method: options.method ?? 'POST',
+        signal: options.signal,
         headers: {
           host: options.host ?? 'mcp.usebaci.com',
           'content-type': 'application/json',
@@ -385,17 +387,25 @@ it('aborts a timed-out preview bridge before returning a gateway timeout', async
   }
 }, 1000);
 
-it('retains concurrency slots until timed-out work actually settles', async () => {
-  let release = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+it.each([
+  'deadline',
+  'disconnect',
+])('retains concurrency slots after %s until work actually settles', async (trigger) => {
+  const gate = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const cancelled = Promise.withResolvers<void>();
+  let running = 0;
+  let aborted = 0;
   const handler = createOwnerPreviewHttpHandler(
-    async () => {
-      await gate;
+    async (req) => {
+      if (++running === 16) started.resolve();
+      req.signal.addEventListener('abort', () => {
+        if (++aborted === 16) cancelled.resolve();
+      });
+      await gate.promise;
       return Response.json({ ok: true });
     },
-    { timeoutMs: 300 }
+    { timeoutMs: trigger === 'deadline' ? 300 : 30000 }
   );
   const server = createServer((req, res) => {
     void handler.handle(req, res);
@@ -404,17 +414,31 @@ it('retains concurrency slots until timed-out work actually settles', async () =
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('fixture');
+  const client = new AbortController();
   try {
-    const timedOut = await Promise.all(
-      Array.from({ length: 16 }, () => send(address.port))
+    const pending = Promise.allSettled(
+      Array.from({ length: 16 }, () =>
+        send(address.port, { signal: client.signal })
+      )
     );
-    expect(timedOut.every((response) => response.status === 504)).toBe(true);
+    await started.promise;
+    if (trigger === 'disconnect') client.abort();
+    const results = await pending;
+    await cancelled.promise;
+    expect(
+      results.every((result) =>
+        trigger === 'deadline'
+          ? result.status === 'fulfilled' && result.value.status === 504
+          : result.status === 'rejected'
+      )
+    ).toBe(true);
     expect((await send(address.port)).status).toBe(429);
-    release();
+    gate.resolve();
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect((await send(address.port)).status).toBe(200);
   } finally {
-    release();
+    client.abort();
+    gate.resolve();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

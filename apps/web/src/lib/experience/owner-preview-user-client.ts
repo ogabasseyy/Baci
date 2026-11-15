@@ -2,6 +2,21 @@ import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
+function ownerPreviewFetch(signal: AbortSignal): typeof fetch {
+  return (input, init) => {
+    const fetchSignal =
+      init?.signal !== undefined
+        ? init.signal
+        : input instanceof Request
+          ? input.signal
+          : undefined;
+    return fetch(input, {
+      ...init,
+      signal: fetchSignal ? AbortSignal.any([signal, fetchSignal]) : signal,
+    });
+  };
+}
+
 /** Creates no privileged client; the bridge separately verifies this user via getUser and RLS. */
 export function createOwnerPreviewUserClientResolver(config: {
   url: string;
@@ -19,7 +34,7 @@ export function createOwnerPreviewUserClientResolver(config: {
     !/^sb_publishable_[A-Za-z0-9_-]{8,}$/.test(config.anonKey)
   )
     throw Error('INVALID_OWNER_PREVIEW_USER_CLIENT');
-  return (accessToken: string) => {
+  return (accessToken: string, signal?: AbortSignal) => {
     if (
       !accessToken ||
       accessToken.length > 8192 ||
@@ -33,7 +48,10 @@ export function createOwnerPreviewUserClientResolver(config: {
           persistSession: false,
           detectSessionInUrl: false,
         },
-        global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        global: {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          ...(signal ? { fetch: ownerPreviewFetch(signal) } : {}),
+        },
       })
     );
   };

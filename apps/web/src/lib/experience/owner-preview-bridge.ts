@@ -35,7 +35,10 @@ export function createOwnerPreviewBridge(settings: {
   previewOrigin: string;
   now?: () => number;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
-  resolveUserClient(token: string): Promise<SupabaseClient>;
+  resolveUserClient(
+    token: string,
+    signal: AbortSignal
+  ): Promise<SupabaseClient>;
   launch: ExperienceOwnerRuntime['createPreviewLaunch'];
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_OWNER_BRIDGE_CONFIG');
@@ -84,14 +87,17 @@ export function createOwnerPreviewBridge(settings: {
       )
         return reply(409);
       request.signal.throwIfAborted();
-      const client = await settings.resolveUserClient(parsed.data.accessToken);
+      const client = await settings.resolveUserClient(
+        parsed.data.accessToken,
+        request.signal
+      );
       request.signal.throwIfAborted();
       const owner = await requireExperienceOwner(
         { supabase: client, merchantId: parsed.data.input.merchantId },
         'storefront.read'
       ).catch(hideOwnerDenial);
-      if (!owner) return reply(404);
       request.signal.throwIfAborted();
+      if (!owner) return reply(404);
       const result = await settings.launch(
         {
           supabase: owner.supabase,
@@ -106,13 +112,12 @@ export function createOwnerPreviewBridge(settings: {
         }
       );
       request.signal.throwIfAborted();
-      if (
-        !(await requireExperienceOwner(owner, 'storefront.read').catch(
-          hideOwnerDenial
-        ))
-      )
-        return reply(404);
+      const currentOwner = await requireExperienceOwner(
+        owner,
+        'storefront.read'
+      ).catch(hideOwnerDenial);
       request.signal.throwIfAborted();
+      if (!currentOwner) return reply(404);
       return reply(200, result);
     } catch {
       return reply(503);

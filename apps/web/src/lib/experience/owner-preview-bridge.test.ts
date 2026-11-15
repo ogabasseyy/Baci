@@ -5,6 +5,7 @@ import { expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
+import { createOwnerPreviewUserClientResolver } from './owner-preview-user-client';
 
 const key = new Uint8Array(32).fill(7);
 const now = 1700000000000;
@@ -64,7 +65,10 @@ it('requires a signed fresh single-use request and verifies the user and owner b
   const f = fixture();
   const response = await f.handler(request(body()));
   expect(response.status).toBe(200);
-  expect(f.resolve).toHaveBeenCalledWith('synthetic.user.token');
+  expect(f.resolve).toHaveBeenCalledWith(
+    'synthetic.user.token',
+    expect.any(AbortSignal)
+  );
   expect(f.client.auth.getUser).toHaveBeenCalled();
   expect(f.client.rpc).toHaveBeenCalledWith(
     'experience_authorize_read',
@@ -214,4 +218,52 @@ it('reports an unexpected owner authorization outage without exposing its detail
   expect(response.status).toBe(503);
   expect(await response.text()).not.toContain('private authorization outage');
   expect(f.launch).not.toHaveBeenCalled();
+});
+
+it.each([
+  'auth',
+  'rest',
+])('interrupts an in-flight Supabase %s fetch before launching a preview', async (api) => {
+  const launch = vi.fn();
+  const controller = new AbortController();
+  const entered = Promise.withResolvers<AbortSignal | null | undefined>();
+  const upstream = vi.fn<typeof fetch>(async (input, init) => {
+    if (api === 'rest' && String(input).includes('/auth/v1/user'))
+      return Response.json({ id: 'owner' });
+    const signal = init?.signal;
+    entered.resolve(signal);
+    if (!signal) return Response.error();
+    await new Promise<void>((resolve) =>
+      signal.addEventListener('abort', () => resolve(), { once: true })
+    );
+    signal.throwIfAborted();
+    return Response.error();
+  });
+  vi.stubGlobal('fetch', upstream);
+  const handler = createOwnerPreviewBridge({
+    key,
+    now: () => now,
+    previewOrigin: 'https://builder.baci.test',
+    consumeNonce: async () => true,
+    resolveUserClient: createOwnerPreviewUserClientResolver({
+      url: 'https://project.supabase.co',
+      anonKey: 'sb_publishable_synthetic',
+    }),
+    launch,
+  });
+  try {
+    const input = new Request(request(body()), { signal: controller.signal });
+    const response = handler(input);
+    const signal = await entered.promise;
+    expect(signal?.aborted).toBe(false);
+    controller.abort();
+    expect(signal?.aborted).toBe(true);
+    const result = await response;
+    expect(result.status).toBe(503);
+    expect(await result.json()).toEqual({});
+    expect(launch).not.toHaveBeenCalled();
+  } finally {
+    controller.abort();
+    vi.unstubAllGlobals();
+  }
 });

@@ -48,8 +48,17 @@ describe('storefront customer API client', () => {
       const client = createStorefrontCustomerApiClient();
       const pending = client.fetchJson({ path: '/api/x', timeoutMs: 20_000 });
       const outcome = expect(pending).rejects.toThrow('timed out after 20000');
+      await jest.advanceTimersByTimeAsync(0);
+      const sent = mockFetchWithTimeout.mock.calls[0][1] as {
+        signal: AbortSignal;
+      };
+      expect(sent.signal.aborted).toBe(false);
+
       await jest.advanceTimersByTimeAsync(20_000);
+
       await outcome;
+      // The request itself is cancelled, not just abandoned.
+      expect(sent.signal.aborted).toBe(true);
     } finally {
       jest.useRealTimers();
     }

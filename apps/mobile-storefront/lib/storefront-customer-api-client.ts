@@ -80,25 +80,34 @@ async function parseJsonResponse(response: Response) {
 }
 
 /**
- * Holds a body read to the same deadline as its request: a server that sends
- * headers then stalls the body still fails on time (CodeRabbit, #4259).
+ * One deadline for the request and its body: when it passes, the request is
+ * aborted and the read fails, even if headers came back and the body then
+ * stalled (CodeRabbit, #4259).
  */
-async function withinDeadline<T>(
-  work: Promise<T>,
-  deadlineMs: number,
-  timeoutMs: number
-): Promise<T> {
+async function fetchJsonWithinDeadline(
+  send: (signal: AbortSignal) => Promise<Response>,
+  timeoutMs: number,
+  callerSignal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const onCallerAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) onCallerAbort();
+  callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new TimeoutError(timeoutMs)),
-      Math.max(deadlineMs - Date.now(), 0)
-    );
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new TimeoutError(timeoutMs));
+    }, timeoutMs);
   });
   try {
-    return await Promise.race([work, expired]);
+    return await Promise.race([
+      send(controller.signal).then(parseJsonResponse),
+      expired,
+    ]);
   } finally {
     clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
   }
 }
 
@@ -214,25 +223,24 @@ export function createStorefrontCustomerApiClient() {
         await parseJsonResponse(csrfResponse)
       ).token;
     }
-    const deadlineMs = timeoutMs ? Date.now() + timeoutMs : undefined;
     const queryString = query ? buildQueryString(query) : '';
     const url = `${EXPO_PUBLIC_API_URL}${path}${queryString ? `?${queryString}` : ''}`;
-    const response = await fetchWithTimeout(url, {
-      body: body ? JSON.stringify(body) : undefined,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
-      },
-      method,
-      signal,
-      timeout: timeoutMs ?? DEFAULT_TIMEOUT,
-      ...(deadlineMs ? { deadlineMs } : {}),
-    });
+    const send = (requestSignal?: AbortSignal) =>
+      fetchWithTimeout(url, {
+        body: body ? JSON.stringify(body) : undefined,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        },
+        method,
+        signal: requestSignal,
+        timeout: timeoutMs ?? DEFAULT_TIMEOUT,
+      });
 
-    return deadlineMs && timeoutMs
-      ? withinDeadline(parseJsonResponse(response), deadlineMs, timeoutMs)
-      : parseJsonResponse(response);
+    return timeoutMs
+      ? fetchJsonWithinDeadline(send, timeoutMs, signal)
+      : send(signal).then(parseJsonResponse);
   };
 
   return {

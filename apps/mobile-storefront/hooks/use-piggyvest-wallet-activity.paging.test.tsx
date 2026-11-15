@@ -32,9 +32,11 @@ const page2 = {
 const cursors = () =>
   mockFetch.mock.calls.map((call) => (call[0] as { cursor: unknown }).cursor);
 
-function setup() {
+function setup(staleTime = 0) {
   const client = new QueryClient({
-    defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } },
+    defaultOptions: {
+      queries: { gcTime: Number.POSITIVE_INFINITY, staleTime },
+    },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -129,6 +131,30 @@ describe('bugfix: reopening the wallet re-read every loaded page', () => {
       ).toHaveLength(1)
     );
     expect(env.client.getQueryState(key)?.dataUpdatedAt).toBe(readAt);
+  });
+
+  it('reloads page 1 on reopening once the trimmed list is older than five minutes', async () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    try {
+      mockFetch.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+      mockFetch.mockResolvedValue(page1);
+      // The app's own setting: data is fresh for five minutes.
+      const env = setup(5 * 60_000);
+      const first = env.render();
+      await waitFor(() => expect(first.result.current.items).toHaveLength(1));
+      act(() => first.result.current.loadMore());
+      await waitFor(() => expect(first.result.current.items).toHaveLength(2));
+
+      now.mockReturnValue(start + 6 * 60_000);
+      first.unmount();
+      const second = env.render();
+
+      await waitFor(() => expect(cursors()).toEqual([null, 'c2', null]));
+      await waitFor(() => expect(second.result.current.items).toHaveLength(1));
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('a return to the screen during "Show more" re-reads page 1 once it ends', async () => {

@@ -122,8 +122,16 @@ export async function runWalletPayDrain(
       continue;
     }
     await attempt(async () => {
-      await deps.refund({ runtime, paymentId: id, surfaceErrors: true });
-      summary.refunds += 1;
+      const outcome = await deps.refund({
+        runtime,
+        paymentId: id,
+        surfaceErrors: true,
+      });
+      // A refund the wallets could not cover or read stays owed for the next
+      // run: not counted as sent (CodeRabbit).
+      if (outcome === 'unfunded' || outcome === 'unavailable')
+        summary.deferred += 1;
+      else summary.refunds += 1;
     });
   }
   for (const item of work.deliver) {

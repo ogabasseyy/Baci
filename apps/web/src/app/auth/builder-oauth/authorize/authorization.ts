@@ -9,7 +9,8 @@ import {
 
 export const SITE_ORIGIN = 'https://usebaci.com';
 export const AUTHORIZATION_PATH = '/auth/builder-oauth/authorize';
-const BUILDER_CALLBACK = `${BUILDER_ISSUER}/upstream/callback`;
+const BUILDER_CALLBACK = `${BUILDER_ISSUER}/upstream/callback` as const;
+type BuilderCallback = `${typeof BUILDER_CALLBACK}${string}`;
 
 type OAuth = Awaited<ReturnType<typeof createClient>>['auth']['oauth'];
 
@@ -19,7 +20,9 @@ export async function readBuilderConsent(
   actorUserId: string,
   allowApproved = false
 ): Promise<
-  { kind: 'pending' } | { kind: 'approved'; destination: string } | null
+  | { kind: 'pending' }
+  | { kind: 'approved'; destination: BuilderCallback }
+  | null
 > {
   const clientId = upstreamAuthorizationId.safeParse(
     process.env.BACI_BUILDER_UPSTREAM_OAUTH_CLIENT_ID
@@ -43,8 +46,8 @@ export async function readBuilderConsent(
   // validates the code, client identity, state and PKCE before linking.
   const approved = upstreamApprovedRedirect.safeParse(data);
   if (!allowApproved || !approved.success) return null;
-  const destination = approved.data.redirect_url;
-  if (!isBuilderCallback(destination)) return null;
+  const destination = parseBuilderCallback(approved.data.redirect_url);
+  if (!destination) return null;
   const { searchParams } = new URL(destination);
   if (
     !searchParams.get('code') ||
@@ -60,17 +63,21 @@ export async function readBuilderConsent(
   return { kind: 'approved', destination };
 }
 
-export function isBuilderCallback(value: string | undefined): value is string {
-  if (!value) return false;
+export function parseBuilderCallback(
+  value: string | undefined
+): BuilderCallback | null {
+  if (!value) return null;
   try {
     const url = new URL(value);
-    return (
-      url.origin + url.pathname === BUILDER_CALLBACK &&
-      !url.username &&
-      !url.password &&
-      !url.hash
-    );
+    if (
+      url.origin + url.pathname !== BUILDER_CALLBACK ||
+      url.username ||
+      url.password ||
+      url.hash
+    )
+      return null;
+    return `${BUILDER_CALLBACK}${url.search}`;
   } catch {
-    return false;
+    return null;
   }
 }

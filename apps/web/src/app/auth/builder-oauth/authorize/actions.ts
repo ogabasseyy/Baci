@@ -5,7 +5,7 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { upstreamAuthorizationDecision } from '@/schemas/builder-upstream-oauth';
 import {
-  isBuilderCallback,
+  parseBuilderCallback,
   readBuilderConsent,
   SITE_ORIGIN,
 } from './authorization';
@@ -34,8 +34,8 @@ export async function decideBuilderOAuthAuthorization(formData: FormData) {
     decision === 'approve'
       ? await oauth.approveAuthorization(authorizationId, options)
       : await oauth.denyAuthorization(authorizationId, options);
-  const destination = data?.redirect_url;
-  if (error || !isBuilderCallback(destination)) notFound();
+  const destination = parseBuilderCallback(data?.redirect_url);
+  if (error || !destination) notFound();
 
   redirect(destination);
 }

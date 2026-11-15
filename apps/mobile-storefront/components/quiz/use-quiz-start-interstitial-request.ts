@@ -63,6 +63,18 @@ export function useQuizStartInterstitialRequest({
     let mounted = true;
     let noticeTimer: ReturnType<typeof setTimeout> | null = null;
     let endNotice: (() => void) | null = null;
+    // Ends a notice that is still counting down: on unmount, and when the
+    // helper settles early (SDK error or load deadline while it is up), so
+    // no timer outlives the request.
+    const settleNotice = () => {
+      if (noticeTimer !== null) {
+        clearTimeout(noticeTimer);
+        noticeTimer = null;
+      }
+      const end = endNotice;
+      endNotice = null;
+      end?.();
+    };
     if (getRemainingSeconds() > QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS) {
       void maybeShowQuizStartInterstitial({
         beforePresent: () =>
@@ -94,6 +106,7 @@ export function useQuizStartInterstitialRequest({
           getRemainingSeconds() <=
             QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
         onClosed: () => {
+          settleNotice();
           if (!mounted) return;
           isFullscreenAdActiveRef.current = false;
           setIsFullscreenAdActive(false);
@@ -136,6 +149,7 @@ export function useQuizStartInterstitialRequest({
         // take is atomic, and abandon paths hold nothing to flush). The
         // notice comes down too: an ad abandoned after it must not leave
         // the waiting room covered.
+        settleNotice();
         isFullscreenAdActiveRef.current = false;
         setIsFullscreenAdActive(false);
         setIsAdBreakNoticeVisible(false);
@@ -153,8 +167,7 @@ export function useQuizStartInterstitialRequest({
       mounted = false;
       // Settle a notice still on screen so the helper re-checks, sees the
       // unmount and releases its reservation instead of waiting on a timer.
-      if (noticeTimer !== null) clearTimeout(noticeTimer);
-      endNotice?.();
+      settleNotice();
     };
   }, []);
 }

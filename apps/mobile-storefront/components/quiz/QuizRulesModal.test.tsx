@@ -152,4 +152,60 @@ describe('QuizRulesModal', () => {
       });
     });
   });
+
+  describe('bugfix: measured banner edge cases', () => {
+    const banner = () =>
+      screen.getByTestId('quiz-rules-modal-banner', {
+        includeHiddenElements: true,
+      });
+    const sheetStyle = () =>
+      (
+        screen.UNSAFE_getByProps({
+          accessibilityViewIsModal: true,
+        }) as unknown as { props: { style: Record<string, unknown>[] } }
+      ).props.style;
+    const measure = (height: number) =>
+      fireEvent(banner(), 'layout', {
+        nativeEvent: { layout: { height, width: 390, x: 0, y: 75 } },
+      });
+    const modal = (visible: boolean) => (
+      <QuizRulesModal
+        eventTitle="Tonight quiz"
+        onClose={jest.fn()}
+        onConfirm={jest.fn()}
+        requiresAcceptance={false}
+        timePerQuestionSeconds={15}
+        visible={visible}
+      />
+    );
+
+    it('drops the banner instead of collapsing the sheet when there is no room', () => {
+      render(modal(true));
+      const { height: windowHeight } = Dimensions.get('window');
+
+      // A banner so tall that under 320pt would be left for the sheet.
+      measure(windowHeight - 75 - 24 - 200);
+
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+      expect(banner().props.children).toBeNull();
+      expect(screen.getByTestId('quiz-rules-list')).toBeTruthy();
+    });
+
+    it('forgets the last banner measurement when the sheet closes', () => {
+      const { rerender } = render(modal(true));
+      measure(78);
+      expect(sheetStyle()).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+
+      rerender(modal(false));
+      rerender(modal(true));
+
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+    });
+  });
 });

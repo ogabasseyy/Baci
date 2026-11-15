@@ -17,6 +17,10 @@ import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 // Clear space kept between the banner and the sheet (and its close
 // button), per AdMob's accidental-click guidance.
 export const QUIZ_RULES_BANNER_CLEAR_SPACE = 24;
+// Least room the sheet needs to stay usable (header, a rule or two, the
+// action button). With less than this under the banner, the banner is
+// left out instead of squeezing the sheet or painting over the ad.
+export const QUIZ_RULES_SHEET_MIN_HEIGHT = 320;
 
 interface QuizRulesModalProps {
   eventTitle: string;
@@ -45,18 +49,23 @@ export function QuizRulesModal({
   // ad it loads, so a fixed share of the screen could let a tall sheet's
   // close button sit right under the ad.
   const [bannerBottom, setBannerBottom] = useState<number | null>(null);
-  const sheetMaxHeight =
+  const roomUnderBanner =
     bannerBottom === null
-      ? '75%'
-      : Math.max(
-          0,
-          windowHeight - bannerBottom - QUIZ_RULES_BANNER_CLEAR_SPACE
-        );
+      ? null
+      : windowHeight - bannerBottom - QUIZ_RULES_BANNER_CLEAR_SPACE;
+  const bannerFits =
+    roomUnderBanner === null || roomUnderBanner >= QUIZ_RULES_SHEET_MIN_HEIGHT;
+  const sheetMaxHeight =
+    roomUnderBanner === null || !bannerFits ? '75%' : roomUnderBanner;
   const [accepted, setAccepted] = useState(false);
   const isPlayLocked = requiresAcceptance && !accepted;
 
   useEffect(() => {
-    if (!visible) setAccepted(false);
+    if (visible) return;
+    setAccepted(false);
+    // The next opening measures its own banner: the ad, and so its height,
+    // can differ.
+    setBannerBottom(null);
   }, [visible]);
 
   return (
@@ -86,7 +95,7 @@ export function QuizRulesModal({
             top: insets.top + 16,
           }}
         >
-          <AdSlot placement="FOOTER_ANCHOR" />
+          {bannerFits ? <AdSlot placement="FOOTER_ANCHOR" /> : null}
         </View>
         <View
           accessibilityViewIsModal

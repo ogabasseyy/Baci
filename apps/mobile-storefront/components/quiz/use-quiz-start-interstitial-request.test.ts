@@ -27,6 +27,11 @@ type InterstitialOptions = NonNullable<
 
 function setup(getRemainingSeconds = 60) {
   mockMaybeShowQuizStartInterstitial.mockClear();
+  return setupWithoutClear(getRemainingSeconds);
+}
+
+// For tests that queue a one-off helper result before rendering.
+function setupWithoutClear(getRemainingSeconds = 60) {
   const refs = {
     appStateRef: ref<AppStateStatus>('active'),
     getRemainingSeconds: jest.fn(() => getRemainingSeconds),
@@ -185,7 +190,11 @@ describe('useQuizStartInterstitialRequest', () => {
   describe('ad break notice', () => {
     it('covers the room for the notice time before the ad may present', async () => {
       jest.useFakeTimers();
-      const { options, refs } = setup();
+      // The request stays in flight while the notice is up.
+      mockMaybeShowQuizStartInterstitial.mockReturnValueOnce(
+        new Promise<'shown' | 'skipped'>(() => undefined)
+      );
+      const { options, refs } = setupWithoutClear();
       const settled = jest.fn();
 
       let notice: Promise<void> | undefined;
@@ -245,5 +254,33 @@ describe('useQuizStartInterstitialRequest', () => {
       expect(options()?.isCancelled?.()).toBe(true);
       jest.useRealTimers();
     });
+  });
+
+  it('bugfix: ends a counting-down notice when the request settles early', async () => {
+    jest.useFakeTimers();
+    let settleRequest: (outcome: 'shown' | 'skipped') => void = () => undefined;
+    mockMaybeShowQuizStartInterstitial.mockReturnValueOnce(
+      new Promise<'shown' | 'skipped'>((resolve) => {
+        settleRequest = resolve;
+      })
+    );
+    const { options } = setupWithoutClear();
+    const settled = jest.fn();
+    let notice: Promise<void> | undefined;
+    act(() => {
+      notice = options()?.beforePresent?.();
+    });
+    void notice?.then(settled);
+
+    // An SDK error or the load deadline abandons the ad mid-notice.
+    await act(async () => {
+      settleRequest('skipped');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Settled by the early exit, well before the notice time is up.
+    expect(settled).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });

@@ -1,10 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import {
-  useRefreshWalletActivity,
-  WALLET_ACTIVITY_QUERY_KEY,
-} from './use-refresh-wallet-activity';
+import { useRefreshWalletActivity } from './use-refresh-wallet-activity';
+import { WALLET_ACTIVITY_QUERY_KEY } from './wallet-activity-query-key';
 
 describe('bugfix: a paid check or bill was missing from the wallet activity until a pull to refresh (Fable walk 17)', () => {
   it('marks every wallet activity list stale, so the next open reads the server', () => {

@@ -254,7 +254,11 @@ export function useImeiWalletPay({
         },
         pay: async (operationId, proof) => {
           if (!inner) throw new Error('Wallet payment not started');
-          return await inner.pay(operationId, proof);
+          const answer = await inner.pay(operationId, proof);
+          // A payment still pending may already be a listed spend (CodeRabbit).
+          if (answer.kind === 'outcome' && answer.outcome.kind === 'pending')
+            refreshActivity();
+          return answer;
         },
       };
       // Settled purchases may have moved money: show the new balance. The

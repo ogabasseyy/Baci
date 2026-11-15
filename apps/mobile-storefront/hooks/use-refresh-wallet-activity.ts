@@ -1,8 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext } from 'react';
-
-/** The query key every PiggyVest wallet activity list is stored under. */
-export const WALLET_ACTIVITY_QUERY_KEY = ['piggyvest-wallet-activity'] as const;
+import { WALLET_ACTIVITY_QUERY_KEY } from './wallet-activity-query-key';
 
 /**
  * Marks the wallet activity lists stale so the next time the wallet opens it

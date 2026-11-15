@@ -9,7 +9,7 @@ import { fetchPiggyvestWalletActivity } from '@/lib/piggyvest-wallet-activity';
 import type { PiggyvestWalletActivityPage } from '@/schemas/piggyvest-wallet-activity';
 import { useAuthStore } from '@/stores/auth-store';
 import { useRefetchOnRefocus } from './use-refetch-on-refocus';
-import { WALLET_ACTIVITY_QUERY_KEY } from './use-refresh-wallet-activity';
+import { WALLET_ACTIVITY_QUERY_KEY } from './wallet-activity-query-key';
 
 /** "Show more" gets one attempt and this long, so a hung server fails fast. */
 const LOAD_MORE_TIMEOUT_MS = 20_000;

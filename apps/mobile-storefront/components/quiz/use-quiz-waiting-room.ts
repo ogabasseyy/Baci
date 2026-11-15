@@ -34,6 +34,12 @@ export interface QuizWaitingRoomState {
    * banner slots must stay unmounted until it closes.
    */
   isFullscreenAdActive: boolean;
+  /**
+   * While true a loaded pre-quiz interstitial is about to present (or is
+   * presented): the room shows a non-interactive "ad break" notice so the
+   * ad never lands under a tap.
+   */
+  isAdBreakNoticeVisible: boolean;
   isRefreshing: boolean;
   remainingSeconds: number;
 }
@@ -77,6 +83,7 @@ export function useQuizWaitingRoom({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFullscreenAdActive, setIsFullscreenAdActive] = useState(false);
   const isFullscreenAdActiveRef = useRef(false);
+  const [isAdBreakNoticeVisible, setIsAdBreakNoticeVisible] = useState(false);
   // A start boundary that lands while the interstitial owns the screen waits
   // here until the ad closes instead of starting timed play behind it.
   const pendingStartRef = useRef<QuizEvent | null>(null);
@@ -134,7 +141,11 @@ export function useQuizWaitingRoom({
       // the interstitial onClosed handler or the start-hold hook). The
       // rewarded prop arrives via a passive effect after the tap, so also
       // read the synchronously claimed ownership: a refresh resolving in
-      // that window must still hold.
+      // that window must still hold. The 1.5 s ad-break notice needs no
+      // hold: a natural boundary cannot land inside it (the request needs
+      // more than 30 s left and cancels at 30 s or less), and an early
+      // server-side start takes the notice down at once (below) while
+      // startedRef cancels the pending present.
       if (
         isFullscreenAdActiveRef.current ||
         isStartBlockedRef.current ||
@@ -144,6 +155,9 @@ export function useQuizWaitingRoom({
         return;
       }
       startedRef.current = true;
+      // Live play must never begin under the touch-blocking ad-break
+      // notice; the pending present is cancelled by startedRef.
+      setIsAdBreakNoticeVisible(false);
       onStartRef.current(nextEvent.id, true);
     }
   };
@@ -207,6 +221,7 @@ export function useQuizWaitingRoom({
     isStartBlockedRef,
     onStartRef,
     pendingStartRef,
+    setIsAdBreakNoticeVisible,
     setIsFullscreenAdActive,
     startedRef,
     stoppedRef,
@@ -263,6 +278,7 @@ export function useQuizWaitingRoom({
   return {
     error,
     event,
+    isAdBreakNoticeVisible,
     isFullscreenAdActive,
     isRefreshing,
     remainingSeconds,

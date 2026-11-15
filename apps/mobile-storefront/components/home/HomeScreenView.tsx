@@ -13,14 +13,17 @@ import Animated, {
   type SharedValue,
   useAnimatedStyle,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Header } from '@/components/storefront/Header';
+import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
 import { SearchDropdown } from '@/components/storefront/SearchDropdown';
 import { HeroSkeleton, ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { SnowEffect } from '@/components/ui/SnowEffect';
 import { useColorScheme } from '@/components/useColorScheme';
 import { ELITE_BACKDROP_HEIGHT } from '@/constants/layout';
+import { CONFIG } from '@/lib/config';
 import type { Block } from '@/types/blocks';
 import { HomeFeedList } from './HomeFeedList';
 import { homeScreenStyles as styles } from './home-screen.styles';
@@ -89,10 +92,15 @@ export function HomeScreenView({
   shouldRenderDecorations,
   showSearchMinLengthHint,
 }: HomeScreenViewProps) {
+  const nextDrop = CONFIG.MERCHANT_SLUG === 'ogabassey' && isElite;
   const searchFocusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
   );
   const colorScheme = useColorScheme();
+  const { top } = useSafeAreaInsets();
+  const barStyle =
+    isElite || colorScheme === 'dark' ? 'light-content' : 'dark-content';
+  const useWarmDarkSurface = nextDrop && colorScheme === 'dark';
   useHomeNavigationBarStyle(colorScheme, !isConfigLoading);
 
   const headerOverlayAnimatedStyle = useAnimatedStyle(() => {
@@ -114,9 +122,17 @@ export function HomeScreenView({
   if (isConfigLoading) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
-        <Header showSearch />
+        <StatusBar
+          barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'}
+        />
+        <Header
+          showSearch
+          useScallopedSearch={nextDrop}
+          useWarmDarkSurface={useWarmDarkSurface}
+        />
+        {nextDrop && <HomeServiceCards placement="underSearch" />}
         <HeroSkeleton />
-        <ProductGridSkeleton count={4} />
+        <ProductGridSkeleton count={4} fullWidth={nextDrop} />
       </View>
     );
   }
@@ -127,7 +143,7 @@ export function HomeScreenView({
     <View style={[styles.container, { backgroundColor }]}>
       <Stack.Screen options={{ headerShown: false, title: '' }} />
       {shouldRenderDecorations && <SnowEffect />}
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={barStyle} />
 
       {shouldRenderDecorations && !isElite && (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
@@ -140,7 +156,7 @@ export function HomeScreenView({
         </View>
       )}
 
-      {isElite && (
+      {isElite && !nextDrop && (
         <View
           style={[
             styles.eliteBackground,
@@ -158,6 +174,17 @@ export function HomeScreenView({
         </View>
       )}
 
+      <View
+        pointerEvents="none"
+        style={[
+          styles.headerOverlay,
+          {
+            height: top,
+            backgroundColor: isElite ? blackColor : backgroundColor,
+            zIndex: 99,
+          },
+        ]}
+      />
       <Animated.View
         style={[
           styles.headerOverlay,
@@ -175,7 +202,9 @@ export function HomeScreenView({
             onSearchQueryChange={onSearchQueryChange}
             onSearchSubmit={onSearchSubmit}
             onSearchCancel={onSearchCancel}
-            isScrolled={isScrolled}
+            isScrolled={isScrolled || nextDrop}
+            useScallopedSearch={nextDrop}
+            useWarmDarkSurface={useWarmDarkSurface}
           />
 
           {!isOnline && hasPageConfig && (
@@ -202,6 +231,7 @@ export function HomeScreenView({
 
       <HomeFeedList
         blocks={blocks}
+        nextDrop={nextDrop}
         primaryProductGridIndex={primaryProductGridIndex}
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}

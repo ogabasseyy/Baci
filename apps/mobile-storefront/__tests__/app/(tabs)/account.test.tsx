@@ -100,6 +100,10 @@ function getMockRealtimeChannel(topic: string): MockRealtimeChannel {
 }
 
 jest.mock('expo-router', () => ({
+  Redirect: ({ href }: { href: unknown }) => {
+    mockRouterReplace(href);
+    return null;
+  },
   router: {
     push: (...args: unknown[]) => mockRouterPush(...args),
     replace: (...args: unknown[]) => mockRouterReplace(...args),
@@ -273,7 +277,7 @@ describe('AccountScreen', () => {
     expect(screen.queryByTestId('account-scrollview')).toBeNull();
   });
 
-  it('returns null when there is no authenticated user', () => {
+  it('redirects signed-out deep links to login with an account return path', () => {
     mockUseAuthStatus.mockReturnValue({
       isInitialized: true,
       user: null,
@@ -282,6 +286,10 @@ describe('AccountScreen', () => {
     const view = render(<AccountScreen />);
 
     expect(view.toJSON()).toBeNull();
+    expect(mockRouterReplace).toHaveBeenCalledWith({
+      pathname: '/auth/login',
+      params: { returnTo: '/(tabs)/account' },
+    });
     expect(mockStorefrontScreenShell).not.toHaveBeenCalled();
   });
 

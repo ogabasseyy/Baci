@@ -11,6 +11,10 @@ import {
   setupHomeFeedMocks,
 } from './HomeFeedList-test-harness';
 
+jest.mock('@/hooks/use-black-friday', () => ({
+  useBlackFriday: () => ({ data: [] }),
+}));
+
 jest.mock('@shopify/flash-list', () => mockFlashListModule());
 
 jest.mock('./use-home-product-feed', () => ({

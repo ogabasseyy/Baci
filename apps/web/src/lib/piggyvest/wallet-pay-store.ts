@@ -84,6 +84,25 @@ export function createWalletPayCustomerStore(input: {
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
     },
+    // Closes this customer's PiggyVest-paid VTU purchase whose payment ended
+    // unpaid (no payment for it live or paid). True when it was closed.
+    // cancelOperationId: the sheet closed before any PIN, so that one issued
+    // payment (nothing reserved) is released first.
+    async closeUnpaidVtu(transactionId: string, cancelOperationId?: string) {
+      const result = await input.execute(customerSql.closeUnpaidVtu, [
+        scope,
+        JSON.stringify({
+          transactionId: z.uuid().parse(transactionId),
+          ...(cancelOperationId
+            ? {
+                cancelIssued: true,
+                operationId: z.uuid().parse(cancelOperationId),
+              }
+            : {}),
+        }),
+      ]);
+      return schemas.manageRows.parse(result.rows)[0].result;
+    },
     async readStatus(operationId: string) {
       const result = await input.execute(customerSql.status, [
         scope,
@@ -157,6 +176,15 @@ export function createWalletPayWorkerStore(input: {
         schemas.operationId.parse(operationId),
       ]);
       return schemas.manageRows.parse(result.rows)[0].result;
+    },
+    // How a claimed VTU payment's purchase ended (a never-vended pending row
+    // is closed as failed in the same call).
+    async vtuDeliveryState(operationId: string) {
+      const result = await input.execute(workerSql.vtuDeliveryState, [
+        ...binding,
+        schemas.operationId.parse(operationId),
+      ]);
+      return schemas.vtuDeliveryRows.parse(result.rows)[0].result;
     },
     async listWork(maxRows: number) {
       const result = await input.execute(workerSql.work, [

@@ -227,13 +227,30 @@ VALUES (
   'scheduled-insert-backfill',
   'Scheduled body',
   'scheduled',
-  '2026-11-16T10:00:00Z'
+  '2026-11-26T10:00:00Z'
 );
 
 SELECT pg_temp.assert_true(
-  (SELECT requested_publish_at = '2026-11-16T10:00:00Z'::timestamptz
+  (SELECT requested_publish_at = '2026-11-26T10:00:00Z'::timestamptz
    FROM public.blog_posts WHERE id = 'd3000000-0000-4000-8000-000000000097'),
   'scheduled INSERT populates requested_publish_at from published_at when omitted'
+);
+
+-- Unmanaged scheduled post moved to a new published_at charges the new day, not stale requested_publish_at
+UPDATE public.blog_posts
+SET published_at = '2026-11-27T10:00:00Z'
+WHERE id = 'd3000000-0000-4000-8000-000000000097';
+
+SELECT pg_temp.assert_true(
+  (SELECT total_used = 0
+   FROM private.compute_blog_release_day_usage_v1('d2000000-0000-4000-8000-000000000001', '2026-11-26')),
+  'unmanaged scheduled post vacates original requested_publish_at day when published_at moves'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT total_used = 1
+   FROM private.compute_blog_release_day_usage_v1('d2000000-0000-4000-8000-000000000001', '2026-11-27')),
+  'unmanaged scheduled post counts against its current published_at day'
 );
 
 ROLLBACK;

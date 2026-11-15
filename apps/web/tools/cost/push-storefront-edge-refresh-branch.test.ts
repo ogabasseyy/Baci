@@ -13,7 +13,7 @@ const script = join(
 );
 const INVENTORY = 'docs/inventory.json';
 const TEST = 'apps/snapshot.test.ts';
-const BRANCH = 'automation/storefront-edge-inventory-abc-def';
+const BRANCH = 'automation/storefront-edge-inventory-0123456789ab-cdef01234567';
 const gitEnv = {
   ...process.env,
   GIT_CONFIG_COUNT: '4',
@@ -89,6 +89,22 @@ async function run(work: string, sourceSha: string) {
 }
 
 describe('push-storefront-edge-refresh-branch.sh', { timeout: 60_000 }, () => {
+  it('refuses any ref other than an automation refresh branch, so it can never push a tag', async () => {
+    const fixture = await arrange();
+    const work = await checkout(fixture);
+
+    for (const ref of ['v1-storefront', 'refs/tags/v1-storefront', 'main']) {
+      await expect(
+        execFileAsync(
+          'bash',
+          [script, ref, fixture.sourceSha, INVENTORY, TEST],
+          { cwd: work, env: gitEnv }
+        )
+      ).rejects.toThrow('refusing to push unexpected ref name');
+    }
+    expect(await git(fixture.remote, 'tag', '--list')).toBe('');
+  });
+
   it('pushes one refresh commit on the source SHA when the branch is new', async () => {
     const fixture = await arrange();
     const work = await checkout(fixture);

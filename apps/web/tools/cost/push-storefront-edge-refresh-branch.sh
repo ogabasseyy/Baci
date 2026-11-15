@@ -16,6 +16,13 @@ inventory_path="$3"
 test_path="$4"
 commit_body="${5:-}"
 
+# Only ever an automation branch head, never a tag or another ref: the
+# storefront release workflows start from tag pushes.
+if ! printf '%s\n' "$branch" | grep -Eqx 'automation/storefront-edge-inventory-[a-f0-9]{12}-[a-f0-9]{12}'; then
+  echo "::error::refusing to push unexpected ref name: $branch" >&2
+  exit 1
+fi
+
 git_remote() {
   if [ -n "${GIT_PUSH_AUTH_HEADER:-}" ]; then
     git -c http.extraheader="$GIT_PUSH_AUTH_HEADER" "$@"

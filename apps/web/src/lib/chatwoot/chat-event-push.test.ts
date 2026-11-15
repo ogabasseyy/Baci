@@ -13,10 +13,10 @@ vi.mock('@/lib/expo-push-core', () => ({
   notifyMerchantWithStore: mocks.notify,
 }));
 vi.mock('@/lib/expo-client', () => ({ getExpoClient: () => ({}) }));
-vi.mock('./chat-event-push-store', async (importActual) => ({
-  ...(await importActual<typeof import('./chat-event-push-store')>()),
-  createChatEventPushStore: mocks.createStore,
-}));
+vi.mock('./chat-event-push-store', async (importActual) => {
+  const actual: Record<string, unknown> = await importActual();
+  return { ...actual, createChatEventPushStore: mocks.createStore };
+});
 
 import { sendChatEventPush } from './chat-event-push';
 

@@ -33,7 +33,10 @@ $chat_preference_check$;
 COMMENT ON COLUMN public.notification_preferences.chat_message_notifications IS
   'Customer chat notifications: all = every customer message, handover = only when the assistant hands a chat to the merchant, off = none.';
 
--- Server-only proof secrets. Never exposed through the API schema.
+-- Server-only proof secrets. Never exposed through the API schema. The
+-- secret is platform-wide (it authenticates Baci's own server, not a store);
+-- per-store separation comes from the store id bound into every proof and
+-- from the per-store webhook signing secret checked before a proof is made.
 CREATE TABLE IF NOT EXISTS private.chat_event_server_secrets (
   secret_name text PRIMARY KEY CHECK (secret_name IN ('current', 'previous')),
   secret text NOT NULL CHECK (char_length(secret) BETWEEN 32 AND 256),
@@ -118,10 +121,12 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('outcome', 'ignored');
   END IF;
 
-  -- Serialize one conversation: duplicate deliveries and bursts of messages
-  -- must not create more than one notification.
+  -- Serialize one store's chat events: duplicate deliveries, bursts in one
+  -- conversation and the hourly budget below are all decided one at a time.
+  -- An event key is bound to its store by the proof, so the same key can only
+  -- ever race under this one lock.
   PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(p_merchant_id::text || ':' || p_conversation_id::text, 0)
+    pg_catalog.hashtextextended('chat-events:' || p_merchant_id::text, 0)
   );
 
   SELECT * INTO v_existing FROM public.chat_message_events WHERE event_key = p_event_key;
@@ -157,6 +162,16 @@ BEGIN
   ) THEN
     -- The merchant already has a visible, unread notification for this chat.
     v_outcome := 'coalesced';
+  ELSIF (
+    SELECT count(*) FROM public.chat_message_events e
+    WHERE e.merchant_id = p_merchant_id
+      AND e.outcome = 'notified'
+      AND e.created_at > pg_catalog.now() - interval '1 hour'
+  ) >= 60 THEN
+    -- Hourly budget per store: a surge of separate chats, a misbehaving
+    -- sender or a leaked proof secret cannot fill the merchant's bell without
+    -- bound. The event is still recorded; the chats remain in the inbox.
+    v_outcome := 'coalesced';
   ELSE
     INSERT INTO public.notifications(
       title, message, notification_type, priority, target_type, target_merchant_ids,
@@ -177,7 +192,8 @@ BEGIN
   INSERT INTO public.chat_message_events(event_key, merchant_id, conversation_id, outcome, notification_id)
   VALUES (p_event_key, p_merchant_id, p_conversation_id, v_outcome, v_notification);
 
-  -- Bounded housekeeping: the duplicate guard only needs recent rows.
+  -- Bounded housekeeping: the duplicate guard only needs recent rows. A
+  -- provider message redelivered after 30 days would be treated as new.
   DELETE FROM public.chat_message_events
   WHERE event_key IN (
     SELECT event_key FROM public.chat_message_events

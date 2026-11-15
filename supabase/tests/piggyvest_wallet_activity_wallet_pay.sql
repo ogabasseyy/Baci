@@ -230,11 +230,20 @@ BEGIN
 
   -- REGRESSION (walk 19): a held (reserved) savings add moved nothing and may
   -- still be cancelled: it is listed only once the money is on its way.
+  -- A goal of its own: the real schema refuses new funding for a goal whose
+  -- cancel is under way (the goal above), with P0001.
+  INSERT INTO public.customer_savings_goals (
+    id, merchant_id, customer_id, product_id, title, target_amount, current_amount,
+    contribution_amount, contribution_frequency, start_date, maturity_date, source_mode,
+    terms_accepted_at, non_withdrawable_accepted_at)
+  VALUES ('f9a10000-0000-4000-8000-0000000000f9', c_merchant, c_neighbour,
+    'f9a10000-0000-4000-8000-0000000000a4', 'Held add goal',
+    10000, 0, 1000, 'daily', current_date, current_date + 30, 'manual', now(), now());
   INSERT INTO piggyvest_primary.savings_operations (
     id, integration_id, intent_id, goal_id, amount_kobo, source_wallet_id,
     destination_wallet_id, reference, state, created_at)
   VALUES ('f9a10000-0000-4000-8000-0000000000e1', 'f9a10000-0000-4000-8000-000000000006',
-    'f9a10000-0000-4000-8000-000000000007', c_goal, 200000, 'synthetic-walletpay-main',
+    'f9a10000-0000-4000-8000-000000000007', 'f9a10000-0000-4000-8000-0000000000f9', 200000, 'synthetic-walletpay-main',
     'synthetic-walletpay-goal', 'pvb-save-activity-held', 'reserved', now() - interval '3 hours');
   PERFORM pg_temp.wp_assert(NOT EXISTS (SELECT 1 FROM public.list_piggyvest_wallet_activity(c_merchant) AS row
       WHERE row.id = 'f9a10000-0000-4000-8000-0000000000e1'), 'a held savings add was listed as money out');
@@ -251,7 +260,8 @@ BEGIN
     destination_wallet_id, amount_kobo, provider_transaction_id, issued_at, expires_at,
     reserved_at, dispatched_at, settled_at)
   VALUES ('f9a10000-0000-4000-8000-0000000000e2', 'f9a10000-0000-4000-8000-000000000006',
-    'f9a10000-0000-4000-8000-000000000007', c_goal, 'needs_review', 'pvb-complete-' || c_goal::text,
+    'f9a10000-0000-4000-8000-000000000007', 'f9a10000-0000-4000-8000-0000000000f9', 'needs_review',
+    'pvb-complete-f9a10000-0000-4000-8000-0000000000f9',
     'synthetic-walletpay-goal', 'synthetic-walletpay-main', 30000, 'synthetic-complete-tx',
     c_dispatched - interval '10 minutes', c_dispatched + interval '1 hour',
     c_dispatched - interval '10 minutes', c_dispatched - interval '5 minutes', now());
@@ -322,13 +332,6 @@ BEGIN
   PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('service_role',
     'public.list_piggyvest_wallet_activity(uuid,timestamptz,uuid,integer)', 'EXECUTE'),
     'service_role can read activity');
-EXCEPTION WHEN OTHERS THEN -- TEMP-DIAG
-  DECLARE v_ctx text; v_line text; -- TEMP-DIAG
-  BEGIN -- TEMP-DIAG
-    GET STACKED DIAGNOSTICS v_ctx = PG_EXCEPTION_CONTEXT; -- TEMP-DIAG
-    SELECT m[1] INTO v_line FROM regexp_matches(v_ctx, 'inline_code_block line (\d+) at', 'g') AS m LIMIT 1; -- TEMP-DIAG
-    RAISE EXCEPTION '%', SQLERRM USING ERRCODE = 'X' || lpad(coalesce(v_line, '0'), 4, '0'); -- TEMP-DIAG
-  END; -- TEMP-DIAG
 END;
 $behaviour$;
 

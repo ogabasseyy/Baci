@@ -79,6 +79,10 @@ export function useSharedCart(
                 display: applyCartPeerPreview(own.display, peerLines),
               };
             },
+            // Writes go to the real ref, so this never becomes a trap.
+            set current(next) {
+              runtime.stateRef.current = next;
+            },
           },
         }
       : runtime

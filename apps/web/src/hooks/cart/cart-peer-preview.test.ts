@@ -112,6 +112,22 @@ describe('cart peer preview messages', () => {
     expect(readCartPeerMessage(value)).toBeNull();
   });
 
+  it('rejects more lines than a cart can hold', () => {
+    expect(
+      readCartPeerMessage({
+        cartId: 'c',
+        kind: 'edit',
+        lines: Array.from({ length: 21 }, (_, index) => ({
+          id: `l${index}`,
+          quantity: 1,
+        })),
+        merchantId: 'm',
+        sender: 'tab-a',
+        version: 3,
+      })
+    ).toBeNull();
+  });
+
   it('rejects a message that names the same line twice', () => {
     expect(
       readCartPeerMessage({

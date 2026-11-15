@@ -41,6 +41,8 @@ function matchesConfirmed(
 const PREVIEW_TIMEOUT_MS = 10000;
 /** A slow save repeats its announcement so siblings keep the preview. */
 const REANNOUNCE_MS = 4000;
+/** After this many repeats of one edit the sibling's preview may expire. */
+const MAX_REANNOUNCEMENTS = 5;
 
 /**
  * Announces this tab's pending edits to its sibling tabs and returns the
@@ -174,8 +176,19 @@ export function useCartPeerPreview(
   useEffect(() => {
     if (!pending) return;
     setPreview(null);
+    // Bounded per announced edit: a save that hangs must not hold siblings
+    // on an unconfirmed hint (and a 'pending' cart) without end.
+    let repeatOf: CartPeerMessage | null = null;
+    let repeats = 0;
     const timer = setInterval(() => {
-      if (lastEdit.current) channelRef.current?.post(lastEdit.current);
+      const edit = lastEdit.current;
+      if (edit !== repeatOf) {
+        repeatOf = edit;
+        repeats = 0;
+      }
+      if (!edit || repeats >= MAX_REANNOUNCEMENTS) return;
+      repeats += 1;
+      channelRef.current?.post(edit);
     }, REANNOUNCE_MS);
     return () => {
       clearInterval(timer);

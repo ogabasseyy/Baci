@@ -1,4 +1,7 @@
-import { SHARED_CART_MAX_QUANTITY_PER_LINE } from '@baci/shared/cart';
+import {
+  SHARED_CART_MAX_LINES,
+  SHARED_CART_MAX_QUANTITY_PER_LINE,
+} from '@baci/shared/cart';
 import type { SharedCartDisplayItem } from './cart-types';
 
 /**
@@ -43,7 +46,8 @@ export type OpenCartPeerChannel = (
 ) => CartPeerChannel | null;
 
 const MAX_ID_LENGTH = 128;
-const MAX_LINES = 200;
+/** A cart cannot hold more lines than the server allows. */
+const MAX_LINES = SHARED_CART_MAX_LINES;
 
 function isId(value: unknown): value is string {
   return (

@@ -319,10 +319,22 @@ describe('cart peer preview', () => {
       { id: 'l1', quantity: 3 },
       { id: 'l2', quantity: 1 },
     ]);
-    act(() => {
-      vi.advanceTimersByTime(25000);
-    });
+    // One second per act, so each repeat's re-render lands at its own time.
+    const advance = (seconds: number) => {
+      for (let second = 0; second < seconds; second += 1)
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+    };
+    advance(25);
     expect(watching.result.current).not.toBeNull();
+
+    // A save that never finishes stops being repeated (5 repeats, last at
+    // 20 s), so the hint expires 10 s later instead of pinning this tab.
+    advance(4);
+    expect(watching.result.current).not.toBeNull();
+    advance(1);
+    expect(watching.result.current).toBeNull();
   });
 
   it('keeps a third tab’s pending edit when another tab settles', () => {

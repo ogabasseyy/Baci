@@ -179,6 +179,9 @@ BEGIN
   PERFORM pg_temp.wp_assert((SELECT review_reason FROM piggyvest_primary.wallet_payments WHERE id = v_op::uuid)
     = 'refund_failed_with_fee', 'the late fee did not reach the payment review reason');
   PERFORM pg_temp.wp_assert(pg_temp.wp_refunds(v_op) = 1, 'the unsent replacement was not retired');
+EXCEPTION WHEN OTHERS THEN -- TEMP-DIAG
+  IF SQLSTATE LIKE 'W%' THEN RAISE; END IF; -- TEMP-DIAG
+  RAISE EXCEPTION '%', SQLERRM USING ERRCODE = 'X' || lpad(coalesce(nullif(pg_catalog.current_setting('test.wp_n', true), ''), '0'), 4, '0'); -- TEMP-DIAG
 END;
 $behaviour$;
 

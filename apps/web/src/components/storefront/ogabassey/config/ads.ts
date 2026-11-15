@@ -18,7 +18,10 @@ export const SPONSORED_SLIDE_AD_BOOT_DELAY_MS = 9000;
 // initial paint but with enough lead time to fill before it's shown.
 export const CATEGORY_CAROUSEL_AD_BOOT_DELAY_MS = 3000;
 
-export const AD_CONFIG: Record<string, AdPlacement> = {
+// Closed set of placements: `satisfies` keeps the literal keys, so a
+// placement key that is not listed here fails to compile instead of
+// silently rendering no ad.
+export const AD_CONFIG = {
   // 1. HEADER LEADERBOARD (Standard)
   // Location: Top of pages, or inside the top Banner Carousel.
   // Standard: 728x90 (Desktop) | 320x100 (Mobile)
@@ -193,4 +196,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
     mobileHeight: 100,
     type: 'banner',
   },
-};
+} as const satisfies Record<string, AdPlacement>;
+
+export type AdPlacementKey = keyof typeof AD_CONFIG;

@@ -14,7 +14,9 @@ export function AccessHeroSearch({
     return (
       <>
         <AccessSearchStyles />
-        <div className="oa-hero-search oa-hero-search-reserve" />
+        <div className="oa-search-slot">
+          <div className="oa-hero-search oa-hero-search-reserve" />
+        </div>
       </>
     );
   }

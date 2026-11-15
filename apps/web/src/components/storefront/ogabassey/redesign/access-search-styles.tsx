@@ -4,7 +4,8 @@ const SEARCH_STYLES = `
 .oa-search-slot[data-docked=true]>search{position:fixed;top:var(--oa-search-top,0px);left:0;right:0;z-index:60;padding:8px 20px;background:var(--oa-paper);border-bottom:1px solid var(--oa-line);box-shadow:0 6px 16px #0000000d}
 .oa-search-slot[data-docked=true] .oa-hero-search{margin:0 auto;min-height:54px;box-shadow:none}
 .oa-search-slot[data-docked=true] .oa-search-submit{min-height:40px;padding-block:8px}
-body:has([data-ogabassey-access-hero][data-search-placement]) .ogabassey-navbar__search-wrap{display:none}
+body:has([data-ogabassey-access-hero][data-search-placement]:not(.oa-hide-mobile)) .ogabassey-navbar__search-wrap{display:none}
+@media(width > 767px){body:has([data-ogabassey-access-hero][data-search-placement].oa-hide-mobile) .ogabassey-navbar__search-wrap{display:none}}
 .ogabassey-navbar[data-oa-search-docked=true]{transform:none}
 @media(max-width:767px){.oa-search-slot[data-docked=true]>search{padding:8px 12px}}
 

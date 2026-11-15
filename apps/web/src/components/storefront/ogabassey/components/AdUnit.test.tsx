@@ -101,7 +101,7 @@ describe('AdUnit', () => {
     expect(screen.getByText('Sponsored')).toHaveClass(
       'ogabassey-ad-placeholder-text'
     );
-    expect(screen.getByText('Ad Space')).toHaveClass(
+    expect(screen.getByText('Advertisement')).toHaveClass(
       'ogabassey-ad-placeholder-text'
     );
     expect(ensureGoogleAdManagerBoot).not.toHaveBeenCalled();
@@ -288,4 +288,52 @@ describe('AdUnit', () => {
     expect(ensureGoogleAdManagerBoot).not.toHaveBeenCalled();
   });
 
+
+  it('bugfix: gives each repeat of a placement its own slot so every one requests an ad', async () => {
+    // Two grid ads on one page used to share an element id, so the second
+    // was skipped as "already defined" and never requested an ad.
+    const { container } = render(
+      <>
+        <AdUnit
+          loadStrategy="immediate"
+          placementKey="PRODUCT_GRID_MPU"
+          slotInstance={4}
+        />
+        <AdUnit
+          loadStrategy="immediate"
+          placementKey="PRODUCT_GRID_MPU"
+          slotInstance={8}
+        />
+      </>
+    );
+
+    expect(container.querySelector('#div-gpt-ad-grid-mpu-4')).not.toBeNull();
+    expect(container.querySelector('#div-gpt-ad-grid-mpu-8')).not.toBeNull();
+
+    await waitFor(() => {
+      expect(window.googletag.display).toHaveBeenCalledWith(
+        'div-gpt-ad-grid-mpu-4'
+      );
+      expect(window.googletag.display).toHaveBeenCalledWith(
+        'div-gpt-ad-grid-mpu-8'
+      );
+    });
+    // Both use the same Ad Manager unit; only the page element differs.
+    expect(window.googletag.defineSlot).toHaveBeenCalledWith(
+      '/23331099951/in_feed_mpu',
+      [300, 250],
+      'div-gpt-ad-grid-mpu-4'
+    );
+    expect(window.googletag.defineSlot).toHaveBeenCalledWith(
+      '/23331099951/in_feed_mpu',
+      [300, 250],
+      'div-gpt-ad-grid-mpu-8'
+    );
+  });
+
+  it('keeps the plain placement id when no instance is given', () => {
+    const { container } = render(<AdUnit placementKey="HOMEPAGE_STRIP" />);
+
+    expect(container.querySelector('#div-gpt-ad-home-strip')).not.toBeNull();
+  });
 });

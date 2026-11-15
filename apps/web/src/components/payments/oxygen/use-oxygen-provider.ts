@@ -14,12 +14,15 @@ import {
   selectOxygenActionKey,
 } from './oxygen-address-recovery';
 import { mayRetryFailedSelfie } from './oxygen-failed-selfie-retry';
+import { isLegacyOfferRecoveryQueued } from './oxygen-legacy-offer-recovery-queued';
+import { oxygenPendingActionBlocked } from './oxygen-pending-action-blocked';
 import { retireQueuedPhoneVerification } from './oxygen-phone-recovery';
 import {
   decodeOxygenResponse as decode,
   SignInRequired,
 } from './oxygen-provider-response';
 import { pendingReadRecovery } from './oxygen-read-recovery';
+import { retireLegacyQueuedApproval } from './oxygen-retire-legacy-approval';
 import { oxygenSubmitErrorMessage } from './oxygen-submit-error-message';
 
 export { oxygenRateLimitMessage } from './oxygen-provider-response';
@@ -107,14 +110,7 @@ export function useOxygenProvider(orderId: string) {
       !canReplaceQueuedAddress(snapshot)
     )
       return false;
-    if (
-      snapshot.pending?.status === 'queued' &&
-      snapshot.pending.action !== command.action &&
-      !(
-        snapshot.pending.action === 'validate_customer' &&
-        command.action === 'resend_customer_otp'
-      )
-    ) {
+    if (oxygenPendingActionBlocked(snapshot, command.action)) {
       setError('Complete the previous step first.');
       return false;
     }
@@ -134,18 +130,28 @@ export function useOxygenProvider(orderId: string) {
       command.action
     );
     const pending = snapshot.pending;
-    const key = selectOxygenActionKey(
-      command.action,
-      snapshot,
-      lastKey.current,
-      pendingReadRecovery(snapshot)
-    );
+    const key =
+      command.action === 'refresh_eligibility' &&
+      isLegacyOfferRecoveryQueued(snapshot)
+        ? crypto.randomUUID()
+        : selectOxygenActionKey(
+            command.action,
+            snapshot,
+            lastKey.current,
+            pendingReadRecovery(snapshot)
+          );
     lastKey.current = {
       action: command.action,
       version: snapshot.version,
       key,
     };
     try {
+      if (
+        command.action === 'refresh_eligibility' &&
+        pending &&
+        isLegacyOfferRecoveryQueued(snapshot)
+      )
+        await retireLegacyQueuedApproval(snapshot);
       if (command.action === 'submit_address' && pending)
         await retireQueuedAddress(snapshot, command, file);
       if (

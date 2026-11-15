@@ -71,6 +71,36 @@ describe('GET /api/storefront/cart', () => {
     });
   });
 
+  it('reuses the store lookup on the next read from the same instance', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const headers = { cookie: cartCookie(sessionProof()) };
+    expect((await getCart({ headers })).status).toBe(200);
+
+    // The lookup would now fail; a remembered published store still serves.
+    mocks.merchantRows = [];
+    expect((await getCart({ headers })).status).toBe(200);
+  });
+
+  it('never remembers a store that failed to resolve', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const headers = { cookie: cartCookie(sessionProof()) };
+    mocks.merchantRows = [];
+    expect((await getCart({ headers })).status).not.toBe(200);
+
+    mocks.merchantRows = [merchantRow(MERCHANT)];
+    expect((await getCart({ headers })).status).toBe(200);
+  });
+
   it('accepts a native Bearer session proof', async () => {
     mocks.cartPayload = {
       code: null,

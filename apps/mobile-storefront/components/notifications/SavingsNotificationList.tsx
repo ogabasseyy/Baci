@@ -10,10 +10,16 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, RADIUS, SPACING } from '@/constants/Colors';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+} from '@/constants/layout';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
 
 type SavingsNotificationListProps = {
   header: ReactElement | null;
+  /** Scrolls with the list, so it never covers the empty state. */
+  footer?: ReactElement | null;
   isLoading: boolean;
   notifications: SavingsNotification[];
   onOpen: (notification: SavingsNotification) => void;
@@ -62,6 +68,7 @@ function getNotificationIcon(
 
 export function SavingsNotificationList({
   header,
+  footer,
   isLoading,
   notifications,
   onOpen,
@@ -102,11 +109,9 @@ export function SavingsNotificationList({
             accessibilityRole="button"
             accessibilityLabel="Try again"
             onPress={onRetry}
-            style={({ pressed }) => [
-              styles.retryButton,
-              { backgroundColor: colors.primary },
-              pressed && styles.pressed,
-            ]}
+            // A static style: on device the function form rendered no
+            // button at all in walk 14 (white text with no background).
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
           >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -126,7 +131,7 @@ export function SavingsNotificationList({
         <Text
           style={[styles.stateDescription, { color: colors.textSecondary }]}
         >
-          Your plan milestones and credited-interest alerts will appear here.
+          Your plan milestones and interest updates will appear here.
         </Text>
       </View>
     );
@@ -138,6 +143,7 @@ export function SavingsNotificationList({
       keyExtractor={(notification) => notification.id}
       ListEmptyComponent={renderEmpty}
       ListHeaderComponent={header}
+      ListFooterComponent={footer}
       contentContainerStyle={styles.content}
       renderItem={({ item }) => (
         <Pressable
@@ -147,39 +153,50 @@ export function SavingsNotificationList({
           )}
           accessibilityRole="button"
           onPress={() => onOpen(item)}
-          style={({ pressed }) => [
-            styles.notification,
-            { backgroundColor: colors.card, borderColor: colors.border },
-            item.readAt === null && {
-              borderLeftColor: BRAND.primary,
-              borderLeftWidth: 3,
-            },
-            pressed && styles.pressed,
-          ]}
+          // Only the press feedback is a style function: the card itself is
+          // a plain View, so its layout never depends on a function style.
+          style={({ pressed }) => (pressed ? styles.pressed : null)}
         >
-          <View style={[styles.icon, { backgroundColor: colors.background }]}>
-            <Ionicons
-              color={colors.primary}
-              name={getNotificationIcon(item.type)}
-              size={22}
-            />
-          </View>
-          <View style={styles.copy}>
-            <Text
-              numberOfLines={1}
-              style={[styles.notificationTitle, { color: colors.text }]}
-            >
-              {item.title}
-            </Text>
-            <Text
-              numberOfLines={3}
-              style={[styles.notificationBody, { color: colors.textSecondary }]}
-            >
-              {item.body}
-            </Text>
-            <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
-              {formatSavingsNotificationTimestamp(item.createdAt)}
-            </Text>
+          <View
+            testID="savings-notification-card"
+            style={[
+              styles.notification,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              // Every card keeps the same left edge; only unread ones colour
+              // it, so read and unread content line up.
+              {
+                borderLeftColor:
+                  item.readAt === null ? BRAND.primary : colors.border,
+                borderLeftWidth: 3,
+              },
+            ]}
+          >
+            <View style={[styles.icon, { backgroundColor: colors.background }]}>
+              <Ionicons
+                color={colors.primary}
+                name={getNotificationIcon(item.type)}
+                size={22}
+              />
+            </View>
+            <View style={styles.copy}>
+              <Text
+                numberOfLines={1}
+                style={[styles.notificationTitle, { color: colors.text }]}
+              >
+                {item.title}
+              </Text>
+              <Text
+                style={[
+                  styles.notificationBody,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                {item.body}
+              </Text>
+              <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
+                {formatSavingsNotificationTimestamp(item.createdAt)}
+              </Text>
+            </View>
           </View>
         </Pressable>
       )}
@@ -188,11 +205,18 @@ export function SavingsNotificationList({
   );
 }
 
+/** Clears the floating AI button: its bottom offset plus its height and a gap. */
+export const NOTIFICATIONS_BOTTOM_INSET =
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET + CHAT_WIDGET_FAB_SIZE + SPACING.sm;
+
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     gap: SPACING.sm,
     padding: SPACING.md,
+    // The footer ("View your orders") must sit above the floating AI
+    // button's whole band, wherever it is snapped (left or right edge).
+    paddingBottom: NOTIFICATIONS_BOTTOM_INSET,
   },
   notification: {
     alignItems: 'center',
@@ -200,6 +224,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: SPACING.sm,
+    // FlashList ignores the container's gap, so each card keeps its own space.
+    marginBottom: SPACING.sm,
     padding: SPACING.md,
   },
   icon: {

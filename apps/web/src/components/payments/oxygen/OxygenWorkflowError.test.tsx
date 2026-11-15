@@ -8,6 +8,7 @@ import {
 import { expect, it, vi } from 'vitest';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { OxygenWorkflowError } from './OxygenWorkflowError';
+import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
 
 const kyc = {
   phone_status: 'DONE',
@@ -35,6 +36,33 @@ const snapshot: OxygenRuntimeSnapshot = {
   activationEnabled: false,
   settlementEnabled: false,
 };
+
+it('retries a failed saved-plan offer refresh without changing the booking', () => {
+  const submit = vi.fn().mockResolvedValue(false);
+  render(
+    <OxygenWorkflowError
+      snapshot={{
+        ...oxygenBookedSnapshot,
+        state: {
+          ...oxygenBookedSnapshot.state,
+          applicationReference: oxygenBookedSnapshot.workflowId,
+          validated: true,
+          kyc,
+        },
+      }}
+      action="refresh_eligibility"
+      activeLoan={false}
+      error="unavailable"
+      busy={false}
+      submit={submit}
+      refresh={vi.fn()}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(submit).toHaveBeenCalledExactlyOnceWith({
+    action: 'refresh_eligibility',
+  });
+});
 
 it('shows text loading immediately, blocks duplicate clicks and releases recovery after another failure', async () => {
   let finish: (value: boolean) => void = () => {};

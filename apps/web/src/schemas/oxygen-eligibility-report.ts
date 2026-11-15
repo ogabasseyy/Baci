@@ -19,6 +19,17 @@ export const oxygenEligibilityReportSchema = z.object({
   max_loan_amount: nairaAmount.optional(),
   minimum_loan_amount: nairaAmount.optional(),
   max_tenure: z.number().int().positive().optional(),
+  tenure_unit: z.string().max(40).optional(),
+  offers: z
+    .array(
+      z.object({
+        loan_amount: nairaAmount,
+        tenor: z.number().int().min(1).max(12),
+      })
+    )
+    .min(1)
+    .max(12)
+    .optional(),
   response_code: z.never().optional(),
   error: z.never().optional(),
   errors: z.null().optional(),

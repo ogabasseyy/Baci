@@ -138,6 +138,52 @@ describe('getMerchantInboxBinding', () => {
   });
 });
 
+describe('agent credential format', () => {
+  it.each([
+    'abcDEF123456+/=.~token',
+    'x'.repeat(256),
+  ])('accepts a printable space-free token', (apiAccessToken) => {
+    expect(
+      getMerchantInboxBinding(
+        MERCHANT_A,
+        env({
+          EKAETTE_CHATWOOT_INBOX_BINDINGS: JSON.stringify([
+            {
+              merchantId: MERCHANT_A,
+              accountId: 1,
+              inboxId: 10,
+              apiAccessToken,
+            },
+          ]),
+        })
+      )?.apiAccessToken
+    ).toBe(apiAccessToken);
+  });
+
+  it.each([
+    'short',
+    'has space inside token',
+    'line\nbreak-in-the-token',
+    'x'.repeat(257),
+  ])('rejects a header-unsafe or out-of-range token', (apiAccessToken) => {
+    expect(
+      getMerchantInboxBinding(
+        MERCHANT_A,
+        env({
+          EKAETTE_CHATWOOT_INBOX_BINDINGS: JSON.stringify([
+            {
+              merchantId: MERCHANT_A,
+              accountId: 1,
+              inboxId: 10,
+              apiAccessToken,
+            },
+          ]),
+        })
+      )
+    ).toBeNull();
+  });
+});
+
 describe('normalizeMerchantInboxApiOrigin', () => {
   it.each([
     ['https://chat.example.test/', 'https://chat.example.test'],

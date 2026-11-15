@@ -46,10 +46,18 @@ describe('GET /api/merchant/inbox/conversations', () => {
       hasMore: true,
       page: 1,
     });
-    expect(mocks.resolve).toHaveBeenCalledWith('view');
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'view');
     expect(mocks.list).toHaveBeenCalledWith(binding, {
       page: 1,
       status: 'all',
+    });
+  });
+
+  it('accepts the snoozed filter', async () => {
+    await GET(request('?status=snoozed'));
+    expect(mocks.list).toHaveBeenCalledWith(binding, {
+      page: 1,
+      status: 'snoozed',
     });
   });
 

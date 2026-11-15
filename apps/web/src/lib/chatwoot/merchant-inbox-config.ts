@@ -2,7 +2,9 @@ import 'server-only';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const API_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+// Any printable, space-free ASCII credential: the provider's token alphabet is
+// not part of its contract, so only header-unsafe values are refused.
+const API_TOKEN_PATTERN = /^[\x21-\x7e]{16,256}$/;
 const MAX_BINDINGS = 256;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 

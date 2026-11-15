@@ -48,7 +48,7 @@ describe('GET /api/merchant/inbox/conversations/[conversationId]/messages', () =
       conversation: { id: 7 },
       messages: [{ id: 30 }],
     });
-    expect(mocks.resolve).toHaveBeenCalledWith('view');
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'view');
     expect(mocks.listMessages).toHaveBeenCalledWith(binding, {
       conversationId: 7,
       before: 40,

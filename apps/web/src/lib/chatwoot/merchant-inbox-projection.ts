@@ -19,6 +19,25 @@ function toIso(seconds: number | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+/** Truncates without splitting a surrogate pair at the boundary. */
+function truncateByCodePoint(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  const cut = value.slice(0, maxLength);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
+/** Oldest first by creation time; the id only breaks ties. */
+export function compareMerchantInboxMessages(
+  left: MerchantInboxMessage,
+  right: MerchantInboxMessage
+): number {
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt < right.createdAt ? -1 : 1;
+  }
+  return left.id - right.id;
+}
+
 function cardTitles(attributes: unknown): string[] {
   if (attributes === null || typeof attributes !== 'object') return [];
   const items = (attributes as { items?: unknown }).items;
@@ -73,7 +92,7 @@ export function projectMerchantInboxMessage(
     id: message.id,
     sender,
     kind,
-    text: text.slice(0, MAX_TEXT_LENGTH),
+    text: truncateByCodePoint(text, MAX_TEXT_LENGTH),
     createdAt,
   };
 }

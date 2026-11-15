@@ -90,7 +90,8 @@ export function classifyBookingFailure(
       message: error.message.slice(0, MAX_MESSAGE_LENGTH),
       httpStatus: error.status,
       outcome:
-        error.code === BOOKED_SHIPMENT_NOT_SAVED_CODE
+        error.code === BOOKED_SHIPMENT_NOT_SAVED_CODE ||
+        error.code === 'SHIPMENT_SAVE_FAILED'
           ? 'booked_not_saved'
           : 'rejected',
     };

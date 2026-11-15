@@ -228,3 +228,14 @@ describe('bugfix: wallet-funded unreachable booking asks for a new quote', () =>
     expect(mapped.message).toMatch(/new shipping quote/);
   });
 });
+
+describe('bugfix: order-route persistence failure is booked_not_saved', () => {
+  it('classifies SHIPMENT_SAVE_FAILED as booked_not_saved, not rejected', () => {
+    const error = new OrderShipmentBookingError(
+      'save failed',
+      500,
+      'SHIPMENT_SAVE_FAILED'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('booked_not_saved');
+  });
+});

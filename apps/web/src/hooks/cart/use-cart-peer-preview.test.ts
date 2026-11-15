@@ -1,126 +1,16 @@
-import type { CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpenCartPeerChannel } from './cart-peer-preview';
-import type { SharedCartDisplayItem } from './cart-types';
+import { describe, expect, it, vi } from 'vitest';
+import type { SharedCartPendingEntry } from './shared-cart-state';
+import { useCartPeerPreview } from './use-cart-peer-preview';
 import {
-  initialSharedCartState,
-  type SharedCartPendingEntry,
-  type SharedCartState,
-} from './shared-cart-state';
-import {
-  type CartPeerPreviewContext,
-  useCartPeerPreview,
-} from './use-cart-peer-preview';
-
-function line(serverLineId: string, quantity: number): SharedCartDisplayItem {
-  return {
-    cartItemId: serverLineId,
-    id: `product-${serverLineId}`,
-    name: 'Phone',
-    pendingTempId: null,
-    price: 100,
-    quantity,
-    serverLineId,
-  } as SharedCartDisplayItem;
-}
-
-function snapshot(version: number): CartSnapshot {
-  const confirmedLines = [
-    { id: 'l1', quantity: 1 },
-    { id: 'l2', quantity: 1 },
-  ];
-  return {
-    cartId: 'c',
-    currency: 'NGN',
-    estimatedTotals: false,
-    expiresAt: '2099-01-01',
-    lines: confirmedLines,
-    merchantId: 'm',
-    state: 'active',
-    subtotalMinor: 0,
-    totalMinor: 0,
-    version,
-  } as CartSnapshot;
-}
-
-const edit: SharedCartPendingEntry = {
-  attempts: 0,
-  intent: {
-    kind: 'set_quantity',
-    quantity: 3,
-    target: { kind: 'lineId', lineId: 'l1' },
-  },
-  operationId: 'op-1',
-  state: 'queued',
-};
-
-function context(
-  state: Partial<SharedCartState> = {},
-  version = 2
-): CartPeerPreviewContext {
-  return {
-    enabled: true,
-    merchantId: 'm',
-    sessionGeneration: 1,
-    state: {
-      ...initialSharedCartState,
-      cartId: 'c',
-      confirmed: snapshot(version),
-      display: [line('l1', 1), line('l2', 1)],
-      generation: 1,
-      importStatus: 'done',
-      merchantId: 'm',
-      ...state,
-    },
-  };
-}
-
-/** Same-browser tabs: a post reaches every other open channel. */
-function tabs() {
-  const listeners = new Set<(value: unknown) => void>();
-  const posted: unknown[] = [];
-  const open: OpenCartPeerChannel = (_scope, onMessage) => {
-    listeners.add(onMessage);
-    return {
-      close: () => {
-        listeners.delete(onMessage);
-      },
-      post: (message) => {
-        posted.push(message);
-        for (const listener of listeners)
-          if (listener !== onMessage) listener(message);
-      },
-    };
-  };
-  return {
-    deliver: (value: unknown) => {
-      for (const listener of listeners) listener(value);
-    },
-    open,
-    posted,
-  };
-}
-
-const peerEdit = {
-  sender: 'tab-a',
-  cartId: 'c',
-  kind: 'edit',
-  lines: [{ id: 'l1', quantity: 3 }],
-  merchantId: 'm',
-  version: 2,
-};
-
-const settledBy = {
-  cartId: 'c',
-  kind: 'settled',
-  merchantId: 'm',
-  sender: 'tab-a',
-};
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+  context,
+  edit,
+  line,
+  peerEdit,
+  settledBy,
+  snapshot,
+  tabs,
+} from './use-cart-peer-preview.test-support';
 
 describe('cart peer preview', () => {
   it('announces an edit while it is pending and settles with the saved version', () => {
@@ -305,38 +195,6 @@ describe('cart peer preview', () => {
     expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
   });
 
-  it('repeats a slow save’s announcement so the other tab keeps it', () => {
-    vi.useFakeTimers();
-    const t = tabs();
-    const watching = renderHook(() => useCartPeerPreview(context(), t.open));
-    renderHook(() =>
-      useCartPeerPreview(
-        context({ display: [line('l1', 3), line('l2', 1)], queue: [edit] }),
-        t.open
-      )
-    );
-    expect(watching.result.current).toEqual([
-      { id: 'l1', quantity: 3 },
-      { id: 'l2', quantity: 1 },
-    ]);
-    // One second per act, so each repeat's re-render lands at its own time.
-    const advance = (seconds: number) => {
-      for (let second = 0; second < seconds; second += 1)
-        act(() => {
-          vi.advanceTimersByTime(1000);
-        });
-    };
-    advance(25);
-    expect(watching.result.current).not.toBeNull();
-
-    // A save that never finishes stops being repeated (5 repeats, last at
-    // 20 s), so the hint expires 10 s later instead of pinning this tab.
-    advance(4);
-    expect(watching.result.current).not.toBeNull();
-    advance(1);
-    expect(watching.result.current).toBeNull();
-  });
-
   it('keeps a third tab’s pending edit when another tab settles', () => {
     const t = tabs();
     const { result } = renderHook(() => useCartPeerPreview(context(), t.open));
@@ -359,37 +217,6 @@ describe('cart peer preview', () => {
       })
     );
     expect(result.current).toEqual([{ id: 'l1', quantity: 5 }]);
-  });
-
-  it('gives up after ten seconds if the other tab never settles', () => {
-    vi.useFakeTimers();
-    const t = tabs();
-    const { result } = renderHook(() => useCartPeerPreview(context(), t.open));
-    act(() => t.deliver(peerEdit));
-    act(() => {
-      vi.advanceTimersByTime(9999);
-    });
-    expect(result.current).not.toBeNull();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(result.current).toBeNull();
-  });
-
-  it('does not extend the deadline when the other tab settles', () => {
-    vi.useFakeTimers();
-    const t = tabs();
-    const { result } = renderHook(() => useCartPeerPreview(context(), t.open));
-    act(() => t.deliver(peerEdit));
-    act(() => {
-      vi.advanceTimersByTime(9000);
-    });
-    act(() => t.deliver({ ...settledBy, version: 3 }));
-    expect(result.current).not.toBeNull();
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(result.current).toBeNull();
   });
 
   it('stays silent and deaf for disabled, unlinked, or finished carts', () => {

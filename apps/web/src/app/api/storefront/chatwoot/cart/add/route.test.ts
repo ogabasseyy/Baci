@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -49,52 +48,15 @@ vi.mock('@/lib/csrf', () => ({
 
 import { POST } from './route';
 
-const merchantId = '11111111-1111-4111-8111-111111111111';
-const cartId = '22222222-2222-4222-8222-222222222222';
-const principal = {
-  allowedOperations: ['add'],
+import {
+  binding,
+  body,
   cartId,
-  grantId: '33333333-3333-4333-8333-333333333333',
   merchantId,
-  principalId: 'buyer-1',
-  expiresAt: '2026-11-20T00:00:00.000Z',
-  scope: 'session',
-};
-const state = {
-  cartId,
-  cartSessionSha256: 'b'.repeat(64),
-  cartVersion: 12,
-  grantId: principal.grantId,
-  inboxId: 74,
-  merchantId,
-  origin: 'https://shop.example.com',
-  principalId: principal.principalId,
-  websiteToken: 'synthetic-widget-token-123456',
-};
-const binding = {
-  inboxId: 74,
-  merchantId,
-  origin: 'https://shop.example.com',
-  websiteToken: 'synthetic-widget-token-123456',
-};
-const body = {
-  cartVersion: 12,
-  conversationId: 905,
-  productSlug: 'phone-13',
-  requestId: 'add-request-01',
-  sessionToken: 'signed-session-token',
-  variantId: '44444444-4444-4444-8444-444444444444',
-};
-
-function request() {
-  return new NextRequest(
-    'https://shop.example.com/api/storefront/chatwoot/cart/add',
-    {
-      method: 'POST',
-      headers: { host: 'shop.example.com', origin: 'https://shop.example.com' },
-    }
-  );
-}
+  principal,
+  request,
+  state,
+} from './route.test-support';
 
 function arrange(input: unknown = body, cartVersion = 12) {
   mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: input });
@@ -130,7 +92,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('Chatwoot shared-cart add route', () => {
+describe('Chatwoot shared-cart add route request handling', () => {
   it('rejects CSRF before reading the body or loading cart context', async () => {
     mocks.checkCsrfProtection.mockResolvedValueOnce({ valid: false });
 
@@ -140,7 +102,6 @@ describe('Chatwoot shared-cart add route', () => {
     expect(mocks.readCartJsonBody).not.toHaveBeenCalled();
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
   });
-
   it('rejects malformed input before database-backed context lookup', async () => {
     arrange({ ...body, variantId: 'not-a-uuid' });
 
@@ -149,7 +110,6 @@ describe('Chatwoot shared-cart add route', () => {
     expect(response.status).toBe(400);
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
   });
-
   it('accepts a PostgreSQL UUID variant id with legacy RFC bits', async () => {
     arrange({
       ...body,
@@ -171,7 +131,6 @@ describe('Chatwoot shared-cart add route', () => {
       p_variant_id: '00000000-0000-0000-0000-000000000001',
     });
   });
-
   it('rejects short request IDs before database-backed context lookup', async () => {
     arrange({ ...body, requestId: 'short' });
 
@@ -180,7 +139,6 @@ describe('Chatwoot shared-cart add route', () => {
     expect(response.status).toBe(400);
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
   });
-
   it('returns invalid_context when the signed session does not verify', async () => {
     arrange();
     mocks.verifyChatwootSessionCapability.mockRejectedValueOnce(
@@ -196,7 +154,6 @@ describe('Chatwoot shared-cart add route', () => {
     });
     expect(mocks.checkCartQuota).not.toHaveBeenCalled();
   });
-
   it('returns invalid_context when the conversation does not match the session', async () => {
     arrange();
     mocks.verifyChatwootSessionCapability.mockResolvedValueOnce({
@@ -213,7 +170,6 @@ describe('Chatwoot shared-cart add route', () => {
     });
     expect(mocks.checkCartQuota).not.toHaveBeenCalled();
   });
-
   it('reloads the cart when the request version is ahead of the loaded snapshot', async () => {
     arrange(body, 11);
     mocks.getCart.mockResolvedValueOnce({
@@ -243,7 +199,6 @@ describe('Chatwoot shared-cart add route', () => {
       p_variant_id: body.variantId,
     });
   });
-
   it('requires refresh when the latest cart is still behind the request version', async () => {
     arrange(body, 11);
     mocks.getCart.mockResolvedValueOnce({
@@ -265,104 +220,5 @@ describe('Chatwoot shared-cart add route', () => {
       code: 'refresh_required',
     });
     expect(mocks.rpc).not.toHaveBeenCalled();
-  });
-
-  it('returns quota exhaustion before canonical cart mutation', async () => {
-    arrange();
-    mocks.checkCartQuota.mockResolvedValueOnce({ allowed: false });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(429);
-    expect(mocks.createCartScopedClient).not.toHaveBeenCalled();
-  });
-
-  it('maps a cart RPC authorization rejection to forbidden', async () => {
-    arrange();
-    mocks.rpc.mockResolvedValueOnce({
-      data: { ok: false, code: 'unauthorized' },
-    });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'forbidden',
-    });
-  });
-
-  it('maps a version conflict to a refresh-required response', async () => {
-    arrange();
-    mocks.rpc.mockResolvedValueOnce({
-      data: { ok: false, code: 'version_conflict' },
-    });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'refresh_required',
-    });
-  });
-
-  it('preserves a locked cart as a distinct checkout response', async () => {
-    arrange();
-    mocks.rpc.mockResolvedValueOnce({
-      data: { ok: false, code: 'cart_locked' },
-    });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'cart_locked',
-    });
-  });
-
-  it.each([
-    'expired',
-    'not_found',
-  ])('maps %s to an expired-cart response', async (code) => {
-    arrange();
-    mocks.rpc.mockResolvedValueOnce({ data: { ok: false, code } });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(410);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'cart_expired',
-    });
-  });
-
-  it('preserves an idempotency conflict as a distinct 409 result', async () => {
-    arrange();
-    mocks.rpc.mockResolvedValueOnce({
-      data: { ok: false, code: 'idempotency_conflict' },
-    });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'idempotency_conflict',
-    });
-  });
-
-  it('maps a server-resolved unavailable catalog item to not_addable', async () => {
-    arrange();
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      accepted: false,
-      code: 'not_addable',
-    });
-    expect(mocks.createCartScopedClient).toHaveBeenCalledOnce();
   });
 });

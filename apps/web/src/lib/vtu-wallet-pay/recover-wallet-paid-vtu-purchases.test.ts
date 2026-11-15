@@ -79,7 +79,12 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
       walletPayClaimed: true,
     });
     expect(delivery.finish).toHaveBeenCalledWith(OP, 'fulfilled', TOKEN);
-    expect(summary).toEqual({ checked: 1, recovered: 1, errored: 0 });
+    expect(summary).toEqual({
+      checked: 1,
+      recovered: 1,
+      errored: 0,
+      deferred: 0,
+    });
   });
 
   it('owes the one refund when the re-driven vend failed', async () => {
@@ -93,6 +98,15 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
     expect(delivery.finish).toHaveBeenCalledWith(OP, 'failed', TOKEN);
     expect(refund).toHaveBeenCalledTimes(1);
+  });
+
+  it('bugfix: takes no claim when too little of the invocation remains', async () => {
+    const summary = await recoverWalletPaidVtuPurchases(
+      { supabase, deadlineMs: Date.now() + 10_000 },
+      deps
+    );
+    expect(worker.claim).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({ deferred: 1, recovered: 0 });
   });
 
   it('leaves a purchase that is not mid-vend to the drain, taking no claim', async () => {
@@ -138,7 +152,7 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     };
     await expect(
       recoverWalletPaidVtuPurchases({ supabase }, off as never)
-    ).resolves.toEqual({ checked: 0, recovered: 0, errored: 0 });
+    ).resolves.toEqual({ checked: 0, recovered: 0, errored: 0, deferred: 0 });
   });
 
   it('counts a failure and carries on, never throwing', async () => {

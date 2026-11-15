@@ -196,8 +196,11 @@ describe('bugfix: a start refused before any payment left its purchase live (Cod
   it('closes the purchase when wallet pay is off', async () => {
     deps.readRuntime.mockReturnValueOnce(null as never);
     const response = await runVtuWalletPayStep(base, deps as never);
-    expect(response.status).toBe(503);
-    expect(deps.closeUnissued).toHaveBeenCalledWith(TXN, 'merchant-1');
+    // Closed for certain: the final answer, so the app drops its key.
+    expect(response.status).toBe(409);
+    expect(deps.closeUnpaid).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: TXN })
+    );
   });
 
   it('never closes on a re-check or payment refusal', async () => {

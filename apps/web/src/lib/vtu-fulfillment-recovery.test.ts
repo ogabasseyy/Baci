@@ -77,6 +77,22 @@ describe('vtu-fulfillment-recovery', () => {
     );
   });
 
+  it('bugfix: restores a PiggyVest-paid strand that has no store credit ledger (Codex P1)', async () => {
+    const paid = {
+      id: 'vtu-pv',
+      metadata: { paymentSource: 'piggyvest_wallet' },
+    } as unknown as VtuTransactionRow;
+    mocks.isStrandedPreVendVtuRow.mockReturnValue(true);
+    mocks.hasExistingVtuDebitLedger.mockResolvedValue(false);
+
+    await expect(
+      recoverStrandedPreVendVtuRow({ row: paid, supabase })
+    ).resolves.toBe('continue');
+
+    expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledTimes(1);
+    expect(mocks.hasExistingVtuDebitLedger).not.toHaveBeenCalled();
+  });
+
   it('leaves never-debited strands for support (fail closed)', async () => {
     mocks.isStrandedPreVendVtuRow.mockReturnValue(true);
     mocks.hasExistingVtuDebitLedger.mockResolvedValue(false);

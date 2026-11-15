@@ -8,6 +8,7 @@ import {
 import type { VtuTransactionRow } from '@/lib/vtu-fulfillment';
 import { getSafeMetadataDiagnostics } from '@/lib/vtu-metadata-fields';
 import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
+import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 import {
   isStrandedPreVendVtuRow,
   restoreInterruptedPreVendVtuRow,
@@ -54,9 +55,13 @@ export async function recoverStrandedPreVendVtuRow({
   // Never-debited strands stay processing (visible,
   // support-recoverable). A ledger-read failure throws (no flip)
   // — fail closed, the next pass retries the check.
+  // A purchase paid from the PiggyVest wallet has no store credit debit to
+  // find: its proof that money moved is the confirmed PiggyVest payment, which
+  // the delivery claim and the payment's one refund then settle (Codex P1).
   if (
     isStrandedPreVendVtuRow(row) &&
-    (await hasExistingVtuDebitLedger({ row, supabase }))
+    (isPiggyvestWalletPaid(row.metadata) ||
+      (await hasExistingVtuDebitLedger({ row, supabase })))
   ) {
     await restoreInterruptedPreVendVtuRow({
       userSafeMessage: `Reconciliation recovered stranded pre-vend row ${row.id}`,

@@ -1,5 +1,8 @@
 import 'server-only';
-import { walletPayAccepted } from '@/lib/piggyvest/wallet-pay-http';
+import {
+  walletPayAccepted,
+  walletPayRefuse,
+} from '@/lib/piggyvest/wallet-pay-http';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import { cancelVtuWalletPay } from './vtu-wallet-pay-close';
 import type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
@@ -57,7 +60,7 @@ export async function answerWhileSwitchedOff(
     // live, e.g. one that expired) and close the purchase, so it never stays
     // stuck holding a store credit retry (Codex P2).
     const ref = { runtime, scope, transactionId };
-    await Promise.resolve()
+    const closed = await Promise.resolve()
       .then(
         async (): Promise<unknown> =>
           existing
@@ -68,8 +71,18 @@ export async function answerWhileSwitchedOff(
               )
             : await deps.closeUnpaid(ref)
       )
-      .catch(() => null);
-    return await refusal();
+      .then(() => true)
+      .catch(() => false);
+    // A confirmed closure is a final answer the app settles on (its key is
+    // dropped, so store credit is offered again); an uncertain one stays the
+    // retryable unavailable answer (Codex P2).
+    return closed
+      ? walletPayRefuse(
+          'This payment did not go through. Please start again.',
+          'PAYMENT_NOT_COMPLETED',
+          409
+        )
+      : await refusal();
   }
   // Only this operation, and only while still issued (the database refuses
   // a reserved one): money already moving is never released.

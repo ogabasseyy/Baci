@@ -15,7 +15,12 @@ export interface RecoverWalletPaidVtuSummary {
   checked: number;
   recovered: number;
   errored: number;
+  /** Left for the next run: too little of this run's time remained. */
+  deferred: number;
 }
+
+/** Time one claimed vend may need (a provider call plus the wallet reads). */
+const VEND_BUDGET_MS = 90_000;
 
 const defaultDeps = {
   readRuntime: () => readWalletPayRecoveryRuntime(),
@@ -40,13 +45,19 @@ const defaultDeps = {
  * as before. Never throws: a failure is counted (Codex P1).
  */
 export async function recoverWalletPaidVtuPurchases(
-  input: { supabase: SupabaseClient; maxRows?: number },
+  input: {
+    supabase: SupabaseClient;
+    maxRows?: number;
+    /** The invocation's hard stop (epoch ms); unset runs without a budget. */
+    deadlineMs?: number;
+  },
   deps: typeof defaultDeps = defaultDeps
 ): Promise<RecoverWalletPaidVtuSummary> {
   const summary: RecoverWalletPaidVtuSummary = {
     checked: 0,
     recovered: 0,
     errored: 0,
+    deferred: 0,
   };
   let runtime: ReturnType<typeof readWalletPayRecoveryRuntime> | null;
   try {
@@ -62,6 +73,15 @@ export async function recoverWalletPaidVtuPurchases(
     const work = await worker.listWork(input.maxRows ?? 50);
     for (const item of work.deliver) {
       if (item.purpose !== 'vtu') continue;
+      // Take no claim that the invocation could be killed in the middle of:
+      // a claimed vend that is cut off waits for its claim to lapse (Codex P2).
+      if (
+        input.deadlineMs !== undefined &&
+        Date.now() > input.deadlineMs - VEND_BUDGET_MS
+      ) {
+        summary.deferred += 1;
+        continue;
+      }
       try {
         // Only a purchase mid-vend, and asked before the claim is taken, so
         // anything else is left to the drain without holding its claim.

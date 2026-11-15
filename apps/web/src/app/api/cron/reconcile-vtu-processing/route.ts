@@ -46,7 +46,10 @@ export async function GET(request: NextRequest) {
     });
     // Purchases paid from the PiggyVest wallet whose vend was interrupted:
     // re-driven here under the payment's delivery claim (never throws).
-    const walletPay = await recoverWalletPaidVtuPurchases({ supabase });
+    const walletPay = await recoverWalletPaidVtuPurchases({
+      supabase,
+      deadlineMs: invocationStartedAt + maxDuration * 1000,
+    });
     if (walletPay.errored > 0) {
       logger.warn({
         message: 'PiggyVest-paid VTU recovery completed with errors',

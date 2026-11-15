@@ -6,12 +6,17 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
 import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
+
+// Clear space kept between the banner and the sheet (and its close
+// button), per AdMob's accidental-click guidance.
+export const QUIZ_RULES_BANNER_CLEAR_SPACE = 24;
 
 interface QuizRulesModalProps {
   eventTitle: string;
@@ -35,6 +40,18 @@ export function QuizRulesModal({
   const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizLobbyStyles(colors);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // Bottom edge of the banner, measured: the slot's height depends on the
+  // ad it loads, so a fixed share of the screen could let a tall sheet's
+  // close button sit right under the ad.
+  const [bannerBottom, setBannerBottom] = useState<number | null>(null);
+  const sheetMaxHeight =
+    bannerBottom === null
+      ? '75%'
+      : Math.max(
+          0,
+          windowHeight - bannerBottom - QUIZ_RULES_BANNER_CLEAR_SPACE
+        );
   const [accepted, setAccepted] = useState(false);
   const isPlayLocked = requiresAcceptance && !accepted;
 
@@ -54,6 +71,10 @@ export function QuizRulesModal({
       <View style={styles.modalBackdrop}>
         <View
           testID="quiz-rules-modal-banner"
+          onLayout={(event) => {
+            const { height, y } = event.nativeEvent.layout;
+            setBannerBottom(y + height);
+          }}
           style={{
             alignItems: 'center',
             left: 0,
@@ -69,7 +90,7 @@ export function QuizRulesModal({
         </View>
         <View
           accessibilityViewIsModal
-          style={[styles.rulesSheet, { maxHeight: '75%' }]}
+          style={[styles.rulesSheet, { maxHeight: sheetMaxHeight }]}
         >
           <View style={styles.rulesHeader}>
             <View>

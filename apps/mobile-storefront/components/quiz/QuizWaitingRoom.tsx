@@ -6,6 +6,7 @@ import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useQuizRewardedBadge } from '@/hooks/use-quiz-rewarded-badge';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useAuthStore } from '@/stores/auth-store';
+import { QuizAdBreakNotice } from './QuizAdBreakNotice';
 import { QuizRewardedBadgeOffer } from './QuizRewardedBadgeOffer';
 import { QuizRulesModal } from './QuizRulesModal';
 import { formatQuizClock, formatRemainingTime } from './QuizScreen.utils';
@@ -167,11 +168,13 @@ export function QuizWaitingRoom({
             requests or refreshes while completely obscured. */}
         {rulesVisible ||
         !rulesDismissed ||
+        waitingRoom.isAdBreakNoticeVisible ||
         waitingRoom.isFullscreenAdActive ||
         rewardedBadge.isWatching ? null : (
           <AdSlot placement="FOOTER_ANCHOR" />
         )}
       </ScrollView>
+      {waitingRoom.isAdBreakNoticeVisible ? <QuizAdBreakNotice /> : null}
       <QuizRulesModal
         eventTitle={currentEvent.title}
         onClose={closeRules}

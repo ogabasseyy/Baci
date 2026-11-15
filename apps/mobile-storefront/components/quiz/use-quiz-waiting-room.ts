@@ -34,6 +34,12 @@ export interface QuizWaitingRoomState {
    * banner slots must stay unmounted until it closes.
    */
   isFullscreenAdActive: boolean;
+  /**
+   * While true a loaded pre-quiz interstitial is about to present (or is
+   * presented): the room shows a non-interactive "ad break" notice so the
+   * ad never lands under a tap.
+   */
+  isAdBreakNoticeVisible: boolean;
   isRefreshing: boolean;
   remainingSeconds: number;
 }
@@ -77,6 +83,7 @@ export function useQuizWaitingRoom({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFullscreenAdActive, setIsFullscreenAdActive] = useState(false);
   const isFullscreenAdActiveRef = useRef(false);
+  const [isAdBreakNoticeVisible, setIsAdBreakNoticeVisible] = useState(false);
   // A start boundary that lands while the interstitial owns the screen waits
   // here until the ad closes instead of starting timed play behind it.
   const pendingStartRef = useRef<QuizEvent | null>(null);
@@ -207,6 +214,7 @@ export function useQuizWaitingRoom({
     isStartBlockedRef,
     onStartRef,
     pendingStartRef,
+    setIsAdBreakNoticeVisible,
     setIsFullscreenAdActive,
     startedRef,
     stoppedRef,
@@ -263,6 +271,7 @@ export function useQuizWaitingRoom({
   return {
     error,
     event,
+    isAdBreakNoticeVisible,
     isFullscreenAdActive,
     isRefreshing,
     remainingSeconds,

@@ -10,6 +10,11 @@ import { flushPendingQuizStart } from './quiz-pending-start';
 // Below this the ad could eat into live play, so it is skipped.
 const QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS = 30;
 
+// How long the "ad break" notice covers the waiting room before the loaded
+// interstitial is presented. Long enough to read and to lift a finger that
+// was heading for a button; short enough not to feel like a second ad.
+export const QUIZ_AD_BREAK_NOTICE_MS = 1_500;
+
 /**
  * Requests the pre-quiz interstitial once at lobby open and owns the
  * fullscreen-ownership flag through presentation, close, and failure.
@@ -20,6 +25,11 @@ const QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS = 30;
  * request requires strictly more than 30 seconds, so presentation cancels
  * at 30 or below: a whole "30" on screen can be as little as 29.001 real
  * seconds.
+ *
+ * A loaded ad is never presented straight over the interactive waiting
+ * room: the host first shows a non-interactive "ad break" notice for
+ * QUIZ_AD_BREAK_NOTICE_MS (AdMob's accidental-click guidance), and the
+ * cancellation checks run again when it ends.
  */
 export function useQuizStartInterstitialRequest({
   appStateRef,
@@ -28,6 +38,7 @@ export function useQuizStartInterstitialRequest({
   isStartBlockedRef,
   onStartRef,
   pendingStartRef,
+  setIsAdBreakNoticeVisible,
   setIsFullscreenAdActive,
   startedRef,
   stoppedRef,
@@ -39,6 +50,7 @@ export function useQuizStartInterstitialRequest({
   isStartBlockedRef: MutableRefObject<boolean>;
   onStartRef: MutableRefObject<(eventId: string, termsAccepted: true) => void>;
   pendingStartRef: MutableRefObject<QuizEvent | null>;
+  setIsAdBreakNoticeVisible: Dispatch<SetStateAction<boolean>>;
   setIsFullscreenAdActive: Dispatch<SetStateAction<boolean>>;
   startedRef: MutableRefObject<boolean>;
   stoppedRef: MutableRefObject<boolean>;
@@ -49,8 +61,24 @@ export function useQuizStartInterstitialRequest({
   // biome-ignore lint/correctness/useExhaustiveDependencies: lobby-open request fires once by design
   useEffect(() => {
     let mounted = true;
+    let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+    let endNotice: (() => void) | null = null;
     if (getRemainingSeconds() > QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS) {
       void maybeShowQuizStartInterstitial({
+        beforePresent: () =>
+          new Promise<void>((resolve) => {
+            if (!mounted) {
+              resolve();
+              return;
+            }
+            setIsAdBreakNoticeVisible(true);
+            endNotice = resolve;
+            noticeTimer = setTimeout(() => {
+              noticeTimer = null;
+              endNotice = null;
+              resolve();
+            }, QUIZ_AD_BREAK_NOTICE_MS);
+          }),
         isCancelled: () =>
           !mounted ||
           startedRef.current ||
@@ -69,6 +97,7 @@ export function useQuizStartInterstitialRequest({
           if (!mounted) return;
           isFullscreenAdActiveRef.current = false;
           setIsFullscreenAdActive(false);
+          setIsAdBreakNoticeVisible(false);
           // A native dismissal while the app is inactive must not start
           // timed play in the background: retain the pending transition
           // until the foreground refresh re-validates it on resume.
@@ -104,9 +133,12 @@ export function useQuizStartInterstitialRequest({
         // A failed presentation never produces CLOSED: no dismissal will
         // clear the synchronously claimed ownership, so release it here
         // and flush a boundary held in the window (mirrors onClosed; the
-        // take is atomic, and abandon paths hold nothing to flush).
+        // take is atomic, and abandon paths hold nothing to flush). The
+        // notice comes down too: an ad abandoned after it must not leave
+        // the waiting room covered.
         isFullscreenAdActiveRef.current = false;
         setIsFullscreenAdActive(false);
+        setIsAdBreakNoticeVisible(false);
         if (appStateRef.current !== 'active') return;
         if (isStartBlockedRef.current || isQuizRewardedFlowActive()) return;
         flushPendingQuizStart({
@@ -119,6 +151,10 @@ export function useQuizStartInterstitialRequest({
     }
     return () => {
       mounted = false;
+      // Settle a notice still on screen so the helper re-checks, sees the
+      // unmount and releases its reservation instead of waiting on a timer.
+      if (noticeTimer !== null) clearTimeout(noticeTimer);
+      endNotice?.();
     };
   }, []);
 }

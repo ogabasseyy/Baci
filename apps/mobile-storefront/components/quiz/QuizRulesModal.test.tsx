@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Dimensions } from 'react-native';
 import Colors from '@/constants/Colors';
 import { QuizRulesModal } from './QuizRulesModal';
 import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
@@ -81,6 +82,29 @@ describe('QuizRulesModal', () => {
     };
     expect(sheet.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+    );
+
+    // Once the banner is measured the sheet stops a clear 24pt below it,
+    // so the sheet's close button can never sit right under the ad.
+    // The banner is a sibling of the modal sheet, so it is hidden from
+    // accessibility queries by default.
+    fireEvent(
+      screen.getByTestId('quiz-rules-modal-banner', {
+        includeHiddenElements: true,
+      }),
+      'layout',
+      { nativeEvent: { layout: { height: 78, width: 390, x: 0, y: 75 } } }
+    );
+    const { height: windowHeight } = Dimensions.get('window');
+    const measuredSheet = screen.UNSAFE_getByProps({
+      accessibilityViewIsModal: true,
+    }) as unknown as {
+      props: { style: Record<string, unknown>[] };
+    };
+    expect(measuredSheet.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ maxHeight: windowHeight - 153 - 24 }),
+      ])
     );
     expect(screen.getByTestId('quiz-rules-list')).toBeTruthy();
   });

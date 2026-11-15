@@ -307,6 +307,9 @@ describe('quiz response schemas', () => {
       quizEventSchema.parse({ ...validV2QuizEvent, attemptsUsed: 3 })
     ).toMatchObject({ attemptsUsed: 3 });
     expect(
+      quizEventSchema.parse({ ...validV2QuizEvent, attemptsUsed: 80 })
+    ).toMatchObject({ attemptsUsed: 80 });
+    expect(
       quizEventSchema.safeParse({ ...validV2QuizEvent, attemptsUsed: -1 })
         .success
     ).toBe(false);

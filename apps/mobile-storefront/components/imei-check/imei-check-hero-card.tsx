@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SPACING } from '@/constants/Colors';
+import { IMEI_CARE } from './imei-care-look';
 import type { ImeiCheckerColors } from './imei-check.types';
 
 const IMEI_TRUST_INDICATORS = [
@@ -11,41 +11,27 @@ const IMEI_TRUST_INDICATORS = [
 ] as const;
 
 /**
- * The checker's top band, in the refreshed home's look: black band, white
- * title, the device stamp tiles (children), and a quiet promise line under
- * them like the home's "Ogabassey Never Disappoints!".
+ * The checker's hero, in the burgundy device-care style of the refreshed
+ * home: what the page does in one line, and three quiet promises.
  */
-export default function HeroCard({
-  colors,
-  children,
-}: {
-  colors: ImeiCheckerColors;
-  children?: ReactNode;
-}) {
-  const dark = colors.background !== colors.white;
+export default function HeroCard(_props: { colors: ImeiCheckerColors }) {
   return (
-    <View
-      style={[
-        styles.band,
-        { backgroundColor: dark ? '#181416' : colors.black },
-      ]}
-    >
+    <View style={styles.hero}>
       <View style={styles.titleRow}>
-        <Ionicons name="barcode-outline" size={20} color="#ffc1c3" />
+        <Ionicons
+          name="barcode-outline"
+          size={24}
+          color={IMEI_CARE.heroAccent}
+        />
         <Text accessibilityRole="header" style={styles.title}>
           Device verification
         </Text>
       </View>
-      {children}
-      <View style={styles.promise}>
+      <View style={styles.chips}>
         {IMEI_TRUST_INDICATORS.map((item) => (
-          <View key={item} style={styles.promiseItem}>
-            <Ionicons
-              name="checkmark-circle-outline"
-              size={13}
-              color="#ffc1c3"
-            />
-            <Text style={styles.promiseText}>{item}</Text>
+          <View key={item} style={styles.chip}>
+            <Ionicons name="checkmark" size={12} color={IMEI_CARE.heroAccent} />
+            <Text style={styles.chipText}>{item}</Text>
           </View>
         ))}
       </View>
@@ -54,21 +40,29 @@ export default function HeroCard({
 }
 
 const styles = StyleSheet.create({
-  band: {
-    gap: 12,
+  hero: {
+    backgroundColor: IMEI_CARE.hero,
+    borderRadius: 20,
+    gap: 10,
     marginBottom: SPACING.sm,
-    paddingBottom: 14,
-    paddingHorizontal: SPACING.md,
-    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
-  titleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  title: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
-  promise: {
+  titleRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  title: { color: IMEI_CARE.heroText, fontSize: 20, fontWeight: '800' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  chip: {
+    alignItems: 'center',
+    backgroundColor: IMEI_CARE.heroChip,
+    borderRadius: 999,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  promiseItem: { alignItems: 'center', flexDirection: 'row', gap: 4 },
-  promiseText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  chipText: {
+    color: IMEI_CARE.heroBody,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+  },
 });

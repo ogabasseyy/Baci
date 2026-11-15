@@ -6,7 +6,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { Keyboard } from 'react-native';
+import { Keyboard, View } from 'react-native';
 import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
 import { decideImeiVerify } from '@/components/imei-check/decide-imei-verify';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
@@ -28,7 +28,7 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import { WalletPaySheet } from '@/components/wallet-pay/WalletPaySheet';
-import Colors from '@/constants/Colors';
+import Colors, { SPACING } from '@/constants/Colors';
 import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
@@ -265,13 +265,19 @@ export default function ImeiCheckerScreen() {
         />
       ) : (
         <AppKeyboardContainer style={{ flex: 1 }}>
-          <HeroCard colors={colors}>
+          <View
+            style={{
+              paddingHorizontal: SPACING.md,
+              paddingTop: SPACING.sm,
+            }}
+          >
+            <HeroCard colors={colors} />
             <ImeiDeviceTabs
               colors={colors}
               selected={selectedDevice}
               onSelect={handleDeviceTab}
             />
-          </HeroCard>
+          </View>
           {pendingLookup.pending ? (
             <ImeiCheckPending colors={colors} paused={pendingLookup.paused} />
           ) : null}

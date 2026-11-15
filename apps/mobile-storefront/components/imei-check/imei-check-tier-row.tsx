@@ -43,18 +43,13 @@ export function ImeiCheckTierRow({
       <View
         style={[
           styles.radio,
-          {
-            backgroundColor: isSelected
-              ? BRAND.primary
-              : withAlpha(BRAND.primary, 0.1),
-          },
+          { borderColor: isSelected ? BRAND.primary : colors.border },
+          isSelected && { backgroundColor: BRAND.primary },
         ]}
       >
-        <Ionicons
-          name={isSelected ? 'checkmark' : tier.icon}
-          size={isSelected ? 20 : 18}
-          color={isSelected ? BRAND.onPrimary : BRAND.primary}
-        />
+        {isSelected ? (
+          <Ionicons name="checkmark" size={13} color={BRAND.onPrimary} />
+        ) : null}
       </View>
       <View style={styles.rowBody}>
         <View style={styles.rowNameLine}>

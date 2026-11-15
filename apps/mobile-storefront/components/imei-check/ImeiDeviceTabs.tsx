@@ -7,7 +7,6 @@ import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BRAND, withAlpha } from '@/constants/Colors';
 import type { ImeiCheckerColors } from './imei-check.types';
-import { ImeiStampBackdrop } from './imei-stamp-backdrop';
 
 type IoniconsName = ComponentProps<typeof Ionicons>['name'];
 
@@ -17,25 +16,11 @@ interface ImeiDeviceTabsProps {
   onSelect: (category: ImeiDeviceCategory) => void;
 }
 
-// Each device gets its own soft colour, like the home's stamp tiles.
-const DEVICE_ACCENT: Record<string, string> = {
-  smartphone: '#c81e3a',
-  tablet: '#3158a7',
-  laptop: '#087a58',
-  watch: '#a34d16',
-};
-
-/**
- * Device picker as the home's scalloped stamp tiles on the black band:
- * white stamp, soft colour circle, bold label. The chosen one fills its
- * circle with brand red.
- */
 export function ImeiDeviceTabs({
   colors,
   selected,
   onSelect,
 }: ImeiDeviceTabsProps) {
-  const dark = colors.background !== colors.white;
   return (
     <View
       accessibilityRole="tablist"
@@ -44,7 +29,6 @@ export function ImeiDeviceTabs({
     >
       {IMEI_DEVICE_CATEGORIES.map((category) => {
         const isSelected = category.id === selected;
-        const accent = DEVICE_ACCENT[category.id] ?? BRAND.primary;
         return (
           <Pressable
             key={category.id}
@@ -52,25 +36,21 @@ export function ImeiDeviceTabs({
             accessibilityState={{ selected: isSelected }}
             accessibilityLabel={`${category.label} checks`}
             onPress={() => onSelect(category.id)}
-            style={styles.tab}
+            style={[
+              styles.tab,
+              {
+                backgroundColor: isSelected
+                  ? withAlpha(BRAND.primary, 0.12)
+                  : colors.card,
+                borderColor: isSelected ? BRAND.primary : colors.border,
+              },
+            ]}
           >
-            <ImeiStampBackdrop color={dark ? colors.muted : colors.card} />
-            <View
-              style={[
-                styles.circle,
-                {
-                  backgroundColor: isSelected
-                    ? BRAND.primary
-                    : withAlpha(accent, dark ? 0.24 : 0.12),
-                },
-              ]}
-            >
-              <Ionicons
-                name={category.icon as IoniconsName}
-                size={20}
-                color={isSelected ? BRAND.onPrimary : dark ? '#fff' : accent}
-              />
-            </View>
+            <Ionicons
+              name={category.icon as IoniconsName}
+              size={18}
+              color={isSelected ? BRAND.primary : colors.textSecondary}
+            />
             <Text
               numberOfLines={1}
               style={[
@@ -91,25 +71,20 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 16,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    minHeight: 92,
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-  },
-  circle: {
-    alignItems: 'center',
-    borderRadius: 20,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
+    gap: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

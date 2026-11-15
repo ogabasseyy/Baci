@@ -8,13 +8,12 @@ import Ionicons, {
 } from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BRAND } from '@/constants/Colors';
-import { imeiCareIcon } from './imei-care-look';
+import { BRAND, withAlpha } from '@/constants/Colors';
+import { ImeiTicketNotch, imeiCareIcon } from './imei-care-look';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { pickerStyles as styles } from './imei-check-picker.styles';
 import { ImeiCheckTierRow } from './imei-check-tier-row';
 import { ImeiServiceDetailsSheet } from './imei-service-details-sheet';
-import { ImeiStampBackdrop } from './imei-stamp-backdrop';
 
 const GROUP_ICONS: Record<string, IoniconsIconName> = {
   details: 'phone-portrait-outline',
@@ -109,6 +108,7 @@ export function ImeiCheckServiceSelector({
                   { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
               >
+                <ImeiTicketNotch colors={colors} />
                 {rows.map((tierKey, index) => (
                   <ImeiCheckTierRow
                     key={tierKey}
@@ -146,10 +146,17 @@ export function ImeiCheckServiceSelector({
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: showAllServices }}
-          style={styles.allChecks}
+          style={[
+            styles.allChecks,
+            {
+              backgroundColor: showAllServices
+                ? colors.card
+                : withAlpha(BRAND.primary, 0.06),
+              borderColor: withAlpha(BRAND.primary, 0.35),
+            },
+          ]}
           onPress={onToggleServices}
         >
-          <ImeiStampBackdrop color={careIcon.background} />
           <Ionicons
             name={showAllServices ? 'contract-outline' : 'apps-outline'}
             size={20}

@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import Constants from 'expo-constants';
 import { type Href, router } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import type { TextInputInstance } from 'react-native';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { useThemeStore } from '@/stores/theme-store';
 import { getHeaderStyles } from './header.styles';
 
 interface HeaderProps {
+  searchFocusTimer?: RefObject<ReturnType<typeof setTimeout> | undefined>;
   showSearch?: boolean;
   onSearchPress?: () => void;
   isSearchActive?: boolean;
@@ -32,6 +33,7 @@ interface HeaderProps {
 // Background pattern from web (SVG Data URI)
 
 export function Header({
+  searchFocusTimer,
   showSearch = true,
   onSearchPress,
   isSearchActive = false,
@@ -55,9 +57,10 @@ export function Header({
   useEffect(() => {
     if (isSearchActive) {
       const timer = setTimeout(() => searchInputRef.current?.focus(), 100);
+      if (searchFocusTimer) searchFocusTimer.current = timer;
       return () => clearTimeout(timer);
     }
-  }, [isSearchActive]);
+  }, [isSearchActive, searchFocusTimer]);
 
   const handleSearchPress = () => {
     if (onSearchPress) {

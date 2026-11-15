@@ -289,7 +289,9 @@ describe('start savings controller utils', () => {
         ...validInput,
         acceptsNonWithdrawableTerms: false,
       })
-    ).toBe('You must accept the non-withdrawable savings terms.');
+    ).toBe(
+      'Tick the box to agree that this money stays saved until your goal is done.'
+    );
   });
 });
 

@@ -3,6 +3,7 @@ import type { QuizEvent } from '@/services/quiz';
 import { QuizServiceError } from '@/services/quiz-types';
 import {
   canPlayAnotherQuizAttempt,
+  formatQuizClockWithDay,
   formatRemainingTime,
   formatTimeRange,
   getEventStartButtonText,
@@ -178,5 +179,62 @@ describe('QuizScreen utils', () => {
     expect(
       isQuizRecoveryCurrent({ selectedEventId: null, status: 'ready' })
     ).toBe(true);
+  });
+
+  describe('bugfix: lobby closing time had no day', () => {
+    const now = Date.parse('2026-11-14T20:00:00.000Z');
+
+    it('shows only the clock time when the quiz closes today', () => {
+      expect(
+        formatQuizClockWithDay(
+          '2026-11-14T21:30:00.000Z',
+          'en-US',
+          'Africa/Lagos',
+          now
+        )
+      ).toBe('10:30 PM');
+    });
+
+    it('adds the day when the quiz closed on another day', () => {
+      expect(
+        formatQuizClockWithDay(
+          '2026-11-12T23:34:00.000Z',
+          'en-US',
+          'Africa/Lagos',
+          now
+        )
+      ).toBe('Nov 13, 12:34 AM');
+    });
+
+    it('bugfix: shows a Gregorian day for locales with another default calendar', () => {
+      // th-TH defaults to the Buddhist calendar (year 2568 for 2025); the
+      // day comparison is Gregorian, so the label must be too.
+      const label = formatQuizClockWithDay(
+        '2025-11-12T23:34:00.000Z',
+        'th-TH',
+        'Africa/Lagos',
+        now
+      );
+
+      expect(label).toContain('2025');
+      expect(label).not.toContain('2568');
+    });
+
+    it('adds the year when the quiz closed in another year', () => {
+      expect(
+        formatQuizClockWithDay(
+          '2025-11-12T23:34:00.000Z',
+          'en-US',
+          'Africa/Lagos',
+          now
+        )
+      ).toBe('Nov 13, 2025, 12:34 AM');
+    });
+
+    it('keeps the unset-time wording when there is no end time', () => {
+      expect(formatQuizClockWithDay(null, 'en-US', 'Africa/Lagos', now)).toBe(
+        'Time not set'
+      );
+    });
   });
 });

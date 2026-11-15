@@ -11,10 +11,14 @@ export function resolveAdSlotId(
 ): string | undefined {
   if (!config) return undefined;
   if (slotInstance === undefined) return config.id;
-  // The id is looked up by GPT and must be a plain element id, so anything
-  // outside letters, digits, "-" and "_" becomes "_". Replacing instead of
-  // dropping keeps different instances different ("a/b" is not "ab"); only
-  // an empty instance falls back to the placement id.
-  const suffix = String(slotInstance).replace(/[^a-zA-Z0-9_-]/g, '_');
+  // The id is looked up by GPT and must be a plain element id. Letters, digits
+  // and "-" pass through; every other character, "_" included, is written as
+  // its code point between underscores ("/" becomes "_2f_"). Because a raw "_"
+  // never survives, two different instances can never share an id; only an
+  // empty instance falls back to the placement id.
+  const suffix = String(slotInstance).replace(
+    /[^a-zA-Z0-9-]/gu,
+    (character) => `_${(character.codePointAt(0) ?? 0).toString(16)}_`
+  );
   return suffix ? `${config.id}-${suffix}` : config.id;
 }

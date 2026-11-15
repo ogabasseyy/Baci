@@ -213,4 +213,13 @@ describe('provisional quiz score', () => {
     expect(screen.getByText('Quiz access ended')).toBeTruthy();
     expect(screen.queryByText('Waiting ad')).toBeNull();
   });
+
+  it('bugfix: live standings waited for the first result poll before loading', () => {
+    render(<QuizResultsPanel {...props} v2Result={null} />);
+
+    expect(
+      jest.mocked(useQuizResultsLeaderboard).mock.lastCall?.[0].enabled
+    ).toBe(true);
+    expect(screen.getByText('Live standings')).toBeTruthy();
+  });
 });

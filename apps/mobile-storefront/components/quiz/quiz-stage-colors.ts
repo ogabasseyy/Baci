@@ -74,6 +74,7 @@ export function shouldUseQuizAnswerGrid(
     labels.length === 4 &&
     labels.every(
       (label) =>
+        label.trim().length > 0 &&
         label.length <= QUIZ_ANSWER_GRID_MAX_LABEL_LENGTH &&
         label
           .split(/\s+/)

@@ -76,10 +76,10 @@ export function QuizResultsPanel({
     shouldTick: lifecycle === 'pending_results',
     serverClockOffsetMs: offsetMs,
   });
+  // The live board starts loading the moment the player finishes, without
+  // waiting for the first result poll, so standings appear straight away.
   const shouldLoadLeaderboard =
-    (lifecycle === 'final' ||
-      (lifecycle === 'pending_results' &&
-        v2Result?.availability === 'pending')) &&
+    (lifecycle === 'final' || lifecycle === 'pending_results') &&
     v2Result?.availability !== 'unavailable' &&
     Boolean(eventId && expectedUserId);
   const { leaderboard, leaderboardError, liveBoardHidden, participantCount } =

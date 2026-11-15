@@ -78,6 +78,10 @@ describe('quiz stage colours', () => {
     ).toBe(true);
   });
 
+  it('never draws an empty tile for a blank answer', () => {
+    expect(shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', ' '])).toBe(false);
+  });
+
   it('uses rows in a window too narrow for two tiles side by side', () => {
     const labels = ['A14', 'A15', 'A16', 'A17'];
     expect(shouldUseQuizAnswerGrid(labels, 320)).toBe(false);

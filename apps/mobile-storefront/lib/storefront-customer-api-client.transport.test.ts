@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import { mockFetchWithTimeout } from '@/lib/wallet-top-up.test-utils';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
@@ -18,6 +18,50 @@ describe('storefront customer API client', () => {
       'https://usebaci.com/api/storefront/customer/savings/funding?merchantId=merchant-1&merchantSlug=demo-store&goalId=goal-2',
       expect.objectContaining({ method: 'GET' })
     );
+  });
+
+  it('uses a caller-chosen timeout, and the default otherwise', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    const client = createStorefrontCustomerApiClient();
+    await client.fetchJson({ path: '/api/x', timeoutMs: 20_000 });
+    await client.fetchJson({ path: '/api/x' });
+    expect(mockFetchWithTimeout.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ timeout: 20_000 })
+    );
+    expect(mockFetchWithTimeout.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ timeout: 30_000 })
+    );
+  });
+
+  it('bugfix: a caller timeout also covers a stalled response body', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchWithTimeout.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => undefined),
+      });
+      const client = createStorefrontCustomerApiClient();
+      const pending = client.fetchJson({ path: '/api/x', timeoutMs: 20_000 });
+      const outcome = expect(pending).rejects.toThrow('timed out after 20000');
+      await jest.advanceTimersByTimeAsync(0);
+      const sent = mockFetchWithTimeout.mock.calls[0][1] as {
+        signal: AbortSignal;
+      };
+      expect(sent.signal.aborted).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(20_000);
+
+      await outcome;
+      // The request itself is cancelled, not just abandoned.
+      expect(sent.signal.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('sends authenticated PATCH JSON with the requested CSRF token', async () => {

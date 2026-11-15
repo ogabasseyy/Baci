@@ -42,6 +42,7 @@ import { useCheckoutNavigation } from './use-checkout-navigation';
 import { useCheckoutScreenPayment } from './use-checkout-screen-payment';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
 import { useRedvaultReview } from './use-redvault-review';
+import { walletFundedTransferSubmitParams } from './wallet-funded-transfer-submit-params';
 
 export function CheckoutScreenView({
   prizeSimulation,
@@ -189,8 +190,7 @@ export function CheckoutScreenView({
     setStep,
     user,
     walletBalance,
-    walletFundedBankTransferOptionEnabled:
-      paymentController.walletFundedBankTransferOptionEnabled,
+    ...walletFundedTransferSubmitParams(paymentController),
     walletSelection,
     handleSubmit,
     setIsContactCollapsed,

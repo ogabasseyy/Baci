@@ -9,7 +9,7 @@ import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { QuizEvent } from '@/services/quiz-types';
 import type { createQuizLobbyStyles } from './QuizLobby.styles';
 import {
-  formatQuizClock,
+  formatQuizClockWithDay,
   formatRemainingTime,
   getEventStartButtonText,
   getPrizeMomentLabel,
@@ -113,7 +113,9 @@ export function QuizLobbyEventCard({
       <View style={styles.prizeStage}>
         <View style={styles.prizeCopy}>
           <Text style={styles.eventTitle}>{event.title}</Text>
-          <Text style={styles.eventPrize}>Win {event.prizeName}</Text>
+          <Text numberOfLines={3} style={styles.eventPrize}>
+            Win {event.prizeName}
+          </Text>
           {condition ? (
             <Text style={styles.prizeCondition}>{condition}</Text>
           ) : null}
@@ -160,7 +162,12 @@ export function QuizLobbyEventCard({
         <Text style={styles.timingDot}>•</Text>
         <Text style={styles.timingFact}>
           {isClosed ? 'Closed' : 'Closes'}{' '}
-          {formatQuizClock(event.endsAt, locale, event.timeZone)}
+          {formatQuizClockWithDay(
+            event.endsAt,
+            locale,
+            event.timeZone,
+            serverClock.serverNowMs
+          )}
         </Text>
       </View>
 

@@ -239,4 +239,10 @@ describe('goal actions', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Create your wallet PIN')).toBeOnTheScreen();
   });
+
+  it('names the goal being cancelled', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    renderSheet({ ...goalIds, action: 'cancel', goalTitle: 'iPhone 15' });
+    expect(await screen.findByText('Cancelling iPhone 15')).toBeOnTheScreen();
+  });
 });

@@ -1,8 +1,16 @@
 const React = require('react');
 const { View, ScrollView, TextInput, Pressable } = require('react-native');
 const mockBottomSheetClose = jest.fn();
+const mockBottomSheetSnapToIndex = jest.fn();
 function BottomSheet({ children, ref, backdropComponent: Backdrop, ...props }) {
-  React.useImperativeHandle(ref, () => ({ close: mockBottomSheetClose }), []);
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      close: mockBottomSheetClose,
+      snapToIndex: mockBottomSheetSnapToIndex,
+    }),
+    []
+  );
   return React.createElement(
     View,
     { ...props, testID: 'gorhom-bottom-sheet' },
@@ -27,4 +35,5 @@ module.exports = {
   BottomSheetScrollView,
   BottomSheetTextInput: TextInput,
   mockBottomSheetClose,
+  mockBottomSheetSnapToIndex,
 };

@@ -121,13 +121,20 @@ export function useMerchantInbox() {
 
   useEffect(() => {
     let active = true;
-    let latest = 0;
+    let inFlight = false;
     async function load() {
-      // Polls can overlap: only the newest request may update the screen.
-      latest += 1;
-      const sequence = latest;
-      const result = await fetchMerchantInboxConversations();
-      if (!active || sequence !== latest) return;
+      // One request at a time: a tick that finds a request still running is
+      // skipped, so a slow response is applied instead of being discarded
+      // by a newer, equally slow one.
+      if (inFlight) return;
+      inFlight = true;
+      let result: Awaited<ReturnType<typeof fetchMerchantInboxConversations>>;
+      try {
+        result = await fetchMerchantInboxConversations();
+      } finally {
+        inFlight = false;
+      }
+      if (!active) return;
       if (result.ok) {
         setConversations(result.conversations);
         setHasMoreConversations(result.hasMore);
@@ -158,12 +165,19 @@ export function useMerchantInbox() {
     setMessages([]);
     setThreadState('loading');
     setSendError(null);
-    let latest = 0;
+    let inFlight = false;
     async function load() {
-      latest += 1;
-      const sequence = latest;
-      const result = await fetchMerchantInboxThread(conversationId);
-      if (!active || sequence !== latest) return;
+      // Same single-flight rule as the list; `active` still drops a response
+      // that arrives after the merchant opened another conversation.
+      if (inFlight) return;
+      inFlight = true;
+      let result: Awaited<ReturnType<typeof fetchMerchantInboxThread>>;
+      try {
+        result = await fetchMerchantInboxThread(conversationId);
+      } finally {
+        inFlight = false;
+      }
+      if (!active) return;
       if (result.ok) {
         const polledIds = new Set(result.messages.map((message) => message.id));
         const now = Date.now();

@@ -29,10 +29,18 @@ const KNOWN_CODES = new Set<string>([
   'delivery_unknown',
 ]);
 
+/** Every code this API itself emits; only these prove the server answered. */
+const API_CODES = new Set<string>([
+  ...KNOWN_CODES,
+  'invalid_request',
+  'temporarily_unavailable',
+]);
+
 const BASE_PATH = '/api/merchant/inbox/conversations';
 
 async function failureFrom(
-  response: Response
+  response: Response,
+  isReply: boolean
 ): Promise<MerchantInboxApiFailure> {
   let code: unknown;
   try {
@@ -42,6 +50,12 @@ async function failureFrom(
   }
   if (typeof code === 'string' && KNOWN_CODES.has(code)) {
     return { ok: false, code: code as MerchantInboxApiErrorCode };
+  }
+  // A reply that failed without a code this API emits (a bare gateway
+  // 502/504, an HTML page) may still have been delivered: never report it
+  // as "not sent, try again", which invites a duplicate.
+  if (isReply && !(typeof code === 'string' && API_CODES.has(code))) {
+    return { ok: false, code: 'delivery_unknown' };
   }
   // No readable code (empty or HTML body): classify by status so a request
   // that can never succeed is not reported as a retryable outage.
@@ -61,6 +75,8 @@ async function request<Schema extends z.ZodType>(
     response = await fetch(path, {
       cache: 'no-store',
       credentials: 'same-origin',
+      // Never hang a poller (or leave a send spinning) on a stalled socket.
+      signal: AbortSignal.timeout(20_000),
       ...init,
     });
   } catch {
@@ -73,7 +89,7 @@ async function request<Schema extends z.ZodType>(
           : 'temporarily_unavailable',
     };
   }
-  if (!response.ok) return failureFrom(response);
+  if (!response.ok) return failureFrom(response, init?.method === 'POST');
   try {
     const parsed = schema.safeParse(await response.json());
     if (parsed.success) return { ok: true, data: parsed.data };

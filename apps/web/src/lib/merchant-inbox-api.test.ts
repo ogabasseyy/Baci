@@ -168,4 +168,45 @@ describe('sendMerchantInboxReply', () => {
       code: 'delivery_unknown',
     });
   });
+  it.each([
+    [502, 'bare gateway 502'],
+    [504, 'bare gateway 504'],
+    [401, 'bare 401'],
+  ])('reports unknown delivery for a %i with no readable code (%s)', async (status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status,
+        json: async () => {
+          throw new Error('<html>Bad gateway</html>');
+        },
+      }))
+    );
+    await expect(sendMerchantInboxReply(7, 'In stock')).resolves.toEqual({
+      ok: false,
+      code: 'delivery_unknown',
+    });
+  });
+
+  it('reports unknown delivery for an unrecognised code from a proxy', async () => {
+    stubFetch({ status: 502, body: { code: 'upstream_timeout' } });
+    await expect(sendMerchantInboxReply(7, 'In stock')).resolves.toEqual({
+      ok: false,
+      code: 'delivery_unknown',
+    });
+  });
+
+  it.each([
+    [403, 'forbidden', 'forbidden'],
+    [401, 'unauthorized', 'unauthorized'],
+    [404, 'not_found', 'not_found'],
+    [503, 'temporarily_unavailable', 'temporarily_unavailable'],
+  ])('keeps the definite %i %s rejection', async (status, code, expected) => {
+    stubFetch({ status, body: { code } });
+    await expect(sendMerchantInboxReply(7, 'In stock')).resolves.toEqual({
+      ok: false,
+      code: expected,
+    });
+  });
 });

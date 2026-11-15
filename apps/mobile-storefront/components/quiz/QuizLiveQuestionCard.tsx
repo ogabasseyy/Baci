@@ -139,10 +139,11 @@ export function QuizLiveQuestionCard({
               accessibilityState={{ disabled, selected }}
               disabled={disabled}
               onPress={() => onAnswer(option.id)}
-              style={[
+              style={({ pressed }) => [
                 styles.answerTile,
                 useGrid ? styles.answerTileGrid : styles.answerTileRow,
                 disabled && !selected ? styles.answerTileDisabled : undefined,
+                pressed ? styles.answerTilePressed : undefined,
               ]}
             >
               <QuizTicketBackdrop

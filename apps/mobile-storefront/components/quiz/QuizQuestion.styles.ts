@@ -98,6 +98,8 @@ export function createQuizQuestionStyles(colors: QuizThemeColors) {
       gap: 12,
     },
     answerTileDisabled: { opacity: 0.5 },
+    // The tile dips under the finger so a tap is felt on both platforms.
+    answerTilePressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
     answerTileLetter: {
       borderRadius: 999,
       color: '#FFFFFF',

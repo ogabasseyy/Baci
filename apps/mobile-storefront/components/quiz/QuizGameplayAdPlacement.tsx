@@ -29,6 +29,11 @@ export function QuizGameplayAdPlacement({
 }: QuizGameplayAdPlacementProps) {
   const inline = layout === 'inline';
   const { width: windowWidth } = useWindowDimensions();
+  // The finished-screen ad is a fixed-size rectangle. In a window narrower
+  // than the ad (split screen) it would clip, so it is left out instead,
+  // before the native ads module is touched.
+  if (inline && windowWidth < QUIZ_INLINE_AD_WIDTH) return null;
+
   const { BannerAd, BannerAdSize } =
     require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
 
@@ -39,10 +44,6 @@ export function QuizGameplayAdPlacement({
       valueMicros: event.value,
     });
   };
-
-  // The finished-screen ad is a fixed-size rectangle. In a window narrower
-  // than the ad (split screen) it would clip, so it is left out instead.
-  if (inline && windowWidth < QUIZ_INLINE_AD_WIDTH) return null;
 
   return (
     <View

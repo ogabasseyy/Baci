@@ -130,7 +130,14 @@ function readRpcMutationError(
     error?.message?.includes('evergreen_reserve_protected') ||
     error?.message?.includes('min_spacing_conflict') ||
     error?.message?.includes('min_spacing_active') ||
-    error?.message?.includes('reschedule_request_digest_mismatch')
+    error?.message?.includes('reschedule_request_digest_mismatch') ||
+    error?.message?.includes('active_reservation_already_exists') ||
+    error?.message?.includes('article_identity_conflict') ||
+    error?.message?.includes('article_identity_already_assigned') ||
+    error?.message?.includes('blog_post_already_published') ||
+    error?.message?.includes('cannot_reschedule_published_blog_post') ||
+    error?.message?.includes('cannot_cancel_published_blog_post') ||
+    error?.message?.includes('reservation_request_payload_mismatch')
   ) {
     return {
       error: error.message || 'Schedule conflicts with blog release policy',

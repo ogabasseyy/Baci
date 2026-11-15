@@ -217,7 +217,11 @@ export async function createBlogPost(request: NextRequest) {
       word_count: calculateWordCount(postData.content),
       reading_time_minutes: calculateReadingTime(postData.content),
       published_at:
-        postData.status === 'published' ? new Date().toISOString() : null,
+        postData.status === 'published'
+          ? new Date().toISOString()
+          : postData.status === 'scheduled'
+            ? (postData.published_at ?? null)
+            : null,
     };
     const persistence = await persistBlogPostMutation({
       embeddedProductIds,

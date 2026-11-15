@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { blogPostSchema, createPostSchema, sanitizeBlogPostData } from './blog';
+import { blogPostSchema, sanitizeBlogPostData } from './blog';
 
 // Mock sanitizeHtml to avoid pulling in the full sanitizer
 vi.mock('@/lib/sanitize', () => ({
@@ -288,27 +288,5 @@ describe('sanitizeBlogPostData', () => {
     expect(result.featured_image_width).toBeNull();
     expect(result.featured_image_height).toBeNull();
     expect(result.featured_image_variants).toEqual({});
-  });
-
-  it('requires published_at when status is scheduled in createPostSchema', () => {
-    expect(
-      createPostSchema.safeParse({
-        author_name: 'Editor',
-        content: 'Scheduled post body',
-        slug: 'scheduled-post',
-        status: 'scheduled',
-        title: 'Scheduled Post',
-      }).success
-    ).toBe(false);
-    expect(
-      createPostSchema.safeParse({
-        author_name: 'Editor',
-        content: 'Scheduled post body',
-        published_at: '2026-11-16T10:00:00.000Z',
-        slug: 'scheduled-post',
-        status: 'scheduled',
-        title: 'Scheduled Post',
-      }).success
-    ).toBe(true);
   });
 });

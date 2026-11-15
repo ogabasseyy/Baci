@@ -198,16 +198,17 @@ export async function updateBlogPost(
         updateData.content as string
       );
     }
-    if (
-      targetStatus === 'scheduled' &&
-      !updateData.published_at &&
-      !existingPost.published_at &&
-      !existingPost.requested_publish_at
-    ) {
-      return blogPostError(
-        'published_at is required when status is scheduled',
-        400
-      );
+    if (targetStatus === 'scheduled' && !updateData.published_at) {
+      if (existingPost.published_at) {
+        // Keep existing published_at untouched on partial updates.
+      } else if (existingPost.requested_publish_at) {
+        updateData.published_at = existingPost.requested_publish_at;
+      } else {
+        return blogPostError(
+          'published_at is required when status is scheduled',
+          400
+        );
+      }
     }
     if (
       existingPost.status === 'published' &&

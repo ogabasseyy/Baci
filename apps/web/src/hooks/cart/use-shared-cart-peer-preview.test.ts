@@ -136,7 +136,7 @@ it('shows a quantity change in the second tab before the save returns', async ()
   expect(watching.result.current.version).toBe(3);
 });
 
-it('lets the second tab add when the previewed cart has room', async () => {
+it('keeps the second tab’s own lines for commands while it shows the preview', async () => {
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: true,
     snapshot: snapshot(10, 3),
@@ -162,15 +162,17 @@ it('lets the second tab add when the previewed cart has room', async () => {
     expect(watching.result.current.cart[0]?.quantity).toBe(1)
   );
 
-  // The shopper sees room for one more, so the add must not be dropped.
+  // Until the reduction is confirmed, this tab's own line is still at the
+  // cap: an add built on the preview could reach the server first and be
+  // rejected, or show eleven units.
+  expect(watching.result.current.ownCart?.[0]?.quantity).toBe(10);
   act(() => {
     watching.result.current.addToCart(product(), 1);
   });
-  await waitFor(() =>
-    expect(
-      watching.result.current.cart.some((item) => item.pendingTempId != null)
-    ).toBe(true)
-  );
+  expect(
+    watching.result.current.ownCart?.some((item) => item.pendingTempId != null)
+  ).toBe(false);
+  expect(watching.result.current.cart[0]?.quantity).toBe(1);
 });
 
 it('shows a second tab the higher quantity when a unit is added to a line', async () => {

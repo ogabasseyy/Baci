@@ -64,29 +64,10 @@ export function useSharedCart(
     realtimeConnected: runtime.realtimeConnected || connected,
   });
   useCartSendQueue({ ...runtime, ...snapshots, ...provisioning });
-  // While a sibling's edit is shown, actions read the same cart the shopper
-  // sees: a capacity check against the unpreviewed lines could silently
-  // drop an add that the visible cart has room for.
-  const actions = createCartActions(
-    peerLines
-      ? {
-          ...runtime,
-          stateRef: {
-            get current() {
-              const own = runtime.stateRef.current;
-              return {
-                ...own,
-                display: applyCartPeerPreview(own.display, peerLines),
-              };
-            },
-            // Writes go to the real ref, so this never becomes a trap.
-            set current(next) {
-              runtime.stateRef.current = next;
-            },
-          },
-        }
-      : runtime
-  );
+  // Actions always work from this tab's own state. A sibling's preview is
+  // a display hint only: commands and capacity checks built on it could be
+  // rejected or reordered against the save it anticipates.
+  const actions = createCartActions(runtime);
   const recovery = createCartRecovery({
     ...runtime,
     ...snapshots,
@@ -172,6 +153,7 @@ export function useSharedCart(
     experienceCommandPort: createExperiencePortForCart(runtime),
     addToCart,
     cart: visible,
+    ownCart: state.display,
     cartCount,
     cartId: state.cartId,
     cartTotal,

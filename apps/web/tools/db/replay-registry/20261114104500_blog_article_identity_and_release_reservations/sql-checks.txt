@@ -1,2 +1,7 @@
-supabase/tests/blog_article_identity_and_release_reservations.sql
-supabase/tests/blog_article_identity_and_release_reservations_concurrency.sql
+supabase/tests/blog_release_identity_and_permissions.sql
+supabase/tests/blog_release_reserve_and_caps.sql
+supabase/tests/blog_release_caps_reschedule_and_recovery.sql
+supabase/tests/blog_release_spacing_and_recovery.sql
+supabase/tests/blog_release_finalizer_triggers.sql
+supabase/tests/blog_release_reschedule_policy_and_guards.sql
+supabase/tests/blog_release_concurrency.sql

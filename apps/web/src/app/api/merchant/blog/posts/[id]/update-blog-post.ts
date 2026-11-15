@@ -6,10 +6,7 @@ import {
   validateBlogImageVariantIntegrity,
 } from '@/lib/blog-discover-readiness';
 import { calculateReadingTime, calculateWordCount } from '@/lib/blog-utils';
-import { revalidateBlogPosts } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getBlogEmbeddingText } from '@/lib/embeddings';
-import { getMerchantBlogRevalidationContext } from '@/lib/get-merchant-blog-cache-identifiers';
 import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
 import { parseBlogPostMutationBody } from '../blog-post-mutation-body';
 import { persistBlogPostMutation } from '../persist-blog-post-mutation';
@@ -17,7 +14,7 @@ import { applyFeaturedImageDefaults } from './apply-featured-image-defaults';
 import { featuredImageVariantsEqual } from './featured-image-variants';
 import { loadBlogPostForUpdate } from './load-blog-post-for-update';
 import type { RouteParams } from './route-params';
-import { scheduleUpdatedPostEffects } from './updated-post-effects';
+import { runBlogPostUpdateEffects } from './run-blog-post-update-effects';
 import { validateUpdatedBlogPostSlug } from './validate-updated-blog-post-slug';
 
 function blogPostError(error: string, status: number) {
@@ -201,8 +198,16 @@ export async function updateBlogPost(
         updateData.content as string
       );
     }
-    if (existingPost.status === 'published' && targetStatus === 'published') {
-      updateData.published_at = existingPost.published_at;
+    if (
+      existingPost.status === 'published' &&
+      targetStatus === 'published' &&
+      (updateData.published_at !== undefined ||
+        existingPost.published_at == null)
+    ) {
+      updateData.published_at =
+        existingPost.published_at ??
+        existingPost.requested_publish_at ??
+        new Date().toISOString();
     } else if (
       updateData.status === 'published' &&
       existingPost.status !== 'published' &&
@@ -210,76 +215,47 @@ export async function updateBlogPost(
     ) {
       updateData.published_at = new Date().toISOString();
     }
-    const persistence = await persistBlogPostMutation({
+    let persistence = await persistBlogPostMutation({
       embeddedProductIds,
       merchantId: access.merchantId,
       postData: updateData,
       postId: id,
       supabase: auth.supabase,
     });
+    if (
+      persistence.post === null &&
+      persistence.code === 'scheduled_reservation_requires_reschedule_rpc' &&
+      typeof updateData.published_at === 'string'
+    ) {
+      const { published_at: newRequestedPublishAt, ...remainingUpdateData } =
+        updateData;
+      persistence = await persistBlogPostMutation({
+        embeddedProductIds,
+        merchantId: access.merchantId,
+        postData: remainingUpdateData,
+        postId: id,
+        reschedulePublishAt: newRequestedPublishAt,
+        supabase: auth.supabase,
+      });
+    }
     if (persistence.post === null) {
-      return NextResponse.json(
-        { error: persistence.error ?? 'Failed to update post' },
-        { status: persistence.status ?? 500 }
+      return blogPostError(
+        persistence.error ?? 'Failed to update post',
+        persistence.status ?? 500
       );
     }
     const updatedPost = persistence.post;
-    if (
-      updatedPost &&
-      (updateData.content || updateData.title || updateData.excerpt)
-    ) {
-      const embeddingText = getBlogEmbeddingText({
-        title: updatedPost.title,
-        excerpt: updatedPost.excerpt,
-        content: updatedPost.content,
-        category: updatedPost.category,
-      });
-      void auth.supabase.functions
-        .invoke('generate-embedding', {
-          body: {
-            id: updatedPost.id,
-            text: embeddingText,
-            type: 'blog',
-          },
-        })
-        .then(({ error }) => {
-          if (error)
-            console.error('Failed to regenerate blog embedding:', error);
-        })
-        .catch((error) =>
-          console.error('Failed to regenerate blog embedding:', error)
-        );
-    }
-    let blogRevalidation:
-      | Awaited<ReturnType<typeof getMerchantBlogRevalidationContext>>
-      | undefined;
-    try {
-      blogRevalidation = await getMerchantBlogRevalidationContext(
-        auth.supabase,
-        access.merchantId
-      );
-      revalidateBlogPosts({
-        merchantId: access.merchantId,
-        identifiers: blogRevalidation.identifiers,
-        canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
-        listingCategories: [existingPost.category, updatedPost.category].filter(
-          (category): category is string => Boolean(category)
-        ),
-        postSlugs: [existingPost.slug, updatedPost.slug],
-      });
-    } catch (error) {
-      console.error('Failed post-publication blog revalidation:', {
-        merchantId: access.merchantId,
-        postSlug: updatedPost.slug,
-        error,
-      });
-    }
-    scheduleUpdatedPostEffects({
-      blogRevalidation,
+    await runBlogPostUpdateEffects({
+      existingCategory: existingPost.category,
+      existingSlug: existingPost.slug,
+      existingStatus: existingPost.status,
       featuredImageUrlChanged,
-      post: updatedPost,
-      publishingNow,
+      merchantId: access.merchantId,
+      shouldRegenerateEmbedding: Boolean(
+        updateData.content || updateData.title || updateData.excerpt
+      ),
       supabase: auth.supabase,
+      updatedPost,
     });
     return NextResponse.json(
       discoverImageReadiness.ready

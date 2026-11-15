@@ -142,12 +142,15 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
     );
     const claimedPostIds = new Set<string>();
 
+    const seenClaimRowIds = new Set<string>();
+
     if (Array.isArray(claimedRows)) {
       for (const row of claimedRows as Array<{
         id: string;
         status?: string | null;
       }>) {
-        if (row.status === undefined || row.status === 'published') {
+        seenClaimRowIds.add(row.id);
+        if (row.status === 'published') {
           claimedPostIds.add(row.id);
           continue;
         }
@@ -171,14 +174,37 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
           slug: originalPost?.slug ?? null,
           code,
           details: {
-            status: row.status,
+            status: row.status ?? null,
             reason,
+          },
+        });
+      }
+
+      for (const post of eligiblePosts) {
+        if (seenClaimRowIds.has(post.id)) {
+          continue;
+        }
+        skipped.push({
+          id: post.id,
+          slug: post.slug,
+          code: 'BLOG_RELEASE_RESCHEDULED_SKIPPED',
+          details: {
+            reason:
+              'Post was rescheduled or no longer due when the claim update ran',
           },
         });
       }
     } else {
       for (const post of eligiblePosts) {
-        claimedPostIds.add(post.id);
+        skipped.push({
+          id: post.id,
+          slug: post.slug,
+          code: 'BLOG_RELEASE_NOT_PUBLISHED',
+          details: {
+            status: null,
+            reason: 'Claim update did not return row status projection',
+          },
+        });
       }
     }
 

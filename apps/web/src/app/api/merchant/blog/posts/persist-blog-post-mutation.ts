@@ -20,12 +20,18 @@ type PersistBlogPostMutationInput = {
   merchantId: string;
   postData: Record<string, unknown>;
   postId: string | null;
+  reschedulePublishAt?: string;
   supabase: SupabaseClient;
 };
 
 type PersistBlogPostMutationResult =
   | { error: null; post: BlogPostMutationRecord; status: null }
-  | { error: string; post: null; status: 400 | 403 | 404 | 409 | 500 };
+  | {
+      code?: string;
+      error: string;
+      post: null;
+      status: 400 | 403 | 404 | 409 | 500;
+    };
 
 function readString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -41,7 +47,21 @@ function readRpcMutationError(
     details?: string;
     message?: string;
   } | null
-): { error: string; status: 400 | 403 | 404 | 409 | 500 } {
+): {
+  code?: string;
+  error: string;
+  status: 400 | 403 | 404 | 409 | 500;
+} {
+  if (
+    error?.code === '42501' &&
+    error.message?.includes('scheduled_reservation_requires_reschedule_rpc')
+  ) {
+    return {
+      code: 'scheduled_reservation_requires_reschedule_rpc',
+      error: 'Reserved post schedule must be updated via the reschedule RPC',
+      status: 409,
+    };
+  }
   if (
     error?.code === 'P0002' &&
     error.message === 'embedded_product_not_found_or_not_owned'
@@ -75,6 +95,39 @@ function readRpcMutationError(
     return {
       error: 'Referenced media was removed during save',
       status: 500,
+    };
+  }
+  if (
+    error?.code === '42501' &&
+    error.message?.includes('blog_release_access_denied')
+  ) {
+    return { error: 'Permission denied', status: 403 };
+  }
+  if (error?.code === 'P0002') {
+    return { error: 'Post or active reservation not found', status: 404 };
+  }
+  if (
+    error?.code === '22023' ||
+    error?.message?.includes('outside_publish_window_lagos') ||
+    error?.message?.includes('invalid_reschedule_input') ||
+    error?.message?.includes('blog_post_archived')
+  ) {
+    return {
+      error: error.message || 'Invalid schedule timestamp',
+      status: 400,
+    };
+  }
+  if (
+    error?.code === '40001' ||
+    error?.message?.includes('daily_cap_exceeded') ||
+    error?.message?.includes('fast_track_cap_exceeded') ||
+    error?.message?.includes('evergreen_reserve_protected') ||
+    error?.message?.includes('min_spacing_active') ||
+    error?.message?.includes('reschedule_request_digest_mismatch')
+  ) {
+    return {
+      error: error.message || 'Schedule conflicts with blog release policy',
+      status: 409,
     };
   }
   return { error: 'Failed to persist post', status: 500 };
@@ -126,6 +179,7 @@ export async function persistBlogPostMutation({
   merchantId,
   postData,
   postId,
+  reschedulePublishAt,
   supabase,
 }: PersistBlogPostMutationInput): Promise<PersistBlogPostMutationResult> {
   if (embeddedProductIds && embeddedProductIds.length > 0) {
@@ -173,16 +227,24 @@ export async function persistBlogPostMutation({
     featured_image_url: readNullableString(postData.featured_image_url),
     featured_image_variants: postData.featured_image_variants ?? null,
   };
-  const { data, error } = await supabase.rpc(
-    'mutate_merchant_blog_post_with_product_links',
-    {
-      p_media_paths: blogPostMediaPaths(savedMediaRow),
-      p_merchant_id: merchantId,
-      p_post_data: postData,
-      p_post_id: postId,
-      p_product_ids: embeddedProductIds ?? null,
-    }
-  );
+  const mediaPaths = blogPostMediaPaths(savedMediaRow);
+  const { data, error } =
+    typeof reschedulePublishAt === 'string' && postId !== null
+      ? await supabase.rpc('reschedule_and_mutate_merchant_blog_post_v1', {
+          p_media_paths: mediaPaths,
+          p_merchant_id: merchantId,
+          p_new_requested_publish_at: reschedulePublishAt,
+          p_post_data: postData,
+          p_post_id: postId,
+          p_product_ids: embeddedProductIds ?? null,
+        })
+      : await supabase.rpc('mutate_merchant_blog_post_with_product_links', {
+          p_media_paths: mediaPaths,
+          p_merchant_id: merchantId,
+          p_post_data: postData,
+          p_post_id: postId,
+          p_product_ids: embeddedProductIds ?? null,
+        });
   const post = readMutationPost({
     fallback: postData,
     merchantId,
@@ -196,6 +258,7 @@ export async function persistBlogPostMutation({
       error,
     });
     return {
+      code: error === null ? undefined : mappedError.code,
       error:
         error === null
           ? postId

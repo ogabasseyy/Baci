@@ -40,8 +40,24 @@ run_psql_file() {
 }
 
 run_psql_file "${ROOT_DIR}/supabase/tests/blog_article_identity_and_release_reservations_fixture.sql"
-run_psql_file "${ROOT_DIR}/supabase/migrations/20261114104500_blog_article_identity_and_release_reservations.sql"
-run_psql_file "${ROOT_DIR}/supabase/tests/blog_article_identity_and_release_reservations.sql"
-run_psql_file "${ROOT_DIR}/supabase/tests/blog_article_identity_and_release_reservations_concurrency.sql"
+
+for migration in "${ROOT_DIR}"/supabase/migrations/202611141045*.sql; do
+  run_psql_file "${migration}"
+done
+
+docker cp "${ROOT_DIR}/supabase/tests" "${CONTAINER_NAME}:/tmp/tests"
+
+for test_file in \
+  blog_release_identity_and_permissions.sql \
+  blog_release_reserve_and_caps.sql \
+  blog_release_caps_reschedule_and_recovery.sql \
+  blog_release_spacing_and_recovery.sql \
+  blog_release_finalizer_triggers.sql \
+  blog_release_reschedule_policy_and_guards.sql \
+  blog_release_concurrency.sql; do
+  echo "Running ${test_file}..."
+  docker exec "${CONTAINER_NAME}" \
+    psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f "/tmp/tests/${test_file}"
+done
 
 echo "All blog article identity and release reservation SQL tests passed."

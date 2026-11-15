@@ -182,7 +182,7 @@ describe('scheduled-post release trigger outcomes', () => {
     expect(mockDispatchZohoBlogCampaign).not.toHaveBeenCalled();
   });
 
-  it('treats rows without status property as claimed for backward compatibility', async () => {
+  it('skips rows missing status projection safely instead of dispatching them', async () => {
     const posts = [
       createScheduledPost({ id: 'post-1', slug: 'slug-1', title: 'Post 1' }),
     ];
@@ -193,13 +193,25 @@ describe('scheduled-post release trigger outcomes', () => {
     await expect(response.json()).resolves.toMatchObject({
       success: true,
       processed: 1,
-      published: ['post-1'],
-      skipped: [],
+      published: [],
+      skipped: [
+        {
+          id: 'post-1',
+          slug: 'slug-1',
+          code: 'BLOG_RELEASE_NOT_PUBLISHED',
+          details: {
+            status: null,
+            reason:
+              'Post remained non-published after database release trigger',
+          },
+        },
+      ],
     });
-    expect(mockRevalidateBlogPosts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateBlogPosts).not.toHaveBeenCalled();
+    expect(mockDispatchZohoBlogCampaign).not.toHaveBeenCalled();
   });
 
-  it('rechecks due published_at during claim update so rescheduled future posts are not claimed or dispatched', async () => {
+  it('rechecks due published_at during claim update and records rescheduled rows in skipped', async () => {
     const posts = [
       createScheduledPost({
         id: 'post-rescheduled',
@@ -215,7 +227,17 @@ describe('scheduled-post release trigger outcomes', () => {
       success: true,
       processed: 1,
       published: [],
-      skipped: [],
+      skipped: [
+        {
+          id: 'post-rescheduled',
+          slug: 'rescheduled-post',
+          code: 'BLOG_RELEASE_RESCHEDULED_SKIPPED',
+          details: {
+            reason:
+              'Post was rescheduled or no longer due when the claim update ran',
+          },
+        },
+      ],
     });
     expect(mockSupabase.lte).toHaveBeenCalledTimes(2);
     expect(mockSupabase.lte).toHaveBeenLastCalledWith(

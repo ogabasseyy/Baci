@@ -189,6 +189,14 @@ describe('sendMerchantInboxReply', () => {
     });
   });
 
+  it('treats an unrecognised code on a read as a retryable outage', async () => {
+    stubFetch({ status: 502, body: { code: 'upstream_timeout' } });
+    await expect(fetchMerchantInboxConversations()).resolves.toEqual({
+      ok: false,
+      code: 'temporarily_unavailable',
+    });
+  });
+
   it('reports unknown delivery for an unrecognised code from a proxy', async () => {
     stubFetch({ status: 502, body: { code: 'upstream_timeout' } });
     await expect(sendMerchantInboxReply(7, 'In stock')).resolves.toEqual({

@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import {
   type MerchantInboxConversation,
@@ -36,25 +36,32 @@ const API_CODES = new Set<string>([
   'temporarily_unavailable',
 ]);
 
+const errorPayloadSchema = z.object({ code: z.string() });
+
+function isKnownCode(code: string | null): code is MerchantInboxApiErrorCode {
+  return code !== null && KNOWN_CODES.has(code);
+}
+
 const BASE_PATH = '/api/merchant/inbox/conversations';
 
 async function failureFrom(
   response: Response,
   isReply: boolean
 ): Promise<MerchantInboxApiFailure> {
-  let code: unknown;
+  let code: string | null = null;
   try {
-    code = ((await response.json()) as { code?: unknown }).code;
+    const parsed = errorPayloadSchema.safeParse(await response.json());
+    code = parsed.success ? parsed.data.code : null;
   } catch {
     code = null;
   }
-  if (typeof code === 'string' && KNOWN_CODES.has(code)) {
-    return { ok: false, code: code as MerchantInboxApiErrorCode };
+  if (isKnownCode(code)) {
+    return { ok: false, code };
   }
   // A reply that failed without a code this API emits (a bare gateway
   // 502/504, an HTML page) may still have been delivered: never report it
   // as "not sent, try again", which invites a duplicate.
-  if (isReply && !(typeof code === 'string' && API_CODES.has(code))) {
+  if (isReply && !(code !== null && API_CODES.has(code))) {
     return { ok: false, code: 'delivery_unknown' };
   }
   // No readable code (empty or HTML body): classify by status so a request

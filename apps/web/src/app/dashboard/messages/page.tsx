@@ -89,6 +89,7 @@ export default function MessagesPage() {
                 <ConversationThread
                   key={inbox.selectedId}
                   messages={inbox.messages}
+                  ownReplyId={inbox.ownReplyId}
                   state={inbox.threadState}
                 />
                 {/* Keyed so a draft never carries into another conversation. */}

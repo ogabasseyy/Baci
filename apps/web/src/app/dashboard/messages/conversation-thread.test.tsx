@@ -84,7 +84,7 @@ describe('ConversationThread scrolling', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('always shows the reply the merchant just sent', () => {
+  it('jumps to the reply this browser just had accepted', () => {
     const { rerender } = render(
       <ConversationThread state="ready" messages={[message(1)]} />
     );
@@ -93,10 +93,30 @@ describe('ConversationThread scrolling', () => {
     rerender(
       <ConversationThread
         state="ready"
+        ownReplyId={2}
         messages={[message(1), message(2, 'store')]}
       />
     );
     expect(thread.position()).toBe(AT_BOTTOM);
+  });
+
+  it('does not jump for a store message sent from elsewhere', () => {
+    const { rerender } = render(
+      <ConversationThread state="ready" messages={[message(1)]} />
+    );
+    const thread = layoutThread();
+    thread.scrollTo(900);
+    rerender(
+      <ConversationThread
+        state="ready"
+        ownReplyId={null}
+        messages={[message(1), message(2, 'store')]}
+      />
+    );
+    expect(thread.position()).toBe(AT_BOTTOM - 900);
+    expect(
+      screen.getByRole('button', { name: /new messages/i })
+    ).toBeInTheDocument();
   });
 
   it('clears the jump button once the merchant scrolls back down', () => {

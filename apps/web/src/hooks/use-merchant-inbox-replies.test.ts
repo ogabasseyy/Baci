@@ -34,6 +34,7 @@ describe('useMerchantInbox replies', () => {
     expect(api.sendMerchantInboxReply).toHaveBeenCalledWith(7, 'In stock');
     expect(result.current.messages.map((m) => m.id)).toEqual([30, 31]);
     expect(result.current.sendError).toBeNull();
+    expect(result.current.ownReplyId).toBe(31);
   });
 
   it('keeps the thread and exposes the error when a reply fails', async () => {

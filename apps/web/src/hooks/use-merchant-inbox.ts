@@ -100,6 +100,9 @@ export function useMerchantInbox() {
   const [messages, setMessages] = useState<MerchantInboxMessage[]>([]);
   const [threadState, setThreadState] =
     useState<MerchantInboxThreadState>('idle');
+  // Id of the reply this browser just had accepted: only it may pull the
+  // thread to the bottom (see ConversationThread).
+  const [ownReplyId, setOwnReplyId] = useState<number | null>(null);
   const [sendingIds, setSendingIds] = useState<number[]>([]);
   const [sendError, setSendError] = useState<MerchantInboxApiErrorCode | null>(
     null
@@ -116,6 +119,7 @@ export function useMerchantInbox() {
     // Cleared together with the selection, so an error from the previous
     // conversation never renders in the next one.
     setSendError(null);
+    setOwnReplyId(null);
     setSelectedId(conversationId);
   }
 
@@ -242,6 +246,7 @@ export function useMerchantInbox() {
     });
     if (stillOpen) {
       setMessages((current) => mergeMessage(current, result.message));
+      setOwnReplyId(result.message.id);
     }
     return true;
   }
@@ -251,6 +256,7 @@ export function useMerchantInbox() {
     hasMoreConversations,
     listState,
     messages,
+    ownReplyId,
     selectConversation,
     selectedConversation:
       conversations.find((conversation) => conversation.id === selectedId) ??

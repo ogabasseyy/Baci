@@ -9,6 +9,8 @@ import { formatInboxTime, senderLabel } from './inbox-format';
 
 type ConversationThreadProps = {
   messages: MerchantInboxMessage[];
+  /** The reply this browser just had accepted; only it forces a jump. */
+  ownReplyId?: number | null;
   state: MerchantInboxThreadState;
 };
 
@@ -17,6 +19,7 @@ const NEAR_BOTTOM_PX = 80;
 
 export function ConversationThread({
   messages,
+  ownReplyId = null,
   state,
 }: ConversationThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -24,7 +27,7 @@ export function ConversationThread({
   const [hasNewBelow, setHasNewBelow] = useState(false);
   const last = messages.at(-1);
   const lastId = last?.id;
-  const lastIsMine = last?.sender === 'store';
+  const lastIsMine = lastId !== undefined && lastId === ownReplyId;
 
   /** Moves only the thread's own scroller, never the page around it. */
   function scrollToLatest() {
@@ -45,7 +48,8 @@ export function ConversationThread({
   }
 
   // Follow new messages only while the merchant is at the latest message (or
-  // just sent one). Someone reading older history keeps their place and gets
+  // just sent one here; a store message from another tab, another staff
+  // member or the assistant does not count). Someone reading older history keeps their place and gets
   // a button instead.
   // biome-ignore lint/correctness/useExhaustiveDependencies: lastId is the trigger; refs and the latest sender are read at that moment.
   useEffect(() => {

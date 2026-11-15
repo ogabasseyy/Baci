@@ -1,7 +1,7 @@
 'use client';
 
 import type { User } from '@supabase/supabase-js';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { useCheckoutFormState } from './use-checkout-form-state';
 
 type CheckoutForm = ReturnType<typeof useCheckoutFormState>;
@@ -28,9 +28,11 @@ export function useCheckoutCustomerPrefill({
   setFields,
 }: UseCheckoutCustomerPrefillOptions) {
   const { customerEmail, customerPhone, firstName, lastName } = values;
+  const prefilledUserId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || prefilledUserId.current === user.id) return;
+    prefilledUserId.current = user.id;
 
     const updates: Partial<ContactValues> = {};
     if (user.email && !customerEmail) {

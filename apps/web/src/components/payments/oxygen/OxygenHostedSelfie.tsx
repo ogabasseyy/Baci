@@ -1,9 +1,11 @@
 'use client';
 import { ArrowLeft, Smartphone } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { OxygenExternalSelfieWait } from './OxygenExternalSelfieWait';
 import { OxygenPhoneHandoff } from './OxygenPhoneHandoff';
 import { OxygenSelfieLoading } from './OxygenSelfieLoading';
 import { OxygenSelfieSessionRecovery } from './OxygenSelfieSessionRecovery';
+import { selfieLinkExpired } from './selfie-link-expired';
 import { useOxygenHostedSelfieRenewal } from './use-oxygen-hosted-selfie-renewal';
 import { useOxygenSelfieStatus } from './use-oxygen-selfie-status';
 
@@ -47,19 +49,23 @@ export function OxygenHostedSelfie({
   const frame = useRef<HTMLIFrameElement>(null);
   const lastHint = useRef(0);
   const [phone, setPhone] = useState(false);
+  const [external, setExternal] = useState(false);
+  const [expiredAtClick, setExpiredAtClick] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     void url; // A different link starts a new capture/loading session.
     setLoaded(false);
     setConfirming(false);
+    setExternal(false);
+    setExpiredAtClick(false);
   }, [url]);
   const trustedOrigin = isOxygenSelfieUrl(url, selfieOrigins)
     ? new URL(url).origin
     : null;
   const renewal = useOxygenHostedSelfieRenewal(
     url,
-    Boolean(trustedOrigin) && !phone,
+    Boolean(trustedOrigin) && !phone && !external,
     onRenew,
     onConfirmed
   );
@@ -68,6 +74,15 @@ export function OxygenHostedSelfie({
     onConfirmed
   );
   const retryFromHint = useEffectEvent(() => status.retry());
+  useEffect(() => {
+    if (!external) return;
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') retryFromHint();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [external]);
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (
@@ -109,7 +124,13 @@ export function OxygenHostedSelfie({
           onPrepared={status.retry}
           onBack={() => setPhone(false)}
         />
-      ) : trustedOrigin && (renewal.expired || renewal.renewing) ? (
+      ) : external ? (
+        <OxygenExternalSelfieWait
+          onCheck={status.retry}
+          onBack={() => setExternal(false)}
+        />
+      ) : trustedOrigin &&
+        (expiredAtClick || renewal.expired || renewal.renewing) ? (
         <OxygenSelfieSessionRecovery
           renewing={renewal.renewing}
           error={renewal.error}
@@ -138,6 +159,30 @@ export function OxygenHostedSelfie({
       )}
       {workflowId && !phone && (
         <footer className="shrink-0 border-t border-gray-100 bg-white p-3">
+          {trustedOrigin &&
+            !expiredAtClick &&
+            !renewal.expired &&
+            !renewal.renewing && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  if (selfieLinkExpired(url)) {
+                    event.preventDefault();
+                    setExpiredAtClick(true);
+                    renewal.retry();
+                    return;
+                  }
+                  setExternal(true);
+                  setConfirming(false);
+                  status.retry();
+                }}
+                className="mb-3 flex min-h-11 items-center justify-center rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900"
+              >
+                Open camera in a new tab
+              </a>
+            )}
           <button
             type="button"
             onClick={() => {

@@ -25,11 +25,13 @@ export function OxygenBankFields({
   busy,
   defaults = {},
   active = true,
+  onVerifiedChange,
 }: {
   workflowId?: string;
   busy: boolean;
   active?: boolean;
   defaults?: { bank_code?: string; account_number?: string };
+  onVerifiedChange?: (verified: boolean) => void;
 }) {
   const bankId = useId();
   const [banks, setBanks] = useState<{ name: string; code: string }[]>([]);
@@ -65,6 +67,7 @@ export function OxygenBankFields({
   }, [workflowId]);
   function invalidate() {
     generation.current++;
+    onVerifiedChange?.(false);
     setName('');
     setError('');
     setResolving(false);
@@ -90,6 +93,7 @@ export function OxygenBankFields({
       return;
     const token = ++generation.current;
     setResolving(true);
+    onVerifiedChange?.(false);
     setError('');
     setName('');
     try {
@@ -101,7 +105,10 @@ export function OxygenBankFields({
           account_number: number,
         })
       );
-      if (generation.current === token) setName(result.accountName);
+      if (generation.current === token) {
+        setName(result.accountName);
+        onVerifiedChange?.(Boolean(result.accountName.trim()));
+      }
     } catch {
       if (generation.current === token)
         setError(

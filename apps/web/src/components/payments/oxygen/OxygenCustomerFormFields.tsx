@@ -6,11 +6,11 @@ import { OxygenBankFields } from './OxygenBankFields';
 import { OxygenBirthDateField } from './OxygenBirthDateField';
 import { OxygenContactFields } from './OxygenContactFields';
 import styles from './OxygenCustomerFormFields.module.css';
+import { OxygenCustomerFormNavigation } from './OxygenCustomerFormNavigation';
 import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
 import { OxygenFormError } from './OxygenFormError';
 import { OxygenFormProgress } from './OxygenFormProgress';
 import { OxygenIdentityField } from './OxygenIdentityField';
-import { OxygenLoadingButton } from './OxygenLoadingButton';
 import { OxygenStepHeading } from './OxygenStepHeading';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { OxygenVerificationTrust } from './OxygenVerificationTrust';
@@ -68,6 +68,7 @@ export function CustomerFormFields({
 }) {
   const defaults = initialDraft?.fields ?? {};
   const [step, setStep] = useState(Math.min(initialDraft?.step ?? 0, 1));
+  const [bankVerified, setBankVerified] = useState(false);
   const [residentialFile, setResidentialFile] = useState<File | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const reportedResume = useRef(false);
@@ -237,6 +238,7 @@ export function CustomerFormFields({
         >
           <OxygenBankFields
             active={step === 1}
+            onVerifiedChange={setBankVerified}
             workflowId={workflowId}
             busy={busy}
             defaults={defaults}
@@ -257,43 +259,21 @@ export function CustomerFormFields({
           />
         </div>
         <OxygenVerificationTrust />
-        <div className="flex items-center justify-between gap-3 pt-1">
-          {step > 0 ? (
-            <button
-              type="button"
-              disabled={busy || Boolean(continuing)}
-              className="min-h-11 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600"
-              onClick={() => {
-                clearOxygenFormErrors(formRef.current, formErrorId);
-                setFormError('');
-                capture(step - 1);
-                setStep(step - 1);
-                onProgress?.(step === 2 ? 'bank' : 'identity');
-              }}
-            >
-              Back
-            </button>
-          ) : (
-            <span className="hidden sm:block" />
-          )}
-          <OxygenLoadingButton
-            className="flex-1 sm:flex-none"
-            loading={Boolean(continuing)}
-            pendingLabel={
-              continuing === 'saving'
-                ? 'Saving details…'
-                : 'Starting verification…'
-            }
-            disabled={busy || !phone || saveBlocked}
-            type="submit"
-          >
-            {step === 0
-              ? 'Continue to bank details'
-              : step === 1
-                ? 'Continue to income details'
-                : 'Continue verification'}
-          </OxygenLoadingButton>
-        </div>
+        <OxygenCustomerFormNavigation
+          step={step}
+          busy={busy}
+          continuing={continuing}
+          disabled={
+            busy || !phone || saveBlocked || (step === 1 && !bankVerified)
+          }
+          onBack={() => {
+            clearOxygenFormErrors(formRef.current, formErrorId);
+            setFormError('');
+            capture(step - 1);
+            setStep(step - 1);
+            onProgress?.(step === 2 ? 'bank' : 'identity');
+          }}
+        />
       </fieldset>
     </form>
   );

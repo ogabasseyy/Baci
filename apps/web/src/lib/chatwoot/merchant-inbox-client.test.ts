@@ -6,54 +6,14 @@ import {
   getMerchantInboxConversation,
   listMerchantInboxConversations,
   listMerchantInboxMessages,
-  sendMerchantInboxReply,
 } from './merchant-inbox-client';
-import type { MerchantInboxBinding } from './merchant-inbox-config';
-
-const binding: MerchantInboxBinding = {
-  merchantId: '11111111-1111-4111-8111-111111111111',
-  accountId: 2,
-  inboxId: 20,
-  apiAccessToken: 'synthetic-agent-token-aaaa',
-  apiOrigin: 'https://chat.example.test',
-};
-
-const CREATED = 1_794_720_151;
-
-function conversation(id: number, inboxId = 20) {
-  return { id, inbox_id: inboxId, status: 'open', last_activity_at: CREATED };
-}
-
-function message(id: number, overrides: Record<string, unknown> = {}) {
-  return {
-    id,
-    content: `message ${id}`,
-    message_type: 0,
-    created_at: CREATED,
-    content_type: 'text',
-    ...overrides,
-  };
-}
-
-function stubFetch(
-  handler: (
-    url: URL,
-    init?: RequestInit
-  ) => { status?: number; body?: unknown } | Error
-) {
-  const fetchMock = vi.fn(async (input: URL | string, init?: RequestInit) => {
-    const result = handler(new URL(String(input)), init);
-    if (result instanceof Error) throw result;
-    const status = result.status ?? 200;
-    return {
-      ok: status >= 200 && status < 300,
-      status,
-      json: async () => result.body,
-    };
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
+import {
+  binding,
+  CREATED,
+  conversation,
+  message,
+  stubFetch,
+} from './merchant-inbox-client.test-support';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -282,79 +242,5 @@ describe('listMerchantInboxMessages', () => {
     await expect(
       listMerchantInboxMessages(binding, { conversationId: 7 })
     ).resolves.toEqual({ ok: false, code: 'unavailable' });
-  });
-});
-
-describe('sendMerchantInboxReply', () => {
-  const reply = { conversationId: 7, content: 'Yes, it is in stock.' };
-
-  it('posts a public outgoing message into the bound conversation', async () => {
-    const fetchMock = stubFetch((_url, init) =>
-      init?.method === 'POST'
-        ? { body: message(45, { message_type: 1, content: reply.content }) }
-        : { body: conversation(7) }
-    );
-
-    await expect(sendMerchantInboxReply(binding, reply)).resolves.toEqual({
-      ok: true,
-      message: {
-        id: 45,
-        sender: 'store',
-        kind: 'text',
-        text: 'Yes, it is in stock.',
-        createdAt: new Date(CREATED * 1000).toISOString(),
-      },
-    });
-    const [url, init] = fetchMock.mock.calls[1];
-    expect(new URL(String(url)).pathname).toBe(
-      '/api/v1/accounts/2/conversations/7/messages'
-    );
-    expect(JSON.parse(String(init?.body))).toEqual({
-      content: 'Yes, it is in stock.',
-      message_type: 'outgoing',
-      private: false,
-    });
-  });
-
-  it('never posts into a conversation outside the bound inbox', async () => {
-    const fetchMock = stubFetch(() => ({ body: conversation(7, 99) }));
-
-    await expect(sendMerchantInboxReply(binding, reply)).resolves.toEqual({
-      ok: false,
-      code: 'not_found',
-    });
-    expect(fetchMock).toHaveBeenCalledOnce();
-  });
-
-  it.each([
-    ['a network loss after submission', () => new Error('socket closed')],
-    ['a provider 5xx', () => ({ status: 503 })],
-    ['a provider request timeout', () => ({ status: 408 })],
-    ['provider throttling', () => ({ status: 429 })],
-    ['an unreadable accepted response', () => ({ body: { nope: true } })],
-    [
-      'an echo that is not the store reply',
-      () => ({ body: message(46, { message_type: 0 }) }),
-    ],
-  ])('reports unknown delivery on %s without retrying', async (_l, post) => {
-    const fetchMock = stubFetch((_url, init) =>
-      init?.method === 'POST' ? post() : { body: conversation(7) }
-    );
-
-    await expect(sendMerchantInboxReply(binding, reply)).resolves.toEqual({
-      ok: false,
-      code: 'delivery_unknown',
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('reports a definite provider rejection as unavailable', async () => {
-    stubFetch((_url, init) =>
-      init?.method === 'POST' ? { status: 422 } : { body: conversation(7) }
-    );
-    await expect(sendMerchantInboxReply(binding, reply)).resolves.toEqual({
-      ok: false,
-      code: 'unavailable',
-    });
   });
 });

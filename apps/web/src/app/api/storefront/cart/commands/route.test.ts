@@ -337,6 +337,25 @@ describe('POST /api/storefront/cart/commands', () => {
     }
   });
 
+  it('keeps the committed cart when the post-commit grant reload throws', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState({ lines: [rawLine()] }),
+    };
+    mocks.grantAuthority = { ok: true, allowedOperations: 'not-a-list' };
+    const response = await postCommand({
+      body: addCommand('grant-reload-throws'),
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
+    });
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.cart.version).toBe(2);
+  });
+
   it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {
     mocks.cartPayload = {
       code: null,

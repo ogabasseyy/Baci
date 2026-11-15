@@ -14,7 +14,10 @@ import {
 } from './merchant-inbox-projection';
 
 const REQUEST_TIMEOUT_MS = 8_000;
+/** Used only when the provider gives no total: its default page size. */
 export const MERCHANT_INBOX_PAGE_SIZE = 25;
+/** The provider returns at most this many messages per thread page. */
+export const MERCHANT_INBOX_MESSAGE_PAGE_SIZE = 20;
 
 export type MerchantInboxFailure = {
   ok: false;
@@ -85,13 +88,18 @@ export async function listMerchantInboxConversations(
   const conversations = payload
     .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
     .filter((value): value is MerchantInboxConversation => value !== null);
-  // Prefer the provider's own total for this filter. Without it, fall back to
-  // "a full page may have a successor", which costs at most one empty fetch.
+  // The provider's page size is a server setting it does not let a caller
+  // pin, so nothing here assumes one. With a total, a page this long repeated
+  // `page` times that still falls short of the total means more exists; a
+  // partial last page costs at most one empty follow-up fetch and never skips
+  // a page. Fullness is measured on the provider's page, not on the rows kept
+  // for this inbox, because that is what decides whether a next page exists.
   const total = meta?.all_count;
   const hasMore =
-    typeof total === 'number'
-      ? input.page * MERCHANT_INBOX_PAGE_SIZE < total
-      : payload.length >= MERCHANT_INBOX_PAGE_SIZE;
+    payload.length > 0 &&
+    (typeof total === 'number'
+      ? input.page * payload.length < total
+      : payload.length >= MERCHANT_INBOX_PAGE_SIZE);
   return { ok: true, conversations, hasMore };
 }
 
@@ -130,6 +138,9 @@ export async function listMerchantInboxMessages(
       ok: true;
       conversation: MerchantInboxConversation;
       messages: MerchantInboxMessage[];
+      /** True when an older page may exist; page with `nextBefore`. */
+      hasOlder: boolean;
+      nextBefore: number | null;
     }
   | MerchantInboxFailure
 > {
@@ -150,7 +161,28 @@ export async function listMerchantInboxMessages(
     .map(projectMerchantInboxMessage)
     .filter((value): value is MerchantInboxMessage => value !== null)
     .sort(compareMerchantInboxMessages);
-  return { ok: true, conversation: owned.conversation, messages };
+  // The cursor is the oldest provider row, including rows not shown (private
+  // notes, activity), so paging never stalls on a page of hidden rows.
+  const rawIds = parsed.data.payload
+    .map((raw) =>
+      raw !== null && typeof raw === 'object'
+        ? (raw as { id?: unknown }).id
+        : null
+    )
+    .filter(
+      (id): id is number =>
+        typeof id === 'number' && Number.isSafeInteger(id) && id > 0
+    );
+  const hasOlder =
+    rawIds.length > 0 &&
+    parsed.data.payload.length >= MERCHANT_INBOX_MESSAGE_PAGE_SIZE;
+  return {
+    ok: true,
+    conversation: owned.conversation,
+    messages,
+    hasOlder,
+    nextBefore: hasOlder ? Math.min(...rawIds) : null,
+  };
 }
 
 /**

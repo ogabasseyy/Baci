@@ -24,11 +24,13 @@ import {
 function TradeInModal({
   isOpen,
   onClose,
-  supportPhone
+  supportPhone,
+  merchantSlug
 }: {
   isOpen: boolean;
   onClose: () => void;
   supportPhone: string;
+  merchantSlug?: string;
 }) {
   const [step, setStep] = useState<'upload' | 'analyzing' | 'result'>('upload');
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -56,7 +58,7 @@ function TradeInModal({
     setStep('analyzing');
 
     try {
-      const analysis = await requestDeviceGrading(videoFile);
+      const analysis = await requestDeviceGrading(videoFile, merchantSlug);
       setResult(analysis);
       setStep('result');
     } catch (err: unknown) {
@@ -73,7 +75,9 @@ function TradeInModal({
       `Hello! I did an AI trade-in check.\n\n` +
       `📱 Device: ${result.model}\n` +
       `✨ Grade: ${result.grade}\n` +
-      `💰 Estimate: ₦${result.estimatedValue.toLocaleString()}\n` +
+      (result.estimatedValue > 0
+        ? `💰 Estimate: ₦${result.estimatedValue.toLocaleString()}\n`
+        : '') +
       `📝 Observations: ${result.observations.join(', ')}\n\n` +
       `I'd like to proceed with the swap.`
     );
@@ -141,7 +145,17 @@ function TradeInModal({
               </div>
 
               {error && (
-                <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>
+                <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">
+                  <p>{error}</p>
+                  <a
+                    href={`https://wa.me/${supportPhone}?text=${encodeURIComponent("Hello! I'd like to swap my device.")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block font-semibold underline"
+                  >
+                    Chat with support instead
+                  </a>
+                </div>
               )}
 
               <button type="button"
@@ -161,7 +175,7 @@ function TradeInModal({
                 <div className="absolute inset-0 border-4 border-red-600 rounded-full border-t-transparent animate-spin"></div>
                 <SparklesIcon className="absolute inset-0 m-auto text-red-600 animate-pulse" size={24} />
               </div>
-              <h4 className="text-xl font-bold text-gray-900 mb-2">Gemini AI is Analyzing…</h4>
+              <h4 className="text-xl font-bold text-gray-900 mb-2">Checking your device…</h4>
               <p className="text-gray-500 text-sm animate-pulse">
                 Checking screen condition… Identification model…
               </p>
@@ -173,7 +187,9 @@ function TradeInModal({
               <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
                 <p className="text-sm text-green-800 font-medium mb-1">Estimated Trade-in Value</p>
                 <div className="text-3xl font-extrabold text-green-700">
-                  ₦{result.estimatedValue.toLocaleString()}
+                  {result.estimatedValue > 0
+                    ? `₦${result.estimatedValue.toLocaleString()}`
+                    : 'Confirmed in chat'}
                 </div>
                 {result.basePrice > 0 && (
                   <div className="text-xs text-green-600 mt-1">
@@ -212,7 +228,7 @@ function TradeInModal({
                 onClick={handleCompleteTradeIn}
                 className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-all shadow-lg shadow-green-100 flex items-center justify-center gap-2"
               >
-                Accept Offer & Chat <Check size={20} />
+                {result.estimatedValue > 0 ? 'Accept Offer & Chat' : 'Get My Value in Chat'} <Check size={20} />
               </button>
 
               <button type="button"
@@ -259,6 +275,7 @@ export function OgabasseyV2Swap() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         supportPhone={supportPhone}
+        merchantSlug={merchantContext?.merchant?.slug}
       />
 
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
@@ -275,7 +292,7 @@ export function OgabasseyV2Swap() {
         <div className="bg-linear-to-r from-red-600 to-red-800 text-white rounded-2xl p-8 md:p-12 mb-10 relative overflow-hidden shadow-xl">
           <div className="relative z-10 max-w-lg">
             <span className="inline-block bg-white/20 backdrop-blur-md text-xs font-bold px-3 py-1 rounded-full mb-4 uppercase tracking-wider">
-              Powered by Gemini 3.0 Flash ✨
+              Instant AI check ✨
             </span>
             <h2 className="text-3xl md:text-4xl font-extrabold mb-4 leading-tight">
               Get an Instant AI Valuation in Seconds.
@@ -310,7 +327,7 @@ export function OgabasseyV2Swap() {
               },
               {
                 title: '2. AI Analysis',
-                desc: 'Gemini grades your phone condition automatically.',
+                desc: 'Our AI grades your device condition automatically.',
                 icon: SparklesIcon,
               },
               {

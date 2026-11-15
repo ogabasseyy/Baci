@@ -1,0 +1,78 @@
+import {
+  DEVICE_GRADING_FRAME_TYPES,
+  DEVICE_GRADING_MAX_FRAMES,
+  DEVICE_GRADING_MAX_UPLOAD_BYTES,
+} from '@/schemas/device-grading';
+
+export interface DeviceMediaPart {
+  data: string;
+  mimeType: string;
+}
+
+export type DeviceMediaResult =
+  | { ok: true; merchantSlug: string | null; parts: DeviceMediaPart[] }
+  | { ok: false; error: string; status: 400 | 413 };
+
+const FRAME_TYPES = new Set<string>(DEVICE_GRADING_FRAME_TYPES);
+
+function isFile(value: FormDataEntryValue | null): value is File {
+  return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
+}
+
+async function toPart(file: File): Promise<DeviceMediaPart> {
+  return {
+    data: Buffer.from(await file.arrayBuffer()).toString('base64'),
+    mimeType: file.type,
+  };
+}
+
+/**
+ * Reads the device media from the upload: still frames (`frames`, sent by the
+ * web storefront) or one short clip (`video`, sent by the mobile app).
+ */
+export async function readDeviceMedia(
+  formData: FormData
+): Promise<DeviceMediaResult> {
+  const slugEntry = formData.get('merchantSlug');
+  const merchantSlug =
+    typeof slugEntry === 'string' && slugEntry.trim()
+      ? slugEntry.trim().toLowerCase()
+      : null;
+
+  const frames = formData.getAll('frames').filter(isFile);
+  const video = formData.get('video');
+  const files = frames.length > 0 ? frames : isFile(video) ? [video] : [];
+
+  if (files.length === 0) {
+    return { ok: false, status: 400, error: 'No video file provided' };
+  }
+  if (frames.length > DEVICE_GRADING_MAX_FRAMES) {
+    return { ok: false, status: 400, error: 'Too many images provided' };
+  }
+
+  const typesAreValid =
+    frames.length > 0
+      ? frames.every((frame) => FRAME_TYPES.has(frame.type))
+      : files[0].type.startsWith('video/');
+  if (!typesAreValid) {
+    return { ok: false, status: 400, error: 'Unsupported file type' };
+  }
+
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  if (totalBytes === 0) {
+    return { ok: false, status: 400, error: 'No video file provided' };
+  }
+  if (totalBytes > DEVICE_GRADING_MAX_UPLOAD_BYTES) {
+    return {
+      ok: false,
+      status: 413,
+      error: 'That video is too large. Please record a shorter clip.',
+    };
+  }
+
+  return {
+    ok: true,
+    merchantSlug,
+    parts: await Promise.all(files.map(toPart)),
+  };
+}

@@ -758,6 +758,12 @@ BEGIN
   END IF;
   PERFORM piggyvest_primary.assert_wallet_pay_worker(
     manage_wallet_refund.integration_id, manage_wallet_refund.environment);
+  -- The payment before the refund row, like settlement (Codex P1).
+  PERFORM 1 FROM piggyvest_primary.wallet_payments AS payment
+   WHERE payment.id = (SELECT refund.payment_id FROM piggyvest_primary.wallet_payment_refunds AS refund
+                        WHERE refund.id = manage_wallet_refund.refund_id
+                          AND refund.integration_id = manage_wallet_refund.integration_id)
+     FOR UPDATE;
   SELECT refund.* INTO v_refund FROM piggyvest_primary.wallet_payment_refunds AS refund
    WHERE refund.id = manage_wallet_refund.refund_id
      AND refund.integration_id = manage_wallet_refund.integration_id
@@ -792,8 +798,12 @@ BEGIN
   -- reason does not: its refund is the whole point, so a rejected attempt
   -- opens the next one like any other (Codex P1).
   IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_payments AS payment
-              WHERE payment.id = p_refund.payment_id AND payment.review_reason IS NOT NULL
-                AND payment.review_reason <> 'duplicate_payment') THEN
+              WHERE payment.id = p_refund.payment_id
+                AND ((payment.review_reason IS NOT NULL
+                      AND payment.review_reason <> 'duplicate_payment')
+                     -- Already refunded (a late success of an older attempt):
+                     -- never open another (Codex P1).
+                     OR payment.fulfilment = 'refunded')) THEN
     RETURN;
   END IF;
   IF p_refund.attempt >= 20 THEN
@@ -1282,6 +1292,12 @@ BEGIN
   IF piggyvest_primary.wallet_pay_proof_valid(proof) IS NOT TRUE THEN
     RAISE EXCEPTION 'invalid settlement proof' USING ERRCODE = '22023';
   END IF;
+  -- The payment first, then the refund row: the same order as settlement, so
+  -- a late success of an older attempt and this release can never interleave
+  -- (the retry decision below reads what settlement committed) (Codex P1).
+  PERFORM 1 FROM piggyvest_primary.wallet_payments AS payment
+   WHERE payment.id = (proof ->> 'operationId')::uuid AND payment.integration_id = v_binding.id
+     FOR UPDATE;
   SELECT refund.* INTO v_refund FROM piggyvest_primary.wallet_payment_refunds AS refund
    WHERE refund.payment_id = (proof ->> 'operationId')::uuid
      AND refund.integration_id = v_binding.id AND refund.reference = proof ->> 'reference'
@@ -1293,7 +1309,25 @@ BEGIN
     OR v_binding.business_id IS DISTINCT FROM proof ->> 'businessId' THEN
     RETURN 'conflict';
   END IF;
-  IF v_refund.state = 'released' THEN RETURN 'duplicate'; END IF;
+  IF v_refund.state = 'released' THEN
+    -- An attempt released after a definitive rejection, later indexed as
+    -- failed WITH a fee: the fee moved money. It stays released, but the
+    -- evidence is kept and unsent replacements are retired, so a person
+    -- decides before anything is sent again (Codex P2).
+    IF v_refund.dispatched_at IS NOT NULL AND v_refund.provider_transaction_id IS NULL
+      AND COALESCE((proof ->> 'feeKobo')::bigint, 0) > 0 THEN
+      UPDATE piggyvest_primary.wallet_payment_refunds
+         SET provider_transaction_id = proof ->> 'providerTransactionId',
+             settled_at = pg_catalog.clock_timestamp(), review_reason = 'failed_with_fee'
+       WHERE id = v_refund.id;
+      DELETE FROM piggyvest_primary.wallet_payment_refunds
+       WHERE payment_id = v_refund.payment_id AND id <> v_refund.id AND state = 'owed';
+      UPDATE piggyvest_primary.wallet_payments SET review_reason = 'refund_failed_with_fee'
+       WHERE id = v_refund.payment_id;
+      RETURN 'needs_review';
+    END IF;
+    RETURN 'duplicate';
+  END IF;
   IF v_refund.state = 'needs_review' THEN
     RETURN CASE WHEN v_refund.provider_transaction_id = proof ->> 'providerTransactionId'
                 THEN 'duplicate' ELSE 'conflict' END;

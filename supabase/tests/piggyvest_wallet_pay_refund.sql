@@ -145,6 +145,40 @@ BEGIN
   PERFORM pg_temp.wp_assert(pg_temp.wp_fulfilment(v_late) = 'refunded'
     AND (SELECT review_reason IS NULL FROM piggyvest_primary.wallet_payments WHERE id = v_late::uuid),
     'a refunded duplicate kept its review reason');
+  -- 10. REGRESSION (Codex P1): a payment already marked refunded (a late
+  -- success of an older attempt committed first) never gets another attempt
+  -- when a live attempt is then released: nothing is left to be sent twice.
+  v_op := pg_temp.wp_dispatched('lookup-r10');
+  PERFORM pg_temp.wp_settle(pg_temp.wp_pay_proof(v_op, 'txn-r10'));
+  PERFORM pg_temp.wp_claim(v_op);
+  PERFORM pg_temp.wp_assert(pg_temp.wp_finish(v_op, 'failed') = 'refund_owed', 'r10 failed delivery');
+  v_refund := piggyvest_primary.read_owed_wallet_refund(c_integration, 'staging', v_op::uuid);
+  PERFORM pg_temp.wp_assert(piggyvest_primary.manage_wallet_refund(c_integration, 'staging',
+    (v_refund ->> 'refundId')::uuid, 'dispatch'), 'r10 dispatch');
+  UPDATE piggyvest_primary.wallet_payments SET fulfilment = 'refunded' WHERE id = v_op::uuid;
+  PERFORM pg_temp.wp_assert(piggyvest_primary.manage_wallet_refund(c_integration, 'staging',
+    (v_refund ->> 'refundId')::uuid, 'release'), 'r10 release');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_refunds(v_op) = 1, 'a refunded payment got another refund attempt');
+
+  -- 11. REGRESSION (Codex P2): an attempt released after a definitive
+  -- rejection, later indexed as failed WITH a fee, keeps that evidence and
+  -- retires the unsent replacement, so a person decides.
+  v_op := pg_temp.wp_dispatched('lookup-r11');
+  PERFORM pg_temp.wp_settle(pg_temp.wp_pay_proof(v_op, 'txn-r11'));
+  PERFORM pg_temp.wp_claim(v_op);
+  PERFORM pg_temp.wp_assert(pg_temp.wp_finish(v_op, 'failed') = 'refund_owed', 'r11 failed delivery');
+  v_refund := piggyvest_primary.read_owed_wallet_refund(c_integration, 'staging', v_op::uuid);
+  PERFORM pg_temp.wp_assert(piggyvest_primary.manage_wallet_refund(c_integration, 'staging',
+    (v_refund ->> 'refundId')::uuid, 'dispatch'), 'r11 dispatch');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.manage_wallet_refund(c_integration, 'staging',
+    (v_refund ->> 'refundId')::uuid, 'release'), 'r11 release');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_refunds(v_op) = 2, 'r11 retry not opened');
+  PERFORM pg_temp.wp_assert(piggyvest_primary.release_failed_wallet_refund(c_integration, 'staging',
+    pg_temp.wp_refund_proof(v_op, 'txn-r11-fee') || '{"feeKobo":5000}'::jsonb) = 'needs_review',
+    'a late fee on a released refund was dropped as a duplicate');
+  PERFORM pg_temp.wp_assert((SELECT review_reason FROM piggyvest_primary.wallet_payments WHERE id = v_op::uuid)
+    = 'refund_failed_with_fee', 'the late fee did not reach the payment review reason');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_refunds(v_op) = 1, 'the unsent replacement was not retired');
 END;
 $behaviour$;
 

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 import type { Block } from '@/types/blocks';
 import { BlockRenderer } from './BlockRenderer';
+import type { HeroSlide } from './Hero';
 
 const mockHeroProps = jest.fn();
 const mockUtilityProps = jest.fn();
@@ -30,19 +31,22 @@ jest.mock('./Hero', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
     Hero: (props: {
+      slides: HeroSlide[];
       trailingAdPlacement?: string;
       autoplayPaused?: boolean;
     }) => {
       mockHeroProps(props);
+      const { slides, trailingAdPlacement } = props;
       return (
         <MockText
           testID={
-            props.trailingAdPlacement
-              ? 'hero-carousel-with-ad'
-              : 'hero-carousel'
+            trailingAdPlacement ? 'hero-carousel-with-ad' : 'hero-carousel'
           }
         >
           Hero carousel
+          {slides.map((slide) => (
+            <MockText key={slide.title}>{slide.title}</MockText>
+          ))}
         </MockText>
       );
     },
@@ -119,13 +123,55 @@ describe('BlockRenderer', () => {
   it('renders a configured hero carousel when slides are present', () => {
     renderBlocks([configuredHeroBlock]);
 
-    expect(screen.getByText('Hero carousel')).toBeTruthy();
+    expect(screen.getByText(/Hero carousel/)).toBeTruthy();
+  });
+
+  it('mounts the carousel with Black Friday first after the loading placeholder', () => {
+    const { rerender } = renderBlocks([configuredHeroBlock], {
+      pendingBlackFridayHeroBlockId: configuredHeroBlock.props.id,
+    });
+    expect(screen.getByTestId('hero-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('hero-carousel-with-ad')).toBeNull();
+
+    rerender(
+      <BlockRenderer
+        blocks={[configuredHeroBlock]}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+        blackFridayHeroBlockId={configuredHeroBlock.props.id}
+      />
+    );
+    expect(screen.queryByTestId('hero-skeleton')).toBeNull();
+    expect(screen.getByTestId('hero-carousel-with-ad')).toHaveTextContent(
+      /Black FridayFeatured phones/
+    );
+  });
+
+  it('puts Black Friday first in the selected carousel and keeps its existing slides', () => {
+    renderBlocks([configuredHeroBlock, emptyHeroBlock], {
+      blackFridayHeroBlockId: configuredHeroBlock.props.id,
+    });
+
+    const carousel = screen.getByTestId('hero-carousel-with-ad');
+    expect(carousel).toHaveTextContent(/Black FridayFeatured phones/);
+    expect(screen.getAllByText('Black Friday')).toHaveLength(1);
   });
 
   it('renders the just-launched carousel for a JustLaunched block', () => {
     renderBlocks([{ type: 'JustLaunched', props: { id: 'launches' } }]);
 
     expect(screen.getByText('Just launched')).toBeTruthy();
+  });
+
+  it('keeps merchant slides alongside the home campaign slides', () => {
+    renderBlocks([configuredHeroBlock], {
+      blackFridayHeroBlockId: configuredHeroBlock.props.id,
+      nextDropHeroBlockId: configuredHeroBlock.props.id,
+    });
+
+    expect(screen.getByText('Black Friday')).toBeTruthy();
+    expect(screen.getByText('Save for your device')).toBeTruthy();
+    expect(screen.getByText('Featured phones')).toBeTruthy();
   });
 
   it('passes the search visibility pause through to the hero', () => {

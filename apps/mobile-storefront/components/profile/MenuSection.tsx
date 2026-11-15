@@ -23,8 +23,10 @@ interface MenuSectionProps {
     textSecondary: string;
     card: string;
     border: string;
+    background?: string;
   };
   delayIndex?: number;
+  puzzle?: boolean;
   onItemPress: (item: MenuItem) => void;
 }
 
@@ -33,6 +35,7 @@ export function MenuSection({
   items,
   colors,
   delayIndex = 0,
+  puzzle = false,
   onItemPress,
 }: MenuSectionProps) {
   const handlePress = (item: MenuItem) => {
@@ -55,7 +58,11 @@ export function MenuSection({
       <View
         style={[
           styles.card,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          !puzzle && {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+          puzzle && styles.puzzleStack,
         ]}
       >
         {items.map((item, idx) => (
@@ -69,13 +76,33 @@ export function MenuSection({
               <View
                 style={[
                   styles.row,
-                  idx < items.length - 1 && {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: colors.border,
-                  },
+                  puzzle && [
+                    styles.puzzleRow,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                    },
+                  ],
+                  !puzzle &&
+                    idx < items.length - 1 && {
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: colors.border,
+                    },
                   pressed && styles.rowPressed,
                 ]}
               >
+                {puzzle && idx > 0 && (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.notch,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  />
+                )}
                 <View style={styles.rowLeft}>
                   <View
                     style={[
@@ -150,6 +177,22 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     ...SHADOWS.sm,
+  },
+  puzzleStack: { gap: 4, borderWidth: 0, shadowOpacity: 0, elevation: 0 },
+  puzzleRow: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingVertical: 11,
+  },
+  notch: {
+    position: 'absolute',
+    top: -1,
+    right: 26,
+    height: 6,
+    width: 16,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   row: {
     flexDirection: 'row',

@@ -17,9 +17,8 @@ function build(overrides: Record<string, unknown> = {}) {
   };
   const renewed = vi.fn();
   const context = createChatwootInlineActionContext({
-    actionGeneration: 1,
     getCartState: () => state.cart,
-    getLatestGeneration: () => state.generation,
+    isCurrentGeneration: () => state.generation === 1,
     getSessionExpiresAt: () => state.expiresAt,
     hasSessionAlias: () => state.alias,
     isCurrentTarget: () => state.target,
@@ -98,5 +97,18 @@ describe('createChatwootInlineActionContext', () => {
     state.alias = false;
     context.onSessionTokenRenewed('t3');
     expect(renewed).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a product lookup current until its own context changes', () => {
+    const { context, state } = build();
+    expect(context.isCurrentLookup()).toBe(true);
+    state.cart = { ...state.cart, merchantSlug: 'other' };
+    expect(context.isCurrentLookup()).toBe(false);
+    state.cart = { ...state.cart, merchantSlug: 'shop' };
+    state.expiresAt = Date.now() - 1;
+    expect(context.isCurrentLookup()).toBe(false);
+    state.expiresAt = Date.now() + 60_000;
+    state.generation = 2;
+    expect(context.isCurrentLookup()).toBe(false);
   });
 });

@@ -112,6 +112,32 @@ describe('bugfix: an unpaid PiggyVest purchase blocked a store credit retry (Cod
   });
 });
 
+describe('bugfix: a refused close with a newer live payment is not a closure (Codex P1)', () => {
+  const payInput = { ...base, operationId: OP, pinProof: 'a'.repeat(64) };
+
+  it('keeps the key (pending) when the close is refused and another payment is live', async () => {
+    deps.pay.mockResolvedValue({ status: 'released' });
+    deps.closeUnpaid.mockResolvedValueOnce(false);
+    deps.findForPurchase.mockResolvedValueOnce({
+      state: 'dispatched',
+      operationId: '99999999-9999-4999-8999-999999999999',
+    } as never);
+    const response = await runVtuWalletPayStep(payInput, deps as never);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'payment_pending',
+    });
+  });
+
+  it('settles as not completed when the close answers false and nothing is live (already closed)', async () => {
+    deps.pay.mockResolvedValue({ status: 'released' });
+    deps.closeUnpaid.mockResolvedValueOnce(false);
+    deps.findForPurchase.mockResolvedValueOnce(null);
+    const response = await runVtuWalletPayStep(payInput, deps as never);
+    expect(response.status).toBe(409);
+  });
+});
+
 describe('bugfix: an expired, never-sent payment was re-checked forever (Codex P2)', () => {
   const recheck = { ...base, operationId: OP, pinProof: '' };
 

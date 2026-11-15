@@ -250,12 +250,19 @@ export async function runVtuWalletPayStep(
   // answers pending instead, so the key stays and the re-check retries the
   // close (Codex P1). A purchase already closed answers false, not a throw.
   if (ENDED_UNPAID.has(result.status)) {
+    // A false answer is closed already OR a newer payment still live for this
+    // purchase: only no live attempt left proves the first (Codex P1).
     const closed = await Promise.resolve()
-      .then(() => deps.closeUnpaid(purchaseRef))
-      .then(
-        () => true,
-        () => false
-      );
+      .then(async () => {
+        if (await deps.closeUnpaid(purchaseRef)) return true;
+        return !(await deps.findForPurchase({
+          runtime,
+          scope,
+          purpose: 'vtu',
+          purchaseRef: transactionId,
+        }));
+      })
+      .catch(() => false);
     if (!closed)
       return walletPayAccepted('payment_pending', operationId, extra);
   }

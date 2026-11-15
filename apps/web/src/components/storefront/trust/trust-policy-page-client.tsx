@@ -1,11 +1,11 @@
 import {
-  Camera,
-  ClipboardCheck,
-  PackageCheck,
-  ShieldCheck,
-  Truck,
-} from 'lucide-react';
-import { hasPublishableWarrantyPolicy } from '@/lib/storefront-trust/build-merchant-trust-profile';
+  OGABASSEY_ASSURANCE_SUMMARY,
+  OGABASSEY_CARE_INTRO,
+  OGABASSEY_RETURN_HELP,
+  OGABASSEY_RETURN_SUMMARY,
+  OGABASSEY_WARRANTY_DETAILS,
+  OGABASSEY_WARRANTY_SUMMARY,
+} from '@baci/shared';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -13,19 +13,11 @@ import type {
   MerchantTrustProfileShippingFeeType,
 } from '@/lib/storefront-trust/merchant-trust-profile-types';
 
-export type TrustPolicyKind = 'returns' | 'shipping' | 'warranty';
+import { OgabasseyReturnHighlights } from './ogabassey-return-highlights';
+import { OgabasseyReturnShipping } from './ogabassey-return-shipping';
+import { getPolicyGuidance } from './trust-policy-guidance';
 
-import {
-  OGABASSEY_ASSURANCE_SUMMARY,
-  OGABASSEY_CARE_INTRO,
-  OGABASSEY_CHANGE_OF_MIND_BUYBACK,
-  OGABASSEY_QUALITY_CHECKS,
-  OGABASSEY_RETURN_HELP,
-  OGABASSEY_RETURN_SHIPPING,
-  OGABASSEY_RETURN_SUMMARY,
-  OGABASSEY_WARRANTY_DETAILS,
-  OGABASSEY_WARRANTY_SUMMARY,
-} from '@baci/shared';
+export type TrustPolicyKind = 'returns' | 'shipping' | 'warranty';
 
 export interface TrustPolicyPageClientProps {
   ogabasseyCare?: boolean;
@@ -178,63 +170,6 @@ function getPolicyFacts(
   }
 }
 
-function hasConfiguredReturnPolicy(
-  trustProfile: MerchantTrustProfile
-): boolean {
-  const returnPolicy = trustProfile.returnPolicy;
-  return Boolean(
-    returnPolicy &&
-      (returnPolicy.summary?.trim() ||
-        returnPolicy.windowDays != null ||
-        returnPolicy.returnMethod ||
-        returnPolicy.returnFees)
-  );
-}
-
-function getPolicyGuidance(
-  kind: TrustPolicyKind,
-  merchantName: string,
-  trustProfile: MerchantTrustProfile
-): { heading: string; paragraphs: string[] } {
-  switch (kind) {
-    case 'returns': {
-      if (!hasConfiguredReturnPolicy(trustProfile)) {
-        return {
-          heading: 'Before you contact support about a return',
-          paragraphs: [
-            `Return details for ${merchantName} are not fully specified on this page yet. Contact support before sending any item back so the team can confirm eligibility, required evidence and the correct return address or process.`,
-            'Keep your order number, receipt, product photos and packaging information available. Clear details help support confirm the next step without creating return instructions that are not backed by the merchant policy.',
-          ],
-        };
-      }
-
-      return {
-        heading: 'Before you request a return',
-        paragraphs: [
-          `Use this page to confirm the current return window, accepted return method and any return fees before sending an item back to ${merchantName}. Keep the order number, receipt, original accessories and product packaging ready so support can verify the request quickly.`,
-          'Inspect the item as soon as it arrives. Report defects or delivery damage early, keep product packaging where possible, and contact support before dispatching anything to prevent avoidable delays.',
-        ],
-      };
-    }
-    case 'shipping':
-      return {
-        heading: 'How delivery works',
-        paragraphs: [
-          `Use this page to confirm the delivery regions, handling time, transit estimate and shipping fee method for ${merchantName}. Delivery timing can depend on stock status, payment confirmation, destination city and courier availability.`,
-          'Before checkout, confirm the exact delivery address, recipient phone number and selected product variant. For high-value orders, keep the order reference available and inspect the package at delivery before accepting it where possible.',
-        ],
-      };
-    case 'warranty':
-      return {
-        heading: 'How warranty support works',
-        paragraphs: [
-          `Use this page to confirm the warranty coverage available from ${merchantName} before you complete a purchase or request service support. Read the published coverage and exclusions, and contact support if you need clarification for your device.`,
-          'Keep your order receipt, product identifier where applicable and photos or videos showing the fault. Support can explain the claim process and the coverage stated in the published warranty policy.',
-        ],
-      };
-  }
-}
-
 export function TrustPolicyPageClient({
   kind,
   merchantName,
@@ -275,51 +210,8 @@ export function TrustPolicyPageClient({
           </p>
         ) : null}
 
-        {ogabasseyCare && kind === 'returns' && (
-          <section className="mt-8 rounded-2xl border border-store-border p-5">
-            <h2 className="text-lg font-semibold">
-              Three checks before delivery
-            </h2>
-            <ol className="mt-4 space-y-4">
-              {OGABASSEY_QUALITY_CHECKS.map(({ title, body }, index) => (
-                <li
-                  key={title}
-                  className="flex gap-3 rounded-xl bg-store-background-text/5 p-3"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="font-bold text-store-primary"
-                  >
-                    {index === 0 ? (
-                      <ClipboardCheck size={18} />
-                    ) : index === 1 ? (
-                      <PackageCheck size={18} />
-                    ) : (
-                      <Camera size={18} />
-                    )}
-                  </span>
-                  <div>
-                    <h3 className="font-semibold">{title}</h3>
-                    <p>{body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-        {ogabasseyCare && kind === 'returns' && (
-          <aside className="mt-6 rounded-2xl border border-store-border p-5">
-            <h2 className="flex items-center gap-2 font-semibold">
-              <ShieldCheck size={18} aria-hidden="true" />
-              Ogabassey Assurance
-            </h2>
-            <p className="mt-2 text-sm">{OGABASSEY_ASSURANCE_SUMMARY}</p>
-            {hasPublishableWarrantyPolicy(trustProfile) && (
-              <a href="./warranty" className="mt-2 inline-block underline">
-                See device coverage
-              </a>
-            )}
-          </aside>
+        {isOgabasseyReturns && (
+          <OgabasseyReturnHighlights trustProfile={trustProfile} />
         )}
         <section className="mt-6 rounded-2xl border border-store-border bg-store-background-text/5 p-4">
           <h2 className="text-lg font-semibold text-store-background-text">
@@ -337,20 +229,7 @@ export function TrustPolicyPageClient({
           </div>
         </section>
 
-        {isOgabasseyReturns && (
-          <section className="mt-6 space-y-3 rounded-2xl border border-store-border p-5">
-            <h2 className="text-lg font-semibold">
-              <Truck
-                className="mr-2 inline-block"
-                size={18}
-                aria-hidden="true"
-              />
-              Return shipping and buybacks
-            </h2>
-            <p>{OGABASSEY_RETURN_SHIPPING}</p>
-            <p>{OGABASSEY_CHANGE_OF_MIND_BUYBACK}</p>
-          </section>
-        )}
+        {isOgabasseyReturns && <OgabasseyReturnShipping />}
 
         {facts.length > 0 && (
           <dl className="mt-8 grid gap-4 sm:grid-cols-2">

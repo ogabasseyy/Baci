@@ -144,28 +144,12 @@ jobs:
               cp "$REFRESHED_DIR/storefront-edge-inventory-snapshot.repository.test.ts" "$TEST_PATH"
               git config user.name "github-actions[bot]"
               git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-              auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-              # A rerun after a push that never reached `gh pr create` finds
-              # this branch already on the remote. Reuse it only when it is
-              # exactly one commit on this main SHA carrying these same two
-              # files; a fresh commit would differ and its push would be
-              # rejected as non-fast-forward.
-              if git -c http.extraheader="$auth_header" fetch --quiet --depth=2 origin "refs/heads/$branch" 2>/dev/null; then
-                git add -- "$INVENTORY_PATH" "$TEST_PATH"
-                if [ "$(git rev-parse FETCH_HEAD^)" != "$SOURCE_SHA" ] \
-                  || [ -n "$(git diff --name-only "$SOURCE_SHA" FETCH_HEAD | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)" ] \
-                  || ! git diff --cached --quiet FETCH_HEAD -- "$INVENTORY_PATH" "$TEST_PATH"; then
-                  echo "::error::Existing branch $branch does not carry exactly this refresh; refusing to reuse it." >&2
-                  exit 1
-                fi
-                echo "Reusing the refresh already pushed to $branch."
-              else
-                git switch -c "$branch"
-                git add -- "$INVENTORY_PATH" "$TEST_PATH"
-                git commit -m "fix(ci): refresh storefront edge inventory snapshot" \
-                  -m "Regenerated from main ${SOURCE_SHA} by ${RUN_URL}."
-                git -c http.extraheader="$auth_header" push origin "HEAD:refs/heads/$branch"
-              fi
+              # Reuses the branch when a rerun finds this exact refresh already
+              # pushed (the earlier attempt never reached `gh pr create`).
+              GIT_PUSH_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+                bash apps/web/tools/cost/push-storefront-edge-refresh-branch.sh \
+                "$branch" "$SOURCE_SHA" "$INVENTORY_PATH" "$TEST_PATH" \
+                "Regenerated from main ${SOURCE_SHA} by ${RUN_URL}."
               body="$(printf '%s\n' \
                 "Automated refresh: main's storefront edge inventory snapshot no longer matches the committed routes, so \`storefront-edge-inventory-snapshot.repository.test.ts\` fails on main and on every PR synced with it." \
                 "" \

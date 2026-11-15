@@ -216,3 +216,28 @@ describe('bugfix: equal-timestamp MPIK vs demoted MSHC, and repeated origin scan
     ).toBe(false);
   });
 });
+
+describe('bugfix: equal-timestamp returned/cancelled scans outrank MSHC', () => {
+  it.each([
+    ['SRHUB', 'returned'],
+    ['MSCP', 'cancelled'],
+  ])('keeps %s terminal over a same-time MSHC in either order', (code, expected) => {
+    for (const codes of [
+      [code, 'MSHC'],
+      ['MSHC', code],
+    ]) {
+      const result = normalizeGiglTrackingShipment(
+        {
+          Waybill: 'W23',
+          MobileShipmentTrackings: [
+            event('ARF', '09:00:00'),
+            ...codes.map((c) => event(c, '11:00:00')),
+          ],
+        },
+        'W23',
+        OBSERVED_AT
+      );
+      expect(result.status).toBe(expected);
+    }
+  });
+});

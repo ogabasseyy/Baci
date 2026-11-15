@@ -92,9 +92,20 @@ function isMshc(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
 }
 
-/** Equal-timestamp precedence for the current status: delivered > MSHC (still out for delivery) > rest. */
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
+  'delivered',
+  'returned',
+  'cancelled',
+]);
+
+/** Equal-timestamp precedence for the current status: terminal (delivered/returned/cancelled) > MSHC (still out for delivery) > rest. */
 function currentStatusRank(candidate: Guardable): number {
-  if (candidate.recognizedStatus === 'delivered') return 3;
+  if (
+    candidate.recognizedStatus !== null &&
+    TERMINAL_STATUSES.has(candidate.recognizedStatus)
+  ) {
+    return 3;
+  }
   // A demoted (pickup-run) MSHC must not outrank a completed pickup.
   if (candidate.recognizedStatus === 'pickup_scheduled') return 0;
   return isMshc(candidate) ? 2 : 1;

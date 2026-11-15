@@ -20,7 +20,7 @@ it('binds the checked-in inventory snapshot to current committed source content'
     snapshotSha256:
       '1f293326fc6baf658328e96f117c95207ee07a75de547b64b54d5045c45d9041',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 639,
+    rowCount: 641,
   });
 });
 

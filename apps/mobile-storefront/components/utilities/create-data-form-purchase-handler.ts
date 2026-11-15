@@ -19,6 +19,10 @@ import {
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
 import { phoneLengthError } from './airtime-form-controller.helpers';
+import type {
+  DataCustomer,
+  DataFormSuccessResult,
+} from './create-data-form-purchase-handler.types';
 import {
   awaitUtilitySettlementGate,
   refreshWalletAfterSuppressedVtuResult,
@@ -27,22 +31,6 @@ import {
 import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
-
-interface DataCustomer {
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}
-
-interface DataFormSuccessResult {
-  reference: string;
-  amount: number;
-  customerIdentifier?: string;
-  status?: 'processing' | 'successful';
-  voucherPin?: string;
-  cashback?: { amount: number; newBalance: number };
-}
 
 interface CreateDataFormPurchaseHandlerInput {
   customer: DataCustomer | null | undefined;

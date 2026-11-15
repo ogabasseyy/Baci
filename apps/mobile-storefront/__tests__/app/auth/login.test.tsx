@@ -31,6 +31,7 @@ const mockVerifyOtp = jest.fn<AuthState['verifyOtp']>();
 const mockBackHandlerRemove = jest.fn();
 type HardwareBackPressHandler = () => boolean;
 let hardwareBackPressHandler: HardwareBackPressHandler | null = null;
+const mockDismissKeyboard = jest.fn();
 const mockWithKeyboardDismiss = jest.fn(
   <T extends (...args: never[]) => unknown>(handler: T) => handler
 );
@@ -102,6 +103,7 @@ jest.mock('@/hooks/use-keyboard', () => ({
     password: 'password',
   },
   useKeyboard: () => ({
+    dismissKeyboard: mockDismissKeyboard,
     withKeyboardDismiss: mockWithKeyboardDismiss,
   }),
 }));
@@ -369,7 +371,6 @@ describe('LoginScreen', () => {
       'shopper@example.com'
     );
     fireEvent.press(screen.getByText('Use password instead'));
-    fireEvent.press(screen.getByText('Continue with Password'));
 
     expect(
       await screen.findByText(
@@ -386,5 +387,113 @@ describe('LoginScreen', () => {
       screen.getByRole('button', { name: 'Hide password' })
     ).toBeOnTheScreen();
     expect(passwordInput).toHaveProp('secureTextEntry', false);
+  });
+
+  describe('bugfix: "Use password instead" only relabelled the button', () => {
+    it('opens the password field straight away when the email is valid', async () => {
+      render(<LoginScreen />);
+
+      fireEvent.changeText(
+        screen.getByPlaceholderText('john@example.com'),
+        '  Shopper@Example.com '
+      );
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(
+        await screen.findByText(
+          'Sign in with your password for shopper@example.com'
+        )
+      ).toBeOnTheScreen();
+      expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
+      expect(mockSignInWithOtp).not.toHaveBeenCalled();
+    });
+
+    it('stays on the email step without an error when no valid email is typed yet', async () => {
+      render(<LoginScreen />);
+
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(screen.getByText('Continue with Password')).toBeOnTheScreen();
+      expect(screen.queryByPlaceholderText('••••••••')).toBeNull();
+      // The email error is plain text, so assert on the message itself.
+      // Imported here, not at the top: the helpers load expo-router, which
+      // must see the mocks registered above.
+      const { validateLoginEmailInput } = await import(
+        '@/components/auth/login-screen-controller.helpers'
+      );
+      const emailRequired = validateLoginEmailInput('').error as string;
+      expect(emailRequired).toBeTruthy();
+      expect(screen.queryByText(emailRequired)).toBeNull();
+      expect(
+        screen.getByText('Use verification code instead')
+      ).toBeOnTheScreen();
+
+      // Positive control: the same message does appear once the shopper
+      // actually tries to continue.
+      fireEvent.press(screen.getByText('Continue with Password'));
+      expect(screen.getByText(emailRequired)).toBeOnTheScreen();
+    });
+
+    it('stays on the email step, shows no error and sends no code for a malformed email', async () => {
+      render(<LoginScreen />);
+
+      fireEvent.changeText(
+        screen.getByPlaceholderText('john@example.com'),
+        'foo'
+      );
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(screen.getByText('Continue with Password')).toBeOnTheScreen();
+      expect(screen.queryByPlaceholderText('••••••••')).toBeNull();
+      const { validateLoginEmailInput } = await import(
+        '@/components/auth/login-screen-controller.helpers'
+      );
+      const invalidEmail = validateLoginEmailInput('foo').error as string;
+      expect(invalidEmail).toBeTruthy();
+      expect(screen.queryByText(invalidEmail)).toBeNull();
+      expect(mockSignInWithOtp).not.toHaveBeenCalled();
+    });
+
+    it('dismisses the keyboard only when the toggle opens the password step', () => {
+      render(<LoginScreen />);
+      const emailInput = screen.getByPlaceholderText('john@example.com');
+
+      fireEvent.changeText(emailInput, 'foo');
+      fireEvent.press(screen.getByText('Use password instead'));
+      expect(mockDismissKeyboard).not.toHaveBeenCalled();
+
+      fireEvent.press(screen.getByText('Use verification code instead'));
+      fireEvent.changeText(emailInput, 'shopper@example.com');
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(mockDismissKeyboard).toHaveBeenCalledTimes(1);
+      expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
+    });
+
+    it('clears a stale email error when toggling back to the code method', async () => {
+      render(<LoginScreen />);
+      const { validateLoginEmailInput } = await import(
+        '@/components/auth/login-screen-controller.helpers'
+      );
+      const emailRequired = validateLoginEmailInput('').error;
+      if (!emailRequired) throw new Error('expected an email-required error');
+
+      fireEvent.press(screen.getByText('Use password instead'));
+      fireEvent.press(screen.getByText('Continue with Password'));
+      expect(screen.getByText(emailRequired)).toBeOnTheScreen();
+
+      fireEvent.press(screen.getByText('Use verification code instead'));
+
+      expect(screen.queryByText(emailRequired)).toBeNull();
+    });
+
+    it('switches back to the code method from the email step', () => {
+      render(<LoginScreen />);
+
+      fireEvent.press(screen.getByText('Use password instead'));
+      fireEvent.press(screen.getByText('Use verification code instead'));
+
+      expect(screen.getByText('Continue with Code')).toBeOnTheScreen();
+    });
   });
 });

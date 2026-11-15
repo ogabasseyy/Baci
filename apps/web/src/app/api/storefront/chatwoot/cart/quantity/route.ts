@@ -53,7 +53,10 @@ export async function POST(request: NextRequest) {
     return unavailable(503, 'temporarily_unavailable');
   }
   if (!cartContext.ok) {
-    return unavailable(cartContext.status, cartContext.code);
+    return unavailable(
+      cartContext.status,
+      cartContext.status === 401 ? 'invalid_context' : cartContext.code
+    );
   }
 
   let capability: Awaited<ReturnType<typeof verifyChatwootSessionCapability>>;

@@ -44,13 +44,14 @@ const mockDeriveWalletDisplayData = jest.fn(() => ({
   fundingAccount: null,
   savingsBalance: 0,
   showQuickSave: false,
-  spendableBalance: 0,
+  walletBalance: 0,
   totalBalance: 0,
 }));
 
 jest.mock('expo-router', () => ({
   Redirect: () => null,
   router: { push: jest.fn() },
+  useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
 }));
 jest.mock('zustand/react/shallow', () => ({
   useShallow: (selector: unknown) => selector,

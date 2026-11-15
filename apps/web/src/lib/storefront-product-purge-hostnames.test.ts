@@ -13,7 +13,10 @@ vi.mock('@/lib/cloudflare-purge', () => ({
     mockPurgeCloudflareHostnamesConfirmed(hostnames),
 }));
 
-import { scheduleStorefrontHostnamePurge } from './storefront-product-purge-hostnames';
+import {
+  purgeStorefrontHostnameConfirmed,
+  scheduleStorefrontHostnamePurge,
+} from './storefront-product-purge-hostnames';
 
 describe('scheduleStorefrontHostnamePurge', () => {
   beforeEach(() => {
@@ -60,5 +63,23 @@ describe('scheduleStorefrontHostnamePurge', () => {
 
     expect(afterCallbackResult).toBeInstanceOf(Promise);
     await expect(afterCallbackResult).resolves.toBeUndefined();
+  });
+
+  it('returns confirmation boolean in purgeStorefrontHostnameConfirmed', async () => {
+    mockPurgeCloudflareHostnamesConfirmed.mockResolvedValueOnce({
+      ok: true,
+      reason: 'purged',
+    } as never);
+    await expect(purgeStorefrontHostnameConfirmed('ogabassey')).resolves.toBe(
+      true
+    );
+
+    mockPurgeCloudflareHostnamesConfirmed.mockResolvedValueOnce({
+      ok: false,
+      reason: 'provider_rejected',
+    } as never);
+    await expect(purgeStorefrontHostnameConfirmed('ogabassey')).resolves.toBe(
+      false
+    );
   });
 });

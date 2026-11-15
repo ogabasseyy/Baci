@@ -1,5 +1,3 @@
-import Link from 'next/link';
-import { asRoute } from '@/lib/routes';
 import {
   getStorefrontCrawlDiscoveryPages,
   STOREFRONT_CRAWL_DISCOVERY_BLOG_PAGE_LIMIT,
@@ -45,14 +43,13 @@ export function BlogCrawlDiscoveryLinks({
       </p>
       <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-2">
         {pages.map((page) => (
-          <Link
+          <a
             key={page}
-            href={asRoute(buildHref(page))}
-            prefetch={false}
+            href={buildHref(page)}
             className="text-xs font-medium text-primary underline-offset-4 hover:underline"
           >
             {pageLabel} {page}
-          </Link>
+          </a>
         ))}
       </div>
     </div>

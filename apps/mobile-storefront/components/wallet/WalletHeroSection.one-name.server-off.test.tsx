@@ -1,0 +1,182 @@
+import { describe, expect, it, jest } from '@jest/globals';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { WalletHeroSection } from './WalletHeroSection';
+import { WalletPrimaryContext } from './WalletPrimaryContext';
+
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
+jest.mock('react-native-reanimated', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+  return {
+    __esModule: true,
+    default: { View },
+    FadeIn: { duration: () => ({ delay: () => ({}) }) },
+  };
+});
+jest.mock('@/lib/clipboard', () => ({
+  setClipboardString: () => Promise.resolve(true),
+}));
+jest.mock('@/hooks/use-haptics', () => ({ triggerHaptic: () => undefined }));
+
+const account = {
+  accountName: 'Ada Obi',
+  accountNumber: '3685660013',
+  bankName: 'FAAS (SANDBOX)',
+  provider: 'piggyvest',
+};
+
+const creditWatch = {
+  armCheck: jest.fn(),
+  creditedAmount: null,
+  reset: jest.fn(),
+  returnCtaHref: undefined,
+  status: 'idle' as const,
+};
+
+function renderHero(primaryReady: boolean, onOpenFundPanel = jest.fn()) {
+  render(
+    <WalletPrimaryContext.Provider value={primaryReady}>
+      <WalletHeroSection
+        earningsAvailable={false}
+        earningsBalance={null}
+        creditWatch={creditWatch}
+        fundingAccount={
+          primaryReady ? account : { ...account, provider: 'paystack' }
+        }
+        loyaltyPoints={0}
+        onOpenFundPanel={onOpenFundPanel}
+        onOpenRedeemPanel={jest.fn()}
+        savingsBalance={0}
+        savingsWalletBalance={primaryReady ? 50_000 : undefined}
+        storeCreditBalance={0}
+        totalBalance={50_000}
+      />
+    </WalletPrimaryContext.Provider>
+  );
+  return onOpenFundPanel;
+}
+
+describe('bugfix: one ₦50,000 shown under three names on the wallet card', () => {
+  it('calls the main balance the savings wallet and goal money "In goals"', () => {
+    // Arrange + Act: ₦50,000 in the PiggyVest main wallet, ₦0 in goals.
+    renderHero(true);
+
+    // Assert: no "Total savings ₦50,000" next to "Savings ₦0".
+    expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
+    expect(screen.getByText('₦50,000')).toBeOnTheScreen();
+    expect(screen.getByText('In goals')).toBeOnTheScreen();
+    expect(screen.queryByText('Total savings · NGN')).toBeNull();
+    expect(screen.queryByText('Savings')).toBeNull();
+  });
+});
+
+describe('bugfix: no Add money entry and no copy feedback on the wallet card', () => {
+  it('opens the transfer instructions from a visible Add money button', () => {
+    const onOpenFundPanel = renderHero(true);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
+
+    expect(onOpenFundPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it('says "Copied" after the account number is copied', async () => {
+    renderHero(true);
+
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Copy savings account number' })
+      );
+    });
+
+    expect(screen.getByText('Copied')).toBeOnTheScreen();
+  });
+
+  it('bugfix: shows "Copied" in place of the bank line so the card does not move', async () => {
+    renderHero(true);
+
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Copy savings account number' })
+      );
+    });
+
+    // One "Copied" line replaces the bank name; no extra line is added.
+    expect(screen.getAllByText('Copied')).toHaveLength(1);
+    expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
+  });
+});
+
+describe('server keeps PiggyVest off', () => {
+  it('keeps the card exactly as today: no Add money, the old copy message', async () => {
+    renderHero(false);
+
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Copy funding account number' })
+      );
+    });
+
+    expect(screen.getByText('Total Balance · NGN')).toBeOnTheScreen();
+    expect(screen.getByText('Savings')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Add money' })).toBeNull();
+    expect(
+      screen.getByText('Account number copied to clipboard.')
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: PiggyVest transfers checked in the store-credit ledger', () => {
+  it('hides the transfer checker and labels the account as savings', () => {
+    renderHero(true);
+
+    expect(screen.queryByText("I've transferred — check for it")).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Copy savings account number' })
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the plain funding account label where PiggyVest is off', () => {
+    renderHero(false);
+
+    expect(
+      screen.getByRole('button', { name: 'Copy funding account number' })
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: pending PiggyVest account shown as a spendable total', () => {
+  it('labels it the savings wallet with the older balance as store credit', () => {
+    // Arrange: PiggyVest account number, balance not ready (primaryReady
+    // false); the older ₦1,200 is the legacy balance.
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletHeroSection
+          earningsAvailable={false}
+          earningsBalance={null}
+          fundingAccount={account}
+          loyaltyPoints={0}
+          onOpenFundPanel={jest.fn()}
+          onOpenRedeemPanel={jest.fn()}
+          savingsBalance={0}
+          savingsWalletBalance={0}
+          storeCreditBalance={1200}
+          totalBalance={1200}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+
+    // Assert
+    expect(screen.getByText('Savings wallet · NGN')).toBeOnTheScreen();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    // ₦1,200 appears once: the store credit line, never the big balance.
+    expect(screen.getAllByText('₦1,200')).toHaveLength(1);
+    expect(screen.getByText('Store credit')).toBeOnTheScreen();
+    expect(screen.getByText('In goals')).toBeOnTheScreen();
+    expect(screen.queryByText('Total Balance · NGN')).toBeNull();
+  });
+});

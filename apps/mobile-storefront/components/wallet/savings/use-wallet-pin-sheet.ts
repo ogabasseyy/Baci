@@ -248,9 +248,16 @@ export function useWalletPinSheet({
     error,
     notice,
     busy,
-    setPin: (value: string) => setPin(value.replace(/[^0-9]/g, '').slice(0, 6)),
-    setConfirmPin: (value: string) =>
-      setConfirmPin(value.replace(/[^0-9]/g, '').slice(0, 6)),
+    // Typing again answers "Enter 4 to 6 digits."; other errors (tries
+    // left, unavailable) stay until the next submit replaces them.
+    setPin: (value: string) => {
+      if (error === PIN_FORMAT) setError(null);
+      setPin(value.replace(/[^0-9]/g, '').slice(0, 6));
+    },
+    setConfirmPin: (value: string) => {
+      if (error === PIN_FORMAT) setError(null);
+      setConfirmPin(value.replace(/[^0-9]/g, '').slice(0, 6));
+    },
     submit: () => {
       if (step === 'enter') return submitEntry();
       if (step === 'set' || step === 'reset') return submitNewPin(step);

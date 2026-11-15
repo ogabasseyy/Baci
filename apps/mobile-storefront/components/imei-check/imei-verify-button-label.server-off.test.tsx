@@ -21,6 +21,8 @@ const base = {
   tier: { price: 1500, name: 'Full Report' },
 };
 
+// With paying from PiggyVest switched off nothing says "Pay ... for": the
+// footer keeps its store credit words.
 describe('imeiVerifyButtonLabel', () => {
   it('asks for a check first', () => {
     expect(imeiVerifyButtonLabel({ ...base, hasTier: false })).toBe(
@@ -45,5 +47,13 @@ describe('imeiVerifyButtonLabel', () => {
       'Pay ₦1,500 for Full Report'
     );
     expect(imeiVerifyButtonLabel(base)).toBe('Verify Now - ₦1,500');
+  });
+
+  it('never offers a savings wallet payment while it is switched off', () => {
+    for (const needsTopUp of [false, true]) {
+      expect(
+        imeiVerifyButtonLabel({ ...base, needsTopUp, paysFromPiggyvest: false })
+      ).not.toMatch(/^Pay /);
+    }
   });
 });

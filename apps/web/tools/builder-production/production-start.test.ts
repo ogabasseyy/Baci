@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 
 const f = vi.hoisted(() => ({
   end: vi.fn(async () => {}),
+  poolConfig: vi.fn(),
   close: vi.fn(async () => {}),
   nonce: vi.fn(async () => true),
   boot: vi.fn(),
@@ -17,11 +18,19 @@ vi.mock('server-only', () => ({}));
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => f.client }));
 vi.mock('pg', () => ({
   Pool: class {
+    constructor(options: unknown) {
+      f.poolConfig(options);
+    }
     end = f.end;
   },
 }));
 vi.mock('../builder-auth/owner-preview-nonce', () => ({
   createOwnerPreviewNonceStore: async () => f.nonce,
+  ownerPreviewNonceDeadlines: {
+    connectionTimeoutMillis: 3000,
+    statement_timeout: 2000,
+    lock_timeout: 1000,
+  },
 }));
 vi.mock('../experience-verifier/loopback-forwarder', () => ({
   createVerifierLoopbackForwarder: () => f.forward,
@@ -62,6 +71,14 @@ const config = {
 it('wires restricted nonce admission, independent verifier and fixed artifact storage; closes both resources', async () => {
   f.boot.mockResolvedValueOnce({ close: f.close });
   const service = await startProductionBuilder(config);
+  expect(f.poolConfig).toHaveBeenCalledWith(
+    expect.objectContaining({
+      options: '-c role=baci_owner_preview_nonce',
+      connectionTimeoutMillis: 3000,
+      statement_timeout: 2000,
+      lock_timeout: 1000,
+    })
+  );
   const settings = f.boot.mock.calls.at(-1)?.[0];
   expect(settings.ownerPort).toBe(43104);
   expect(settings.ownerBridge.consumeNonce).toBe(f.nonce);

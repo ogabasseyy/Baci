@@ -3,7 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Pool } from 'pg';
 import { BuilderLifecycleError } from '@/lib/experience/builder-lifecycle-error';
 import { createVerifierAttestationClient } from '@/lib/experience/verifier-attestation-client';
-import { createOwnerPreviewNonceStore } from '../builder-auth/owner-preview-nonce';
+import {
+  createOwnerPreviewNonceStore,
+  ownerPreviewNonceDeadlines,
+} from '../builder-auth/owner-preview-nonce';
 import { createTransientOutputStore } from '../experience-runner/transient-output-store';
 import { createVerifierLoopbackForwarder } from '../experience-verifier/loopback-forwarder';
 import { createBuilderDraftApproval } from './approval';
@@ -22,10 +25,12 @@ export async function startProductionBuilder(input: unknown) {
       connectionString: config.previewDatabaseUrl,
       ssl: { rejectUnauthorized: true },
       max: 4,
-      connectionTimeoutMillis: 10000,
+      ...ownerPreviewNonceDeadlines,
       options: '-c role=baci_owner_preview_nonce',
     });
-    const consumeNonce = await createOwnerPreviewNonceStore(pool);
+    const consumeNonce = await createOwnerPreviewNonceStore(pool, {
+      requireDeadlines: true,
+    });
     const forwardAttestation = createVerifierLoopbackForwarder(
       config.verifierPort
     );

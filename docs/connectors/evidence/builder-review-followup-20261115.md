@@ -20,6 +20,15 @@ publication, checkout/order or ChatGPT submission receipt.
   identity checks and recovery bounds.
 - Startup and shutdown failures identify a fixed lifecycle phase without
   logging underlying exception text, credentials or provider responses.
+- Preview request deadlines and disconnects reach the normal user-scoped
+  Supabase client's Auth and PostgREST fetches. Transport tests retain all
+  occupied slots until admitted work actually settles. Fetch cancellation
+  does not imply rollback of a remote database statement.
+- The dedicated nonce pool uses a three-second connection/acquisition limit
+  and PostgreSQL-enforced two-second statement and one-second lock limits.
+  Production startup verifies the effective server settings. A disposable
+  PostgreSQL regression verifies lock timeout (55P03), statement timeout
+  (57014), and rejection of an unbounded session. No live SQL was changed.
 
 ## Earlier findings checked against current code
 
@@ -53,7 +62,9 @@ the commerce connector.
 Full-code delivery still requires a separately qualified execution origin.
 Before general owner-bridge activation, qualify bounded underlying work,
 deadline/disconnect handling, saturation and shutdown. An HTTP timeout alone
-does not prove that dependent work has stopped.
+does not prove that dependent work has stopped. The fixes above cover user
+fetch cancellation and nonce statements; verifier coordination, renderer and
+runner cleanup still need the complete overload/shutdown qualification.
 
 The actual ChatGPT synthetic merchant build/preview and final-checkout test
 remain pending. Do not label the app submission-ready or submit it on the

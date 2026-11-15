@@ -3,7 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Pool } from 'pg';
 import { startBarePostgresFixture } from './bare-postgres-fixture.ts';
-import { createOwnerPreviewNonceStore } from './owner-preview-nonce.ts';
+import {
+  createOwnerPreviewNonceStore,
+  ownerPreviewNonceDeadlines,
+} from './owner-preview-nonce.ts';
 
 test('durably consumes each signed nonce once across concurrent clients and service restarts', async () => {
   const db = await startBarePostgresFixture();
@@ -36,8 +39,25 @@ test('durably consumes each signed nonce once across concurrent clients and serv
       user: 'baci_owner_preview_login',
       options: '-c role=baci_owner_preview_nonce',
       max: 4,
+      ...ownerPreviewNonceDeadlines,
     });
-    const store = await createOwnerPreviewNonceStore(pool);
+    const store = await createOwnerPreviewNonceStore(pool, {
+      requireDeadlines: true,
+    });
+    const lock = await db.pool.connect();
+    try {
+      await lock.query('BEGIN');
+      await lock.query(
+        'LOCK TABLE builder_authorization.owner_preview_nonces IN ACCESS EXCLUSIVE MODE'
+      );
+      await assert.rejects(store('c'.repeat(64), Date.now() + 30000), {
+        code: '55P03',
+      });
+    } finally {
+      await lock.query('ROLLBACK');
+      lock.release();
+    }
+    await assert.rejects(pool.query('SELECT pg_sleep(5)'), { code: '57014' });
     const expiry = Date.now() + 30000;
     const results = await Promise.all(
       Array.from({ length: 8 }, () => store('a'.repeat(64), expiry))
@@ -50,6 +70,10 @@ test('durably consumes each signed nonce once across concurrent clients and serv
       user: 'baci_owner_preview_login',
       options: '-c role=baci_owner_preview_nonce',
     });
+    await assert.rejects(
+      createOwnerPreviewNonceStore(restarted, { requireDeadlines: true }),
+      /UNBOUNDED_OWNER_PREVIEW_DATABASE_SESSION/
+    );
     assert.equal(
       await (await createOwnerPreviewNonceStore(restarted))(
         'a'.repeat(64),

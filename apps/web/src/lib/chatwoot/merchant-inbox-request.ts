@@ -1,13 +1,11 @@
 import 'server-only';
 
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-import { hasPermission } from '@/lib/api-auth';
+import { type NextRequest, NextResponse } from 'next/server';
+import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { createClient } from '@/lib/supabase/server';
 import {
   getMerchantInboxBinding,
   type MerchantInboxBinding,
@@ -31,21 +29,20 @@ export function merchantInboxJson(body: unknown): NextResponse {
 }
 
 /**
- * Authenticates the caller, resolves their merchant (owner or staff) and
+ * Authenticates the caller (cookie or Bearer), resolves their merchant (owner or staff) and
  * returns that merchant's inbox binding. The merchant is never chosen by the
  * request: only the signed-in session selects it.
  */
 export async function resolveMerchantInboxRequest(
+  request: NextRequest,
   action: 'view' | 'edit'
 ): Promise<
   | { ok: true; binding: MerchantInboxBinding }
   | { ok: false; response: NextResponse }
 > {
-  const supabase = createClient(await cookies());
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // Web cookie sessions and mobile-admin Bearer sessions, both under RLS.
+  const { user, supabase } = await authenticateApiRequest(request);
+  if (!user || !supabase) {
     return {
       ok: false,
       response: merchantInboxError(401, 'Unauthorized', 'unauthorized'),

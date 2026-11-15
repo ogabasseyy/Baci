@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  compareMerchantInboxMessages,
   projectMerchantInboxConversation,
   projectMerchantInboxMessage,
 } from './merchant-inbox-projection';
@@ -77,6 +78,25 @@ describe('projectMerchantInboxMessage', () => {
     expect(
       projectMerchantInboxMessage(message({ content: 'a'.repeat(9_000) }))?.text
     ).toHaveLength(4_000);
+  });
+});
+
+describe('message ordering and truncation', () => {
+  it('does not split a surrogate pair at the cap', () => {
+    const text = projectMerchantInboxMessage(
+      message({ content: `${'a'.repeat(3_999)}😀tail` })
+    )?.text;
+    expect(text).toBe('a'.repeat(3_999));
+  });
+
+  it('orders by creation time and uses the id only to break ties', () => {
+    const at = (id: number, seconds: number) =>
+      projectMerchantInboxMessage(message({ id, created_at: seconds }));
+    const sorted = [at(5, CREATED + 10), at(9, CREATED), at(7, CREATED)]
+      .filter((value) => value !== null)
+      .sort(compareMerchantInboxMessages)
+      .map((value) => value.id);
+    expect(sorted).toEqual([7, 9, 5]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
 } from '@/schemas/merchant-inbox';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
 import {
+  compareMerchantInboxMessages,
   projectMerchantInboxConversation,
   projectMerchantInboxMessage,
 } from './merchant-inbox-projection';
@@ -63,7 +64,10 @@ function failure(response: { status: number | null }): MerchantInboxFailure {
 /** Lists the bound inbox's conversations, most recently active first. */
 export async function listMerchantInboxConversations(
   binding: MerchantInboxBinding,
-  input: { page: number; status: 'open' | 'resolved' | 'pending' | 'all' }
+  input: {
+    page: number;
+    status: 'open' | 'resolved' | 'pending' | 'snoozed' | 'all';
+  }
 ): Promise<
   | { ok: true; conversations: MerchantInboxConversation[]; hasMore: boolean }
   | MerchantInboxFailure
@@ -145,7 +149,7 @@ export async function listMerchantInboxMessages(
   const messages = parsed.data.payload
     .map(projectMerchantInboxMessage)
     .filter((value): value is MerchantInboxMessage => value !== null)
-    .sort((left, right) => left.id - right.id);
+    .sort(compareMerchantInboxMessages);
   return { ok: true, conversation: owned.conversation, messages };
 }
 

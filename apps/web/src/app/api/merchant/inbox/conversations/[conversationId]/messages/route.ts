@@ -22,7 +22,7 @@ export async function GET(
   context: { params: Promise<{ conversationId: string }> }
 ) {
   // Authenticate first: an unauthenticated caller learns nothing about input.
-  const resolved = await resolveMerchantInboxRequest('view');
+  const resolved = await resolveMerchantInboxRequest(request, 'view');
   if (!resolved.ok) return resolved.response;
 
   const { conversationId: rawConversationId } = await context.params;

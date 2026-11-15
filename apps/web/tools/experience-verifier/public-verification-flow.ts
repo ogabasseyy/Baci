@@ -32,9 +32,12 @@ export function createPublicVerificationFlow<
     markerDigest: string;
   }): Promise<void>;
 }) {
-  return async (id: string) => {
+  return async (id: string, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
     const binding = await deps.bind(id);
+    signal?.throwIfAborted();
     const output = await deps.fetchOutput(binding);
+    signal?.throwIfAborted();
     const expected = await deps.deriveExpected(binding);
     if (
       expected.buildDigest !== binding.buildDigest ||
@@ -44,21 +47,28 @@ export function createPublicVerificationFlow<
       !isDeepStrictEqual(expected.assets, binding.assets)
     )
       throw Error('PUBLIC_BINDING_MISMATCH');
+    signal?.throwIfAborted();
     const pages = await deps.fetchPages(binding, expected);
     return verifyPublicExperience(expected, {
-      observe: () => deps.observe(binding, output, pages, expected),
+      observe: () => {
+        signal?.throwIfAborted();
+        return deps.observe(binding, output, pages, expected);
+      },
       current: async () => {
+        signal?.throwIfAborted();
         const current = await deps.bind(id);
         if (!isDeepStrictEqual(current, binding))
           throw Error('PUBLICATION_SUPERSEDED');
         return current;
       },
-      record: (markerDigest) =>
-        deps.record({
+      record: (markerDigest) => {
+        signal?.throwIfAborted();
+        return deps.record({
           receiptId: binding.receiptId,
           effectDigest: binding.effectDigest,
           markerDigest,
-        }),
+        });
+      },
     });
   };
 }

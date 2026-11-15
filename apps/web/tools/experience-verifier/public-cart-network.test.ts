@@ -32,7 +32,8 @@ it('pins an independently resolved public address and retains only bounded cooki
   });
   expect(dial).toHaveBeenCalledWith(
     expect.objectContaining({ url: good.url }),
-    { address: '8.8.8.8', family: 4 }
+    { address: '8.8.8.8', family: 4 },
+    expect.any(AbortSignal)
   );
 });
 

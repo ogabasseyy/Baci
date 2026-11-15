@@ -112,7 +112,9 @@ it('uses owner and anonymous clients for distinct reads and records only after t
   const pool = {};
   const observe = vi.fn(async () => observation);
   f.makePublicClient.mockReturnValue(anonymous);
+  const signal = new AbortController().signal;
   const verify = await createPublicVerificationCoordinator({
+    signal,
     owner: owner as never,
     supabase: {
       url: 'https://project.supabase.co',
@@ -131,6 +133,7 @@ it('uses owner and anonymous clients for distinct reads and records only after t
     'https://project.supabase.co',
     'sb_publishable_synthetic123',
     {
+      global: { fetch: expect.any(Function) },
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -144,12 +147,17 @@ it('uses owner and anonymous clients for distinct reads and records only after t
       runtimeBase: 'https://runtime.other-example.com',
     })
   );
-  expect(f.derive).toHaveBeenCalledWith(binding, f.runtime);
+  expect(f.derive).toHaveBeenCalledWith(binding, f.runtime, signal);
   expect(f.fetchOutput).toHaveBeenCalledWith(
     binding,
-    'https://runtime.other-example.com'
+    'https://runtime.other-example.com',
+    { signal }
   );
-  expect(f.fetchPages).toHaveBeenCalledWith(binding.canonicalBase, plan.routes);
+  expect(f.fetchPages).toHaveBeenCalledWith(
+    binding.canonicalBase,
+    plan.routes,
+    { signal }
+  );
   expect(observe).toHaveBeenCalledWith(
     binding,
     [{ url: 'asset' }],
@@ -157,19 +165,24 @@ it('uses owner and anonymous clients for distinct reads and records only after t
     plan,
     f.relay,
     [{ url: 'framework' }],
-    [{ url: 'frame' }]
+    [{ url: 'frame' }],
+    signal
   );
-  expect(f.fetchFramework).toHaveBeenCalledWith(binding.canonicalBase, [
-    { path: '/' },
-  ]);
+  expect(f.fetchFramework).toHaveBeenCalledWith(
+    binding.canonicalBase,
+    [{ path: '/' }],
+    { signal }
+  );
   expect(f.fetchFrames).toHaveBeenCalledWith(
     binding,
     'https://runtime.other-example.com',
-    plan.routes
+    plan.routes,
+    { signal }
   );
   expect(f.makeRelay).toHaveBeenCalledWith({
     binding,
     product: plan.product,
+    signal,
     paths: plan.routes.map((route) => route.path),
     supabase: {
       url: 'https://project.supabase.co',
@@ -241,4 +254,50 @@ it('rejects secret or legacy privileged keys before creating any public client',
     ).rejects.toThrow('INVALID_PUBLIC_CLIENT');
   }
   expect(f.makePublicClient).not.toHaveBeenCalled();
+});
+
+it('passes cancellation to anonymous fetch and skips remaining stages after abort', async () => {
+  const controller = new AbortController();
+  const started = Promise.withResolvers<void>();
+  const stalledFetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation((_url, init) => {
+      started.resolve();
+      const signal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    });
+  const observe = vi.fn();
+  try {
+    const verify = await createPublicVerificationCoordinator({
+      owner: {} as never,
+      supabase: {
+        url: 'https://project.supabase.co',
+        anonKey: 'sb_publishable_synthetic123',
+      },
+      pool: {} as never,
+      rootDomain: 'example.com',
+      executionOrigin: 'https://runtime.other-example.com',
+      signal: controller.signal,
+      observe,
+    });
+    const clientFetch = f.makePublicClient.mock.calls[0][2].global.fetch;
+    f.bind.mockImplementationOnce(() =>
+      clientFetch('https://project.supabase.co/rest/v1/synthetic')
+    );
+    const result = expect(verify('approval')).rejects.toThrow(
+      'synthetic abort'
+    );
+    await started.promise;
+    controller.abort(Error('synthetic abort'));
+    await result;
+    expect(f.fetchOutput).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+    expect(f.record).not.toHaveBeenCalled();
+  } finally {
+    stalledFetch.mockRestore();
+  }
 });

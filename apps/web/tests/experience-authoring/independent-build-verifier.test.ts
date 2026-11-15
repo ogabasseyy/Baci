@@ -90,10 +90,13 @@ function fixture() {
     jobId: id,
     wallMs: 1,
   }));
+  const withSignal = vi.fn(
+    (kind: string, _payload: unknown, _signal: AbortSignal) => execute(kind)
+  );
   const record = vi.fn(async () => {});
   const canonicalBase = vi.fn(async () => 'https://synthetic.merchant.test');
   const verifier = createIndependentBuildVerifier({
-    execute: execute as never,
+    execute: Object.assign(execute, { withSignal }) as never,
     record,
     bootstrap: vi.fn(async () => ({})) as never,
     canonicalBase,
@@ -107,7 +110,7 @@ function fixture() {
     receiptDigest: 'b'.repeat(64),
     hostOrigin: 'https://synthetic.merchant.test',
   };
-  return { ctx, verifier, input, execute, record, canonicalBase };
+  return { ctx, verifier, input, execute, withSignal, record, canonicalBase };
 }
 it('records only after independent recompilation and browser qualification', async () => {
   const x = fixture();
@@ -146,6 +149,44 @@ it('never records a caller-selected digest or a stale attempt', async () => {
   });
   await expect(x.verifier(x.ctx as never, x.input)).rejects.toThrow(
     'BUILD_FAILED'
+  );
+  expect(x.record).not.toHaveBeenCalled();
+});
+
+it('passes the request abort to the active capture and skips subsequent captures and recording', async () => {
+  const x = fixture();
+  const controller = new AbortController();
+  const reason = Error('synthetic cancellation');
+  x.withSignal.mockImplementation(async (kind, _payload, signal) => {
+    if (kind === 'capture') {
+      const cancelled = new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), {
+          once: true,
+        });
+      });
+      controller.abort(reason);
+      return cancelled;
+    }
+    return x.execute(kind);
+  });
+  f.qualify.mockImplementationOnce(async ({ execute }) => {
+    await execute('capture', { width: 390 });
+    await execute('capture', { width: 1440 });
+  });
+
+  await expect(
+    x.verifier(x.ctx as never, x.input, controller.signal)
+  ).rejects.toBe(reason);
+  expect(x.withSignal.mock.calls.map(([kind]) => kind)).toEqual([
+    'prerender-build',
+    'prerender-build',
+    'prerender',
+    'capture',
+  ]);
+  expect(x.withSignal).toHaveBeenLastCalledWith(
+    'capture',
+    { width: 390 },
+    controller.signal
   );
   expect(x.record).not.toHaveBeenCalled();
 });

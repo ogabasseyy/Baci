@@ -4,6 +4,7 @@ import { resolveCanonicalBase } from '@/lib/experience/canonical-domain';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { createPublicExperienceRuntime } from '@/lib/experience/public-runtime';
 import { createPublicHeadResolver } from './public-head-resolver';
+import { publicNetworkSignal } from './public-network-lifetime';
 import { fetchPublicOutput } from './public-output-fetch';
 import { fetchPublicPages } from './public-page-fetch';
 import { createVerifierPublicRecorder } from './public-recorder';
@@ -25,6 +26,7 @@ export async function createPublicVerificationCoordinator(settings: {
   pool: Pool;
   rootDomain: string;
   executionOrigin: string;
+  signal?: AbortSignal;
   observe(
     binding: Binding,
     output: Output,
@@ -32,9 +34,13 @@ export async function createPublicVerificationCoordinator(settings: {
     expected: Plan,
     relay: ReturnType<typeof createPublicVerificationRelay>,
     framework: Awaited<ReturnType<typeof fetchFrameworkAssets>>,
-    frames: Awaited<ReturnType<typeof fetchPublicFrames>>
+    frames: Awaited<ReturnType<typeof fetchPublicFrames>>,
+    signal?: AbortSignal
   ): Promise<unknown>;
 }) {
+  const signal = settings.signal;
+  signal?.throwIfAborted();
+  const network = { signal };
   const executionOrigin = productionOrigin(settings.executionOrigin);
   let supabaseUrl: string;
   try {
@@ -45,6 +51,20 @@ export async function createPublicVerificationCoordinator(settings: {
     throw Error('INVALID_PUBLIC_CLIENT');
   }
   const publicClient = createClient(supabaseUrl, settings.supabase.anonKey, {
+    global: {
+      fetch: (input, init) => {
+        const inherited =
+          init?.signal ?? (input instanceof Request ? input.signal : undefined);
+        const combined =
+          signal && inherited
+            ? AbortSignal.any([signal, inherited])
+            : (signal ?? inherited);
+        return fetch(input, {
+          ...init,
+          signal: publicNetworkSignal(10000, combined),
+        });
+      },
+    },
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -64,14 +84,30 @@ export async function createPublicVerificationCoordinator(settings: {
     prerenderDelivery: true,
   });
   const record = await createVerifierPublicRecorder(settings.pool);
-  return createPublicVerificationFlow({
+  signal?.throwIfAborted();
+  const verify = createPublicVerificationFlow({
     bind,
-    fetchOutput: (binding) => fetchPublicOutput(binding, executionOrigin),
-    deriveExpected: (binding) => derivePublicVerificationPlan(binding, runtime),
+    fetchOutput: (binding) =>
+      fetchPublicOutput(binding, executionOrigin, network),
+    deriveExpected: (binding) =>
+      derivePublicVerificationPlan(binding, runtime, signal),
     fetchPages: (binding, expected) =>
-      fetchPublicPages(binding.canonicalBase, expected.routes),
-    observe: async (binding, output, pages, expected) =>
-      settings.observe(
+      fetchPublicPages(binding.canonicalBase, expected.routes, network),
+    observe: async (binding, output, pages, expected) => {
+      const framework = await fetchFrameworkAssets(
+        binding.canonicalBase,
+        pages,
+        network
+      );
+      signal?.throwIfAborted();
+      const frames = await fetchPublicFrames(
+        binding,
+        executionOrigin,
+        expected.routes,
+        network
+      );
+      signal?.throwIfAborted();
+      return settings.observe(
         binding,
         output,
         pages,
@@ -81,10 +117,14 @@ export async function createPublicVerificationCoordinator(settings: {
           product: expected.product,
           paths: expected.routes.map((route) => route.path),
           supabase: settings.supabase,
+          signal,
         }),
-        await fetchFrameworkAssets(binding.canonicalBase, pages),
-        await fetchPublicFrames(binding, executionOrigin, expected.routes)
-      ),
+        framework,
+        frames,
+        signal
+      );
+    },
     record,
   });
+  return (id: string) => verify(id, signal);
 }

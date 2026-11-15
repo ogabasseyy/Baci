@@ -12,7 +12,7 @@ export async function fetchPublicPages(
   routes: Route[],
   options: Pick<
     Parameters<typeof createBoundPublicFetcher>[0],
-    'resolve' | 'network'
+    'resolve' | 'network' | 'signal'
   > = {}
 ) {
   const origin = productionOrigin(canonicalBase);

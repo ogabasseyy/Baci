@@ -209,10 +209,12 @@ it('wires public verification only when a trusted observer is explicitly supplie
     resolveUserClient: resolveUser,
   });
   const owner = {};
-  await settings.verify(owner, 'approval');
+  const signal = new AbortController().signal;
+  await settings.verify(owner, 'approval', signal);
   expect(f.publicCoordinator).toHaveBeenCalledWith(
     expect.objectContaining({
       owner,
+      signal,
       observe,
       pool: config.pool,
       rootDomain: 'merchant.test',

@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage } from 'node:http';
 
-async function readBody(req: IncomingMessage): Promise<Buffer> {
+async function readBody(
+  req: IncomingMessage,
+  signal: AbortSignal
+): Promise<Buffer> {
+  signal.throwIfAborted();
   return await new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -13,6 +17,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
       req.off('end', end);
       req.off('error', fail);
       req.off('aborted', fail);
+      signal.removeEventListener('abort', fail);
       if (error) {
         req.resume();
         reject(error);
@@ -30,6 +35,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
     req.once('end', end);
     req.once('error', fail);
     req.once('aborted', fail);
+    signal.addEventListener('abort', fail, { once: true });
   });
 }
 
@@ -39,11 +45,12 @@ export async function startVerifierListener(
   port: number,
   buildHandler?: (request: Request) => Promise<Response>,
   captureHandler?: (request: Request) => Promise<Response>,
-  publicHandler?: (request: Request) => Promise<Response>
+  publicHandler?: (request: Request) => Promise<Response>,
+  deadlineMs = 550000
 ) {
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw Error('INVALID_VERIFIER_PORT');
-  let active = 0;
+  const active = new Set<AbortController>();
   let closing = false;
   let drained: (() => void) | undefined;
   const server = createServer(async (req, res) => {
@@ -70,19 +77,23 @@ export async function startVerifierListener(
       reply(404);
       return;
     }
-    if (closing || active >= 4) {
+    if (closing || active.size >= 4) {
       req.resume();
       reply(429);
       return;
     }
-    active++;
     const controller = new AbortController();
+    active.add(controller);
+    const deadline = setTimeout(() => {
+      controller.abort(Error('VERIFIER_DEADLINE'));
+      reply(503);
+    }, deadlineMs);
     const onClose = () => {
       if (!res.writableEnded) controller.abort();
     };
     res.once('close', onClose);
     try {
-      const bytes = await readBody(req);
+      const bytes = await readBody(req, controller.signal);
       controller.signal.throwIfAborted();
       const headers = new Headers({ 'content-type': 'application/json' });
       if (typeof req.headers['x-baci-verifier-signature'] === 'string')
@@ -107,25 +118,37 @@ export async function startVerifierListener(
           signal: controller.signal,
         })
       );
+      if (controller.signal.aborted) {
+        await result.body?.cancel();
+        return;
+      }
       if (req.url === '/v1/capture' && result.status === 200 && result.body) {
         const reader = result.body.getReader();
         const chunks: Uint8Array[] = [];
         let size = 0;
+        let cancellation: Promise<void> | undefined;
+        const cancel = () => {
+          cancellation ??= reader.cancel().catch(() => undefined);
+          return cancellation;
+        };
+        controller.signal.addEventListener('abort', cancel, { once: true });
         try {
           for (;;) {
             const part = await reader.read();
             if (part.done) break;
             size += part.value.byteLength;
             if (size > 4096) {
-              await reader.cancel();
+              await cancel();
               throw Error('OUTPUT_BUDGET');
             }
             chunks.push(part.value);
           }
         } finally {
+          controller.signal.removeEventListener('abort', cancel);
+          await cancellation;
           reader.releaseLock();
         }
-        if (!res.destroyed) {
+        if (!controller.signal.aborted && !res.destroyed) {
           res.writeHead(200, {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-store',
@@ -137,13 +160,15 @@ export async function startVerifierListener(
         reply(result.status);
       }
     } catch (error) {
-      reply(
-        error instanceof Error && error.message === 'BODY_BUDGET' ? 413 : 403
-      );
+      if (!controller.signal.aborted)
+        reply(
+          error instanceof Error && error.message === 'BODY_BUDGET' ? 413 : 403
+        );
     } finally {
+      clearTimeout(deadline);
       res.off('close', onClose);
-      active--;
-      if (active === 0) drained?.();
+      active.delete(controller);
+      if (active.size === 0) drained?.();
     }
   });
   server.headersTimeout = 10000;
@@ -162,7 +187,7 @@ export async function startVerifierListener(
       closePromise ??= (async () => {
         closing = true;
         const pending =
-          active === 0
+          active.size === 0
             ? Promise.resolve()
             : new Promise<void>((resolve) => {
                 drained = resolve;
@@ -175,6 +200,8 @@ export async function startVerifierListener(
               : resolve()
           )
         );
+        for (const controller of active)
+          controller.abort(Error('VERIFIER_SHUTDOWN'));
         server.closeAllConnections();
         await Promise.all([stopped, pending]);
       })();

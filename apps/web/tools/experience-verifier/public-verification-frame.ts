@@ -24,7 +24,7 @@ export async function fetchPublicFrames(
   routes: { path: string }[],
   options: Pick<
     Parameters<typeof createBoundPublicFetcher>[0],
-    'resolve' | 'network'
+    'resolve' | 'network' | 'signal'
   > = {}
 ) {
   const binding = bindingSchema.parse(input);

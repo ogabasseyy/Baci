@@ -45,20 +45,29 @@ function matches(
 }
 async function boundedText(
   body: ReadableStream<Uint8Array> | null,
-  limit: number
+  limit: number,
+  signal?: AbortSignal
 ) {
   if (!body) throw Error('INVALID_RUNNER_MESSAGE');
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
   let timedOut = false;
+  let cancellation: Promise<void> | undefined;
+  const cancel = () => {
+    cancellation ??= reader.cancel().catch(() => undefined);
+    return cancellation;
+  };
   const timer = setTimeout(() => {
     timedOut = true;
-    void reader.cancel().catch(() => undefined);
+    void cancel();
   }, 10000);
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
     for (;;) {
+      signal?.throwIfAborted();
       const part = await reader.read();
+      signal?.throwIfAborted();
       if (timedOut) throw Error('RUNNER_MESSAGE_TIMEOUT');
       if (part.done) break;
       length += part.value.byteLength;
@@ -66,10 +75,11 @@ async function boundedText(
       chunks.push(part.value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    await cancel();
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
     reader.releaseLock();
   }
   return Buffer.concat(chunks).toString('utf8');
@@ -93,7 +103,12 @@ export function createRunnerExecutor(config: {
   const key = Uint8Array.from(config.key);
   validateConfig(key, config.toolchainDigest);
   const now = config.now ?? Date.now;
-  return async (kind: QualificationKind, payload: unknown) => {
+  async function withSignal(
+    kind: QualificationKind,
+    payload: unknown,
+    ownerSignal?: AbortSignal
+  ) {
+    ownerSignal?.throwIfAborted();
     if (config.lane === 'public-render' && kind !== 'prerender')
       throw Error('INVALID_PUBLIC_RUNNER_KIND');
     const request = experienceRunnerRequest.parse({
@@ -109,13 +124,17 @@ export function createRunnerExecutor(config: {
     const body = JSON.stringify(request);
     if (Buffer.byteLength(body) > INPUT_LIMIT)
       throw Error('RUNNER_MESSAGE_BUDGET');
+    const timeout = AbortSignal.timeout(75000);
+    const signal = ownerSignal
+      ? AbortSignal.any([ownerSignal, timeout])
+      : timeout;
     const response = await (config.fetch ?? fetch)(endpoint, {
       method: 'POST',
       body,
       redirect: 'error',
       credentials: 'omit',
       cache: 'no-store',
-      signal: AbortSignal.timeout(75000),
+      signal,
       headers: {
         'Content-Type': 'application/json',
         'X-Baci-Runner-Signature': signature(key, 'request', body),
@@ -125,7 +144,7 @@ export function createRunnerExecutor(config: {
       await response.body?.cancel();
       throw Error('RUNNER_UNAVAILABLE');
     }
-    const text = await boundedText(response.body, OUTPUT_LIMIT);
+    const text = await boundedText(response.body, OUTPUT_LIMIT, signal);
     if (
       !matches(
         key,
@@ -137,7 +156,11 @@ export function createRunnerExecutor(config: {
       throw Error('INVALID_RUNNER_RESPONSE');
     const result = experienceRunnerReply(request.nonce).parse(JSON.parse(text));
     return experienceRunnerExecution.parse(result.output);
-  };
+  }
+  return Object.assign(
+    (kind: QualificationKind, payload: unknown) => withSignal(kind, payload),
+    { withSignal }
+  );
 }
 
 /** Ingress adapter: the injected executor MUST enforce the existing offline OCI

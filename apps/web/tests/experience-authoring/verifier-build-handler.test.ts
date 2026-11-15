@@ -15,12 +15,13 @@ it('admits a signed owner-bound build once and never accepts source from the cal
       getUser: vi.fn(async () => ({ data: { user: { id } }, error: null })),
     },
   };
+  const resolveUserClient = vi.fn(async () => user as never);
   const seen = new Set<string>();
   const handler = createVerifierBuildHandler({
     key,
     now: () => now,
     verify,
-    resolveUserClient: async () => user as never,
+    resolveUserClient,
     consumeNonce: async (nonce) => {
       if (seen.has(nonce)) return false;
       seen.add(nonce);
@@ -51,10 +52,16 @@ it('admits a signed owner-bound build once and never accepts source from the cal
       },
       body,
     });
-  expect((await handler(req())).status).toBe(204);
+  const input = req();
+  expect((await handler(input)).status).toBe(204);
+  expect(resolveUserClient).toHaveBeenCalledWith(
+    'synthetic.token',
+    input.signal
+  );
   expect(verify).toHaveBeenCalledWith(
     { merchantId: id, supabase: user },
-    expect.objectContaining({ jobId: id, buildDigest: 'b'.repeat(64) })
+    expect.objectContaining({ jobId: id, buildDigest: 'b'.repeat(64) }),
+    input.signal
   );
   expect((await handler(req())).status).toBe(409);
   expect(verify).toHaveBeenCalledOnce();

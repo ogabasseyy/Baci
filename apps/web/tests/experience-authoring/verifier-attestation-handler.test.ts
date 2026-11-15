@@ -14,6 +14,7 @@ function fixture() {
       getUser: vi.fn(async () => ({ data: { user: { id } }, error: null })),
     },
   };
+  const resolveUserClient = vi.fn(async () => user as never);
   const attest = vi.fn(async () => {});
   const seen = new Set<string>();
   const handler = createVerifierAttestationHandler({
@@ -24,7 +25,7 @@ function fixture() {
       seen.add(nonce);
       return true;
     },
-    resolveUserClient: async () => user as never,
+    resolveUserClient,
     attest,
   });
   const body = JSON.stringify({
@@ -54,11 +55,16 @@ function fixture() {
         body: overrides?.body ?? body,
       }
     );
-  return { handler, request, attest, user };
+  return { handler, request, attest, user, resolveUserClient };
 }
 it('verifies a signed owner request and rejects durable nonce replay', async () => {
   const f = fixture();
-  const response = await f.handler(f.request());
+  const input = f.request();
+  const response = await f.handler(input);
+  expect(f.resolveUserClient).toHaveBeenCalledWith(
+    'synthetic.token',
+    input.signal
+  );
   expect(response.status).toBe(204);
   expect(f.user.auth.getUser).toHaveBeenCalledWith('synthetic.token');
   expect(f.attest).toHaveBeenCalledWith(f.user, id, 'draft');

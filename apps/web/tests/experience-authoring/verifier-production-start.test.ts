@@ -4,6 +4,7 @@ const f = vi.hoisted(() => ({
   parse: vi.fn(),
   service: vi.fn(),
   observer: vi.fn(),
+  verifyDeadlines: vi.fn(async () => {}),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('../../tools/experience-verifier/production-config', () => ({
@@ -14,6 +15,13 @@ vi.mock('../../tools/experience-verifier/service', () => ({
 }));
 vi.mock('../../tools/experience-verifier/public-verification-local', () => ({
   createLocalPinnedPublicObserver: f.observer,
+}));
+
+vi.mock('../../tools/experience-verifier/database-role', async (original) => ({
+  ...(await original<
+    typeof import('../../tools/experience-verifier/database-role')
+  >()),
+  verifyVerifierDatabaseDeadlines: f.verifyDeadlines,
 }));
 
 import { startProductionVerifier } from '../../tools/experience-verifier/production-start';
@@ -37,8 +45,13 @@ it('opens a TLS-verified restricted session and closes it after the service', as
       ssl: { rejectUnauthorized: true },
       options: '-c role=baci_experience_verifier',
       max: 4,
+      connectionTimeoutMillis: 3000,
+      statement_timeout: 2000,
+      lock_timeout: 1000,
+      query_timeout: 3000,
     })
   );
+  expect(f.verifyDeadlines).toHaveBeenCalledWith(pool);
   await running.close();
   await running.close();
   expect(calls).toEqual(['service', 'pool']);

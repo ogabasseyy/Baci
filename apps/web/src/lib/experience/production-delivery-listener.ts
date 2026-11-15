@@ -26,7 +26,13 @@ export function createProductionDeliveryListener(settings: {
   const origin = productionOrigin(settings.executionOrigin);
   const host = new URL(origin).host;
   const server = createServer(async (req, res) => {
+    const controller = new AbortController();
+    const onClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.once('close', onClose);
     const unavailable = () => {
+      if (res.destroyed) return;
       if (!res.headersSent) {
         res.writeHead(404, { 'Cache-Control': 'no-store' });
         res.end('Unavailable');
@@ -55,8 +61,13 @@ export function createProductionDeliveryListener(settings: {
       const request = new Request(`${origin}${path}`, {
         method: 'GET',
         headers,
+        signal: controller.signal,
       });
       const response = await settings.deliver(request);
+      if (res.destroyed) {
+        await response.body?.cancel();
+        return;
+      }
       const output: Record<string, string> = {};
       response.headers.forEach((value, name) => {
         if (responseHeaders.has(name)) output[name] = value;
@@ -66,6 +77,8 @@ export function createProductionDeliveryListener(settings: {
       else await pipeline(Readable.fromWeb(response.body as never), res);
     } catch {
       unavailable();
+    } finally {
+      res.off('close', onClose);
     }
   });
   server.requestTimeout = 30000;

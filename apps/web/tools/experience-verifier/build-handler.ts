@@ -26,7 +26,10 @@ export function createVerifierBuildHandler(settings: {
   key: Uint8Array;
   now?: () => number;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
-  resolveUserClient(token: string): Promise<SupabaseClient>;
+  resolveUserClient(
+    token: string,
+    signal: AbortSignal
+  ): Promise<SupabaseClient>;
   verify: ReturnType<typeof createIndependentBuildVerifier>;
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
@@ -36,12 +39,14 @@ export function createVerifierBuildHandler(settings: {
     const reply = (status: number) =>
       new Response(null, { status, headers: { 'Cache-Control': 'no-store' } });
     try {
+      request.signal.throwIfAborted();
       if (
         request.method !== 'POST' ||
         request.url !== 'https://verifier.baci-internal.invalid/v1/build'
       )
         return reply(404);
       const body = await readBoundedJsonBody(request, 16384);
+      request.signal.throwIfAborted();
       const parsed = body.ok ? message.safeParse(body.body) : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
@@ -60,9 +65,15 @@ export function createVerifierBuildHandler(settings: {
         !(await settings.consumeNonce(parsed.data.nonce, parsed.data.expiresAt))
       )
         return reply(409);
-      const client = await settings.resolveUserClient(parsed.data.accessToken);
+      request.signal.throwIfAborted();
+      const client = await settings.resolveUserClient(
+        parsed.data.accessToken,
+        request.signal
+      );
+      request.signal.throwIfAborted();
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
+      request.signal.throwIfAborted();
       const {
         merchantId,
         jobId,
@@ -73,8 +84,10 @@ export function createVerifierBuildHandler(settings: {
       } = parsed.data;
       await settings.verify(
         { supabase: client, merchantId },
-        { jobId, attemptNonce, buildDigest, receiptDigest, hostOrigin }
+        { jobId, attemptNonce, buildDigest, receiptDigest, hostOrigin },
+        request.signal
       );
+      request.signal.throwIfAborted();
       return reply(204);
     } catch {
       return reply(403);

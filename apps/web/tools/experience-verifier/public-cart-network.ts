@@ -1,8 +1,11 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { Agent } from 'undici';
-import { isPublicPublicationAddress } from '../builder-auth/publication-fetch';
 import { createPublicCartPolicy } from './public-cart-policy';
+import {
+  type PublicDnsLookup,
+  publicNetworkSignal,
+  readPublicBody,
+  resolvePublicAddress,
+} from './public-network-lifetime';
 
 type Address = { address: string; family: number };
 type Request = {
@@ -13,10 +16,11 @@ type Request = {
 };
 type Dial = (
   request: Request,
-  address: Address
+  address: Address,
+  signal: AbortSignal
 ) => Promise<{ response: Response; close(): Promise<void> }>;
 
-const dialPinned: Dial = async (request, address) => {
+const dialPinned: Dial = async (request, address, signal) => {
   const dispatcher = new Agent({
     connect: {
       autoSelectFamily: false,
@@ -31,12 +35,15 @@ const dialPinned: Dial = async (request, address) => {
       headers: request.headers,
       credentials: 'omit',
       redirect: 'manual',
-      signal: AbortSignal.timeout(10000),
+      signal,
       dispatcher,
     } as RequestInit & { dispatcher: Agent });
-    return { response, close: () => dispatcher.close() };
+    return {
+      response,
+      close: () => (signal.aborted ? dispatcher.destroy() : dispatcher.close()),
+    };
   } catch (error) {
-    await dispatcher.close();
+    await dispatcher.destroy();
     throw error;
   }
 };
@@ -48,7 +55,8 @@ export function createPublicCartNetwork(settings: {
   productId: string;
   variantId?: string;
   launch?: { buildDigest: string; paths: string[] };
-  resolve?: (host: string) => Promise<Address[]>;
+  signal?: AbortSignal;
+  resolve?: PublicDnsLookup;
   dial?: Dial;
 }) {
   const authorize = createPublicCartPolicy(settings);
@@ -98,28 +106,17 @@ export function createPublicCartNetwork(settings: {
       )
         throw Error();
       const url = new URL(request.url);
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const addresses = await Promise.race([
-        (settings.resolve ?? ((host) => lookup(host, { all: true })))(
-          url.hostname
-        ),
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(Error()), 5000);
-        }),
-      ]).finally(() => clearTimeout(timer));
-      if (
-        !addresses.length ||
-        addresses.some(
-          (address) =>
-            isIP(address.address) !== address.family ||
-            !isPublicPublicationAddress(address.address)
-        )
-      )
-        throw Error();
-      resource = await (settings.dial ?? dialPinned)(
-        request,
-        addresses.find((address) => address.family === 4) ?? addresses[0]
+      const address = await resolvePublicAddress(
+        url.hostname,
+        settings.signal,
+        settings.resolve
       );
+      const signal = publicNetworkSignal(10000, settings.signal);
+      signal.throwIfAborted();
+      resource = await (settings.dial ?? dialPinned)(request, address, signal);
+      if (signal.aborted)
+        await resource.response.body?.cancel().catch(() => undefined);
+      signal.throwIfAborted();
       if (resource.response.status < 200 || resource.response.status >= 300) {
         await resource.response.body?.cancel().catch(() => undefined);
         throw Error();
@@ -132,24 +129,18 @@ export function createPublicCartNetwork(settings: {
         await resource.response.body?.cancel().catch(() => undefined);
         throw Error();
       }
-      const reader = resource.response.body?.getReader();
-      const chunks: Uint8Array[] = [];
       let size = 0;
-      if (reader)
-        try {
-          for (;;) {
-            const part = await reader.read();
-            if (part.done) break;
-            size += part.value.byteLength;
-            if (size > 1048576) throw Error();
-            chunks.push(part.value);
-          }
-        } finally {
-          await reader.cancel().catch(() => undefined);
+      const bytes = await readPublicBody(
+        resource.response.body,
+        signal,
+        (bytes) => {
+          size += bytes;
+          if (size > 1048576) throw Error();
         }
+      );
       return {
         status: resource.response.status,
-        body: Buffer.concat(chunks),
+        body: bytes,
         cookies,
       };
     } catch {

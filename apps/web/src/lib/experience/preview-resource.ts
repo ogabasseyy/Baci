@@ -3,7 +3,8 @@ import type { PreviewVault } from './preview-service';
 export async function authorizePreviewResource(
   vault: PreviewVault,
   ticket: string,
-  path: string
+  path: string,
+  signal?: AbortSignal
 ) {
   if (
     !/^[a-f0-9]{64}$/.test(ticket) ||
@@ -11,5 +12,5 @@ export async function authorizePreviewResource(
     path.includes('\\')
   )
     throw Error('NOT_FOUND');
-  return await vault.read(ticket, path);
+  return await vault.read(ticket, path, signal);
 }

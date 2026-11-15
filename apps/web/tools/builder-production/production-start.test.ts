@@ -24,13 +24,9 @@ vi.mock('pg', () => ({
     end = f.end;
   },
 }));
-vi.mock('../builder-auth/owner-preview-nonce', () => ({
+vi.mock('../builder-auth/owner-preview-nonce', async (original) => ({
+  ...(await original<typeof import('../builder-auth/owner-preview-nonce')>()),
   createOwnerPreviewNonceStore: async () => f.nonce,
-  ownerPreviewNonceDeadlines: {
-    connectionTimeoutMillis: 3000,
-    statement_timeout: 2000,
-    lock_timeout: 1000,
-  },
 }));
 vi.mock('../experience-verifier/loopback-forwarder', () => ({
   createVerifierLoopbackForwarder: () => f.forward,
@@ -77,6 +73,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
       connectionTimeoutMillis: 3000,
       statement_timeout: 2000,
       lock_timeout: 1000,
+      query_timeout: 3000,
     })
   );
   const settings = f.boot.mock.calls.at(-1)?.[0];

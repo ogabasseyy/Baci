@@ -45,7 +45,8 @@ export function createProductionPreviewDelivery(config: {
       const file = await authorizePreviewResource(
         config.vault,
         match[1],
-        match[2]
+        match[2],
+        request.signal
       );
       return new Response(Uint8Array.from(file.bytes), {
         headers: {

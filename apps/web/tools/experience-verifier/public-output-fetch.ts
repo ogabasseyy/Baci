@@ -7,7 +7,7 @@ export function fetchPublicOutput(
   executionOrigin: string,
   options: Pick<
     Parameters<typeof createBoundPublicFetcher>[0],
-    'resolve' | 'network'
+    'resolve' | 'network' | 'signal'
   > = {}
 ) {
   const urls = describePublicOutput(binding, executionOrigin).map(

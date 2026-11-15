@@ -4,6 +4,7 @@ export const ownerPreviewNonceDeadlines = {
   connectionTimeoutMillis: 3000,
   statement_timeout: 2000,
   lock_timeout: 1000,
+  query_timeout: 3000,
 } as const;
 
 /** Restricted DB role only. A unique insert is the replay decision across replicas. */

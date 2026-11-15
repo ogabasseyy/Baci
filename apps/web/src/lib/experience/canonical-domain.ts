@@ -26,14 +26,18 @@ function safeHostname(host: string) {
 export async function resolveCanonicalBase(
   client: SupabaseClient,
   slug: string,
-  rootDomain: string
+  rootDomain: string,
+  signal?: AbortSignal
 ) {
   if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug))
     throw Error('INVALID_MERCHANT_SLUG');
   safeHostname(rootDomain);
-  const result = await client.rpc('resolve_storefront_custom_domain', {
+  signal?.throwIfAborted();
+  const query = client.rpc('resolve_storefront_custom_domain', {
     p_slug: slug,
   });
+  const result = await (signal ? query.abortSignal(signal) : query);
+  signal?.throwIfAborted();
   if (result.error) throw Error('CANONICAL_DOMAIN_UNAVAILABLE');
   if (result.data !== null && typeof result.data !== 'string')
     throw Error('CANONICAL_DOMAIN_UNAVAILABLE');

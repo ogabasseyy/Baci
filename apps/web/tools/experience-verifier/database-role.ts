@@ -1,5 +1,27 @@
 import type { Pool } from 'pg';
 
+export const verifierDatabaseDeadlines = {
+  connectionTimeoutMillis: 3000,
+  statement_timeout: 2000,
+  lock_timeout: 1000,
+  query_timeout: 3000,
+} as const;
+
+export async function verifyVerifierDatabaseDeadlines(pool: Pool) {
+  const { rows } = await pool.query<{
+    statement_timeout_ms: number;
+    lock_timeout_ms: number;
+  }>(`SELECT
+    (SELECT setting::integer FROM pg_catalog.pg_settings WHERE name='statement_timeout' AND unit='ms') AS statement_timeout_ms,
+    (SELECT setting::integer FROM pg_catalog.pg_settings WHERE name='lock_timeout' AND unit='ms') AS lock_timeout_ms`);
+  if (
+    rows[0]?.statement_timeout_ms !==
+      verifierDatabaseDeadlines.statement_timeout ||
+    rows[0]?.lock_timeout_ms !== verifierDatabaseDeadlines.lock_timeout
+  )
+    throw Error('UNBOUNDED_VERIFIER_DATABASE_SESSION');
+}
+
 export async function verifyVerifierDatabaseRole(pool: Pool) {
   const check = await pool.query<{
     login: string;

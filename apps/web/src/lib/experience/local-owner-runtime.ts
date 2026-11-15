@@ -61,6 +61,7 @@ function createPreviewRuntime(
     throw Error('Local preview origin required');
   return {
     async createPreviewLaunch(ctx, input) {
+      ctx.signal?.throwIfAborted();
       if (
         ctx.requestOrigin &&
         ctx.requestOrigin !== base.origin &&
@@ -76,9 +77,11 @@ function createPreviewRuntime(
         input,
         vault,
         base.origin,
-        prerender
+        prerender,
+        ctx.signal
       );
       try {
+        ctx.signal?.throwIfAborted();
         const b = await owner.supabase
           .from('experience_builds')
           .select('job_id')
@@ -107,6 +110,7 @@ function createPreviewRuntime(
         );
         if (!route) throw Error('NOT_FOUND');
         await requireExperienceOwner(owner);
+        ctx.signal?.throwIfAborted();
         return {
           ...launch,
           instanceId: randomUUID(),

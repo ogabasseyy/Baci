@@ -41,7 +41,8 @@ it('pins a public DNS answer and rejects redirects or excessive data', async () 
   );
   expect(network).toHaveBeenCalledWith(
     expect.any(URL),
-    expect.objectContaining({ address: '8.8.8.8', family: 4 })
+    expect.objectContaining({ address: '8.8.8.8', family: 4 }),
+    expect.any(AbortSignal)
   );
 });
 
@@ -214,4 +215,57 @@ it('can inspect a full 64-route storefront and its resources without removing th
   for (let i = 162; i < 256; i++) await fetch(urls[0]);
   await expect(fetch(urls[0])).rejects.toThrow('PUBLIC_FETCH_FAILED');
   expect(network).toHaveBeenCalledTimes(256);
+});
+
+it('cancels stalled DNS before dialing, and closes a stalled response body before rejecting', async () => {
+  const url = 'https://origin.example/path';
+  const dnsController = new AbortController();
+  const stalledDns = Promise.withResolvers<void>();
+  const network = vi.fn();
+  const resolve = vi.fn((_host: string, signal: AbortSignal) => {
+    stalledDns.resolve();
+    return new Promise<never>((_resolve, reject) =>
+      signal.addEventListener('abort', () => reject(signal.reason), {
+        once: true,
+      })
+    );
+  });
+  const fetchWithDns = createBoundPublicFetcher({
+    origins: ['https://origin.example'],
+    urls: [url],
+    signal: dnsController.signal,
+    resolve,
+    network,
+  });
+  const dnsResult = expect(fetchWithDns(url)).rejects.toThrow(
+    'PUBLIC_FETCH_FAILED'
+  );
+  await stalledDns.promise;
+  dnsController.abort();
+  await dnsResult;
+  expect(network).not.toHaveBeenCalled();
+
+  const bodyController = new AbortController();
+  const reading = Promise.withResolvers<void>();
+  const cancel = vi.fn();
+  const close = vi.fn(async () => {});
+  const body = new ReadableStream(
+    { pull: () => reading.resolve(), cancel },
+    { highWaterMark: 0 }
+  );
+  const fetchWithBody = createBoundPublicFetcher({
+    origins: ['https://origin.example'],
+    urls: [url],
+    signal: bodyController.signal,
+    resolve: async () => [{ address: '8.8.8.8', family: 4 }],
+    network: async () => ({ response: new Response(body), close }),
+  });
+  const bodyResult = expect(fetchWithBody(url)).rejects.toThrow(
+    'PUBLIC_FETCH_FAILED'
+  );
+  await reading.promise;
+  bodyController.abort();
+  await bodyResult;
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledOnce();
 });

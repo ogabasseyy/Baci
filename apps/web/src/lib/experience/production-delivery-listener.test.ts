@@ -78,6 +78,7 @@ async function send(
     host?: string;
     origin?: string;
     cookie?: string;
+    signal?: AbortSignal;
   } = {}
 ) {
   return await new Promise<{
@@ -91,6 +92,7 @@ async function send(
         port,
         path,
         method: options.method ?? 'GET',
+        signal: options.signal,
         headers: {
           host: options.host ?? 'output.runtime.test',
           ...(options.origin ? { origin: options.origin } : {}),
@@ -185,6 +187,68 @@ it('rejects foreign hosts, unsafe request targets, unsupported methods and redac
     expect(response.body).not.toContain('secret');
     expect(response.headers['cache-control']).toBe('no-store');
   } finally {
+    await listener.close();
+  }
+});
+
+it('propagates a delivery disconnect into a private vault liveness check', async () => {
+  const executionOrigin = 'https://output.runtime.test';
+  const controller = new AbortController();
+  const entered = Promise.withResolvers<void>();
+  const cancelled = Promise.withResolvers<void>();
+  const vault = createPreviewVault({
+    origin: executionOrigin,
+    now: Date.now,
+    async isActive(_binding, signal) {
+      entered.resolve();
+      await new Promise<void>((resolve) =>
+        signal?.addEventListener('abort', () => resolve(), { once: true })
+      );
+      cancelled.resolve();
+      return false;
+    },
+  });
+  const bytes = Buffer.from('export{}');
+  const ref = vault.create({
+    ownerId: 'owner',
+    bindingId: 'synthetic',
+    buildDigest: 'a'.repeat(64),
+    files: [
+      {
+        path: 'app.js',
+        mime: 'text/javascript',
+        bytes,
+        digest: digestBytes(bytes),
+      },
+    ],
+  });
+  const resource = vault.consume('owner', ref).resources[0];
+  const listener = createProductionDeliveryListener({
+    executionOrigin,
+    deliver: createProductionPreviewDelivery({
+      vault,
+      executionOrigin,
+      hostOrigins: ['https://builder.baci.test'],
+    }),
+  });
+  listener.server.listen(0, '127.0.0.1');
+  await once(listener.server, 'listening');
+  const address = listener.server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    const first = send(address.port, new URL(resource.url).pathname, {
+      signal: controller.signal,
+    });
+    const disconnected = expect(first).rejects.toHaveProperty(
+      'name',
+      'AbortError'
+    );
+    await entered.promise;
+    controller.abort();
+    await disconnected;
+    await cancelled.promise;
+  } finally {
+    controller.abort();
     await listener.close();
   }
 });

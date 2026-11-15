@@ -16,6 +16,7 @@ import {
   type PrerenderPipelineSettings,
 } from './local-prerender-pipeline';
 import { loadOwnerPreviewBootstrap } from './owner-preview-bootstrap';
+import { readPreviewBindingLiveness } from './preview-binding-liveness';
 import { createPreviewVault } from './preview-service';
 import {
   createPrivateExperienceCapture,
@@ -33,7 +34,10 @@ export function createProductionExperienceIntegration(settings: {
   previewOrigin?: string;
   executionOrigin: string;
   artifactDirectory: string;
-  canonicalBase: (slug: string) => string | Promise<string>;
+  canonicalBase: (
+    slug: string,
+    signal?: AbortSignal
+  ) => string | Promise<string>;
   publicClient: SupabaseClient;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   authenticate: ExperienceCompositionSettings['authenticate'];
@@ -64,32 +68,42 @@ export function createProductionExperienceIntegration(settings: {
   if (!settings.remoteCapture && !settings.recordCapture)
     throw Error('VERIFIER_NOT_CONFIGURED');
   let active = true;
-  const guarded =
-    (
-      remoteExecute: ReturnType<typeof createRunnerExecutor>
-    ): typeof remoteExecute =>
-    async (kind, payload) => {
+  const guarded = (remoteExecute: ReturnType<typeof createRunnerExecutor>) => {
+    const withSignal: typeof remoteExecute.withSignal = async (
+      kind,
+      payload,
+      signal
+    ) => {
       if (!active) throw Error('PROFILE_DISABLED');
-      const result = await remoteExecute(kind, payload);
+      const result = await remoteExecute.withSignal(kind, payload, signal);
       if (!active) throw Error('PROFILE_DISABLED');
       return result;
     };
-  const execute = guarded(
-    createRunnerExecutor({ ...settings.runner, lane: 'owner' })
-  );
+    return Object.assign(
+      (kind: Parameters<typeof withSignal>[0], payload: unknown) =>
+        withSignal(kind, payload),
+      { withSignal }
+    );
+  };
+  const ownerExecutor = createRunnerExecutor({
+    ...settings.runner,
+    lane: 'owner',
+  });
+  const execute = guarded(ownerExecutor);
   const publicExecute = guarded(
     createRunnerExecutor({ ...settings.runner, lane: 'public-render' })
   );
   const vault = createPreviewVault({
     origin: settings.executionOrigin,
     now: Date.now,
-    async isActive(binding) {
+    async isActive(binding, signal) {
       if (!active) return false;
-      const result = await settings.publicClient.rpc(
-        'experience_preview_binding_active',
-        { p_binding: binding }
+      const live = await readPreviewBindingLiveness(
+        settings.publicClient,
+        binding,
+        signal
       );
-      return active && !result.error && result.data === true;
+      return active && live;
     },
   });
   const pipelines = new Map<
@@ -101,7 +115,8 @@ export function createProductionExperienceIntegration(settings: {
   >();
   const pipelineFor = async (
     input: OwnerRequestContext,
-    scope: 'storefront.read' | 'storefront.write' = 'storefront.write'
+    scope: 'storefront.read' | 'storefront.write' = 'storefront.write',
+    signal?: AbortSignal
   ) => {
     if (!active) throw Error('PROFILE_DISABLED');
     const owner = await requireExperienceOwner(input, scope);
@@ -117,7 +132,11 @@ export function createProductionExperienceIntegration(settings: {
       !/^[a-z0-9][a-z0-9-]{0,99}$/.test(merchant.data.slug)
     )
       throw Error('NOT_FOUND');
-    const canonicalBase = await settings.canonicalBase(merchant.data.slug);
+    signal?.throwIfAborted();
+    const canonicalBase = await (signal
+      ? settings.canonicalBase(merchant.data.slug, signal)
+      : settings.canonicalBase(merchant.data.slug));
+    signal?.throwIfAborted();
     const canonicalOrigin = new URL(canonicalBase).origin;
     productionDeliveryOrigins({
       executionOrigin: settings.executionOrigin,
@@ -131,6 +150,7 @@ export function createProductionExperienceIntegration(settings: {
         canonicalBase,
         executionOrigin: settings.executionOrigin,
         vault,
+        previewExecute: execute.withSignal,
         build: {
           ...settings.build,
           hostOrigin: canonicalOrigin,
@@ -207,7 +227,9 @@ export function createProductionExperienceIntegration(settings: {
     owner: {
       approval: settings.approval,
       createPreviewLaunch: async (ctx, input) =>
-        (await pipelineFor(ctx)).pipeline.owner.createPreviewLaunch(ctx, input),
+        (
+          await pipelineFor(ctx, 'storefront.write', ctx.signal)
+        ).pipeline.owner.createPreviewLaunch(ctx, input),
     },
     storefront: published.runtime,
   };

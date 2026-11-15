@@ -9,13 +9,14 @@ export async function fetchFrameworkAssets(
   pages: { canonical: string; bytes: Buffer }[],
   options: Pick<
     Parameters<typeof createBoundPublicFetcher>[0],
-    'resolve' | 'network'
+    'resolve' | 'network' | 'signal'
   > = {}
 ) {
   const origin = productionOrigin(canonicalBase);
   if (!pages.length || pages.length > 128) throw Error('INVALID_PUBLIC_PAGES');
   const urls = new Map<string, 'js' | 'css'>();
   for (const page of pages) {
+    options.signal?.throwIfAborted();
     const canonical = new URL(page.canonical);
     if (
       canonical.origin !== origin ||

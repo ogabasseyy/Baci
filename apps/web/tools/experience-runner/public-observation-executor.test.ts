@@ -129,3 +129,80 @@ it('exchanges a start frame and real duplex requests with a separate worker proc
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('cancels a running observer and holds completion until owned cleanup settles', async () => {
+  const controller = new AbortController();
+  const started = Promise.withResolvers<void>();
+  const cleaning = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const command = vi.fn(async (_program: string, args: string[]) => {
+    if (args[2] === 'delete') {
+      cleaning.resolve();
+      await release.promise;
+    }
+    return '';
+  });
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'pipe',
+  });
+  const start = () => {
+    started.resolve();
+    return child;
+  };
+  let settled = false;
+  const result = runPublicObservationJob(
+    {
+      payload: {},
+      signal: controller.signal,
+      session: async () => ({ status: 200, body: '{}' }),
+    },
+    { command, start }
+  ).finally(() => {
+    settled = true;
+  });
+  const rejected = expect(result).rejects.toThrow('PUBLIC_OBSERVATION_FAILED');
+  try {
+    await started.promise;
+    controller.abort();
+    await cleaning.promise;
+    expect(child.signalCode).toBe('SIGKILL');
+    expect(settled).toBe(false);
+  } finally {
+    release.resolve();
+    child.kill('SIGKILL');
+  }
+  await rejected;
+}, 3000);
+
+it('cleans an owned preparation interrupted by abort without starting the worker', async () => {
+  const controller = new AbortController();
+  const preparing = Promise.withResolvers<void>();
+  const prepared = Promise.withResolvers<void>();
+  const command = vi.fn(async (_program: string, args: string[]) => {
+    if (args[2] === 'prepare') {
+      preparing.resolve();
+      await prepared.promise;
+    }
+    return '';
+  });
+  const start = vi.fn();
+  const result = runPublicObservationJob(
+    {
+      payload: {},
+      signal: controller.signal,
+      session: async () => ({ status: 200, body: '{}' }),
+    },
+    { command, start }
+  );
+  const rejected = expect(result).rejects.toThrow('PUBLIC_OBSERVATION_FAILED');
+  await preparing.promise;
+  controller.abort();
+  expect(command).toHaveBeenCalledTimes(1);
+  prepared.resolve();
+  await rejected;
+  expect(start).not.toHaveBeenCalled();
+  expect(command.mock.calls.map(([, args]) => args[2])).toEqual([
+    'prepare',
+    'delete',
+  ]);
+});

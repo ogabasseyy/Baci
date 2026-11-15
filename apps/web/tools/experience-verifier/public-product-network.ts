@@ -1,16 +1,20 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { Agent } from 'undici';
-import { isPublicPublicationAddress } from '../builder-auth/publication-fetch';
+import {
+  type PublicDnsLookup,
+  publicNetworkSignal,
+  readPublicBody,
+  resolvePublicAddress,
+} from './public-network-lifetime';
 import { createPublicProductPolicy } from './public-product-policy';
 
 type Address = { address: string; family: number };
 type Dial = (
   url: URL,
   address: Address,
-  key: string
+  key: string,
+  signal: AbortSignal
 ) => Promise<{ response: Response; close(): Promise<void> }>;
-const pinned: Dial = async (url, address, key) => {
+const pinned: Dial = async (url, address, key, signal) => {
   const dispatcher = new Agent({
     connect: {
       autoSelectFamily: false,
@@ -28,12 +32,15 @@ const pinned: Dial = async (url, address, key) => {
       },
       redirect: 'manual',
       credentials: 'omit',
-      signal: AbortSignal.timeout(10000),
+      signal,
       dispatcher,
     } as RequestInit & { dispatcher: Agent });
-    return { response, close: () => dispatcher.close() };
+    return {
+      response,
+      close: () => (signal.aborted ? dispatcher.destroy() : dispatcher.close()),
+    };
   } catch (error) {
-    await dispatcher.close();
+    await dispatcher.destroy();
     throw error;
   }
 };
@@ -44,7 +51,8 @@ export function createPublicProductNetwork(settings: {
   merchantId: string;
   productId: string;
   publishableKey: string;
-  resolve?: (host: string) => Promise<Address[]>;
+  signal?: AbortSignal;
+  resolve?: PublicDnsLookup;
   dial?: Dial;
 }) {
   if (!/^sb_publishable_[A-Za-z0-9_-]{8,}$/.test(settings.publishableKey))
@@ -56,51 +64,36 @@ export function createPublicProductNetwork(settings: {
     try {
       if (!allowed(request) || ++requests > 16) throw Error();
       const url = new URL(request.url);
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const addresses = await Promise.race([
-        (settings.resolve ?? ((host) => lookup(host, { all: true })))(
-          url.hostname
-        ),
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(Error()), 5000);
-        }),
-      ]).finally(() => clearTimeout(timer));
-      if (
-        !addresses.length ||
-        addresses.some(
-          (address) =>
-            isIP(address.address) !== address.family ||
-            !isPublicPublicationAddress(address.address)
-        )
-      )
-        throw Error();
+      const address = await resolvePublicAddress(
+        url.hostname,
+        settings.signal,
+        settings.resolve
+      );
+      const signal = publicNetworkSignal(10000, settings.signal);
+      signal.throwIfAborted();
       resource = await (settings.dial ?? pinned)(
         url,
-        addresses.find((address) => address.family === 4) ?? addresses[0],
-        settings.publishableKey
+        address,
+        settings.publishableKey,
+        signal
       );
+      if (signal.aborted)
+        await resource.response.body?.cancel().catch(() => undefined);
+      signal.throwIfAborted();
       if (resource.response.status !== 200) {
         await resource.response.body?.cancel().catch(() => undefined);
         throw Error();
       }
-      const reader = resource.response.body?.getReader();
-      const chunks: Uint8Array[] = [];
       let size = 0;
-      if (reader)
-        try {
-          for (;;) {
-            const part = await reader.read();
-            if (part.done) break;
-            size += part.value.byteLength;
-            if (size > 1048576) throw Error();
-            chunks.push(part.value);
-          }
-        } finally {
-          await reader.cancel().catch(() => undefined);
+      const bytes = await readPublicBody(
+        resource.response.body,
+        signal,
+        (bytes) => {
+          size += bytes;
+          if (size > 1048576) throw Error();
         }
-      const body = new TextDecoder('utf-8', { fatal: true }).decode(
-        Buffer.concat(chunks)
       );
+      const body = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       const value: unknown = JSON.parse(body);
       if (!Array.isArray(value) || value.length > 1) throw Error();
       if (

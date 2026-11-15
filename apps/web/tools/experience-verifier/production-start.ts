@@ -1,4 +1,8 @@
 import { Pool, type PoolConfig } from 'pg';
+import {
+  verifierDatabaseDeadlines,
+  verifyVerifierDatabaseDeadlines,
+} from './database-role';
 import { parseVerifierProductionConfig } from './production-config';
 import { createLocalPinnedPublicObserver } from './public-verification-local';
 import { startVerifierService } from './service';
@@ -17,9 +21,10 @@ export async function startProductionVerifier(
       connectionString: config.databaseUrl,
       ssl: { rejectUnauthorized: true },
       max: 4,
-      connectionTimeoutMillis: 10000,
+      ...verifierDatabaseDeadlines,
       options: '-c role=baci_experience_verifier',
     });
+    await verifyVerifierDatabaseDeadlines(pool);
     const publicVerification =
       config.publicObserver === 'co-located'
         ? {

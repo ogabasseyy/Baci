@@ -21,6 +21,7 @@ import {
 } from './local-owner-runtime';
 import { createLocalPerformanceReports } from './local-performance-reports';
 import { validatePerformanceBootstrap } from './performance-bootstrap';
+import type { PrerenderPreviewOptions } from './prerender-preview';
 import type { PreviewVault } from './preview-service';
 import { productionDeliveryOrigins } from './production-origins';
 /** Prefer a route that does not require an existing catalog item. */
@@ -39,6 +40,7 @@ export interface PrerenderPipelineSettings {
   artifactDirectory?: string;
   canonicalBase: string;
   vault: PreviewVault;
+  previewExecute?: PrerenderPreviewOptions['executeWithSignal'];
   build: Omit<
     Parameters<typeof runExperienceBuild>[2],
     'bootstrap' | 'prerenderArtifacts'
@@ -108,6 +110,7 @@ function createPrerenderPipeline(
     artifacts,
     bootstrap: settings.bootstrap,
     execute: settings.build.execute,
+    executeWithSignal: settings.previewExecute,
     previewOrigin: settings.build.previewOrigin,
   };
   const execute = settings.build.execute;

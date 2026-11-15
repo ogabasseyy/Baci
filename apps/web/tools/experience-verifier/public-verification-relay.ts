@@ -23,6 +23,7 @@ export function createPublicVerificationRelay(
     product: { id: string; slug: string; variantId?: string };
     supabase: { url: string; anonKey: string };
     paths: string[];
+    signal?: AbortSignal;
   },
   deps: {
     makeCartNetwork: typeof createPublicCartNetwork;
@@ -58,15 +59,17 @@ export function createPublicVerificationRelay(
     launch: { buildDigest: input.binding.buildDigest, paths: input.paths },
     ...(variantId ? { variantId } : {}),
   };
+  const signal = input.signal;
   const cart = createPublicCartSession({
     ...cartConfig,
     merchantId,
-    network: deps.makeCartNetwork(cartConfig),
+    network: deps.makeCartNetwork({ ...cartConfig, signal }),
   });
   const product = { origin: productOrigin, merchantId, productId };
   const readProduct = deps.makeProductNetwork({
     ...product,
     publishableKey: input.supabase.anonKey,
+    signal,
   });
   const commerce = createPublicCommerceRelay({ product, cart, readProduct });
   const readState = deps.makeStateReader(
@@ -76,19 +79,22 @@ export function createPublicVerificationRelay(
       buildDigest: input.binding.buildDigest,
       policyRevision: input.binding.head.policyRevision,
     },
-    input.paths
+    input.paths,
+    { signal }
   );
-  const readCatalog = deps.makeCatalogReader({
+  const catalog = {
     origin,
     merchantSlug,
     productId,
     productSlug: input.product.slug,
     paths: input.paths,
-  });
+  };
+  const readCatalog = deps.makeCatalogReader(catalog, { signal });
   const readFramework = (
     deps.makeFrameworkReader ?? createPublicFrameworkReader
-  )(origin);
+  )(origin, undefined, signal);
   return async (request: Parameters<typeof commerce>[0]) => {
+    signal?.throwIfAborted();
     const path = new URL(request.url).pathname;
     if (publicFrameworkRequest(origin, request)) return readFramework(request);
     if (path === '/api/storefront/experience/state') return readState(request);

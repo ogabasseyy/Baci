@@ -103,6 +103,7 @@ export function createOwnerPreviewBridge(settings: {
           supabase: owner.supabase,
           merchantId: owner.merchantId,
           requestOrigin: previewOrigin,
+          signal: request.signal,
         },
         {
           buildId: parsed.data.input.buildId,

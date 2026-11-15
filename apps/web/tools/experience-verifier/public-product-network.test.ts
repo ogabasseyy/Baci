@@ -31,7 +31,8 @@ it('uses only the host-owned public key with a pinned public address', async () 
   expect(dial).toHaveBeenCalledWith(
     url,
     { address: '8.8.8.8', family: 4 },
-    settings.publishableKey
+    settings.publishableKey,
+    expect.any(AbortSignal)
   );
 });
 

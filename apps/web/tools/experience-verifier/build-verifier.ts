@@ -21,6 +21,7 @@ import { parseExperienceManifest } from '@/schemas/experience-manifest';
 import type { runLocalQualification } from '../experience-runner/local-oci-executor';
 import { unpackPrerenderBuild } from '../experience-runner/prerender-artifacts';
 import { packPrivateBuild } from '../experience-runner/private-build-payload';
+import type { createRunnerExecutor } from '../experience-runner/runner-transport';
 
 const request = z.strictObject({
   jobId: z.uuid(),
@@ -32,7 +33,8 @@ const request = z.strictObject({
 
 /** Separately trusted verifier: re-reads source and independently runs qualification. */
 export function createIndependentBuildVerifier(settings: {
-  execute: typeof runLocalQualification;
+  execute: typeof runLocalQualification &
+    Partial<Pick<ReturnType<typeof createRunnerExecutor>, 'withSignal'>>;
   bootstrap(
     ctx: OwnerRequestContext,
     manifest: ExperienceManifest,
@@ -46,7 +48,21 @@ export function createIndependentBuildVerifier(settings: {
   executionOrigin: string;
   record(receipt: VerifierReceipt): Promise<void>;
 }) {
-  return async (inputCtx: OwnerRequestContext, value: unknown) => {
+  return async (
+    inputCtx: OwnerRequestContext,
+    value: unknown,
+    signal?: AbortSignal
+  ) => {
+    signal?.throwIfAborted();
+    const execute: typeof runLocalQualification = async (kind, payload) => {
+      signal?.throwIfAborted();
+      const result =
+        signal && settings.execute.withSignal
+          ? await settings.execute.withSignal(kind, payload, signal)
+          : await settings.execute(kind, payload);
+      signal?.throwIfAborted();
+      return result;
+    };
     const input = request.parse(value);
     const hostOrigin = productionOrigin(input.hostOrigin);
     productionDeliveryOrigins({
@@ -54,6 +70,7 @@ export function createIndependentBuildVerifier(settings: {
       hostOrigins: [hostOrigin, settings.previewOrigin],
     });
     const ctx = await requireExperienceOwner(inputCtx);
+    signal?.throwIfAborted();
     const repo = createExperienceRepository(ctx);
     const job = await repo.loadOwnedJob(input.jobId);
     const currentAttempt = (row: typeof job) =>
@@ -62,6 +79,7 @@ export function createIndependentBuildVerifier(settings: {
       row.source_digest === job.source_digest &&
       Date.parse(row.expires_at) > Date.now();
     if (!currentAttempt(job)) throw Error('BUILD_FAILED');
+    signal?.throwIfAborted();
     const merchant = await ctx.supabase
       .from('merchants')
       .select('slug')
@@ -69,6 +87,7 @@ export function createIndependentBuildVerifier(settings: {
       .maybeSingle();
     if (merchant.error || typeof merchant.data?.slug !== 'string')
       throw Error('BUILD_FAILED');
+    signal?.throwIfAborted();
     const canonical = new URL(
       await settings.canonicalBase(merchant.data.slug, ctx.supabase)
     );
@@ -80,6 +99,7 @@ export function createIndependentBuildVerifier(settings: {
       canonical.origin !== hostOrigin
     )
       throw Error('BUILD_FAILED');
+    signal?.throwIfAborted();
     const source = await ctx.supabase
       .from('experience_artifacts')
       .select('manifest')
@@ -95,6 +115,7 @@ export function createIndependentBuildVerifier(settings: {
       manifest.routes.find((item) => item.view !== 'product') ??
       manifest.routes[0];
     if (!route) throw Error('BUILD_FAILED');
+    signal?.throwIfAborted();
     const bootstrap = await settings.bootstrap(ctx, manifest, route.view);
     const payload = packPrivateBuild(
       manifest,
@@ -103,10 +124,10 @@ export function createIndependentBuildVerifier(settings: {
       settings.previewOrigin
     );
     const first = unpackPrerenderBuild(
-      (await settings.execute('prerender-build', payload)).output
+      (await execute('prerender-build', payload)).output
     );
     const second = unpackPrerenderBuild(
-      (await settings.execute('prerender-build', payload)).output
+      (await execute('prerender-build', payload)).output
     );
     if (
       first.client.digest !== input.buildDigest ||
@@ -127,7 +148,7 @@ export function createIndependentBuildVerifier(settings: {
       assets,
     });
     const rendered = (
-      await settings.execute('prerender', {
+      await execute('prerender', {
         javascript: first.renderer.javascript,
         bootstrap,
       })
@@ -148,7 +169,7 @@ export function createIndependentBuildVerifier(settings: {
       assets: [],
     });
     await qualifyBuildRender({
-      execute: settings.execute,
+      execute,
       candidate: first.client,
       independentOutput: second.client,
       readCandidate: () => first.client,
@@ -157,9 +178,12 @@ export function createIndependentBuildVerifier(settings: {
       assets,
       hostOrigins: [...new Set([hostOrigin, settings.previewOrigin])],
     });
+    signal?.throwIfAborted();
     await requireExperienceOwner(ctx);
+    signal?.throwIfAborted();
     if (!currentAttempt(await repo.loadOwnedJob(job.id)))
       throw Error('BUILD_FAILED');
+    signal?.throwIfAborted();
     const latestCanonical = new URL(
       await settings.canonicalBase(merchant.data.slug, ctx.supabase)
     );
@@ -171,6 +195,7 @@ export function createIndependentBuildVerifier(settings: {
       latestCanonical.origin !== hostOrigin
     )
       throw Error('BUILD_FAILED');
+    signal?.throwIfAborted();
     await settings.record({ merchantId: ctx.merchantId, ...input });
   };
 }

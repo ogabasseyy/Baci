@@ -15,6 +15,7 @@ it('returns owner-bound capture metadata through the signed loopback boundary', 
     },
     rpc: vi.fn(async () => ({ data: true, error: null })),
   };
+  const resolveUserClient = vi.fn(async () => user as never);
   const worker = vi.fn(async () => ({
     evidenceId: id,
     buildId: id,
@@ -24,7 +25,7 @@ it('returns owner-bound capture metadata through the signed loopback boundary', 
   const handler = createVerifierCaptureHandler({
     key,
     consumeNonce: async () => true,
-    resolveUserClient: async () => user as never,
+    resolveUserClient,
     resolveWorker: async () => worker as never,
   });
   const listener = await startVerifierListener(
@@ -57,6 +58,10 @@ it('returns owner-bound capture metadata through the signed loopback boundary', 
     await expect(
       client(ctx, { buildId: id, routeId: 'home', idempotencyKey: id })
     ).resolves.toMatchObject({ evidenceId: id, buildId: id });
+    expect(resolveUserClient).toHaveBeenCalledWith(
+      'synthetic.token',
+      expect.any(AbortSignal)
+    );
     expect(worker).toHaveBeenCalledOnce();
     worker.mockResolvedValueOnce({
       evidenceId: id,

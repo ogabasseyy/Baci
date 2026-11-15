@@ -159,3 +159,28 @@ test('refuses a pre-existing nonce role with unrelated privileges', async () => 
     await db.close();
   }
 });
+
+test('disposes the connection when the owner nonce pool hits the driver read timeout', async () => {
+  const db = await startBarePostgresFixture();
+  const pool = new Pool({
+    ...db.connection,
+    ...ownerPreviewNonceDeadlines,
+    max: 1,
+  });
+  const backendPid = async () =>
+    (await pool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid'))
+      .rows[0].pid;
+  try {
+    const firstPid = await backendPid();
+    // Force the driver backstop to trigger before the server timeout in this fixture.
+    await pool.query("SET statement_timeout = '5s'");
+    await assert.rejects(
+      pool.query('SELECT pg_sleep(4)'),
+      /Query read timeout/
+    );
+    assert.notEqual(await backendPid(), firstPid);
+  } finally {
+    await pool.end();
+    await db.close();
+  }
+});

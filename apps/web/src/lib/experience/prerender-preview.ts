@@ -22,6 +22,11 @@ export interface PrerenderPreviewOptions {
     routeId: string
   ): Promise<PublicBootstrap>;
   execute?: typeof runLocalQualification;
+  executeWithSignal?: (
+    kind: Parameters<typeof runLocalQualification>[0],
+    payload: unknown,
+    signal?: AbortSignal
+  ) => ReturnType<typeof runLocalQualification>;
 }
 export async function consumePrerenderPreview(
   ctx: ExperienceContext,
@@ -33,8 +38,10 @@ export async function consumePrerenderPreview(
     ref: string;
   },
   vault: PreviewVault,
-  options: PrerenderPreviewOptions
+  options: PrerenderPreviewOptions,
+  signal?: AbortSignal
 ) {
+  signal?.throwIfAborted();
   const renderer = options.artifacts.read({
     merchantId: ctx.merchantId,
     buildId: input.buildId,
@@ -60,10 +67,12 @@ export async function consumePrerenderPreview(
             .map((r) => [r.path.slice(7), r.url])
         ),
       };
-      const proof = await (options.execute ?? runLocalQualification)(
-        'prerender',
-        { javascript: renderer.javascript, bootstrap }
-      );
+      signal?.throwIfAborted();
+      const payload = { javascript: renderer.javascript, bootstrap };
+      const proof = await (options.executeWithSignal
+        ? options.executeWithSignal('prerender', payload, signal)
+        : (options.execute ?? runLocalQualification)('prerender', payload));
+      signal?.throwIfAborted();
       const result = proof.output;
       if (
         !result ||
@@ -82,7 +91,8 @@ export async function consumePrerenderPreview(
       );
       await requireExperienceOwner(ctx);
       return document;
-    }
+    },
+    signal
   );
   if (!bootstrap) throw Error('BUILD_FAILED');
   return { ...launch, bootstrap, renderMode: 'prerender' as const };

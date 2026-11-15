@@ -34,7 +34,10 @@ export function createVerifierCaptureHandler(settings: {
   key: Uint8Array;
   now?: () => number;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
-  resolveUserClient(token: string): Promise<SupabaseClient>;
+  resolveUserClient(
+    token: string,
+    signal: AbortSignal
+  ): Promise<SupabaseClient>;
   resolveWorker(ctx: OwnerRequestContext, buildId: string): Promise<Worker>;
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
@@ -44,12 +47,14 @@ export function createVerifierCaptureHandler(settings: {
     const reply = (status: number) =>
       new Response(null, { status, headers: { 'Cache-Control': 'no-store' } });
     try {
+      request.signal.throwIfAborted();
       if (
         request.method !== 'POST' ||
         request.url !== 'https://verifier.baci-internal.invalid/v1/capture'
       )
         return reply(404);
       const body = await readBoundedJsonBody(request, 16384);
+      request.signal.throwIfAborted();
       const parsed = body.ok ? message.safeParse(body.body) : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
@@ -68,11 +73,18 @@ export function createVerifierCaptureHandler(settings: {
         !(await settings.consumeNonce(parsed.data.nonce, parsed.data.expiresAt))
       )
         return reply(409);
-      const client = await settings.resolveUserClient(parsed.data.accessToken);
+      request.signal.throwIfAborted();
+      const client = await settings.resolveUserClient(
+        parsed.data.accessToken,
+        request.signal
+      );
+      request.signal.throwIfAborted();
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
+      request.signal.throwIfAborted();
       const ctx = { supabase: client, merchantId: parsed.data.merchantId };
       const worker = await settings.resolveWorker(ctx, parsed.data.buildId);
+      request.signal.throwIfAborted();
       const result = output.parse(
         await worker(ctx, {
           buildId: parsed.data.buildId,
@@ -80,8 +92,10 @@ export function createVerifierCaptureHandler(settings: {
           idempotencyKey: parsed.data.idempotencyKey,
         })
       );
+      request.signal.throwIfAborted();
       if (result.buildId !== parsed.data.buildId) return reply(403);
       await requireExperienceOwner(ctx);
+      request.signal.throwIfAborted();
       return Response.json(result, {
         headers: { 'Cache-Control': 'no-store' },
       });

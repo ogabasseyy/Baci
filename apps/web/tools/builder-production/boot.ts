@@ -36,11 +36,12 @@ export async function startProductionBuilderFromPrivateConfig(
       host: {
         integration: {
           ...settings.integration,
-          canonicalBase: (slug) =>
+          canonicalBase: (slug, signal) =>
             resolveCanonicalBase(
               settings.integration.publicClient,
               slug,
-              settings.rootDomain
+              settings.rootDomain,
+              signal
             ),
         },
         startBroker: async () => {

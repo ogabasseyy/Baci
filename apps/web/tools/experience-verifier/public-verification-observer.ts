@@ -27,6 +27,7 @@ type Payload = {
 type Run = (input: {
   payload: Payload;
   session: Args[4];
+  signal?: AbortSignal;
 }) => Promise<{ output: Record<string, unknown> }>;
 
 /** Adapt checked resources to the fixed isolated job; does not install the job. */
@@ -35,7 +36,17 @@ export function createPublicObservationAdapter(
   run: Run = runPublicObservationJob
 ): Observe {
   const origin = productionOrigin(productOrigin);
-  return async (binding, output, pages, expected, relay, framework, frames) => {
+  return async (
+    binding,
+    output,
+    pages,
+    expected,
+    relay,
+    framework,
+    frames,
+    signal
+  ) => {
+    signal?.throwIfAborted();
     if (
       binding.buildDigest !== expected.buildDigest ||
       !pages.length ||
@@ -101,6 +112,6 @@ export function createPublicObservationAdapter(
     };
     if (Buffer.byteLength(JSON.stringify({ type: 'start', payload })) > 8388608)
       throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
-    return (await run({ payload, session: relay })).output;
+    return (await run({ payload, session: relay, signal })).output;
   };
 }

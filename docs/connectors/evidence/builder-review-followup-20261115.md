@@ -25,7 +25,8 @@ publication, checkout/order or ChatGPT submission receipt.
   occupied slots until admitted work actually settles. Fetch cancellation
   does not imply rollback of a remote database statement.
 - The dedicated nonce pool uses a three-second connection/acquisition limit
-  and PostgreSQL-enforced two-second statement and one-second lock limits.
+  a three-second driver read timeout, and PostgreSQL-enforced two-second
+  statement and one-second lock limits.
   Production startup verifies the effective server settings. A disposable
   PostgreSQL regression verifies lock timeout (55P03), statement timeout
   (57014), and rejection of an unbounded session. No live SQL was changed.
@@ -66,9 +67,15 @@ the commerce connector.
 Full-code delivery still requires a separately qualified execution origin.
 Before general owner-bridge activation, qualify bounded underlying work,
 deadline/disconnect handling, saturation and shutdown. An HTTP timeout alone
-does not prove that dependent work has stopped. The fixes above cover user
-fetch cancellation and nonce statements; verifier coordination, renderer and
-runner cleanup still need the complete overload/shutdown qualification.
+does not prove that dependent work has stopped. Focused synthetic checks now cover request-local cancellation through user and
+anonymous RLS reads, canonical lookup, preview liveness and runner transport.
+The verifier has a 550-second request deadline and keeps admission slots until
+handlers and cleanup settle. Public DNS, fetch, relay and browser observation
+observe cancellation; tests cover stalled responses, saturation and shutdown.
+Disposable PostgreSQL checks verify that a driver read timeout discards the
+pooled connection. These are local component receipts, not complete live stack
+qualification. A disconnected caller does not terminate already admitted remote
+runner work; the runner retains its own slot and process limits until completion.
 
 The actual ChatGPT synthetic merchant build/preview and final-checkout test
 remain pending. Do not label the app submission-ready or submit it on the

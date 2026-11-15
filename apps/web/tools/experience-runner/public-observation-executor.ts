@@ -20,6 +20,7 @@ const start: Start = (jobId) =>
 export async function runPublicObservationJob(
   input: {
     payload: unknown;
+    signal?: AbortSignal;
     session(request: Request): Promise<{ status: number; body: string }>;
   },
   deps: { command: LinuxRunnerCommand; start: Start } = {
@@ -27,6 +28,7 @@ export async function runPublicObservationJob(
     start,
   }
 ) {
+  input.signal?.throwIfAborted();
   const encoded = JSON.stringify({ type: 'start', payload: input.payload });
   if (
     typeof encoded !== 'string' ||
@@ -56,6 +58,7 @@ export async function runPublicObservationJob(
   let failure: unknown;
   let output: Record<string, unknown> | undefined;
   try {
+    input.signal?.throwIfAborted();
     const child = deps.start(jobId);
     child.stdin.on('error', () => undefined);
     let stderrBytes = 0;
@@ -64,10 +67,17 @@ export async function runPublicObservationJob(
       if (stderrBytes > 65536) child.kill('SIGKILL');
     });
     const exit = new Promise<number | null>((resolve) => {
-      child.once('error', () => resolve(null));
+      child.once('error', () => undefined);
       child.once('close', resolve);
     });
-    const deadline = setTimeout(() => child.kill('SIGKILL'), 75000);
+    const stop = () => {
+      child.kill('SIGKILL');
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
+    input.signal?.addEventListener('abort', stop, { once: true });
+    const deadline = setTimeout(stop, 75000);
     try {
       await new Promise<void>((resolve, reject) =>
         child.stdin.write(`${encoded}\n`, (error) =>
@@ -77,10 +87,14 @@ export async function runPublicObservationJob(
       const observed = await runPublicCartChannel({
         input: child.stdout,
         output: child.stdin,
-        session: input.session,
+        session: (request) => {
+          input.signal?.throwIfAborted();
+          return input.session(request);
+        },
       });
       if (
         (await exit) !== 0 ||
+        input.signal?.aborted ||
         stderrBytes > 65536 ||
         !observed ||
         typeof observed !== 'object' ||
@@ -90,7 +104,9 @@ export async function runPublicObservationJob(
       output = observed as Record<string, unknown>;
     } finally {
       clearTimeout(deadline);
-      child.kill('SIGKILL');
+      input.signal?.removeEventListener('abort', stop);
+      stop();
+      await exit;
     }
   } catch {
     failure = Error('PUBLIC_OBSERVATION_FAILED');

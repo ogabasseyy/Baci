@@ -113,11 +113,12 @@ export async function startVerifierService(settings: {
         key: settings.key,
         consumeNonce,
         resolveUserClient,
-        verify: async (owner, id) => {
+        verify: async (owner, id, signal) => {
           if (!settings.publicVerification)
             throw Error('PUBLIC_VERIFIER_NOT_INSTALLED');
           const verify = await createPublicVerificationCoordinator({
             owner,
+            signal,
             pool: settings.pool,
             supabase: settings.supabase,
             rootDomain: settings.publicVerification.rootDomain,

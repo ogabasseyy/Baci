@@ -35,7 +35,8 @@ export async function derivePublicVerificationPlan(
         })
       | null
     >;
-  }
+  },
+  signal?: AbortSignal
 ) {
   const base = productionOrigin(binding.canonicalBase);
   if (
@@ -47,6 +48,7 @@ export async function derivePublicVerificationPlan(
   )
     throw Error('PUBLIC_BINDING_MISMATCH');
   const merchant = { id: binding.merchantId, slug: binding.slug };
+  signal?.throwIfAborted();
   const catalog = await runtime.catalog(merchant, {});
   const product = [...(catalog?.products ?? [])]
     .sort((a, b) => a.id.localeCompare(b.id))
@@ -67,6 +69,7 @@ export async function derivePublicVerificationPlan(
   );
   const routes = [];
   for (const route of binding.head.routes) {
+    signal?.throwIfAborted();
     const path =
       route.view === 'product'
         ? productPath

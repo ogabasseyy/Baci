@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
+import {
+  verifierDatabaseDeadlines,
+  verifyVerifierDatabaseDeadlines,
+} from '../../tools/experience-verifier/database-role';
 import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-store';
 import { experienceDataFixture } from './data-fixture.test-support';
 
@@ -30,8 +34,27 @@ it('uses a restricted durable single-use ledger across concurrency and restart',
       database: 'postgres',
       options: '-c role=baci_experience_verifier',
     };
-    pool = new Pool({ ...config, max: 4 });
+    pool = new Pool({ ...config, ...verifierDatabaseDeadlines, max: 4 });
+    await verifyVerifierDatabaseDeadlines(pool);
     const consume = await createVerifierNonceStore(pool);
+    const lock = await f.db.pool.connect();
+    try {
+      await lock.query('BEGIN');
+      await lock.query(
+        'LOCK TABLE experience_authorization.verifier_nonces IN ACCESS EXCLUSIVE MODE'
+      );
+      await expect(
+        consume('c'.repeat(64), Date.now() + 30000)
+      ).rejects.toMatchObject({
+        code: '55P03',
+      });
+    } finally {
+      await lock.query('ROLLBACK');
+      lock.release();
+    }
+    await expect(pool.query('SELECT pg_sleep(5)')).rejects.toMatchObject({
+      code: '57014',
+    });
     const expires = Date.now() + 30000;
     const results = await Promise.all(
       Array.from({ length: 8 }, () => consume('a'.repeat(64), expires))
@@ -40,6 +63,9 @@ it('uses a restricted durable single-use ledger across concurrency and restart',
     await pool.end();
     pool = undefined;
     restarted = new Pool(config);
+    await expect(verifyVerifierDatabaseDeadlines(restarted)).rejects.toThrow(
+      'UNBOUNDED_VERIFIER_DATABASE_SESSION'
+    );
     expect(
       await (await createVerifierNonceStore(restarted))('a'.repeat(64), expires)
     ).toBe(false);

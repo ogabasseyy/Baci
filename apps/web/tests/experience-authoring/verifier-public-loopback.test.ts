@@ -86,7 +86,11 @@ it('forwards a signed public-verification request over loopback and reauthentica
     });
     await client(owner as never, { approvalId });
     expect(verify).toHaveBeenCalledOnce();
-    expect(verify).toHaveBeenCalledWith(owner, approvalId);
+    expect(verify).toHaveBeenCalledWith(
+      owner,
+      approvalId,
+      expect.any(AbortSignal)
+    );
     expect(owner.auth.getUser).toHaveBeenCalledTimes(2);
   } finally {
     await ownerListener.close();

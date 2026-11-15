@@ -38,16 +38,22 @@ it('authenticates a signed one-time request and invokes verification with the ow
     },
   };
   const verify = vi.fn(async () => {});
+  const resolveUserClient = vi.fn(async () => client as never);
   const consumeNonce = vi.fn(async () => true);
   const handler = createPublicVerificationHandler({
     key,
     now: () => now,
     consumeNonce,
-    resolveUserClient: async () => client as never,
+    resolveUserClient,
     verify,
   });
-  expect((await handler(request())).status).toBe(204);
-  expect(verify).toHaveBeenCalledWith(client, body.approvalId);
+  const input = request();
+  expect((await handler(input)).status).toBe(204);
+  expect(resolveUserClient).toHaveBeenCalledWith(
+    body.accessToken,
+    input.signal
+  );
+  expect(verify).toHaveBeenCalledWith(client, body.approvalId, input.signal);
   expect(consumeNonce).toHaveBeenCalledWith(body.nonce, body.expiresAt);
 });
 

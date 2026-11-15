@@ -15,7 +15,7 @@ export function createPublicStateReader(
   paths: string[],
   options: Pick<
     Parameters<typeof createBoundPublicFetcher>[0],
-    'resolve' | 'network'
+    'resolve' | 'network' | 'signal'
   > = {}
 ) {
   const origin = productionOrigin(binding.canonicalBase);

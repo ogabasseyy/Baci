@@ -22,7 +22,10 @@ export function createVerifierAttestationHandler(settings: {
   key: Uint8Array;
   now?: () => number;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
-  resolveUserClient(token: string): Promise<SupabaseClient>;
+  resolveUserClient(
+    token: string,
+    signal: AbortSignal
+  ): Promise<SupabaseClient>;
   attest: OwnerLifecycleVerification['attest'];
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
@@ -63,7 +66,10 @@ export function createVerifierAttestationHandler(settings: {
       )
         return reply(409);
       request.signal.throwIfAborted();
-      const client = await settings.resolveUserClient(parsed.data.accessToken);
+      const client = await settings.resolveUserClient(
+        parsed.data.accessToken,
+        request.signal
+      );
       request.signal.throwIfAborted();
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);

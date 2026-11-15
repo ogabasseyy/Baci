@@ -16,7 +16,7 @@ export function createPublicCatalogReader(
   },
   options: Pick<
     Parameters<typeof createBoundPublicFetcher>[0],
-    'resolve' | 'network'
+    'resolve' | 'network' | 'signal'
   > = {}
 ) {
   const origin = productionOrigin(settings.origin);

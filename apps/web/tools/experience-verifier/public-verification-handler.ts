@@ -20,8 +20,15 @@ export function createPublicVerificationHandler(settings: {
   key: Uint8Array;
   now?: () => number;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
-  resolveUserClient(token: string): Promise<SupabaseClient>;
-  verify(client: SupabaseClient, approvalId: string): Promise<unknown>;
+  resolveUserClient(
+    token: string,
+    signal: AbortSignal
+  ): Promise<SupabaseClient>;
+  verify(
+    client: SupabaseClient,
+    approvalId: string,
+    signal: AbortSignal
+  ): Promise<unknown>;
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
@@ -30,6 +37,7 @@ export function createPublicVerificationHandler(settings: {
     const reply = (status: number) =>
       new Response(null, { status, headers: { 'Cache-Control': 'no-store' } });
     try {
+      request.signal.throwIfAborted();
       const url = new URL(request.url);
       if (
         request.method !== 'POST' ||
@@ -40,6 +48,7 @@ export function createPublicVerificationHandler(settings: {
       )
         return reply(404);
       const body = await readBoundedJsonBody(request, 16384);
+      request.signal.throwIfAborted();
       const parsed = body.ok ? message.safeParse(body.body) : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
@@ -58,10 +67,17 @@ export function createPublicVerificationHandler(settings: {
         !(await settings.consumeNonce(parsed.data.nonce, parsed.data.expiresAt))
       )
         return reply(409);
-      const client = await settings.resolveUserClient(parsed.data.accessToken);
+      request.signal.throwIfAborted();
+      const client = await settings.resolveUserClient(
+        parsed.data.accessToken,
+        request.signal
+      );
+      request.signal.throwIfAborted();
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
-      await settings.verify(client, parsed.data.approvalId);
+      request.signal.throwIfAborted();
+      await settings.verify(client, parsed.data.approvalId, request.signal);
+      request.signal.throwIfAborted();
       return reply(204);
     } catch {
       return reply(403);

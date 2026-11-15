@@ -23,6 +23,7 @@ export interface ExperienceOwnerRuntime {
       supabase: SupabaseClient;
       merchantId: string;
       requestOrigin?: string;
+      signal?: AbortSignal;
     },
     input: { buildId: string; routeId?: string }
   ): Promise<unknown>;

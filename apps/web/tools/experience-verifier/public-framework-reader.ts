@@ -7,16 +7,22 @@ type Fetch = (url: string) => Promise<{ body: Buffer; contentType: string }>;
 /** Host side only. The worker can request bounded public framework files, never arbitrary URLs. */
 export function createPublicFrameworkReader(
   origin: string,
-  fetchAsset?: Fetch
+  fetchAsset?: Fetch,
+  signal?: AbortSignal
 ) {
   let count = 0;
   let total = 0;
   return async (request: Request) => {
+    signal?.throwIfAborted();
     const kind = publicFrameworkRequest(origin, request);
     if (!kind || ++count > 32) throw Error('PUBLIC_FRAMEWORK_DENIED');
     const fetch =
       fetchAsset ??
-      createBoundPublicFetcher({ origins: [origin], urls: [request.url] });
+      createBoundPublicFetcher({
+        origins: [origin],
+        urls: [request.url],
+        signal,
+      });
     const result = await fetch(request.url);
     const mime = result.contentType.split(';', 1)[0].trim().toLowerCase();
     if (

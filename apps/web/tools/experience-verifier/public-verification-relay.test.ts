@@ -75,7 +75,8 @@ it('binds cart and product relay to the resolved merchant and public client', as
   expect(readState).toHaveBeenCalledWith(stateRequest);
   expect(makeStateReader).toHaveBeenCalledWith(
     expect.objectContaining({ policyRevision: 'policy-1' }),
-    ['/']
+    ['/'],
+    { signal: undefined }
   );
   const url = new URL(`${supabase.url}/rest/v1/products`);
   url.searchParams.set('select', HYDRATION_SELECT.replace(/\s+/g, ''));

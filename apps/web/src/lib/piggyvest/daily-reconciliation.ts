@@ -1,4 +1,5 @@
 import { piggyvestDailyReconciliationSchemas as schemas } from '@/schemas/piggyvest-daily-reconciliation';
+import type { CreditGapReport } from './credit-gap-reconciliation';
 import {
   confirmShortfalls,
   readBalance,
@@ -40,7 +41,8 @@ export type AttentionReason =
   | 'balance_below_expected'
   | 'balance_unreadable'
   | 'list_truncated'
-  | 'read_deadline_reached';
+  | 'read_deadline_reached'
+  | 'credit_gap';
 
 export interface StuckFinding {
   operationId: string;
@@ -87,6 +89,8 @@ export type ReconciliationReport =
       deferred: { stuck: number; wallets: number };
       /** Set when provider reads were cut off to leave time to report. */
       deadlineReached?: true;
+      /** PVB credits vs our credit ledgers (credit-gap-reconciliation.ts). */
+      creditGap?: CreditGapReport;
       reasons: AttentionReason[];
     };
 

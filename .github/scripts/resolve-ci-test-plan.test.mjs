@@ -14,7 +14,8 @@ test('targets Vitest changed tests for pull requests with only local web source 
     }),
     {
       mode: 'targeted-web-vitest',
-      reason: 'Pull request changes are limited to apps/web source or test files.',
+      reason:
+        'Pull request changes are limited to apps/web source or test files.',
       command:
         'pnpm --filter @baci/web exec vitest run --changed origin/main --passWithNoTests',
     }
@@ -83,18 +84,67 @@ test('keeps full affected tests when web test setup changes', () => {
   );
 });
 
-test('keeps full affected tests when replay registry lists change', () => {
-  // Registry lists are read through fs, so `vitest --changed` cannot see
-  // which tests consume them; a targeted run would skip their validation.
-  assert.equal(
+test('keeps full affected tests when the web node/jsdom project split changes', () => {
+  // These files decide which environment and setup every web test gets, so a
+  // targeted `vitest --changed` run cannot prove a change to them is safe.
+  for (const file of [
+    'apps/web/vitest.config.ts',
+    'apps/web/vitest.escape-glob.ts',
+    'apps/web/vitest.jsdom-holdouts.ts',
+    'apps/web/vitest.next-image-mock.ts',
+    'apps/web/vitest.node-folders.ts',
+    'apps/web/vitest.setup.node.ts',
+    'apps/web/vitest.setup.shared.ts',
+  ]) {
+    const plan = resolveCiTestPlan({
+      baseRef: 'origin/main',
+      changedFiles: [file],
+      eventName: 'pull_request',
+    });
+    assert.equal(plan.mode, 'full-affected', file);
+    // The explicit trigger reason, not the "outside the targeted scope"
+    // fall-through that any unknown path would also hit.
+    assert.match(plan.reason, /test setup changes/, file);
+  }
+});
+
+test('keeps full affected tests when the web test sequencer or its slow-file list changes', () => {
+  // vitest.sequencer.ts decides the order every web test starts in and sits on
+  // the path of the CI shard split, so only a full run can prove a change to it
+  // (or to the list it reads) leaves every shard intact.
+  for (const file of [
+    'apps/web/vitest.sequencer.ts',
+    'apps/web/vitest.slow-test-files.ts',
+  ]) {
+    const plan = resolveCiTestPlan({
+      baseRef: 'origin/main',
+      changedFiles: [file],
+      eventName: 'pull_request',
+    });
+    assert.equal(plan.mode, 'full-affected', file);
+    assert.match(plan.reason, /test setup changes/, file);
+  }
+});
+
+test('targets the tests that read replay registry lists instead of the full suite', () => {
+  // Registry lists are read through fs, which a plain `vitest --changed` cannot
+  // follow. The Vitest changed-files provider (vitest-changed-files-provider.mjs)
+  // adds the tests that mention the registry, so the targeted run is enough.
+  assert.deepEqual(
     resolveCiTestPlan({
       baseRef: 'origin/main',
       changedFiles: [
         'apps/web/tools/db/replay-registry/20261101090000_goals/pending-sources.txt',
       ],
       eventName: 'pull_request',
-    }).mode,
-    'full-affected'
+    }),
+    {
+      mode: 'targeted-web-vitest',
+      reason:
+        'Pull request changes are limited to apps/web source or test files and files that tests read; the Vitest changed-files provider adds the tests that read them.',
+      command:
+        'pnpm --filter @baci/web exec vitest run --changed origin/main --passWithNoTests',
+    }
   );
 });
 

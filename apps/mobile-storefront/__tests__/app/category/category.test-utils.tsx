@@ -142,7 +142,7 @@ export function mockStorefrontInsetsModule(): unknown {
 export function mockHooksModule(): unknown {
   return {
     useCategories: () => mockUseCategories(),
-    useProducts: () => mockUseProducts(),
+    useProducts: (...args: unknown[]) => mockUseProducts(...args),
   };
 }
 

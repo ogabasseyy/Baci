@@ -19,6 +19,7 @@
     "./lib/commerce-variant-axis": "./src/lib/commerce-variant-axis.ts",
     "./lib/filter-by-location-phrase": "./src/lib/filter-by-location-phrase.ts",
     "./lib/gigl-tracking-status": "./src/lib/gigl-tracking-status.ts",
+    "./lib/gigl-shipping-retention-payment-methods": "./src/lib/gigl-shipping-retention-payment-methods.ts",
     "./lib/negotiation-policy": "./src/lib/negotiation-policy.ts",
     "./lib/product-condition": "./src/lib/product-condition.ts",
     "./lib/product-default-variant": "./src/lib/product-default-variant.ts",
@@ -44,7 +45,10 @@
     "./test-fixtures/piggyvest-draft-closure": "./src/test-fixtures/piggyvest-draft-closure.ts",
     "./test-fixtures/piggyvest-schedule": "./src/test-fixtures/piggyvest-schedule.ts",
     "./test-fixtures/fixture-mock": "./src/test-fixtures/fixture-mock.ts",
-    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts"
+    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts",
+    "./experience": "./src/experience/index.ts",
+    "./experience/limits": "./src/experience/limits.ts",
+    "./lib/is-product-variant-purchasable": "./src/lib/is-product-variant-purchasable.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

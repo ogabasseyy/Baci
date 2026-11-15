@@ -93,6 +93,8 @@
         "PETROCK_REMEDIATION_ENABLED",
         "USDT_WALLET_ENABLED",
         "PIGGYVEST_GOAL_CANCEL_DISABLED",
+        "PIGGYVEST_INTEREST_WALLET_ID",
+        "PIGGYVEST_INTEREST_WALLET_OWNER_ID",
         "PIGGYVEST_GOAL_COMPLETE_DISABLED",
         "NEXT_PUBLIC_WALLET_ORDER_AUTO_DEBIT_ENABLED",
         "WALLET_CREDIT_PUSH_ENABLED",
@@ -141,6 +143,9 @@
         "$TURBO_ROOT$/tsconfig*.json"
       ]
     },
+    "typecheck:build": {
+      "cache": false
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -156,6 +161,10 @@
         "BACI_BUILDER_LOCAL_PG_MAJOR",
         "BACI_BUILDER_LOCAL_PG_BIN"
       ]
+    },
+    "qualify:experience:release": {
+      "cache": false,
+      "dependsOn": ["^qualify:experience:release"]
     }
   }
 }

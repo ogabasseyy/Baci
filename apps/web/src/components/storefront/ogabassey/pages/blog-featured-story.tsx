@@ -38,6 +38,7 @@ export function BlogFeaturedStory({
   return (
     <Link
       href={asRoute(blogPostHref(basePath, featuredPost.slug))}
+      prefetch={false}
       className="group relative mb-12 block h-[400px] overflow-hidden rounded-4xl shadow-2xl transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.15)] md:h-[500px]"
     >
       <div className="ogabassey-blog-featured-story__media absolute inset-0">

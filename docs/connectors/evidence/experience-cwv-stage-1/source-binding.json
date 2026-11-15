@@ -1,0 +1,244 @@
+{
+  "baseMain": "7f711eea1f6a27cb24005e03511b3c8b64aa9aa7",
+  "prototypeOnly": true,
+  "releaseQualified": false,
+  "coreWebVitalsQualified": false,
+  "uncommitted": true,
+  "reviewedSourceBeforeFixes": {
+    "actualBaseMain": "7f711eea1f6a27cb24005e03511b3c8b64aa9aa7",
+    "reviewBaseIntegration": "c90cae6d021de5abe630717e4d0808905a987648",
+    "paths": [
+      {
+        "path": "apps/web/tests/experience-performance/prepare-prototype.test.ts",
+        "sha256": "85af1b2541d04a6cb8548a01e1f017e05211277d663e446111a0e89163cc639e"
+      },
+      {
+        "path": "apps/web/tests/experience-performance/prerender-browser-worker.ts",
+        "sha256": "d9003ec2fecab0e387848408864ae92a3180fba2dd20fbfcaea3ea5cb8e3e180"
+      },
+      {
+        "path": "apps/web/tests/experience-performance/prerender-browser.test.ts",
+        "sha256": "5d2e1ef3a638d30fcd178c806ed6d0c68d7927a704e024fa062c0cd233bf6395"
+      },
+      {
+        "path": "apps/web/tests/experience-performance/prerender-document.test.ts",
+        "sha256": "69dba353f61aab68ee5f59ccc7947fe64c1435cb8594d5dd7be05b868438ad4b"
+      },
+      {
+        "path": "apps/web/tests/experience-performance/prerender-document.ts",
+        "sha256": "cef775ca40562f1d68b44fb7b00d5f612e03322815af09c32806c49590b9e5c0"
+      },
+      {
+        "path": "apps/web/tests/experience-performance/prerender-worker.mjs",
+        "sha256": "6d6f795eafbf0b280ed44b7e9af0e6d31f3e5a915b8e2701b73bbb6c9307dc78"
+      },
+      {
+        "path": "apps/web/tests/experience-performance/serve-prototype.mts",
+        "sha256": "4253bb68fb57bd5579fa1ec1b8055b5e7d5685d80643c869fc53ce3587a3406e"
+      },
+      {
+        "path": "apps/web/tools/experience-runner/bundle-source.ts",
+        "sha256": "d2a2e3034fb5fb437cbfeb560a50975efe53d8a63a73f2e4708061b93f91881c"
+      },
+      {
+        "path": "apps/web/tools/experience-runner/local-oci-executor.test.ts",
+        "sha256": "104afee5349df9ae1682b46c409ba7de45e27ef4116c585c2945de1b6a81a885"
+      },
+      {
+        "path": "apps/web/tools/experience-runner/local-oci-executor.ts",
+        "sha256": "cacbc90776dc6d547d79a5d1a60f14153aaf30a4ddfb7150264b8f1d8e03cc73"
+      },
+      {
+        "path": "apps/web/tools/experience-runner/prerender-runtime-entry.ts",
+        "sha256": "4fb5c8b71c67e0c8e5b8d3d81bc6d4fc19ccc15b276dd600dbf57283c4581976"
+      },
+      {
+        "path": "apps/web/tools/experience-runner/prerender-source.test.ts",
+        "sha256": "22081a417edc28989d9e5ba6e20496a480b7531f55e9ec3634092fd59f177e11"
+      },
+      {
+        "path": "apps/web/tsconfig.experience-performance.json",
+        "sha256": "8b26fd7b7cfbc52552b6cf61c8517904e33c32f869a5a576202a06a5d95c5af3"
+      },
+      {
+        "path": "apps/web/vitest.config.ts",
+        "sha256": "f97eaebaf1f1b9f45758db10d65c790aea614f51bfb55329d3ed65eb699cd869"
+      },
+      {
+        "path": "apps/web/vitest.experience-performance-browser.config.ts",
+        "sha256": "c2f32833e375ecc09509da405a6bf483e0e0563a704b2d9ac45330efb030d62f"
+      },
+      {
+        "path": "apps/web/vitest.experience-performance.config.ts",
+        "sha256": "2e71629dff5ac3251c73182b3c4ad1cecacaee88af199230270c2df5ea981860"
+      }
+    ],
+    "paidCreditsEnabled": false
+  },
+  "finalSourceFiles": [
+    {
+      "path": "apps/web/tests/experience-performance/bounded-input.mjs",
+      "sha256": "72ee477a231f3c677f4cabe4778af1e247d75944adb49aa933793296943c0644"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/bounded-input.test.ts",
+      "sha256": "b12bc69868396abf87706f8d7105c6591c4fffbf2fa7189242fbf739a297c13f"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prepare-prototype.test.ts",
+      "sha256": "85af1b2541d04a6cb8548a01e1f017e05211277d663e446111a0e89163cc639e"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-browser-worker.ts",
+      "sha256": "0d77d704f991f8c34ab2b019e093d1e1075223b958a239f7e956ab71ea2b6c84"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-browser.test.ts",
+      "sha256": "5d2e1ef3a638d30fcd178c806ed6d0c68d7927a704e024fa062c0cd233bf6395"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-document.test.ts",
+      "sha256": "69dba353f61aab68ee5f59ccc7947fe64c1435cb8594d5dd7be05b868438ad4b"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-document.ts",
+      "sha256": "cef775ca40562f1d68b44fb7b00d5f612e03322815af09c32806c49590b9e5c0"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-worker.mjs",
+      "sha256": "8015c509d9cafe6e200f40315af057687982fd0c9314b78a61d931065e351a4e"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/serve-prototype.mts",
+      "sha256": "4253bb68fb57bd5579fa1ec1b8055b5e7d5685d80643c869fc53ce3587a3406e"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/bundle-source.ts",
+      "sha256": "d2a2e3034fb5fb437cbfeb560a50975efe53d8a63a73f2e4708061b93f91881c"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/local-oci-executor.test.ts",
+      "sha256": "104afee5349df9ae1682b46c409ba7de45e27ef4116c585c2945de1b6a81a885"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/local-oci-executor.ts",
+      "sha256": "cacbc90776dc6d547d79a5d1a60f14153aaf30a4ddfb7150264b8f1d8e03cc73"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/prerender-runtime-entry.ts",
+      "sha256": "4fb5c8b71c67e0c8e5b8d3d81bc6d4fc19ccc15b276dd600dbf57283c4581976"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/prerender-source.test.ts",
+      "sha256": "22081a417edc28989d9e5ba6e20496a480b7531f55e9ec3634092fd59f177e11"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-performance.json",
+      "sha256": "8b26fd7b7cfbc52552b6cf61c8517904e33c32f869a5a576202a06a5d95c5af3"
+    },
+    {
+      "path": "apps/web/vitest.config.ts",
+      "sha256": "f97eaebaf1f1b9f45758db10d65c790aea614f51bfb55329d3ed65eb699cd869"
+    },
+    {
+      "path": "apps/web/vitest.experience-performance-browser.config.ts",
+      "sha256": "c2f32833e375ecc09509da405a6bf483e0e0563a704b2d9ac45330efb030d62f"
+    },
+    {
+      "path": "apps/web/vitest.experience-performance.config.ts",
+      "sha256": "c218139e358c5128ece038790eeff1851445b80f2ce20d29cf58df811a500355"
+    }
+  ],
+  "reviewIssues": [
+    {
+      "file": "apps/web/tests/experience-performance/prerender-worker.mjs",
+      "severity": "minor",
+      "title": "Decode stdin as UTF-8 before concatenating chunks.",
+      "resolution": "fixed with split-UTF8 RED to GREEN regression"
+    },
+    {
+      "file": "apps/web/tests/experience-performance/serve-prototype.mts",
+      "severity": "minor",
+      "title": "Fix the missing space in the startup message.",
+      "resolution": "deferred cosmetic"
+    },
+    {
+      "file": "apps/web/tests/experience-performance/prerender-browser-worker.ts",
+      "severity": "minor",
+      "title": "Decode stdin as UTF-8 before concatenating chunks.",
+      "resolution": "fixed with split-UTF8 RED to GREEN regression"
+    }
+  ],
+  "reviewedFiles": 16,
+  "reviewFixesRereviewed": false,
+  "finalChecks": {
+    "runnerTests": 66,
+    "preparationTests": 5,
+    "browserTests": 2,
+    "sdkTests": 7,
+    "runnerTypecheck": "passed",
+    "prototypeTypecheck": "passed",
+    "lint": "passed"
+  },
+  "artifacts": [
+    {
+      "path": "200ccafa66560564.html",
+      "sha256": "852e49908f223d2a2682491491c449682e34b8006ad6614c85c6bf6b6bf868d9"
+    },
+    {
+      "path": "acd0b3f1859723f1.html",
+      "sha256": "f4a8227af508460cea82d120d45912bd87af0d0be1da1c51d14503bff22dd34a"
+    },
+    {
+      "path": "app.css",
+      "sha256": "f54e65d8ee041fda75234297dbb1d4ad45120690493e78684f45efba7ddefbec"
+    },
+    {
+      "path": "app.js",
+      "sha256": "9f93088fa7d5b1378a6538bf7afb53dcc2ab7543d481395220f2d7bdd8edd2e8"
+    },
+    {
+      "path": "baseline.js",
+      "sha256": "517b98d2380f53bf6fd7241023e253080fbe01c66c3c54a52b9d2f3ba7d0ff66"
+    },
+    {
+      "path": "bootstrap.json",
+      "sha256": "e3baddc55882aa3c0a1d26102bfb8105ed1d1b4aadccd285f653a5232ba027fc"
+    },
+    {
+      "path": "browser-1440.json",
+      "sha256": "70db2c9e6f9e29b0d5e4db75ca64c4f63973ea3575fe5c487413ff42bb07a005"
+    },
+    {
+      "path": "browser-390.json",
+      "sha256": "b4417db98d0e532d9a60007269379717d0fcf4fb916afa61c695ff15fc4c363d"
+    },
+    {
+      "path": "c69d3da5f3e80e5e.html",
+      "sha256": "ea12a1e622e0c0a4a4b762256a64c4ea8000dbd54cca19c118508a96f747de0d"
+    },
+    {
+      "path": "index.html",
+      "sha256": "0ac706d241b59e8ac8b32b6a337e6f4d30fc39df8f5e230e96571935530dc8b0"
+    },
+    {
+      "path": "no-js-1440.png",
+      "sha256": "6d432c669bba25fdb2a8393fa25957972af5b709956ad04b1867dbe8d51967c7"
+    },
+    {
+      "path": "no-js-390.png",
+      "sha256": "1de0b2c050f96a4c5d21fdcb2146f68d28aeb7cc74e5414ecfbd6ec84a71e80d"
+    },
+    {
+      "path": "receipt.json",
+      "sha256": "fc87b37123ff5985b0d1cc0c8e297f358cce08c53d567dbdd7478699e913e614"
+    },
+    {
+      "path": "synthetic-device-image.png",
+      "sha256": "e4dbd37f93fd409ec9aef9a39d8d1996c750928cdd49f857845f32ea90632978"
+    }
+  ],
+  "ordersCreated": 0,
+  "payments": 0,
+  "paidCreditsEnabled": false
+}

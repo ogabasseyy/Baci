@@ -72,10 +72,10 @@ export function SavingsCardMethodPicker({
 }
 
 const styles = StyleSheet.create({
-  body: { fontSize: 14, lineHeight: 21 },
-  notice: { fontSize: 13, lineHeight: 20 },
+  body: { fontSize: 13, lineHeight: 21 },
+  notice: { fontSize: 12, lineHeight: 20 },
   method: {
-    minHeight: 48,
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: 14,
     flexDirection: 'row',

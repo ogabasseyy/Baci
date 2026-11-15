@@ -62,18 +62,18 @@ function plan(ref: string, equity: number) {
     updatedAt: '2026-10-23T12:00:00Z',
   };
 }
+const eligibleState = {
+  ...plan(ref25, 25).state,
+  eligibleAmount: 400000,
+  minimumAmount: 10000,
+  maxTenure: 3,
+  offers: [{ tenure: 3, loanAmount: 400000 }],
+} as Parameters<typeof OxygenSavedPlans>[0]['state'];
 it('reviews the saved plan locally without requesting an approval OTP or submitting approval', async () => {
   mocks.fetch.mockResolvedValue(
     Response.json({ selectedReference: ref25, plans: [plan(ref25, 25)] })
   );
-  render(
-    <OxygenSavedPlans
-      workflowId={id}
-      state={
-        plan(ref25, 25).state as Parameters<typeof OxygenSavedPlans>[0]['state']
-      }
-    />
-  );
+  render(<OxygenSavedPlans workflowId={id} state={eligibleState} />);
   expect(
     await screen.findByRole('button', { name: 'Continue' })
   ).toBeDisabled();
@@ -96,14 +96,7 @@ it('keeps approval on the plan screen disabled and follows the exact selected ca
       plans: [plan(ref25, 25), plan(ref35, 35)],
     })
   );
-  render(
-    <OxygenSavedPlans
-      workflowId={id}
-      state={
-        plan(ref25, 25).state as Parameters<typeof OxygenSavedPlans>[0]['state']
-      }
-    />
-  );
+  render(<OxygenSavedPlans workflowId={id} state={eligibleState} />);
   fireEvent.click(await screen.findByRole('button', { name: '35%' }));
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
   expect(screen.getByText('₦145,000.00')).toBeVisible();
@@ -130,9 +123,7 @@ it('resumes signature-first without sending a code on render', async () => {
   render(
     <OxygenSavedPlans
       workflowId={id}
-      state={
-        plan(ref25, 25).state as Parameters<typeof OxygenSavedPlans>[0]['state']
-      }
+      state={eligibleState}
       approvalReference={ref25}
       requestApprovalCode={request}
     />
@@ -156,9 +147,7 @@ it('requests a code only for the matching canonical selected reference', async (
   const { unmount } = render(
     <OxygenSavedPlans
       workflowId={id}
-      state={
-        plan(ref25, 25).state as Parameters<typeof OxygenSavedPlans>[0]['state']
-      }
+      state={eligibleState}
       requestApprovalCode={request}
     />
   );

@@ -1,0 +1,33 @@
+{
+  "name": "@baci/experience-sdk",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "esbuild src/index.ts --bundle --format=esm --platform=browser --external:react --external:@baci/shared/experience --outfile=dist/index.js",
+    "qualify:experience:release": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@baci/shared": "workspace:*",
+    "react": "19.2.3"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2",
+    "vitest": "^4.1.11",
+    "esbuild": "0.28.1",
+    "@biomejs/biome": "^2.5.0",
+    "@types/react": "^19.2.17",
+    "@types/node": "^24.13.2",
+    "jsdom": "^27.4.0",
+    "@testing-library/react": "^16.3.2",
+    "react-dom": "19.2.3",
+    "@types/react-dom": "19.2.3"
+  }
+}

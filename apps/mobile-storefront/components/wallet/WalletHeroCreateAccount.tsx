@@ -55,11 +55,11 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
   },
   button: {
-    minHeight: 48,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  label: { color: '#F8B84C', fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  label: { color: '#F8B84C', fontSize: 11, fontWeight: '700', flexShrink: 1 },
   disabled: { opacity: 0.55 },
 });

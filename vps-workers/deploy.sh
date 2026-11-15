@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Deploy VPS workers to bassey@82.29.190.219
-# Usage: bash vps-workers/deploy.sh
+# Deploy VPS workers to bassey@82.29.190.219 (usage: bash vps-workers/deploy.sh)
 set -euo pipefail
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/prepare-worker-release.sh
@@ -22,8 +21,7 @@ CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
 # tree may be changed but unrecorded (rollback failed, or the rollback
 # landed with unrecorded readers and a stuck barrier), so the
 # coordinator must HOLD the release lock for reconciliation instead of
-# auto-releasing it for a clean retry. Every other failure (including
-# a clean rollback that just needs a rerun) exits 1.
+# auto-releasing it for a clean retry. Every other failure exits 1.
 WORKER_UNRECONCILED_EXIT=42
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Refusing worker deployment from a dirty tracked checkout." >&2
@@ -140,6 +138,7 @@ $CRON_BLOCK_START
 */5 *  * * * flock -n $REMOTE_DIR/locks/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
 */5 * * * * flock -n $REMOTE_DIR/locks/oxygen-callback-reconciliation.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/oxygen-callback-reconciliation' >> $REMOTE_DIR/logs/oxygen-callback-reconciliation.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
+*/5 *  * * * flock -n $REMOTE_DIR/locks/cart-notice-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/cart-notice-health' >> $REMOTE_DIR/logs/cart-notice-health.log 2>&1
 20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
 # process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.
 * *    * * * flock -n $REMOTE_DIR/locks/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
@@ -161,7 +160,9 @@ $CRON_BLOCK_START
 0 2    * * * flock -n $REMOTE_DIR/locks/ai-jobs-worker.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/ai-jobs/worker' >> $REMOTE_DIR/logs/ai-jobs-worker.log 2>&1
 15 2   * * * flock -n $REMOTE_DIR/locks/sync-petrock-catalog.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/sync-petrock-catalog' >> $REMOTE_DIR/logs/sync-petrock-catalog.log 2>&1
 0 6    * * * flock -n $REMOTE_DIR/locks/wallet-payouts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/wallet-payouts' >> $REMOTE_DIR/logs/wallet-payouts.log 2>&1
-0 23  * * * flock -n $REMOTE_DIR/locks/piggyvest-daily-reconciliation.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-daily-reconciliation' >> $REMOTE_DIR/logs/piggyvest-daily-reconciliation.log 2>&1
+*/5 *  * * * flock -n $REMOTE_DIR/locks/piggyvest-wallet-pay-drain.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-wallet-pay-drain' >> $REMOTE_DIR/logs/piggyvest-wallet-pay-drain.log 2>&1
+*/5 * * * * flock -n $REMOTE_DIR/locks/piggyvest-degraded-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-degraded-health' >> $REMOTE_DIR/logs/piggyvest-degraded-health.log 2>&1
+0 23  * * * flock -n $REMOTE_DIR/locks/piggyvest-daily-reconciliation.lock bash -lc 'cd $REMOTE_DIR && if $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-daily-reconciliation; then $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-goal-cancel-forfeit-sweep; else $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/piggyvest-goal-cancel-forfeit-sweep; false; fi' >> $REMOTE_DIR/logs/piggyvest-daily-reconciliation.log 2>&1
 0 8    * * * flock -n $REMOTE_DIR/locks/alert-stuck-bnpl.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/alert-stuck-bnpl' >> $REMOTE_DIR/logs/alert-stuck-bnpl.log 2>&1
 30 8   1 * * flock -n $REMOTE_DIR/locks/vtu-cashback-summaries.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/vtu-cashback-summaries' >> $REMOTE_DIR/logs/vtu-cashback-summaries.log 2>&1
 */15 * * * * flock -n $REMOTE_DIR/locks/publish-scheduled-posts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/publish-scheduled-posts' >> $REMOTE_DIR/logs/publish-scheduled-posts.log 2>&1

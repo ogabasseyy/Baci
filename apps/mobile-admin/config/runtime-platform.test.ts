@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { Platform } from 'react-native';
 import { describe, expect, it } from 'vitest';
 import {

@@ -63,9 +63,67 @@ describe('fetchCustomerWallet', () => {
       totalEarned: 5000,
       totalRedeemed: 0,
       transactions: [
-        { id: 'txn-1', source_type: 'wallet_topup', type: 'credit' },
+        {
+          description: 'Wallet top-up',
+          id: 'txn-1',
+          source_type: 'wallet_topup',
+          type: 'credit',
+        },
       ],
     });
+  });
+
+  it('never shows a customer the provider or lookup id behind a transaction', async () => {
+    const supabase = supabaseDouble({
+      wallet: {
+        data: {
+          available_balance: '0',
+          id: 'wallet-1',
+          total_earned: '0',
+          total_redeemed: '5000',
+        },
+        error: null,
+      },
+      transactions: {
+        data: [
+          {
+            description:
+              'Petrock IMEI lookup payment: 3f2b8c1e-1d2a-4c3b-9e8f-0a1b2c3d4e5f',
+            id: 'txn-2',
+            source_type: 'imei_wallet_payment',
+            type: 'redemption',
+          },
+          {
+            description: 'Partial invoice payment via paystack',
+            id: 'txn-3',
+            source_type: null,
+            type: 'debit',
+          },
+          {
+            description: 'PiggyVest bank transfer',
+            id: 'txn-4',
+            source_type: 'piggyvest_primary_inflow',
+            type: 'credit',
+          },
+        ],
+        error: null,
+      },
+    });
+
+    const result = await fetchCustomerWallet({ ...args, supabase });
+
+    if (result.kind !== 'ok') throw new Error('expected ok');
+    // Only the text a customer reads is relabeled: source_type is a machine
+    // field older apps branch on, so it keeps its value.
+    const descriptions = result.transactions.map((tx) => tx.description);
+    expect(descriptions.join(' ')).not.toMatch(
+      /petrock|paystack|piggyvest|3f2b8c1e/i
+    );
+    expect(descriptions).toEqual([
+      'IMEI check',
+      'Partial invoice payment',
+      'Money added',
+    ]);
   });
 
   it('maps PGRST116 ("no row") to no-wallet, not an error', async () => {

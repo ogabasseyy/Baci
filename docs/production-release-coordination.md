@@ -99,6 +99,18 @@ which retains every non-test source and all strict compiler settings but
 omits test roots. The normal `pnpm turbo typecheck` still uses the complete
 application-and-test configuration. The scope regression test enforces this
 separation and the explicit `ignoreBuildErrors: false` setting.
+`next build` regenerates `.next/types/link.d.ts` immediately before its own
+type check, so the typed-route preparation that `pnpm typecheck` applies in
+place cannot survive there. The `build` script therefore runs `next typegen`
+and writes the prepared declaration to `.typed-navigation/link.d.ts`;
+`tsconfig.build.json` lists that copy under `files` and excludes the
+regenerated file, so a build that skipped the preparation fails with TS6053
+instead of silently dropping typed-route checks.
+On a fresh checkout, run `next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts` in `apps/web` (or `pnpm typecheck:build`, which also type checks) before a bare `tsc -p tsconfig.build.json`, which otherwise fails with TS6053.
+`typecheck:build` passes `--incremental false` because a stale `.next/cache/tsconfig.build.tsbuildinfo` let an unprepared declaration pass without being re-checked; do not trust an incremental result when verifying this path by hand.
+`build:ci` compiles without type checking, so only a production build
+exercises this path: a TS2589 in a deploy with green PR checks means the two
+have drifted.
 The production build also supplies `GOMEMLIMIT=6GiB` to the native Go
 compiler. This is a soft garbage-collection budget, not a hard memory cap;
 `NODE_OPTIONS` only budgets Node.js. The host has 24 GiB swap after adding

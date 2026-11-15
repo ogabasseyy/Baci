@@ -15,7 +15,9 @@ const interestEvent: InterestPayoutSuccessEvent = {
   eventData: {
     id: 'faas-interest-synthetic-001',
     amount: 95000,
-    destination_wallet: 'faas-wallet-synthetic-001',
+    // PiggyVest (2026-11-11): PVB's internal wallet, never the credited
+    // plan wallet.
+    destination_wallet: 'pvb-internal-wallet-synthetic-009',
     destination_wallet_balance: 1095000,
     destination_wallet_ledger_balance: 1095000,
     reference: 'faas-ref-synthetic-002',
@@ -28,9 +30,8 @@ const interestEvent: InterestPayoutSuccessEvent = {
     },
   },
   pvb_reference: 'pvb-txn-synthetic-002',
-  // Observed provider shape: the envelope wallet is the source
-  // accrued-interest wallet, not the credited plan wallet.
-  pvb_wallet: 'pvb-wallet-synthetic-001',
+  // PiggyVest (2026-11-11): the PVB wallet the payout credited.
+  pvb_wallet: 'faas-wallet-synthetic-001',
   pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
   pvb_destination_wallet: null,
   pvb_third_party_reference: null,
@@ -51,6 +52,8 @@ const MAPPING_ROW = {
 };
 
 const STORED_PAYOUT_ROW = {
+  pvb_reference: 'pvb-txn-synthetic-002',
+  provider_payout_id: 'faas-interest-synthetic-001',
   customer_id: 'faas-customer-synthetic-001',
   wallet_id: 'faas-wallet-synthetic-001',
   amount_kobo: 95000,
@@ -110,21 +113,6 @@ function mockSupabase(options: {
 }
 
 describe('recordInterestPayout', () => {
-  it('rejects a reused payout ID with a changed batch under a new event ID', async () => {
-    const { client } = mockSupabase({
-      upsertResult: { data: [], error: null },
-    });
-    await expect(
-      recordInterestPayout(client, {
-        ...interestEvent,
-        eventId: 'different-event',
-        eventData: { ...interestEvent.eventData, batch_id: 'different-batch' },
-      })
-    ).rejects.toMatchObject({
-      code: 'INTEREST_LEDGER_CONFLICT',
-      conflict: { mismatchedFields: ['batch_id'] },
-    });
-  });
   it('credits the reconciled net on first delivery', async () => {
     const { client, upsert } = mockSupabase({
       upsertResult: {
@@ -144,11 +132,11 @@ describe('recordInterestPayout', () => {
         net_kobo: 95000,
         batch_id: 'batch-synthetic-001',
       }),
-      { onConflict: 'provider_payout_id', ignoreDuplicates: true }
+      { onConflict: 'pvb_reference', ignoreDuplicates: true }
     );
   });
 
-  it('attributes the mapping and stored row to the destination plan wallet', async () => {
+  it('attributes the mapping and stored row to the credited pvb_wallet', async () => {
     const { client, upsert, mappingEq } = mockSupabase({
       upsertResult: {
         data: [{ provider_payout_id: 'faas-interest-synthetic-001' }],

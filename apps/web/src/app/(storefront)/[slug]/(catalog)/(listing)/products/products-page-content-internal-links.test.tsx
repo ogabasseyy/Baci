@@ -217,7 +217,7 @@ describe('ProductsPageContent maintained buying path modules', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     // Late SEO enrichment must never insert above the already-painted catalog.
     expect(
@@ -269,7 +269,7 @@ describe('ProductsPageContent maintained buying path modules', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.queryByRole('link', { name: 'iPhone Air' })
@@ -292,7 +292,7 @@ describe('ProductsPageContent maintained buying path modules', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.queryByRole('heading', { name: 'Explore Ogabassey buying paths' })

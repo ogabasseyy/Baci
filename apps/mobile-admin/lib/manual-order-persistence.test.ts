@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { PostgrestError } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createManualOrderWithItems } from '@/lib/manual-order-persistence';

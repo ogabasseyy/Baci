@@ -82,13 +82,18 @@ export function navigateFromPushScreen(
         // Forward the reminder's named goal so the wallet opens that exact
         // owned plan; WalletScreen falls back to the default active goal
         // when the id is absent or no longer matches an owned plan.
+        // A named goal goes through the goal link route, which re-checks the
+        // goal is still this account's before opening its sheet (never a
+        // fallback goal); without one, the wallet's own savings sheet opens.
         const savingsGoalId = params?.savingsGoalId?.trim();
-        router.push({
-          pathname: '/wallet',
-          params: savingsGoalId
-            ? { action: 'savings', savingsGoalId }
-            : { action: 'savings' },
-        });
+        router.push(
+          savingsGoalId
+            ? {
+                pathname: '/wallet/savings/goal-actions',
+                params: { goalId: savingsGoalId },
+              }
+            : { pathname: '/wallet', params: { action: 'savings' } }
+        );
         break;
       }
       // Wallet-credited taps may carry an onward destination (the interrupted

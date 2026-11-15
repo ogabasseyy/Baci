@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import { Keyboard } from 'react-native';
+import { TextInput } from 'react-native';
 import Colors from '@/constants/Colors';
 import {
   fetchWalletPinStatus,
@@ -50,11 +50,14 @@ function renderSheet(open: PinProofRequest = request) {
   return { onProof, onCancel };
 }
 
-function chooseAndSave(button: string, newPin: string, confirm: string) {
-  fireEvent.changeText(screen.getByLabelText('New PIN'), newPin);
-  fireEvent.changeText(screen.getByLabelText('Confirm PIN'), confirm);
-  fireEvent.press(screen.getByRole('button', { name: button }));
+/** Taps the in-sheet number pad, one digit at a time. */
+function typePin(pin: string) {
+  for (const digit of pin)
+    fireEvent.press(screen.getByRole('button', { name: digit }));
 }
+
+const digitsEntered = (label: string, count: number) =>
+  screen.getByLabelText(`${label}, ${count} of 6 digits entered`);
 
 beforeEach(() => jest.resetAllMocks());
 
@@ -64,14 +67,14 @@ describe('entering the PIN', () => {
     jest.mocked(verifyFundPin).mockResolvedValue(proof);
     const { onProof } = renderSheet();
     await screen.findByText('Enter your wallet PIN');
-    fireEvent.changeText(screen.getByLabelText('PIN'), '4821');
+    typePin('4821');
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
     expect(verifyFundPin).toHaveBeenCalledWith(
       { ...request, pin: '4821' },
       undefined
     );
-    expect(screen.getByLabelText('PIN').props.value).toBe('');
+    expect(digitsEntered('PIN', 0)).toBeOnTheScreen();
   });
 
   it('shows the server copy for a wrong PIN and clears the field', async () => {
@@ -83,10 +86,10 @@ describe('entering the PIN', () => {
       );
     const { onProof } = renderSheet();
     await screen.findByText('Enter your wallet PIN');
-    fireEvent.changeText(screen.getByLabelText('PIN'), '0000');
+    typePin('0000');
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('That PIN is not right.')).toBeOnTheScreen();
-    expect(screen.getByLabelText('PIN').props.value).toBe('');
+    expect(digitsEntered('PIN', 0)).toBeOnTheScreen();
     expect(onProof).not.toHaveBeenCalled();
   });
 
@@ -98,7 +101,7 @@ describe('entering the PIN', () => {
       .mockRejectedValue(serverError(locked, 'PIN_LOCKED'));
     renderSheet();
     await screen.findByText('Enter your wallet PIN');
-    fireEvent.changeText(screen.getByLabelText('PIN'), '1234');
+    typePin('1234');
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText(locked)).toBeOnTheScreen();
   });
@@ -107,8 +110,8 @@ describe('entering the PIN', () => {
     jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
     renderSheet();
     await screen.findByText('Enter your wallet PIN');
-    fireEvent.changeText(screen.getByLabelText('PIN'), '12a');
-    expect(screen.getByLabelText('PIN').props.value).toBe('12');
+    typePin('12');
+    expect(digitsEntered('PIN', 2)).toBeOnTheScreen();
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Enter 4 to 6 digits.')).toBeOnTheScreen();
     expect(verifyFundPin).not.toHaveBeenCalled();
@@ -124,70 +127,6 @@ describe('entering the PIN', () => {
   });
 });
 
-describe('setting a PIN', () => {
-  it('asks for a matching confirmation, saves, then asks to enter it', async () => {
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ hasPin: false }));
-    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
-    renderSheet();
-    await screen.findByText('Set a wallet PIN');
-    chooseAndSave('Save PIN', '4821', '4822');
-    expect(
-      await screen.findByText('The two PINs do not match.')
-    ).toBeOnTheScreen();
-    expect(submitWalletPin).not.toHaveBeenCalled();
-    chooseAndSave('Save PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
-    expect(submitWalletPin).toHaveBeenCalledWith('set', '4821', undefined);
-    expect(verifyFundPin).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('PIN').props.value).toBe('');
-  });
-
-  it('shows the server copy when saving fails', async () => {
-    const message = 'Please sign in again to continue.';
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ hasPin: false }));
-    jest
-      .mocked(submitWalletPin)
-      .mockRejectedValue(serverError(message, 'REAUTHENTICATION_REQUIRED'));
-    renderSheet();
-    await screen.findByText('Set a wallet PIN');
-    chooseAndSave('Save PIN', '4821', '4821');
-    expect(await screen.findByText(message)).toBeOnTheScreen();
-  });
-
-  it('goes to PIN entry when the server says a PIN already exists', async () => {
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ hasPin: false }));
-    jest
-      .mocked(submitWalletPin)
-      .mockRejectedValue(
-        serverError('A PIN is already set.', 'PIN_ALREADY_SET')
-      );
-    renderSheet();
-    await screen.findByText('Set a wallet PIN');
-    chooseAndSave('Save PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
-  });
-});
-
-describe('resetting a PIN', () => {
-  it('uses the reset route when the server requires a reset', async () => {
-    jest
-      .mocked(fetchWalletPinStatus)
-      .mockResolvedValue(status({ resetRequired: true }));
-    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
-    renderSheet();
-    await screen.findByText('Reset your wallet PIN');
-    chooseAndSave('Reset PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
-    expect(submitWalletPin).toHaveBeenCalledWith('reset', '4821', undefined);
-  });
-});
-
 describe('when the PIN service cannot be used', () => {
   it.each([
     ['not available', status({ available: false, hasPin: false })],
@@ -198,9 +137,9 @@ describe('when the PIN service cannot be used', () => {
     expect(
       await screen.findByText('Wallet PIN is unavailable right now')
     ).toBeOnTheScreen();
-    expect(screen.queryByText('Set a wallet PIN')).toBeNull();
-    expect(screen.queryByLabelText('PIN')).toBeNull();
-    expect(screen.queryByLabelText('New PIN')).toBeNull();
+    expect(screen.queryByText('Create your wallet PIN')).toBeNull();
+    expect(screen.queryByLabelText(/^PIN, /)).toBeNull();
+    expect(screen.queryByLabelText(/^New PIN, /)).toBeNull();
   });
 
   it('treats a failed status read as unavailable, never as set-a-PIN', async () => {
@@ -209,18 +148,50 @@ describe('when the PIN service cannot be used', () => {
     expect(
       await screen.findByText('Wallet PIN is unavailable right now')
     ).toBeOnTheScreen();
-    expect(screen.queryByText('Set a wallet PIN')).toBeNull();
+    expect(screen.queryByText('Create your wallet PIN')).toBeNull();
   });
 });
 
-describe('keyboard handling', () => {
-  it('hides the number pad when the sheet is tapped, and leaves the sheet open', async () => {
+describe('number pad', () => {
+  it('uses its own number pad, never the phone keyboard', async () => {
     jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
-    const dismiss = jest.spyOn(Keyboard, 'dismiss');
-    const { onCancel } = renderSheet();
-    fireEvent.press(await screen.findByText('Enter your wallet PIN'));
-    expect(dismiss).toHaveBeenCalled();
-    expect(onCancel).not.toHaveBeenCalled();
+    renderSheet();
+    await screen.findByText('Enter your wallet PIN');
+    expect(screen.UNSAFE_queryAllByType(TextInput)).toHaveLength(0);
+    typePin('482');
+    fireEvent.press(screen.getByRole('button', { name: 'Delete digit' }));
+    expect(digitsEntered('PIN', 2)).toBeOnTheScreen();
+  });
+
+  it('asks for at least four digits before the confirm step', async () => {
+    jest
+      .mocked(fetchWalletPinStatus)
+      .mockResolvedValue(status({ hasPin: false }));
+    renderSheet();
+    await screen.findByText('Create your wallet PIN');
+    typePin('482');
+    fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText('Enter 4 to 6 digits.')).toBeOnTheScreen();
+    expect(screen.getByText('Choose 4 to 6 digits.')).toBeOnTheScreen();
+    expect(submitWalletPin).not.toHaveBeenCalled();
+  });
+
+  it('turns the button red only once four digits are in', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    renderSheet();
+    await screen.findByText('Enter your wallet PIN');
+    const confirm = () => screen.getByRole('button', { name: 'Confirm' });
+    expect(confirm()).toHaveStyle({ backgroundColor: Colors.light.muted });
+    typePin('4821');
+    expect(confirm()).toHaveStyle({ backgroundColor: Colors.light.primary });
+  });
+
+  it('says what the PIN is for', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    renderSheet();
+    expect(
+      await screen.findByText('Adding ₦2,500 to savings')
+    ).toBeOnTheScreen();
   });
 });
 
@@ -247,7 +218,7 @@ describe('goal actions', () => {
     jest.mocked(verifyGoalActionPin).mockResolvedValue(proof);
     const { onProof } = renderSheet({ ...goalIds, action });
     expect(await screen.findByText(copy)).toBeOnTheScreen();
-    fireEvent.changeText(screen.getByLabelText('PIN'), '4821');
+    typePin('4821');
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
     expect(verifyGoalActionPin).toHaveBeenCalledWith(
@@ -264,8 +235,14 @@ describe('goal actions', () => {
       .mockRejectedValue(serverError('Set a PIN first.', 'PIN_NOT_SET'));
     renderSheet({ ...goalIds, action: 'cancel' });
     await screen.findByText('Enter your PIN to cancel this goal.');
-    fireEvent.changeText(screen.getByLabelText('PIN'), '4821');
+    typePin('4821');
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
-    expect(await screen.findByText('Set a wallet PIN')).toBeOnTheScreen();
+    expect(await screen.findByText('Create your wallet PIN')).toBeOnTheScreen();
+  });
+
+  it('names the goal being cancelled', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    renderSheet({ ...goalIds, action: 'cancel', goalTitle: 'iPhone 15' });
+    expect(await screen.findByText('Cancelling iPhone 15')).toBeOnTheScreen();
   });
 });

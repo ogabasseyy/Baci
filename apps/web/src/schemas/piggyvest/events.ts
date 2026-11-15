@@ -144,6 +144,9 @@ export const walletTransferOutflowSuccessEventSchema = z.object({
   eventCategory: z.string().min(1),
   customer_id: z.string().min(1),
   eventData: z.looseObject({}),
+  // Our own transfer reference (pvb-pay-*, pvb-refund-*) travels here, not in
+  // eventData: kept through parsing so the outflow is attributed (Codex P2).
+  pvb_third_party_reference: nullableStringSchema.optional(),
 });
 
 export const restrictionCreatedSuccessEventSchema = z.object({

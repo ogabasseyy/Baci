@@ -1,3 +1,14 @@
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({
+      fallback,
+    }: {
+      fallback: import('react').ReactNode;
+    }) => fallback,
+  })
+);
+
 import { render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { Suspense } from 'react';

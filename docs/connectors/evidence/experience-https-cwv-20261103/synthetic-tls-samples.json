@@ -1,0 +1,411 @@
+{
+  "purpose": "functional offline HTTPS transport proof; not clean-host or field qualification",
+  "status": "measured",
+  "report": {
+    "format": "baci.performance-lab/v1",
+    "buildDigest": "3f6bd7b8f68fbfccb5875bb446bb395b07ec1e34ca05d054aeb73284d7eddf52",
+    "sourceDigest": "65c00b4c3f407d2588bd7901607b0bf1db862bb4d6ebc54fb314a64a3485d55e",
+    "renderer": "prerender",
+    "measuredAt": "2026-11-03T16:21:42.799Z",
+    "environment": "local-synthetic",
+    "cwvQualified": false,
+    "releaseQualified": false,
+    "contaminated": false,
+    "browser": "Chromium 153.0.8010.12",
+    "bootstrapDigests": [
+      {
+        "route": "/",
+        "digest": "8b75dda063b31dd953810d17ba12dea18a55d51c5e4fc22a4a23f5981a323027"
+      }
+    ],
+    "samples": [
+      {
+        "width": 390,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 221.5,
+        "hostLcpMs": 144,
+        "frameCls": 0,
+        "hostCls": 0,
+        "diagnostics": {
+          "transport": "https-loopback-tls",
+          "tlsConnections": 4,
+          "host": {
+            "rawCls": 0,
+            "firstPaintMs": 144,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          },
+          "frame": {
+            "rawCls": 0,
+            "firstPaintMs": 152,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          }
+        },
+        "interactionDurationMs": null,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      },
+      {
+        "width": 390,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 126.099853515625,
+        "hostLcpMs": 88,
+        "frameCls": 0,
+        "hostCls": 0,
+        "diagnostics": {
+          "transport": "https-loopback-tls",
+          "tlsConnections": 4,
+          "host": {
+            "rawCls": 0,
+            "firstPaintMs": 88,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          },
+          "frame": {
+            "rawCls": 0,
+            "firstPaintMs": 64,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          }
+        },
+        "interactionDurationMs": null,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      },
+      {
+        "width": 390,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 112.599853515625,
+        "hostLcpMs": 68,
+        "frameCls": 0,
+        "hostCls": 0,
+        "diagnostics": {
+          "transport": "https-loopback-tls",
+          "tlsConnections": 4,
+          "host": {
+            "rawCls": 0,
+            "firstPaintMs": 68,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          },
+          "frame": {
+            "rawCls": 0,
+            "firstPaintMs": 84,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          }
+        },
+        "interactionDurationMs": null,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      },
+      {
+        "width": 1440,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 132.199951171875,
+        "hostLcpMs": 72,
+        "frameCls": 0,
+        "hostCls": 0,
+        "diagnostics": {
+          "transport": "https-loopback-tls",
+          "tlsConnections": 4,
+          "host": {
+            "rawCls": 0,
+            "firstPaintMs": 72,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          },
+          "frame": {
+            "rawCls": 0,
+            "firstPaintMs": 80,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          }
+        },
+        "interactionDurationMs": null,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      },
+      {
+        "width": 1440,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 190.599853515625,
+        "hostLcpMs": 68,
+        "frameCls": 0,
+        "hostCls": 0,
+        "diagnostics": {
+          "transport": "https-loopback-tls",
+          "tlsConnections": 4,
+          "host": {
+            "rawCls": 0,
+            "firstPaintMs": 68,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          },
+          "frame": {
+            "rawCls": 0,
+            "firstPaintMs": 144,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          }
+        },
+        "interactionDurationMs": null,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      },
+      {
+        "width": 1440,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 156,
+        "hostLcpMs": 72,
+        "frameCls": 0,
+        "hostCls": 0,
+        "diagnostics": {
+          "transport": "https-loopback-tls",
+          "tlsConnections": 4,
+          "host": {
+            "rawCls": 0,
+            "firstPaintMs": 72,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          },
+          "frame": {
+            "rawCls": 0,
+            "firstPaintMs": 100,
+            "rawLayoutShifts": [],
+            "layoutShiftOverflow": false
+          }
+        },
+        "interactionDurationMs": null,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      }
+    ]
+  },
+  "jobIds": [
+    "baci-experience-64af5907-2a9a-4c43-a432-e38bd83de1b9",
+    "baci-experience-e45146a3-d336-44c8-a2d4-b26956b8a9c8",
+    "baci-experience-75dd60b1-a4bd-44df-8c36-33ee4bb1f6bb",
+    "baci-experience-8bd887f9-f03a-483b-8a25-2f1474c1c633",
+    "baci-experience-c341f984-4a26-4dab-8b10-c53e084bbbed",
+    "baci-experience-d0692dbf-31e7-4aad-87f5-885e58381907",
+    "baci-experience-53443914-fbfb-427f-8beb-f4d06accf58e"
+  ],
+  "qualification": {
+    "policyId": "chromium-native-reference/v1",
+    "buildDigest": "3f6bd7b8f68fbfccb5875bb446bb395b07ec1e34ca05d054aeb73284d7eddf52",
+    "sourceDigest": "65c00b4c3f407d2588bd7901607b0bf1db862bb4d6ebc54fb314a64a3485d55e",
+    "reportDigest": "b178de3644bb0770be368c55c8c04960dbc6261367016cf3f9bde999cf712c8a",
+    "routeCount": 1,
+    "sampleCount": 6,
+    "cwvQualified": false,
+    "releaseQualified": false,
+    "report": {
+      "format": "baci.performance-lab/v1",
+      "buildDigest": "3f6bd7b8f68fbfccb5875bb446bb395b07ec1e34ca05d054aeb73284d7eddf52",
+      "sourceDigest": "65c00b4c3f407d2588bd7901607b0bf1db862bb4d6ebc54fb314a64a3485d55e",
+      "measuredAt": "2026-11-03T16:21:42.799Z",
+      "renderer": "prerender",
+      "environment": "local-synthetic",
+      "cwvQualified": false,
+      "releaseQualified": false,
+      "contaminated": false,
+      "browser": "Chromium 153.0.8010.12",
+      "bootstrapDigests": [
+        {
+          "route": "/",
+          "digest": "8b75dda063b31dd953810d17ba12dea18a55d51c5e4fc22a4a23f5981a323027"
+        }
+      ],
+      "samples": [
+        {
+          "width": 390,
+          "cache": "cold-context",
+          "route": "/",
+          "frameLcpMs": 221.5,
+          "hostLcpMs": 144,
+          "frameCls": 0,
+          "hostCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 144,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 152,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "transport": "https-loopback-tls",
+            "tlsConnections": 4
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0
+        },
+        {
+          "width": 390,
+          "cache": "cold-context",
+          "route": "/",
+          "frameLcpMs": 126.099853515625,
+          "hostLcpMs": 88,
+          "frameCls": 0,
+          "hostCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 88,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 64,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "transport": "https-loopback-tls",
+            "tlsConnections": 4
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0
+        },
+        {
+          "width": 390,
+          "cache": "cold-context",
+          "route": "/",
+          "frameLcpMs": 112.599853515625,
+          "hostLcpMs": 68,
+          "frameCls": 0,
+          "hostCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 68,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 84,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "transport": "https-loopback-tls",
+            "tlsConnections": 4
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0
+        },
+        {
+          "width": 1440,
+          "cache": "cold-context",
+          "route": "/",
+          "frameLcpMs": 132.199951171875,
+          "hostLcpMs": 72,
+          "frameCls": 0,
+          "hostCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 72,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 80,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "transport": "https-loopback-tls",
+            "tlsConnections": 4
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0
+        },
+        {
+          "width": 1440,
+          "cache": "cold-context",
+          "route": "/",
+          "frameLcpMs": 190.599853515625,
+          "hostLcpMs": 68,
+          "frameCls": 0,
+          "hostCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 68,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 144,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "transport": "https-loopback-tls",
+            "tlsConnections": 4
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0
+        },
+        {
+          "width": 1440,
+          "cache": "cold-context",
+          "route": "/",
+          "frameLcpMs": 156,
+          "hostLcpMs": 72,
+          "frameCls": 0,
+          "hostCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 72,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 100,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "transport": "https-loopback-tls",
+            "tlsConnections": 4
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0
+        }
+      ]
+    }
+  }
+}

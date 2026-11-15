@@ -18,6 +18,69 @@ const response = {
   minimum_loan_amount: 10000,
   max_tenure: 6,
 };
+it('retains Oxygen limits for each repayment period', async () => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      tenure_unit: 'Monthly',
+      offers: [
+        { loan_amount: 68000, tenor: 1 },
+        { loan_amount: 131000, tenor: 2 },
+        { loan_amount: 189000, tenor: 3 },
+      ],
+    }),
+  });
+  expect(state).toMatchObject({
+    offers: [
+      { loanAmount: 68000, tenure: 1 },
+      { loanAmount: 131000, tenure: 2 },
+      { loanAmount: 189000, tenure: 3 },
+    ],
+  });
+});
+it('does not retain old offers when the provider omits them', async () => {
+  const state: OxygenProviderState = {
+    applicationReference: 'application',
+    offers: [{ tenure: 1, loanAmount: 68000 }],
+  };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue(response),
+  });
+  expect(state.offers).toBeUndefined();
+});
+it('does not interpret offers with an unknown period as months', async () => {
+  await expect(
+    refreshOxygenEligibility(
+      context,
+      { applicationReference: 'application' },
+      {
+        call: vi.fn().mockResolvedValue({
+          ...response,
+          offers: [{ loan_amount: 68000, tenor: 1 }],
+        }),
+      }
+    )
+  ).rejects.toThrow();
+});
+it('rejects ambiguous offers for the same repayment period', async () => {
+  await expect(
+    refreshOxygenEligibility(
+      context,
+      { applicationReference: 'application' },
+      {
+        call: vi.fn().mockResolvedValue({
+          ...response,
+          tenure_unit: 'Monthly',
+          offers: [
+            { loan_amount: 68000, tenor: 1 },
+            { loan_amount: 131000, tenor: 1 },
+          ],
+        }),
+      }
+    )
+  ).rejects.toThrow();
+});
 it('retains strict eligibility success behavior', async () => {
   const state: OxygenProviderState = { applicationReference: 'application' };
   await refreshOxygenEligibility(context, state, {

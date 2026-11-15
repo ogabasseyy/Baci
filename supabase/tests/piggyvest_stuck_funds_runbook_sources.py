@@ -5,13 +5,13 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
-def real_function(name):
-    """The latest CREATE OR REPLACE FUNCTION public.<name> in supabase/migrations, verbatim."""
-    head = re.compile(r'CREATE OR REPLACE FUNCTION "?public"?\."?' + name + r'"?\(')
+def real_function(name, schema='public'):
+    """The latest CREATE OR REPLACE FUNCTION <schema>.<name> in supabase/migrations, verbatim."""
+    head = re.compile(r'CREATE OR REPLACE FUNCTION "?' + schema + r'"?\."?' + name + r'"?\(')
     sources = sorted(path for path in (ROOT / 'supabase/migrations').glob('*.sql')
                      if head.search(path.read_text(encoding='utf-8')))
     if not sources:
-        raise RuntimeError(f'no migration defines public.{name}')
+        raise RuntimeError(f'no migration defines {schema}.{name}')
     text = sources[-1].read_text(encoding='utf-8')
     body = text[list(head.finditer(text))[-1].start():]
     tag = re.search(r'\bAS\s+(\$[a-z_]*\$)', body, re.I)

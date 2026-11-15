@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { User } from '@supabase/supabase-js';
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

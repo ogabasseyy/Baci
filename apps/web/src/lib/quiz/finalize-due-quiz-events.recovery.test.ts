@@ -50,6 +50,16 @@ function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
   };
 }
 
+function queueRpcSequence(
+  awardPayload: Record<string, unknown> = { scheduledPromoted: 0 }
+) {
+  mocks.rpc
+    .mockResolvedValueOnce({ data: { updated: true }, error: null })
+    .mockResolvedValueOnce({ data: awardPayload, error: null })
+    .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
+    .mockResolvedValueOnce({ data: 0, error: null });
+}
+
 describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,7 +68,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     mocks.approved.mockReturnValue(false);
     mocks.getRedis.mockReturnValue(null);
     mocks.resolveQuizSweepWatermarks.mockResolvedValue(makeOkWatermarks('ok'));
-    mocks.invalidateQuizProductCaches.mockResolvedValue(undefined);
+    mocks.invalidateQuizProductCaches.mockResolvedValue(true);
     mocks.rpc.mockResolvedValue({ data: {}, error: null });
   });
 
@@ -88,28 +98,20 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
         boundarySnapshots: new Map([['evt-1', '{"status":"ended"}']]),
       },
     };
-    const idleRpcSequence = () => {
-      mocks.rpc
-        .mockResolvedValueOnce({ data: { updated: true }, error: null })
-        .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
-        .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
-        .mockResolvedValueOnce({ data: 0, error: null });
-    };
-
     // Tick 1: warm idle baseline
     await saveQuizSweepBaseline({
       watermarks: tick1Watermarks,
       hasPendingRecoverySweep: false,
     });
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
-    idleRpcSequence();
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
 
     // Tick 2: DB deadline clock advanced events.floor before pre-RPC probe,
     // so worker RPCs return 0; must sweep from tick1Watermarks.
-    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
-    idleRpcSequence();
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(tick2Watermarks);
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledWith(
@@ -118,8 +120,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     );
 
     // Tick 3: unchanged from tick2Watermarks -> idle skip resumes.
-    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
-    idleRpcSequence();
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
   });
@@ -134,28 +135,20 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
         boundarySnapshots: new Map([['evt-1', '{"status":"ended"}']]),
       },
     };
-    const idleRpcSequence = () => {
-      mocks.rpc
-        .mockResolvedValueOnce({ data: { updated: true }, error: null })
-        .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
-        .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
-        .mockResolvedValueOnce({ data: 0, error: null });
-    };
-
     // Tick 1: baseline
     await saveQuizSweepBaseline({
       watermarks: tick1Watermarks,
       hasPendingRecoverySweep: false,
     });
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
-    idleRpcSequence();
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
 
     // Tick 2: external mutation triggers sweep, but sweep reports incomplete (false).
-    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(tick2Watermarks);
     mocks.invalidateQuizProductCaches.mockResolvedValueOnce(false);
-    idleRpcSequence();
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
@@ -164,9 +157,8 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     );
 
     // Tick 3: watermarks unchanged, but recovery is still pending -> retries from tick1Watermarks.
-    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
     mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
-    idleRpcSequence();
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenLastCalledWith(
@@ -175,8 +167,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     );
 
     // Tick 4: recovery succeeded -> idle skip resumes.
-    mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick2Watermarks);
-    idleRpcSequence();
+    queueRpcSequence();
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
   });
@@ -187,11 +178,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     // Tick 1: first-ever tick has a local mutation, but sweep fails (false).
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
     mocks.invalidateQuizProductCaches.mockResolvedValueOnce(false);
-    mocks.rpc
-      .mockResolvedValueOnce({ data: { updated: true }, error: null })
-      .mockResolvedValueOnce({ data: { awarded: 1 }, error: null })
-      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
-      .mockResolvedValueOnce({ data: 0, error: null });
+    queueRpcSequence({ awarded: 1 });
 
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
@@ -207,11 +194,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     // Tick 2: idle RPCs, same watermarks -> retries recovery from tick1Watermarks.
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
     mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
-    mocks.rpc
-      .mockResolvedValueOnce({ data: { updated: true }, error: null })
-      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
-      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
-      .mockResolvedValueOnce({ data: 0, error: null });
+    queueRpcSequence();
 
     await finalizeDueQuizEvents();
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
@@ -240,11 +223,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     };
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(coldStartWatermarks);
     mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
-    mocks.rpc
-      .mockResolvedValueOnce({ data: { updated: true }, error: null })
-      .mockResolvedValueOnce({ data: { scheduledPromoted: 0 }, error: null })
-      .mockResolvedValueOnce({ data: { expired: 0 }, error: null })
-      .mockResolvedValueOnce({ data: 0, error: null });
+    queueRpcSequence();
 
     await finalizeDueQuizEvents();
 
@@ -253,5 +232,52 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
       mocks.invalidateQuizProductCaches.mock.calls[0]?.[1];
     expect(passedWatermarks.events.floor).toBe('2026-09-01T00:00:05Z');
     expect(passedWatermarks.events.boundarySnapshots.size).toBe(0);
+  });
+
+  it('saves post-RPC watermarks after a mutating sweep so the next idle tick does not repeat', async () => {
+    const preRpc = makeOkWatermarks('ok');
+    const postRpc = {
+      ...makeOkWatermarks('ok'),
+      events: {
+        status: 'ok' as const,
+        floor: '2026-09-01T00:00:10Z',
+        boundarySnapshots: new Map([['evt-2', '{"status":"ended"}']]),
+      },
+    };
+    await saveQuizSweepBaseline({
+      watermarks: preRpc,
+      hasPendingRecoverySweep: false,
+    });
+    mocks.resolveQuizSweepWatermarks
+      .mockResolvedValueOnce(preRpc)
+      .mockResolvedValue(postRpc);
+    queueRpcSequence({ awarded: 1 });
+
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+
+    // Next idle tick sees postRpc -> no duplicate sweep.
+    queueRpcSequence();
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains recovery when invalidateQuizProductCaches returns a non-true value', async () => {
+    const tick1 = makeOkWatermarks('ok');
+    await saveQuizSweepBaseline({
+      watermarks: tick1,
+      hasPendingRecoverySweep: false,
+    });
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(undefined);
+    queueRpcSequence({ awarded: 1 });
+
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
+
+    mocks.invalidateQuizProductCaches.mockResolvedValueOnce(true);
+    queueRpcSequence();
+
+    await finalizeDueQuizEvents();
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(2);
   });
 });

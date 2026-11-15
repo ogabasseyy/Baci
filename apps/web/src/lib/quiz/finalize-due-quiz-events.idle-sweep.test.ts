@@ -52,7 +52,7 @@ describe('finalizeDueQuizEvents idle sweep gating', () => {
     mocks.phase.mockReturnValue('1a');
     mocks.approved.mockReturnValue(false);
     mocks.resolveQuizSweepWatermarks.mockResolvedValue(makeOkWatermarks('ok'));
-    mocks.invalidateQuizProductCaches.mockResolvedValue(undefined);
+    mocks.invalidateQuizProductCaches.mockResolvedValue(true);
     mocks.rpc.mockResolvedValue({ data: {}, error: null });
   });
 

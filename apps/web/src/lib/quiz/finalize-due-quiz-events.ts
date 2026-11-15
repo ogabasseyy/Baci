@@ -206,18 +206,25 @@ async function runFinalizeDueQuizEvents() {
         : lastObservedWatermarks === null && requiresColdStartSweep
           ? withoutBoundarySnapshots(sweepWatermarks)
           : sweepWatermarks;
+    const postRpcWatermarks = sweepWatermarks.hasProbeFailure
+      ? sweepWatermarks
+      : await resolveQuizSweepWatermarks(client, cacheInvalidationStartedAt);
     const sweepSucceeded =
-      (await invalidateQuizProductCaches(client, sweepTargetWatermarks)) !==
-      false;
+      (await invalidateQuizProductCaches(client, sweepTargetWatermarks)) ===
+      true;
 
-    if (sweepWatermarks.hasProbeFailure || !sweepSucceeded) {
+    if (
+      sweepWatermarks.hasProbeFailure ||
+      postRpcWatermarks.hasProbeFailure ||
+      !sweepSucceeded
+    ) {
       await saveQuizSweepBaseline({
         watermarks: lastObservedWatermarks ?? sweepTargetWatermarks,
         hasPendingRecoverySweep: true,
       });
     } else {
       await saveQuizSweepBaseline({
-        watermarks: sweepWatermarks,
+        watermarks: postRpcWatermarks,
         hasPendingRecoverySweep: false,
       });
     }

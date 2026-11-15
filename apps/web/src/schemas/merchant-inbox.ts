@@ -81,3 +81,36 @@ export type MerchantInboxConversation = {
   lastActivityAt: string | null;
   lastMessage: MerchantInboxMessage | null;
 };
+
+/** Baci's own inbox responses, validated again in the browser. */
+export const merchantInboxMessageSchema = z.object({
+  id: providerId,
+  sender: z.enum(['customer', 'store', 'assistant', 'system']),
+  kind: z.enum(['text', 'product_card', 'other']),
+  text: z.string().max(4_000),
+  createdAt: z.string().min(1).max(40),
+}) satisfies z.ZodType<MerchantInboxMessage>;
+
+export const merchantInboxConversationSchema = z.object({
+  id: providerId,
+  status: z.enum(['open', 'resolved', 'pending', 'snoozed']),
+  unreadCount: z.number().int().nonnegative(),
+  customerName: z.string().min(1).max(80),
+  lastActivityAt: z.string().min(1).max(40).nullable(),
+  lastMessage: merchantInboxMessageSchema.nullable(),
+}) satisfies z.ZodType<MerchantInboxConversation>;
+
+export const merchantInboxConversationsResponseSchema = z.object({
+  conversations: z.array(merchantInboxConversationSchema).max(100),
+  hasMore: z.boolean(),
+  page: z.number().int().positive(),
+});
+
+export const merchantInboxThreadResponseSchema = z.object({
+  conversation: merchantInboxConversationSchema,
+  messages: z.array(merchantInboxMessageSchema).max(200),
+});
+
+export const merchantInboxReplyResponseSchema = z.object({
+  message: merchantInboxMessageSchema,
+});

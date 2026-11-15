@@ -31,6 +31,7 @@ const mockVerifyOtp = jest.fn<AuthState['verifyOtp']>();
 const mockBackHandlerRemove = jest.fn();
 type HardwareBackPressHandler = () => boolean;
 let hardwareBackPressHandler: HardwareBackPressHandler | null = null;
+const mockDismissKeyboard = jest.fn();
 const mockWithKeyboardDismiss = jest.fn(
   <T extends (...args: never[]) => unknown>(handler: T) => handler
 );
@@ -102,6 +103,7 @@ jest.mock('@/hooks/use-keyboard', () => ({
     password: 'password',
   },
   useKeyboard: () => ({
+    dismissKeyboard: mockDismissKeyboard,
     withKeyboardDismiss: mockWithKeyboardDismiss,
   }),
 }));
@@ -452,30 +454,20 @@ describe('LoginScreen', () => {
       expect(mockSignInWithOtp).not.toHaveBeenCalled();
     });
 
-    it('dismisses the keyboard when the toggle opens the password step', () => {
-      const dismissed = jest.fn();
-      mockWithKeyboardDismiss.mockImplementation(((
-        handler: (...args: never[]) => unknown
-      ) =>
-        (...args: never[]) => {
-          dismissed();
-          return handler(...args);
-        }) as never);
-      try {
-        render(<LoginScreen />);
-        fireEvent.changeText(
-          screen.getByPlaceholderText('john@example.com'),
-          'shopper@example.com'
-        );
-        fireEvent.press(screen.getByText('Use password instead'));
+    it('dismisses the keyboard only when the toggle opens the password step', () => {
+      render(<LoginScreen />);
+      const emailInput = screen.getByPlaceholderText('john@example.com');
 
-        expect(dismissed).toHaveBeenCalledTimes(1);
-        expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
-      } finally {
-        mockWithKeyboardDismiss.mockImplementation(
-          ((handler: unknown) => handler) as never
-        );
-      }
+      fireEvent.changeText(emailInput, 'foo');
+      fireEvent.press(screen.getByText('Use password instead'));
+      expect(mockDismissKeyboard).not.toHaveBeenCalled();
+
+      fireEvent.press(screen.getByText('Use verification code instead'));
+      fireEvent.changeText(emailInput, 'shopper@example.com');
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(mockDismissKeyboard).toHaveBeenCalledTimes(1);
+      expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
     });
 
     it('switches back to the code method from the email step', () => {

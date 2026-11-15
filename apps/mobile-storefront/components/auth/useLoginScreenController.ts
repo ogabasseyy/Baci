@@ -69,7 +69,7 @@ export function useLoginScreenController() {
   const [showPassword, setShowPassword] = useState(false);
   const [_isAppleAvailable, setIsAppleAvailable] = useState(false);
 
-  const { withKeyboardDismiss } = useKeyboard();
+  const { dismissKeyboard, withKeyboardDismiss } = useKeyboard();
 
   const otpInputRef = useRef<TextInputInstance>(null);
   const isMountedRef = useRef(true);
@@ -171,14 +171,16 @@ export function useLoginScreenController() {
     }
   });
 
-  const handleToggleAuthMethod = withKeyboardDismiss(() => {
+  const handleToggleAuthMethod = () => {
     const next = resolveAuthMethodToggle(authMethod, email);
     setAuthMethod(next.authMethod);
     if (!next.passwordEmail) return;
+    // Dismiss only when the step advances; else they still need to type.
+    dismissKeyboard();
     setEmailError(null);
     setEmail(next.passwordEmail);
     setStep('password');
-  });
+  };
 
   const handlePasswordSignIn = withKeyboardDismiss(async () => {
     if (!password) {

@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import { createOwnerAdmission } from '../../../builder-mcp-server/owner-admission';
 import { createOwnerInternalNodeServer } from '../../../builder-mcp-server/owner-internal-node';
 import { createVerifierLoopbackForwarder } from '../../../tools/experience-verifier/loopback-forwarder';
+import { BuilderLifecycleError } from './builder-lifecycle-error';
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
 import { createOwnerPreviewUserClientResolver } from './owner-preview-user-client';
 import { startProductionBuilderHost } from './production-builder-host';
@@ -97,6 +98,7 @@ export async function startProductionBuilderStack(settings: {
     | ReturnType<typeof createOwnerInternalNodeServer>
     | undefined;
   let delivery: ReturnType<typeof createProductionDeliveryListener> | undefined;
+  let phase: ConstructorParameters<typeof BuilderLifecycleError>[1] = 'host';
   try {
     host = await startProductionBuilderHost({
       integration: settings.host.integration,
@@ -113,6 +115,7 @@ export async function startProductionBuilderStack(settings: {
           }
         : {}),
     });
+    phase = 'owner-listener';
     const ownerPreview = settings.ownerBridge
       ? createOwnerPreviewBridge({
           ...settings.ownerBridge,
@@ -125,9 +128,11 @@ export async function startProductionBuilderStack(settings: {
           launch: host.ownerPreviewLaunch,
         })
       : undefined;
+    phase = 'mcp-listener';
     listener = createProductionBuilderListener(host.publicJwks);
     await listen(listener.server, settings.port);
     if (settings.ownerPort !== undefined) {
+      phase = 'owner-listener';
       ownerListener = createOwnerInternalNodeServer({
         ownerPreview,
         ...(settings.ownerBridge
@@ -159,6 +164,7 @@ export async function startProductionBuilderStack(settings: {
       });
       await ownerListener.listen(settings.ownerPort);
     }
+    phase = 'delivery-listener';
     delivery = createProductionDeliveryListener({
       executionOrigin: settings.host.integration.executionOrigin,
       deliver: host.deliver,
@@ -169,23 +175,25 @@ export async function startProductionBuilderStack(settings: {
       deliver: host.deliver,
       close() {
         closing ??= (async () => {
-          try {
+          let failedPhase: typeof phase | undefined;
+          const closeSteps = [
+            ['delivery-listener', () => delivery?.close()],
+            ['owner-listener', () => ownerListener?.close()],
+            ['mcp-listener', () => listener?.close()],
+            ['host', () => host?.close()],
+          ] as const;
+          for (const [step, close] of closeSteps) {
             try {
-              try {
-                await delivery?.close();
-              } finally {
-                try {
-                  await ownerListener?.close();
-                } finally {
-                  await listener?.close();
-                }
-              }
-            } finally {
-              await host?.close();
+              await close();
+            } catch {
+              failedPhase ??= step;
             }
-          } catch {
-            throw Error('BUILDER_STACK_SHUTDOWN_FAILED');
           }
+          if (failedPhase)
+            throw new BuilderLifecycleError(
+              'BUILDER_STACK_SHUTDOWN_FAILED',
+              failedPhase
+            );
         })();
         return closing;
       },
@@ -195,6 +203,6 @@ export async function startProductionBuilderStack(settings: {
     await ownerListener?.close().catch(() => undefined);
     await listener?.close().catch(() => undefined);
     await host?.close().catch(() => undefined);
-    throw Error('BUILDER_STACK_STARTUP_FAILED');
+    throw new BuilderLifecycleError('BUILDER_STACK_STARTUP_FAILED', phase);
   }
 }

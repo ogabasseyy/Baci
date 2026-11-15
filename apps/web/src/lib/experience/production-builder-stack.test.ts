@@ -77,6 +77,39 @@ it('starts isolated output delivery alongside MCP and shuts down before the host
   expect(calls).toEqual(['output', 'mcp', 'host']);
 });
 
+it('reports the failed shutdown phase without leaking its error and still closes the stack', async () => {
+  const server = {
+    listen: vi.fn((_port, _host, callback) => callback()),
+    once: vi.fn(),
+    off: vi.fn(),
+  };
+  const closeMcp = vi.fn(async () => {});
+  const closeHost = vi.fn(async () => {});
+  f.host.mockResolvedValue({ publicJwks: { keys: [] }, close: closeHost });
+  f.listener.mockReturnValue({ server, close: closeMcp });
+  f.delivery.mockReturnValue({
+    server,
+    close: vi.fn(async () => {
+      throw Error('private shutdown detail');
+    }),
+  });
+  const stack = await startProductionBuilderStack({
+    host: {
+      integration: { executionOrigin: 'https://output.runtime.test' },
+    } as never,
+    port: 8790,
+    deliveryPort: 8791,
+  });
+  const closing = stack.close();
+  await expect(closing).rejects.toMatchObject({
+    message: 'BUILDER_STACK_SHUTDOWN_FAILED',
+    phase: 'delivery-listener',
+  });
+  await expect(closing).rejects.not.toHaveProperty('cause');
+  expect(closeMcp).toHaveBeenCalledOnce();
+  expect(closeHost).toHaveBeenCalledOnce();
+});
+
 it('starts the listener on loopback after the host, then closes listener before host', async () => {
   const calls: string[] = [];
   const jwks = { keys: [] };
@@ -127,7 +160,10 @@ it('closes the host if listener construction fails and rejects invalid ports bef
       port: 8790,
       deliveryPort: 8791,
     })
-  ).rejects.toThrow('BUILDER_STACK_STARTUP_FAILED');
+  ).rejects.toMatchObject({
+    message: 'BUILDER_STACK_STARTUP_FAILED',
+    phase: 'mcp-listener',
+  });
   expect(close).toHaveBeenCalledOnce();
   f.host.mockClear();
   await expect(

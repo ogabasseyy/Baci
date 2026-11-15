@@ -1,6 +1,7 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import { Pool } from 'pg';
+import { BuilderLifecycleError } from '@/lib/experience/builder-lifecycle-error';
 import { createVerifierAttestationClient } from '@/lib/experience/verifier-attestation-client';
 import { createOwnerPreviewNonceStore } from '../builder-auth/owner-preview-nonce';
 import { createTransientOutputStore } from '../experience-runner/transient-output-store';
@@ -11,9 +12,12 @@ import { parseBuilderProductionConfig } from './production-config';
 
 /** Private operator startup. No public listener is bound here. */
 export async function startProductionBuilder(input: unknown) {
-  const config = parseBuilderProductionConfig(input);
   let pool: Pool | undefined;
+  let phase: ConstructorParameters<typeof BuilderLifecycleError>[1] =
+    'configuration';
   try {
+    const config = parseBuilderProductionConfig(input);
+    phase = 'nonce-store';
     pool = new Pool({
       connectionString: config.previewDatabaseUrl,
       ssl: { rejectUnauthorized: true },
@@ -25,6 +29,7 @@ export async function startProductionBuilder(input: unknown) {
     const forwardAttestation = createVerifierLoopbackForwarder(
       config.verifierPort
     );
+    phase = 'stack';
     const service = await startProductionBuilderFromPrivateConfig({
       port: config.port,
       deliveryPort: config.deliveryPort,
@@ -86,15 +91,26 @@ export async function startProductionBuilder(input: unknown) {
         closing ??= (async () => {
           try {
             await service.close();
-          } finally {
+          } catch (error) {
+            await pool?.end().catch(() => undefined);
+            if (error instanceof BuilderLifecycleError) throw error;
+            throw new BuilderLifecycleError('BUILDER_SHUTDOWN_FAILED', 'stack');
+          }
+          try {
             await pool?.end();
+          } catch {
+            throw new BuilderLifecycleError(
+              'BUILDER_SHUTDOWN_FAILED',
+              'database-pool'
+            );
           }
         })();
         return closing;
       },
     };
-  } catch {
+  } catch (error) {
     await pool?.end().catch(() => undefined);
-    throw Error('BUILDER_STARTUP_FAILED');
+    if (error instanceof BuilderLifecycleError) throw error;
+    throw new BuilderLifecycleError('BUILDER_STARTUP_FAILED', phase);
   }
 }

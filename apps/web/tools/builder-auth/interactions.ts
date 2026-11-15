@@ -2,6 +2,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type Provider from 'oidc-provider';
 import { z } from 'zod';
+import {
+  MAX_CONNECTION_TTL_SECONDS,
+  MIN_CONNECTION_TTL_SECONDS,
+} from './connection-lifetime.ts';
 import { renderConsentPage } from './consent-page.ts';
 import { buildConsentDecision, validateConsentPost } from './linking.ts';
 import type { AuthStorage } from './storage.ts';
@@ -54,8 +58,8 @@ export function createInteractionHandler(deps: {
 }) {
   if (
     !Number.isSafeInteger(deps.connectionTtlSeconds) ||
-    deps.connectionTtlSeconds < 300 ||
-    deps.connectionTtlSeconds > 2592000
+    deps.connectionTtlSeconds < MIN_CONNECTION_TTL_SECONDS ||
+    deps.connectionTtlSeconds > MAX_CONNECTION_TTL_SECONDS
   )
     throw new Error('Invalid connection lifetime');
   const { provider, storage, upstream } = deps;

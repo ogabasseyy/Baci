@@ -117,3 +117,18 @@ test('accepts only the dedicated login principal instead of the NOLOGIN storage 
     /INVALID_AUTH_CONFIG/
   );
 });
+
+test('accepts the runtime connection lifetime ceiling and rejects higher values', async () => {
+  const input = await fixture();
+  assert.equal(
+    parseProductionAuthConfig({ ...input, connectionTtlSeconds: 2592000 })
+      .connectionTtlSeconds,
+    2592000
+  );
+  for (const connectionTtlSeconds of [2592001, 2678400]) {
+    assert.throws(
+      () => parseProductionAuthConfig({ ...input, connectionTtlSeconds }),
+      /INVALID_AUTH_CONFIG/
+    );
+  }
+});

@@ -5,8 +5,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
-import { dirname, isAbsolute } from 'node:path';
-import { assertPrivateDirectory } from './private-directory.ts';
+import { preparePrivateSocketPath } from './private-socket-path.ts';
 
 export async function listenPrivateAuth(settings: {
   socketPath: string;
@@ -53,12 +52,9 @@ export async function createAuthListener(settings: {
   authority: string;
   handler(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }): Promise<{ close(): Promise<void> }> {
-  const directory = dirname(settings.socketPath);
-  if (!isAbsolute(settings.socketPath))
-    throw Error('UNTRUSTED_SOCKET_DIRECTORY');
-  await assertPrivateDirectory(directory);
   if (!/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(settings.authority))
     throw Error('INVALID_AUTHORITY');
+  await preparePrivateSocketPath(settings.socketPath);
 
   const server = createServer((req, res) => {
     if (req.headers.host !== settings.authority) {

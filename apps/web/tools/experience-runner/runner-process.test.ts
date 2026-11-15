@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import {
   createServer as createHttpsServer,
@@ -134,6 +134,55 @@ it('sends a signed synthetic job through HTTPS and a separate runner process', a
       child.kill('SIGTERM');
       await once(child, 'exit').catch(() => undefined);
     }
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 15000);
+
+it('restarts after SIGKILL leaves the Unix socket behind', async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'runner-restart-')));
+  const socketPath = join(dir, 'runner.sock');
+  const start = () =>
+    spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        fileURLToPath(new URL('./runner-process.fixture.ts', import.meta.url)),
+      ],
+      {
+        env: { ...process.env, BACI_TEST_SOCKET: socketPath },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+  const ready = (child: ReturnType<typeof start>) =>
+    Promise.race([
+      once(child.stdout, 'data'),
+      once(child, 'exit').then(() => {
+        throw Error('FIXTURE_EXITED');
+      }),
+    ]);
+  const stop = async (
+    child: ReturnType<typeof start>,
+    signal: NodeJS.Signals
+  ) => {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exit = once(child, 'exit');
+      child.kill(signal);
+      await exit;
+    }
+  };
+  const first = start();
+  let replacement: ReturnType<typeof start> | undefined;
+  try {
+    await ready(first);
+    await stop(first, 'SIGKILL');
+    expect((await lstat(socketPath)).isSocket()).toBe(true);
+    replacement = start();
+    await ready(replacement);
+    expect((await lstat(socketPath)).mode & 0o777).toBe(0o600);
+  } finally {
+    await stop(first, 'SIGKILL');
+    if (replacement) await stop(replacement, 'SIGTERM');
     await rm(dir, { recursive: true, force: true });
   }
 }, 15000);

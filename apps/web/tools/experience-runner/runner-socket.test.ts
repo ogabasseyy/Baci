@@ -1,5 +1,13 @@
 import { createHmac } from 'node:crypto';
-import { chmod, lstat, mkdtemp, realpath, rm } from 'node:fs/promises';
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -136,4 +144,25 @@ it('opens ingress only after runner installation verification succeeds', async (
   expect(order).toEqual(['verify', 'listen']);
   await service.close();
   expect(order).toEqual(['verify', 'listen', 'close']);
+});
+
+it('preserves a live listener and refuses a regular file at the socket path', async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'runner-occupied-')));
+  const socketPath = join(dir, 'runner.sock');
+  const settings = { socketPath, handler: async () => new Response() };
+  try {
+    const listener = await createRunnerSocket(settings);
+    try {
+      const socket = await lstat(socketPath);
+      await expect(createRunnerSocket(settings)).rejects.toThrow();
+      expect((await lstat(socketPath)).ino).toBe(socket.ino);
+    } finally {
+      await listener.close();
+    }
+    await writeFile(socketPath, 'keep');
+    await expect(createRunnerSocket(settings)).rejects.toThrow();
+    expect(await readFile(socketPath, 'utf8')).toBe('keep');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

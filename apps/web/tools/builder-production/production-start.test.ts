@@ -98,8 +98,9 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
 it('closes the restricted database pool when the stack fails to start', async () => {
   f.end.mockClear();
   f.boot.mockRejectedValueOnce(Error('private detail'));
-  await expect(startProductionBuilder(config)).rejects.toThrow(
-    'BUILDER_STARTUP_FAILED'
-  );
+  await expect(startProductionBuilder(config)).rejects.toMatchObject({
+    message: 'BUILDER_STARTUP_FAILED',
+    phase: 'stack',
+  });
   expect(f.end).toHaveBeenCalledOnce();
 });

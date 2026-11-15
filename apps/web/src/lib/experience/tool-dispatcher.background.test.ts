@@ -12,7 +12,13 @@ vi.mock('./build-service', () => ({
 
 import { createExperienceToolDispatcher } from './tool-dispatcher';
 
-it('returns the queued job immediately in background mode without running finalization', async () => {
+it.each([
+  { status: 'queued', recover: false },
+  { status: 'finalized', recover: true },
+])('returns the $status operation and only repairs finalized output in background mode', async ({
+  status,
+  recover,
+}) => {
   const id = '11111111-1111-4111-8111-111111111111';
   const identity: BuilderIdentity = {
     actorUserId: id,
@@ -30,10 +36,13 @@ it('returns the queued job immediately in background mode without running finali
       error: null,
     })),
   };
-  const finalizeBuild = vi.fn();
+  const finalized = { buildId: id, buildDigest: 'a'.repeat(64) };
+  const finalizeBuild = vi.fn(async () => finalized);
+  f.read.mockClear();
   f.read.mockResolvedValue({
     id,
-    status: 'queued',
+    status,
+    ...(recover ? finalized : {}),
     expires_at: '2099-01-01T00:00:00Z',
   });
   const dispatch = createExperienceToolDispatcher({
@@ -48,7 +57,15 @@ it('returns the queued job immediately in background mode without running finali
       jobId: id,
       idempotencyKey: id,
     })
-  ).toMatchObject({ status: 'ok', value: { id, status: 'queued' } });
-  expect(finalizeBuild).not.toHaveBeenCalled();
+  ).toMatchObject({
+    status: 'ok',
+    value: { id, status, ...(recover ? finalized : {}) },
+  });
+  if (recover)
+    expect(finalizeBuild).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId: id }),
+      { jobId: id, idempotencyKey: id }
+    );
+  else expect(finalizeBuild).not.toHaveBeenCalled();
   expect(f.read).toHaveBeenCalledOnce();
 });

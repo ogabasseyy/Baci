@@ -1,3 +1,4 @@
+import { BuilderLifecycleError } from '@/lib/experience/builder-lifecycle-error';
 import 'server-only';
 import {
   resolveCanonicalBase,
@@ -78,7 +79,8 @@ export async function startProductionBuilderFromPrivateConfig(
         },
       },
     });
-  } catch {
-    throw Error('BUILDER_BOOT_FAILED');
+  } catch (error) {
+    if (error instanceof BuilderLifecycleError) throw error;
+    throw new BuilderLifecycleError('BUILDER_BOOT_FAILED', 'configuration');
   }
 }

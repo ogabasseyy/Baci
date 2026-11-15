@@ -210,8 +210,13 @@ async function execute(
     case 'finalize_experience_build': {
       const { storefrontId: _, ...input } =
         experienceToolInputs.finalize_experience_build.parse(raw);
-      if (deps.backgroundBuilds)
-        return readExperienceOperation(ctx, input.jobId);
+      if (deps.backgroundBuilds) {
+        const operation = await readExperienceOperation(ctx, input.jobId);
+        if (operation.status !== 'finalized') return operation;
+        // The DB receipt can survive a crash before the renderer is retained.
+        await deps.finalizeBuild(ctx, input);
+        return operation;
+      }
       return deps.finalizeBuild(ctx, input);
     }
     case 'preview_experience': {

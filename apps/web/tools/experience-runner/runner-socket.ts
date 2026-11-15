@@ -1,18 +1,15 @@
 import { once } from 'node:events';
 import { chmod } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { dirname, isAbsolute } from 'node:path';
 import { Readable } from 'node:stream';
-import { assertPrivateDirectory } from '../builder-auth/private-directory';
+import { preparePrivateSocketPath } from '../builder-auth/private-socket-path';
 
 /** Private same-user ingress for a preflighted signed runner handler. */
 export async function createRunnerSocket(settings: {
   socketPath: string;
   handler(request: Request): Promise<Response>;
 }): Promise<{ close(): Promise<void> }> {
-  if (!isAbsolute(settings.socketPath))
-    throw Error('UNTRUSTED_SOCKET_DIRECTORY');
-  await assertPrivateDirectory(dirname(settings.socketPath));
+  await preparePrivateSocketPath(settings.socketPath);
   const server = createServer((req, res) => {
     if (req.method !== 'POST' || req.url !== '/v1/execute') {
       req.resume();

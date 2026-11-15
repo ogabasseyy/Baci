@@ -4,6 +4,10 @@ import {
   BUILDER_ISSUER,
   BUILDER_RESOURCE,
 } from '../../src/lib/builder-connector/resource.ts';
+import {
+  MAX_CONNECTION_TTL_SECONDS,
+  MIN_CONNECTION_TTL_SECONDS,
+} from './connection-lifetime.ts';
 
 const bytes32 = z
   .string()
@@ -41,7 +45,11 @@ const schema = z.strictObject({
     url: z.string().url(),
     anonKey: z.string().min(1).max(8192),
   }),
-  connectionTtlSeconds: z.number().int().min(300).max(2678400),
+  connectionTtlSeconds: z
+    .number()
+    .int()
+    .min(MIN_CONNECTION_TTL_SECONDS)
+    .max(MAX_CONNECTION_TTL_SECONDS),
 });
 
 /** Parses only trusted operator input. It never exposes configuration values in errors. */

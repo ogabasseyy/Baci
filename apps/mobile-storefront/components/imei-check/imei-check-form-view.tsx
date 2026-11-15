@@ -17,12 +17,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING } from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
-import { formatServicePrice } from './format-service-price';
 import { ImeiBrandChips } from './ImeiBrandChips';
 import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 import { ImeiCheckServiceSelector } from './imei-check-service-selector';
+import { imeiFindHint } from './imei-find-hint';
+import { imeiVerifyButtonLabel } from './imei-verify-button-label';
 import { ImeiWalletBadge } from './imei-wallet-badge';
 import { getImeiWalletCopy } from './imei-wallet-copy';
 
@@ -47,7 +48,6 @@ interface ImeiCheckFormViewProps {
   walletBalance: number;
   /** PiggyVest customer: the balance is store credit. */
   walletIsStoreCredit?: boolean;
-  /** True when the PiggyVest wallet pays this check (store credit can't). */
   /** Paying from the PiggyVest wallet (dark until switched on). */
   walletPay?: ImeiWalletPayView;
   /** The top-up opens the card-only sheet (verdict unknown at the pilot). */
@@ -119,12 +119,7 @@ export function ImeiCheckFormView({
   const needsTopUp =
     selectedTier !== null && isWalletReady && !hasEnoughBalance;
   const shortfall = Math.max(0, currentTier.price - walletBalance);
-  const findHint =
-    identifier === 'serial'
-      ? 'Find it in Settings › General › About'
-      : identifier === 'both'
-        ? 'Dial *#06# or Settings › General › About'
-        : 'Dial *#06# to find your IMEI';
+  const findHint = imeiFindHint(identifier);
   const canVerify =
     selectedTier !== null &&
     displayedTierKeys.includes(selectedTier) &&
@@ -275,21 +270,15 @@ export function ImeiCheckFormView({
               ) : (
                 <>
                   <Text style={styles.verifyButtonText}>
-                    {selectedTier === null
-                      ? 'Choose a check'
-                      : isWalletLoading
-                        ? walletCopy.loadingButton
-                        : isWalletError
-                          ? walletCopy.unavailableButton
-                          : needsTopUp
-                            ? walletCopy.topUpButton
-                            : paysFromPiggyvest
-                              ? // The check it pays for is named: the
-                                // preselected card can sit below the fold
-                                // (Fable walk 15); the savings badge beside
-                                // it shows where the money comes from.
-                                `Pay ${formatServicePrice(currentTier.price)} for ${currentTier.name}`
-                              : `Verify Now - ${formatServicePrice(currentTier.price)}`}
+                    {imeiVerifyButtonLabel({
+                      hasTier: selectedTier !== null,
+                      isWalletLoading,
+                      isWalletError,
+                      needsTopUp,
+                      paysFromPiggyvest,
+                      walletCopy,
+                      tier: currentTier,
+                    })}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />
                 </>

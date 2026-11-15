@@ -1,28 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import type {
-  WalletPayAdapter,
-  WalletPayOutcomeKind,
-} from './wallet-pay.types';
-
-// Answers that prove nothing about a payment already sent (a lost session,
-// a paused service, a dropped start): the purchase keeps its key so the next
-// tap resumes the same payment instead of paying again.
-const KEEP_OUTCOMES = new Set<WalletPayOutcomeKind>([
-  'pending',
-  'review',
-  'sign_in',
-  'unavailable',
-  'not_started',
-]);
-// After a PIN, only a definite answer settles: delivered, refunded, short of
-// money, or not completed. Anything else (an IMEI mismatch, a refusal) keeps
-// the key, because the transfer may still be confirming.
-const PAY_SETTLES = new Set<WalletPayOutcomeKind>([
-  'refunded',
-  'insufficient',
-  'not_completed',
-]);
+import type { WalletPayAdapter } from './wallet-pay.types';
+import { KEEP_OUTCOMES, PAY_SETTLES } from './wallet-pay-key-outcomes';
 
 const STORAGE_KEY = 'baci.walletPay.openPurchases.v1';
 // How long unreadable saved data refuses wallet pay before it is cleared.

@@ -18,7 +18,7 @@ Screenshots are local only: `/private/tmp/claude-501/-Users-mac-Baci-app/a619119
 
 | # | Severity | Screen | Finding | Steps | Shot | Owner |
 |---|---|---|---|---|---|---|
-| H1 | High | IMEI, live Petrock check | Live `POST /order` reply did not match `petrockSubmitOrderResponseSchema` (no `data[0][0].order_uuid`). The lookup went to `submission_unknown`: ₦500 held, the app says "We're checking" forever, and it can't recover by itself (no lookup by `reference_id`, and the callback can't reach a local server). If production gets the same reply shape, every Petrock-routed check (`simLock`, `esimCompatibility`, `applePartNumber`) gets stuck the same way. | Store credit ₦500 → SIM Lock → IMEI 356938035643817 → Verify Now | 64, 66, 72 | IMEI/Petrock (main). Check the production `imei_lookups` Petrock statuses and the Petrock dashboard; lookup `c0e7f0c9-9741-4a73-a910-7ee882b812f3` |
+| H1 | High (local), not seen in production | IMEI, live Petrock check | Live `POST /order` reply did not match `petrockSubmitOrderResponseSchema` (no `data[0][0].order_uuid`). The lookup went to `submission_unknown`: ₦500 held, the app says "We're checking" forever, and it can't recover by itself (no lookup by `reference_id`, and the callback can't reach a local server). If production gets the same reply shape, every Petrock-routed check (`simLock`, `esimCompatibility`, `applePartNumber`) gets stuck the same way. | Store credit ₦500 → SIM Lock → IMEI 356938035643817 → Verify Now | 64, 66, 72 | IMEI/Petrock (main). Check the production `imei_lookups` Petrock statuses and the Petrock dashboard; lookup `c0e7f0c9-9741-4a73-a910-7ee882b812f3` |
 | H2 | High | IMEI, pay from wallet | A wallet-pay purchase key kept after a failed start traps that IMEI + check. Every later attempt goes back through the wallet sheet and shows "Can't check this payment right now", even when store credit covers the price. There is no way to pay. | Wallet pay on → SIM Lock → Pay → 503 (Petrock config) → retry → 409 refusal, and every retry after it | 57, 58, 64 | #4225 (`use-imei-wallet-pay`, kept-key replay) |
 | M1 | Medium | IMEI, pay from wallet | The savings wallet is offered for Petrock-routed checks, but the server only lets the wallet pay for Sickw checks (`PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER`). The refusal comes after Pay and the PIN. The app should know the payable checks up front, for example from the capabilities endpoint. | Wallet pay on → SIM Lock → "Pay ₦500 for SIM Lock" | 43, 44 | #4220/#4225 |
 | M2 | Medium | Petrock catalogue cron | The remediation sync fails on every run: product 658 has `cost_usd 0.0000`, which breaks `petrock_remediation_products_cost_usd_check`, so `/api/cron/sync-petrock-catalog` answers 500. The product list itself synced (975 rows). | Run the cron with Petrock configured | log | IMEI remediation (main) |
@@ -33,6 +33,18 @@ Screenshots are local only: `/private/tmp/claude-501/-Users-mac-Baci-app/a619119
 | L8 | Low | Airtime | The single payment method isn't preselected. | Airtime | 46 | utilities form |
 | D1 | Design | IMEI checker page | "Other options" toggles look like plain text and repeat under each section; the title stays "IMEI Results" after Back; "Out Of Warranty" is shown in green. | IMEI checker | 37–42, 35 | Handed to the IMEI redesign session (builds on #3874) |
 | D2 | Design | PIN sheets | IMEI and airtime PIN sheets use a close X; the savings PIN sheet uses a back arrow and a subtitle. | — | 34, 19 | known open sheet-style decision |
+
+## Production check for H1 (owner-approved, read-only, 2026-11-15)
+
+This ran through the Supabase CLI (`supabase db query --linked`), not the MCP tool, using one SELECT that groups `imei_lookups` by status with no customer data.
+
+Production has had exactly one Petrock check: SIM Lock on 2026-10-30, `completed`, with an order id. So production has no stuck Petrock orders, and that day's live reply parsed correctly.
+
+Two questions remain open:
+- What differed in today's local reply: a Petrock format change, or something about this IMEI.
+- Why production Petrock traffic is so low. Only clients that send `imei-async-v1` are routed to Petrock.
+
+Next step: log the reply's field names (never its values) on `invalid_response`, and look up today's order in the Petrock dashboard.
 
 ## Passed
 

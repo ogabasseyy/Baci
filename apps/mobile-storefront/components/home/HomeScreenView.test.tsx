@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StatusBar } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import type { Block } from '@/types/blocks';
 import { HomeScreenView } from './HomeScreenView';
@@ -179,6 +180,27 @@ function createProps() {
 }
 
 describe('HomeScreenView', () => {
+  it.each([
+    { theme: 'light', isElite: false, barStyle: 'dark-content' },
+    { theme: 'dark', isElite: false, barStyle: 'light-content' },
+    { theme: 'light', isElite: true, barStyle: 'light-content' },
+  ] as const)('sets readable status icons in $theme mode (elite: $isElite)', ({
+    theme,
+    isElite,
+    barStyle,
+  }) => {
+    mockColorScheme = theme;
+    const pushStackEntry = jest.spyOn(StatusBar, 'pushStackEntry');
+    try {
+      render(<HomeScreenView {...createProps()} isElite={isElite} />);
+      expect(pushStackEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ barStyle })
+      );
+    } finally {
+      pushStackEntry.mockRestore();
+    }
+  });
+
   beforeEach(() => {
     mockSetNavigationBarStyle.mockClear();
     mockColorScheme = 'light';

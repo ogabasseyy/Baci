@@ -65,7 +65,7 @@ export function QuizStandingsPodium({
             </Text>
             <Text style={styles.podiumScore}>{entry.score} pts</Text>
             {finishTime ? (
-              <Text style={styles.podiumScore}>{finishTime}</Text>
+              <Text style={styles.podiumTime}>{finishTime}</Text>
             ) : null}
             <View
               style={[

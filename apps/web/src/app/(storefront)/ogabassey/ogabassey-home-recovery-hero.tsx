@@ -1,5 +1,5 @@
 import { buildLaunchSlides } from '@/components/storefront/ogabassey/components/build-launch-slides';
-import { Hero } from '@/components/storefront/ogabassey/components/Hero';
+import { Hero } from '@/components/storefront/ogabassey/redesign/access-home-hero';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import type { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
@@ -23,6 +23,7 @@ export async function OgabasseyHomeRecoveryHero({
   const products = await productsPromise;
   return (
     <Hero
+      basePath={buildStoreUrl(merchant)}
       omitDocumentHeading
       omitMobileCarousel={omitMobileCarousel}
       prioritizeMobileHeroImage

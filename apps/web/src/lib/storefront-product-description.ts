@@ -35,6 +35,7 @@ export function stripVolatileProductPriceSentences(
   }
 
   return value
+    .replace(/&(?:nbsp|#0*160|#x0*a0);/gi, ' ')
     .replace(
       VOLATILE_INLINE_FORMATTED_LISTED_PRICE_SENTENCE_REGEX,
       preserveSentenceBoundary

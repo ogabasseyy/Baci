@@ -49,20 +49,44 @@ describe('POST /api/events legacy persistence', () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
-  it('upserts idempotently when event_id is supplied', async () => {
-    await POST(
+  it('inserts an explicit event ID with only the ingress insert policy', async () => {
+    const response = await POST(
       eventRouteRequest({ event_id: 'event-1', event_type: 'purchase' })
     );
-    expect(mocks.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ event_id: 'event-1' }),
-      { ignoreDuplicates: true, onConflict: 'merchant_id,event_id,event_type' }
+    expect(response.status).toBe(200);
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ event_id: 'event-1' })
     );
+    expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
-  it('returns 500 on idempotent persistence failure', async () => {
-    mocks.upsert.mockResolvedValue({ error: { message: 'failed' } });
+  it('acknowledges a duplicate on the event identity index', async () => {
+    mocks.insert.mockResolvedValue({
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "analytics_events_merchant_event_id_type_uidx"',
+      },
+    });
+    const response = await POST(eventRouteRequest({ event_id: 'event-1' }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      event_id: 'event-1',
+    });
+  });
+
+  it.each([
+    [
+      '23505',
+      'duplicate key value violates unique constraint "analytics_events_pkey"',
+    ],
+    ['42501', 'new row violates row-level security policy'],
+  ])('returns safe 500 on other persistence failures (%s)', async (code, message) => {
+    mocks.insert.mockResolvedValue({ error: { code, message } });
     const response = await POST(eventRouteRequest({ event_id: 'event-1' }));
     expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Failed to store event' });
   });
 
   it('normalizes mobile event names before persistence', async () => {

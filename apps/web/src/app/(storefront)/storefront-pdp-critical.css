@@ -1,11 +1,13 @@
+@import "./storefront-pdp-design-tokens.css";
+
 /* PDP above-fold critical shell styles. Loaded by storefront-pdp.css only. */
 @layer components {
   [data-ogabassey-pdp-critical-shell] {
-    background: var(--store-background, #ffffff);
     color: var(--store-background-text, #111827);
     /* Bottom padding tightened (was 7rem) to close the gap between the
        above-fold product block and the deferred detail tabs. */
     padding: 1rem 1rem 2.5rem;
+    background: var(--store-background, #fff);
   }
 
   [data-ogabassey-pdp-critical-inner] {
@@ -41,12 +43,13 @@
   [data-ogabassey-pdp-image-frame] {
     align-items: center;
     aspect-ratio: 1 / 1;
-    background: var(
-      --ogabassey-surface-muted,
-      var(--store-option-secondary, #f3f4f6)
+    background: color-mix(
+      in srgb,
+      var(--store-background, #fff) 89%,
+      var(--ogabassey-gallery-accent)
     );
-    border: 1px solid var(--ogabassey-border, var(--store-border, #e5e7eb));
-    border-radius: 1rem;
+    border: 0;
+    border-radius: 2rem;
     display: flex;
     justify-content: center;
     overflow: hidden;
@@ -61,22 +64,43 @@
   [data-ogabassey-pdp-image-frame] > img {
     height: 100%;
     inset: 0;
-    object-fit: cover;
+    object-fit: contain;
+    padding: 5rem 2rem 5.5rem;
     position: absolute;
     width: 100%;
   }
 
   [data-ogabassey-pdp-condition] {
-    background: var(--store-primary, #d62027);
+    background: var(--store-background, #fff);
     border-radius: 999px;
-    color: var(--store-primary-text, #ffffff);
+    color: var(--store-background-text, #171717);
     font-size: 0.75rem;
     font-weight: 700;
-    left: 1rem;
+    left: 2rem;
     padding: 0.25rem 0.75rem;
     position: absolute;
     text-transform: uppercase;
-    top: 1rem;
+    top: 2rem;
+    z-index: 1;
+  }
+
+  [data-ogabassey-pdp-image-eyebrow] {
+    position: absolute;
+    right: 2rem;
+    top: 2rem;
+    z-index: 1;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  [data-ogabassey-pdp-editorial-eyebrow] {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0 0 1rem;
   }
 
   [data-ogabassey-pdp-summary] {
@@ -93,10 +117,20 @@
 
   [data-ogabassey-pdp-title] {
     color: var(--store-background-text, #111827);
-    font-size: 1.875rem;
+    font-size: clamp(3rem, 4.5vw, 4.25rem);
+    max-width: 10ch;
     font-weight: 800;
-    line-height: 1.18;
+    letter-spacing: -0.055em;
+    overflow-wrap: anywhere;
+    line-height: 1.05;
     margin: 0 0 1rem;
+  }
+
+  [data-ogabassey-pdp-intro] {
+    font-size: 1rem;
+    line-height: 1.65;
+    max-width: 38rem;
+    margin: 1rem 0 1.5rem;
   }
 
   [data-ogabassey-pdp-rating-row] {
@@ -122,8 +156,9 @@
   }
 
   [data-ogabassey-pdp-price] {
-    color: var(--store-primary, #d62027);
-    font-size: 1.875rem;
+    color: var(--store-background-text, #171717);
+    font-size: 2.25rem;
+    letter-spacing: -0.04em;
     font-weight: 800;
   }
 

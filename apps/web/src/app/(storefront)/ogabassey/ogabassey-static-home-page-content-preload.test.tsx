@@ -63,7 +63,7 @@ vi.mock('next/image', () => ({
 }));
 
 const mockCriticalHero = vi.hoisted(() => vi.fn());
-vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
+vi.mock('@/components/storefront/ogabassey/redesign/access-home-hero', () => ({
   Hero: (props: { slides: unknown[] }) => {
     mockCriticalHero(props);
     return (

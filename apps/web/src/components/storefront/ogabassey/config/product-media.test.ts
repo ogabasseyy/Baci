@@ -14,7 +14,7 @@ import {
 describe('OgaBassey PDP product media config', () => {
   it('keeps PDP image sizing aligned to the storefront gallery layout', () => {
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_SIZES).toBe(
-      `${OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_MEDIA} ${OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES}, ${OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_SIZES}`,
+      `${OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_MEDIA} ${OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES}, ${OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_SIZES}`
     );
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_MEDIA).toBe(
       '(max-width: 767.98px)'
@@ -22,11 +22,9 @@ describe('OgaBassey PDP product media config', () => {
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_MEDIA).toBe(
       '(min-width: 768px)'
     );
-    expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES).toBe(
-      'calc(100vw - 32px)'
-    );
+    expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_SIZES).toBe('calc(100vw - 96px)');
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_DESKTOP_SIZES).toBe(
-      '(max-width: 1023px) calc(100vw - 48px), (max-width: 1439px) 40vw, 560px'
+      '(max-width: 1023px) calc(100vw - 112px), (max-width: 1439px) calc(52.38vw - 195px), 572px'
     );
     expect(OGABASSEY_PDP_PRIMARY_IMAGE_MOBILE_WIDTHS).toEqual([
       256, 384, 640, 750,

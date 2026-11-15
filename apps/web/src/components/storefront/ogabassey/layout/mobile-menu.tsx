@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, Leaf, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
@@ -14,6 +14,7 @@ import {
   MOBILE_MENU_SUPPORT_ITEMS,
   type MobileMenuItem,
 } from './mobile-menu-constants';
+import styles from './mobile-menu.module.css';
 import { resolveActiveMobileMenuPath } from './resolve-active-mobile-menu-path';
 import { resolveMobileMenuBasePath } from './resolve-mobile-menu-base-path';
 import { useMobileMenuDialog } from './use-mobile-menu-dialog';
@@ -91,11 +92,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
   });
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
-    <div className="mb-5 px-4 last:mb-0">
-      <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
-        {title}
-      </h2>
-      <ul className="space-y-1">
+    <div className={styles.section}>
+      <h2 className={styles.heading}>{title}</h2>
+      <ul className={styles.menuList}>
         {items.map((item) => {
           const isActive = item.path === activePath;
           return (
@@ -105,24 +104,29 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 prefetch={false}
                 onClick={() => onClose('navigate')}
                 aria-current={isActive ? 'page' : undefined}
-                className={`group flex w-full items-center justify-between rounded-xl p-2.5 text-sm transition-colors ${
-                  isActive
-                    ? 'bg-store-primary/10 font-bold text-store-primary'
-                    : 'font-medium text-store-background-text/80 hover:bg-store-background-text/5'
-                }`}
+                className={styles.menuLink}
               >
-                <span className="flex items-center gap-3">
-                  <item.icon
-                    size={18}
-                    aria-hidden="true"
-                    className={
-                      isActive
-                        ? 'text-store-primary'
-                        : 'text-store-background-text/50 group-hover:text-store-primary'
-                    }
-                  />
+                <span className={styles.linkLabel}>
+                  <span
+                    className={styles.iconTile}
+                  >
+                    <item.icon size={17} aria-hidden="true" />
+                  </span>
                   {item.label}
                 </span>
+                {item.path === '/swap' || item.path === '/repairs' ? (
+                  <Leaf
+                    className={styles.leaf}
+                    size={16}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ChevronRight
+                    className={styles.chevron}
+                    size={15}
+                    aria-hidden="true"
+                  />
+                )}
               </Link>
             </li>
           );
@@ -138,28 +142,28 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
       aria-modal="true"
       aria-label="Mobile menu"
       data-open="true"
-      className="fixed inset-0 z-100"
+      className={styles.dialog}
       ref={dialogRef}
     >
       {/* Backdrop */}
       <div
         role="presentation"
-        className="fade-in absolute inset-0 animate-in bg-black/60 duration-200 backdrop-blur-xs"
+        className={styles.backdrop}
         onClick={() => onClose('dismiss')}
       />
 
       {/* Sidebar */}
-      <div className="slide-in-from-left absolute inset-y-0 left-0 flex w-[85%] max-w-[320px] flex-col border-store-border border-r bg-store-background text-store-background-text shadow-2xl animate-in duration-300">
-        <div className="flex items-center justify-between border-store-border border-b px-4 py-4">
+      <div className={styles.panel}>
+        <div className={styles.header}>
           <Logo
-            className="h-8 w-auto text-store-background-text"
+            className={styles.logo}
             color="current"
           />
           <button
             type="button"
             ref={closeButtonRef}
             onClick={() => onClose('dismiss')}
-            className="rounded-full p-2 text-store-background-text/70 transition-colors hover:bg-store-background-text/10 hover:text-store-background-text"
+            className={styles.close}
             aria-label="Close menu"
           >
             <X size={20} aria-hidden="true" />
@@ -168,16 +172,14 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
         <nav
           aria-label="Mobile storefront navigation"
-          className="hide-scrollbar flex-1 overflow-y-auto py-4"
+          className={styles.navigation}
         >
           {renderSection('Shop & Services', MOBILE_MENU_SHOP_ITEMS)}
 
           {normalizedCategories.length > 0 && (
-            <div className="mb-5 px-4">
-              <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
-                Categories
-              </h2>
-              <ul className="flex flex-wrap gap-1.5 px-1">
+            <div className={styles.categorySection}>
+              <h2 className={styles.heading}>Categories</h2>
+              <ul className={styles.categories}>
                 {normalizedCategories.map((category) => (
                   <li key={category.slug}>
                     <Link
@@ -186,7 +188,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                       )}
                       prefetch={false}
                       onClick={() => onClose('navigate')}
-                      className="inline-flex items-center rounded-full bg-store-background-text/10 px-3 py-1.5 font-medium text-store-background-text/80 text-xs transition-colors hover:bg-store-primary/10 hover:text-store-primary"
+                      className={styles.categoryLink}
                     >
                       {category.name}
                     </Link>
@@ -201,16 +203,17 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         </nav>
 
         {/* Footer */}
-        <div className="border-store-border border-t bg-store-background-text/5 p-4">
+        <div className={styles.footer}>
           <Link
             href={asRoute(buildHref('/account/login'))}
             prefetch={false}
             onClick={() => onClose('navigate')}
-            className="block w-full rounded-xl bg-store-primary py-3.5 text-center font-bold text-store-primary-text shadow-lg transition-transform active:scale-95"
+            className={styles.login}
           >
             Login / Register
+            <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
-          <p className="mt-3 text-center text-store-background-text/60 text-xs">
+          <p className={styles.copyright}>
             &copy; {businessName}
           </p>
         </div>

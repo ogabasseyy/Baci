@@ -16,7 +16,7 @@ const OGABASSEY_PRERENDER_PAGE_SIZE = 200;
 const OGABASSEY_PRERENDER_MAX_PAGES = 12;
 // Preview-target sample: the full catalog emits ~183k cold files that never
 // finish the preview finalize step, so preview builds prerender only the
-// priority PDP below plus this many newest index products. Production is
+// priority and QA PDPs below plus this many newest index products. Production is
 // unaffected — the gate is an exact `VERCEL_ENV=preview` match.
 export const OGABASSEY_PREVIEW_PRERENDER_PRODUCT_LIMIT = 11;
 const OGABASSEY_PREVIEW_PRERENDER_MAX_PAGES = 1;
@@ -30,6 +30,13 @@ const OGABASSEY_PRIORITY_PRERENDER_PRODUCTS = [
     category: 'gaming-laptops',
     productSlug: 'dell-alienware-m18-r3-rtx-5080',
   },
+] as const;
+
+// Keep fixed-configuration and selectable-variant PDPs available for preview
+// regression checks even when newer catalog entries displace them.
+const OGABASSEY_PREVIEW_QA_PRODUCTS = [
+  { category: 'tablets', productSlug: 'tecno-megapad-2' },
+  { category: 'tablets', productSlug: 'ipad-10th-gen-2022' },
 ] as const;
 
 export async function resolveProductStaticParams(): Promise<
@@ -91,7 +98,13 @@ export async function resolveProductStaticParams(): Promise<
   const params: Array<{ slug: string; category: string; productSlug: string }> =
     [];
 
-  for (const product of OGABASSEY_PRIORITY_PRERENDER_PRODUCTS) {
+  const pinnedProducts = previewBuild
+    ? [
+        ...OGABASSEY_PRIORITY_PRERENDER_PRODUCTS,
+        ...OGABASSEY_PREVIEW_QA_PRODUCTS,
+      ]
+    : OGABASSEY_PRIORITY_PRERENDER_PRODUCTS;
+  for (const product of pinnedProducts) {
     const key = `${product.category}/${product.productSlug}`;
     seen.add(key);
     params.push({ slug: OGABASSEY_DOMAIN, ...product });

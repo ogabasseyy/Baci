@@ -19,14 +19,28 @@ function readStorefrontFile(fileName: string): string {
 
 describe('critical PDP description geometry', () => {
   it('omits redundant visible-summary and selection-hint rules from critical summary CSS', () => {
-    const summaryCss = readStorefrontFile(
-      'storefront-pdp-critical-summary.css'
-    );
+    const summaryCss = [
+      'storefront-pdp-critical-summary.css',
+      'storefront-pdp-critical-commerce.css',
+      'storefront-pdp-editorial.css',
+    ]
+      .map(readStorefrontFile)
+      .join('\n');
 
     expect(summaryCss).not.toMatch(/\[data-ogabassey-pdp-visible-summary\]/);
     expect(summaryCss).not.toMatch(
       /\[data-ogabassey-pdp-commerce-selection-hint\]/
     );
+  });
+
+  it('loads editorial colors with the critical PDP styles without depending on globals', () => {
+    expect(readStorefrontFile('storefront-pdp-critical.css')).toMatch(
+      /@import ["']\.\/storefront-pdp-design-tokens\.css["']/
+    );
+    const tokens = readStorefrontFile('storefront-pdp-design-tokens.css');
+    expect(tokens).toContain('--ogabassey-gallery-accent:');
+    expect(tokens).toContain('--ogabassey-sustainability-surface:');
+    expect(tokens).toContain('--ogabassey-sustainability-text:');
   });
 
   it('keeps only the initial deferred description geometry in critical PDP CSS', () => {

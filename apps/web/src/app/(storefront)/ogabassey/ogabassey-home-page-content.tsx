@@ -2,8 +2,8 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
-import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
+import { Hero } from '@/components/storefront/ogabassey/redesign/access-home-hero';
 import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { OGABASSEY_TITLE, OGABASSEY_URL } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
@@ -71,6 +71,7 @@ function renderPublishedOgabasseyHomePageContent({
     <>
       {requestMerchantShellSlides ? (
         <Hero
+          basePath={resolvedPathPrefix}
           prioritizeMobileHeroImage
           omitDocumentHeading={omitDocumentHeading}
           omitMobileCarousel={omitMobileCarousel}

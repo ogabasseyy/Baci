@@ -212,7 +212,7 @@ describe('resolveProductStaticParams', () => {
     expect(OGABASSEY_PREVIEW_PRERENDER_PRODUCT_LIMIT).toBeLessThan(200);
   });
 
-  it('caps preview builds to the priority PDP plus a small newest sample', async () => {
+  it('prerenders fixed and multi-variant QA products outside the newest preview sample', async () => {
     vi.stubEnv('VERCEL_ENV', 'preview');
     try {
       const fullPage = Array.from({ length: 200 }, (_, index) => ({
@@ -226,11 +226,25 @@ describe('resolveProductStaticParams', () => {
 
       const params = await resolveProductStaticParams();
 
-      // One index page walked, then sliced: priority + 11 newest. The full
+      // One index page walked: priority + two QA products + 11 newest. The full
       // catalog would emit ~183k cold files that never finish the preview
       // finalize step; branch previews only need a representative sample.
       expect(mockGetCachedStorefrontProductIndex).toHaveBeenCalledTimes(1);
-      expect(params).toHaveLength(12);
+      expect(params).toHaveLength(14);
+      expect(params).toEqual(
+        expect.arrayContaining([
+          {
+            slug: OGABASSEY_DOMAIN,
+            category: 'tablets',
+            productSlug: 'tecno-megapad-2',
+          },
+          {
+            slug: OGABASSEY_DOMAIN,
+            category: 'tablets',
+            productSlug: 'ipad-10th-gen-2022',
+          },
+        ])
+      );
       expect(params[0]).toEqual({
         slug: OGABASSEY_DOMAIN,
         category: 'gaming-laptops',

@@ -113,7 +113,7 @@ vi.mock('@/components/storefront/store-not-published', () => ({
   ),
 }));
 
-vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
+vi.mock('@/components/storefront/ogabassey/redesign/access-home-hero', () => ({
   Hero: ({
     omitDocumentHeading,
     omitMobileCarousel,

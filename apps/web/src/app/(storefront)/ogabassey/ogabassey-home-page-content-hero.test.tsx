@@ -83,7 +83,7 @@ vi.mock('@/components/storefront/store-not-published', () => ({
   ),
 }));
 
-vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
+vi.mock('@/components/storefront/ogabassey/redesign/access-home-hero', () => ({
   Hero: ({
     omitDocumentHeading,
     omitMobileCarousel,
@@ -118,6 +118,12 @@ vi.mock('next/link', () => ({
     <a href={href} {...props}>
       {children}
     </a>
+  ),
+}));
+
+vi.mock('./ogabassey-home-hero-reserve-fallback', () => ({
+  OgabasseyHomeHeroReserveFallback: () => (
+    <div aria-hidden="true" data-testid="hero-reserve" />
   ),
 }));
 

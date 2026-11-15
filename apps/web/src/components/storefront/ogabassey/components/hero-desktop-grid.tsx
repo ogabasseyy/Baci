@@ -43,7 +43,7 @@ const HERO_IMAGE_QUALITY = 70;
 /** Media-scoped desktop hero image. On mobile the `<source media="(max-width: 767px)">`
  *  matches a transparent pixel (zero network), while `<img src>` holds the real
  *  fallback URL so no `fetchpriority="high"` hero `<img>` uses a `data:image/gif` `src`. */
-function HeroBigImage({ alt, src }: { alt: string; src: string }) {
+export function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
   } = getImageProps({

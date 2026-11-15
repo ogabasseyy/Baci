@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { stripVolatileProductPriceSentences } from './storefront-product-description';
 
 describe('stripVolatileProductPriceSentences', () => {
+  it.each([
+    '&nbsp;',
+    '&#160;',
+    '&#xA0;',
+  ])('removes listed prices with encoded whitespace %s', (space) => {
+    expect(
+      stripVolatileProductPriceSentences(
+        `Portable tablet. Current${space}listed price is NGN${space}100,000. Keep creating.`
+      )
+    ).toBe('Portable tablet. Keep creating.');
+  });
   it('removes stale absolute listed-price sentences while preserving stable product copy', () => {
     expect(
       stripVolatileProductPriceSentences(

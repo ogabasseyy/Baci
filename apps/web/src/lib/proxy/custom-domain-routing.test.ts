@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./custom-domain-alias-routing', () => ({
-  runCustomDomainAliasRouting: vi.fn().mockResolvedValue(null),
+  runCustomDomainAliasRouting: vi.fn().mockReturnValue(null),
   runCustomDomainCurrentSlugCanonicalization: vi.fn(() => null),
 }));
 vi.mock('./custom-domain-api-routing', () => ({
@@ -24,6 +24,7 @@ describe('custom-domain routing', () => {
       {
         domain: 'shop.example',
         domainMerchantSlug: 'shop',
+        pathAliasCurrentSlug: null,
         domainPathSegments: ['shop.example', 'products'],
         normalizedRequestHost: 'shop.example',
         requestHostHadWww: false,
@@ -43,6 +44,7 @@ describe('custom-domain routing', () => {
       const context = {
         domain: 'shop.example',
         domainMerchantSlug: 'shop',
+        pathAliasCurrentSlug: null,
         domainPathSegments: ['checkout'],
         normalizedRequestHost: 'shop.example',
         requestHostHadWww: false,

@@ -47,7 +47,7 @@ function deliveryData(input: AnalyticsEventRequest, request: NextRequest) {
     ua: request.headers.get('user-agent') ?? undefined,
   };
 }
-function storeLegacyEvent(
+async function storeLegacyEvent(
   supabase: SupabaseClient,
   input: AnalyticsEventRequest,
   eventType: string,
@@ -55,22 +55,25 @@ function storeLegacyEvent(
   eventTimestamp: string
 ) {
   const row = {
+    ...(input.event_id ? { event_id: input.event_id } : {}),
     event_data: eventData,
     event_timestamp: eventTimestamp,
     merchant_id: input.merchant_id,
     source: input.source ?? 'web',
     event_type: eventType,
   };
-  if (input.event_id) {
-    return supabase.from('analytics_events').upsert(
-      { ...row, event_id: input.event_id },
-      {
-        ignoreDuplicates: true,
-        onConflict: 'merchant_id,event_id,event_type',
-      }
-    );
+  // A targeted upsert also requires SELECT for its conflict columns.
+  // Keep the ingress capability insert-only and accept only this replay.
+  const { error } = await supabase.from('analytics_events').insert(row);
+  if (
+    input.event_id &&
+    error?.code === '23505' &&
+    error.message ===
+      'duplicate key value violates unique constraint "analytics_events_merchant_event_id_type_uidx"'
+  ) {
+    return { error: null };
   }
-  return supabase.from('analytics_events').insert(row);
+  return { error };
 }
 export async function POST(request: NextRequest) {
   const bodyResult = await readBoundedJsonBody(request, MAX_EVENT_BYTES);

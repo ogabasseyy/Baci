@@ -1,9 +1,5 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/lib/slug-alias-cache', () => ({
-  getCurrentSlugForAlias: vi.fn().mockResolvedValue('new-shop'),
-}));
+import { describe, expect, it } from 'vitest';
 
 import {
   runCustomDomainAliasRouting,
@@ -15,11 +11,12 @@ const context = {
   domainMerchantSlug: 'new-shop',
   normalizedRequestHost: 'shop.example',
   requestHostHadWww: false,
+  pathAliasCurrentSlug: 'new-shop',
   domainPathSegments: ['old-shop', 'products', 'iphone'],
 };
 describe('custom-domain slug canonicalization', () => {
-  it('strips a retired alias prefix on safe requests', async () => {
-    const response = await runCustomDomainAliasRouting(
+  it('strips a retired alias prefix on safe requests', () => {
+    const response = runCustomDomainAliasRouting(
       new NextRequest('https://shop.example/old-shop/products/iphone'),
       '/old-shop/products/iphone',
       context
@@ -39,6 +36,7 @@ describe('custom-domain slug canonicalization', () => {
         domainMerchantSlug: 'ogabassey',
         normalizedRequestHost: 'ogabassey.com',
         requestHostHadWww: false,
+        pathAliasCurrentSlug: null,
         domainPathSegments: ['ogabassey', 'smartphones', 'iphone-16'],
       }
     );
@@ -60,18 +58,18 @@ describe('custom-domain slug canonicalization', () => {
     ).toBeNull();
   });
 
-  it('preserves the exact live unlock-orders page but strips a suffixed retired alias', async () => {
+  it('preserves the exact live unlock-orders page but strips a suffixed retired alias', () => {
     const exactPath = '/unlock-orders';
-    await expect(
+    expect(
       runCustomDomainAliasRouting(
         new NextRequest(`https://shop.example${exactPath}`),
         exactPath,
         { ...context, domainPathSegments: ['unlock-orders'] }
       )
-    ).resolves.toBeNull();
+    ).toBeNull();
 
     const suffixedPath = '/unlock-orders/summer-sale';
-    const response = await runCustomDomainAliasRouting(
+    const response = runCustomDomainAliasRouting(
       new NextRequest(`https://shop.example${suffixedPath}`),
       suffixedPath,
       { ...context, domainPathSegments: ['unlock-orders', 'summer-sale'] }

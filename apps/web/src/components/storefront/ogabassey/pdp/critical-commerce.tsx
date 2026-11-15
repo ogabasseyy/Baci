@@ -1,12 +1,11 @@
 import type { Route } from 'next';
 import { Suspense } from 'react';
 import {
-  type OgabasseyPdpCriticalProduct,
-} from './critical-product';
-import {
   OgabasseyPdpCriticalCommerceConditionFact,
   OgabasseyPdpCriticalCommerceControls,
 } from './critical-commerce.client';
+import type { OgabasseyPdpCriticalProduct } from './critical-product';
+import { ProductOwnershipLinks } from './product-ownership-links';
 
 interface OgabasseyPdpCriticalCommerceProps {
   cartBasePathPromise?: Promise<string>;
@@ -39,10 +38,13 @@ async function OgabasseyPdpResolvedCriticalCommerceControls({
   const cartHref = `${basePath}/cart` as Route;
 
   return (
-    <OgabasseyPdpCriticalCommerceControls
-      cartHref={cartHref}
-      productName={productName}
-    />
+    <>
+      <ProductOwnershipLinks cartHref={cartHref} />
+      <OgabasseyPdpCriticalCommerceControls
+        cartHref={cartHref}
+        productName={productName}
+      />
+    </>
   );
 }
 
@@ -52,10 +54,13 @@ export function OgabasseyPdpCriticalCommerce({
   product,
 }: OgabasseyPdpCriticalCommerceProps) {
   const controls = cartHref ? (
-    <OgabasseyPdpCriticalCommerceControls
-      cartHref={cartHref}
-      productName={product.name}
-    />
+    <>
+      <ProductOwnershipLinks cartHref={cartHref} />
+      <OgabasseyPdpCriticalCommerceControls
+        cartHref={cartHref}
+        productName={product.name}
+      />
+    </>
   ) : cartBasePathPromise ? (
     <Suspense fallback={null}>
       <OgabasseyPdpResolvedCriticalCommerceControls
@@ -66,14 +71,9 @@ export function OgabasseyPdpCriticalCommerce({
   ) : null;
 
   return (
-    <aside
-      data-ogabassey-pdp-commerce-panel
-      aria-label="Purchase options"
-    >
+    <aside data-ogabassey-pdp-commerce-panel aria-label="Purchase options">
       <div data-ogabassey-pdp-commerce-facts>
-        <p data-ogabassey-pdp-commerce-eyebrow>
-          Ready to buy
-        </p>
+        <p data-ogabassey-pdp-commerce-eyebrow>Ready to buy</p>
         <OgabasseyPdpCriticalCommerceConditionFact
           fallbackCondition={product.condition}
         />

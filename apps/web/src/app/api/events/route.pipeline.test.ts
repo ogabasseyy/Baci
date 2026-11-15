@@ -90,9 +90,8 @@ describe('POST /api/events durable pipeline', () => {
     const response = await POST(request());
 
     expect(response.status).toBe(200);
-    expect(mocks.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ merchant_id: MERCHANT_ID }),
-      expect.any(Object)
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ merchant_id: MERCHANT_ID })
     );
     expect(mocks.after).toHaveBeenCalledTimes(1);
   });

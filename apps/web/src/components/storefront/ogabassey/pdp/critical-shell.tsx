@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import type { Route } from 'next';
-import { Suspense, type ReactNode } from 'react';
+import Link from 'next/link';
+import { type ReactNode, Suspense } from 'react';
 import {
   COMPACT_OPTIONS,
   type CurrencyConfig,
@@ -96,7 +96,6 @@ async function OgabasseyPdpResolvedCriticalBreadcrumbs({
   );
 }
 
-
 export function OgabasseyPdpCriticalShell({
   basePath = '',
   basePathPromise,
@@ -147,6 +146,7 @@ export function OgabasseyPdpCriticalShell({
         </nav>
         <div data-ogabassey-pdp-grid>
           <div data-ogabassey-pdp-image-frame>
+            <span data-ogabassey-pdp-image-eyebrow>Your next possibility</span>
             <OgabasseyPdpCriticalProductImage
               alt={product.name}
               fallbackImage={fallbackImage || product.image}
@@ -154,10 +154,21 @@ export function OgabasseyPdpCriticalShell({
             <OgabasseyPdpCriticalConditionBadge
               fallbackCondition={product.condition}
             />
+            <span data-ogabassey-pdp-gallery-brand>{product.brand}</span>
+            <div data-ogabassey-pdp-gallery-note>
+              <span>Made for your next chapter.</span>
+              <span>Keep good tech going.</span>
+            </div>
           </div>
           <div data-ogabassey-pdp-summary>
+            <p data-ogabassey-pdp-editorial-eyebrow>
+              Learn. Create. Earn. Your way.
+            </p>
             <p data-ogabassey-pdp-brand>{product.brand}</p>
             <h1 data-ogabassey-pdp-title>{product.name}</h1>
+            {product.descriptionExcerpt ? (
+              <p data-ogabassey-pdp-intro>{product.descriptionExcerpt}</p>
+            ) : null}
             {hasRatingRow ? (
               <div data-ogabassey-pdp-rating-row>
                 {hasRatingSignal ? (
@@ -170,9 +181,7 @@ export function OgabasseyPdpCriticalShell({
                   </span>
                 ) : null}
                 {aggregateRatingCount > 0 ? (
-                  <span data-ogabassey-pdp-review-count>
-                    {reviewCountText}
-                  </span>
+                  <span data-ogabassey-pdp-review-count>{reviewCountText}</span>
                 ) : null}
               </div>
             ) : null}
@@ -184,9 +193,7 @@ export function OgabasseyPdpCriticalShell({
               </div>
             )}
           </div>
-          <div data-ogabassey-pdp-commerce-slot>
-            {children}
-          </div>
+          <div data-ogabassey-pdp-commerce-slot>{children}</div>
         </div>
       </div>
     </section>

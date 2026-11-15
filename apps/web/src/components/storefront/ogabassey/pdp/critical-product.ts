@@ -1,3 +1,6 @@
+import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
+import { buildDescriptionExcerpt } from '../pages/product-details-page/build-description-excerpt';
+
 type CategoryShape =
   | { id?: string | null; name?: string | null; slug?: string | null }
   | null
@@ -15,6 +18,7 @@ export interface OgabasseyPdpCriticalProductInput {
   category_slug?: string | null;
   categories?: CategoryShape | CategoryShape[];
   condition?: string | null;
+  description?: string | null;
   id: string;
   image?: string | null;
   imageLarge?: string | null;
@@ -31,6 +35,7 @@ export interface OgabasseyPdpCriticalProductInput {
 }
 
 export interface OgabasseyPdpCriticalProduct {
+  descriptionExcerpt?: string;
   brand: string;
   categoryName: string;
   categorySlug: string;
@@ -168,6 +173,9 @@ export function buildOgabasseyPdpCriticalProduct(
   const image = getOgabasseyPdpPrimaryImage(product);
 
   return {
+    descriptionExcerpt: buildDescriptionExcerpt(
+      stripVolatileProductPriceSentences(product.description || '')
+    ),
     brand: product.brand || 'OgaBassey',
     categoryName,
     categorySlug:

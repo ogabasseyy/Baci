@@ -1,0 +1,107 @@
+/* The drawer loads with the deferred menu so route styles stay small. */
+@reference "tailwindcss";
+@reference "../../../../app/(storefront)/storefront-theme-tokens.css";
+@config "../../../../../tailwind.storefront.scoped.config.mjs";
+
+.section {
+  @apply mb-6 px-4 last:mb-0;
+}
+
+.menuList {
+  @apply space-y-1;
+}
+
+.linkLabel {
+  @apply flex items-center gap-3;
+}
+
+.leaf {
+  @apply shrink-0 text-store-menu-sustainability;
+}
+
+.chevron {
+  @apply shrink-0 text-store-background-text/60;
+}
+
+.dialog {
+  @apply fixed inset-0 z-100;
+}
+
+.backdrop {
+  @apply absolute inset-0 bg-black/60 motion-safe:fade-in motion-safe:animate-in motion-safe:duration-200;
+}
+
+.panel {
+  @apply absolute inset-y-0 left-0 flex w-[calc(100%_-_2rem)] max-w-[360px] flex-col border-store-border border-r bg-store-menu-surface text-store-background-text shadow-2xl motion-safe:slide-in-from-left motion-safe:animate-in motion-safe:duration-300;
+}
+
+.header {
+  @apply flex shrink-0 items-center justify-between gap-3 border-store-border border-b bg-store-menu-header px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))];
+}
+
+.logo {
+  @apply h-6 w-auto min-w-0 text-store-background-text;
+}
+
+.close {
+  @apply grid size-11 shrink-0 place-items-center rounded-full border border-store-background-text/20 bg-store-background hover:bg-store-background-text/10 motion-safe:transition-colors;
+}
+
+.navigation {
+  @apply min-h-0 flex-1 overflow-y-auto overscroll-contain py-5;
+}
+
+.categorySection {
+  @apply mb-6 px-4;
+}
+
+.categories {
+  @apply flex flex-wrap gap-1.5 px-1;
+}
+
+.categoryLink {
+  @apply inline-flex min-h-9 items-center rounded-full border border-store-background-text/20 bg-store-background px-3 font-semibold text-xs hover:border-store-primary/50 hover:bg-store-primary/10 motion-safe:transition-colors;
+}
+
+.footer {
+  @apply shrink-0 border-store-border border-t bg-store-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))];
+}
+
+.login {
+  @apply flex min-h-11 items-center justify-center gap-2 rounded-full bg-store-primary px-4 py-2 font-bold text-sm text-store-primary-text motion-safe:transition-transform motion-safe:active:scale-[0.98];
+}
+
+.copyright {
+  @apply mt-3 text-center text-store-background-text/75 text-xs;
+}
+
+.heading {
+  @apply mb-2 px-2 font-bold text-[11px] text-store-background-text/75 uppercase tracking-[0.14em];
+}
+
+.menuLink {
+  @apply flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-transparent px-2 py-1 font-medium text-sm motion-safe:transition-colors;
+}
+
+.iconTile {
+  @apply grid size-8 shrink-0 place-items-center rounded-lg bg-store-background-text/5 text-store-background-text;
+}
+
+.menuLink:not([aria-current="page"]) {
+  @apply hover:bg-store-background-text/5;
+}
+
+.menuLink[aria-current="page"] {
+  @apply border-store-primary/30 bg-store-primary/10 font-bold;
+}
+
+.menuLink[aria-current="page"] .iconTile {
+  @apply bg-store-primary text-store-primary-text;
+}
+
+.menuLink,
+.categoryLink,
+.close,
+.login {
+  @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-background-text;
+}

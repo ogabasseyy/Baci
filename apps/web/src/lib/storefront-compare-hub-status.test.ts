@@ -1,181 +1,244 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveStorefrontCompareHubStatus } from './storefront-compare-hub-status';
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  type CompareHubStatusResolver,
+  clearStorefrontCompareHubStatusCache,
+  resolveStorefrontCompareHubStatus,
+} from './storefront-compare-hub-status';
 
 function buildOptions(
-  fetchImpl: typeof fetch,
+  resolverImpl: CompareHubStatusResolver,
   overrides: Partial<
     Parameters<typeof resolveStorefrontCompareHubStatus>[0]
   > = {}
 ) {
   return {
-    // Loopback origin: resolveBaseUrl returns it verbatim, so the transport
-    // path is exercised without a configured platform root domain.
-    origin: 'http://localhost:3000',
+    origin: 'https://ogabassey.com',
     identifier: 'ogabassey',
     categorySlug: 'printers',
     secret: 'test-internal-secret',
-    fetchImpl,
+    resolverImpl,
     ...overrides,
   };
 }
 
 describe('resolveStorefrontCompareHubStatus', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
+    clearStorefrontCompareHubStatusCache();
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.spyOn(console, 'info').mockImplementation(() => undefined);
   });
 
-  it('resolves empty for a confirmed-empty hub verdict', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ empty: true, hasError: false }));
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resolves empty for a confirmed-empty hub verdict in-process without fetch', async () => {
+    const resolverImpl = vi.fn().mockResolvedValue({ kind: 'empty' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     const resolution = await resolveStorefrontCompareHubStatus(
-      buildOptions(fetchImpl)
+      buildOptions(resolverImpl)
     );
 
     expect(resolution).toEqual({ kind: 'empty' });
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:3000/api/internal/compare-hub-status/ogabassey?category=printers',
-      expect.objectContaining({
-        headers: { 'x-baci-internal-auth': 'test-internal-secret' },
-        redirect: 'manual',
+    expect(resolverImpl).toHaveBeenCalledWith({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'printers',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('caches empty verdicts for 10 seconds and refreshes after expiry', async () => {
+    const resolverImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'empty' })
+      .mockResolvedValueOnce({ kind: 'renderable', merchantId: 'merchant-1' });
+
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'empty' });
+
+    vi.advanceTimersByTime(9_999);
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'empty' });
+    expect(resolverImpl).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(2);
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
+    expect(resolverImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolves renderable for a non-empty hub verdict and caches for 60 seconds', async () => {
+    const resolverImpl = vi
+      .fn()
+      .mockResolvedValue({ kind: 'renderable', merchantId: 'merchant-1' });
+
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
+
+    vi.advanceTimersByTime(59_999);
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
+    expect(resolverImpl).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(2);
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
+    expect(resolverImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces concurrent identical lookups via SingleFlight', async () => {
+    let resolve: ((value: { kind: 'empty' }) => void) | undefined;
+    let started: (() => void) | undefined;
+    const lookupStarted = new Promise<void>((done) => {
+      started = done;
+    });
+    const resolverImpl = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+          started?.();
+        })
+    );
+
+    const first = resolveStorefrontCompareHubStatus(buildOptions(resolverImpl));
+    const second = resolveStorefrontCompareHubStatus(
+      buildOptions(resolverImpl, {
+        identifier: ' OGABASSEY ',
+        categorySlug: ' Printers ',
       })
     );
+
+    await lookupStarted;
+    resolve?.({ kind: 'empty' });
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { kind: 'empty' },
+      { kind: 'empty' },
+    ]);
+    expect(resolverImpl).toHaveBeenCalledTimes(1);
+    expect(resolverImpl).toHaveBeenCalledWith({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'printers',
+    });
   });
 
-  it('resolves renderable for a non-empty hub verdict', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ empty: false, hasError: false }));
-
-    await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-  });
-
-  it('never sends the secret to an untrusted request origin (no configured base URL)', async () => {
-    // A merchant custom domain's DNS is merchant-controlled: without a trusted
-    // platform base URL the preflight must fail open WITHOUT fetching, or the
-    // internal secret could be exfiltrated to wherever that domain resolves.
-    const fetchImpl = vi.fn();
-
-    await expect(
-      resolveStorefrontCompareHubStatus(
-        buildOptions(fetchImpl, { origin: 'https://ogabassey.com' })
-      )
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(console.warn).toHaveBeenCalledWith(
-      '[storefront-internal-preflight] fail-open',
-      expect.objectContaining({ reason: 'no-base-url' })
+  it('normalizes whitespace/case before resolver invocation in reversed order', async () => {
+    let resolve: ((value: { kind: 'empty' }) => void) | undefined;
+    let started: (() => void) | undefined;
+    const lookupStarted = new Promise<void>((done) => {
+      started = done;
+    });
+    const resolverImpl = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+          started?.();
+        })
     );
+
+    const first = resolveStorefrontCompareHubStatus(
+      buildOptions(resolverImpl, {
+        identifier: ' OGABASSEY ',
+        categorySlug: ' Printers ',
+      })
+    );
+    const second = resolveStorefrontCompareHubStatus(
+      buildOptions(resolverImpl)
+    );
+
+    await lookupStarted;
+    resolve?.({ kind: 'empty' });
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { kind: 'empty' },
+      { kind: 'empty' },
+    ]);
+    expect(resolverImpl).toHaveBeenCalledTimes(1);
+    expect(resolverImpl).toHaveBeenCalledWith({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'printers',
+    });
   });
 
-  it('fails open when the secret is missing without calling the route', async () => {
-    const fetchImpl = vi.fn();
+  it('fails open when the secret is missing without calling the resolver', async () => {
+    const resolverImpl = vi.fn();
 
     await expect(
       resolveStorefrontCompareHubStatus(
-        buildOptions(fetchImpl, { secret: undefined })
+        buildOptions(resolverImpl, { secret: undefined })
       )
     ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(resolverImpl).not.toHaveBeenCalled();
   });
 
-  it('fails open on an unsafe category segment without calling the route', async () => {
-    const fetchImpl = vi.fn();
+  it('fails open on an unsafe category segment without calling the resolver', async () => {
+    const resolverImpl = vi.fn();
 
     await expect(
       resolveStorefrontCompareHubStatus(
-        buildOptions(fetchImpl, { categorySlug: 'a'.repeat(600) })
+        buildOptions(resolverImpl, { categorySlug: 'a'.repeat(600) })
       )
     ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(resolverImpl).not.toHaveBeenCalled();
   });
 
-  it('fails open on transport errors', async () => {
-    const fetchImpl = vi.fn().mockRejectedValue(new Error('socket hang up'));
-
-    await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-  });
-
-  it('fails open on a fetch timeout', async () => {
-    const fetchImpl = vi
+  it('fails open on resolver errors without caching the failure', async () => {
+    const resolverImpl = vi
       .fn()
-      .mockRejectedValue(new DOMException('Timed out', 'TimeoutError'));
+      .mockRejectedValueOnce(new Error('db unavailable'))
+      .mockResolvedValueOnce({ kind: 'empty' });
 
     await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
     ).resolves.toEqual({ kind: 'renderable-or-unknown' });
+    await expect(
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'empty' });
+    expect(resolverImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails open on a lookup timeout without caching the failure', async () => {
+    const resolverImpl = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValueOnce({ kind: 'empty' });
+
+    const pending = resolveStorefrontCompareHubStatus(
+      buildOptions(resolverImpl, { timeoutMs: 100 })
+    );
+    await vi.advanceTimersByTimeAsync(101);
+
+    await expect(pending).resolves.toEqual({ kind: 'renderable-or-unknown' });
     expect(console.warn).toHaveBeenCalledWith(
       '[storefront-internal-preflight] fail-open',
       expect.objectContaining({ reason: 'timeout' })
     );
-  });
-
-  it('fails open on a redirect response instead of replaying the secret to its target', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(null, {
-        status: 308,
-        headers: { Location: 'https://attacker.example/steal' },
-      })
-    );
 
     await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-    expect(console.warn).toHaveBeenCalledWith(
-      '[storefront-internal-preflight] fail-open',
-      expect.objectContaining({ reason: 'redirect' })
-    );
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'empty' });
+    expect(resolverImpl).toHaveBeenCalledTimes(2);
   });
 
-  it('fails open on a non-200 response', async () => {
-    const fetchImpl = vi
+  it('fails open on unknown status without caching it', async () => {
+    const resolverImpl = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: 'Unauthorized' }, 401));
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'empty' });
 
     await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
     ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-  });
-
-  it('fails open when a successful response is not JSON', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(new Response('not-json'));
-
     await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-  });
-
-  it('fails open on a schema-invalid body', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ unexpected: true }));
-
-    await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
-  });
-
-  it('fails open on a degraded-resolver (hasError) body even when marked empty', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ empty: true, hasError: true }));
-
-    await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(fetchImpl))
-    ).resolves.toEqual({ kind: 'renderable-or-unknown' });
+      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
+    ).resolves.toEqual({ kind: 'empty' });
+    expect(resolverImpl).toHaveBeenCalledTimes(2);
   });
 });

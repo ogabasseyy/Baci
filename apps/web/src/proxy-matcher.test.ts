@@ -13,7 +13,9 @@ describe('proxy matcher', () => {
     // Hashed-asset example: the matcher is extension-based, so any *.woff2
     // bypasses the proxy — this exact content hash is incidental.
     '/fonts/inter-naira.61440e0f45d4.woff2',
-  ])('excludes static request %s', (url) => {
+    '/baci-relay/static/relay.js',
+    '/baci-relay/e/capture/',
+  ])('excludes static and offloaded relay request %s', (url) => {
     expect(matches(url)).toBe(false);
   });
 
@@ -25,7 +27,6 @@ describe('proxy matcher', () => {
     '/sitemap.xml',
     '/agent-commerce.json',
     '/agent-trust.json',
-    '/baci-relay/static/relay.js',
   ])('includes proxy-owned request %s', (url) => {
     expect(matches(url)).toBe(true);
   });

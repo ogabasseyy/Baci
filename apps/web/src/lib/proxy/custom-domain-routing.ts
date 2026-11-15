@@ -15,6 +15,7 @@ import {
   STOREFRONT_ROOT_SITEMAP_PATH,
   toLlmApiPath,
 } from '@/lib/proxy/machine-responses';
+import { isEligibleForHardStatusPreflight } from '@/lib/proxy/preflight-common';
 import {
   buildProxyRequestHeaders,
   setStorefrontMetadataCacheBucketSearchParam,
@@ -27,6 +28,7 @@ import {
 } from '@/lib/proxy/routing-policy';
 import { runStorefrontPreflight } from '@/lib/proxy/storefront-preflight';
 import { buildLegacyTermsAliasRedirectResponse } from '@/lib/proxy/terms-redirects';
+import { isStorefrontDocumentNavigation } from '@/lib/storefront-document-navigation';
 import { applyOwnedOxygenDocumentPolicy } from './oxygen-owned-document';
 
 function decorate(
@@ -72,12 +74,6 @@ async function runCustomDomainRoutingInternal(
     normalizedRequestHost,
     requestHostHadWww,
   } = context;
-  const aliasResponse = await runCustomDomainAliasRouting(
-    request,
-    pathname,
-    context
-  );
-  if (aliasResponse) return aliasResponse;
   if (pathname === '/favicon.ico')
     return buildStorefrontFaviconRewriteResponse({
       request,
@@ -182,7 +178,30 @@ async function runCustomDomainRoutingInternal(
     userAgent,
     merchantIdentifier: domainMerchantSlug ?? domain,
   });
-  if (preflight) return preflight;
+  if (preflight) {
+    if (preflight.status === 404) {
+      const aliasResponse = await runCustomDomainAliasRouting(
+        request,
+        pathname,
+        context
+      );
+      if (aliasResponse) return aliasResponse;
+    }
+    return preflight;
+  }
+
+  const preflightCheckedTwoSegmentDoc =
+    context.domainPathSegments.length === 2 &&
+    isStorefrontDocumentNavigation(request.method, request.headers) &&
+    isEligibleForHardStatusPreflight(request, pathname);
+  if (!preflightCheckedTwoSegmentDoc) {
+    const aliasResponse = await runCustomDomainAliasRouting(
+      request,
+      pathname,
+      context
+    );
+    if (aliasResponse) return aliasResponse;
+  }
   const url = request.nextUrl.clone();
   url.pathname = `/${domain}${pathname}`;
   if (

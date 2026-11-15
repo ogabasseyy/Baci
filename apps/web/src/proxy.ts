@@ -174,19 +174,17 @@ export const config = {
   matcher: [
     '/agent-commerce.json',
     '/agent-trust.json',
-    // Next statically analyzes matcher values. Keep this literal in sync with
-    // DEFAULT_POSTHOG_RELAY_PATH so relay static assets do not bypass header
-    // stripping just because they end in .js/.css/.json.
-    '/baci-relay/:path*',
-    // Custom relay paths are runtime-configurable, while matcher values are
-    // statically analyzed. Catch custom `/relay/static/*.js` and
-    // `/relay/array/*.js` assets, but keep Next's own static chunks out of
-    // middleware so critical JS/CSS does not pay proxy overhead on every page.
-    '/((?!_next/static(?:/|$))(?:.+/)?(?:static|array)/.*)',
+    // Offload `/baci-relay/:path*` to `next.config.ts` rewrites/headers (and
+    // Cloudflare Transform Rules for request-header stripping) so relay traffic
+    // does not invoke proxy.ts. Catch custom `/relay/static/*.js` and
+    // `/relay/array/*.js` assets, while keeping Next's own static chunks and
+    // `/baci-relay/*` out of middleware.
+    '/((?!_next/static(?:/|$)|baci-relay(?:/|$))(?:.+/)?(?:static|array)/.*)',
     /*
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
+     * - baci-relay (PostHog relay handled by next.config.ts rewrites/headers)
      * - favicon.ico (favicon file)
      * - robots.txt (SEO file)
      * - ads.txt (host-aware Route Handler at app/ads.txt; bypasses middleware
@@ -194,6 +192,6 @@ export const config = {
      * - sitemap.xml (SEO file)
      * - Static files with extensions (.svg, .png, .jpg, etc.)
      */
-    '/((?!_next/image(?:/.*[^/])?$|_next/static(?:/.*[^/])?$|manifest\\.webmanifest$|robots\\.txt$|ads\\.txt$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|woff|woff2|ttf|eot|css|js|json)$|(?!favicon\\.ico$)(?!favicon\\.ico/$).+\\.ico$).*)',
+    '/((?!_next/image(?:/.*[^/])?$|_next/static(?:/.*[^/])?$|baci-relay(?:/.*)?$|manifest\\.webmanifest$|robots\\.txt$|ads\\.txt$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|woff|woff2|ttf|eot|css|js|json)$|(?!favicon\\.ico$)(?!favicon\\.ico/$).+\\.ico$).*)',
   ],
 };

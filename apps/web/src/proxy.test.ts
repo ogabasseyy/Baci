@@ -337,6 +337,7 @@ describe('Middleware Proxy', () => {
   it('forwards auth route CSP and nonce headers for Next script nonces', async () => {
     const req = new NextRequest(`https://${ROOT_DOMAIN}/login`);
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     const res = await proxy(req);
     expect(updateSession).toHaveBeenCalledTimes(1);
@@ -396,6 +397,7 @@ describe('Middleware Proxy', () => {
     for (let index = 0; index < 3; index += 1) {
       const req = new NextRequest(`https://${ROOT_DOMAIN}/login`);
       req.headers.set('host', ROOT_DOMAIN);
+      req.cookies.set('sb-project-auth-token', 'session');
 
       await proxy(req);
       const forwardedRequest = vi.mocked(updateSession).mock.calls[index]?.[0];
@@ -419,6 +421,7 @@ describe('Middleware Proxy', () => {
 
     const req = new NextRequest(`https://${ROOT_DOMAIN}/login`);
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     try {
       const res = await proxy(req);
@@ -480,6 +483,7 @@ describe('Middleware Proxy', () => {
       `https://${ROOT_DOMAIN}/login?redirect=%2Fadmin&redirectTo=%2Fdashboard`
     );
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     const res = await proxy(req);
 
@@ -497,6 +501,7 @@ describe('Middleware Proxy', () => {
       `https://${ROOT_DOMAIN}/login?redirectTo=%2Fadmin`
     );
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     const res = await proxy(req);
 
@@ -552,6 +557,7 @@ describe('Middleware Proxy', () => {
         `https://${ROOT_DOMAIN}/login?redirect=${encodeURIComponent(rawRedirect)}`
       );
       req.headers.set('host', ROOT_DOMAIN);
+      req.cookies.set('sb-project-auth-token', 'session');
 
       const res = await proxy(req);
       const location = res.headers.get('location');
@@ -574,6 +580,7 @@ describe('Middleware Proxy', () => {
         `https://${ROOT_DOMAIN}/login?redirect=${encodeURIComponent('/admin\r\nx-test:1')}`
       );
       req.headers.set('host', ROOT_DOMAIN);
+      req.cookies.set('sb-project-auth-token', 'session');
 
       const res = await proxy(req);
       const location = res.headers.get('location');
@@ -743,8 +750,8 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('matches PostHog relay static assets so rewrites cannot bypass header stripping', () => {
-    expect(config.matcher).toContain('/baci-relay/:path*');
+  it('offloads default PostHog relay paths from proxy matcher to next.config.ts', () => {
+    expect(config.matcher).not.toContain('/baci-relay/:path*');
   });
 
   it('does not force no-cache on default PostHog relay static assets', async () => {
@@ -792,7 +799,7 @@ describe('Middleware Proxy', () => {
         await import('./proxy');
 
       expect(configWithCustomRelay.matcher).toContain(
-        '/((?!_next/static(?:/|$))(?:.+/)?(?:static|array)/.*)'
+        '/((?!_next/static(?:/|$)|baci-relay(?:/|$))(?:.+/)?(?:static|array)/.*)'
       );
 
       const req = new NextRequest(

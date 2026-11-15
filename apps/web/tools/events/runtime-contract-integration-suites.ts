@@ -2,6 +2,8 @@ import { oxygenIntegrationSuites } from './runtime-contract-oxygen-integration-s
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
   ...oxygenIntegrationSuites,
+  'apps/web/src/components/storefront/ogabassey/redesign/access-search-dock.tsx':
+    'apps/web/src/components/storefront/ogabassey/redesign/access-search-experiments.test.tsx',
   'apps/web/src/components/storefront/ogabassey/redesign/access-benefits.tsx':
     'apps/web/src/components/storefront/ogabassey/redesign/access-home.test.tsx',
   'apps/web/src/components/storefront/ogabassey/redesign/access-home-hero.tsx':

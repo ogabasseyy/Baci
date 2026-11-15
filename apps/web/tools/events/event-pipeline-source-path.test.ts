@@ -4,6 +4,7 @@ import { isTestSourcePath } from './event-pipeline-source-path';
 describe('isTestSourcePath', () => {
   it.each([
     'apps/web/tools/builder-preview-spike/test-fixtures/app/page.tsx',
+    'apps/web/test-fixtures/event-ingress-isolated/app/api/events/route.ts',
     'worker.test.js',
     'worker.spec.jsx',
     'worker.test.cjs',

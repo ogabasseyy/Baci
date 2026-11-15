@@ -379,7 +379,7 @@ Evidence:
 
 ### Isolated HTTP route verification (2026-11-15)
 
-The reusable `apps/web/tests/event-ingress-isolated` fixture starts a loopback-only Next.js development server and imports the actual `/api/events` handler. It uses the dedicated synthetic Supabase database, generated local ES256 key, real context resolver, cookies, scoped clients, RLS, ledger and queue. It strips inherited environment configuration and rejects external fetch destinations. No production keys or deployment settings changed.
+The reusable `apps/web/test-fixtures/event-ingress-isolated` fixture starts a loopback-only Next.js development server and imports the actual `/api/events` handler. It uses the dedicated synthetic Supabase database, generated local ES256 key, real context resolver, cookies, scoped clients, RLS, ledger and queue. It strips inherited environment configuration and rejects external fetch destinations. No production keys or deployment settings changed.
 
 This caught a real legacy persistence bug: PostgREST targeted upsert required SELECT privileges that the ingress capability deliberately does not grant. Plain insertion now acknowledges only the exact event-identity unique-index conflict; other errors remain failures. The failing first-write and replay checks now pass without widening RLS. Eight focused route test files pass (47 tests). Six durable rows have matching queue entries; legacy writes with and without event IDs persist; duplicate requests do not add rows. Signing configuration failures return a safe 500.
 

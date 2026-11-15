@@ -11,7 +11,7 @@ export const analyticsDeliveryAuthorityManifest = {
     'apps/web/src/app/api/analytics/conversion/route.ts':
       'ab0d2ea5784e8b349efd559786591bb9ae0f2a79617a80323d5881bb25bb0169',
     'apps/web/src/app/api/events/route.ts':
-      '78936b0e67cdb78931660b8bf248a21a754bea6b02373879a185ba79cee6b3b1',
+      'a1ec09444503991598ccee27138400814a1b867bf83a9c1ae5e2d3eff92b72ad',
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
       '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
     'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':

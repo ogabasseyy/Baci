@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
--- Execute with an authorized operator over a TLS-verified connection to postgres.
+-- Execute over TLS with a role authorized to provision and validate credentials.
+-- Validation requires SELECT on pg_catalog.pg_authid and returns no verifier.
 -- On first run, enter the secret-store password at psql's hidden prompt.
 -- psql encrypts it before sending ALTER ROLE. A rerun preserves the password.
 BEGIN;
@@ -53,6 +54,14 @@ BEGIN
          AND (roleid <> storage_role OR admin_option OR inherit_option)
      ) THEN
     RAISE EXCEPTION 'unsafe_builder_auth_login';
+  END IF;
+  IF NOT EXISTS (
+    SELECT FROM pg_catalog.pg_authid
+    WHERE oid = login_role.oid
+      AND rolpassword LIKE 'SCRAM-SHA-256$%'
+      AND (rolvaliduntil IS NULL OR rolvaliduntil > CURRENT_TIMESTAMP)
+  ) THEN
+    RAISE EXCEPTION 'builder_auth_login_password_required';
   END IF;
 END
 $verify$;

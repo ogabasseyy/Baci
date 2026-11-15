@@ -85,7 +85,9 @@ export default function MessagesPage() {
                     {inbox.selectedConversation?.customerName ?? 'Customer'}
                   </h2>
                 </header>
+                {/* Keyed so scroll position never carries into another chat. */}
                 <ConversationThread
+                  key={inbox.selectedId}
                   messages={inbox.messages}
                   state={inbox.threadState}
                 />

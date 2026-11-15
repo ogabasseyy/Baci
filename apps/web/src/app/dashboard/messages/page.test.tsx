@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -236,6 +236,33 @@ describe('MessagesPage', () => {
     expect(
       screen.getByRole('textbox', { name: 'Reply to customer' })
     ).toHaveValue('');
+  });
+
+  it('opens another conversation at its latest message, not where the last one was scrolled', () => {
+    const open = (selectedId: number, index: number, text: string) =>
+      state({
+        selectedId,
+        selectedConversation: conversations[index],
+        threadState: 'ready',
+        messages: [message(selectedId * 100, 'customer', text)],
+      });
+    inbox.value = open(7, 0, 'first chat');
+    const { rerender } = render(<MessagesPage />);
+    const scroller = screen.getByRole('list', { name: 'Messages' })
+      .parentElement as HTMLElement;
+    Object.defineProperties(scroller, {
+      scrollHeight: { configurable: true, value: 2_000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, value: 0, writable: true },
+    });
+    fireEvent.scroll(scroller);
+
+    inbox.value = open(8, 1, 'second chat');
+    rerender(<MessagesPage />);
+    expect(screen.getByText('second chat')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /new messages/i })
+    ).not.toBeInTheDocument();
   });
 
   it('shortens a long preview in the content itself', () => {

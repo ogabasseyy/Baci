@@ -175,7 +175,9 @@ DO $$ BEGIN
   IF NOT public.chat_event_claim_push(current_setting('test.proof'), current_setting('test.at')::bigint, 'c4a71000-0000-4000-8000-0000000000b1', 'evt-push-0001', 'c4a71000-0000-4000-8000-0000000000c3') THEN
     RAISE EXCEPTION 'anon could not claim with a valid proof';
   END IF;
-  BEGIN PERFORM 1 FROM public.push_tokens LIMIT 1; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM 1 FROM public.push_tokens LIMIT 1;
+    RAISE EXCEPTION 'anon could read push tokens directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
 SET LOCAL ROLE authenticated;

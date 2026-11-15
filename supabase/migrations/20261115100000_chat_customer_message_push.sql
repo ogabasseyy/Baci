@@ -237,20 +237,15 @@ END;
 $$;
 
 -- Reachable without a session, but useless without a valid proof and claim.
-DO $chat_push_grants$
-DECLARE v_signature text;
-BEGIN
-  FOREACH v_signature IN ARRAY ARRAY[
-    'public.chat_event_claim_push(text, bigint, uuid, text, uuid)',
-    'public.chat_event_push_tokens(text, bigint, uuid, text, uuid)',
-    'public.chat_event_store_push_tickets(text, bigint, uuid, text, uuid, jsonb)',
-    'public.chat_event_deactivate_push_tokens(text, bigint, uuid, text, uuid, text, text[])',
-    'public.chat_event_record_push_attempt(text, bigint, uuid, text, uuid, jsonb)'
-  ] LOOP
-    EXECUTE pg_catalog.format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', v_signature);
-    EXECUTE pg_catalog.format('GRANT EXECUTE ON FUNCTION %s TO anon, service_role', v_signature);
-  END LOOP;
-END;
-$chat_push_grants$;
+REVOKE ALL ON FUNCTION public.chat_event_claim_push(text, bigint, uuid, text, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.chat_event_claim_push(text, bigint, uuid, text, uuid) TO anon, service_role;
+REVOKE ALL ON FUNCTION public.chat_event_push_tokens(text, bigint, uuid, text, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.chat_event_push_tokens(text, bigint, uuid, text, uuid) TO anon, service_role;
+REVOKE ALL ON FUNCTION public.chat_event_store_push_tickets(text, bigint, uuid, text, uuid, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.chat_event_store_push_tickets(text, bigint, uuid, text, uuid, jsonb) TO anon, service_role;
+REVOKE ALL ON FUNCTION public.chat_event_deactivate_push_tokens(text, bigint, uuid, text, uuid, text, text[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.chat_event_deactivate_push_tokens(text, bigint, uuid, text, uuid, text, text[]) TO anon, service_role;
+REVOKE ALL ON FUNCTION public.chat_event_record_push_attempt(text, bigint, uuid, text, uuid, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.chat_event_record_push_attempt(text, bigint, uuid, text, uuid, jsonb) TO anon, service_role;
 
 COMMIT;

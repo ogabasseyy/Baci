@@ -23,6 +23,7 @@ export const CONSENT_FORM_BACKSTOP_MS = 120_000;
 export type ConsentBeforeTrackingOutcome =
   | 'done'
   | 'error'
+  | 'fallback'
   | 'skipped'
   | 'timeout';
 
@@ -44,10 +45,24 @@ function areMobileAdsEnabled(): boolean {
  * is shown once. Never rejects, and resolves without waiting when ads are
  * off or the ads module is missing, so the tracking prompt always runs.
  */
+function positiveFinite(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export async function gatherConsentBeforeTracking(
-  updateWatchdogMs: number = CONSENT_UPDATE_WATCHDOG_MS,
-  formBackstopMs: number = CONSENT_FORM_BACKSTOP_MS
+  requestedWatchdogMs: number = CONSENT_UPDATE_WATCHDOG_MS,
+  requestedBackstopMs: number = CONSENT_FORM_BACKSTOP_MS
 ): Promise<ConsentBeforeTrackingOutcome> {
+  // These control a launch-blocking wait, so bad values fall back to the
+  // defaults and the backstop can never be shorter than the watchdog.
+  const updateWatchdogMs = positiveFinite(
+    requestedWatchdogMs,
+    CONSENT_UPDATE_WATCHDOG_MS
+  );
+  const formBackstopMs = Math.max(
+    positiveFinite(requestedBackstopMs, CONSENT_FORM_BACKSTOP_MS),
+    updateWatchdogMs
+  );
   let watchdog: ReturnType<typeof setTimeout> | null = null;
   let backstop: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -59,7 +74,12 @@ export async function gatherConsentBeforeTracking(
     // absorbed inside prepareQuizMobileAdsConsent), and later ad placements
     // share it.
     return await Promise.race<ConsentBeforeTrackingOutcome>([
-      prepareQuizMobileAdsConsent().then(() => 'done' as const),
+      prepareQuizMobileAdsConsent().then(() =>
+        // A refresh that failed falls back to the previous consent state.
+        getQuizMobileAdsConsentStage() === 'failed'
+          ? ('fallback' as const)
+          : ('done' as const)
+      ),
       new Promise<ConsentBeforeTrackingOutcome>((resolve) => {
         watchdog = setTimeout(() => {
           // Nothing on screen yet: give up. Otherwise a person may be

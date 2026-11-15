@@ -84,7 +84,12 @@ type QuizMobileAdsConsent = {
  * nothing on screen; `form` means Google's message may be showing and a
  * person may be reading it.
  */
-export type QuizMobileAdsConsentStage = 'idle' | 'updating' | 'form' | 'done';
+export type QuizMobileAdsConsentStage =
+  | 'idle'
+  | 'updating'
+  | 'form'
+  | 'done'
+  | 'failed';
 
 let consentStage: QuizMobileAdsConsentStage = 'idle';
 
@@ -111,12 +116,14 @@ export function prepareQuizMobileAdsConsent(
           await adsConsent.requestInfoUpdate();
           consentStage = 'form';
           await adsConsent.loadAndShowConsentFormIfRequired();
+          consentStage = 'done';
         } catch {
+          // 'failed' still resolves the promise (the previous consent state
+          // is used) but lets callers tell it apart from a completed refresh.
+          consentStage = 'failed';
           log.warn(
             'Consent refresh unavailable; checking the previous consent state.'
           );
-        } finally {
-          consentStage = 'done';
         }
       })
       .catch((error) => {

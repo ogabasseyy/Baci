@@ -89,7 +89,7 @@ describe('bugfix: the tracking prompt fired before the consent message', () => {
     expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledWith('ATT Consent Gate', {
       outcome: 'done',
-      appStateBeforeConsent: AppState.currentState,
+      appStateBeforeConsent: AppState.currentState ?? 'unknown',
     });
   });
 
@@ -108,7 +108,7 @@ describe('bugfix: the tracking prompt fired before the consent message', () => {
     expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledWith('ATT Consent Gate', {
       outcome,
-      appStateBeforeConsent: AppState.currentState,
+      appStateBeforeConsent: AppState.currentState ?? 'unknown',
     });
   });
 

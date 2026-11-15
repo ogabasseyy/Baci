@@ -128,4 +128,56 @@ describe('gatherConsentBeforeTracking', () => {
 
     await expect(pending).resolves.toBe('timeout');
   });
+
+  it("reports 'fallback' when the consent refresh failed and the previous state is used", async () => {
+    setEnv('true', undefined);
+    mockStage.mockReturnValue('failed');
+
+    await expect(gatherConsentBeforeTracking()).resolves.toBe('fallback');
+  });
+
+  it.each([
+    [Number.NaN, -5],
+    [-1, 0],
+    [Number.POSITIVE_INFINITY, Number.NaN],
+  ])('falls back to the defaults for unusable durations (%s, %s)', async (watchdog, backstop) => {
+    jest.useFakeTimers();
+    setEnv('true', undefined);
+    mockStage.mockReturnValue('updating');
+    mockPrepareConsent.mockReturnValue(new Promise<void>(() => undefined));
+    const outcomes: string[] = [];
+
+    const pending = gatherConsentBeforeTracking(watchdog, backstop).then(
+      (outcome) => {
+        outcomes.push(outcome);
+        return outcome;
+      }
+    );
+    await jest.advanceTimersByTimeAsync(CONSENT_UPDATE_WATCHDOG_MS - 1);
+    expect(outcomes).toEqual([]);
+    await jest.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toBe('timeout');
+  });
+
+  it('never lets the backstop be shorter than the watchdog', async () => {
+    jest.useFakeTimers();
+    setEnv('true', undefined);
+    mockStage.mockReturnValue('form');
+    mockPrepareConsent.mockReturnValue(new Promise<void>(() => undefined));
+    const outcomes: string[] = [];
+
+    const pending = gatherConsentBeforeTracking(5_000, 1_000).then(
+      (outcome) => {
+        outcomes.push(outcome);
+        return outcome;
+      }
+    );
+    await jest.advanceTimersByTimeAsync(4_999);
+    expect(outcomes).toEqual([]);
+    await jest.advanceTimersByTimeAsync(1);
+    await jest.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toBe('timeout');
+  });
 });

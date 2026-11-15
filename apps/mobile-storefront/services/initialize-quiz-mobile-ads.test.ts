@@ -133,7 +133,7 @@ describe('initializeQuizMobileAds', () => {
     expect(getQuizMobileAdsConsentStage()).toBe('done');
   });
 
-  it('does not show the form when the info update fails, and still finishes', async () => {
+  it('does not show the form when the info update fails, and finishes as failed', async () => {
     mockRequestInfoUpdate.mockRejectedValueOnce(new Error('offline'));
     const { getQuizMobileAdsConsentStage, prepareQuizMobileAdsConsent } =
       await loadInitializer();
@@ -141,7 +141,7 @@ describe('initializeQuizMobileAds', () => {
     await expect(prepareQuizMobileAdsConsent()).resolves.toBeUndefined();
 
     expect(mockLoadForm).not.toHaveBeenCalled();
-    expect(getQuizMobileAdsConsentStage()).toBe('done');
+    expect(getQuizMobileAdsConsentStage()).toBe('failed');
     expect(mockWarn).toHaveBeenCalled();
   });
 

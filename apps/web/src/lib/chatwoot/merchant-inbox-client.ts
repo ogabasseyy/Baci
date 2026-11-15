@@ -91,7 +91,7 @@ export async function listMerchantInboxConversations(
   if (!response.ok) return failure(response);
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
-  const { meta, payload } = parsed.data.data;
+  const { payload } = parsed.data.data;
   const conversations = payload
     .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
     .filter((value): value is MerchantInboxConversation => value !== null)
@@ -101,18 +101,14 @@ export async function listMerchantInboxConversations(
         (b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0) -
         (a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0)
     );
-  // The provider's page size is a server setting it does not let a caller
-  // pin, so nothing here assumes one. With a total, a page this long repeated
-  // `page` times that still falls short of the total means more exists.
-  // Without a total, any non-empty page may have a successor. Either way a
-  // page is never skipped, paging ends on an empty page, and the worst case
-  // is one empty follow-up fetch. Fullness is measured on the provider's
-  // page, not on the rows kept for this inbox, because that is what decides
-  // whether a next page exists.
-  const total = meta?.all_count;
-  const hasMore =
-    payload.length > 0 &&
-    (typeof total !== 'number' || input.page * payload.length < total);
+  // The provider's page size is a server setting a caller cannot pin, and its
+  // total is read before the page rows, so a conversation arriving between
+  // the two makes the total stale. Neither is trusted to end paging: any
+  // non-empty provider page may have a successor, a page is never skipped,
+  // paging ends on an empty page, and the worst case is one empty follow-up
+  // fetch. Measured on the provider's page, not on the rows kept for this
+  // inbox, because that is what decides whether a next page exists.
+  const hasMore = payload.length > 0;
   return { ok: true, conversations, hasMore };
 }
 

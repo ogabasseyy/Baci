@@ -84,11 +84,11 @@ describe('listMerchantInboxConversations', () => {
   it.each([
     // [page, rows on this provider page, provider total, expected]
     [1, 25, 26, true],
-    [1, 25, 25, false],
+    [1, 25, 25, true], // the total may be stale: a 26th conversation can exist
     [1, 10, 30, true], // a provider configured for 10 per page
-    [3, 10, 30, false],
+    [3, 10, 30, true], // never ended by the total alone
     [2, 0, 25, false], // an empty page always ends paging
-    [1, 21, 21, false],
+    [1, 21, 21, true],
   ])('page %i with %i rows of %i total has more: %s', async (page, rows, total, expected) => {
     stubFetch(() => ({
       body: {

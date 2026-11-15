@@ -6,7 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import QuizRoute from '@/app/quiz';
-import Colors from '@/constants/Colors';
+import { QUIZ_STAGE_COLORS } from '@/components/quiz/quiz-stage-colors';
 import {
   fetchQuizEvents,
   type QuizEvent,
@@ -200,7 +200,7 @@ describe('/quiz screen', () => {
       )
     ).toBeOnTheScreen();
     expect(screen.getByLabelText('icon:podium-outline')).toHaveStyle({
-      color: Colors.light.primary,
+      color: QUIZ_STAGE_COLORS.warning,
     });
   });
 

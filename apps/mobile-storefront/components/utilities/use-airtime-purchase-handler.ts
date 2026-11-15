@@ -248,9 +248,9 @@ export function useAirtimePurchaseHandler({
       request,
       onSuccess,
       phoneNumber,
-      isRetainedReplay
+      isRetainedReplay,
+      getIsActive
     );
-    // Left the screen during the key lookup: charge nothing (Codex P2).
     if (handedOver || (getIsActive && !getIsActive())) {
       isSubmittingRef.current = false;
       return;

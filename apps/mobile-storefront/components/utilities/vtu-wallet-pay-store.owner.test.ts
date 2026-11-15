@@ -47,3 +47,22 @@ describe('bugfix: an account switch during the kept-key lookup handed the form t
     useVtuWalletPayStore.setState({ pending: null });
   });
 });
+
+describe('bugfix: leaving the screen during the retained-key lookup installed an orphan handoff (Codex P2)', () => {
+  it('opens no sheet and takes no checkout slot when the screen is gone after the lookup', async () => {
+    useVtuWalletPayStore.setState({
+      covers: () => true,
+      retains: async () => true,
+      pending: null,
+    });
+    const handled = await payFromPiggyvest(
+      request,
+      () => undefined,
+      '08031234567',
+      false,
+      () => false
+    );
+    expect(handled).toBe(true);
+    expect(useVtuWalletPayStore.getState().pending).toBeNull();
+  });
+});

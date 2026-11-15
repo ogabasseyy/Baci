@@ -134,7 +134,8 @@ export function createBillFormPurchaseHandler({
         request,
         onSuccess,
         customerId,
-        isRetainedReplay
+        isRetainedReplay,
+        getIsActive
       );
       // Left the screen during the retained-key lookup: charge nothing (Codex P2).
       if (handedOver || (getIsActive && !getIsActive()))

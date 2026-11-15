@@ -96,7 +96,9 @@ export async function payFromPiggyvest(
   onSuccess: (result: VtuPiggyvestSuccess) => void,
   customerIdentifier: string,
   /** The form's retained-replay peek, taken once before this call. */
-  isRetainedReplay: boolean
+  isRetainedReplay: boolean,
+  /** Whether the screen is still here; false after the lookup = handled. */
+  getIsActive?: () => boolean
 ): Promise<boolean> {
   // A store credit attempt that was charged but never answered must replay
   // on its own key, never be forked into a second (PiggyVest) purchase.
@@ -112,6 +114,9 @@ export async function payFromPiggyvest(
     .catch(() => true);
   // Switched meanwhile: the stale form is dropped (handled, nothing paid).
   if ((useAuthStore.getState().user?.id ?? null) !== owner) return true;
+  // The customer left while the lookup ran: the host is gone, so no sheet is
+  // opened and no checkout slot is taken (Codex P2).
+  if (getIsActive && !getIsActive()) return true;
   return openVtuWalletPay(
     request,
     (result) =>

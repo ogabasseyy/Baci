@@ -121,12 +121,13 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
+    const claimNow = new Date().toISOString();
     const { data: claimedRows, error: updateError } = await supabase
       .from('blog_posts')
       .update({ status: 'published' })
       .in('id', postIds)
       .eq('status', 'scheduled')
-      .lte('published_at', now)
+      .lte('published_at', claimNow)
       .select('id, status');
 
     if (updateError) {

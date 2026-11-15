@@ -201,7 +201,8 @@ export async function updateBlogPost(
     if (
       targetStatus === 'scheduled' &&
       !updateData.published_at &&
-      !existingPost.published_at
+      !existingPost.published_at &&
+      !existingPost.requested_publish_at
     ) {
       return blogPostError(
         'published_at is required when status is scheduled',

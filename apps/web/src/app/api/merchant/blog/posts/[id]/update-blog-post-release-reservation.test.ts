@@ -319,4 +319,49 @@ describe('updateBlogPost release reservation handling', () => {
     expect(response.status).toBe(400);
     expect(mocks.persistBlogPostMutation).not.toHaveBeenCalled();
   });
+
+  it('allows editing a scheduled post when published_at is null but requested_publish_at is set', async () => {
+    const supabase = createUpdateSupabaseMock();
+    mocks.authenticate.mockResolvedValue({ supabase, user: { id: 'user-1' } });
+    mocks.loadPost.mockResolvedValue({
+      kind: 'found',
+      post: makeExistingPost({
+        id: 'post-sched-req-only',
+        published_at: null,
+        requested_publish_at: '2026-11-16T10:00:00.000Z',
+        status: 'scheduled',
+      }),
+    });
+    mocks.persistBlogPostMutation.mockResolvedValue({
+      error: null,
+      post: {
+        category: 'guides',
+        content: 'Scheduled body',
+        excerpt: null,
+        id: 'post-sched-req-only',
+        published_at: null,
+        slug: 'reserved-post',
+        status: 'scheduled',
+        title: 'Updated Scheduled Title',
+      },
+      status: null,
+    });
+
+    const response = await updateBlogPost(
+      new NextRequest(
+        'http://localhost/api/merchant/blog/posts/post-sched-req-only?merchantId=merchant-1',
+        {
+          body: JSON.stringify({
+            status: 'scheduled',
+            title: 'Updated Scheduled Title',
+          }),
+          method: 'PATCH',
+        }
+      ),
+      { params: Promise.resolve({ id: 'post-sched-req-only' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.persistBlogPostMutation).toHaveBeenCalledTimes(1);
+  });
 });

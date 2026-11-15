@@ -14,18 +14,17 @@ const mocks = vi.hoisted(() => ({
   record: vi.fn(),
   resolveContext: vi.fn(),
   rpc: vi.fn(),
-  upsert: vi.fn(),
 }));
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    from: () => ({ insert: mocks.insert, upsert: mocks.upsert }),
+    from: () => ({ insert: mocks.insert }),
     rpc: mocks.rpc,
   }),
 }));
 vi.mock('@/lib/events/event-ingress-capability', () => ({
   createEventIngressClient: () => ({
-    from: () => ({ insert: mocks.insert, upsert: mocks.upsert }),
+    from: () => ({ insert: mocks.insert }),
     rpc: mocks.rpc,
   }),
 }));
@@ -95,13 +94,12 @@ export function resetPipelineMocks() {
     mocks.afterCallbacks.push(callback);
   });
   mocks.insert.mockResolvedValue({ error: null });
-  mocks.upsert.mockResolvedValue({ error: null });
   mocks.isConversionEvent.mockReturnValue(false);
   mocks.isLegacyFanoutDisabled.mockReturnValue(false);
   mocks.isPipelineEnabled.mockReturnValue(true);
   mocks.record.mockResolvedValue({ queue_message_id: 1 });
   mocks.createServerClient.mockResolvedValue({
-    from: () => ({ insert: mocks.insert, upsert: mocks.upsert }),
+    from: () => ({ insert: mocks.insert }),
     rpc: mocks.rpc,
   });
   mocks.createServiceClient.mockReturnValue({ from: vi.fn() });

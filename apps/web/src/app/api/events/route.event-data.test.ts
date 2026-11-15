@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventRouteRequest } from './route.test-support';
 
-const mocks = vi.hoisted(() => ({ upsert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ insert: vi.fn() }));
 vi.mock('@/lib/events/event-ingress-capability', () => ({
   createEventIngressClient: () => ({
-    from: () => ({ insert: vi.fn(), upsert: mocks.upsert }),
+    from: () => ({ insert: mocks.insert }),
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
@@ -23,7 +23,7 @@ import { POST } from './route';
 describe('POST /api/events event data', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.insert.mockResolvedValue({ error: null });
   });
 
   it.each([
@@ -53,7 +53,7 @@ describe('POST /api/events event data', () => {
     ],
   ])('builds event-specific data', async (input, eventData) => {
     await POST(eventRouteRequest({ ...input, event_id: 'event-1' }));
-    expect(mocks.upsert).toHaveBeenCalledWith(
+    expect(mocks.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         event_data: {
           ...eventData,
@@ -62,8 +62,7 @@ describe('POST /api/events event data', () => {
             ? { targets: [] }
             : {}),
         },
-      }),
-      expect.any(Object)
+      })
     );
   });
 
@@ -75,9 +74,8 @@ describe('POST /api/events event data', () => {
         event_type: 'custom_event',
       })
     );
-    expect(mocks.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ event_data: { custom_data: { answer: 42 } } }),
-      expect.any(Object)
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ event_data: { custom_data: { answer: 42 } } })
     );
   });
 
@@ -89,7 +87,7 @@ describe('POST /api/events event data', () => {
         product_id: 'sku-1',
       })
     );
-    const row = mocks.upsert.mock.calls[0]?.[0];
+    const row = mocks.insert.mock.calls[0]?.[0];
     expect(row.event_data).toEqual({
       product_id: 'sku-1',
       targets: [],

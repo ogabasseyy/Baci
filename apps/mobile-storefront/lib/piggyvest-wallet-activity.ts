@@ -15,12 +15,15 @@ export async function fetchPiggyvestWalletActivity(input: {
   merchantId: string;
   userId?: string;
   cursor?: string | null;
+  /** A shorter timeout than the default, for "Show more". */
+  timeoutMs?: number;
 }): Promise<PiggyvestWalletActivityPage> {
   const query = new URLSearchParams({ merchantId: input.merchantId });
   if (input.cursor) query.set('cursor', input.cursor);
   const data = await createStorefrontCustomerApiClient().fetchJson({
     path: `${PATH}?${query.toString()}`,
     expectedUserId: input.userId,
+    ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
   });
   const page = piggyvestWalletActivityPageSchema.safeParse(data);
   if (!page.success) throw new Error('We couldn’t load your wallet activity.');

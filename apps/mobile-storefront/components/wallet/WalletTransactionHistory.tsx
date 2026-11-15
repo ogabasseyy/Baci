@@ -6,10 +6,12 @@ import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { styles } from './wallet.styles';
+import { walletListLayout } from './wallet-list-layout';
 
-// Says what this list covers: the PiggyVest wallet has its own list above.
+// Says what this list covers: the wallet has its own list above. Never
+// names the provider (owner rule).
 export const STORE_CREDIT_SCOPE_COPY =
-  'Only older store credit, for purchases. Your PiggyVest savings wallet activity is listed above.';
+  'Only older store credit, for purchases. Your wallet activity is listed above.';
 
 /** The list's heading for PiggyVest customers: the older balance only. */
 export const STORE_CREDIT_HISTORY_TITLE = 'Older store credit';
@@ -89,6 +91,7 @@ export function WalletTransactionHistory({
         { backgroundColor: colors.card },
         // Aligned with the card edges above it (walk-through).
         primaryReady && localStyles.alignedSection,
+        primaryReady && walletListLayout.aligned,
       ]}
     >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -101,7 +104,12 @@ export function WalletTransactionHistory({
       ) : null}
 
       {transactions.length === 0 ? (
-        <View style={styles.emptyTransactions}>
+        <View
+          style={[
+            styles.emptyTransactions,
+            primaryReady && walletListLayout.centred,
+          ]}
+        >
           <Ionicons
             accessible={false}
             importantForAccessibility="no"

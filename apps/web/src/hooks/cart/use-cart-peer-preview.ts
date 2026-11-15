@@ -5,6 +5,7 @@ import {
   type CartPeerChannel,
   type CartPeerLine,
   type CartPeerMessage,
+  createCartPeerSender,
   type OpenCartPeerChannel,
   openCartPeerChannel,
   readCartPeerMessage,
@@ -59,7 +60,8 @@ export function useCartPeerPreview(
   /** The last edit announced in this run of pending work, if any. */
   const lastPosted = useRef<string | null>(null);
   const lastEdit = useRef<CartPeerMessage | null>(null);
-  const [sender] = useState(() => crypto.randomUUID());
+  // Stable for the life of this tab's cart hook, across carts.
+  const [sender] = useState(createCartPeerSender);
   // Advance only after commit so a message never reads an abandoned render.
   useEffect(() => {
     latest.current = context;
@@ -130,7 +132,7 @@ export function useCartPeerPreview(
     };
   }, [ready, merchantId, cartId, sessionGeneration, open]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cartId and merchantId changes reopen the channel above, which resets this sender.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cartId and merchantId changes reopen the channel above, which clears the last-posted refs this effect reads; sender is stable for the hook's life.
   useEffect(() => {
     const channel = channelRef.current;
     const confirmed = state.confirmed;

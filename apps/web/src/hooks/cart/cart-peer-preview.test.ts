@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyCartPeerPreview,
   buildCartPeerLines,
+  createCartPeerSender,
   readCartPeerMessage,
 } from './cart-peer-preview';
 import type { SharedCartDisplayItem } from './cart-types';
@@ -109,6 +110,42 @@ describe('cart peer preview messages', () => {
     },
   ])('rejects malformed message %#', (value) => {
     expect(readCartPeerMessage(value)).toBeNull();
+  });
+
+  it('rejects a message that names the same line twice', () => {
+    expect(
+      readCartPeerMessage({
+        cartId: 'c',
+        kind: 'edit',
+        lines: [
+          { id: 'l1', quantity: 2 },
+          { id: 'l1', quantity: 3 },
+        ],
+        merchantId: 'm',
+        sender: 'tab-a',
+        version: 3,
+      })
+    ).toBeNull();
+  });
+
+  it('labels a tab even where randomUUID is unavailable', () => {
+    vi.stubGlobal('crypto', {});
+    try {
+      const sender = createCartPeerSender();
+      expect(sender).toMatch(/^tab-/);
+      expect(
+        readCartPeerMessage({
+          cartId: 'c',
+          kind: 'settled',
+          merchantId: 'm',
+          sender,
+          version: 1,
+        })
+      ).not.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(createCartPeerSender()).not.toBe(createCartPeerSender());
   });
 
   it('sends every line the server knows, including one with an add merged in', () => {

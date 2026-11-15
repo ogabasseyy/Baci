@@ -56,17 +56,20 @@ function isId(value: unknown): value is string {
 function readLines(value: unknown): CartPeerLine[] | null {
   if (!Array.isArray(value) || value.length > MAX_LINES) return null;
   const lines: CartPeerLine[] = [];
+  const seen = new Set<string>();
   for (const entry of value) {
     if (typeof entry !== 'object' || entry === null) return null;
     const { id, quantity } = entry as Record<string, unknown>;
     if (
       !isId(id) ||
+      seen.has(id) ||
       typeof quantity !== 'number' ||
       !Number.isInteger(quantity) ||
       quantity < 1 ||
       quantity > SHARED_CART_MAX_QUANTITY_PER_LINE
     )
       return null;
+    seen.add(id);
     lines.push({ id, quantity });
   }
   return lines;
@@ -133,6 +136,24 @@ export function applyCartPeerPreview(
     if (quantity === undefined) return [];
     return quantity === line.quantity ? [line] : [{ ...line, quantity }];
   });
+}
+
+/**
+ * A per-tab label for routing settle messages, not a secret. randomUUID is
+ * missing on plain-HTTP origins and older browsers, and this runs during
+ * render, so it must never throw.
+ */
+export function createCartPeerSender(): string {
+  try {
+    if (
+      typeof crypto !== 'undefined' &&
+      typeof crypto.randomUUID === 'function'
+    )
+      return crypto.randomUUID();
+  } catch {
+    /* Fall through to the non-cryptographic label. */
+  }
+  return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 /** Browsers without BroadcastChannel keep the server-driven update. */

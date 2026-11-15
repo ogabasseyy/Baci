@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -10,10 +9,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual = await vi.importActual('next/server');
+  const actual: Record<string, unknown> = await vi.importActual('next/server');
   return { ...actual, after: mocks.after };
 });
-
 vi.mock('@/lib/chatwoot/chat-webhook-config', () => ({
   getChatWebhookBinding: mocks.getBinding,
 }));
@@ -27,57 +25,13 @@ vi.mock('@/lib/chatwoot/chat-event-intake', () => ({
     (value ?? '').replace(/\s+/g, ' ').trim().slice(0, max),
   recordChatCustomerMessage: mocks.record,
 }));
-
 vi.mock('@/lib/chatwoot/chat-event-push', () => ({
   sendChatEventPush: mocks.push,
 }));
 
-import { POST } from './route';
+import { binding, call, KEY, payload } from './route.test-support';
 
-const KEY = 'synthetic-webhook-key-aaaa';
-const binding = {
-  merchantId: '11111111-1111-4111-8111-111111111111',
-  accountId: 2,
-  inboxId: 20,
-  webhookKey: KEY,
-  webhookSecret: 'synthetic-webhook-signing-secret-0001',
-};
-
-function payload(overrides: Record<string, unknown> = {}) {
-  return {
-    event: 'message_created',
-    id: 128,
-    message_type: 'incoming',
-    private: false,
-    content: '  Do you have\nthe Demo Phone X?  ',
-    account: { id: 2, name: 'Synthetic' },
-    inbox: { id: 20 },
-    conversation: { id: 21, messages: [{ id: 1 }] },
-    sender: { name: ' Ada ', email: 'hidden@example.invalid' },
-    ...overrides,
-  };
-}
-
-function call(
-  body: unknown,
-  raw = false,
-  headers: Record<string, string> = {}
-) {
-  const text = raw ? String(body) : JSON.stringify(body);
-  return POST(
-    new NextRequest(`https://app.example.test/api/webhooks/chatwoot/${KEY}`, {
-      method: 'POST',
-      body: text,
-      headers: {
-        'content-type': 'application/json',
-        'x-chatwoot-signature': 'sha256=abc',
-        'x-chatwoot-timestamp': '1794730000',
-        ...headers,
-      },
-    }),
-    { params: Promise.resolve({ webhookKey: KEY }) }
-  );
-}
+const pending: Promise<void>[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,9 +49,6 @@ beforeEach(() => {
   });
   pending.length = 0;
 });
-
-const pending: Promise<void>[] = [];
-const settle = () => Promise.all(pending);
 
 describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
   it('records a signed customer message for the bound store', async () => {
@@ -223,113 +174,5 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
       error: 'Temporarily unavailable',
       code: 'temporarily_unavailable',
     });
-  });
-
-  it('pushes once for a newly notified message', async () => {
-    await call(payload());
-    await settle();
-    expect(mocks.push).toHaveBeenCalledOnce();
-    expect(mocks.push).toHaveBeenCalledWith({
-      merchantId: binding.merchantId,
-      eventKey: 'chat-msg-2-128',
-      conversationId: 21,
-      customerName: 'Ada',
-      preview: 'Do you have the Demo Phone X?',
-    });
-  });
-
-  it.each([
-    ['a redelivered message', { outcome: 'notified', duplicate: true }],
-    ['a merged message', { outcome: 'coalesced', duplicate: false }],
-    ['a muted store', { outcome: 'muted', duplicate: false }],
-    ['an unknown store', { outcome: 'ignored', duplicate: false }],
-  ])('does not push for %s', async (_label, outcome) => {
-    mocks.record.mockResolvedValue({ ok: true, ...outcome });
-    const response = await call(payload());
-    await settle();
-    expect(response.status).toBe(200);
-    expect(mocks.push).not.toHaveBeenCalled();
-    expect(mocks.after).not.toHaveBeenCalled();
-  });
-
-  it('still acknowledges the webhook when the push fails', async () => {
-    mocks.push.mockRejectedValue(new Error('expo down'));
-    const response = await call(payload());
-    await settle();
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      received: true,
-      handled: true,
-    });
-  });
-
-  it.each([
-    ['a failed push', { status: 'failed' }, 'failed'],
-    [
-      'a missing push secret',
-      { status: 'skipped', reason: 'not_configured' },
-      'skipped:not_configured',
-    ],
-  ])('logs %s without customer text', async (_label, push, status) => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mocks.push.mockResolvedValue(push);
-    const response = await call(payload());
-    await settle();
-
-    expect(response.status).toBe(200);
-    expect(warn).toHaveBeenCalledWith('Chat message push was not sent', {
-      eventKey: 'chat-msg-2-128',
-      merchantId: binding.merchantId,
-      status,
-    });
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('Demo Phone');
-    warn.mockRestore();
-  });
-
-  it('logs a push that threw', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mocks.push.mockRejectedValue(new Error('expo down'));
-    await call(payload());
-    await settle();
-    expect(warn).toHaveBeenCalledWith(
-      'Chat message push was not sent',
-      expect.objectContaining({ status: 'failed' })
-    );
-    warn.mockRestore();
-  });
-
-  it.each([
-    ['a sent push', { status: 'sent', sent: 1, failed: 0 }],
-    [
-      'a claim lost to another delivery',
-      { status: 'skipped', reason: 'already_claimed' },
-    ],
-  ])('does not log %s', async (_label, push) => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mocks.push.mockResolvedValue(push);
-    await call(payload());
-    await settle();
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  it('does not push when the notification could not be recorded', async () => {
-    mocks.record.mockResolvedValue({ ok: false, code: 'unavailable' });
-    await call(payload());
-    await settle();
-    expect(mocks.push).not.toHaveBeenCalled();
-  });
-
-  it('answers 200 even when the push never settles', async () => {
-    mocks.push.mockReturnValue(new Promise(() => undefined));
-    const response = await call(payload());
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      received: true,
-      handled: true,
-    });
-    // The push was only scheduled, not awaited by the handler.
-    expect(mocks.after).toHaveBeenCalledOnce();
-    expect(mocks.push).toHaveBeenCalledOnce();
   });
 });

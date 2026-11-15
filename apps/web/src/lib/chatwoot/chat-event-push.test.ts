@@ -1,0 +1,114 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  notify: vi.fn(),
+  createStore: vi.fn(() => ({ store: true })),
+}));
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: () => ({ rpc: mocks.rpc }),
+}));
+vi.mock('@/lib/expo-push-core', () => ({
+  notifyMerchantWithStore: mocks.notify,
+}));
+vi.mock('@/lib/expo-client', () => ({ getExpoClient: () => ({}) }));
+vi.mock('./chat-event-push-store', async (importActual) => ({
+  ...(await importActual<typeof import('./chat-event-push-store')>()),
+  createChatEventPushStore: mocks.createStore,
+}));
+
+import { sendChatEventPush } from './chat-event-push';
+
+const SECRET = 'synthetic-chat-event-secret-0123456789abcdef';
+const env = {
+  EKAETTE_CHAT_EVENT_RPC_SECRET: SECRET,
+} as unknown as NodeJS.ProcessEnv;
+const input = {
+  merchantId: 'c4a70000-0000-4000-8000-0000000000b1',
+  eventKey: 'chat-msg-2-128',
+  conversationId: 21,
+  customerName: 'Ada',
+  preview: 'Is it in stock?',
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.rpc.mockResolvedValue({ data: true, error: null });
+  mocks.notify.mockResolvedValue({ sent: 2, failed: 0, errors: [] });
+});
+
+describe('sendChatEventPush', () => {
+  it('claims the event, then pushes to the store merchant app', async () => {
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'sent',
+      sent: 2,
+      failed: 0,
+    });
+
+    const [name, args] = mocks.rpc.mock.calls[0];
+    expect(name).toBe('chat_event_claim_push');
+    expect(args).toMatchObject({
+      p_merchant_id: input.merchantId,
+      p_event_key: 'chat-msg-2-128',
+    });
+    expect(args.p_claim).toMatch(/^[0-9a-f-]{36}$/);
+    // The store is built for the same claim that was taken.
+    expect(mocks.createStore).toHaveBeenCalledWith(expect.anything(), SECRET, {
+      merchantId: input.merchantId,
+      eventKey: 'chat-msg-2-128',
+      claim: args.p_claim,
+    });
+    expect(mocks.notify).toHaveBeenCalledWith(
+      { store: true },
+      input.merchantId,
+      'New message from Ada',
+      'Is it in stock?',
+      { type: 'customer_message', conversation_id: 21 },
+      'general'
+    );
+  });
+
+  it('uses neutral wording when the customer has no name or text', async () => {
+    await sendChatEventPush({ ...input, customerName: '', preview: '' }, env);
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.anything(),
+      input.merchantId,
+      'New customer message',
+      'A customer sent a message to your store.',
+      expect.anything(),
+      'general'
+    );
+  });
+
+  it('does not push when the claim was already taken', async () => {
+    mocks.rpc.mockResolvedValue({ data: false, error: null });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'already_claimed',
+    });
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+
+  it('does not push when the claim call fails', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'failed',
+    });
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+
+  it('does nothing without a configured secret', async () => {
+    await expect(
+      sendChatEventPush(input, {} as unknown as NodeJS.ProcessEnv)
+    ).resolves.toEqual({ status: 'skipped', reason: 'not_configured' });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('reports a failure instead of throwing when delivery throws', async () => {
+    mocks.notify.mockRejectedValue(new Error('expo down'));
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'failed',
+    });
+  });
+});

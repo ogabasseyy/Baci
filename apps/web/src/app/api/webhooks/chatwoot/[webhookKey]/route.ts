@@ -5,6 +5,7 @@ import {
   normalizeChatEventText,
   recordChatCustomerMessage,
 } from '@/lib/chatwoot/chat-event-intake';
+import { sendChatEventPush } from '@/lib/chatwoot/chat-event-push';
 import { readChatWebhookBody } from '@/lib/chatwoot/chat-webhook-body';
 import { getChatWebhookBinding } from '@/lib/chatwoot/chat-webhook-config';
 import { verifyChatWebhookSignature } from '@/lib/chatwoot/chat-webhook-signature';
@@ -29,6 +30,8 @@ function respond(status: number, body: Record<string, unknown>) {
  *   not reveal which stores exist.
  * - Events that are not a public customer message for the bound inbox are
  *   acknowledged and dropped (200), so the sender does not retry them.
+ * - A newly notified message is also pushed to the store's merchant-app
+ *   devices, best effort and at most once per message.
  * - A database or configuration failure is 503, so the sender may retry;
  *   a redelivery is harmless because the database removes duplicates.
  */
@@ -86,7 +89,7 @@ export async function POST(
     return respond(200, { received: true, handled: false });
   }
 
-  const result = await recordChatCustomerMessage({
+  const chatEvent = {
     merchantId: binding.merchantId,
     // Stable per provider message. The prefix keeps even the smallest ids
     // within the 8-80 characters the database intake requires.
@@ -100,12 +103,23 @@ export async function POST(
       event.content,
       CHAT_EVENT_PREVIEW_MAX_LENGTH
     ),
-  });
+  };
+  const result = await recordChatCustomerMessage(chatEvent);
   if (!result.ok) {
     return respond(503, {
       error: 'Temporarily unavailable',
       code: 'temporarily_unavailable',
     });
+  }
+  // Push only for a newly created notification. It is best effort and at
+  // most once (the database hands out one claim per event), and it never
+  // changes the answer: the notification itself is already recorded.
+  if (result.outcome === 'notified' && !result.duplicate) {
+    try {
+      await sendChatEventPush(chatEvent);
+    } catch {
+      // Swallowed on purpose; see above.
+    }
   }
   return respond(200, { received: true, handled: true });
 }

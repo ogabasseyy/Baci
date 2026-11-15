@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getBinding: vi.fn(),
   verify: vi.fn(),
   record: vi.fn(),
+  push: vi.fn(),
 }));
 
 vi.mock('@/lib/chatwoot/chat-webhook-config', () => ({
@@ -19,6 +20,10 @@ vi.mock('@/lib/chatwoot/chat-event-intake', () => ({
   normalizeChatEventText: (value: string | null | undefined, max: number) =>
     (value ?? '').replace(/\s+/g, ' ').trim().slice(0, max),
   recordChatCustomerMessage: mocks.record,
+}));
+
+vi.mock('@/lib/chatwoot/chat-event-push', () => ({
+  sendChatEventPush: mocks.push,
 }));
 
 import { POST } from './route';
@@ -77,6 +82,7 @@ beforeEach(() => {
     outcome: 'notified',
     duplicate: false,
   });
+  mocks.push.mockResolvedValue({ status: 'sent', sent: 1, failed: 0 });
 });
 
 describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
@@ -203,5 +209,45 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
       error: 'Temporarily unavailable',
       code: 'temporarily_unavailable',
     });
+  });
+
+  it('pushes once for a newly notified message', async () => {
+    await call(payload());
+    expect(mocks.push).toHaveBeenCalledOnce();
+    expect(mocks.push).toHaveBeenCalledWith({
+      merchantId: binding.merchantId,
+      eventKey: 'chat-msg-2-128',
+      conversationId: 21,
+      customerName: 'Ada',
+      preview: 'Do you have the Demo Phone X?',
+    });
+  });
+
+  it.each([
+    ['a redelivered message', { outcome: 'notified', duplicate: true }],
+    ['a merged message', { outcome: 'coalesced', duplicate: false }],
+    ['a muted store', { outcome: 'muted', duplicate: false }],
+    ['an unknown store', { outcome: 'ignored', duplicate: false }],
+  ])('does not push for %s', async (_label, outcome) => {
+    mocks.record.mockResolvedValue({ ok: true, ...outcome });
+    const response = await call(payload());
+    expect(response.status).toBe(200);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('still acknowledges the webhook when the push fails', async () => {
+    mocks.push.mockRejectedValue(new Error('expo down'));
+    const response = await call(payload());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      received: true,
+      handled: true,
+    });
+  });
+
+  it('does not push when the notification could not be recorded', async () => {
+    mocks.record.mockResolvedValue({ ok: false, code: 'unavailable' });
+    await call(payload());
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });

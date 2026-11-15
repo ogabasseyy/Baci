@@ -74,6 +74,32 @@ describe('projectMerchantInboxMessage', () => {
     expect(projectMerchantInboxMessage(message(overrides))).toBeNull();
   });
 
+  it('keeps an attachment-only message as an empty other message', () => {
+    expect(
+      projectMerchantInboxMessage(
+        message({
+          content: null,
+          content_type: 'text',
+          attachments: [
+            { file_type: 'image', data_url: 'https://x.invalid/a' },
+          ],
+        })
+      )
+    ).toEqual({
+      id: 128,
+      sender: 'customer',
+      kind: 'other',
+      text: '',
+      createdAt: CREATED_ISO,
+    });
+  });
+
+  it('still drops an empty text message without attachments', () => {
+    expect(
+      projectMerchantInboxMessage(message({ content: null, attachments: [] }))
+    ).toBeNull();
+  });
+
   it('caps very long text', () => {
     expect(
       projectMerchantInboxMessage(message({ content: 'a'.repeat(9_000) }))?.text
@@ -128,6 +154,20 @@ describe('projectMerchantInboxConversation', () => {
         createdAt: CREATED_ISO,
       },
     });
+  });
+
+  it('previews an attachment-only last message', () => {
+    const result = projectMerchantInboxConversation(
+      {
+        ...conversation,
+        last_non_activity_message: message({
+          content: null,
+          attachments: [{ file_type: 'image' }],
+        }),
+      },
+      2
+    );
+    expect(result?.lastMessage).toMatchObject({ kind: 'other', text: '' });
   });
 
   it('rejects a conversation from another inbox', () => {

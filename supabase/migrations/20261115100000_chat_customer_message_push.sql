@@ -71,18 +71,34 @@ $$;
 REVOKE ALL ON FUNCTION private.chat_event_push_lease(text, bigint, uuid, text, uuid, text) FROM PUBLIC, anon, authenticated, service_role;
 
 -- Users whose merchant-app devices may be told about a customer chat: the
--- owner, and staff allowed to view customers (the inbox permission).
+-- owner, and active staff allowed to view customers (the inbox permission).
+-- check_staff_permission only answers for the calling user or the service
+-- role, and this runs for a caller with no session, so the role claim is
+-- raised for the lookup and restored straight after, exactly as the tracking
+-- worker's recipient lookup does.
 CREATE OR REPLACE FUNCTION private.chat_event_push_recipients(p_merchant_id uuid)
 RETURNS uuid[]
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-  SELECT COALESCE(pg_catalog.array_agg(DISTINCT candidate.user_id), '{}'::uuid[])
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_previous_role text;
+  v_users uuid[];
+BEGIN
+  v_previous_role := pg_catalog.current_setting('request.jwt.claim.role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  SELECT COALESCE(pg_catalog.array_agg(member.user_id), '{}'::uuid[])
+  INTO v_users
   FROM (
-    SELECT m.user_id FROM public.merchants m WHERE m.id = p_merchant_id AND m.user_id IS NOT NULL
+    SELECT m.user_id FROM public.merchants m WHERE m.id = p_merchant_id
     UNION
-    SELECT pt.user_id FROM public.push_tokens pt
-    WHERE pt.merchant_id = p_merchant_id AND pt.app_type = 'admin' AND pt.is_active
-      AND public.check_staff_permission(pt.user_id, p_merchant_id, 'customers', 'view')
-  ) AS candidate;
+    SELECT staff.user_id FROM public.staff_members staff
+    WHERE staff.merchant_id = p_merchant_id
+      AND staff.status = 'active'
+      AND public.check_staff_permission(staff.user_id, staff.merchant_id, 'customers', 'view')
+  ) AS member
+  WHERE member.user_id IS NOT NULL;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', COALESCE(v_previous_role, ''), true);
+  RETURN v_users;
+END;
 $$;
 REVOKE ALL ON FUNCTION private.chat_event_push_recipients(uuid) FROM PUBLIC, anon, authenticated, service_role;
 
@@ -111,18 +127,21 @@ $$;
 CREATE OR REPLACE FUNCTION public.chat_event_push_tokens(
   p_proof text, p_issued_at bigint, p_merchant_id uuid, p_event_key text, p_claim uuid
 ) RETURNS TABLE (token text, platform text)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_merchant uuid;
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_merchant uuid;
+  v_recipients uuid[];
 BEGIN
   v_merchant := private.chat_event_push_lease(p_proof, p_issued_at, p_merchant_id, p_event_key, p_claim, 'tokens');
   IF v_merchant IS NULL THEN RETURN; END IF;
+  v_recipients := private.chat_event_push_recipients(v_merchant);
   RETURN QUERY
   SELECT pt.token, pt.platform
   FROM public.push_tokens pt
   WHERE pt.merchant_id = v_merchant
     AND pt.is_active = true
     AND pt.app_type = 'admin'
-    AND pt.user_id = ANY (private.chat_event_push_recipients(v_merchant))
+    AND pt.user_id = ANY (v_recipients)
   LIMIT 500;
 END;
 $$;
@@ -152,7 +171,9 @@ BEGIN
       SELECT 1 FROM public.push_tokens pt
       WHERE pt.token = ticket ->> 'push_token'
         AND pt.merchant_id = v_merchant AND pt.app_type = 'admin'
-    );
+    )
+  -- Storing the same tickets again (a retried step) is a no-op.
+  ON CONFLICT (ticket_id) DO NOTHING;
   RETURN true;
 END;
 $$;
@@ -190,7 +211,11 @@ BEGIN
   IF v_merchant IS NULL THEN RETURN false; END IF;
   IF p_attempt IS NULL OR pg_catalog.jsonb_typeof(p_attempt) IS DISTINCT FROM 'object'
     OR (p_attempt ->> 'status') IS NULL
-    OR (p_attempt ->> 'status') NOT IN ('sent', 'partial_failure', 'failed', 'skipped_no_tokens') THEN
+    OR (p_attempt ->> 'status') NOT IN ('sent', 'partial_failure', 'failed', 'skipped_no_tokens')
+    -- Counts must be small non-negative whole numbers before they are cast.
+    OR COALESCE(p_attempt ->> 'token_count', '0') !~ '^[0-9]{1,6}$'
+    OR COALESCE(p_attempt ->> 'sent_count', '0') !~ '^[0-9]{1,6}$'
+    OR COALESCE(p_attempt ->> 'failed_count', '0') !~ '^[0-9]{1,6}$' THEN
     RAISE EXCEPTION 'invalid_chat_push_request' USING ERRCODE = '22023';
   END IF;
   INSERT INTO public.push_notification_attempts (

@@ -5,12 +5,20 @@ BEGIN;
 INSERT INTO auth.users (id, instance_id, aud, role, email) VALUES
   ('c4a71000-0000-4000-8000-0000000000a1', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-owner@example.invalid'),
   ('c4a71000-0000-4000-8000-0000000000a2', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-other-owner@example.invalid'),
-  ('c4a71000-0000-4000-8000-0000000000a3', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-outsider@example.invalid');
+  ('c4a71000-0000-4000-8000-0000000000a3', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-outsider@example.invalid'),
+  ('c4a71000-0000-4000-8000-0000000000a4', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-staff-allowed@example.invalid'),
+  ('c4a71000-0000-4000-8000-0000000000a5', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-staff-denied@example.invalid'),
+  ('c4a71000-0000-4000-8000-0000000000a6', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-push-staff-inactive@example.invalid');
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, country, payout_currency) VALUES
   ('c4a71000-0000-4000-8000-0000000000b1', 'c4a71000-0000-4000-8000-0000000000a1', 'chat-push-owner@example.invalid', 'Synthetic Chat Push Store', 'synthetic-chat-push', 'NG', 'NGN'),
   ('c4a71000-0000-4000-8000-0000000000b2', 'c4a71000-0000-4000-8000-0000000000a2', 'chat-push-other-owner@example.invalid', 'Synthetic Chat Push Store Two', 'synthetic-chat-push-two', 'NG', 'NGN');
+-- Staff: one allowed to view customers, one explicitly not, one allowed but inactive.
+INSERT INTO public.staff_members (merchant_id, user_id, email, role, permissions, status) VALUES
+  ('c4a71000-0000-4000-8000-0000000000b1', 'c4a71000-0000-4000-8000-0000000000a4', 'chat-push-staff-allowed@example.invalid', 'blog_manager', '{"customers":{"view":true}}'::jsonb, 'active'),
+  ('c4a71000-0000-4000-8000-0000000000b1', 'c4a71000-0000-4000-8000-0000000000a5', 'chat-push-staff-denied@example.invalid', 'blog_manager', '{"customers":{"view":false}}'::jsonb, 'active'),
+  ('c4a71000-0000-4000-8000-0000000000b1', 'c4a71000-0000-4000-8000-0000000000a6', 'chat-push-staff-inactive@example.invalid', 'blog_manager', '{"customers":{"view":true}}'::jsonb, 'suspended');
 RESET ROLE;
 SELECT set_config('request.jwt.claim.role', '', true);
 
@@ -19,7 +27,10 @@ INSERT INTO public.push_tokens (user_id, merchant_id, token, platform, is_active
   ('c4a71000-0000-4000-8000-0000000000a1', 'c4a71000-0000-4000-8000-0000000000b1', 'ExponentPushToken[synthetic-owner-old]', 'android', false, 'admin'),
   ('c4a71000-0000-4000-8000-0000000000a1', 'c4a71000-0000-4000-8000-0000000000b1', 'ExponentPushToken[synthetic-owner-shopper]', 'ios', true, 'storefront'),
   ('c4a71000-0000-4000-8000-0000000000a3', 'c4a71000-0000-4000-8000-0000000000b1', 'ExponentPushToken[synthetic-outsider]', 'ios', true, 'admin'),
-  ('c4a71000-0000-4000-8000-0000000000a2', 'c4a71000-0000-4000-8000-0000000000b2', 'ExponentPushToken[synthetic-other-store]', 'ios', true, 'admin');
+  ('c4a71000-0000-4000-8000-0000000000a2', 'c4a71000-0000-4000-8000-0000000000b2', 'ExponentPushToken[synthetic-other-store]', 'ios', true, 'admin'),
+  ('c4a71000-0000-4000-8000-0000000000a4', 'c4a71000-0000-4000-8000-0000000000b1', 'ExponentPushToken[synthetic-staff-allowed]', 'android', true, 'admin'),
+  ('c4a71000-0000-4000-8000-0000000000a5', 'c4a71000-0000-4000-8000-0000000000b1', 'ExponentPushToken[synthetic-staff-denied]', 'android', true, 'admin'),
+  ('c4a71000-0000-4000-8000-0000000000a6', 'c4a71000-0000-4000-8000-0000000000b1', 'ExponentPushToken[synthetic-staff-inactive]', 'android', true, 'admin');
 
 DELETE FROM private.chat_event_server_secrets;
 INSERT INTO private.chat_event_server_secrets(secret_name, secret) VALUES ('current', 'synthetic-chat-event-secret-0123456789abcdef');
@@ -54,7 +65,7 @@ BEGIN
   BEGIN PERFORM public.chat_event_claim_push(pg_temp.push_proof('evt-push-0001', claim, 'tokens'), pg_temp.at(), m, 'evt-push-0001', claim);
     RAISE EXCEPTION 'proof reused across actions';
   EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'chat_event_proof_invalid' THEN RAISE; END IF; END;
-  IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE push_claim IS NOT NULL) THEN RAISE EXCEPTION 'a refused claim was taken'; END IF;
+  IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE push_claim IS NOT NULL AND merchant_id IN ('c4a71000-0000-4000-8000-0000000000b1', 'c4a71000-0000-4000-8000-0000000000b2')) THEN RAISE EXCEPTION 'a refused claim was taken'; END IF;
 
   -- Without a claim nothing is readable or writable.
   IF EXISTS (SELECT 1 FROM public.chat_event_push_tokens(pg_temp.push_proof('evt-push-0001', claim, 'tokens'), pg_temp.at(), m, 'evt-push-0001', claim)) THEN
@@ -72,11 +83,16 @@ BEGIN
     RAISE EXCEPTION 'second claim accepted: a redelivery would push twice';
   END IF;
 
-  -- Only the store's active merchant-app tokens of eligible users.
+  -- Only the store's active merchant-app tokens of eligible users: the owner
+  -- and active staff allowed to view customers.
   SELECT array_agg(t.token ORDER BY t.token) INTO v_tokens
   FROM public.chat_event_push_tokens(pg_temp.push_proof('evt-push-0001', claim, 'tokens'), pg_temp.at(), m, 'evt-push-0001', claim) t;
-  IF v_tokens IS DISTINCT FROM ARRAY['ExponentPushToken[synthetic-owner-ios]'] THEN
+  IF v_tokens IS DISTINCT FROM ARRAY['ExponentPushToken[synthetic-owner-ios]', 'ExponentPushToken[synthetic-staff-allowed]'] THEN
     RAISE EXCEPTION 'unexpected tokens: %', v_tokens;
+  END IF;
+  -- The temporary role claim used for the staff lookup does not leak out.
+  IF COALESCE(current_setting('request.jwt.claim.role', true), '') <> '' THEN
+    RAISE EXCEPTION 'role claim left raised after the recipient lookup';
   END IF;
   -- The losing claim sees nothing.
   IF EXISTS (SELECT 1 FROM public.chat_event_push_tokens(pg_temp.push_proof('evt-push-0001', other_claim, 'tokens'), pg_temp.at(), m, 'evt-push-0001', other_claim)) THEN
@@ -90,6 +106,11 @@ BEGIN
       {"ticket_id":"synthetic-ticket-3","push_token":"ExponentPushToken[synthetic-owner-shopper]"},
       {"ticket_id":"","push_token":"ExponentPushToken[synthetic-owner-ios]"}]'::jsonb) THEN
     RAISE EXCEPTION 'tickets refused';
+  END IF;
+  -- Storing the same tickets again (a retried step) succeeds and adds nothing.
+  IF NOT public.chat_event_store_push_tickets(pg_temp.push_proof('evt-push-0001', claim, 'tickets'), pg_temp.at(), m, 'evt-push-0001', claim,
+    '[{"ticket_id":"synthetic-ticket-1","push_token":"ExponentPushToken[synthetic-owner-ios]"}]'::jsonb) THEN
+    RAISE EXCEPTION 'retried tickets refused';
   END IF;
   IF (SELECT array_agg(ticket_id ORDER BY ticket_id) FROM public.push_notification_tickets WHERE ticket_id LIKE 'synthetic-ticket-%')
     IS DISTINCT FROM ARRAY['synthetic-ticket-1'] THEN
@@ -124,6 +145,13 @@ BEGIN
   END IF;
   BEGIN PERFORM public.chat_event_record_push_attempt(pg_temp.push_proof('evt-push-0001', claim, 'attempt'), pg_temp.at(), m, 'evt-push-0001', claim, '{"status":"whatever"}'::jsonb);
     RAISE EXCEPTION 'unknown attempt status accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  -- Malformed counts are refused with the same error, not a cast failure.
+  BEGIN PERFORM public.chat_event_record_push_attempt(pg_temp.push_proof('evt-push-0001', claim, 'attempt'), pg_temp.at(), m, 'evt-push-0001', claim, '{"status":"sent","token_count":"many"}'::jsonb);
+    RAISE EXCEPTION 'non-numeric count accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  BEGIN PERFORM public.chat_event_record_push_attempt(pg_temp.push_proof('evt-push-0001', claim, 'attempt'), pg_temp.at(), m, 'evt-push-0001', claim, '{"status":"sent","sent_count":99999999999}'::jsonb);
+    RAISE EXCEPTION 'out-of-range count accepted';
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
 
   -- The claim on this store's key gives nothing on the other store's same key.

@@ -217,7 +217,10 @@ export function QuizResultsPanel({
             ) : null}
             {/* No wrapper: when the ad withholds itself the slot renders
                 nothing, so it leaves no empty gap in the card. */}
-            {lifecycle === 'pending_results' ? adSlot : null}
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability !== 'unavailable'
+              ? adSlot
+              : null}
             {v2Result?.availability === 'final' && v2Result.prizeClaim ? (
               <QuizPrizeClaimPanel
                 prizeClaim={v2Result.prizeClaim}

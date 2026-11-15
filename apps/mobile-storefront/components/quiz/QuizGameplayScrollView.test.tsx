@@ -1,7 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { ScrollView, View } from 'react-native';
-import { QuizGameplayScrollView } from './QuizGameplayScrollView';
+import {
+  QUIZ_SCROLL_RESET_WINDOW_MS,
+  QuizGameplayScrollView,
+} from './QuizGameplayScrollView';
 import { createQuizStyles } from './QuizScreen.styles';
 import type { QuizThemeColors } from './quiz-theme';
 
@@ -60,5 +63,35 @@ describe('QuizGameplayScrollView', () => {
     fireEvent(scroll, 'contentSizeChange', 320, 950);
     expect(scrollTo).toHaveBeenCalledTimes(1);
     scrollTo.mockRestore();
+  });
+
+  it('bugfix: a late size change pulled the player back to the top mid-question', () => {
+    jest.useFakeTimers();
+    const scrollTo = jest
+      .spyOn(ScrollView.prototype, 'scrollTo')
+      .mockImplementation(() => undefined);
+    const styles = createQuizStyles(colors);
+    render(
+      <QuizGameplayScrollView topKey="question-1" styles={styles}>
+        <View />
+      </QuizGameplayScrollView>
+    );
+    scrollTo.mockClear();
+
+    // No size change follows the question change (same height as before),
+    // then an ad loads well into the question.
+    act(() => {
+      jest.advanceTimersByTime(QUIZ_SCROLL_RESET_WINDOW_MS + 1);
+    });
+    fireEvent(
+      screen.getByTestId('quiz-gameplay-scroll'),
+      'contentSizeChange',
+      320,
+      980
+    );
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    scrollTo.mockRestore();
+    jest.useRealTimers();
   });
 });

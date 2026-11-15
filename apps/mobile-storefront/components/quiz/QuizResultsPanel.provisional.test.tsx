@@ -196,4 +196,21 @@ describe('provisional quiz score', () => {
     expect(screen.getByText('Standings open when the quiz ends.')).toBeTruthy();
     expect(screen.queryByLabelText('Loading standings')).toBeNull();
   });
+
+  it('bugfix: the waiting ad showed under the "result unavailable" error', () => {
+    render(
+      <QuizResultsPanel
+        {...props}
+        adSlot={<Text>Waiting ad</Text>}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'unavailable',
+          reason: 'tester_revoked',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Quiz access ended')).toBeTruthy();
+    expect(screen.queryByText('Waiting ad')).toBeNull();
+  });
 });

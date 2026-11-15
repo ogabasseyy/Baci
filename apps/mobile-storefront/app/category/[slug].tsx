@@ -48,8 +48,10 @@ const getCategoryTitle = (slug: string): string => {
   );
 };
 
+const PHONE_CATEGORY_SLUGS = ['phones', 'smartphones', 'mobile-phones'];
+
 export default function CategoryScreen() {
-  const { slug, sort } = useLocalSearchParams<{
+  const { slug: slugParam, sort } = useLocalSearchParams<{
     slug: string;
     sort?: string;
   }>();
@@ -57,19 +59,18 @@ export default function CategoryScreen() {
   const colors = Colors[colorScheme ?? 'light'];
   const { getListContentStyle } = useStorefrontInsets();
 
-  // BUG-2-004 FIX: Validate slug is non-empty before use
-  const isValidSlug = Boolean(
-    slug && typeof slug === 'string' && slug.length > 0
-  );
+  const slug =
+    typeof slugParam === 'string' ? slugParam.trim().toLowerCase() : '';
+  const isValidSlug = Boolean(slug);
 
   // H10 FIX: Resolve category slug to UUID since Supabase query uses category_id
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
   const categoryId =
     categories.find((category) => category.slug === slug)?.id ??
-    (slug === 'phones'
+    (PHONE_CATEGORY_SLUGS.includes(slug)
       ? categories.find((category) =>
-          ['smartphones', 'mobile-phones'].includes(category.slug)
+          PHONE_CATEGORY_SLUGS.includes(category.slug)
         )?.id
       : undefined);
   const isCategoryResolved = slug === 'all' || Boolean(categoryId);

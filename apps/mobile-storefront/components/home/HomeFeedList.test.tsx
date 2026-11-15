@@ -14,10 +14,14 @@ import {
 } from './HomeFeedList-test-harness';
 
 let mockCampaignData: { id: string }[] = [];
+let mockCampaignLoading = false;
 let mockMerchantSlug = 'another-store';
 
 jest.mock('@/hooks/use-black-friday', () => ({
-  useBlackFriday: () => ({ data: mockCampaignData }),
+  useBlackFriday: () => ({
+    data: mockCampaignData,
+    isLoading: mockCampaignLoading,
+  }),
 }));
 
 jest.mock('@/lib/config', () => ({
@@ -113,6 +117,7 @@ import { HomeFeedList } from './HomeFeedList';
 beforeEach(() => {
   setupHomeFeedMocks();
   mockCampaignData = [];
+  mockCampaignLoading = false;
   mockMerchantSlug = 'another-store';
 });
 
@@ -133,6 +138,22 @@ describe('HomeFeedList', () => {
       expect.objectContaining({
         blackFridayHeroBlockId:
           merchantSlug === 'ogabassey' ? hero.props.id : undefined,
+      })
+    );
+  });
+
+  it('reserves the campaign carousel while its lineup is loading', () => {
+    mockMerchantSlug = 'ogabassey';
+    mockCampaignLoading = true;
+    const hero = {
+      type: 'HeroCarousel',
+      props: { id: 'campaign-hero', slides: [] },
+    } satisfies Block;
+    renderList({ blocks: [hero, ...GRID_BLOCKS], primaryProductGridIndex: 2 });
+    expect(mockBlockRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingBlackFridayHeroBlockId: hero.props.id,
+        blackFridayHeroBlockId: undefined,
       })
     );
   });

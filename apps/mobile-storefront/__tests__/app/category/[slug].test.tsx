@@ -73,13 +73,20 @@ describe('CategoryScreen', () => {
     expect(screen.getByText('Invalid Category')).toBeTruthy();
   });
 
-  it('resolves the phones alias when sorted by newest', () => {
+  it.each([
+    { slug: ' Phones ', catalogSlug: 'smartphones' },
+    { slug: 'SMARTPHONES', catalogSlug: 'phones' },
+    { slug: 'mobile-phones', catalogSlug: 'phones' },
+  ])('resolves $slug to catalog category $catalogSlug', ({
+    slug,
+    catalogSlug,
+  }) => {
     mockUseLocalSearchParams.mockReturnValue({
-      slug: 'phones',
+      slug,
       sort: 'newest',
     });
     mockUseCategories.mockReturnValue({
-      data: [{ id: 'smartphone-category', slug: 'smartphones' }],
+      data: [{ id: 'smartphone-category', slug: catalogSlug }],
       isLoading: false,
     });
 

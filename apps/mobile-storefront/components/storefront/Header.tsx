@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import Constants from 'expo-constants';
 import { type Href, router } from 'expo-router';
-import { type RefObject, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { TextInputInstance } from 'react-native';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,23 +17,8 @@ import { useCartStore } from '@/stores/cart-store';
 import { useDrawerStore } from '@/stores/drawer-store';
 import { useThemeStore } from '@/stores/theme-store';
 import { getHeaderStyles } from './header.styles';
+import type { HeaderProps } from './header.types';
 import { ShortcutTileBackdrop } from './ShortcutTileBackdrop';
-
-interface HeaderProps {
-  searchFocusTimer?: RefObject<ReturnType<typeof setTimeout> | undefined>;
-  showSearch?: boolean;
-  onSearchPress?: () => void;
-  isSearchActive?: boolean;
-  searchQuery?: string;
-  onSearchQueryChange?: (text: string) => void;
-  onSearchSubmit?: () => void;
-  onSearchCancel?: () => void;
-  isScrolled?: boolean;
-  useWarmDarkSurface?: boolean;
-  useScallopedSearch?: boolean;
-}
-
-// Background pattern from web (SVG Data URI)
 
 export function Header({
   searchFocusTimer,

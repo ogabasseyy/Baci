@@ -9,9 +9,6 @@ const shadowStyles = getFilterBarShadowStyles(
   Platform.OS === 'web' ? 'web' : 'native'
 );
 
-// Theme-aware factory so the filter bar surfaces (the panel, category pills,
-// price fields, toggles, popover) follow light/dark instead of a hardcoded
-// white band. Layout is unchanged; only colors are driven from the theme.
 export const getFilterBarStyles = (
   colors: ThemeColors,
   accent = colors.primary

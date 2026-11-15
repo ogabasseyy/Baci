@@ -1,6 +1,7 @@
 import type React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { homeCampaignSlides } from '@/components/home/home-campaign-slides';
+import { HeroSkeleton } from '@/components/ui/Skeleton';
 import { useCategories } from '@/hooks';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
@@ -26,6 +27,7 @@ interface Category {
 interface BlockRendererProps {
   blocks: Block[];
   blackFridayHeroBlockId?: string;
+  pendingBlackFridayHeroBlockId?: string;
   nextDropHeroBlockId?: string;
   selectedCategoryId: string | null;
   onCategorySelect: (id: string | null) => void;
@@ -56,6 +58,7 @@ interface BlockRendererProps {
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
   blocks,
   blackFridayHeroBlockId,
+  pendingBlackFridayHeroBlockId,
   nextDropHeroBlockId,
   selectedCategoryId,
   onCategorySelect,
@@ -111,6 +114,10 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
         const renderedBlock = (() => {
           switch (block.type) {
             case 'HeroCarousel': {
+              if (block.props.id === pendingBlackFridayHeroBlockId) {
+                return <HeroSkeleton />;
+              }
+
               const heroBlock = block as HeroCarouselBlock;
               const configuredSlides = Array.isArray(heroBlock.props.slides)
                 ? heroBlock.props.slides

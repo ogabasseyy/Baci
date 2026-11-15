@@ -126,6 +126,27 @@ describe('BlockRenderer', () => {
     expect(screen.getByText(/Hero carousel/)).toBeTruthy();
   });
 
+  it('mounts the carousel with Black Friday first after the loading placeholder', () => {
+    const { rerender } = renderBlocks([configuredHeroBlock], {
+      pendingBlackFridayHeroBlockId: configuredHeroBlock.props.id,
+    });
+    expect(screen.getByTestId('hero-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('hero-carousel-with-ad')).toBeNull();
+
+    rerender(
+      <BlockRenderer
+        blocks={[configuredHeroBlock]}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+        blackFridayHeroBlockId={configuredHeroBlock.props.id}
+      />
+    );
+    expect(screen.queryByTestId('hero-skeleton')).toBeNull();
+    expect(screen.getByTestId('hero-carousel-with-ad')).toHaveTextContent(
+      /Black FridayFeatured phones/
+    );
+  });
+
   it('puts Black Friday first in the selected carousel and keeps its existing slides', () => {
     renderBlocks([configuredHeroBlock, emptyHeroBlock], {
       blackFridayHeroBlockId: configuredHeroBlock.props.id,

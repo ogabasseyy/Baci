@@ -18,13 +18,15 @@ import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 export default function BlackFridayScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { data, isPending, isError, refetch } = useBlackFriday();
+  const products = isOgabasseyApp && !isError ? (data ?? []) : [];
+  const hasOffers = products.length > 0;
 
   return (
     <StorefrontScreenShell themeBackground>
       <Stack.Screen options={{ title: 'Black Friday', headerShown: true }} />
       <FlatList
         contentContainerStyle={styles.content}
-        data={isError ? [] : (data ?? [])}
+        data={products}
         keyExtractor={(product) => product.id}
         ListHeaderComponent={
           <View style={styles.hero}>
@@ -32,23 +34,27 @@ export default function BlackFridayScreen() {
               <Text accessibilityRole="header" style={styles.title}>
                 Black <Text style={styles.accent}>Friday</Text>
               </Text>
-              <Text
-                style={[
-                  styles.subtitle,
-                  { color: '#ffd5dc', fontWeight: '700' },
-                ]}
-              >
-                {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
-              </Text>
+              {hasOffers && (
+                <Text
+                  style={[
+                    styles.subtitle,
+                    { color: '#ffd5dc', fontWeight: '700' },
+                  ]}
+                >
+                  {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+                </Text>
+              )}
               {__DEV__ &&
                 process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN && (
                   <Text style={styles.subtitle}>
                     Local preview · Sample lineup
                   </Text>
                 )}
-              <Text style={styles.subtitle}>
-                Find your next upgrade in our Black Friday lineup.
-              </Text>
+              {hasOffers && (
+                <Text style={styles.subtitle}>
+                  Find your next upgrade in our Black Friday lineup.
+                </Text>
+              )}
             </View>
             <Image
               accessible={false}

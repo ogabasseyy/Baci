@@ -9,14 +9,8 @@ import {
   useEffect,
   useRef,
 } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  type StyleProp,
-  View,
-  type ViewStyle,
-} from 'react-native';
-import Animated, { type ScrollHandlerProcessed } from 'react-native-reanimated';
+import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
@@ -25,43 +19,29 @@ import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
 import { PRODUCT_GRID_LOADING_MORE_LABEL } from '@/constants/product-grid';
-import { useBlackFriday } from '@/hooks/use-black-friday';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import type { Block, ProductGridBlock } from '@/types/blocks';
-import type { Product } from '@/types/product';
 import { HomeCategoryDiscovery } from './HomeCategoryDiscovery';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
 import { HomeFeedSectionTitle } from './HomeFeedSectionTitle';
 import { HomeImpactCarousel } from './HomeImpactCarousel';
 import { getHomeFeedSlices } from './home-feed-ad-owners';
+import type {
+  HomeFeedListItem,
+  HomeFeedListProps,
+} from './home-feed-list.types';
+import { buildHomeFeedItems } from './home-feed-list-items';
+import { useHomeBlackFridayHero } from './use-home-black-friday-hero';
 import { useHomeProductFeed } from './use-home-product-feed';
 
-export type HomeFeedListItem =
-  | { kind: 'product'; product: Product }
-  | { kind: 'product-list-end'; id: string };
+export type { HomeFeedListItem } from './home-feed-list.types';
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<FlashListProps<HomeFeedListItem>>
 );
-
-interface HomeFeedListProps {
-  blocks: Block[];
-  nextDrop?: boolean;
-  primaryProductGridIndex: number;
-  selectedCategoryId: string | null;
-  onCategorySelect: (id: string | null) => void;
-  onScroll: ScrollHandlerProcessed<Record<string, unknown>>;
-  isSearchOpen: boolean;
-  refreshing: boolean;
-  onRefresh: () => void;
-  primaryColor: string;
-  resolvedHeaderHeight: number;
-  contentBottomPadding: number;
-  blockWrapperStyle?: StyleProp<ViewStyle>;
-}
 
 export function HomeFeedList({
   blocks,
@@ -117,31 +97,16 @@ export function HomeFeedList({
   }, [feedResetKey]);
 
   const numColumns = currentVariant === 'grid' ? 2 : 1;
-  // HOME_STRIP and PRODUCT_GRID_MPU are each one logical slot for the
-  // whole page: slice page-unique blocks and elect the owners across both
-  // slices (see home-feed-ad-owners) so repeated blocks cannot each claim
-  // one slot.
   const {
     footerBlocks,
     headerBlocks,
     heroAdOwnerBlockId,
     launchAdOwnerBlockId,
   } = getHomeFeedSlices({ blocks, hasPrimaryGrid, primaryProductGridIndex });
-  const { data: blackFridayProducts, isError: blackFridayError } =
-    useBlackFriday();
-  const heroBlocks = headerBlocks.filter(
-    (block) => block.type === 'HeroCarousel'
+  const { nextDropHero, blackFridayHeroProps } = useHomeBlackFridayHero(
+    headerBlocks,
+    nextDrop
   );
-  const nextDropHero = nextDrop ? heroBlocks[0] : undefined;
-  const campaignHero =
-    CONFIG.MERCHANT_SLUG === 'ogabassey' &&
-    !isSearchOpen &&
-    !blackFridayError &&
-    blackFridayProducts?.length
-      ? (nextDropHero ??
-        heroBlocks.find((block) => block.props.slides?.length) ??
-        heroBlocks[0])
-      : undefined;
 
   const shoppingStories = !isSearchOpen && (
     <>
@@ -183,22 +148,14 @@ export function HomeFeedList({
   );
 
   const handleEndReached = () => {
-    // Backup trigger for layouts without post-grid blocks; the sentinel handles
-    // the common case before footer content extends the measured list end.
     handleProductDataEndReached();
   };
 
-  const visibleFeedProducts = hasPrimaryGrid ? feedProducts : [];
-  const feedItems: HomeFeedListItem[] = visibleFeedProducts.map((product) => ({
-    kind: 'product',
-    product,
-  }));
-  if (visibleFeedProducts.length > 0 && hasMore) {
-    feedItems.push({
-      kind: 'product-list-end',
-      id: `home-feed-product-list-end-${feedResetKey}`,
-    });
-  }
+  const feedItems = buildHomeFeedItems(
+    hasPrimaryGrid ? feedProducts : [],
+    hasMore,
+    feedResetKey
+  );
 
   const listHeader = (
     <View>
@@ -212,7 +169,7 @@ export function HomeFeedList({
       {nextDrop && !nextDropHero && shoppingStories}
       <BlockRenderer
         blocks={headerBlocks}
-        blackFridayHeroBlockId={campaignHero?.props.id}
+        {...blackFridayHeroProps}
         nextDropHeroBlockId={nextDropHero?.props.id}
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}

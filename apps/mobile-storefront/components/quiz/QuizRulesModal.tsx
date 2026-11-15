@@ -103,6 +103,11 @@ export function QuizRulesModal({
         <View
           testID="quiz-rules-modal-banner"
           onLayout={(event) => {
+            // A dropped banner collapses to zero height: re-measuring it
+            // would shrink bannerBottom, flip bannerFits back to true and
+            // remount the slot in a request/drop loop. Keep the last
+            // measurement while it is dropped.
+            if (!bannerFits) return;
             const { height, y } = event.nativeEvent.layout;
             setBannerBottom(y + height);
           }}

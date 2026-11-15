@@ -247,5 +247,21 @@ describe('QuizRulesModal', () => {
       });
       expect(banner().props.children).not.toBeNull();
     });
+
+    it('keeps a dropped banner dropped when its empty wrapper re-lays out', () => {
+      // Regression: the emptied wrapper reports height 0, which used to
+      // pull bannerBottom back up, re-fit the banner and remount the slot.
+      render(modal(true));
+      const { height: windowHeight } = Dimensions.get('window');
+      measure(windowHeight - 75 - 24 - 200);
+      expect(banner().props.children).toBeNull();
+
+      measure(0);
+
+      expect(banner().props.children).toBeNull();
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+    });
   });
 });

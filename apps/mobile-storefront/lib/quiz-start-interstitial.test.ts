@@ -315,6 +315,33 @@ describe('maybeShowQuizStartInterstitial', () => {
       setAdsEnabled(ORIGINAL_ENV);
     });
 
+    it('does not let the load deadline abandon an ad that loaded before the notice', async () => {
+      // Regression: the 30s load timer stayed armed through the notice, so a
+      // load finishing near the deadline was abandoned mid-notice.
+      jest.useFakeTimers();
+      try {
+        setAdsEnabled('true');
+        let endNotice: () => void = () => undefined;
+        const pending = maybeShowQuizStartInterstitial({
+          beforePresent: () =>
+            new Promise<void>((resolve) => {
+              endNotice = resolve;
+            }),
+        });
+        await flushConsentGate();
+        await jest.advanceTimersByTimeAsync(29_000);
+        for (const listener of listeners.loaded) listener();
+        await jest.advanceTimersByTimeAsync(2_000);
+
+        endNotice();
+        await expect(pending).resolves.toBe('shown');
+        expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+        setAdsEnabled(ORIGINAL_ENV);
+      }
+    });
+
     it('abandons without using the session cap when cancelled during the notice', async () => {
       setAdsEnabled('true');
       let cancelled = false;

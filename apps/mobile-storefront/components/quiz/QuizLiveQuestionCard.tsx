@@ -158,6 +158,9 @@ export function QuizLiveQuestionCard({
               >
                 {String.fromCharCode(65 + index)}
               </Text>
+              {/* The grid rule in quiz-stage-colors is what keeps answers whole
+                  on every platform. The shrink props are only a bonus where
+                  the platform honours them. */}
               <Text
                 adjustsFontSizeToFit={useGrid}
                 minimumFontScale={0.8}

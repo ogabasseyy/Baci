@@ -49,11 +49,31 @@ describe('bugfix: PiggyVest balance shown as a spendable total', () => {
     expect(screen.queryByText('Store credit')).toBeNull();
   });
 
-  it('shows the store credit line when the older balance is above zero', () => {
-    renderHero(true, 1200);
+  it('shows the store credit line while the PiggyVest balance is not ready', () => {
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletHeroSection
+          {...baseProps}
+          fundingAccount={
+            { provider: 'piggyvest' } as React.ComponentProps<
+              typeof WalletHeroSection
+            >['fundingAccount']
+          }
+          storeCreditBalance={1200}
+        />
+      </WalletPrimaryContext.Provider>
+    );
 
     expect(screen.getByText('Store credit')).toBeOnTheScreen();
-    expect(screen.getByText('₦1,200')).toBeOnTheScreen();
+  });
+
+  it('bugfix: a refund is not counted twice in a ready PiggyVest wallet', () => {
+    // A refund of ₦2,000 raises the savings wallet and its older mirror.
+    renderHero(true, 2000, 7000);
+
+    expect(screen.getByText('₦7,000')).toBeOnTheScreen();
+    expect(screen.queryByText('Store credit')).toBeNull();
+    expect(screen.queryByText('₦2,000')).toBeNull();
   });
 });
 

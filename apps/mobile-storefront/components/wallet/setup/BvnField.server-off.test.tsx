@@ -85,3 +85,37 @@ describe('bugfix: the BVN field looked like an error before any error', () => {
     expect(border()).toBe(Colors.light.error);
   });
 });
+
+describe('bugfix: the BVN placeholder was letter-spaced', () => {
+  const inputStyle = () =>
+    Object.assign(
+      {},
+      ...[screen.getByLabelText('BVN').props.style].flat(
+        Number.POSITIVE_INFINITY
+      )
+    );
+
+  it('spaces only typed digits, never the placeholder', () => {
+    const { rerender } = render(
+      <BvnField
+        colors={Colors.light}
+        value=""
+        onChange={jest.fn()}
+        error={null}
+        editable
+      />
+    );
+    expect(inputStyle().letterSpacing ?? 0).toBe(0);
+
+    rerender(
+      <BvnField
+        colors={Colors.light}
+        value="1234"
+        onChange={jest.fn()}
+        error={null}
+        editable
+      />
+    );
+    expect(inputStyle().letterSpacing).toBe(2);
+  });
+});

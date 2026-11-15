@@ -296,6 +296,10 @@ describe('sendMerchantInboxReply', () => {
     ['a provider request timeout', () => ({ status: 408 })],
     ['provider throttling', () => ({ status: 429 })],
     ['an unreadable accepted response', () => ({ body: { nope: true } })],
+    [
+      'an echo that is not the store reply',
+      () => ({ body: message(46, { message_type: 0 }) }),
+    ],
   ])('reports unknown delivery on %s without retrying', async (_l, post) => {
     const fetchMock = stubFetch((_url, init) =>
       init?.method === 'POST' ? post() : { body: conversation(7) }

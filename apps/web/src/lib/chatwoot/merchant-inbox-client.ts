@@ -243,6 +243,9 @@ export async function sendMerchantInboxReply(
   const message = projectMerchantInboxMessage(body);
   // Accepted by the provider, but the echo was unreadable: do not invite a
   // resend that would duplicate the customer-visible message.
-  if (!message) return { ok: false, code: 'delivery_unknown' };
+  // The echo must also be the reply itself, not some other row.
+  if (message?.sender !== 'store') {
+    return { ok: false, code: 'delivery_unknown' };
+  }
   return { ok: true, message };
 }

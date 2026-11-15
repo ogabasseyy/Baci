@@ -34,10 +34,24 @@ describe('runWalletPayDrain', () => {
       deliver: [],
     });
     worker.releaseStale.mockImplementation(async (id: string) => id === A);
+    deps.reconcilePayment.mockResolvedValue('confirmed');
     const summary = await runWalletPayDrain({ runtime, deliverers: {} }, deps);
     expect(deps.reconcilePayment).toHaveBeenCalledTimes(1);
     expect(deps.reconcilePayment).toHaveBeenCalledWith(runtime, B);
     expect(summary).toMatchObject({ released: 1, settled: 1 });
+  });
+
+  it('bugfix: counts an unverified or held reconciliation as pending, not settled', async () => {
+    worker.listWork.mockResolvedValue({
+      settle: [A, B],
+      refund: [],
+      deliver: [],
+    });
+    deps.reconcilePayment
+      .mockResolvedValueOnce('pending')
+      .mockResolvedValueOnce('needs_review');
+    const summary = await runWalletPayDrain({ runtime, deliverers: {} }, deps);
+    expect(summary).toMatchObject({ settled: 0, pending: 2 });
   });
 
   it('sends every owed refund through the exactly-once refund step', async () => {

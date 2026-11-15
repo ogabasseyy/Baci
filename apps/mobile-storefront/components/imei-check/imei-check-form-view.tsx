@@ -7,13 +7,7 @@ import type {
 } from '@baci/shared/imei';
 import { isValidDeviceIdentifier } from '@baci/shared/imei';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING } from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
@@ -24,6 +18,7 @@ import { footerStyles } from './imei-check-footer.styles';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 import { ImeiCheckServiceSelector } from './imei-check-service-selector';
 import { imeiFindHint } from './imei-find-hint';
+import { ImeiPayButton } from './imei-pay-button';
 import { imeiVerifyButtonLabel } from './imei-verify-button-label';
 import { ImeiWalletBadge } from './imei-wallet-badge';
 import { getImeiWalletCopy } from './imei-wallet-copy';
@@ -247,55 +242,31 @@ export function ImeiCheckFormView({
               {findHint}
             </Text>
           )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: payDisabled, busy: isLoading }}
-            style={[
-              footerStyles.payButton,
-              { backgroundColor: BRAND.primary },
-              payDisabled && footerStyles.payButtonDisabled,
-            ]}
+          <ImeiPayButton
+            busy={isLoading}
+            disabled={payDisabled}
+            icon={
+              needsTopUp && !goesThroughVerify
+                ? 'add-circle-outline'
+                : selectedTier === null
+                  ? 'hand-left-outline'
+                  : 'shield-checkmark-outline'
+            }
+            label={imeiVerifyButtonLabel({
+              hasTier: selectedTier !== null,
+              isWalletLoading,
+              isWalletError,
+              needsTopUp,
+              paysFromPiggyvest,
+              walletCopy,
+              tier: currentTier,
+            })}
             onPress={
               needsTopUp && !goesThroughVerify
                 ? () => onTopUpWallet(shortfall)
                 : onCheck
             }
-            disabled={payDisabled}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={BRAND.onPrimary} />
-            ) : (
-              <>
-                <Ionicons
-                  name={
-                    needsTopUp && !goesThroughVerify
-                      ? 'add-circle-outline'
-                      : selectedTier === null
-                        ? 'hand-left-outline'
-                        : 'shield-checkmark-outline'
-                  }
-                  size={18}
-                  color={BRAND.onPrimary}
-                />
-                <Text
-                  style={[
-                    footerStyles.payButtonText,
-                    { color: BRAND.onPrimary },
-                  ]}
-                >
-                  {imeiVerifyButtonLabel({
-                    hasTier: selectedTier !== null,
-                    isWalletLoading,
-                    isWalletError,
-                    needsTopUp,
-                    paysFromPiggyvest,
-                    walletCopy,
-                    tier: currentTier,
-                  })}
-                </Text>
-              </>
-            )}
-          </Pressable>
+          />
           <ImeiWalletBadge
             colors={colors}
             isWalletReady={isWalletReady}

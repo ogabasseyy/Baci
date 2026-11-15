@@ -6,6 +6,9 @@ const UUID_PATTERN =
 // not part of its contract, so only header-unsafe values are refused.
 const API_TOKEN_PATTERN = /^[\x21-\x7e]{16,256}$/;
 const MAX_BINDINGS = 256;
+// Plain HTTP is allowed only for these exact loopback spellings (a messaging
+// service on the same host). Any other loopback form must use HTTPS: the list
+// is deliberately not widened to the whole range, so it fails closed.
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /** One merchant's private link to its Chatwoot account and inbox. */

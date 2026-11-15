@@ -87,15 +87,19 @@ describe('listMerchantInboxConversations', () => {
   });
 
   it.each([
-    [1, 26, true],
-    [1, 25, false],
-    [2, 26, false],
-  ])('page %i of %i conversations has more: %s (provider total)', async (page, total, expected) => {
+    // [page, rows on this provider page, provider total, expected]
+    [1, 25, 26, true],
+    [1, 25, 25, false],
+    [1, 10, 30, true], // a provider configured for 10 per page
+    [3, 10, 30, false],
+    [2, 0, 25, false], // an empty page always ends paging
+    [1, 21, 21, false],
+  ])('page %i with %i rows of %i total has more: %s', async (page, rows, total, expected) => {
     stubFetch(() => ({
       body: {
         data: {
           meta: { all_count: total },
-          payload: Array.from({ length: 25 }, (_, i) => conversation(i + 1)),
+          payload: Array.from({ length: rows }, (_, i) => conversation(i + 1)),
         },
       },
     }));
@@ -179,6 +183,8 @@ describe('listMerchantInboxMessages', () => {
 
     expect(result).toMatchObject({
       ok: true,
+      hasOlder: false,
+      nextBefore: null,
       conversation: { id: 7 },
       messages: [
         { id: 29, sender: 'store' },
@@ -190,6 +196,26 @@ describe('listMerchantInboxMessages', () => {
       '/api/v1/accounts/2/conversations/7/messages'
     );
     expect(messagesUrl.searchParams.get('before')).toBe('40');
+  });
+
+  it('signals an older page with a cursor that counts hidden rows', async () => {
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? {
+            body: {
+              payload: [
+                message(100, { private: true }),
+                ...Array.from({ length: 19 }, (_, i) => message(101 + i)),
+              ],
+            },
+          }
+        : { body: conversation(7) }
+    );
+    const result = await listMerchantInboxMessages(binding, {
+      conversationId: 7,
+    });
+    expect(result).toMatchObject({ ok: true, hasOlder: true, nextBefore: 100 });
+    if (result.ok) expect(result.messages).toHaveLength(19);
   });
 
   it('is unavailable when the message read fails', async () => {

@@ -40,6 +40,8 @@ beforeEach(() => {
     ok: true,
     conversation: { id: 7 },
     messages: [{ id: 30 }],
+    hasOlder: true,
+    nextBefore: 30,
   });
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.sendReply.mockResolvedValue({ ok: true, message: { id: 45 } });
@@ -67,6 +69,8 @@ describe('GET /api/merchant/inbox/conversations/[conversationId]/messages', () =
     await expect(response.json()).resolves.toEqual({
       conversation: { id: 7 },
       messages: [{ id: 30 }],
+      hasOlder: true,
+      nextBefore: 30,
     });
     expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'view');
     expect(mocks.listMessages).toHaveBeenCalledWith(binding, {

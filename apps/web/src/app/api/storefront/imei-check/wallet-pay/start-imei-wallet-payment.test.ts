@@ -1,0 +1,445 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { startImeiWalletPayment } from './start-imei-wallet-payment';
+
+vi.mock('server-only', () => ({}));
+
+const LOOKUP = '11111111-1111-4111-8111-111111111111';
+const OP = '5b0f2a40-1c1d-4e6b-9a51-2f3c4d5e6f70';
+const runtime = {
+  merchantId: 'merchant-1',
+  businessId: 'business-1',
+  configuration: {
+    integrationId: '22222222-2222-4222-8222-222222222222',
+    environment: 'staging',
+  },
+} as never;
+const identity = {
+  merchantId: 'merchant-1',
+  customerId: 'customer-1',
+  userId: 'user-1',
+};
+
+function deps(overrides: Record<string, unknown> = {}) {
+  return {
+    readRuntime: vi.fn(() => runtime),
+    resolveIdentity: vi.fn(async () => identity),
+    issue: vi.fn(async () => ({
+      status: 'issued' as const,
+      operationId: OP,
+      amountKobo: 50000,
+      expiresAt: '2026-11-12T17:00:00Z',
+    })),
+    findForPurchase: vi.fn(async () => ({
+      operationId: OP,
+      state: 'issued' as const,
+    })),
+    wasAttempted: vi.fn(async () => true),
+    ...overrides,
+  };
+}
+function input(overrides: Record<string, unknown> = {}) {
+  return {
+    binding: { provider: 'sickw' },
+    serviceTier: { price: 500 },
+    customer: { id: 'customer-1' },
+    merchantId: 'merchant-1',
+    idempotencyKey: '33333333-3333-4333-8333-333333333333',
+    imeiHash: 'a'.repeat(64),
+    deviceCategory: 'smartphone',
+    requestedTier: 'simLock',
+    replayContext: {
+      customerId: 'customer-1',
+      imeiHash: 'a'.repeat(64),
+      merchantId: 'merchant-1',
+      tier: 'simLock',
+    },
+    supabase: {},
+    user: { id: 'user-1' },
+    supabaseAdmin: {
+      insertPending: vi.fn(async () => ({ data: { id: LOOKUP }, error: null })),
+    },
+    ...overrides,
+  } as never;
+}
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('startImeiWalletPayment', () => {
+  it('creates the lookup and issues a payment of exactly the server price in kobo', async () => {
+    const d = deps();
+    const response = await startImeiWalletPayment(input(), d);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      status: 'payment_required',
+      lookupId: LOOKUP,
+      operationId: OP,
+      amountKobo: 50000,
+      expiresAt: '2026-11-12T17:00:00Z',
+    });
+    expect(d.issue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          purpose: 'imei_check',
+          purchaseRef: LOOKUP,
+          amountKobo: 50000,
+        },
+        scope: expect.objectContaining({
+          customerId: 'customer-1',
+          merchantId: 'merchant-1',
+          businessId: 'business-1',
+        }),
+      })
+    );
+  });
+
+  it('is unavailable (503, like the PIN and pay steps; nothing created) when wallet pay is off', async () => {
+    const i = input();
+    const response = await startImeiWalletPayment(
+      i,
+      deps({ readRuntime: vi.fn(() => null) })
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PIGGYVEST_PAY_UNAVAILABLE',
+    });
+    expect(
+      (
+        i as {
+          supabaseAdmin: { insertPending: { mock: { calls: unknown[] } } };
+        }
+      ).supabaseAdmin.insertPending.mock.calls
+    ).toHaveLength(0);
+  });
+
+  it('is unavailable for a merchant that is not the PiggyVest merchant', async () => {
+    const response = await startImeiWalletPayment(
+      input({ merchantId: 'merchant-2' }),
+      deps()
+    );
+    expect(response.status).toBe(409);
+  });
+
+  it('is unavailable for Petrock (asynchronous) tiers', async () => {
+    const response = await startImeiWalletPayment(
+      input({ binding: { provider: 'petrock' } }),
+      deps()
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER',
+    });
+  });
+
+  it('asks the customer to finish their PiggyVest wallet when it is not ready', async () => {
+    const response = await startImeiWalletPayment(
+      input(),
+      deps({ resolveIdentity: vi.fn(async () => null) })
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PIGGYVEST_WALLET_NOT_READY',
+    });
+  });
+
+  it('reports a payment already sent for this lookup instead of issuing another', async () => {
+    const response = await startImeiWalletPayment(
+      input(),
+      deps({
+        issue: vi.fn(async () => ({
+          status: 'pending' as const,
+          operationId: OP,
+          amountKobo: 50000,
+        })),
+      })
+    );
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'payment_pending',
+      lookupId: LOOKUP,
+      operationId: OP,
+    });
+  });
+
+  it('answers 503 when the collection wallet is not configured', async () => {
+    const response = await startImeiWalletPayment(
+      input({
+        supabaseAdmin: {
+          insertPending: vi.fn(async () => ({
+            data: { id: LOOKUP },
+            error: null,
+          })),
+          deletePending: vi.fn(async () => ({ data: null, error: null })),
+        },
+      }),
+      deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+    );
+    expect(response.status).toBe(503);
+  });
+  it('answers 503 (not 500) when wallet pay is on but misconfigured', async () => {
+    const response = await startImeiWalletPayment(
+      input(),
+      deps({
+        readRuntime: vi.fn(() => {
+          throw new Error('missing collection wallet');
+        }),
+      })
+    );
+    expect(response.status).toBe(503);
+  });
+
+  describe('bugfix: an outage at issue stranded the request key (#4220)', () => {
+    it('deletes the uncharged pending lookup it just created, so a retry can issue', async () => {
+      const deletePending = vi.fn(async () => ({ data: null, error: null }));
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+      );
+      expect(response.status).toBe(503);
+      expect(deletePending).toHaveBeenCalledWith(LOOKUP);
+    });
+
+    it('bugfix: a clean-up the database refuses asks to start again with a new key (Codex P2)', async () => {
+      const deletePending = vi.fn(async () => ({
+        data: null,
+        error: { message: 'busy' },
+      }));
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+      );
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PAYMENT_NOT_COMPLETED',
+      });
+      expect(deletePending).toHaveBeenCalledTimes(3);
+    });
+
+    it('bugfix: an issue that throws removes the new lookup and answers a retryable 503, not a 500 (Muse)', async () => {
+      const deletePending = vi.fn(async () => ({ data: null, error: null }));
+      const issue = vi.fn(async () => {
+        throw new Error('database unreachable');
+      });
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue })
+      );
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PIGGYVEST_PAY_UNAVAILABLE',
+      });
+      expect(deletePending).toHaveBeenCalledWith(LOOKUP);
+    });
+
+    it('bugfix: an issue that throws and leaves the lookup keeps the key, never a restart that could charge twice (Codex P1)', async () => {
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending: vi.fn(async () => ({
+              data: null,
+              error: { message: 'payment exists' },
+            })),
+          },
+        }),
+        deps({
+          issue: vi.fn(async () => {
+            throw new Error('timeout after commit');
+          }),
+        })
+      );
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: 'PIGGYVEST_PAY_UNAVAILABLE' });
+      expect(body.code).not.toBe('PAYMENT_NOT_COMPLETED');
+    });
+
+    it('retries a clean-up that throws once, then answers 503', async () => {
+      const deletePending = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('network'))
+        .mockResolvedValueOnce({ data: null, error: null });
+      const response = await startImeiWalletPayment(
+        input({
+          supabaseAdmin: {
+            insertPending: vi.fn(async () => ({
+              data: { id: LOOKUP },
+              error: null,
+            })),
+            deletePending,
+          },
+        }),
+        deps({ issue: vi.fn(async () => ({ status: 'unavailable' as const })) })
+      );
+      expect(response.status).toBe(503);
+      expect(deletePending).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('replay of the same Idempotency-Key', () => {
+    const existing = {
+      id: LOOKUP,
+      status: 'pending',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-1',
+      imei_hash: 'a'.repeat(64),
+      tier: 'simLock',
+      device_category: 'smartphone',
+      amount_ngn: 500,
+      cached_response: null,
+      cached_status: null,
+    };
+    function replayInput(row: Record<string, unknown>) {
+      return input({
+        supabaseAdmin: {
+          insertPending: vi.fn(async () => ({
+            data: null,
+            error: { code: '23505' },
+          })),
+          readReplay: vi.fn(async () => ({ data: row, error: null })),
+        },
+      });
+    }
+
+    it('returns the payment already issued for this wallet lookup', async () => {
+      const d = deps();
+      const response = await startImeiWalletPayment(replayInput(existing), d);
+      expect(response.status).toBe(202);
+      expect(d.issue).toHaveBeenCalled();
+    });
+
+    it('bugfix: re-issues when this wallet flow’s earlier attempt expired unpaid (Codex P2)', async () => {
+      const d = deps({ findForPurchase: vi.fn(async () => null) });
+      const response = await startImeiWalletPayment(replayInput(existing), d);
+      expect(response.status).toBe(202);
+      expect(d.wasAttempted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'imei_check',
+          purchaseRef: LOOKUP,
+        })
+      );
+      expect(d.issue).toHaveBeenCalled();
+    });
+
+    it('bugfix: keeps a lookup with no wallet attempt in flight, never pays it (Codex P1)', async () => {
+      const d = deps({
+        findForPurchase: vi.fn(async () => null),
+        wasAttempted: vi.fn(async () => false),
+      });
+      const replay = replayInput(existing) as unknown as {
+        replayContext: Record<string, unknown>;
+      };
+      replay.replayContext = {
+        ...replay.replayContext,
+        deviceCategory: 'smartphone',
+      };
+      const response = await startImeiWalletPayment(replay as never, d);
+      const body = await response.json();
+      expect(body.code).toBe('IDEMPOTENT_REQUEST_IN_FLIGHT');
+      expect(d.issue).not.toHaveBeenCalled();
+    });
+
+    it('treats a different device as another request', async () => {
+      const d = deps();
+      const response = await startImeiWalletPayment(
+        replayInput({ ...existing, device_category: 'tablet' }),
+        d
+      );
+      expect(response.status).not.toBe(202);
+      expect(d.issue).not.toHaveBeenCalled();
+    });
+  });
+  describe('replay after the payment moved on', () => {
+    const existing = {
+      id: LOOKUP,
+      status: 'pending',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-1',
+      imei_hash: 'a'.repeat(64),
+      tier: 'simLock',
+      device_category: 'smartphone',
+      amount_ngn: 400,
+      cached_response: null,
+      cached_status: null,
+    };
+    const replay = () =>
+      input({
+        supabaseAdmin: {
+          insertPending: vi.fn(async () => ({
+            data: null,
+            error: { code: '23505' },
+          })),
+          readReplay: vi.fn(async () => ({ data: existing, error: null })),
+        },
+      });
+
+    it('re-asks at the price recorded on the lookup, not today’s price', async () => {
+      const d = deps();
+      await startImeiWalletPayment(replay(), d);
+      expect(d.issue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({ amountKobo: 40000 }),
+        })
+      );
+    });
+
+    it('never issues a second payment once the first was confirmed', async () => {
+      const d = deps({
+        findForPurchase: vi.fn(async () => ({
+          operationId: OP,
+          state: 'confirmed' as const,
+        })),
+      });
+      const response = await startImeiWalletPayment(replay(), d);
+      expect(d.issue).not.toHaveBeenCalled();
+      // bugfix (Codex P2): the operation comes back so delivery can resume.
+      expect(response.status).toBe(202);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      await expect(response.json()).resolves.toEqual({
+        status: 'payment_pending',
+        lookupId: LOOKUP,
+        operationId: OP,
+        amountKobo: 40000,
+      });
+    });
+
+    it('hands back a payment under review as such', async () => {
+      const d = deps({
+        findForPurchase: vi.fn(async () => ({
+          operationId: OP,
+          state: 'needs_review' as const,
+        })),
+      });
+      const response = await startImeiWalletPayment(replay(), d);
+      await expect(response.json()).resolves.toMatchObject({
+        status: 'payment_review',
+      });
+      expect(d.issue).not.toHaveBeenCalled();
+    });
+  });
+});

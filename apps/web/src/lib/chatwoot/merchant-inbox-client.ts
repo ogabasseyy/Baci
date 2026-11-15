@@ -46,9 +46,20 @@ async function providerGet(
       redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) return { ok: false, status: response.status };
+    if (!response.ok) {
+      // Status only: never the token, URL query or response body.
+      console.error('[merchant-inbox] provider request failed', {
+        status: response.status,
+        path,
+      });
+      return { ok: false, status: response.status };
+    }
     return { ok: true, body: await response.json() };
   } catch {
+    console.error('[merchant-inbox] provider request failed', {
+      status: null,
+      path,
+    });
     return { ok: false, status: null };
   }
 }
@@ -83,7 +94,13 @@ export async function listMerchantInboxConversations(
   const { meta, payload } = parsed.data.data;
   const conversations = payload
     .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
-    .filter((value): value is MerchantInboxConversation => value !== null);
+    .filter((value): value is MerchantInboxConversation => value !== null)
+    // Ordering must not depend on the provider honouring `sort_by`.
+    .sort(
+      (a, b) =>
+        (b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0) -
+        (a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0)
+    );
   // The provider's page size is a server setting it does not let a caller
   // pin, so nothing here assumes one. With a total, a page this long repeated
   // `page` times that still falls short of the total means more exists.

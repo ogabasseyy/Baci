@@ -54,6 +54,42 @@ function stubFetch(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('listMerchantInboxConversations', () => {
+  it('orders the page by latest activity regardless of provider order', async () => {
+    stubFetch(() => ({
+      body: {
+        data: {
+          payload: [
+            { ...conversation(1), last_activity_at: CREATED },
+            { ...conversation(2), last_activity_at: CREATED + 500 },
+            { ...conversation(3), last_activity_at: null },
+          ],
+        },
+      },
+    }));
+    const result = await listMerchantInboxConversations(binding, {
+      page: 1,
+      status: 'all',
+    });
+    expect(result.ok && result.conversations.map((c) => c.id)).toEqual([
+      2, 1, 3,
+    ]);
+  });
+
+  it('logs the provider status without leaking the token', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubFetch(() => ({ status: 401, body: { error: 'bad token' } }));
+    const result = await listMerchantInboxConversations(binding, {
+      page: 1,
+      status: 'all',
+    });
+    expect(result).toEqual({ ok: false, code: 'unavailable' });
+    const logged = JSON.stringify(errorSpy.mock.calls);
+    expect(logged).toContain('401');
+    expect(logged).not.toContain(binding.apiAccessToken);
+    expect(logged).not.toContain('bad token');
+    errorSpy.mockRestore();
+  });
+
   it('requests only the bound inbox with the server-side credential', async () => {
     const fetchMock = stubFetch(() => ({
       body: { data: { payload: [conversation(1), conversation(2, 99)] } },

@@ -128,6 +128,9 @@ export function formatQuizClockWithDay(
   const yearOf = (target: Date) =>
     getGregorianDateKey(target, timeZone).slice(0, 4);
   const day = date.toLocaleDateString(resolvedLocale, {
+    // Same calendar as the day comparison above: a locale whose default
+    // calendar is not Gregorian must not show a different day or year.
+    calendar: 'gregory',
     day: 'numeric',
     month: 'short',
     timeZone,

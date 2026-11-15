@@ -82,6 +82,11 @@ describe('AdSlot', () => {
     render(<AdSlot placement="CART_MPU" />);
     measureSlot('ad-slot-cart-mpu', 320);
     expect(screen.getByLabelText('Sponsored advertisement')).toBeTruthy();
+    // The slot must not be a single accessibility element: that would
+    // hide the native banner's own content from screen readers.
+    expect(
+      screen.getByLabelText('Sponsored advertisement').props.accessible
+    ).not.toBe(true);
     expect(screen.getByText('Sponsored')).toBeTruthy();
     expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
     setAdsEnabled(ORIGINAL_ENV);

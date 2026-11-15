@@ -117,11 +117,12 @@ export function AdSlot({
 
   return (
     <View
-      // Nothing is announced until a banner can actually be requested.
+      // Nothing is labelled until a banner can actually be requested. The
+      // container is deliberately not one accessibility element: screen
+      // reader users must be able to reach the native banner inside it.
       accessibilityLabel={
         slotWidth === null ? undefined : 'Sponsored advertisement'
       }
-      accessible={slotWidth !== null}
       onLayout={(event) => {
         const measured = Math.floor(event.nativeEvent.layout.width);
         // Ignore sub-threshold jitter: every accepted change remounts the

@@ -206,6 +206,20 @@ describe('QuizScreen utils', () => {
       ).toBe('Nov 13, 12:34 AM');
     });
 
+    it('bugfix: shows a Gregorian day for locales with another default calendar', () => {
+      // th-TH defaults to the Buddhist calendar (year 2568 for 2025); the
+      // day comparison is Gregorian, so the label must be too.
+      const label = formatQuizClockWithDay(
+        '2025-11-12T23:34:00.000Z',
+        'th-TH',
+        'Africa/Lagos',
+        now
+      );
+
+      expect(label).toContain('2025');
+      expect(label).not.toContain('2568');
+    });
+
     it('adds the year when the quiz closed in another year', () => {
       expect(
         formatQuizClockWithDay(

@@ -1,13 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, type TextInputInstance } from 'react-native';
-import { useShallow } from 'zustand/react/shallow';
 import type { LoginAuthMethod } from '@/components/auth/LoginEmailStep';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { createLogger } from '@/lib/logger';
-import { useAuthStore } from '@/stores/auth-store';
 import {
   getAuthLoginResumeState,
   saveAuthLoginResumeState,
@@ -23,6 +21,7 @@ import {
   validateLoginEmailInput,
 } from './login-screen-controller.helpers';
 import { runLoginSocialSignIn } from './login-social-sign-in';
+import { useLoginAuthStore } from './use-login-auth-store';
 import { useLoginEmailHintGuidance } from './use-login-email-hint-guidance';
 import { useLoginHardwareBackHandler } from './useLoginHardwareBackHandler';
 
@@ -55,18 +54,7 @@ export function useLoginScreenController() {
     signInWithApple,
     user,
     isInitialized,
-  } = useAuthStore(
-    useShallow((state) => ({
-      signInWithOtp: state.signInWithOtp,
-      verifyOtp: state.verifyOtp,
-      signInWithGoogle: state.signInWithGoogle,
-      isLoading: state.isLoading,
-      signInWithPassword: state.signInWithPassword,
-      signInWithApple: state.signInWithApple,
-      user: state.user,
-      isInitialized: state.isInitialized,
-    }))
-  );
+  } = useLoginAuthStore();
 
   const [step, setStep] = useState<AuthStep>('email');
   const [authMethod, setAuthMethod] = useState<LoginAuthMethod>('otp');
@@ -183,14 +171,14 @@ export function useLoginScreenController() {
     }
   });
 
-  const handleToggleAuthMethod = () => {
+  const handleToggleAuthMethod = withKeyboardDismiss(() => {
     const next = resolveAuthMethodToggle(authMethod, email);
     setAuthMethod(next.authMethod);
     if (!next.passwordEmail) return;
     setEmailError(null);
     setEmail(next.passwordEmail);
     setStep('password');
-  };
+  });
 
   const handlePasswordSignIn = withKeyboardDismiss(async () => {
     if (!password) {

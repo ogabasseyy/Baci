@@ -432,6 +432,52 @@ describe('LoginScreen', () => {
       expect(screen.getByText(emailRequired)).toBeOnTheScreen();
     });
 
+    it('stays on the email step, shows no error and sends no code for a malformed email', async () => {
+      render(<LoginScreen />);
+
+      fireEvent.changeText(
+        screen.getByPlaceholderText('john@example.com'),
+        'foo'
+      );
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(screen.getByText('Continue with Password')).toBeOnTheScreen();
+      expect(screen.queryByPlaceholderText('••••••••')).toBeNull();
+      const { validateLoginEmailInput } = await import(
+        '@/components/auth/login-screen-controller.helpers'
+      );
+      const invalidEmail = validateLoginEmailInput('foo').error as string;
+      expect(invalidEmail).toBeTruthy();
+      expect(screen.queryByText(invalidEmail)).toBeNull();
+      expect(mockSignInWithOtp).not.toHaveBeenCalled();
+    });
+
+    it('dismisses the keyboard when the toggle opens the password step', () => {
+      const dismissed = jest.fn();
+      mockWithKeyboardDismiss.mockImplementation(((
+        handler: (...args: never[]) => unknown
+      ) =>
+        (...args: never[]) => {
+          dismissed();
+          return handler(...args);
+        }) as never);
+      try {
+        render(<LoginScreen />);
+        fireEvent.changeText(
+          screen.getByPlaceholderText('john@example.com'),
+          'shopper@example.com'
+        );
+        fireEvent.press(screen.getByText('Use password instead'));
+
+        expect(dismissed).toHaveBeenCalledTimes(1);
+        expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
+      } finally {
+        mockWithKeyboardDismiss.mockImplementation(
+          ((handler: unknown) => handler) as never
+        );
+      }
+    });
+
     it('switches back to the code method from the email step', () => {
       render(<LoginScreen />);
 

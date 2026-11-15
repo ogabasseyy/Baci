@@ -222,7 +222,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                   )}
                 />
               ))}
-              <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+              <AdUnit placementKey="PRODUCT_GRID_MPU" slotInstance="cart" />
             </div>
 
             <CartPageSummaryPanel

@@ -176,12 +176,18 @@ export function CategoryPageResults({
                     {/* Ad insertion logic */}
                     {viewMode === 'grid' && (index === 5 || index === 11) && (
                       <div className="col-span-2 md:col-span-3 my-4">
-                        <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+                        <AdUnit
+                          placementKey="PRODUCT_GRID_MPU"
+                          slotInstance={index + 1}
+                        />
                       </div>
                     )}
                     {viewMode === 'list' && (index === 3 || index === 7) && (
                       <div className="w-full my-4">
-                        <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+                        <AdUnit
+                          placementKey="PRODUCT_GRID_MPU"
+                          slotInstance={index + 1}
+                        />
                       </div>
                     )}
                   </React.Fragment>

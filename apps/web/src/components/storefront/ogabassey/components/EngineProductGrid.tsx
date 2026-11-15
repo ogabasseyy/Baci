@@ -489,7 +489,10 @@ export const EngineProductGrid: React.FC<EngineProductGridProps> = ({
 
                   {adBreakpoints.includes(index + 1) && (
                     <div className={`col-span-2 ${viewMode === 'grid' ? 'lg:col-span-4' : 'w-full'} flex items-center justify-center my-2 md:my-4`}>
-                      <AdUnit placementKey="PRODUCT_GRID_MPU" />
+                      <AdUnit
+                        placementKey="PRODUCT_GRID_MPU"
+                        slotInstance={index + 1}
+                      />
                     </div>
                   )}
                 </React.Fragment>

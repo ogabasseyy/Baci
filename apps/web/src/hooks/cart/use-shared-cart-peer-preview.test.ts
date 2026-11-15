@@ -109,6 +109,9 @@ it('shows a quantity change in the second tab before the save returns', async ()
   );
   expect(watching.result.current.cartCount).toBe(3);
   expect(watching.result.current.cartTotal).toBe(300);
-  // Only the editing tab saved: the watching tab issued no command.
-  expect(watching.result.current.syncStatus).toBe('synced');
+  // The watching tab issued no command of its own, and reports the shown
+  // cart as not yet confirmed so checkout waits for the server copy.
+  expect(sendSharedCartCommand).toHaveBeenCalledTimes(1);
+  expect(watching.result.current.syncStatus).toBe('pending');
+  expect(watching.result.current.version).toBe(3);
 });

@@ -26,12 +26,16 @@ function line(serverLineId: string, quantity: number): SharedCartDisplayItem {
 }
 
 function snapshot(version: number): CartSnapshot {
+  const confirmedLines = [
+    { id: 'l1', quantity: 1 },
+    { id: 'l2', quantity: 1 },
+  ];
   return {
     cartId: 'c',
     currency: 'NGN',
     estimatedTotals: false,
     expiresAt: '2099-01-01',
-    lines: [],
+    lines: confirmedLines,
     merchantId: 'm',
     state: 'active',
     subtotalMinor: 0,
@@ -242,6 +246,23 @@ describe('cart peer preview', () => {
       context({ display: [line('l1', 1), line('l2', 1), line('l3', 1)] }, 3)
     );
     expect(result.current).toBeNull();
+  });
+
+  it('says nothing for an edit that changes no quantity', () => {
+    const t = tabs();
+    const assurance: SharedCartPendingEntry = {
+      ...edit,
+      intent: {
+        hasAssurance: true,
+        kind: 'set_assurance',
+        target: { kind: 'lineId', lineId: 'l1' },
+      },
+    };
+    const { rerender } = renderHook((p) => useCartPeerPreview(p, t.open), {
+      initialProps: context({ queue: [assurance] }),
+    });
+    rerender(context({}, 3));
+    expect(t.posted).toEqual([]);
   });
 
   it('does not repeat an edit when nothing shared changed', () => {

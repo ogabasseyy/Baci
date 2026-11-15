@@ -24,6 +24,15 @@ interface PeerPreview {
   settledVersion: number | null;
 }
 
+function matchesConfirmed(
+  lines: CartPeerLine[],
+  confirmed: { id: string; quantity: number }[]
+): boolean {
+  if (lines.length !== confirmed.length) return false;
+  const quantities = new Map(confirmed.map((line) => [line.id, line.quantity]));
+  return lines.every((line) => quantities.get(line.id) === line.quantity);
+}
+
 /** A tab that closes mid-edit never settles: stop trusting its hint. */
 const PREVIEW_TIMEOUT_MS = 10000;
 
@@ -42,7 +51,7 @@ export function useCartPeerPreview(
   const [preview, setPreview] = useState<PeerPreview | null>(null);
   const latest = useRef(context);
   const channelRef = useRef<CartPeerChannel | null>(null);
-  const wasPending = useRef(false);
+  /** The last edit announced in this run of pending work, if any. */
   const lastPosted = useRef<string | null>(null);
   // Advance only after commit so a message never reads an abandoned render.
   useEffect(() => {
@@ -64,7 +73,6 @@ export function useCartPeerPreview(
 
   useEffect(() => {
     setPreview(null);
-    wasPending.current = false;
     lastPosted.current = null;
     if (!ready || cartId === null) return;
     const channel = open(merchantId, (value) => {
@@ -109,25 +117,31 @@ export function useCartPeerPreview(
   // biome-ignore lint/correctness/useExhaustiveDependencies: cartId and merchantId changes reopen the channel above, which resets this sender.
   useEffect(() => {
     const channel = channelRef.current;
-    if (!ready || !channel || cartId === null || version === null) {
-      wasPending.current = false;
+    const confirmed = state.confirmed;
+    if (!ready || !channel || cartId === null || confirmed === null) {
+      lastPosted.current = null;
       return;
     }
-    if (pending) {
-      const lines = buildCartPeerLines(state.display);
-      // Display churn that changes no shared quantity (product details
-      // loading, an assurance toggle) is not worth another message.
-      const key = JSON.stringify([version, lines]);
-      if (key !== lastPosted.current) {
-        lastPosted.current = key;
-        channel.post({ cartId, kind: 'edit', lines, merchantId, version });
-      }
-    } else if (wasPending.current) {
+    const version = confirmed.version;
+    if (!pending) {
+      // Nothing was announced for an edit that changed no quantity.
+      if (lastPosted.current !== null)
+        channel.post({ cartId, kind: 'settled', merchantId, version });
       lastPosted.current = null;
-      channel.post({ cartId, kind: 'settled', merchantId, version });
+      return;
     }
-    wasPending.current = pending;
-  }, [ready, pending, version, state.display]);
+    const lines = buildCartPeerLines(state.display);
+    // An assurance or price edit leaves every quantity as the server has
+    // it: siblings already show that, so there is nothing to announce.
+    if (lastPosted.current === null && matchesConfirmed(lines, confirmed.lines))
+      return;
+    // Display churn that changes no shared quantity (product details
+    // loading) is not worth another message.
+    const key = JSON.stringify([version, lines]);
+    if (key === lastPosted.current) return;
+    lastPosted.current = key;
+    channel.post({ cartId, kind: 'edit', lines, merchantId, version });
+  }, [ready, pending, state.confirmed, state.display]);
 
   useEffect(() => {
     if (pending) setPreview(null);

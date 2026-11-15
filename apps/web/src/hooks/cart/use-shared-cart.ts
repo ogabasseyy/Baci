@@ -46,11 +46,16 @@ export function useSharedCart(
       ),
   });
   // A sibling tab's edit shows here at once; this tab's own authorized
-  // refetch still replaces it.
+  // refetch still replaces it. Until then the cart reports 'pending', so
+  // checkout and other consumers wait for the server copy as they do for
+  // this tab's own unsaved edits.
   const peerLines = useCartPeerPreview(runtime);
   const visible = peerLines
     ? applyCartPeerPreview(state.display, peerLines)
     : state.display;
+  const ownSyncStatus = deriveSyncStatus(state);
+  const syncStatus =
+    peerLines && ownSyncStatus === 'synced' ? 'pending' : ownSyncStatus;
   const provisioning = createCartProvisioning({ ...runtime, ...snapshots });
   useCartLinkLifecycle({
     ...runtime,
@@ -162,7 +167,7 @@ export function useSharedCart(
     resolveImportConflicts,
     retryPendingSync,
     syncError: state.syncError,
-    syncStatus: deriveSyncStatus(state),
+    syncStatus,
     toggleAssurance,
     updateQuantity,
     version: state.confirmed?.version ?? null,

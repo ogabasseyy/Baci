@@ -60,8 +60,10 @@ SELECT set_config('test.wp_scope', jsonb_build_object(
   'businessId', 'synthetic-walletpay-business', 'environment', 'staging')::text, true);
 
 CREATE FUNCTION pg_temp.wp_assert(p_ok boolean, p_message text) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE v_n integer := coalesce(nullif(pg_catalog.current_setting('test.wp_n', true), '')::integer, 0) + 1;
 BEGIN
-  IF p_ok IS NOT TRUE THEN RAISE EXCEPTION 'wallet pay behaviour: %', p_message; END IF;
+  PERFORM pg_catalog.set_config('test.wp_n', v_n::text, true); -- TEMP-DIAG
+  IF p_ok IS NOT TRUE THEN RAISE EXCEPTION 'wallet pay behaviour: %', p_message USING ERRCODE = 'W' || lpad(v_n::text, 4, '0'); END IF; -- TEMP-DIAG
 END;
 $$;
 CREATE FUNCTION pg_temp.wp_scope() RETURNS jsonb LANGUAGE sql AS $$

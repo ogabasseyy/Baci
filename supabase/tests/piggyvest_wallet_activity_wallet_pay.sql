@@ -322,6 +322,13 @@ BEGIN
   PERFORM pg_temp.wp_assert(NOT pg_catalog.has_function_privilege('service_role',
     'public.list_piggyvest_wallet_activity(uuid,timestamptz,uuid,integer)', 'EXECUTE'),
     'service_role can read activity');
+EXCEPTION WHEN OTHERS THEN -- TEMP-DIAG
+  DECLARE v_ctx text; v_line text; -- TEMP-DIAG
+  BEGIN -- TEMP-DIAG
+    GET STACKED DIAGNOSTICS v_ctx = PG_EXCEPTION_CONTEXT; -- TEMP-DIAG
+    SELECT m[1] INTO v_line FROM regexp_matches(v_ctx, 'inline_code_block line (\d+) at', 'g') AS m LIMIT 1; -- TEMP-DIAG
+    RAISE EXCEPTION '%', SQLERRM USING ERRCODE = 'X' || lpad(coalesce(v_line, '0'), 4, '0'); -- TEMP-DIAG
+  END; -- TEMP-DIAG
 END;
 $behaviour$;
 

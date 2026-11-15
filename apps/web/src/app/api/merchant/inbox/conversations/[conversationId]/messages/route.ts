@@ -61,6 +61,9 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ conversationId: string }> }
 ) {
+  // CSRF intentionally comes first: it is an origin check for cookie
+  // sessions and needs no identity, so forged requests stop before any
+  // auth or provider work.
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid) return merchantInboxError(403, 'Forbidden', 'forbidden');
 
@@ -71,13 +74,16 @@ export async function POST(
   const { conversationId: rawConversationId } = await context.params;
   const conversationId =
     merchantInboxConversationIdSchema.safeParse(rawConversationId);
+  if (!conversationId.success) {
+    return merchantInboxError(400, 'Invalid request', 'invalid_request');
+  }
   // Shared streaming JSON reader: its 64 KB byte cap is enforced before the
   // body is buffered. The reply's own limit is the 2,000-character schema.
   const rawBody = await readCartJsonBody(request);
   const body = merchantInboxReplySchema.safeParse(
     rawBody.ok ? rawBody.body : null
   );
-  if (!conversationId.success || !body.success) {
+  if (!body.success) {
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
 

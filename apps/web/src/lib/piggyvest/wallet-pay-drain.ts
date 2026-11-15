@@ -39,6 +39,8 @@ const defaultDeps = {
 export interface WalletPayDrainSummary {
   released: number;
   settled: number;
+  /** Still open after the check: unverified, held for review or refunding. */
+  pending: number;
   refunds: number;
   delivered: number;
   skipped: number;
@@ -78,7 +80,7 @@ export async function runWalletPayDrain(
     reconcilePayment: (
       runtime: WalletPayRuntime,
       id: string
-    ) => Promise<unknown>;
+    ) => Promise<string | undefined>;
     refund: typeof refundWalletPayment;
   } = defaultDeps
 ): Promise<WalletPayDrainSummary> {
@@ -87,6 +89,7 @@ export async function runWalletPayDrain(
   const summary: WalletPayDrainSummary = {
     released: 0,
     settled: 0,
+    pending: 0,
     refunds: 0,
     delivered: 0,
     skipped: 0,
@@ -111,8 +114,12 @@ export async function runWalletPayDrain(
     await attempt(async () => {
       if (await worker.releaseStale(id)) summary.released += 1;
       else {
-        await deps.reconcilePayment(runtime, id);
-        summary.settled += 1;
+        // Count what the reconciliation concluded, not that it did not throw:
+        // an unverified record or a held fee is not settled (Muse).
+        const outcome = await deps.reconcilePayment(runtime, id);
+        if (outcome === 'confirmed') summary.settled += 1;
+        else if (outcome === 'released') summary.released += 1;
+        else summary.pending += 1;
       }
     });
   }

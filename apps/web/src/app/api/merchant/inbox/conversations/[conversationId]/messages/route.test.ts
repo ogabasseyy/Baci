@@ -60,10 +60,19 @@ describe('GET /api/merchant/inbox/conversations/[conversationId]/messages', () =
     ['0', ''],
     ['-4', ''],
     ['7', '?before=x'],
-  ])('rejects id %s %s before authenticating', async (id, query) => {
+  ])('rejects id %s %s for a signed-in merchant', async (id, query) => {
     const response = await call(id, query);
     expect(response.status).toBe(400);
-    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.listMessages).not.toHaveBeenCalled();
+  });
+
+  it('answers an unauthenticated caller the same for valid and invalid ids', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: false,
+      response: NextResponse.json({ code: 'unauthorized' }, { status: 401 }),
+    });
+    expect((await call('abc')).status).toBe(401);
+    expect((await call('7')).status).toBe(401);
   });
 
   it('returns 404 for a conversation outside the merchant inbox', async () => {

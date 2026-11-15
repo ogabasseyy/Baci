@@ -15,6 +15,10 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ conversationId: string }> }
 ) {
+  // Authenticate first: an unauthenticated caller learns nothing about input.
+  const resolved = await resolveMerchantInboxRequest('view');
+  if (!resolved.ok) return resolved.response;
+
   const { conversationId: rawConversationId } = await context.params;
   const conversationId =
     merchantInboxConversationIdSchema.safeParse(rawConversationId);
@@ -24,9 +28,6 @@ export async function GET(
   if (!conversationId.success || !query.success) {
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
-
-  const resolved = await resolveMerchantInboxRequest('view');
-  if (!resolved.ok) return resolved.response;
 
   const result = await listMerchantInboxMessages(resolved.binding, {
     conversationId: conversationId.data,

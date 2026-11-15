@@ -77,15 +77,18 @@ export async function listMerchantInboxConversations(
   if (!response.ok) return failure(response);
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
-  const { payload } = parsed.data.data;
+  const { meta, payload } = parsed.data.data;
   const conversations = payload
     .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
     .filter((value): value is MerchantInboxConversation => value !== null);
-  return {
-    ok: true,
-    conversations,
-    hasMore: payload.length >= MERCHANT_INBOX_PAGE_SIZE,
-  };
+  // Prefer the provider's own total for this filter. Without it, fall back to
+  // "a full page may have a successor", which costs at most one empty fetch.
+  const total = meta?.all_count;
+  const hasMore =
+    typeof total === 'number'
+      ? input.page * MERCHANT_INBOX_PAGE_SIZE < total
+      : payload.length >= MERCHANT_INBOX_PAGE_SIZE;
+  return { ok: true, conversations, hasMore };
 }
 
 /**

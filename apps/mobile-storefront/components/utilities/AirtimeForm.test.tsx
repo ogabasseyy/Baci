@@ -142,6 +142,12 @@ describe('AirtimeForm', () => {
     jest.restoreAllMocks();
   });
 
+  it('shows a disabled Pay button on an empty form', () => {
+    render(<AirtimeForm onSuccess={jest.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Pay ₦0' })).toBeDisabled();
+  });
+
   it('keeps network provider cards hidden when phone number is empty', () => {
     render(<AirtimeForm onSuccess={jest.fn()} />);
 

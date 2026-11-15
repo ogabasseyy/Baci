@@ -1,7 +1,8 @@
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { billFormStyles as styles } from '@/components/utilities/bill-form-styles';
 import type Colors from '@/constants/Colors';
-import { BRAND, SPACING } from '@/constants/Colors';
+import { SPACING } from '@/constants/Colors';
+import { UtilityPayButton } from './UtilityPayButton';
 
 const BILL_PAYMENT_AMOUNT_FORMATTER = new Intl.NumberFormat('en-NG', {
   currency: 'NGN',
@@ -46,26 +47,14 @@ export function BillPaymentFooter({
         },
       ]}
     >
-      <Pressable
-        style={[
-          styles.payButton,
-          {
-            backgroundColor: BRAND.primary,
-            opacity: isBusy ? 0.7 : 1,
-          },
-        ]}
+      <UtilityPayButton
+        amount={numericAmount}
+        buttonStyle={styles.payButton}
+        isBusy={isBusy}
+        label={paymentLabel}
         onPress={onPurchase}
-        disabled={isBusy}
-        accessibilityRole="button"
-        accessibilityLabel={paymentLabel}
-        accessibilityState={{ busy: isBusy, disabled: isBusy }}
-      >
-        {isBusy ? (
-          <ActivityIndicator color={colors.primaryForeground} />
-        ) : (
-          <Text style={styles.payButtonText}>{paymentLabel}</Text>
-        )}
-      </Pressable>
+        textStyle={styles.payButtonText}
+      />
     </View>
   );
 }

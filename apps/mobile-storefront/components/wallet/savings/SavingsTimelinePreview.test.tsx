@@ -16,8 +16,24 @@ describe('SavingsTimelinePreview', () => {
     );
 
     expect(screen.getByText('10 monthly contributions')).toBeOnTheScreen();
-    expect(screen.getByText(/About 9 months/)).toBeOnTheScreen();
     expect(screen.getByText(/Estimated completion/)).toBeOnTheScreen();
+  });
+
+  it('bugfix: never shows a span that disagrees with the payment count', () => {
+    render(
+      <SavingsTimelinePreview
+        colors={Colors.light}
+        targetAmount={250000}
+        contributionAmount={25000}
+        frequency="monthly"
+        maturityDate="2027-08-13"
+        initialContributionEnabled={false}
+      />
+    );
+
+    expect(screen.getByText('10 monthly contributions')).toBeOnTheScreen();
+    expect(screen.queryByText(/About \d+ months?/)).toBeNull();
+    expect(screen.getByText('13 August 2027')).toBeOnTheScreen();
   });
 
   it('does not show a misleading timeline before a valid amount is entered', () => {

@@ -92,7 +92,7 @@ describe('start savings with a PiggyVest wallet', () => {
     expect(submitSavingsGoal).toHaveBeenCalledWith();
   });
 
-  it('keeps bank transfer on the transfer sheet', async () => {
+  it('ignores a stale bank-transfer choice and moves the head start through the wallet', async () => {
     const { flow, submitSavingsGoal } = createFlow({
       primaryWallet: true,
       selectedFundingOption: 'bank_transfer',
@@ -100,6 +100,8 @@ describe('start savings with a PiggyVest wallet', () => {
     await flow.handleFundingContinue();
     expect(submitSavingsGoal).toHaveBeenCalledWith({
       deferInitialContribution: true,
+      continueInWallet: true,
+      confirmPrimaryBalance: true,
     });
   });
 });

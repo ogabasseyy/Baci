@@ -63,6 +63,10 @@ export function ReplyBox({ error, onSend, sending }: ReplyBoxProps) {
           placeholder="Write a reply…"
           value={draft}
           maxLength={MERCHANT_INBOX_REPLY_MAX_LENGTH}
+          // Locked while sending: text typed during the request would be
+          // cleared together with the accepted draft.
+          readOnly={sending}
+          aria-busy={sending}
           rows={2}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}

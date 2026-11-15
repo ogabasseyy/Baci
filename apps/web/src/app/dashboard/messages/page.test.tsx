@@ -179,7 +179,7 @@ describe('MessagesPage', () => {
     );
   });
 
-  it('disables sending while a reply is in flight', async () => {
+  it('locks the reply box and Send while a reply is in flight', async () => {
     inbox.value = state({
       selectedId: 7,
       selectedConversation: conversations[0],
@@ -187,10 +187,10 @@ describe('MessagesPage', () => {
       sending: true,
     });
     render(<MessagesPage />);
-    await userEvent.type(
-      screen.getByRole('textbox', { name: 'Reply to customer' }),
-      'hello'
-    );
+    const box = screen.getByRole('textbox', { name: 'Reply to customer' });
+    await userEvent.type(box, 'typed during send');
+    expect(box).toHaveValue('');
+    expect(box).toHaveAttribute('readonly');
     expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
   });
 

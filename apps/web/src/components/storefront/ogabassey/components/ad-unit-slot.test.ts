@@ -18,9 +18,19 @@ describe('resolveAdSlotId', () => {
 
   it('keeps the id a plain element id whatever the instance contains', () => {
     expect(resolveAdSlotId(placement, 'row 4 #top')).toBe(
-      'div-gpt-ad-grid-mpu-row4top'
+      'div-gpt-ad-grid-mpu-row_4__top'
     );
-    expect(resolveAdSlotId(placement, ' / ')).toBe('div-gpt-ad-grid-mpu');
+    expect(resolveAdSlotId(placement, '')).toBe('div-gpt-ad-grid-mpu');
+  });
+
+  it('bugfix: keeps different instances different after cleaning', () => {
+    expect(resolveAdSlotId(placement, 'a/b')).not.toBe(
+      resolveAdSlotId(placement, 'ab')
+    );
+    // An all-symbol instance must not collapse onto the bare placement id.
+    expect(resolveAdSlotId(placement, ' / ')).not.toBe(
+      resolveAdSlotId(placement)
+    );
   });
 
   it('returns undefined for an unknown placement', () => {

@@ -45,5 +45,7 @@ export async function GET(
   return merchantInboxJson({
     conversation: result.conversation,
     messages: result.messages,
+    hasOlder: result.hasOlder,
+    nextBefore: result.nextBefore,
   });
 }

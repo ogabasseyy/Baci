@@ -81,6 +81,8 @@ export const blogPostSchema = z
       .nullable(),
     embedded_products: embeddedProductIdsSchema.optional(),
   })
+  // Partial PATCH payloads may omit published_at when editing an existing
+  // scheduled post; updateBlogPost enforces existingPost.published_at presence.
   .superRefine((data, ctx) => {
     if (data.status === 'scheduled' && data.published_at === null) {
       ctx.addIssue({
@@ -122,6 +124,8 @@ export const createPostSchema = z
     author_title: z.string().max(100).optional(),
     author_image_url: z.url().optional().nullable(),
     author_bio: z.string().max(500).optional(),
+    // Manual dashboard scheduled posts without a reservation row are intentionally
+    // unmanaged by release caps until automated scheduling calls reserve RPC.
     status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
     published_at: z.iso.datetime({ offset: true }).nullable().optional(),
     seo_title: z.string().max(70).optional(),
@@ -129,6 +133,8 @@ export const createPostSchema = z
     focus_keyword: z.string().max(50).optional().nullable(),
     embedded_products: embeddedProductIdsSchema.optional(),
   })
+  // Partial PATCH payloads may omit published_at when editing an existing
+  // scheduled post; updateBlogPost enforces existingPost.published_at presence.
   .superRefine((data, ctx) => {
     if (data.status === 'scheduled' && !data.published_at) {
       ctx.addIssue({

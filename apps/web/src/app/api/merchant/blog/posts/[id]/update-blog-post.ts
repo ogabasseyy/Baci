@@ -242,6 +242,9 @@ export async function updateBlogPost(
           409
         );
       }
+      if (Number.isNaN(Date.parse(updateData.published_at))) {
+        return blogPostError('Invalid published_at timestamp', 400);
+      }
       const { published_at: newRequestedPublishAt, ...remainingUpdateData } =
         updateData;
       persistence = await persistBlogPostMutation({

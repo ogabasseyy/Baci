@@ -110,7 +110,11 @@ function readRpcMutationError(
     error?.code === '22023' ||
     error?.message?.includes('outside_publish_window_lagos') ||
     error?.message?.includes('invalid_reschedule_input') ||
-    error?.message?.includes('blog_post_archived')
+    error?.message?.includes('blog_post_archived') ||
+    error?.message?.includes('fast_track_event_timestamp_required') ||
+    error?.message?.includes('fast_track_event_in_future') ||
+    error?.message?.includes('fast_track_news_expired') ||
+    error?.message?.includes('fast_track_outside_lagos_window')
   ) {
     return {
       error: error.message || 'Invalid schedule timestamp',
@@ -121,6 +125,7 @@ function readRpcMutationError(
     error?.code === '40001' ||
     error?.message?.includes('daily_cap_exceeded') ||
     error?.message?.includes('fast_track_cap_exceeded') ||
+    error?.message?.includes('low_demand_game_software_cap_exceeded') ||
     error?.message?.includes('evergreen_reserve_required') ||
     error?.message?.includes('evergreen_reserve_protected') ||
     error?.message?.includes('min_spacing_conflict') ||

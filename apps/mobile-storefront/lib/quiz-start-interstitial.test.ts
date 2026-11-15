@@ -342,6 +342,32 @@ describe('maybeShowQuizStartInterstitial', () => {
       }
     });
 
+    it('releases the reservation when a host notice never settles', async () => {
+      // Regression: with the load deadline cleared for the notice, a host
+      // that never resolved left the attempt 'loading' for the session.
+      jest.useFakeTimers();
+      try {
+        setAdsEnabled('true');
+        const pending = maybeShowQuizStartInterstitial({
+          beforePresent: () => new Promise<void>(() => {}),
+        });
+        await flushConsentGate();
+        for (const listener of listeners.loaded) listener();
+        await jest.advanceTimersByTimeAsync(5_001);
+
+        await expect(pending).resolves.toBe('skipped');
+        expect(mockInterstitialShow).not.toHaveBeenCalled();
+        const retry = maybeShowQuizStartInterstitial();
+        await flushConsentGate();
+        expect(mockInterstitialLoad).toHaveBeenCalledTimes(2);
+        for (const listener of listeners.loaded) listener();
+        await expect(retry).resolves.toBe('shown');
+      } finally {
+        jest.useRealTimers();
+        setAdsEnabled(ORIGINAL_ENV);
+      }
+    });
+
     it('abandons without using the session cap when cancelled during the notice', async () => {
       setAdsEnabled('true');
       let cancelled = false;

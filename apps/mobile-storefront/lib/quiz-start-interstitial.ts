@@ -24,6 +24,10 @@ let didShowThisSession = false;
 type QuizStartAttemptState = 'idle' | 'loading' | 'owned';
 let attemptState: QuizStartAttemptState = 'idle';
 
+// Longest a host's pre-present notice may hold the attempt. The in-app
+// host settles at 1.5 s; this only backstops a host that never settles.
+const QUIZ_NOTICE_MAX_MS = 5_000;
+
 export function resetQuizStartInterstitialForTests(): void {
   didShowThisSession = false;
   attemptState = 'idle';
@@ -234,13 +238,17 @@ export async function maybeShowQuizStartInterstitial(
             return;
           }
           // The load phase is over: the 30s deadline must not fire during
-          // the notice and abandon an ad that already loaded. The notice
-          // carries its own bound (the host's timer), and every exit is
-          // re-checked in presentAfterNotice.
+          // the notice and abandon an ad that already loaded. Every exit is
+          // re-checked in presentAfterNotice. A host notice that never
+          // settles must not hold the session reservation forever, so the
+          // helper bounds it too (present() and abandon() clear this timer).
           if (loadTimer !== null) {
             clearTimeout(loadTimer);
-            loadTimer = null;
           }
+          loadTimer = setTimeout(() => {
+            loadTimer = null;
+            abandon();
+          }, QUIZ_NOTICE_MAX_MS);
           // The host's notice takes real time: the deadline, an SDK error,
           // live play or the rewarded flow can all land while it is up, so
           // every exit is re-checked before the ad is claimed. Nothing is

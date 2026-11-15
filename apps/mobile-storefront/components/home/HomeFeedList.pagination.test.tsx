@@ -11,6 +11,10 @@ type MockHomeFeedListItem =
   | { kind: 'product'; product: Product }
   | { kind: 'product-list-end'; id: string };
 
+jest.mock('@/hooks/use-black-friday', () => ({
+  useBlackFriday: () => ({ data: [] }),
+}));
+
 jest.mock('@shopify/flash-list', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual(

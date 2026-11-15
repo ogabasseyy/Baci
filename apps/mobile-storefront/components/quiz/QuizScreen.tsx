@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
-import { useTheme } from '@/hooks/useTheme';
 import { createLogger } from '@/lib/logger';
 import { prepareQuizMobileAds } from '@/services/prepare-quiz-mobile-ads';
 import { fetchQuizEvents, submitQuizAnswer } from '@/services/quiz';
@@ -27,6 +26,7 @@ import {
 import { QuizScreenFeedback } from './QuizScreenFeedback';
 import { QuizScreenModals } from './QuizScreenModals';
 import { createQuizAnswerHandlers } from './quiz-answer-handlers';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 import { useQuizMusicState } from './use-quiz-music-state';
 import { useQuizQuestionTimer } from './use-quiz-question-timer';
 import { useQuizResultPolling } from './use-quiz-result-polling';
@@ -43,7 +43,7 @@ export function QuizScreen({
   locale,
   onSignIn,
 }: QuizScreenProps = {}) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizStyles(colors);
   const lobbyStyles = createQuizLobbyStyles(colors);
   const {
@@ -237,7 +237,7 @@ export function QuizScreen({
         />
       ) : null}
       {(status === 'question' || status === 'submitting') && attempt ? (
-        <QuizGameplayScrollView styles={styles}>
+        <QuizGameplayScrollView topKey={attempt.question.id} styles={styles}>
           <QuizMusicPlayer />
           <QuizQuestionCard
             attempt={attempt}
@@ -258,7 +258,7 @@ export function QuizScreen({
         </View>
       ) : null}
       {(status === 'question' || status === 'submitting') && v2Attempt ? (
-        <QuizGameplayScrollView styles={styles}>
+        <QuizGameplayScrollView topKey={v2Attempt.question?.id} styles={styles}>
           <QuizLiveQuestionCard
             attempt={v2Attempt}
             isSubmitting={status === 'submitting'}
@@ -274,6 +274,7 @@ export function QuizScreen({
       ) : null}
       {status === 'result' ? (
         <QuizResultRoute
+          adsPrewarmFailed={adsPrewarmFailed}
           backHandlerRef={backHandlerRef}
           dismissRecovery={dismissRecovery}
           events={events}

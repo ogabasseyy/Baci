@@ -46,6 +46,11 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
     error: 'Add your date of birth before starting the quiz',
     status: 409,
   },
+  QZ014: {
+    code: 'QUIZ_AGE_RESTRICTED',
+    error: 'You must be 18 or older to play this quiz',
+    status: 403,
+  },
   QZ020: {
     code: 'QUIZ_PRIZE_FINALIZATION_NOT_APPROVED',
     error: 'Quiz prize finalization is not approved',

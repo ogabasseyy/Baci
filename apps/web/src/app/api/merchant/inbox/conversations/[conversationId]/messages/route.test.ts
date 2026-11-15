@@ -181,6 +181,22 @@ describe('POST /api/merchant/inbox/conversations/[conversationId]/messages', () 
     expect(mocks.sendReply).not.toHaveBeenCalled();
   });
 
+  it('does not read the body when the conversation id is invalid', async () => {
+    const request = new NextRequest(
+      'https://app.example.test/api/merchant/inbox/conversations/abc/messages',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'hello' }),
+      }
+    );
+    const response = await POST(request, {
+      params: Promise.resolve({ conversationId: 'abc' }),
+    });
+    expect(response.status).toBe(400);
+    expect(request.bodyUsed).toBe(false);
+  });
+
   it('does not send for a caller without edit permission', async () => {
     mocks.resolve.mockResolvedValue({
       ok: false,

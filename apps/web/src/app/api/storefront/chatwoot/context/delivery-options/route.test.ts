@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -37,110 +37,17 @@ vi.mock('@/app/api/shipping/quotes/load-public-merchant-rates', () => ({
 
 import { POST } from './route';
 
-const binding = {
-  inboxId: 74,
-  merchantId: '6df442af-4d21-4f4f-9f0b-607400000001',
-  origin: 'https://shop.example.com',
-  websiteToken: 'synthetic-widget-token-123456',
-};
-const cartContextState = {
-  cartId: '6df442af-4d21-4f4f-9f0b-607400000002',
-  cartSessionSha256: 'a'.repeat(64),
-  cartVersion: 12,
-  grantId: '6df442af-4d21-4f4f-9f0b-607400000003',
-  inboxId: binding.inboxId,
-  merchantId: binding.merchantId,
-  origin: binding.origin,
-  principalId: '6df442af-4d21-4f4f-9f0b-607400000004',
-  websiteToken: binding.websiteToken,
-};
-const cart = {
-  cartId: cartContextState.cartId,
-  merchantId: binding.merchantId,
-  state: 'active',
-  version: 12,
-  currency: 'NGN',
-  subtotalMinor: 250_000,
-  totalMinor: 250_000,
-  estimatedTotals: false,
-  expiresAt: '2026-11-08T12:00:00.000Z',
-  checkoutSessionId: 'private-checkout-session',
-  lines: [
-    {
-      id: 'server-line-1',
-      item: { productId: 'server-product-1' },
-      quantity: 2,
-      unitPriceMinor: 125_000,
-      lineTotalMinor: 250_000,
-      voucherToken: 'private-voucher-token',
-    },
-  ],
-};
-
-function request() {
-  return new NextRequest(
-    `${binding.origin}/api/storefront/chatwoot/context/delivery-options`,
-    {
-      method: 'POST',
-      headers: {
-        host: 'shop.example.com',
-        origin: binding.origin,
-        'content-type': 'application/json',
-      },
-    }
-  );
-}
-
-function loadedContext(overrides: Record<string, unknown> = {}) {
-  return {
-    ok: true,
-    binding,
-    state: cartContextState,
-    cart: { ...cart, ...overrides },
-  };
-}
+import {
+  applyDefaultDeliveryOptionsMocks,
+  binding,
+  cartContextState,
+  loadedContext,
+  request,
+} from './route-test-fixtures';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.checkCsrfProtection.mockResolvedValue({ valid: true });
-  mocks.readCartJsonBody.mockResolvedValue({
-    ok: true,
-    body: {
-      sessionToken: 'signed-chatwoot-session',
-      conversationId: 905,
-      expectedCartVersion: 12,
-      state: ' Lagos ',
-    },
-  });
-  mocks.loadChatwootCartContext.mockResolvedValue(loadedContext());
-  mocks.loadChatwootMerchantCurrency.mockResolvedValue({
-    country: 'NG',
-    currency: 'NGN',
-  });
-  mocks.verifyChatwootSessionCapability.mockResolvedValue({
-    conversationId: 905,
-    sessionExpiresAt: 1_799_000_000,
-  });
-  mocks.loadPublicMerchantRates.mockResolvedValue({
-    resolvedCountry: 'NG',
-    resolvedCurrency: 'NGN',
-    quotes: [
-      {
-        provider: 'MERCHANT',
-        displayName: 'Store pickup',
-        price: 0,
-        currency: 'NGN',
-        estimatedDays: 1,
-        isStationPickup: true,
-        stationName: 'Ikeja collection point',
-        stationAddress: 'Ikeja, Lagos',
-        stationInstructions: 'Ask at the store counter',
-        providerRateId: 'private-provider-rate-id',
-        providerCost: 900,
-        rawResponse: { secret: 'must-not-leak' },
-      },
-    ],
-  });
+  applyDefaultDeliveryOptionsMocks(mocks);
 });
 
 describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
@@ -318,123 +225,5 @@ describe('POST /api/storefront/chatwoot/context/delivery-options', () => {
     expect(await response.json()).toMatchObject({
       code: 'no_delivery_options',
     });
-  });
-
-  it('preserves authorization errors during the post-rate session recheck', async () => {
-    mocks.verifyChatwootSessionCapability
-      .mockResolvedValueOnce({
-        conversationId: 905,
-        sessionExpiresAt: 1_799_000_000,
-      })
-      .mockRejectedValueOnce(
-        new mocks.ChatwootCommerceContextError('invalid_session')
-      );
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: 'invalid_session' });
-  });
-
-  it('rejects stale carts before reading merchant rates', async () => {
-    mocks.readCartJsonBody.mockResolvedValueOnce({
-      ok: true,
-      body: {
-        sessionToken: 'signed-chatwoot-session',
-        conversationId: 905,
-        expectedCartVersion: 11,
-        state: 'Lagos',
-      },
-    });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    expect(mocks.loadPublicMerchantRates).not.toHaveBeenCalled();
-  });
-
-  it('rejects an unrecognized state without querying rates', async () => {
-    mocks.readCartJsonBody.mockResolvedValueOnce({
-      ok: true,
-      body: {
-        sessionToken: 'signed-chatwoot-session',
-        conversationId: 905,
-        expectedCartVersion: 12,
-        state: 'Atlantis',
-      },
-    });
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(400);
-    expect(mocks.loadPublicMerchantRates).not.toHaveBeenCalled();
-  });
-
-  it('rechecks cart version after rate lookup and refuses a raced result', async () => {
-    mocks.loadChatwootCartContext
-      .mockResolvedValueOnce(loadedContext())
-      .mockResolvedValueOnce(loadedContext({ version: 13 }));
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    expect(mocks.verifyChatwootSessionCapability).toHaveBeenCalledTimes(2);
-    expect(await response.json()).toMatchObject({ code: 'cart_changed' });
-  });
-
-  it('reapplies line totals and subtotal invariants after rate lookup', async () => {
-    mocks.loadChatwootCartContext
-      .mockResolvedValueOnce(loadedContext())
-      .mockResolvedValueOnce(
-        loadedContext({
-          lines: [
-            {
-              ...cart.lines[0],
-              lineTotalMinor: 249_999,
-            },
-          ],
-        })
-      );
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ code: 'cart_changed' });
-  });
-
-  it('rejects changed lines even when the version and subtotal are unchanged', async () => {
-    mocks.loadChatwootCartContext
-      .mockResolvedValueOnce(loadedContext())
-      .mockResolvedValueOnce(
-        loadedContext({
-          lines: [
-            {
-              ...cart.lines[0],
-              item: { productId: 'substituted-product' },
-            },
-          ],
-        })
-      );
-
-    const response = await POST(request());
-
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ code: 'cart_changed' });
-  });
-
-  it('refuses estimated cart totals and failed or non-NGN rate context', async () => {
-    mocks.loadChatwootCartContext.mockResolvedValueOnce(
-      loadedContext({ estimatedTotals: true })
-    );
-    expect((await POST(request())).status).toBe(409);
-    expect(mocks.loadPublicMerchantRates).not.toHaveBeenCalled();
-
-    mocks.loadChatwootCartContext.mockResolvedValue(loadedContext());
-    mocks.loadPublicMerchantRates.mockResolvedValueOnce({
-      resolvedCurrency: 'USD',
-      resolvedCountry: 'US',
-      quotes: [],
-    });
-    expect((await POST(request())).status).toBe(409);
   });
 });

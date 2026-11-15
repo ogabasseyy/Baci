@@ -12,6 +12,26 @@ function boundedText(value: unknown, maxLength: number): string | undefined {
   return normalized || undefined;
 }
 
+/**
+ * Merchant rates with no configured delivery days carry `estimatedDays: 0`
+ * as an "unknown" sentinel. A real estimate always has min/max days or a range.
+ */
+function hasConfiguredEstimate(quote: ShippingQuote): boolean {
+  if (
+    !Number.isInteger(quote.estimatedDays) ||
+    quote.estimatedDays < 0 ||
+    quote.estimatedDays > 365
+  ) {
+    return false;
+  }
+  if (quote.estimatedDays > 0) return true;
+  return (
+    quote.minDays !== undefined ||
+    quote.maxDays !== undefined ||
+    Boolean(quote.deliveryRange)
+  );
+}
+
 /** Keep only customer-facing merchant-rate estimate fields. */
 export function projectChatwootDeliveryOptions(input: {
   state: string;
@@ -63,9 +83,7 @@ export function projectChatwootDeliveryOptions(input: {
       displayName,
       priceMajor: quote.price,
       currency: input.currency,
-      ...(Number.isInteger(quote.estimatedDays) &&
-      quote.estimatedDays >= 0 &&
-      quote.estimatedDays <= 365
+      ...(hasConfiguredEstimate(quote)
         ? { estimatedDays: quote.estimatedDays }
         : {}),
       pickup: quote.isStationPickup === true,

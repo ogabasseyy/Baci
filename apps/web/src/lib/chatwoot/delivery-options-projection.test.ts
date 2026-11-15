@@ -45,7 +45,6 @@ describe('projectChatwootDeliveryOptions', () => {
           displayName: 'Store pickup',
           priceMajor: 0,
           currency: 'NGN',
-          estimatedDays: 0,
           pickup: true,
           pickupLocation: 'Ikeja collection point · Ikeja, Lagos',
           pickupInstructions: 'Ask at the store counter',
@@ -56,6 +55,36 @@ describe('projectChatwootDeliveryOptions', () => {
     expect(JSON.stringify(result)).not.toContain('do-not-return');
     expect(JSON.stringify(result)).not.toContain('providerCost');
     expect(JSON.stringify(result)).not.toContain('pricingVersion');
+  });
+
+  it('omits the unknown-estimate sentinel but keeps configured delivery days', () => {
+    const input = {
+      state: 'Lagos',
+      cartVersion: 4,
+      currency: 'NGN',
+      subtotalMinor: 250_000,
+    };
+    const result = projectChatwootDeliveryOptions({
+      ...input,
+      quotes: [
+        { ...baseQuote, displayName: 'Unknown', estimatedDays: 0 },
+        {
+          ...baseQuote,
+          displayName: 'Same day',
+          estimatedDays: 0,
+          minDays: 0,
+          deliveryRange: '0 days',
+        },
+        { ...baseQuote, displayName: 'Standard', estimatedDays: 3, minDays: 3 },
+      ],
+    });
+
+    expect(result?.options.map((o) => o.estimatedDays)).toEqual([
+      undefined,
+      0,
+      3,
+    ]);
+    expect(result?.options[0]).not.toHaveProperty('estimatedDays');
   });
 
   it('filters invalid quotes while preserving any valid merchant options', () => {

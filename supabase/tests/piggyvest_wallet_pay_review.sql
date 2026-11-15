@@ -147,12 +147,17 @@ BEGIN
   UPDATE piggyvest_primary.wallet_payments SET state = 'released', fulfilment = 'awaiting', provider_transaction_id = NULL;
   UPDATE piggyvest_primary.wallet_payments SET dispatched_at = pg_catalog.clock_timestamp() - interval '1 hour'
    WHERE id = v_late::uuid;
+  -- Only this guard is armed: other triggers on public.customers raise their
+  -- own errors on the real schema before ours would run.
+  ALTER TABLE public.customers DISABLE TRIGGER USER;
+  ALTER TABLE public.customers ENABLE TRIGGER primary_wallet_pay_block_unsettled_customer_deletion;
   BEGIN
     DELETE FROM public.customers WHERE id = 'f9a10000-0000-4000-8000-000000000003';
     RAISE EXCEPTION 'a customer with a reconcilable released send was deleted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM NOT LIKE 'cannot delete customer with unsettled wallet payments%' THEN RAISE; END IF;
   END;
+  ALTER TABLE public.customers ENABLE TRIGGER USER;
 END;
 $behaviour$;
 

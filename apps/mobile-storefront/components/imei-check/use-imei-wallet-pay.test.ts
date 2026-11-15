@@ -123,3 +123,37 @@ describe('bugfix: a stale balance chose PiggyVest during a refresh (Muse)', () =
     expect(refreshing.view.savingsKobo).toBeNull();
   });
 });
+
+describe('bugfix: wallet offered for a check the server routes to Petrock (walk M1)', () => {
+  const ready = { balance: 0, primary_balance_kobo: 100_000_000 };
+
+  it('follows the server list when it has one', () => {
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: [],
+      })
+    ).toBe(false);
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: ['basic'],
+      })
+    ).toBe(true);
+  });
+
+  it('keeps the app rule while the list is unknown', () => {
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: null,
+      })
+    ).toBe(true);
+  });
+});

@@ -19,6 +19,7 @@ import {
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { CONFIG } from '@/lib/config';
+import { fetchImeiWalletPayableTiers } from '@/lib/imei-wallet-payable-tiers';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import { useAuthStore } from '@/stores/auth-store';
 import {
@@ -39,12 +40,17 @@ export function imeiWalletPayCovers(input: {
   wallet: PayingWallet | null | undefined;
   tier: ImeiServiceTierKey;
   refusedTiers?: readonly ImeiServiceTierKey[];
+  /** The server's list of wallet-payable checks; null when not known yet. */
+  payableTiers?: readonly ImeiServiceTierKey[] | null;
 }) {
   const { tier } = input;
   // Only Sickw-backed checks can be paid this way (server rule).
   if (IMEI_SERVICE_TIERS[tier].providerServiceId === 'petrock-only')
     return false;
   if (input.refusedTiers?.includes(tier)) return false;
+  // A check the server routes to Petrock today is never offered (walk
+  // 2026-11-15, M1), even when its tier can also run on Sickw.
+  if (input.payableTiers && !input.payableTiers.includes(tier)) return false;
   return piggyvestWalletCovers({
     canPay: input.canPay,
     wallet: input.wallet,
@@ -112,6 +118,26 @@ export function useImeiWalletPay({
     closeForSwitch();
   }, [userId]);
   const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
+  const [payableTiers, setPayableTiers] = useState<
+    readonly ImeiServiceTierKey[] | null
+  >(null);
+  // Asked only while paying from PiggyVest is on. A failed read keeps the
+  // app's own rule (null), and the server still refuses what it can't bill.
+  useEffect(() => {
+    if (!canPay) return;
+    const controller = new AbortController();
+    setPayableTiers(null);
+    fetchImeiWalletPayableTiers({
+      device,
+      apiBaseUrl,
+      signal: controller.signal,
+    })
+      .then((tiers) => {
+        if (!controller.signal.aborted) setPayableTiers(tiers);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [apiBaseUrl, canPay, device]);
   const checkingKept = useRef(false);
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();
@@ -121,7 +147,14 @@ export function useImeiWalletPay({
   // the amount shown and the verify gate always agree (Muse).
   const refreshing = walletQuery.isRefetching === true;
   const covers = (tier: ImeiServiceTierKey) =>
-    !refreshing && imeiWalletPayCovers({ canPay, wallet, tier, refusedTiers });
+    !refreshing &&
+    imeiWalletPayCovers({
+      canPay,
+      wallet,
+      tier,
+      refusedTiers,
+      payableTiers,
+    });
   const openWallet = () => leaveTo('/wallet');
   const signIn = () => leaveTo('/auth/login?returnTo=/imei-check');
   return {
@@ -235,12 +268,12 @@ export function useImeiWalletPay({
           const answer = await startWithReplayCaution(!minted, () =>
             started.start()
           );
-          // A tier refusal comes before any lookup or payment exists. On a
-          // key minted by this tap nothing can be left to recover, so it is
-          // forgotten and the next tap falls back to store credit or a
-          // top-up (Codex P2). A reused key keeps it: its earlier attempt
-          // may have paid before the tier changed.
-          if (tierRefused && minted && purchase)
+          // A tier refusal means no lookup exists for this key: the server
+          // answers a key with an earlier lookup from that lookup instead
+          // of refusing (walk 2026-11-15, H2). Nothing is left to recover,
+          // so the key is forgotten and the next tap falls back to store
+          // credit or a top-up, minted or reused (Codex P2).
+          if (tierRefused && purchase)
             await walletPayPurchaseKeys
               .forget(purchase, idempotencyKey)
               .catch(() => undefined);

@@ -4,6 +4,7 @@ import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
 import { primaryPendingField } from './primary-pending-field';
 import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
+import { markHeldImeiCharges } from './wallet-held-imei-charges';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import {
   primaryBalanceField,
@@ -234,7 +235,9 @@ export async function fetchWalletDataUnbounded(
   if (walletResult.data?.id) {
     const txResult = await supabase
       .from('customer_wallet_transactions')
-      .select('id, type, amount, description, created_at, source_type')
+      .select(
+        'id, type, amount, description, created_at, source_type, source_id'
+      )
       .eq('wallet_id', walletResult.data.id)
       .eq('merchant_id', merchantId)
       .order('created_at', { ascending: false })
@@ -252,6 +255,17 @@ export async function fetchWalletDataUnbounded(
         }
         return rows;
       }, []);
+      transactionRows = await markHeldImeiCharges(
+        async (ids) =>
+          await supabase
+            .from('imei_lookups')
+            .select('id, status')
+            .eq('merchant_id', merchantId)
+            .in('id', ids)
+            .limit(ids.length),
+        txResult.data,
+        transactionRows
+      );
     }
   }
 

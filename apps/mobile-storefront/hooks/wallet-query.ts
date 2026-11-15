@@ -93,6 +93,8 @@ export interface Transaction {
   created_at: string;
   /** `customer_wallet_transactions.source_type` — `wallet_topup` for funding. */
   source_type?: string | null;
+  /** An IMEI check charge whose check has not finished yet. */
+  pending?: boolean;
 }
 
 export interface WalletQueryData {

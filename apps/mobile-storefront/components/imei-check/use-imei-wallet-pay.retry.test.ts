@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as Crypto from 'expo-crypto';
 import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { imeiWalletPayApi } from '@/lib/wallet-pay/imei-wallet-pay-api';
@@ -228,7 +228,7 @@ describe('bugfix: a tier refused before payment kept its key forever (Codex P2)'
     );
   });
 
-  it('keeps a reused key: its earlier attempt may have paid before the tier changed', async () => {
+  it('bugfix: forgets a reused key too, since the server answers a key with a lookup instead of refusing it (walk H2)', async () => {
     start.mockResolvedValueOnce({
       httpStatus: 202,
       body: {
@@ -246,7 +246,7 @@ describe('bugfix: a tier refused before payment kept its key forever (Codex P2)'
     await openAndClose(hook);
     await openAndClose(hook);
     await expect(hook.result.current.retains('basic', IMEI)).resolves.toBe(
-      true
+      false
     );
   });
 });
@@ -283,5 +283,29 @@ describe('bugfix: a broken key store withheld store credit while switched off (M
       setup(false).result.current.retains('basic', IMEI)
     ).resolves.toBe(false);
     has.mockRestore();
+  });
+});
+
+describe('bugfix: the app ignored the server list of wallet-payable checks (walk M1)', () => {
+  it('stops offering a check the server can not bill to the wallet', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ walletPayableTierKeys: ['full'] }),
+    } as Response);
+    const hook = setup();
+    await waitFor(() =>
+      expect(hook.result.current.covers('basic')).toBe(false)
+    );
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain(
+      'https://api.test/api/storefront/imei-check?device=smartphone'
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it('asks nothing while paying from PiggyVest is switched off', () => {
+    const fetchSpy = jest.spyOn(global, 'fetch');
+    setup(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

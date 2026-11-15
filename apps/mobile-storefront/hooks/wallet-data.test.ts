@@ -237,6 +237,31 @@ describe('fetchWalletData', () => {
     );
   });
 
+  it('bugfix: marks a held IMEI charge as pending, scoped to the merchant (walk M3)', async () => {
+    const { selectCalls } = setupSupabaseTables({
+      customer_wallet_transactions: createResult([
+        {
+          amount: '-500',
+          created_at: '2026-11-15T10:00:00.000Z',
+          description: 'IMEI check',
+          id: 'tx-imei',
+          source_type: 'imei_wallet_payment',
+          source_id: 'lookup-1',
+          type: 'redemption',
+        },
+      ]),
+      imei_lookups: createResult([
+        { id: 'lookup-1', status: 'pending_provider' },
+      ]),
+    });
+
+    const result = await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(selectCalls.customer_wallet_transactions[0]).toContain('source_id');
+    expect(selectCalls.imei_lookups).toEqual(['id, status']);
+    expect(result.transactions[0]?.pending).toBe(true);
+  });
+
   it('selects and preserves the ledger source_type that identifies wallet top-ups', async () => {
     const { selectCalls } = setupSupabaseTables({
       customer_wallet_transactions: createResult([

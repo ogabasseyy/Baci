@@ -29,6 +29,8 @@ export interface WalletTransaction {
    * apart from cashback/reversal credits.
    */
   source_type?: string | null;
+  /** An IMEI check charge whose check has not finished yet. */
+  pending?: boolean;
   type:
     | 'credit'
     | 'debit'
@@ -153,7 +155,7 @@ export function WalletTransactionHistory({
             <View
               accessible
               accessibilityRole="text"
-              accessibilityLabel={`${accessibleType}. ${transaction.description}. ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at)}.`}
+              accessibilityLabel={`${accessibleType}. ${transaction.description}.${transaction.pending ? ' Pending.' : ''} ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at)}.`}
               key={transaction.id}
               style={[
                 styles.transactionItem,
@@ -182,6 +184,7 @@ export function WalletTransactionHistory({
                 </Text>
                 <Text style={[styles.txDate, { color: colors.textSecondary }]}>
                   {formatWalletDate(transaction.created_at)}
+                  {transaction.pending ? ' · Pending' : ''}
                 </Text>
               </View>
               <Text style={[styles.txAmount, { color: amountColor }]}>

@@ -217,6 +217,8 @@ SELECT * FROM (VALUES
   ('public.unsubscribe_merchant_onboarding_emails(uuid)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.unsubscribe_newsletter(text,uuid)',
-   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership')
+   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership'),
+  ('public.record_chat_customer_message(text,bigint,uuid,text,bigint,text,text)',
+   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

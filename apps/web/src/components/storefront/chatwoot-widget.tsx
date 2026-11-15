@@ -235,6 +235,9 @@ export function ChatwootWidget({
         return;
       }
       widgetWindow.__baciChatwootReadyKey = configKey;
+      // A navigation between run() and ready hid the bubble in cleanup and the
+      // replacement effect could not restore it yet, so show it here.
+      readyWidget.toggleBubbleVisibility?.('show');
       setActiveWidgetKey(configKey);
     };
     window.addEventListener('chatwoot:ready', onReady);

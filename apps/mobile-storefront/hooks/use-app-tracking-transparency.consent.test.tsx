@@ -96,6 +96,7 @@ describe('bugfix: the tracking prompt fired before the consent message', () => {
   it.each([
     'timeout',
     'error',
+    'fallback',
   ])('still asks for tracking when the consent step ends in %s', async (outcome) => {
     mockGatherConsentBeforeTracking.mockResolvedValue(outcome);
     const { result } = renderHook(() =>
@@ -110,6 +111,38 @@ describe('bugfix: the tracking prompt fired before the consent message', () => {
       outcome,
       appStateBeforeConsent: AppState.currentState ?? 'unknown',
     });
+  });
+
+  it('does not ask again when the consent form already collected the tracking decision', async () => {
+    mockGetTrackingPermissionStatus
+      .mockResolvedValueOnce({ status: 'undetermined' })
+      .mockResolvedValueOnce({ status: 'granted' });
+    const { result } = renderHook(() =>
+      useAppTrackingTransparency({ enabled: true })
+    );
+
+    await waitFor(() => {
+      expect(result.current.isTrackingAuthorizationSettled).toBe(true);
+    });
+    expect(mockRequestTrackingPermission).not.toHaveBeenCalled();
+    expect(mockTrackEvent).toHaveBeenCalledWith('ATT Status Checked', {
+      status: 'granted',
+      afterConsent: 'true',
+    });
+  });
+
+  it('still asks for tracking when the status re-check after consent fails', async () => {
+    mockGetTrackingPermissionStatus
+      .mockResolvedValueOnce({ status: 'undetermined' })
+      .mockRejectedValueOnce(new Error('status unavailable'));
+    const { result } = renderHook(() =>
+      useAppTrackingTransparency({ enabled: true })
+    );
+
+    await waitFor(() => {
+      expect(result.current.isTrackingAuthorizationSettled).toBe(true);
+    });
+    expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
   });
 
   it('asks for tracking without a consent event when ads are off', async () => {

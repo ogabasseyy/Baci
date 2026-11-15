@@ -184,6 +184,27 @@ export function useAppTrackingTransparency({
             outcome: consentOutcome,
             appStateBeforeConsent,
           });
+
+          // With an IDFA message configured in AdMob, Google's consent
+          // form can present Apple's prompt itself. If the shopper decided
+          // there, there is nothing left to ask; a failed re-check or a
+          // still-undetermined status goes on to the request below.
+          try {
+            const { status: statusAfterConsent } =
+              await getTrackingPermissionStatus();
+            if (cancelled) return;
+            if (statusAfterConsent !== 'undetermined') {
+              recordAttLifecycleEvent(
+                'ATT Status Checked',
+                'att:status_checked',
+                { status: statusAfterConsent, afterConsent: 'true' }
+              );
+              settle();
+              return;
+            }
+          } catch {
+            if (cancelled) return;
+          }
         }
 
         requestWhenActive();

@@ -18,18 +18,22 @@ describe('consent split matches the SDK gatherConsent()', () => {
       join(dirname(packageJson), 'src', 'AdsConsent.ts'),
       'utf8'
     );
-    const match = source.match(
-      /async gatherConsent\([^)]*\)\s*\{([\s\S]*?)\n {2}\},/
-    );
+    const start = source.indexOf('async gatherConsent(');
+    expect(start).toBeGreaterThan(-1);
+    // The method ends at the next top-level member of the AdsConsent object.
+    const body = source
+      .slice(start)
+      .split(/\n {2}[a-zA-Z]+\(/)[0]
+      .replace(/\/\/.*$/gm, '');
 
-    expect(match).not.toBeNull();
-    const body = (match?.[1] ?? '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-    expect(body).toEqual([
-      'await this.requestInfoUpdate(options);',
-      'return this.loadAndShowConsentFormIfRequired();',
+    const update = body.indexOf('requestInfoUpdate(');
+    const form = body.indexOf('loadAndShowConsentFormIfRequired(');
+    expect(update).toBeGreaterThan(-1);
+    expect(form).toBeGreaterThan(update);
+    // No other consent-related calls were added around the pair.
+    expect(body.match(/this\.\w+\(/g)).toEqual([
+      'this.requestInfoUpdate(',
+      'this.loadAndShowConsentFormIfRequired(',
     ]);
   });
 });

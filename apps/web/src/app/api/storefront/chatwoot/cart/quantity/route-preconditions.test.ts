@@ -147,6 +147,24 @@ describe('Chatwoot quantity route preconditions', () => {
     expect(mocks.mutateCart).not.toHaveBeenCalled();
   });
 
+  it('maps expired browser proof to a non-retryable invalid context', async () => {
+    arrange();
+    mocks.loadChatwootCartContext.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      code: 'expired_proof',
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'invalid_context',
+    });
+    expect(mocks.mutateCart).not.toHaveBeenCalled();
+  });
+
   it('requires refresh for a version newer than the authorized snapshot', async () => {
     arrange({ ...body, cartVersion: cart.version + 1 });
 

@@ -68,6 +68,10 @@ export async function handleChatwootInlineCartAdd(input: {
     mutation?.accepted === true && mutation.operationId !== requestId;
   const refreshRequired = mutation?.code === 'refresh_required';
   const idempotencyConflict = mutation?.code === 'idempotency_conflict';
+  // A locked or expired cart changed state on the server: re-read it so the
+  // widget stops rendering the stale cart as actionable.
+  const cartClosed =
+    mutation?.code === 'cart_locked' || mutation?.code === 'cart_expired';
   const responseStatus = mutation?.httpStatus;
   const outcomeUnavailable =
     mutation === null ||
@@ -86,7 +90,11 @@ export async function handleChatwootInlineCartAdd(input: {
     input.onSessionTokenRenewed?.(mutation.sessionToken);
   }
   if (
-    (accepted || refreshRequired || idempotencyConflict || outcomeUnavailable) &&
+    (accepted ||
+      refreshRequired ||
+      idempotencyConflict ||
+      cartClosed ||
+      outcomeUnavailable) &&
     input.isCurrentCartContext()
   ) {
     try {

@@ -13,11 +13,26 @@ import { useAuthStore } from '@/stores/auth-store';
 import { QuizLeaderboardParticipantCount } from './QuizLeaderboardParticipantCount';
 import { QuizLeaderboardRow } from './QuizLeaderboardRow';
 import { createQuizLeaderboardStyles } from './QuizLeaderboardScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
 import { formatQuizClock } from './QuizScreen.utils';
+import { QuizStandingsPodium } from './QuizStandingsPodium';
 import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
-function getLeaderboardRows(leaderboard: QuizLeaderboard | null) {
-  return leaderboard?.entries ?? [];
+const PODIUM_SIZE = 3;
+
+/**
+ * Splits a board into the medal podium (the top three, when there are at
+ * least three players) and the rows listed under it.
+ */
+function splitLeaderboard(leaderboard: QuizLeaderboard | null) {
+  const entries = [...(leaderboard?.entries ?? [])].sort(
+    (a, b) => a.rank - b.rank
+  );
+  if (entries.length < PODIUM_SIZE) return { podium: [], rows: entries };
+  return {
+    podium: entries.slice(0, PODIUM_SIZE),
+    rows: entries.slice(PODIUM_SIZE),
+  };
 }
 
 function isPastQuizEvent(item: QuizEvent): boolean {
@@ -36,6 +51,7 @@ function isPastQuizEvent(item: QuizEvent): boolean {
 export function QuizLeaderboardScreen() {
   const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizLeaderboardStyles(colors);
+  const podiumStyles = createQuizStyles(colors);
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const [events, setEvents] = useState<QuizEvent[]>([]);
   const [selected, setSelected] = useState<QuizEvent | null>(null);
@@ -96,7 +112,7 @@ export function QuizLeaderboardScreen() {
     }
   };
 
-  const rows = getLeaderboardRows(leaderboard);
+  const { podium, rows } = splitLeaderboard(leaderboard);
 
   if (selected) {
     return (
@@ -156,10 +172,11 @@ export function QuizLeaderboardScreen() {
               {leaderboard?.status === 'published' ? (
                 <Text style={styles.boardTitle}>Final standings</Text>
               ) : null}
+              <QuizStandingsPodium entries={podium} styles={podiumStyles} />
             </View>
           }
           ListEmptyComponent={
-            loading || error ? undefined : (
+            loading || error || podium.length > 0 ? undefined : (
               <Text style={styles.state}>No standings are available yet.</Text>
             )
           }

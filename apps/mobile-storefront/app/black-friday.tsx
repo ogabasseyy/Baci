@@ -17,7 +17,7 @@ import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 
 export default function BlackFridayScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
-  const { data, isPending, isError, refetch } = useBlackFriday();
+  const { data, isPending, isError, isRefetching, refetch } = useBlackFriday();
   const products = isOgabasseyApp ? (data ?? []) : [];
   const hasOffers = products.length > 0;
 
@@ -45,6 +45,8 @@ export default function BlackFridayScreen() {
       <FlatList
         contentContainerStyle={styles.content}
         data={products}
+        onRefresh={isOgabasseyApp ? () => void refetch() : undefined}
+        refreshing={isOgabasseyApp && isRefetching}
         keyExtractor={(product) => product.id}
         ListHeaderComponent={
           <>

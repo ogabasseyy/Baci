@@ -8,12 +8,11 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 const log = createLogger('AuthCallback');
-const callbackDestinations: ReadonlySet<string> = new Set([
-  '/',
-  '/account',
-  '/(tabs)/account',
-  '/wallet',
-  '/(tabs)/wallet',
+const callbackDestinations = new Map<string, Href>([
+  ['/account', '/(tabs)/account'],
+  ['/(tabs)/account', '/(tabs)/account'],
+  ['/wallet', '/(tabs)/wallet'],
+  ['/(tabs)/wallet', '/(tabs)/wallet'],
 ]);
 
 function getCallbackDestination(value: string | string[] | undefined): Href {
@@ -21,7 +20,7 @@ function getCallbackDestination(value: string | string[] | undefined): Href {
 
   try {
     const path = decodeURIComponent(value);
-    return callbackDestinations.has(path) ? (path as Href) : '/';
+    return callbackDestinations.get(path) ?? '/';
   } catch {
     return '/';
   }

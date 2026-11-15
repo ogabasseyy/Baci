@@ -1,12 +1,17 @@
 import { OGABASSEY_BLACK_FRIDAY_DATE_LABEL } from '@baci/shared';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
 import BlackFridayScreen from '@/app/black-friday';
 
 const mockRefetch = jest.fn();
 let mockState: Record<string, unknown>;
 jest.mock('@/hooks/use-black-friday', () => ({
   isOgabasseyApp: true,
-  useBlackFriday: () => ({ ...mockState, refetch: mockRefetch }),
+  useBlackFriday: () => ({
+    isRefetching: false,
+    ...mockState,
+    refetch: mockRefetch,
+  }),
 }));
 jest.mock('@/components/storefront/StorefrontScreenShell', () => ({
   StorefrontScreenShell: ({ children }: { children: React.ReactNode }) =>
@@ -65,4 +70,17 @@ it('keeps cached offers visible and retries a failed refresh', () => {
   expect(screen.getByText(/showing the last loaded lineup/i)).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
   expect(mockRefetch).toHaveBeenCalledTimes(1);
+});
+
+it('lets shoppers pull to refresh and keeps the lineup visible during the request', () => {
+  const data = [{ id: 'one', slug: 'phone', name: 'Phone', price: '₦1' }];
+  mockState = { data, isRefetching: false };
+  const { rerender } = render(<BlackFridayScreen />);
+  fireEvent(screen.UNSAFE_getByType(FlatList), 'refresh');
+  expect(mockRefetch).toHaveBeenCalledTimes(1);
+
+  mockState = { data, isRefetching: true };
+  rerender(<BlackFridayScreen />);
+  expect(screen.UNSAFE_getByType(FlatList).props.refreshing).toBe(true);
+  expect(screen.getByText('Phone')).toBeTruthy();
 });

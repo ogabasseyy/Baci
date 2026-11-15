@@ -29,6 +29,8 @@ afterEach(() => jest.useRealTimers());
 
 it.each([
   { returnTo: '/(tabs)/account', target: '/(tabs)/account' },
+  { returnTo: '/account', target: '/(tabs)/account' },
+  { returnTo: '/wallet', target: '/(tabs)/wallet' },
   { returnTo: encodeURIComponent('/(tabs)/wallet'), target: '/(tabs)/wallet' },
   { returnTo: '/auth/login', target: '/' },
   { returnTo: '/account%', target: '/' },

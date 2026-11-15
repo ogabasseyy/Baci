@@ -36,6 +36,9 @@ def run(database: str, migration: str) -> None:
     if process.wait() != 0:
         raise RuntimeError(f'cutover migration failed: {stderr}')
     check = """DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM public.imei_lookups WHERE imei_hash='malformed')
+        OR EXISTS (SELECT 1 FROM private.imei_attempt_claims WHERE imei_hash='malformed') THEN
+        RAISE EXCEPTION 'malformed legacy row was not safely skipped'; END IF;
       IF NOT EXISTS (SELECT 1 FROM private.imei_attempt_claims WHERE imei_hash=repeat('c',64)
         AND idempotency_key='80000000-0000-4000-8000-000000000010') THEN RAISE EXCEPTION 'cutover missed legacy row'; END IF;
       BEGIN

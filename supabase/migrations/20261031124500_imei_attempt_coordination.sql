@@ -134,6 +134,7 @@ INSERT INTO private.imei_attempt_claims (merchant_id, customer_id, tier, imei_ha
 SELECT DISTINCT ON (merchant_id, customer_id, tier, imei_hash)
   merchant_id, customer_id, tier, imei_hash, idempotency_key
 FROM public.imei_lookups
+WHERE imei_hash ~ '^[a-f0-9]{64}$'
 ORDER BY merchant_id, customer_id, tier, imei_hash,
   CASE WHEN status IN ('pending', 'provider_submitting', 'pending_provider', 'submission_unknown', 'refund_pending') THEN 0 ELSE 1 END,
   CASE WHEN status IN ('pending', 'provider_submitting', 'pending_provider', 'submission_unknown', 'refund_pending') THEN created_at END ASC,

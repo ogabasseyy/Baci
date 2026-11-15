@@ -84,7 +84,13 @@ async function checkWallets(
     if (!bound || isRestricted(source) || isRestricted(destination))
       return 'unavailable';
     return source.balance >= reservation.amountKobo ? 'ok' : 'insufficient';
-  } catch {
+  } catch (error) {
+    // The failure class only (no ids or provider bodies), so a persistent
+    // schema mismatch reads differently from a short outage (CodeRabbit).
+    console.warn(
+      '[PiggyVest wallet pay] wallet check failed',
+      error instanceof Error ? error.name : typeof error
+    );
     return 'unavailable';
   }
 }

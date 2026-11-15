@@ -146,4 +146,15 @@ describe('runWalletPayDrain', () => {
     );
     expect(unbounded.deferred).toBe(0);
   });
+
+  it('bugfix: a refund the wallets could not cover is deferred, not counted as sent (CodeRabbit)', async () => {
+    worker.listWork.mockResolvedValue({
+      settle: [],
+      refund: [A, B],
+      deliver: [],
+    });
+    deps.refund.mockResolvedValueOnce('unfunded').mockResolvedValueOnce('sent');
+    const summary = await runWalletPayDrain({ runtime, deliverers: {} }, deps);
+    expect(summary).toMatchObject({ refunds: 1, deferred: 1, failed: 0 });
+  });
 });

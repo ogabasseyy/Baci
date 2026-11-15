@@ -73,6 +73,13 @@ export function createQuizResultsStyles(colors: QuizThemeColors) {
       fontVariant: ['tabular-nums'],
       fontWeight: '700',
     },
+    // The tie-breaker stays visible but sits below the score.
+    podiumTime: {
+      color: colors.textSecondary,
+      fontSize: 11,
+      fontVariant: ['tabular-nums'],
+      fontWeight: '500',
+    },
     podiumStep: {
       alignItems: 'center',
       alignSelf: 'stretch',

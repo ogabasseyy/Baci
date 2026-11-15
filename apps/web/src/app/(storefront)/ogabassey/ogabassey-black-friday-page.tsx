@@ -5,10 +5,7 @@ import {
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
-import {
-  BLACK_FRIDAY_PRODUCT_SLUGS,
-  IS_BLACK_FRIDAY_PREVIEW,
-} from '@/config/ogabassey-black-friday';
+import { IS_BLACK_FRIDAY_PREVIEW } from '@/config/ogabassey-black-friday';
 import { getBlackFridayProducts } from '@/lib/ogabassey-black-friday';
 import { asRoute } from '@/lib/routes';
 import { BlackFridayFilters } from './black-friday-filters';
@@ -20,7 +17,10 @@ interface BlackFridayPageProps {
   filters?: Promise<Record<string, string | string[] | undefined>>;
 }
 
+type Lineup = ReturnType<typeof getBlackFridayProducts>;
+
 export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
+  const lineup = getBlackFridayProducts();
   return (
     <section className={styles.page}>
       <header className={styles.hero}>
@@ -31,22 +31,11 @@ export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
           <h1 className={styles.title}>
             Black <span className={styles.accent}>Friday</span>
           </h1>
-          {BLACK_FRIDAY_PRODUCT_SLUGS.length > 0 && (
-            <>
-              <p className={styles.description}>
-                Find your next upgrade in our Black Friday lineup.
-              </p>
-              <time
-                dateTime={OGABASSEY_BLACK_FRIDAY_DATE}
-                className="block font-semibold text-rose-200"
-              >
-                {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
-              </time>
-              <a className={styles.heroLink} href="#black-friday-offers">
-                Shop the lineup <span aria-hidden="true">↓</span>
-              </a>
-            </>
-          )}
+          <div className={styles.heroDetails}>
+            <Suspense fallback={null}>
+              <BlackFridayHeroDetails lineup={lineup} />
+            </Suspense>
+          </div>
         </div>
         {/* biome-ignore lint/performance/noImgElement: Local WebP sizes are encoded ahead of time. */}
         <img
@@ -67,10 +56,32 @@ export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
           aria-hidden="true"
         />
         <Suspense fallback={<BlackFridayOffersLoading />}>
-          <BlackFridayOffers {...props} />
+          <BlackFridayOffers {...props} lineup={lineup} />
         </Suspense>
       </section>
     </section>
+  );
+}
+
+export async function BlackFridayHeroDetails({ lineup }: { lineup: Lineup }) {
+  const products = await lineup.catch(() => []);
+  if (!products.length) return null;
+
+  return (
+    <>
+      <p className={styles.description}>
+        Find your next upgrade in our Black Friday lineup.
+      </p>
+      <time
+        dateTime={OGABASSEY_BLACK_FRIDAY_DATE}
+        className="block font-semibold text-rose-200"
+      >
+        {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+      </time>
+      <a className={styles.heroLink} href="#black-friday-offers">
+        Shop the lineup <span aria-hidden="true">↓</span>
+      </a>
+    </>
   );
 }
 
@@ -94,8 +105,9 @@ function BlackFridayOffersLoading() {
 export async function BlackFridayOffers({
   pathPrefix,
   filters,
-}: BlackFridayPageProps) {
-  const products = await getBlackFridayProducts();
+  lineup = getBlackFridayProducts(),
+}: BlackFridayPageProps & { lineup?: Lineup }) {
+  const products = await lineup;
   const { products: matchingProducts, ...selection } = getBlackFridayLineupView(
     products,
     (await filters) ?? {}

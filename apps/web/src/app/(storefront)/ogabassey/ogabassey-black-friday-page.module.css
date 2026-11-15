@@ -39,6 +39,11 @@
   color: #ff626a;
 }
 
+.heroDetails {
+  min-block-size: 9rem;
+  display: flow-root;
+}
+
 .description {
   max-width: 28ch;
   margin-top: 1rem;

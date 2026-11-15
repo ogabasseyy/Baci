@@ -117,6 +117,18 @@ describe('CategoryScreen', () => {
     );
   });
 
+  it.each([
+    { sort: 'price-asc', expected: 'price_asc' },
+    { sort: 'price-desc', expected: 'price_desc' },
+    { sort: 'unsupported', expected: undefined },
+  ])('normalizes catalog sort $sort', ({ sort, expected }) => {
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'accessories', sort });
+    render(<CategoryScreen />);
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: expected })
+    );
+  });
+
   it('renders the loading state while category products are being fetched', () => {
     setProductsState({
       isLoading: true,

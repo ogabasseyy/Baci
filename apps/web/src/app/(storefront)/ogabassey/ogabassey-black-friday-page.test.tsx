@@ -1,22 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { asRoute } from '@/lib/routes';
 import { OgabasseyBlackFridayHomeLink } from './ogabassey-black-friday-home-link';
 import {
+  BlackFridayHeroDetails,
   BlackFridayOffers,
   OgabasseyBlackFridayPage,
 } from './ogabassey-black-friday-page';
 
-const { getBlackFridayProducts, campaign } = vi.hoisted(() => ({
+const { getBlackFridayProducts } = vi.hoisted(() => ({
   getBlackFridayProducts: vi.fn(),
-  campaign: { slugs: [] as string[] },
-}));
-
-vi.mock('@/config/ogabassey-black-friday', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/config/ogabassey-black-friday')>()),
-  get BLACK_FRIDAY_PRODUCT_SLUGS() {
-    return campaign.slugs;
-  },
 }));
 
 vi.mock('@/lib/ogabassey-black-friday', () => ({ getBlackFridayProducts }));
@@ -37,7 +31,6 @@ vi.mock('next/link', () => ({
 
 beforeEach(() => {
   getBlackFridayProducts.mockReset();
-  campaign.slugs = [];
   vi.stubGlobal('matchMedia', () => ({
     matches: false,
     addEventListener: vi.fn(),
@@ -49,13 +42,13 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Black Friday storefront page', () => {
   it('renders the hero and keeps the placeholder below it while offers load', () => {
-    campaign.slugs = ['phone'];
     getBlackFridayProducts.mockReturnValue(new Promise(() => {}));
     render(<OgabasseyBlackFridayPage pathPrefix="" />);
 
     expect(
-      screen.getByRole('link', { name: 'Shop the lineup' })
-    ).toHaveAttribute('href', '#black-friday-offers');
+      screen.queryByRole('link', { name: 'Shop the lineup' })
+    ).not.toBeInTheDocument();
+    expect(getBlackFridayProducts).toHaveBeenCalledOnce();
     expect(
       screen.getByRole('region', { name: 'Black Friday offers' })
     ).toContainElement(document.getElementById('black-friday-offers'));
@@ -67,10 +60,14 @@ describe('Black Friday storefront page', () => {
     );
   });
 
-  it('hides the date and shopping action after the approved lineup is removed', () => {
-    getBlackFridayProducts.mockReturnValue(new Promise(() => {}));
-    render(<OgabasseyBlackFridayPage pathPrefix="" />);
-
+  it.each([
+    false,
+    true,
+  ])('hides the hero action when the lineup is unavailable (failed: %s)', async (failed) => {
+    const lineup = failed
+      ? Promise.reject(new Error('catalog unavailable'))
+      : Promise.resolve([]);
+    render(await BlackFridayHeroDetails({ lineup }));
     expect(
       screen.queryByText('Friday, 27 November 2026')
     ).not.toBeInTheDocument();
@@ -79,7 +76,37 @@ describe('Black Friday storefront page', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('renders the catalog links and prices in lineup order', async () => {
+  it('shows the dated shop action when the lineup contains offers', async () => {
+    const lineup = Promise.resolve([
+      {
+        id: 'phone',
+        name: 'Phone',
+        slug: 'phone',
+        rawPrice: 1,
+        storage: undefined,
+        ram: undefined,
+        graphics: undefined,
+        colors: undefined,
+        simType: undefined,
+        displayType: undefined,
+        displaySize: undefined,
+        condition: undefined,
+        compareAtPrice: undefined,
+        href: asRoute('/phones/phone'),
+        price: '₦1',
+        priceAmount: 1,
+        brand: 'Brand',
+        image: '',
+      },
+    ]);
+    render(await BlackFridayHeroDetails({ lineup }));
+    expect(screen.getByText('Friday, 27 November 2026')).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Shop the lineup' })
+    ).toHaveAttribute('href', '#black-friday-offers');
+  });
+
+  it('keeps the catalog lineup order for an unsupported sort', async () => {
     getBlackFridayProducts.mockReturnValue(
       Promise.resolve([
         {
@@ -102,7 +129,12 @@ describe('Black Friday storefront page', () => {
         },
       ])
     );
-    render(await BlackFridayOffers({ pathPrefix: '/ogabassey' }));
+    render(
+      await BlackFridayOffers({
+        pathPrefix: '/ogabassey',
+        filters: Promise.resolve({ sort: 'unsupported' }),
+      })
+    );
 
     expect(
       screen.getAllByRole('link').map((link) => link.getAttribute('href'))

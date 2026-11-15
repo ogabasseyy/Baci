@@ -75,7 +75,19 @@ export default function CategoryScreen() {
         ).find(Boolean)
       : undefined);
   const isCategoryResolved = slug === 'all' || Boolean(categoryId);
-  const sortBy = sort === 'price_asc' || sort === 'newest' ? sort : undefined;
+  // Accept web price-sort aliases while keeping the catalog's RPC keys.
+  const normalizedSort =
+    sort === 'price-asc'
+      ? 'price_asc'
+      : sort === 'price-desc'
+        ? 'price_desc'
+        : sort;
+  const sortBy =
+    normalizedSort === 'price_asc' ||
+    normalizedSort === 'price_desc' ||
+    normalizedSort === 'newest'
+      ? normalizedSort
+      : undefined;
 
   const { products, isLoading, error, hasMore, refetch, loadMore } =
     useProducts({

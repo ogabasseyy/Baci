@@ -171,3 +171,18 @@ trial exercised compilation. Restart replay, wrong-pin startup, current
 verifier composition, real OAuth and HTTPS ingress still need their own
 acceptance receipts. No permanent service, DNS, firewall, paid AI, order,
 payment, publication or submission was involved.
+
+## Root-only artifact staging, 15 November 2026
+
+The operator assembly built from `028da10658232f3812baa65fec4001a3f99ba900`
+and its disabled staging script were transferred to
+`/root/baci-builder-candidates/028da10658` on Contabo. All 16 checksums
+matched. The directory is root-owned mode 0700 and files are mode 0600.
+The candidate manifest SHA-256 is
+`371ed1b915beeddd0c8fd95bd697e77949277cb0e42727e6d1f16aff02f324b9`;
+the transfer checksum manifest SHA-256 is
+`999788c2929a7829435c1fc2d7ea97ee8f7c770db677a1bd2bdf4eba51ca9ad7`.
+No fixed installation path, sudo policy, service, firewall or DNS changed.
+This directory records the earlier source commit. The subsequent PR head
+`bdcd99f14444e770e4cffb5175684c0e168d5f27` needs its own assembly comparison
+before rollout.

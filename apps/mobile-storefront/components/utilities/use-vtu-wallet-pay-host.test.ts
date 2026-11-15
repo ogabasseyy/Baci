@@ -289,3 +289,55 @@ describe('bugfix: a fresh start refused while wallet pay was rolled back kept it
     expect(await saved()).toContain('key-1');
   });
 });
+
+describe("bugfix: a delayed settled answer removed a newer attempt's key (Codex P1)", () => {
+  const STORE = 'baci.walletPay.openPurchases.v1';
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    walletPayPurchaseKeys.resetMemory();
+  });
+
+  it('retires only the key this attempt used', async () => {
+    start.mockResolvedValue({
+      httpStatus: 202,
+      body: {
+        status: 'payment_required',
+        transactionId: '33333333-3333-4333-8333-333333333333',
+        operationId: '11111111-1111-4111-8111-111111111111',
+        amountKobo: 50_000,
+      },
+    });
+    (vtuWalletPayApi.verifyPin as jest.Mock).mockResolvedValue({
+      httpStatus: 200,
+      body: { proof: 'a'.repeat(64) },
+    });
+    let settle: (value: unknown) => void = () => undefined;
+    (vtuWalletPayApi.pay as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => (settle = resolve))
+    );
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    act(() => hook.result.current.sheet.setPin('1234'));
+    let submitted: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      submitted = hook.result.current.sheet.submit();
+    });
+    // Another tab replaced the purchase's key while the pay was out.
+    const saved = JSON.parse((await AsyncStorage.getItem(STORE)) ?? '{}');
+    const [purchase] = Object.keys(saved);
+    await AsyncStorage.setItem(
+      STORE,
+      JSON.stringify({ [purchase]: { key: 'key-newer', at: Date.now() } })
+    );
+    walletPayPurchaseKeys.resetMemory();
+    await act(async () => {
+      settle({ httpStatus: 202, body: { status: 'payment_refunding' } });
+      await submitted;
+    });
+    expect(String(await AsyncStorage.getItem(STORE))).toContain('key-newer');
+    hook.unmount();
+  });
+});

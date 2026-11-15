@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { readCartJsonBody } from '@/lib/cart/request-context';
+import { readMerchantInboxJsonBody } from '@/lib/chatwoot/merchant-inbox-body';
 import {
   listMerchantInboxMessages,
   sendMerchantInboxReply,
@@ -77,9 +77,9 @@ export async function POST(
   if (!conversationId.success) {
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
-  // Shared streaming JSON reader: its 64 KB byte cap is enforced before the
-  // body is buffered. The reply's own limit is the 2,000-character schema.
-  const rawBody = await readCartJsonBody(request);
+  // Local streaming reader (no cart/env imports): its byte cap is enforced
+  // before the body is buffered; the reply's own limit is the schema's.
+  const rawBody = await readMerchantInboxJsonBody(request);
   const body = merchantInboxReplySchema.safeParse(
     rawBody.ok ? rawBody.body : null
   );

@@ -87,6 +87,8 @@ describe('QuizLiveQuestionCard', () => {
     renderWithOptions(['Lagos', 'Abuja', 'Kano', 'Ibadan']);
 
     expect(screen.getByTestId('quiz-answers-grid')).toBeTruthy();
+    // bugfix: a two-line cap could hide the end of an answer on Android.
+    expect(screen.getByText('Ibadan').props.numberOfLines).toBeUndefined();
     for (const letter of ['A', 'B', 'C', 'D']) {
       expect(screen.getByText(letter)).toBeTruthy();
     }

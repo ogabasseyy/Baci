@@ -159,13 +159,10 @@ export function QuizLiveQuestionCard({
               >
                 {String.fromCharCode(65 + index)}
               </Text>
-              {/* The grid rule in quiz-stage-colors is what keeps answers whole
-                  on every platform. The shrink props are only a bonus where
-                  the platform honours them. */}
+              {/* No line cap: a tile grows with its text (and its row with
+                  it), so an answer is never cut off on any platform. The
+                  grid rule in quiz-stage-colors keeps that growth small. */}
               <Text
-                adjustsFontSizeToFit={useGrid}
-                minimumFontScale={0.8}
-                numberOfLines={useGrid ? 2 : undefined}
                 style={[
                   styles.answerTileText,
                   useGrid

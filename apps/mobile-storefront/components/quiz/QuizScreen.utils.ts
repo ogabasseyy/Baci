@@ -225,8 +225,9 @@ export function getQuizTriesLeft(
   if (
     typeof used !== 'number' ||
     typeof max !== 'number' ||
-    !Number.isFinite(used) ||
-    !Number.isFinite(max)
+    !Number.isInteger(used) ||
+    !Number.isInteger(max) ||
+    used < 0
   ) {
     return null;
   }

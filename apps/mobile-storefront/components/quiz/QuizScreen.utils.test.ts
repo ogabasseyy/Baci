@@ -257,6 +257,8 @@ describe('getQuizTriesLeft', () => {
     expect(
       getQuizTriesLeft({ attemptsUsed: Number.NaN, maxAttempts: 3 })
     ).toBeNull();
+    expect(getQuizTriesLeft({ attemptsUsed: -1, maxAttempts: 3 })).toBeNull();
+    expect(getQuizTriesLeft({ attemptsUsed: 1.5, maxAttempts: 3 })).toBeNull();
   });
 });
 

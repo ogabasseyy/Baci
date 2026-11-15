@@ -220,7 +220,9 @@ export function QuizResultsPanel({
             canReturnToQuizList ? onReturnToQuizList : undefined
           }
           returnLabel={
-            lifecycle === 'pending_results' ? 'Play again' : 'Back to quizzes'
+            lifecycle === 'pending_results' && triesLeft !== 0
+              ? 'Play again'
+              : 'Back to quizzes'
           }
           showHistory={v2Result?.availability === 'final'}
           styles={styles}

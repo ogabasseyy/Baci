@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createLogger } from '@/lib/logger';
 import { fetchQuizEvents } from '@/services/quiz';
+import type { QuizEvent } from '@/services/quiz-types';
 import { getQuizTriesLeft } from './QuizScreen.utils';
 
 const log = createLogger('QuizTriesLeft');
@@ -13,34 +14,33 @@ const log = createLogger('QuizTriesLeft');
  */
 export function useQuizTriesLeft(
   eventId: string | null | undefined,
-  enabled: boolean,
-  maxAttempts: number | undefined
+  enabled: boolean
 ): number | null {
-  const [attemptsUsed, setAttemptsUsed] = useState<number | null>(null);
+  const [fresh, setFresh] = useState<Pick<
+    QuizEvent,
+    'attemptsUsed' | 'maxAttempts'
+  > | null>(null);
 
   useEffect(() => {
     if (!enabled || !eventId) {
-      setAttemptsUsed(null);
+      setFresh(null);
       return;
     }
     let active = true;
     fetchQuizEvents()
       .then((events) => {
         if (!active) return;
-        const used = events.find((event) => event.id === eventId)?.attemptsUsed;
-        setAttemptsUsed(typeof used === 'number' ? used : null);
+        // Both numbers come from the same fresh payload, never the cached list.
+        setFresh(events.find((event) => event.id === eventId) ?? null);
       })
       .catch((error) => {
         log.warn('Failed to refresh quiz attempts', error);
-        if (active) setAttemptsUsed(null);
+        if (active) setFresh(null);
       });
     return () => {
       active = false;
     };
   }, [enabled, eventId]);
 
-  return getQuizTriesLeft({
-    attemptsUsed: attemptsUsed ?? undefined,
-    maxAttempts,
-  });
+  return getQuizTriesLeft(fresh ?? undefined);
 }

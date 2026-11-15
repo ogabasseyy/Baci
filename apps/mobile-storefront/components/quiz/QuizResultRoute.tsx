@@ -66,11 +66,7 @@ export function QuizResultRoute({
       ? (terminalContext?.eventEndsAt ?? event?.endsAt)
       : terminalContext?.serverNow
   );
-  const triesLeft = useQuizTriesLeft(
-    terminalContext?.eventId,
-    canPlayAgain,
-    event?.maxAttempts
-  );
+  const triesLeft = useQuizTriesLeft(terminalContext?.eventId, canPlayAgain);
   const returnToLobby = () => {
     if (lifecycle === 'pending_results' && !canPlayAgain) return;
     if (terminalContext?.eventId) dismissRecovery(terminalContext.eventId);

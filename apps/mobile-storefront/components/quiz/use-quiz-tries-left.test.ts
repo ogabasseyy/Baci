@@ -28,7 +28,7 @@ describe('useQuizTriesLeft', () => {
 
   it('reads the count from a fresh fetch, not the cached lobby list', async () => {
     mockFetch.mockResolvedValue([event(2)]);
-    const { result } = renderHook(() => useQuizTriesLeft('event-1', true, 3));
+    const { result } = renderHook(() => useQuizTriesLeft('event-1', true));
     expect(result.current).toBeNull();
     await waitFor(() => expect(result.current).toBe(1));
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -36,21 +36,27 @@ describe('useQuizTriesLeft', () => {
 
   it('stays null when the server sends no count', async () => {
     mockFetch.mockResolvedValue([event(undefined)]);
-    const { result } = renderHook(() => useQuizTriesLeft('event-1', true, 3));
+    const { result } = renderHook(() => useQuizTriesLeft('event-1', true));
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     expect(result.current).toBeNull();
   });
 
   it('stays null when the fetch fails', async () => {
     mockFetch.mockRejectedValue(new Error('offline'));
-    const { result } = renderHook(() => useQuizTriesLeft('event-1', true, 3));
+    const { result } = renderHook(() => useQuizTriesLeft('event-1', true));
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     expect(result.current).toBeNull();
   });
 
   it('does not fetch when another attempt is not allowed', () => {
-    const { result } = renderHook(() => useQuizTriesLeft('event-1', false, 3));
+    const { result } = renderHook(() => useQuizTriesLeft('event-1', false));
     expect(result.current).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('uses the fresh maxAttempts even when the cached event is unavailable', async () => {
+    mockFetch.mockResolvedValue([{ ...event(0), maxAttempts: 5 }]);
+    const { result } = renderHook(() => useQuizTriesLeft('event-1', true));
+    await waitFor(() => expect(result.current).toBe(5));
   });
 });

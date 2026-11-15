@@ -171,6 +171,33 @@ describe('QuizResultsPanel lifecycle', () => {
     expect(fetchQuizLeaderboard).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [2, 'Play again · 2 tries left'],
+    [0, 'Return to quiz list'],
+  ])('with %s tries left the pending-results action is "%s"', (triesLeft, name) => {
+    render(
+      <QuizResultsPanel
+        allowPendingResultsExit
+        eventId="event-1"
+        eventEndsAt={new Date(30_000).toISOString()}
+        expectedUserId="user-1"
+        legacyResult={null}
+        lifecycle="pending_results"
+        onReturnToQuizList={jest.fn()}
+        serverNow={new Date(0).toISOString()}
+        styles={createQuizStyles(colors)}
+        triesLeft={triesLeft}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'pending',
+          availableAt: null,
+        }}
+      />
+    );
+
+    expect(screen.getByRole('button', { name })).toBeTruthy();
+  });
+
   it('offers another attempt while a multi-attempt event is still open', () => {
     const onReturnToQuizList = jest.fn();
     render(

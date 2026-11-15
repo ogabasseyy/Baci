@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
+import { CHAT_WIDGET_FAB_SIZE } from '@/constants/layout';
 import {
   ActivityQueryWrapper,
   activityItem,
@@ -81,6 +83,16 @@ describe('PiggyVest wallet activity list', () => {
     renderList();
 
     expect(await screen.findByText('No wallet activity yet')).toBeOnTheScreen();
+  });
+
+  it('bugfix: centres the empty state on the screen, not the narrowed list', async () => {
+    mockFetch.mockResolvedValue({ items: [], nextCursor: null });
+    renderList();
+
+    const empty = (await screen.findByText('No wallet activity yet')).parent
+      ?.parent;
+    const flat = StyleSheet.flatten(empty?.props.style);
+    expect(flat.paddingLeft).toBe(CHAT_WIDGET_FAB_SIZE + 8);
   });
 
   it('loads the next page with the server cursor', async () => {

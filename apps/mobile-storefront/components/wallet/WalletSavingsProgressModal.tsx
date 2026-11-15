@@ -10,6 +10,7 @@ import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
+import { clearSavingsNotice } from './savings/clear-savings-notice';
 import { GoalCancelStep } from './savings/GoalCancelStep';
 import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
@@ -240,7 +241,16 @@ export function WalletSavingsProgressModal({
               // Not while an add is in flight: the Change phone step would
               // replace the sheet and drop the add's PIN prompt.
               onChangeDevice={
-                canChangeDevice && !isAdding ? onChangeDevice : undefined
+                canChangeDevice && !isAdding
+                  ? () => {
+                      // Moving on to Change phone: the last outcome (e.g.
+                      // "Savings updated") is old news and must not stay
+                      // pinned above that step. A swap failure still posts
+                      // its own notice there.
+                      clearSavingsNotice();
+                      onChangeDevice();
+                    }
+                  : undefined
               }
               onResolveVariant={onResolveVariant}
             />

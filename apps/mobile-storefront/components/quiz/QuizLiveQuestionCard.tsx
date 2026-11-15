@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import type { QuizV2Attempt } from '@/services/quiz-types';
 import type { createQuizStyles } from './QuizScreen.styles';
 import { QuizTicketBackdrop } from './QuizTicketBackdrop';
@@ -39,6 +39,7 @@ export function QuizLiveQuestionCard({
   expiryRetryable = false,
 }: QuizLiveQuestionCardProps) {
   const question = attempt.question;
+  const { width: windowWidth } = useWindowDimensions();
   const universalExpiryStartedRef = useRef(false);
   const questionIdRef = useRef(question?.id ?? null);
   if (questionIdRef.current !== (question?.id ?? null)) {
@@ -77,7 +78,8 @@ export function QuizLiveQuestionCard({
   );
   const isUrgent = questionTimer.remainingSeconds <= 3;
   const useGrid = shouldUseQuizAnswerGrid(
-    question.options.map((option) => option.label)
+    question.options.map((option) => option.label),
+    windowWidth
   );
   const timerColor = isUrgent
     ? styles.timerBadgeUrgentText.color

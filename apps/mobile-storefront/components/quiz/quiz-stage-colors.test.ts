@@ -78,6 +78,12 @@ describe('quiz stage colours', () => {
     ).toBe(true);
   });
 
+  it('uses rows in a window too narrow for two tiles side by side', () => {
+    const labels = ['A14', 'A15', 'A16', 'A17'];
+    expect(shouldUseQuizAnswerGrid(labels, 320)).toBe(false);
+    expect(shouldUseQuizAnswerGrid(labels, 360)).toBe(true);
+  });
+
   it('keeps a long unbroken word out of the narrow tiles', () => {
     expect(
       shouldUseQuizAnswerGrid(['A14', 'A15', 'A16', 'Telecommunications'])

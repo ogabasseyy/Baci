@@ -61,9 +61,16 @@ export const QUIZ_ANSWER_GRID_MAX_WORD_LENGTH = 11;
  */
 const TILE_SAFE_TEXT_PATTERN = /^[\u0020-\u024F\u2010-\u2027\u20A0-\u20BF]*$/;
 
+/** The limits above assume at least this window width (split screen is narrower). */
+export const QUIZ_ANSWER_GRID_MIN_WINDOW_WIDTH = 340;
+
 /** Short answers sit in a 2×2 grid; long ones fall back to full-width rows. */
-export function shouldUseQuizAnswerGrid(labels: readonly string[]): boolean {
+export function shouldUseQuizAnswerGrid(
+  labels: readonly string[],
+  windowWidth: number = QUIZ_ANSWER_GRID_MIN_WINDOW_WIDTH
+): boolean {
   return (
+    windowWidth >= QUIZ_ANSWER_GRID_MIN_WINDOW_WIDTH &&
     labels.length === 4 &&
     labels.every(
       (label) =>

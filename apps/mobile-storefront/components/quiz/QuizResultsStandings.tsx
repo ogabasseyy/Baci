@@ -60,7 +60,9 @@ export function QuizResultsStandings({
           color={styles.finalStandingsTitle.color}
         />
       </View>
-      {!leaderboard && liveBoardHidden ? (
+      {/* A fetch error wins: "reconnecting" and "opens at the end" must
+          never show together. */}
+      {!leaderboard && liveBoardHidden && !leaderboardError ? (
         <Text style={styles.standingsHidden}>
           Standings open when the quiz ends.
         </Text>

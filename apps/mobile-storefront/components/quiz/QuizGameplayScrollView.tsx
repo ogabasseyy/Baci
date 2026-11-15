@@ -17,14 +17,25 @@ export function QuizGameplayScrollView({
   styles,
 }: QuizGameplayScrollViewProps) {
   const scrollRef = useRef<ScrollViewInstance>(null);
+  // The new question may not have laid out when the key changes, so the
+  // reset repeats once on the first content-size change after it.
+  const resetPending = useRef(false);
+  const scrollToTop = () =>
+    scrollRef.current?.scrollTo({ animated: false, y: 0 });
   // biome-ignore lint/correctness/useExhaustiveDependencies: topKey is the trigger; the effect reads nothing from it.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ animated: false, y: 0 });
+    resetPending.current = true;
+    scrollToTop();
   }, [topKey]);
   return (
     <ScrollView
       ref={scrollRef}
       contentContainerStyle={styles.container}
+      onContentSizeChange={() => {
+        if (!resetPending.current) return;
+        resetPending.current = false;
+        scrollToTop();
+      }}
       style={styles.screen}
       testID="quiz-gameplay-scroll"
     >

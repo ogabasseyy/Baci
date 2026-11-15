@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { ScrollView, View } from 'react-native';
 import { QuizGameplayScrollView } from './QuizGameplayScrollView';
 import { createQuizStyles } from './QuizScreen.styles';
@@ -50,6 +50,15 @@ describe('QuizGameplayScrollView', () => {
     );
 
     expect(scrollTo).toHaveBeenCalledWith({ animated: false, y: 0 });
+
+    // The new question lays out after the key changes: reset once more,
+    // then leave the player's own scrolling alone.
+    scrollTo.mockClear();
+    const scroll = screen.getByTestId('quiz-gameplay-scroll');
+    fireEvent(scroll, 'contentSizeChange', 320, 900);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    fireEvent(scroll, 'contentSizeChange', 320, 950);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
     scrollTo.mockRestore();
   });
 });

@@ -64,7 +64,27 @@ BEGIN
     first_failed_at, last_failed_at
   ) VALUES (9301003, v_pii, 'bad', 'old but refailing', now() - interval '100 days', now() - interval '5 days');
 
+  -- A row minimised at ingest (consent flags only) carries no personal data
+  -- and is left untouched.
+  INSERT INTO public.domain_event_ledger (
+    domain_event_id, producer, trust_level, idempotency_key, event_name,
+    subject_type, subject_id, envelope, status, created_at
+  ) VALUES (
+    '00000000-0000-4000-8000-00000000e105', 'sql-retention', 'server',
+    'retention-e105', 'analytics.page_view.v1', 'event', 'e105',
+    jsonb_build_object('data', jsonb_build_object(
+      'delivery_user_data',
+      jsonb_build_object('analytics_consent', false, 'marketing_consent', false))),
+    'routed', now() - interval '100 days'
+  );
+
   PERFORM * FROM public.cleanup_domain_event_pipeline_v1();
+
+  IF (SELECT envelope FROM public.domain_event_ledger
+      WHERE domain_event_id = '00000000-0000-4000-8000-00000000e105')
+       #>> '{data,delivery_user_data,analytics_consent}' IS DISTINCT FROM 'false' THEN
+    RAISE EXCEPTION 'minimised row was rewritten by the scrub';
+  END IF;
 
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_queued)
        #> '{data,delivery_user_data}' IS NOT NULL THEN

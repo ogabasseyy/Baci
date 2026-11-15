@@ -14,17 +14,25 @@
 -- OWNER DECISION: v_personal_data_retention (90 days) is the single place the
 -- period is set.
 
--- Partial indexes hold only rows that still carry the personal block, so the
--- scrub finds its work without scanning rows that were already cleaned.
+-- Partial indexes hold only rows that still carry personal data (any key in
+-- delivery_user_data besides the two consent flags, or a stray user agent), so
+-- the scrub finds its work without scanning rows that were already minimised
+-- at ingest or cleaned.
 CREATE INDEX IF NOT EXISTS idx_event_deliveries_personal_data_created
   ON public.event_deliveries (created_at)
-  WHERE (payload #> '{data,delivery_user_data}' IS NOT NULL OR payload #> '{data,event_data,user_agent}' IS NOT NULL);
+  WHERE ((jsonb_typeof(payload #> '{data,delivery_user_data}') = 'object'
+          AND (payload #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR payload #> '{data,event_data,user_agent}' IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_domain_event_ledger_personal_data_created
   ON public.domain_event_ledger (created_at)
-  WHERE (envelope #> '{data,delivery_user_data}' IS NOT NULL OR envelope #> '{data,event_data,user_agent}' IS NOT NULL);
+  WHERE ((jsonb_typeof(envelope #> '{data,delivery_user_data}') = 'object'
+          AND (envelope #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR envelope #> '{data,event_data,user_agent}' IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_domain_event_failures_personal_data_failed
   ON public.domain_event_failures (first_failed_at)
-  WHERE (original_envelope #> '{data,delivery_user_data}' IS NOT NULL OR original_envelope #> '{data,event_data,user_agent}' IS NOT NULL);
+  WHERE ((jsonb_typeof(original_envelope #> '{data,delivery_user_data}') = 'object'
+          AND (original_envelope #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR original_envelope #> '{data,event_data,user_agent}' IS NOT NULL);
 
 CREATE OR REPLACE FUNCTION public.cleanup_domain_event_pipeline_v1(
   p_delivered_attempt_retention interval DEFAULT interval '30 days',
@@ -102,7 +110,9 @@ BEGIN
       WHERE delivery.status IN
           ('delivered', 'skipped', 'shadowed', 'dead_letter', 'delivery_unknown')
         AND delivery.created_at < now() - v_personal_data_retention
-        AND (delivery.payload #> '{data,delivery_user_data}' IS NOT NULL OR delivery.payload #> '{data,event_data,user_agent}' IS NOT NULL)
+        AND ((jsonb_typeof(delivery.payload #> '{data,delivery_user_data}') = 'object'
+          AND (delivery.payload #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR delivery.payload #> '{data,event_data,user_agent}' IS NOT NULL)
       ORDER BY delivery.created_at
       LIMIT 10000
       FOR UPDATE SKIP LOCKED
@@ -124,7 +134,9 @@ BEGIN
       SELECT ledger.domain_event_id
       FROM public.domain_event_ledger AS ledger
       WHERE ledger.created_at < now() - v_personal_data_retention
-        AND (ledger.envelope #> '{data,delivery_user_data}' IS NOT NULL OR ledger.envelope #> '{data,event_data,user_agent}' IS NOT NULL)
+        AND ((jsonb_typeof(ledger.envelope #> '{data,delivery_user_data}') = 'object'
+          AND (ledger.envelope #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR ledger.envelope #> '{data,event_data,user_agent}' IS NOT NULL)
         AND NOT EXISTS (
           SELECT 1
           FROM public.event_deliveries AS open_delivery
@@ -157,7 +169,9 @@ BEGIN
       FROM public.domain_event_failures AS failure
       WHERE failure.first_failed_at < now() - v_personal_data_retention
         AND failure.last_failed_at < now() - v_personal_data_retention
-        AND (failure.original_envelope #> '{data,delivery_user_data}' IS NOT NULL OR failure.original_envelope #> '{data,event_data,user_agent}' IS NOT NULL)
+        AND ((jsonb_typeof(failure.original_envelope #> '{data,delivery_user_data}') = 'object'
+          AND (failure.original_envelope #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR failure.original_envelope #> '{data,event_data,user_agent}' IS NOT NULL)
       ORDER BY failure.first_failed_at
       LIMIT 10000
       FOR UPDATE SKIP LOCKED

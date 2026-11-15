@@ -68,7 +68,7 @@ describe('GET /api/merchant/inbox/conversations/[conversationId]/messages', () =
       conversation: { id: 7 },
       messages: [{ id: 30 }],
     });
-    expect(mocks.resolve).toHaveBeenCalledWith('view');
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'view');
     expect(mocks.listMessages).toHaveBeenCalledWith(binding, {
       conversationId: 7,
       before: 40,
@@ -125,7 +125,7 @@ describe('POST /api/merchant/inbox/conversations/[conversationId]/messages', () 
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ message: { id: 45 } });
-    expect(mocks.resolve).toHaveBeenCalledWith('edit');
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'edit');
     expect(mocks.sendReply).toHaveBeenCalledWith(binding, {
       conversationId: 7,
       content: 'Yes, in stock.',

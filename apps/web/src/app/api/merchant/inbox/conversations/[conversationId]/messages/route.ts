@@ -22,7 +22,7 @@ export async function GET(
   context: { params: Promise<{ conversationId: string }> }
 ) {
   // Authenticate first: an unauthenticated caller learns nothing about input.
-  const resolved = await resolveMerchantInboxRequest('view');
+  const resolved = await resolveMerchantInboxRequest(request, 'view');
   if (!resolved.ok) return resolved.response;
 
   const { conversationId: rawConversationId } = await context.params;
@@ -63,7 +63,7 @@ export async function POST(
   if (!csrf.valid) return merchantInboxError(403, 'Forbidden', 'forbidden');
 
   // Authenticate before reading input, as the GET handlers do.
-  const resolved = await resolveMerchantInboxRequest('edit');
+  const resolved = await resolveMerchantInboxRequest(request, 'edit');
   if (!resolved.ok) return resolved.response;
 
   const { conversationId: rawConversationId } = await context.params;

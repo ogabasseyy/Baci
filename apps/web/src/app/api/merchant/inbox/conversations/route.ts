@@ -10,7 +10,7 @@ import { merchantInboxListQuerySchema } from '@/schemas/merchant-inbox';
 /** Lists the signed-in merchant's customer conversations. */
 export async function GET(request: NextRequest) {
   // Authenticate first: an unauthenticated caller learns nothing about input.
-  const resolved = await resolveMerchantInboxRequest('view');
+  const resolved = await resolveMerchantInboxRequest(request, 'view');
   if (!resolved.ok) return resolved.response;
 
   const query = merchantInboxListQuerySchema.safeParse(

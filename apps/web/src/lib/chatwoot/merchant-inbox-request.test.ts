@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  getUser: vi.fn(),
+  authenticate: vi.fn(),
   getMerchantForApiRequest: vi.fn(),
   getMerchantInboxBinding: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
-vi.mock('next/headers', () => ({ cookies: vi.fn(async () => ({})) }));
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => ({ auth: { getUser: mocks.getUser } })),
+vi.mock('@/lib/api-auth', () => ({
+  authenticateApiRequest: mocks.authenticate,
+  hasPermission: (
+    access: {
+      isOwner: boolean;
+      permissions: Record<string, Record<string, boolean>>;
+    },
+    resource: string,
+    action: string
+  ) => access.isOwner || access.permissions[resource]?.[action] === true,
 }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: mocks.getMerchantForApiRequest,
@@ -33,7 +40,13 @@ vi.mock('./merchant-inbox-config', () => ({
   getMerchantInboxBinding: mocks.getMerchantInboxBinding,
 }));
 
+import { NextRequest } from 'next/server';
 import { resolveMerchantInboxRequest } from './merchant-inbox-request';
+
+const request = new NextRequest(
+  'https://app.example.test/api/merchant/inbox/conversations'
+);
+const supabase = { marker: 'scoped-client' };
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 const binding = {
@@ -64,7 +77,7 @@ function staff(permissions: Record<string, Record<string, boolean>>) {
 }
 
 async function failure(action: 'view' | 'edit' = 'view') {
-  const result = await resolveMerchantInboxRequest(action);
+  const result = await resolveMerchantInboxRequest(request, action);
   if (result.ok) throw new Error('expected a failure');
   return {
     status: result.response.status,
@@ -75,22 +88,41 @@ async function failure(action: 'view' | 'edit' = 'view') {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+  mocks.authenticate.mockResolvedValue({
+    user: { id: 'user-1' },
+    supabase,
+    error: null,
+  });
   mocks.getMerchantForApiRequest.mockResolvedValue(owner());
   mocks.getMerchantInboxBinding.mockReturnValue(binding);
 });
 
 describe('resolveMerchantInboxRequest', () => {
   it('returns the binding of the session merchant for an owner', async () => {
-    await expect(resolveMerchantInboxRequest('view')).resolves.toEqual({
-      ok: true,
-      binding,
-    });
+    await expect(resolveMerchantInboxRequest(request, 'view')).resolves.toEqual(
+      {
+        ok: true,
+        binding,
+      }
+    );
     expect(mocks.getMerchantInboxBinding).toHaveBeenCalledWith(MERCHANT_ID);
   });
 
+  it('authenticates the request itself so Bearer and cookie sessions both work', async () => {
+    await resolveMerchantInboxRequest(request, 'view');
+    expect(mocks.authenticate).toHaveBeenCalledWith(request);
+    expect(mocks.getMerchantForApiRequest).toHaveBeenCalledWith(
+      supabase,
+      'user-1'
+    );
+  });
+
   it('rejects a signed-out caller before any merchant lookup', async () => {
-    mocks.getUser.mockResolvedValue({ data: { user: null } });
+    mocks.authenticate.mockResolvedValue({
+      user: null,
+      supabase: null,
+      error: 'Not authenticated',
+    });
     await expect(failure()).resolves.toMatchObject({
       status: 401,
       body: { code: 'unauthorized' },
@@ -123,7 +155,9 @@ describe('resolveMerchantInboxRequest', () => {
     mocks.getMerchantForApiRequest.mockResolvedValue(
       staff({ customers: { view: true } })
     );
-    await expect(resolveMerchantInboxRequest('view')).resolves.toMatchObject({
+    await expect(
+      resolveMerchantInboxRequest(request, 'view')
+    ).resolves.toMatchObject({
       ok: true,
     });
     await expect(failure('edit')).resolves.toMatchObject({ status: 403 });

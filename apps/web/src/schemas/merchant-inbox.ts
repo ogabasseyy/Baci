@@ -47,7 +47,9 @@ export const providerInboxMessageListSchema = z.object({
 
 export const merchantInboxListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(500).default(1),
-  status: z.enum(['open', 'resolved', 'pending', 'all']).default('all'),
+  status: z
+    .enum(['open', 'resolved', 'pending', 'snoozed', 'all'])
+    .default('all'),
 });
 
 export const merchantInboxMessagesQuerySchema = z.object({

@@ -16,6 +16,13 @@ DECLARE
   v_threw boolean;
 BEGIN
   PERFORM pg_temp.wp_collection();
+  -- Another customer of the same store (the real schema enforces the customer
+  -- foreign key on vtu_transactions).
+  INSERT INTO auth.users (id, email)
+  VALUES ('f9a10000-0000-4000-8000-0000000000fe', 'walletpay-close-other@example.test');
+  INSERT INTO public.customers (id, merchant_id, user_id, email)
+  VALUES ('f9a10000-0000-4000-8000-0000000000ff', c_merchant,
+    'f9a10000-0000-4000-8000-0000000000fe', 'walletpay-close-other@example.test');
   INSERT INTO public.vtu_transactions (id, customer_id, merchant_id, type, network_provider, phone_number,
     request_reference, source, metadata, amount, status)
   VALUES

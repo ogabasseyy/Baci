@@ -81,6 +81,18 @@ describe('bugfix: a kept VTU purchase could not resume while switched off (Codex
     expect(refusal).toHaveBeenCalled();
   });
 
+  it('bugfix: a negative close answer is not a closure and stays retryable (Codex P1)', async () => {
+    const raced = deps('issued');
+    raced.closeUnpaid.mockResolvedValueOnce(false);
+    const response = await answerWhileSwitchedOff(
+      raced as never,
+      input,
+      refusal
+    );
+    expect(response.status).toBe(503);
+    expect(refusal).toHaveBeenCalled();
+  });
+
   it('never answers for another store or customer', async () => {
     const d = {
       ...deps('confirmed'),

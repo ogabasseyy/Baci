@@ -110,6 +110,7 @@ describe('runVtuWalletPayStep: start', () => {
 
   it('answers a final not-completed and issues nothing while wallet pay is switched off', async () => {
     deps.readRuntime.mockReturnValue(null);
+    deps.closeUnpaid.mockResolvedValue(true);
     const answer = await json(await runVtuWalletPayStep(base, deps));
     expect(answer).toMatchObject({
       status: 409,

@@ -60,18 +60,16 @@ export async function answerWhileSwitchedOff(
     // live, e.g. one that expired) and close the purchase, so it never stays
     // stuck holding a store credit retry (Codex P2).
     const ref = { runtime, scope, transactionId };
+    // The close answers true only when the purchase is closed for certain; a
+    // false (a payment was admitted meanwhile) or an error is not a closure
+    // (Codex P1).
     const closed = await Promise.resolve()
-      .then(
-        async (): Promise<unknown> =>
-          existing
-            ? await cancelVtuWalletPay(
-                deps.closeUnpaid,
-                ref,
-                existing.operationId
-              )
-            : await deps.closeUnpaid(ref)
+      .then(() =>
+        deps.closeUnpaid(
+          existing ? { ...ref, cancelOperationId: existing.operationId } : ref
+        )
       )
-      .then(() => true)
+      .then((answer) => answer === true)
       .catch(() => false);
     // A confirmed closure is a final answer the app settles on (its key is
     // dropped, so store credit is offered again); an uncertain one stays the

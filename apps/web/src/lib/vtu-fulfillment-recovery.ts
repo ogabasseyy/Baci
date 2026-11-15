@@ -55,12 +55,16 @@ export async function recoverStrandedPreVendVtuRow({
   // Never-debited strands stay processing (visible,
   // support-recoverable). A ledger-read failure throws (no flip)
   // — fail closed, the next pass retries the check.
-  // A purchase paid from the PiggyVest wallet has no store credit debit to
-  // find: its proof that money moved is the confirmed PiggyVest payment, which
-  // the delivery claim and the payment's one refund then settle (Codex P1).
+  // PiggyVest-paid: payment proves money moved; marker absence, no vend.
+  const piggyvestNeverSubmitted =
+    isPiggyvestWalletPaid(row.metadata) &&
+    isUnsubmittedPreparedVtuRow({
+      ...row,
+      metadata: { ...row.metadata, walletDebited: true },
+    });
   if (
     isStrandedPreVendVtuRow(row) &&
-    (isPiggyvestWalletPaid(row.metadata) ||
+    (piggyvestNeverSubmitted ||
       (await hasExistingVtuDebitLedger({ row, supabase })))
   ) {
     await restoreInterruptedPreVendVtuRow({

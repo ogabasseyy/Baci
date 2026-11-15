@@ -176,11 +176,13 @@ export function useAppTrackingTransparency({
         // so it goes first. Only a shopper who has not decided yet waits on
         // it, and it never rejects or hangs: whatever the outcome, the
         // request below still runs through the active-state and retry path.
+        const appStateBeforeConsent = AppState.currentState;
         const consentOutcome = await gatherConsentBeforeTracking();
         if (cancelled) return;
         if (consentOutcome !== 'skipped') {
           recordAttLifecycleEvent('ATT Consent Gate', 'att:consent_gate', {
             outcome: consentOutcome,
+            appStateBeforeConsent,
           });
         }
 

@@ -13,9 +13,12 @@ export const CONSENT_UPDATE_WATCHDOG_MS = 10_000;
 /**
  * Once Google's message may be showing, a person is reading it and the
  * prompt waits for them. This backstop only exists so a wedged native call
- * can never hold the prompt (and the startup work behind it) forever.
+ * can never hold the prompt (and the startup work behind it) forever. The
+ * `form` stage starts when the form is requested, not when it is shown, and
+ * the library gives no signal for the difference, so a stalled form load is
+ * bounded by this value too: keep it short enough to be a tolerable stall.
  */
-export const CONSENT_FORM_BACKSTOP_MS = 300_000;
+export const CONSENT_FORM_BACKSTOP_MS = 120_000;
 
 export type ConsentBeforeTrackingOutcome =
   | 'done'
@@ -51,6 +54,10 @@ export async function gatherConsentBeforeTracking(
     if (!areMobileAdsEnabled() || !isQuizMobileAdsAvailable()) {
       return 'skipped';
     }
+    // The consent promise that loses this race is left running on purpose:
+    // native consent calls cannot be cancelled, it never rejects (errors are
+    // absorbed inside prepareQuizMobileAdsConsent), and later ad placements
+    // share it.
     return await Promise.race<ConsentBeforeTrackingOutcome>([
       prepareQuizMobileAdsConsent().then(() => 'done' as const),
       new Promise<ConsentBeforeTrackingOutcome>((resolve) => {

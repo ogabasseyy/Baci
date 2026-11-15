@@ -7,6 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import { useAppTrackingTransparency } from './use-app-tracking-transparency';
 import {
   attAppStateMock,
@@ -88,6 +89,7 @@ describe('bugfix: the tracking prompt fired before the consent message', () => {
     expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledWith('ATT Consent Gate', {
       outcome: 'done',
+      appStateBeforeConsent: AppState.currentState,
     });
   });
 
@@ -106,6 +108,7 @@ describe('bugfix: the tracking prompt fired before the consent message', () => {
     expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledWith('ATT Consent Gate', {
       outcome,
+      appStateBeforeConsent: AppState.currentState,
     });
   });
 

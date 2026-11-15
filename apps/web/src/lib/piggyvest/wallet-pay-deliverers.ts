@@ -1,6 +1,7 @@
 import 'server-only';
 import type { WalletPayPurpose } from '@/schemas/piggyvest-wallet-pay';
 import type { WalletPayDeliverer } from './wallet-pay-drain';
+import { refundUncollectedPayment } from './wallet-pay-refund-uncollected';
 
 /**
  * Per-product handlers the wallet pay drain uses for confirmed payments
@@ -9,4 +10,9 @@ import type { WalletPayDeliverer } from './wallet-pay-drain';
  */
 export const WALLET_PAY_DELIVERERS: Partial<
   Record<WalletPayPurpose, WalletPayDeliverer>
-> = {};
+> = {
+  // An IMEI check needs the identifier the customer re-sends; it is never
+  // stored in plain text, so an uncollected paid check is refunded (unless
+  // its result was already saved, which is recorded as fulfilled).
+  imei_check: refundUncollectedPayment,
+};

@@ -135,6 +135,7 @@ function externalWaybill(overrides: Record<string, unknown> = {}) {
 }
 
 const base = {
+  canBookGigl: true,
   canUseProvider: true,
   fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
   fulfillmentItemIndex: 0,

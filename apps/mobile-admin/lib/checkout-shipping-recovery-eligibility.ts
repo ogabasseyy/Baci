@@ -14,14 +14,14 @@ export function canUseCheckoutShippingRecovery(
         | 'tracking_number'
       >
     | undefined,
-  merchant: { id: string; user_id?: string | null } | null,
-  userId?: string | null
+  merchant: { id: string } | null,
+  /** Owner, or staff with orders.fulfill and orders.edit (canBookOrderGigl). */
+  canRecover: boolean
 ): boolean {
   return Boolean(
     order &&
-      userId &&
-      merchant?.user_id === userId &&
-      merchant.id === order.merchant_id &&
+      canRecover &&
+      merchant?.id === order.merchant_id &&
       order.payment_status === 'paid' &&
       order.shipping_status === 'processing' &&
       order.shipping_funding_source === 'customer_checkout' &&

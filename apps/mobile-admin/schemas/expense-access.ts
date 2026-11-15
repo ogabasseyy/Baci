@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  parseStaffPermissionGrants,
+  resolveStaffPermissionGrant,
+  type StaffPermissionGrants,
+} from './staff-permission-grants';
 
 export interface ExpenseAccess {
   canView: boolean;
@@ -6,23 +11,6 @@ export interface ExpenseAccess {
   canEdit: boolean;
   canManageIntegrations: boolean;
 }
-
-const PermissionBooleanSchema = z.preprocess((value) => {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') {
-    if (value === 1) return true;
-    if (value === 0) return false;
-    return value;
-  }
-  if (typeof value !== 'string') return value;
-  if (['true', 't', 'yes', 'y', 'on', '1'].includes(value.toLowerCase())) {
-    return true;
-  }
-  if (['false', 'f', 'no', 'n', 'off', '0'].includes(value.toLowerCase())) {
-    return false;
-  }
-  return value;
-}, z.boolean());
 
 const SUPPORTED_PERMISSION_RESOURCES = [
   '*',
@@ -34,42 +22,8 @@ const SUPPORTED_PERMISSION_RESOURCES = [
 type SupportedPermissionResource =
   (typeof SUPPORTED_PERMISSION_RESOURCES)[number];
 
-export type ExpensePermissionMap = Partial<
-  Record<SupportedPermissionResource, Record<string, boolean>>
->;
-
-function parseSupportedPermissions(
-  raw: Record<string, unknown>
-): ExpensePermissionMap {
-  const permissions: ExpensePermissionMap = {};
-
-  for (const resource of SUPPORTED_PERMISSION_RESOURCES) {
-    const actions = raw[resource];
-    if (
-      actions === undefined ||
-      typeof actions !== 'object' ||
-      actions === null
-    ) {
-      continue;
-    }
-
-    const parsedActions: Record<string, boolean> = {};
-    for (const [action, value] of Object.entries(
-      actions as Record<string, unknown>
-    )) {
-      const parsed = PermissionBooleanSchema.safeParse(value);
-      if (parsed.success) {
-        parsedActions[action] = parsed.data;
-      }
-    }
-
-    if (Object.keys(parsedActions).length > 0) {
-      permissions[resource] = parsedActions;
-    }
-  }
-
-  return permissions;
-}
+export type ExpensePermissionMap =
+  StaffPermissionGrants<SupportedPermissionResource>;
 
 export const ExpenseAccessRowSchema = z
   .object({
@@ -82,37 +36,33 @@ export const ExpenseAccessRowSchema = z
   .strict()
   .transform((row) => ({
     ...row,
-    permissions: parseSupportedPermissions(row.permissions),
+    permissions: parseStaffPermissionGrants(
+      row.permissions,
+      SUPPORTED_PERMISSION_RESOURCES
+    ),
   }));
 
 export type ExpenseAccessRow = z.infer<typeof ExpenseAccessRowSchema>;
 
-function resolveGrant(
-  permissions: ExpenseAccessRow['permissions'],
-  resource: SupportedPermissionResource,
-  action: string
-): boolean {
-  const grants = [
-    permissions['*']?.['*'],
-    permissions['*']?.[action],
-    permissions[resource]?.['*'],
-    permissions[resource]?.[action],
-    permissions[resource]?.all,
-    permissions.full_access?.all,
-  ];
-
-  return grants.find((grant) => grant !== undefined) ?? false;
-}
-
 export function resolveExpenseAccess(access: ExpenseAccessRow): ExpenseAccess {
-  const canView = resolveGrant(access.permissions, 'expenses', 'view');
+  const canView = resolveStaffPermissionGrant(
+    access.permissions,
+    'expenses',
+    'view'
+  );
 
   return {
     canView,
-    canCreate: resolveGrant(access.permissions, 'expenses', 'create'),
-    canEdit: canView && resolveGrant(access.permissions, 'expenses', 'edit'),
+    canCreate: resolveStaffPermissionGrant(
+      access.permissions,
+      'expenses',
+      'create'
+    ),
+    canEdit:
+      canView &&
+      resolveStaffPermissionGrant(access.permissions, 'expenses', 'edit'),
     canManageIntegrations:
       access.is_owner ||
-      resolveGrant(access.permissions, 'integrations', 'manage'),
+      resolveStaffPermissionGrant(access.permissions, 'integrations', 'manage'),
   };
 }

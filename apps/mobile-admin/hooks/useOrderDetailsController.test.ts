@@ -3,49 +3,6 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const routeParamsState = vi.hoisted(() => ({
-  current: { id: '123e4567-e89b-42d3-a456-426614174000' } as { id: string },
-}));
-
-const orderState = vi.hoisted(() => ({
-  current: undefined as unknown,
-}));
-
-const auditEventsState = vi.hoisted(() => ({
-  current: {
-    data: [] as unknown[],
-    isError: false,
-    isLoading: false,
-  },
-}));
-
-const merchantState = vi.hoisted(() => ({
-  current: null as unknown,
-}));
-
-const authState = vi.hoisted(() => ({
-  user: null as { id: string } | null,
-}));
-
-const shipmentParameters = vi.hoisted(() => ({
-  current: null as null | {
-    onProviderBookingError: (error: unknown) => Promise<unknown>;
-  },
-}));
-
-const giglShippingState = vi.hoisted(() => ({
-  calls: [] as unknown[],
-  prefetchCalls: [] as unknown[],
-}));
-
-const shipmentUiState = vi.hoisted(() => ({
-  current: { shipmentFlowStep: 'details', showShipmentFlow: false } as {
-    shipmentFlowStep: string;
-    showShipmentFlow: boolean;
-    showStatusModal?: boolean;
-  },
-}));
-
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => routeParamsState.current,
 }));
@@ -60,6 +17,10 @@ vi.mock('@/hooks/useMerchant', () => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: authState.user }),
+}));
+
+vi.mock('@/hooks/useOrderFulfillAccess', () => ({
+  useOrderFulfillAccess: () => fulfillAccessMock(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -109,31 +70,13 @@ vi.mock('@/hooks/orders/useOrderGiglPreviewPrefetch', () => ({
 vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
   useOrderGiglShipping: (params: unknown) => {
     giglShippingState.calls.push(params);
-    return { quote: null, wallet: null };
+    return giglShippingState.result;
   },
 }));
 
-vi.mock('@/lib/order-shipment', () => ({
-  orderRequiresFulfillment: vi.fn(() => false),
-  getOrderFulfillmentIdentifierItems: vi.fn(() => []),
-  getOrderGiglInitialAddress: vi.fn(() => ({})),
-  updateShipmentFulfillmentDetails: vi.fn((previous) => previous),
-  formatShippingProviderName: vi.fn(() => null),
-  canUseSelectedShippingProvider: vi.fn(
-    (order: {
-      selected_quote_id?: string | null;
-      shipment_id?: string | null;
-      shipping_provider?: string | null;
-      tracking_number?: string | null;
-    }) =>
-      Boolean(
-        order.shipping_provider &&
-          order.selected_quote_id &&
-          !order.tracking_number &&
-          !order.shipment_id
-      )
-  ),
-}));
+vi.mock('@/lib/order-shipment', async () =>
+  (await import('./useOrderDetailsController.test-support')).orderShipmentMock()
+);
 
 vi.mock('@/hooks/createOrderDetailsContactActions', () => ({
   createOrderDetailsContactActions: () => ({
@@ -194,77 +137,26 @@ vi.mock('@/hooks/useOrderDetailsBackHandler', () => ({
 }));
 
 vi.mock('@/hooks/useOrderDetailsUiState', () => ({
-  useOrderDetailsUiState: () => ({
-    creditNotes: '',
-    fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
-    fulfillmentItemIndex: 0,
-    isGeneratingReceipt: false,
-    isShipmentSubmitting: false,
-    paymentAmount: '',
-    paymentMethod: '',
-    paymentNotes: '',
-    pendingShipmentMode: 'provider',
-    receiptHtml: '',
-    riderPhone: '',
-    savedRiders: [],
-    selectedOrderItem: null,
-    setCreditNotes: vi.fn(),
-    setFulfillmentDetails: vi.fn(),
-    setFulfillmentItemIndex: vi.fn(),
-    setIsGeneratingReceipt: vi.fn(),
-    setIsShipmentSubmitting: vi.fn(),
-    setPaymentAmount: vi.fn(),
-    setPaymentMethod: vi.fn(),
-    setPaymentNotes: vi.fn(),
-    setPendingShipmentMode: vi.fn(),
-    setReceiptHtml: vi.fn(),
-    setRiderPhone: vi.fn(),
-    setSavedRiders: vi.fn(),
-    setSelectedOrderItem: vi.fn(),
-    setShipmentFlowStep: vi.fn(),
-    setShowCreditModal: vi.fn(),
-    setShowPaymentOptionModal: vi.fn(),
-    setShowReceiptPreview: vi.fn(),
-    setShowRecordPaymentModal: vi.fn(),
-    setShowShipmentFlow: vi.fn(),
-    setShowStatusModal: vi.fn(),
-    setSuccessModal: vi.fn(),
-    shipmentFlowStep: shipmentUiState.current.shipmentFlowStep,
-    showCreditModal: false,
-    showPaymentOptionModal: false,
-    showReceiptPreview: false,
-    showRecordPaymentModal: false,
-    showShipmentFlow: shipmentUiState.current.showShipmentFlow,
-    showStatusModal: shipmentUiState.current.showStatusModal ?? false,
-    successModal: {
-      actionLabel: '',
-      actionVariant: 'default',
-      message: '',
-      showAction: false,
-      subMessage: '',
-      title: 'Success!',
-      visible: false,
-    },
-  }),
+  useOrderDetailsUiState: () => orderDetailsUiStateMock(),
 }));
 
 import { useOrderDetailsController } from './useOrderDetailsController';
+import {
+  auditEventsState,
+  authState,
+  fulfillAccessMock,
+  giglShippingState,
+  merchantState,
+  orderDetailsUiStateMock,
+  orderState,
+  resetControllerState,
+  routeParamsState,
+  shipmentParameters,
+  shipmentUiState,
+} from './useOrderDetailsController.test-support';
 
 describe('useOrderDetailsController', () => {
-  beforeEach(() => {
-    auditEventsState.current = { data: [], isError: false, isLoading: false };
-    orderState.current = undefined;
-    merchantState.current = null;
-    authState.user = null;
-    giglShippingState.calls = [];
-    giglShippingState.prefetchCalls = [];
-    shipmentUiState.current = {
-      shipmentFlowStep: 'details',
-      showShipmentFlow: false,
-      showStatusModal: false,
-    };
-    routeParamsState.current = { id: '123e4567-e89b-42d3-a456-426614174000' };
-  });
+  beforeEach(resetControllerState);
 
   it('returns null orderId when route params are invalid', () => {
     orderState.current = undefined;
@@ -547,6 +439,7 @@ it('routes eligible checkout quote rejection through the controller without wall
     )
   ).resolves.toBe('review_checkout_quote');
   authState.user = { id: 'staff' };
+
   renderHook(() => useOrderDetailsController());
   await expect(
     shipmentParameters.current?.onProviderBookingError(

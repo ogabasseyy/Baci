@@ -4,6 +4,7 @@ import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  access: { canFulfill: true, canEdit: true },
   eligible: true,
   externalWaybill: { reset: vi.fn() },
   beforeLink: undefined as undefined | (() => Promise<void>),
@@ -31,6 +32,9 @@ vi.mock('@/lib/supabase', () => ({
 
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'merchant-1' } }),
+}));
+vi.mock('@/hooks/useOrderFulfillAccess', () => ({
+  useOrderFulfillAccess: () => mocks.access,
 }));
 vi.mock('@/hooks/useGiglAdminShippingEligibility', () => ({
   useGiglAdminShippingEligibility: () => ({ isEligible: mocks.eligible }),
@@ -82,6 +86,7 @@ function render(
 describe('useOrderDetailsGiglExternalWaybill', () => {
   beforeEach(() => {
     mocks.eligible = true;
+    mocks.access = { canFulfill: true, canEdit: true };
     mocks.update.mockReset();
     mocks.updateError = null;
   });
@@ -127,5 +132,18 @@ describe('useOrderDetailsGiglExternalWaybill', () => {
         visible: true,
       })
     );
+  });
+
+  it.each([
+    ['fulfill-only', { canFulfill: true, canEdit: false }],
+    ['edit-only', { canFulfill: false, canEdit: true }],
+  ])('offers the waybill option to %s staff', (_name, access) => {
+    mocks.access = access;
+    expect(render().hook.result.current).toBe(mocks.externalWaybill);
+  });
+
+  it('hides the waybill option from staff with neither grant', () => {
+    mocks.access = { canFulfill: false, canEdit: false };
+    expect(render().hook.result.current).toBeUndefined();
   });
 });

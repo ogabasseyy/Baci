@@ -151,7 +151,7 @@ async function applyCommand(
     // cookie govern until they expire, and retries replay by
     // operation id.
     const liveGrant = await timer.measure('renew', () =>
-      loadLiveGrantOperations(client, principal)
+      loadLiveGrantOperations(client, principal).catch(() => null)
     );
     const proofGrantExpiry = liveGrant
       ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)

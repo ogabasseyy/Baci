@@ -1,3 +1,5 @@
+import { VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY } from '@/lib/vtu-metadata-fields';
+
 /**
  * Airtime, data and bills paid from the PiggyVest main wallet (dark). The
  * row is prepared like a wallet-only checkout (a full wallet payment split,
@@ -66,6 +68,7 @@ export function owePiggyvestWalletRefund(
  */
 export function piggyvestWalletPaidHold(row: {
   amount: unknown;
+  metadata?: Record<string, unknown> | null;
   request_reference: string;
   status: string;
   error_message?: string | null;
@@ -74,9 +77,13 @@ export function piggyvestWalletPaidHold(row: {
   if (row.status === 'failed')
     return {
       amount,
+      // The stored text is raw provider output unless the writer flagged it
+      // first-party: only flagged text is returned (Codex P1).
       error:
-        row.error_message ??
-        'We could not complete this purchase. Your payment is going back to your savings wallet.',
+        row.metadata?.[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY] === true &&
+        row.error_message
+          ? row.error_message
+          : 'We could not complete this purchase. Your payment is going back to your savings wallet.',
       reference: row.request_reference,
       status: 'failed' as const,
     };

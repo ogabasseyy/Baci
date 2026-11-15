@@ -51,7 +51,13 @@ describe('bugfix: a kept VTU purchase could not resume while switched off (Codex
       input,
       refusal
     );
-    expect(response.status).toBe(503);
+    // Confirmed closed: a final answer the app settles on, not the retryable
+    // unavailable one that keeps the key (Codex P2).
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_NOT_COMPLETED',
+    });
+    expect(refusal).not.toHaveBeenCalled();
     expect(issued.closeUnpaid).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: TXN, cancelOperationId: OP })
     );
@@ -61,6 +67,30 @@ describe('bugfix: a kept VTU purchase could not resume while switched off (Codex
     expect(none.closeUnpaid).toHaveBeenCalledWith(
       expect.not.objectContaining({ cancelOperationId: expect.anything() })
     );
+  });
+
+  it('bugfix: stays retryable when the closure is uncertain (Codex P2)', async () => {
+    const failing = deps('issued');
+    failing.closeUnpaid.mockRejectedValueOnce(new Error('db down'));
+    const response = await answerWhileSwitchedOff(
+      failing as never,
+      input,
+      refusal
+    );
+    expect(response.status).toBe(503);
+    expect(refusal).toHaveBeenCalled();
+  });
+
+  it('bugfix: a negative close answer is not a closure and stays retryable (Codex P1)', async () => {
+    const raced = deps('issued');
+    raced.closeUnpaid.mockResolvedValueOnce(false);
+    const response = await answerWhileSwitchedOff(
+      raced as never,
+      input,
+      refusal
+    );
+    expect(response.status).toBe(503);
+    expect(refusal).toHaveBeenCalled();
   });
 
   it('never answers for another store or customer', async () => {

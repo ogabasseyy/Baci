@@ -23,8 +23,12 @@ it('returns a public no-store tier-key DTO without auth or money operations', as
   expect(response.status).toBe(200);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
   const body = await response.json();
-  expect(Object.keys(body)).toEqual(['availableTierKeys']);
+  expect(Object.keys(body)).toEqual([
+    'availableTierKeys',
+    'walletPayableTierKeys',
+  ]);
   expect(body.availableTierKeys).toContain('basic');
+  expect(body.walletPayableTierKeys).toContain('basic');
   expect(JSON.stringify(body)).not.toContain('secret');
 });
 
@@ -53,5 +57,8 @@ it('fails closed with a successful empty DTO when server capability is disabled'
     ...configuration,
     getAccessSigningSecret: () => undefined,
   })(new Request('https://shop.example/api/storefront/imei-check'));
-  expect(await response.json()).toEqual({ availableTierKeys: [] });
+  expect(await response.json()).toEqual({
+    availableTierKeys: [],
+    walletPayableTierKeys: [],
+  });
 });

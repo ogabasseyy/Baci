@@ -108,12 +108,13 @@ describe('runVtuWalletPayStep: start', () => {
     expect(deps.issue).not.toHaveBeenCalled();
   });
 
-  it('answers 503 and issues nothing while wallet pay is switched off', async () => {
+  it('answers a final not-completed and issues nothing while wallet pay is switched off', async () => {
     deps.readRuntime.mockReturnValue(null);
+    deps.closeUnpaid.mockResolvedValue(true);
     const answer = await json(await runVtuWalletPayStep(base, deps));
     expect(answer).toMatchObject({
-      status: 503,
-      body: { code: 'PIGGYVEST_PAY_UNAVAILABLE' },
+      status: 409,
+      body: { code: 'PAYMENT_NOT_COMPLETED' },
     });
     expect(deps.issue).not.toHaveBeenCalled();
   });

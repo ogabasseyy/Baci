@@ -120,6 +120,7 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     expect(response.status).toBe(200);
     expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith({
       supabase: { admin: true },
+      // The recovery shares the invocation's deadline (Codex P2).
       deadlineMs: expect.any(Number),
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);

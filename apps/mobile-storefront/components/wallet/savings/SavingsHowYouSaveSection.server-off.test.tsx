@@ -69,6 +69,35 @@ describe('SavingsHowYouSaveSection for a PiggyVest wallet', () => {
     expect(screen.queryByText(/%|per annum|p\.a\./i)).toBeNull();
   });
 
+  it('bugfix: drops the lose-your-interest warning once "No, savings only" is picked', () => {
+    render(
+      <SavingsHowYouSaveSection
+        colors={Colors.light}
+        controller={createPrimaryStartSavingsController({
+          interestChoice: false,
+        })}
+      />
+    );
+    expect(screen.getByText('No, savings only')).toBeOnTheScreen();
+    expect(
+      screen.queryByText('Cancel early and lose your interest.')
+    ).toBeNull();
+  });
+
+  it('keeps the early-cancel warning when interest is picked', () => {
+    render(
+      <SavingsHowYouSaveSection
+        colors={Colors.light}
+        controller={createPrimaryStartSavingsController({
+          interestChoice: true,
+        })}
+      />
+    );
+    expect(
+      screen.getByText('Cancel early and lose your interest.')
+    ).toBeOnTheScreen();
+  });
+
   it('keeps the step short: no extra wallet row or choose-once row', () => {
     render(
       <SavingsHowYouSaveSection

@@ -121,11 +121,76 @@ describe('startImeiWalletPayment', () => {
 
   it('is unavailable for Petrock (asynchronous) tiers', async () => {
     const response = await startImeiWalletPayment(
-      input({ binding: { provider: 'petrock' } }),
+      input({
+        binding: { provider: 'petrock' },
+        supabaseAdmin: {
+          insertPending: vi.fn(),
+          readReplay: vi.fn(async () => ({ data: null, error: null })),
+        },
+      }),
       deps()
     );
     await expect(response.json()).resolves.toMatchObject({
       code: 'PIGGYVEST_PAY_UNAVAILABLE_FOR_TIER',
+    });
+  });
+
+  describe('bugfix: a check moved to Petrock trapped an earlier attempt on the same key', () => {
+    // Walk 2026-11-15: the per-check refusal came before the replay lookup,
+    // so a key whose attempt already exists could never be answered, and the
+    // app had to keep it forever ("Can't check this payment right now").
+    it('answers an earlier finished attempt with its saved result, not the refusal', async () => {
+      const response = await startImeiWalletPayment(
+        input({
+          binding: { provider: 'petrock' },
+          replayContext: {
+            customerId: 'customer-1',
+            deviceCategory: 'smartphone',
+            imeiHash: 'a'.repeat(64),
+            merchantId: 'merchant-1',
+            tier: 'simLock',
+          },
+          supabaseAdmin: {
+            insertPending: vi.fn(),
+            readReplay: vi.fn(async () => ({
+              data: {
+                id: LOOKUP,
+                customer_id: 'customer-1',
+                merchant_id: 'merchant-1',
+                tier: 'simLock',
+                imei_hash: 'a'.repeat(64),
+                device_category: 'smartphone',
+                status: 'completed',
+                cached_response: { status: 'completed', tier: 'simLock' },
+                cached_status: 200,
+              },
+              error: null,
+            })),
+          },
+        }),
+        deps()
+      );
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        status: 'completed',
+        lookupId: LOOKUP,
+      });
+    });
+
+    it('refuses only when nothing exists for the key, so the app may drop it', async () => {
+      const insertPending = vi.fn();
+      const response = await startImeiWalletPayment(
+        input({
+          binding: { provider: 'petrock' },
+          supabaseAdmin: {
+            insertPending,
+            readReplay: vi.fn(async () => ({ data: null, error: null })),
+          },
+        }),
+        deps()
+      );
+      expect(response.status).toBe(409);
+      expect(insertPending).not.toHaveBeenCalled();
     });
   });
 

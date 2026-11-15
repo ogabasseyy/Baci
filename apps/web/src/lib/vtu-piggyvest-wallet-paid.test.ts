@@ -47,6 +47,31 @@ describe('piggyvestWalletPaidHold', () => {
     ).toMatchObject({ status: 'failed', amount: 500 });
   });
 
+  describe('bugfix: a failed row never returns raw provider text', () => {
+    const failed = {
+      amount: 500,
+      request_reference: 'ref',
+      status: 'failed',
+      error_message: 'Provider 5xx: upstream id 8812 timeout',
+    };
+
+    it('returns the fixed customer-safe message for an unflagged stored error', () => {
+      const hold = piggyvestWalletPaidHold(failed);
+      expect(hold).toMatchObject({ status: 'failed' });
+      expect(JSON.stringify(hold)).not.toContain('Provider 5xx');
+    });
+
+    it('returns the stored text only when it is flagged first-party', () => {
+      expect(
+        piggyvestWalletPaidHold({
+          ...failed,
+          error_message: 'Your purchase could not be completed.',
+          metadata: { customerSafeErrorMessage: true },
+        })
+      ).toMatchObject({ error: 'Your purchase could not be completed.' });
+    });
+  });
+
   it('holds a pending row as processing', () => {
     expect(
       piggyvestWalletPaidHold({

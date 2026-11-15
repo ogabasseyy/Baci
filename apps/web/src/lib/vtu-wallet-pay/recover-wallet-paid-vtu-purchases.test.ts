@@ -100,6 +100,15 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     expect(refund).toHaveBeenCalledTimes(1);
   });
 
+  it('bugfix: takes no claim when too little of the invocation remains', async () => {
+    const summary = await recoverWalletPaidVtuPurchases(
+      { supabase, deadlineMs: Date.now() + 10_000 },
+      deps
+    );
+    expect(worker.claim).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({ deferred: 1, recovered: 0 });
+  });
+
   it('leaves a purchase that is not mid-vend to the drain, taking no claim', async () => {
     delivery.vtuDeliveryState.mockResolvedValue('failed');
     await recoverWalletPaidVtuPurchases({ supabase }, deps as never);

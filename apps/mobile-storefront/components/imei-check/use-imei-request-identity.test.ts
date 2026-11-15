@@ -48,3 +48,23 @@ describe('bugfix: a store credit key replayed for another account (Muse)', () =>
     mockAuth.user = { id: 'user-1' };
   });
 });
+
+describe('bugfix: a store credit key replayed for another device tab (Muse)', () => {
+  it('mints a new key and does not retain when the device changes', () => {
+    mockAuth.user = { id: 'user-1' };
+    const createKey = jest
+      .fn<() => string>()
+      .mockReturnValueOnce('key-phone')
+      .mockReturnValueOnce('key-laptop');
+    const { result } = renderHook(() => useImeiRequestIdentity(createKey));
+    expect(result.current.get('basic', '490154203237518', 'smartphone')).toBe(
+      'key-phone'
+    );
+    expect(result.current.retains('basic', '490154203237518', 'laptop')).toBe(
+      false
+    );
+    expect(result.current.get('basic', '490154203237518', 'laptop')).toBe(
+      'key-laptop'
+    );
+  });
+});

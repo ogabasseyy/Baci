@@ -20,6 +20,12 @@ describe('consent split matches the SDK gatherConsent()', () => {
     );
     const start = source.indexOf('async gatherConsent(');
     expect(start).toBeGreaterThan(-1);
+    // Calling requestInfoUpdate() with no argument only matches
+    // gatherConsent() while its options default to an empty object.
+    expect(source.slice(start, start + 120)).toMatch(
+      /gatherConsent\(\s*options(: \w+)? = \{\}\s*\)/
+    );
+    expect(source.slice(start)).toContain('this.requestInfoUpdate(options)');
     // The method ends at the next top-level member of the AdsConsent object.
     const body = source
       .slice(start)

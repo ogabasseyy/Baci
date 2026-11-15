@@ -136,6 +136,9 @@ export function useVtuWalletPayHost({
     // True while this sheet still takes answers (not closed or reopened).
     const wanted = sheet.nextSession();
     let purchase: string | null = null;
+    // The key this sheet's attempt used: only it is ever retired or forgotten,
+    // so a delayed answer never removes a newer attempt's key (Codex P1).
+    let usedKey: string | null = null;
     let inner: WalletPayAdapter<VtuWalletPayResult> | null = null;
     const lazy: WalletPayAdapter<VtuWalletPayResult> = {
       async start() {
@@ -155,6 +158,7 @@ export function useVtuWalletPayHost({
             return Crypto.randomUUID();
           }
         );
+        usedKey = idempotencyKey;
         // The account may have changed during the awaits above.
         if (useAuthStore.getState().user?.id !== user.id)
           return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
@@ -188,7 +192,9 @@ export function useVtuWalletPayHost({
           answer.kind === 'outcome' &&
           answer.outcome.kind === 'unavailable'
         )
-          await walletPayPurchaseKeys.forget(issuedKey).catch(() => undefined);
+          await walletPayPurchaseKeys
+            .forget(issuedKey, idempotencyKey)
+            .catch(() => undefined);
         if (answer.kind === 'pin') {
           const cancel = async () => {
             if (!issuedToken) return;
@@ -203,7 +209,7 @@ export function useVtuWalletPayHost({
             });
             // Released and closed: the next attempt starts afresh.
             if (reply.httpStatus === 200 && reply.body.status === 'cancelled')
-              await walletPayPurchaseKeys.forget(issuedKey);
+              await walletPayPurchaseKeys.forget(issuedKey, idempotencyKey);
           };
           // Closed while the start was out: cancel now (Codex P2).
           if (wanted()) cancelUnpaid.current = cancel;
@@ -224,6 +230,7 @@ export function useVtuWalletPayHost({
     };
     void sheet.open(
       trackWalletPayPurchase(lazy, () => purchase, {
+        key: () => usedKey,
         onSettled: () => void walletQuery.refetch?.(),
         stillOwner: () => useAuthStore.getState().user?.id === user?.id,
         stillWanted: wanted,

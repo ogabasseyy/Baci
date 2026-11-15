@@ -130,6 +130,10 @@ export interface CartContextType {
   sharedCartRef?: { cartId: string; version: number } | null;
   /** Refetches the authoritative snapshot; absent in legacy mode. */
   refreshSharedCart?: () => Promise<void>;
+  /** Ensures a delegated cart session exists for trusted host integrations. */
+  ensureSharedCartSession?: () => Promise<
+    import('./shared-cart-hook-support').EnsureCartResult
+  >;
   /** Last-confirmed-plus-pending sync state; absent in legacy mode. */
   syncStatus?: SharedCartSyncStatus;
   /** Last sync failure code, cleared on the next success. */

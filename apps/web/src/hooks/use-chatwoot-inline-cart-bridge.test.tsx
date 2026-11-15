@@ -14,6 +14,7 @@ import {
 const mocks = vi.hoisted(() => ({
   cartState: {
     addToCart: vi.fn(),
+    ensureSharedCartSession: vi.fn(async () => ({ ok: true as const })),
     cart: [
       {
         id: 'local-product',
@@ -52,6 +53,28 @@ function HookHarness({
 }
 
 describe('ChatwootInlineCartBridge', () => {
+  it('does not provision a cart for a context request from another origin', async () => {
+    const { target } = installFrame();
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: `baci-commerce-context-request:${JSON.stringify({
+            requestId: 'context_123456',
+            conversationId: 905,
+            websiteToken: 'synthetic-widget-token-123456',
+            visitorTokenSha256: 'b'.repeat(64),
+          })}`,
+          origin: 'https://attacker.example.com',
+          source: target,
+        })
+      );
+    });
+
+    expect(mocks.cartState.ensureSharedCartSession).not.toHaveBeenCalled();
+  });
+
   it('posts context authorization only to the configured widget origin', async () => {
     const { target, postMessage } = installFrame();
     render(<HookHarness storeSlug="store" widgetOrigin={origin} />);

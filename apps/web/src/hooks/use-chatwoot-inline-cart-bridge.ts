@@ -117,6 +117,9 @@ export function useChatwootInlineCartBridge(
             );
             sessionExpiresAt = expiresAt;
           },
+          ensureCartSession: () =>
+            latestState.current.ensureSharedCartSession?.() ??
+            Promise.resolve(null),
         });
         return;
       }

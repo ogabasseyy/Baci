@@ -1,9 +1,11 @@
 'use client';
 
+import { useRef } from 'react';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { createCartActions } from './shared-cart-actions';
 import { createExperiencePortForCart } from './shared-cart-experience-runtime';
 import {
+  type EnsureCartResult,
   noop,
   type UseSharedCartOptions,
   type UseSharedCartResult,
@@ -43,7 +45,17 @@ export function useSharedCart(
           entry.operationId === operationId && entry.state === 'sending'
       ),
   });
-  const provisioning = createCartProvisioning({ ...runtime, ...snapshots });
+  const ensureCartFlightRef = useRef<{
+    generation: number;
+    merchantId: string;
+    merchantSlug: string | null;
+    promise: Promise<EnsureCartResult>;
+  } | null>(null);
+  const provisioning = createCartProvisioning({
+    ...runtime,
+    ...snapshots,
+    ensureCartFlightRef,
+  });
   useCartLinkLifecycle({
     ...runtime,
     ...snapshots,
@@ -129,6 +141,7 @@ export function useSharedCart(
       syncStatus: 'synced',
       toggleAssurance: noop,
       updateQuantity: noop,
+      ensureCartSession: async () => null,
       version: null,
     };
   }
@@ -151,6 +164,7 @@ export function useSharedCart(
     refreshSharedCart,
     retryImport,
     discardLegacyImport,
+    ensureCartSession: provisioning.ensureCart,
     resolveImportConflicts,
     retryPendingSync,
     syncError: state.syncError,

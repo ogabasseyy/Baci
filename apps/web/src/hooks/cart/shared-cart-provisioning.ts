@@ -17,9 +17,19 @@ import {
 } from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
+type EnsureCartFlight = {
+  generation: number;
+  merchantId: string;
+  merchantSlug: string | null;
+  promise: Promise<EnsureCartResult>;
+};
+
 export function createCartProvisioning(
   context: SharedCartRuntime & {
     hydrateMissing?: (snapshot: CartSnapshot) => Promise<void>;
+    ensureCartFlightRef?: {
+      current: EnsureCartFlight | null;
+    };
   }
 ) {
   const {
@@ -40,8 +50,9 @@ export function createCartProvisioning(
   const createSourceIdsRef = context.createSourceIdsRef ?? {
     current: [] as Array<{ cartItemId: string; quantity: number }>,
   };
+  const ensureCartFlightRef = context.ensureCartFlightRef ?? { current: null };
 
-  async function ensureCart(
+  async function ensureCartOnce(
     canProceed: () => boolean = () => true
   ): Promise<EnsureCartResult> {
     if (reportCartCookieStorageFailure(dispatch, generationRef.current))
@@ -204,7 +215,7 @@ export function createCartProvisioning(
           context,
           merchantSlug,
           fenced,
-          () => ensureCart(canProceed)
+          () => ensureCartOnce(canProceed)
         );
         if (adopted) return adopted;
         if (!fenced()) return null;
@@ -232,7 +243,7 @@ export function createCartProvisioning(
         // key with a different body would be an idempotency conflict.
         createOpRef.current = crypto.randomUUID();
         createRequestRef.current = { operationId: createOpRef.current };
-        return ensureCart(canProceed);
+        return ensureCartOnce(canProceed);
       }
       return { code: created.code, ok: false, retryable: created.retryable };
     }
@@ -255,6 +266,34 @@ export function createCartProvisioning(
       });
     }
     return { ok: true };
+  }
+
+  async function ensureCart(
+    canProceed: () => boolean = () => true
+  ): Promise<EnsureCartResult> {
+    const current = ensureCartFlightRef.current;
+    if (
+      current &&
+      current.generation === context.sessionGeneration &&
+      current.merchantId === context.merchantId &&
+      current.merchantSlug === context.merchantSlug
+    ) {
+      return current.promise;
+    }
+    const flight: EnsureCartFlight = {
+      generation: context.sessionGeneration,
+      merchantId: context.merchantId,
+      merchantSlug: context.merchantSlug,
+      promise: ensureCartOnce(canProceed),
+    };
+    ensureCartFlightRef.current = flight;
+    try {
+      return await flight.promise;
+    } finally {
+      if (ensureCartFlightRef.current === flight) {
+        ensureCartFlightRef.current = null;
+      }
+    }
   }
 
   const finishImportOp = createImportFinisher(context);

@@ -129,12 +129,17 @@ export function CustomerAuthProvider({
 
   // Check session on demand (e.g. refreshCustomer).
   const checkSession = () =>
-    loadCustomerSession(merchantSlug, {
-      currentUserId: user?.id,
-      setUser,
-      setCustomer,
-      setIsLoading,
-    });
+    loadCustomerSession(
+      merchantSlug,
+      {
+        currentUserId: user?.id,
+        setUser,
+        setCustomer,
+        setIsLoading,
+      },
+      undefined,
+      { bypassSessionHint: true }
+    );
 
   // Publish the storefront reset commit-synchronously (Codex R129
   // P2, R133 P2): a layout effect leaves no post-commit window in

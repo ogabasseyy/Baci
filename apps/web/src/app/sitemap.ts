@@ -1,7 +1,10 @@
 import type { MetadataRoute } from 'next';
-import { cookies, headers } from 'next/headers';
-import { getPlatformBlogSitemapPosts } from '@/lib/platform-blog';
-import { createClient } from '@/lib/supabase/server';
+import { cacheLife, cacheTag } from 'next/cache';
+import {
+  getPlatformBlogSitemapPosts,
+  PLATFORM_BLOG_SITEMAP_CACHE_TAG,
+} from '@/lib/platform-blog';
+import { createAnonClient } from '@/lib/supabase/anon';
 
 interface SitemapDomain {
   domain: string | null;
@@ -20,115 +23,102 @@ interface SitemapMerchant {
  * Fetches active merchants for dynamic storefront URLs.
  *
  * RLS policy note:
- * Queries `merchants` and its nested `domains` relation using the standard
- * `createClient(await cookies())` (anon role). `public.domains` has the
+ * Queries `merchants` and its nested `domains` relation using the stateless
+ * `createAnonClient()` (anon role). `public.domains` has the
  * `domains_select_policy` RLS policy in PostgreSQL permitting anon reads
  * for active verified domains. Downstream, `hasActiveCustomDomain` verifies
  * active status and custom/purchased domain type to omit merchants whose canonical
  * storefront URL is served by their own custom domain.
  */
 async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
-  try {
-    const supabase = createClient(await cookies());
-    const { data: merchants, error } = await supabase
-      .from('merchants')
-      .select(
-        // Active domains are permitted under domains_select_policy RLS
-        'slug, updated_at, domains(domain, status, domain_type, is_primary)'
-      )
-      .eq('is_published', true)
-      .not('slug', 'is', null)
-      .order('updated_at', { ascending: false });
+  const supabase = createAnonClient();
+  const { data: merchants, error } = await supabase
+    .from('merchants')
+    .select(
+      // Active domains are permitted under domains_select_policy RLS
+      'slug, updated_at, domains(domain, status, domain_type, is_primary)'
+    )
+    .eq('is_published', true)
+    .not('slug', 'is', null)
+    .order('updated_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching merchants for sitemap:', error);
-      return [];
-    }
-
-    return ((merchants as SitemapMerchant[] | null) || []).filter(
-      (merchant) => {
-        const domainRows = Array.isArray(merchant.domains)
-          ? merchant.domains
-          : merchant.domains
-            ? [merchant.domains]
-            : [];
-        const hasActiveCustomDomain = domainRows.some((d) => {
-          const status = d.status?.trim().toLowerCase();
-          const domainType = d.domain_type?.trim().toLowerCase();
-          return (
-            status === 'active' &&
-            (domainType === 'custom' || domainType === 'purchased') &&
-            Boolean(d.domain?.trim())
-          );
-        });
-        return !hasActiveCustomDomain;
-      }
-    );
-  } catch (error) {
-    console.error('Failed to fetch merchants:', error);
-    return [];
+  if (error) {
+    throw new Error(`Error fetching merchants for sitemap: ${error.message}`);
   }
+
+  return ((merchants as SitemapMerchant[] | null) || []).filter((merchant) => {
+    const domainRows = Array.isArray(merchant.domains)
+      ? merchant.domains
+      : merchant.domains
+        ? [merchant.domains]
+        : [];
+    const hasActiveCustomDomain = domainRows.some((d) => {
+      const status = d.status?.trim().toLowerCase();
+      const domainType = d.domain_type?.trim().toLowerCase();
+      return (
+        status === 'active' &&
+        (domainType === 'custom' || domainType === 'purchased') &&
+        Boolean(d.domain?.trim())
+      );
+    });
+    return !hasActiveCustomDomain;
+  });
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const headersList = await headers();
-  const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
+const STATIC_SITEMAP_PAGES = [
+  { path: '/', changeFreq: 'weekly' as const, priority: 1.0 },
+  { path: '/pricing', changeFreq: 'weekly' as const, priority: 0.9 },
+  { path: '/features', changeFreq: 'monthly' as const, priority: 0.8 },
+  { path: '/about', changeFreq: 'monthly' as const, priority: 0.7 },
+  { path: '/contact', changeFreq: 'monthly' as const, priority: 0.6 },
+  { path: '/blog', changeFreq: 'daily' as const, priority: 0.8 },
+  { path: '/demo', changeFreq: 'monthly' as const, priority: 0.7 },
+  { path: '/terms', changeFreq: 'yearly' as const, priority: 0.3 },
+  { path: '/privacy', changeFreq: 'yearly' as const, priority: 0.3 },
+];
 
-  const host = process.env.NEXT_PUBLIC_ROOT_DOMAIN
-    ? process.env.NEXT_PUBLIC_ROOT_DOMAIN
-    : headersList.get('host') || 'localhost:3000';
-
-  const siteUrl = `${protocol}://${host}`;
-
-  // Define static platform pages
-  const staticPages = [
-    { path: '/', changeFreq: 'weekly' as const, priority: 1.0 },
-    { path: '/pricing', changeFreq: 'weekly' as const, priority: 0.9 },
-    { path: '/features', changeFreq: 'monthly' as const, priority: 0.8 },
-    { path: '/about', changeFreq: 'monthly' as const, priority: 0.7 },
-    { path: '/contact', changeFreq: 'monthly' as const, priority: 0.6 },
-    { path: '/blog', changeFreq: 'daily' as const, priority: 0.8 },
-    { path: '/demo', changeFreq: 'monthly' as const, priority: 0.7 },
-    { path: '/terms', changeFreq: 'yearly' as const, priority: 0.3 },
-    { path: '/privacy', changeFreq: 'yearly' as const, priority: 0.3 },
-  ];
-
-  // Map static pages to sitemap entries
-  const sitemapEntries: MetadataRoute.Sitemap = staticPages.map((page) => ({
+function buildStaticSitemapEntries(siteUrl: string): MetadataRoute.Sitemap {
+  return STATIC_SITEMAP_PAGES.map((page) => ({
     url: `${siteUrl}${page.path}`,
     changeFrequency: page.changeFreq,
     priority: page.priority,
   }));
+}
+
+async function getCachedSitemapEntries(
+  siteUrl: string
+): Promise<MetadataRoute.Sitemap> {
+  'use cache';
+
+  cacheLife('storefront-page');
+  cacheTag('merchants', PLATFORM_BLOG_SITEMAP_CACHE_TAG);
+
+  const sitemapEntries: MetadataRoute.Sitemap =
+    buildStaticSitemapEntries(siteUrl);
 
   // Add dynamic platform blog posts
-  try {
-    const blogPosts = await getPlatformBlogSitemapPosts();
-    blogPosts.forEach((post) => {
-      if (!post.slug) {
-        return;
-      }
+  const blogPosts = await getPlatformBlogSitemapPosts();
+  blogPosts.forEach((post) => {
+    if (!post.slug) {
+      return;
+    }
 
-      const publishedAt = post.published_at
-        ? new Date(post.published_at)
-        : null;
-      const updatedAt = post.updated_at ? new Date(post.updated_at) : null;
-      const lastModified =
-        updatedAt && !Number.isNaN(updatedAt.getTime())
-          ? updatedAt
-          : publishedAt && !Number.isNaN(publishedAt.getTime())
-            ? publishedAt
-            : undefined;
+    const publishedAt = post.published_at ? new Date(post.published_at) : null;
+    const updatedAt = post.updated_at ? new Date(post.updated_at) : null;
+    const lastModified =
+      updatedAt && !Number.isNaN(updatedAt.getTime())
+        ? updatedAt
+        : publishedAt && !Number.isNaN(publishedAt.getTime())
+          ? publishedAt
+          : undefined;
 
-      sitemapEntries.push({
-        url: `${siteUrl}/blog/${post.slug}`,
-        ...(lastModified && { lastModified }),
-        changeFrequency: 'weekly',
-        priority: 0.7,
-      });
+    sitemapEntries.push({
+      url: `${siteUrl}/blog/${post.slug}`,
+      ...(lastModified && { lastModified }),
+      changeFrequency: 'weekly',
+      priority: 0.7,
     });
-  } catch (error) {
-    console.error('Failed to fetch platform blog sitemap posts:', error);
-  }
+  });
 
   // Add merchant storefronts (for SEO discovery)
   // Note: Individual merchant sitemaps are served at /[slug]/sitemap.xml
@@ -158,4 +148,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
 
   return sitemapEntries;
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
+  const host =
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN ||
+    (process.env.NODE_ENV === 'development' ? 'localhost:3000' : 'usebaci.com');
+  const siteUrl = `${protocol}://${host}`;
+
+  try {
+    return await getCachedSitemapEntries(siteUrl);
+  } catch (error) {
+    console.error('Failed to build cached sitemap:', error);
+    return buildStaticSitemapEntries(siteUrl);
+  }
 }

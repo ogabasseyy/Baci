@@ -102,6 +102,7 @@ export const ProductGridItem: React.FC<ProductGridItemProps> = ({
     <div className="bg-white border border-gray-100 rounded-2xl p-3 md:p-4 shadow-sm md:hover:shadow-xl active:shadow-md active:scale-[0.99] transition-all duration-300 group flex flex-col h-full relative">
       <Link
         href={asRoute(getStorefrontProductHref(product, basePath))}
+        prefetch={false}
         className="absolute inset-0 z-0"
       />
 

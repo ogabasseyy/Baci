@@ -1,7 +1,6 @@
 import { formatSupabaseErrorLog } from '@baci/shared/lib';
 import { createClient as createStaticClient } from '@supabase/supabase-js';
-import { unstable_cache } from 'next/cache';
-import { cookies } from 'next/headers';
+import { cacheLife, cacheTag, unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { getPrimaryProductImage } from '@/lib/product-image';
@@ -16,7 +15,7 @@ import {
   searchStorefrontProducts,
   toStorefrontSearchSort,
 } from '@/lib/storefront-search';
-import { createClient } from '@/lib/supabase/server';
+import { createAnonClient } from '@/lib/supabase/anon';
 import { storefrontProductsQuerySchema } from '@/schemas/storefront-products-query';
 import type { StorefrontProductsQuery } from '@/schemas/storefront-products-query.types';
 import {
@@ -288,6 +287,11 @@ async function fetchProductsByIds(
   ids: string[],
   options: { compact?: boolean } = {}
 ) {
+  'use cache';
+
+  cacheLife('products');
+  cacheTag(...buildStorefrontProductsCacheTags(merchantId));
+
   const products = await fetchProductRowsByIds(merchantId, ids, options);
 
   return (await projectStandardListingRows(merchantId, products)).map(
@@ -304,8 +308,7 @@ async function fetchProductRowsByIds(
     return [];
   }
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createAnonClient();
   const selectColumns: string =
     options.compact === false
       ? storefrontProductsRouteData.STOREFRONT_PRODUCTS_SELECT
@@ -462,8 +465,7 @@ export async function GET(request: NextRequest) {
       // Page ranked candidates when filters run in memory. search_products_v2
       // caps each page at 100, so filtered storefront responses must not stop at
       // a fixed pre-filter candidate window.
-      const cookieStore = await cookies();
-      const supabase = createClient(cookieStore);
+      const supabase = createAnonClient();
       const requestedLimit = limit ?? 20;
       const searchSort = searchParams.has('sort')
         ? toStorefrontSearchSort(sort)

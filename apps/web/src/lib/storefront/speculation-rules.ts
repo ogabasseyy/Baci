@@ -91,7 +91,8 @@ const RESERVED_STOREFRONT_SEGMENTS = [
   'api',
 ] as const;
 
-const EAGERNESS: SpeculationEagerness = 'moderate';
+const PRERENDER_EAGERNESS: SpeculationEagerness = 'conservative';
+const PREFETCH_EAGERNESS: SpeculationEagerness = 'moderate';
 
 /** URLPattern alternation group of the reserved first segments. */
 function reservedSegmentGroup(): string {
@@ -121,28 +122,29 @@ export function buildStorefrontSpeculationRules(
   basePath: string
 ): StorefrontSpeculationRuleset {
   const reserved = reservedSegmentGroup();
+  const pdpWhere: SpeculationCondition = {
+    and: [
+      // Exactly two path segments => a product detail page.
+      { href_matches: `${basePath}/:category/:product` },
+      // Drop reserved sections (e.g. /account/orders, /checkout/success,
+      // /blog/:post) that also have a two-segment shape.
+      { not: { href_matches: `${basePath}/${reserved}/*` } },
+      // Drop the /:category/compare listing sub-route.
+      { not: { href_matches: `${basePath}/*/compare` } },
+      ...sharedExclusions(),
+    ],
+  };
 
   return {
     prerender: [
       {
-        eagerness: EAGERNESS,
-        where: {
-          and: [
-            // Exactly two path segments => a product detail page.
-            { href_matches: `${basePath}/:category/:product` },
-            // Drop reserved sections (e.g. /account/orders, /checkout/success,
-            // /blog/:post) that also have a two-segment shape.
-            { not: { href_matches: `${basePath}/${reserved}/*` } },
-            // Drop the /:category/compare listing sub-route.
-            { not: { href_matches: `${basePath}/*/compare` } },
-            ...sharedExclusions(),
-          ],
-        },
+        eagerness: PRERENDER_EAGERNESS,
+        where: pdpWhere,
       },
     ],
     prefetch: [
       {
-        eagerness: EAGERNESS,
+        eagerness: PREFETCH_EAGERNESS,
         where: {
           and: [
             // Exactly one path segment => a category listing. The empty home
@@ -152,6 +154,10 @@ export function buildStorefrontSpeculationRules(
             ...sharedExclusions(),
           ],
         },
+      },
+      {
+        eagerness: PREFETCH_EAGERNESS,
+        where: pdpWhere,
       },
     ],
   };

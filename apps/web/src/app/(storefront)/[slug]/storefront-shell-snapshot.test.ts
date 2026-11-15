@@ -128,14 +128,14 @@ describe('getStorefrontShellSnapshot', () => {
     });
   });
 
-  it('returns domain-routed shell data with an empty basePath on first render', async () => {
+  it('returns domain-routed shell data with an empty basePath for domain identifiers without reading headers', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([
       { name: 'Phones', slug: 'phones' },
     ]);
-    mockHeaders.mockResolvedValue(new Headers([['x-custom-domain', '1']]));
 
-    const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
+    const shellSnapshotBase =
+      await getStorefrontShellSnapshotBase('ogabassey.com');
     expect(shellSnapshotBase).not.toBeNull();
     if (!shellSnapshotBase) {
       throw new Error('Expected shellSnapshotBase to be resolved');
@@ -153,55 +153,11 @@ describe('getStorefrontShellSnapshot', () => {
     expect(getStorefrontNavigationCategories).toHaveBeenCalledWith(
       'merchant-1'
     );
-  });
-
-  it('does not read request headers when the storefront identifier is already a domain', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
-
-    const shellSnapshotBase =
-      await getStorefrontShellSnapshotBase('ogabassey.com');
-
-    expect(shellSnapshotBase).toMatchObject({
-      routingMode: 'domain',
-      basePath: '',
-    });
     expect(mockHeaders).not.toHaveBeenCalled();
   });
 
-  it('treats slug subdomains as domain-routed even without x-merchant headers', async () => {
+  it('does not read request headers for slug identifiers either', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
-    mockHeaders.mockResolvedValue(
-      new Headers([['host', 'ogabassey.usebaci.com']])
-    );
-
-    const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
-
-    expect(shellSnapshotBase).toMatchObject({
-      routingMode: 'domain',
-      basePath: '',
-    });
-  });
-
-  it('uses the configured root domain for slug subdomain routing', async () => {
-    vi.mocked(getRootDomain).mockReturnValue('shops.example');
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
-    mockHeaders.mockResolvedValue(
-      new Headers([['host', 'ogabassey.shops.example']])
-    );
-
-    const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
-
-    expect(shellSnapshotBase).toMatchObject({
-      routingMode: 'domain',
-      basePath: '',
-    });
-  });
-
-  it('rejects confusable host suffixes when inferring slug subdomain routing', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
-    mockHeaders.mockResolvedValue(
-      new Headers([['host', 'ogabassey.usebaci.com.attacker.tld']])
-    );
 
     const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
 
@@ -209,39 +165,7 @@ describe('getStorefrontShellSnapshot', () => {
       routingMode: 'path',
       basePath: '/ogabassey',
     });
-  });
-
-  it('parses forwarded host lists when host is unavailable', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
-    mockHeaders.mockResolvedValue(
-      new Headers([
-        ['x-forwarded-host', 'ogabassey.usebaci.com:443, proxy.local'],
-      ])
-    );
-
-    const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
-
-    expect(shellSnapshotBase).toMatchObject({
-      routingMode: 'domain',
-      basePath: '',
-    });
-  });
-
-  it('prefers host over forwarded host for slug subdomain routing inference', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
-    mockHeaders.mockResolvedValue(
-      new Headers([
-        ['host', 'usebaci.com'],
-        ['x-forwarded-host', 'ogabassey.usebaci.com'],
-      ])
-    );
-
-    const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
-
-    expect(shellSnapshotBase).toMatchObject({
-      routingMode: 'path',
-      basePath: '/ogabassey',
-    });
+    expect(mockHeaders).not.toHaveBeenCalled();
   });
 
   it('expands a precomputed base snapshot without repeating merchant lookup work', async () => {

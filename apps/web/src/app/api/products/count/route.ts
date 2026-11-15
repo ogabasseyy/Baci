@@ -1,6 +1,26 @@
-import { cookies } from 'next/headers';
+import { cacheLife, cacheTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAnonClient } from '@/lib/supabase/anon';
+
+async function getCachedMerchantProductCount(
+  merchantId: string
+): Promise<number> {
+  'use cache';
+
+  cacheLife('products');
+  cacheTag('products', `products-${merchantId}`);
+
+  const supabase = createAnonClient();
+  const { data: count, error } = await supabase.rpc(
+    'get_merchant_product_count',
+    {
+      merchant_id_param: merchantId,
+    }
+  );
+
+  if (error) throw error;
+  return count || 0;
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -14,24 +34,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    const { data: count, error } = await supabase.rpc(
-      'get_merchant_product_count',
-      {
-        merchant_id_param: merchantId,
-      }
-    );
-
-    if (error) throw error;
+    const count = await getCachedMerchantProductCount(merchantId);
 
     // Determine recommended search method based on count
     const THRESHOLD = 500;
-    const recommendedMethod = (count || 0) > THRESHOLD ? 'server' : 'client';
+    const recommendedMethod = count > THRESHOLD ? 'server' : 'client';
 
     return NextResponse.json({
-      count: count || 0,
+      count,
       recommendedMethod,
       threshold: THRESHOLD,
     });

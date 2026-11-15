@@ -1,11 +1,14 @@
 import { render, renderHook, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { Suspense } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StorefrontMerchantProvider } from '@/hooks/merchant/storefront-merchant-provider';
 import { useMerchant } from '@/hooks/merchant/use-merchant';
 
 describe('StorefrontMerchantProvider', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
   it('provides server-resolved storefront merchant data without loading state', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StorefrontMerchantProvider
@@ -109,5 +112,67 @@ describe('StorefrontMerchantProvider', () => {
       screen.getByRole('status', { name: 'Loading storefront chrome' })
     ).toBeInTheDocument();
     expect(screen.getByText('Phones')).toBeInTheDocument();
+  });
+
+  it('upgrades path server snapshot to domain routing on *.usebaci.com subdomains', () => {
+    vi.stubGlobal('window', {
+      ...window,
+      location: { ...window.location, hostname: 'ogabassey.usebaci.com' },
+    });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontMerchantProvider
+        shellSnapshot={{
+          merchant: {
+            id: 'merchant-1',
+            user_id: '',
+            business_name: 'Ogabassey',
+            business_type: 'gadgets',
+            slug: 'ogabassey',
+          },
+          routingMode: 'path',
+          basePath: '/ogabassey',
+          navigationCategories: [],
+        }}
+      >
+        {children}
+      </StorefrontMerchantProvider>
+    );
+
+    const { result } = renderHook(() => useMerchant(), { wrapper });
+
+    expect(result.current.routingMode).toBe('domain');
+    expect(result.current.basePath).toBe('');
+  });
+
+  it('preserves path routing on Vercel preview hostnames', () => {
+    vi.stubGlobal('window', {
+      ...window,
+      location: { ...window.location, hostname: 'baci-preview.vercel.app' },
+    });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontMerchantProvider
+        shellSnapshot={{
+          merchant: {
+            id: 'merchant-1',
+            user_id: '',
+            business_name: 'Ogabassey',
+            business_type: 'gadgets',
+            slug: 'ogabassey',
+          },
+          routingMode: 'path',
+          basePath: '/ogabassey',
+          navigationCategories: [],
+        }}
+      >
+        {children}
+      </StorefrontMerchantProvider>
+    );
+
+    const { result } = renderHook(() => useMerchant(), { wrapper });
+
+    expect(result.current.routingMode).toBe('path');
+    expect(result.current.basePath).toBe('/ogabassey');
   });
 });

@@ -6,6 +6,9 @@ const mockGetPlatformBlogPost = vi.fn();
 const mockIncrementPlatformBlogPostViews = vi.fn();
 
 vi.mock('@/lib/platform-blog', () => ({
+  PLATFORM_BLOG_CACHE_TAG: 'platform-blog',
+  PLATFORM_BLOG_LIST_CACHE_TAG: 'platform-blog-list',
+  getPlatformBlogPostCacheTag: (slug: string) => `platform-blog-post-${slug}`,
   getPlatformBlogListing: (...args: unknown[]) =>
     mockGetPlatformBlogListing(...args),
   getPlatformBlogPost: (...args: unknown[]) => mockGetPlatformBlogPost(...args),
@@ -13,7 +16,7 @@ vi.mock('@/lib/platform-blog', () => ({
     mockIncrementPlatformBlogPostViews(...args),
 }));
 
-import { GET } from './route';
+import { GET, POST } from './route';
 
 describe('GET /api/blog/posts', () => {
   beforeEach(() => {
@@ -45,6 +48,12 @@ describe('GET /api/blog/posts', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=60, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'platform-blog,platform-blog-list'
+    );
     expect(mockGetPlatformBlogListing).toHaveBeenCalledWith({
       category: null,
       limit: 10,
@@ -77,6 +86,12 @@ describe('GET /api/blog/posts', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=60, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'platform-blog,platform-blog-list'
+    );
     expect(mockGetPlatformBlogListing).toHaveBeenCalledWith({
       category: null,
       limit: 10,
@@ -102,6 +117,12 @@ describe('GET /api/blog/posts', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=60, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'platform-blog,platform-blog-post-launch-faster'
+    );
     expect(mockGetPlatformBlogPost).toHaveBeenCalledWith('launch-faster');
     expect(mockIncrementPlatformBlogPostViews).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
@@ -111,7 +132,7 @@ describe('GET /api/blog/posts', () => {
     });
   });
 
-  it('tracks a post view when trackView=1 is provided', async () => {
+  it('tracks a post view via POST', async () => {
     mockGetPlatformBlogPost.mockResolvedValueOnce({
       id: 'post-2',
       slug: 'view-error',
@@ -119,10 +140,12 @@ describe('GET /api/blog/posts', () => {
     });
     mockIncrementPlatformBlogPostViews.mockResolvedValueOnce(undefined);
 
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/blog/posts?slug=view-error&trackView=1'
-      )
+    const response = await POST(
+      new NextRequest('http://localhost/api/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'view-error' }),
+      })
     );
 
     expect(response.status).toBe(200);
@@ -130,7 +153,7 @@ describe('GET /api/blog/posts', () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 
-  it('returns ok=false when trackView increment fails', async () => {
+  it('returns ok=false when POST trackView increment fails', async () => {
     mockGetPlatformBlogPost.mockResolvedValueOnce({
       id: 'post-2',
       slug: 'view-error',
@@ -141,10 +164,12 @@ describe('GET /api/blog/posts', () => {
     );
 
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/blog/posts?slug=view-error&trackView=1'
-      )
+    const response = await POST(
+      new NextRequest('http://localhost/api/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'view-error' }),
+      })
     );
 
     expect(response.status).toBe(200);
@@ -167,6 +192,12 @@ describe('GET /api/blog/posts', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=60, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'platform-blog,platform-blog-list'
+    );
     expect(mockGetPlatformBlogListing).toHaveBeenCalledWith({
       category: 'insights',
       limit: 12,

@@ -21,11 +21,13 @@ describe('BlogPostViewTracker', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
     expect(mockFetch).toHaveBeenCalledWith(
-      '/api/blog/posts?slug=launch-faster&trackView=1',
+      '/api/blog/posts',
       expect.objectContaining({
+        body: JSON.stringify({ slug: 'launch-faster' }),
         cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
         keepalive: true,
-        method: 'GET',
+        method: 'POST',
       })
     );
   });

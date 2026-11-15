@@ -845,18 +845,32 @@ export class TopshipProvider extends BaseShippingProvider {
       pickupCharge: initialPickupCharge,
     });
 
-    const payResponse = await this.safeFetch(
-      `${TOPSHIP_BASE_URL}/pay-from-wallet`,
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          detail: {
-            shipmentId: savedShipment.id,
-          },
-        }),
-      }
-    );
+    let payResponse: Response;
+    try {
+      payResponse = await this.safeFetch(
+        `${TOPSHIP_BASE_URL}/pay-from-wallet`,
+        {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            detail: {
+              shipmentId: savedShipment.id,
+            },
+          }),
+        }
+      );
+    } catch (error) {
+      // The shipment already exists at Topship, so a connection error here is
+      // NOT "never reached": throw a plain error (no network code) so the
+      // booking lock stays held instead of allowing a duplicate shipment.
+      this.log('error', 'Topship payment request failed after save', {
+        trackingId: savedShipment.trackingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(
+        `Topship payment request failed after the shipment was saved (tracking ${savedShipment.trackingId ?? 'unknown'}).`
+      );
+    }
     const payResult = await this.readResponseBody(payResponse);
 
     if (!payResponse.ok) {

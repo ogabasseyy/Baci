@@ -1,0 +1,100 @@
+.drawer {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(100%, 25rem);
+  height: 100%;
+  border-inline-start: 1px solid var(--store-border);
+  background: var(--store-background);
+  color: var(--store-background-text);
+  box-shadow: -1rem 0 3rem rgb(0 0 0 / 25%);
+  animation: enter 180ms ease-out;
+}
+
+@keyframes enter {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    animation: none;
+  }
+}
+
+.drawer [data-filter-drawer-header] {
+  position: static;
+  justify-content: initial;
+  gap: 0.75rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.75rem;
+}
+
+.drawer [data-filter-drawer-header] h3 {
+  margin-inline-end: auto;
+  font-size: 1.25rem;
+}
+
+.drawer [data-filter-drawer-header] button {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.drawer [data-filter-drawer-clear] {
+  color: var(--store-primary);
+  padding-inline: 0.5rem;
+  font-weight: 700;
+}
+
+.drawer [data-filter-drawer-body] {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem;
+}
+
+.drawer [data-filter-drawer-body] > div:first-child {
+  background: transparent;
+  padding: 0;
+}
+
+.drawer [data-filter-group] {
+  margin: 0 0 0.625rem;
+  padding: 0.75rem;
+  border: 1px solid var(--store-border);
+  border-radius: 0.75rem;
+}
+
+.drawer [data-filter-group] h3,
+.drawer [data-filter-group] > button > span {
+  color: var(--store-background-text);
+  font-size: 0.9375rem;
+}
+
+.drawer [data-filter-group] label {
+  align-items: center;
+  min-height: 2.25rem;
+  padding-block: 0.25rem;
+}
+
+.drawer [data-filter-group] label span {
+  color: var(--store-background-text);
+  overflow-wrap: anywhere;
+}
+
+.drawer [data-filter-group] :is(input[type="text"], input[type="number"]) {
+  min-height: 2.5rem;
+  font-size: 0.875rem;
+}
+
+.drawer [data-filter-drawer-footer] {
+  position: static;
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.drawer [data-filter-drawer-footer] button {
+  min-height: 3rem;
+}

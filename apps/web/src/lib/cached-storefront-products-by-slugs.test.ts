@@ -99,6 +99,52 @@ describe('getCachedStorefrontProductsBySlugs', () => {
     ]);
   });
 
+  it('prices a pinned phone by its purchasable cellular variant', async () => {
+    harness.mockListResult.data = [
+      {
+        id: 'phone',
+        name: 'iPhone 16',
+        slug: slugs[0],
+        category: 'Smartphones',
+        price: 600000,
+        compare_at_price: 800000,
+        has_variants: true,
+        variant_model: 'sku_matrix',
+        manage_stock: false,
+      },
+    ];
+    harness.mockRpc.mockResolvedValue({
+      error: null,
+      data: [
+        {
+          id: 'wifi',
+          product_id: 'phone',
+          attributes: { sim_type: 'Wi-Fi Only', storage: '128GB' },
+          price_override: 600000,
+          condition: 'used',
+          stock_quantity: 1,
+        },
+        {
+          id: 'cellular',
+          product_id: 'phone',
+          attributes: { sim_type: 'Physical + eSIM', storage: '128GB' },
+          price_override: 900000,
+          condition: 'used',
+          stock_quantity: 1,
+        },
+      ],
+    });
+
+    await expect(
+      getCachedStorefrontProductsBySlugs('merchant-123', slugs, true)
+    ).resolves.toEqual([
+      expect.objectContaining({
+        advertised_price: 900000,
+        advertised_compare_at_price: null,
+      }),
+    ]);
+  });
+
   it('tags the cache so revalidateProducts() busts it', async () => {
     harness.mockListResult.data = [];
 

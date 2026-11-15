@@ -81,11 +81,14 @@ export function projectMerchantInboxMessage(
   const isCard = message.content_type === 'cards';
   const titles = isCard ? cardTitles(message.content_attributes) : [];
   const text = [content, ...titles].filter(Boolean).join('\n');
+  const hasAttachment = (message.attachments?.length ?? 0) > 0;
   const kind = isCard
     ? 'product_card'
-    : !message.content_type || message.content_type === 'text'
-      ? 'text'
-      : 'other';
+    : hasAttachment && !text
+      ? 'other'
+      : !message.content_type || message.content_type === 'text'
+        ? 'text'
+        : 'other';
   if (!text && kind !== 'other') return null;
 
   return {

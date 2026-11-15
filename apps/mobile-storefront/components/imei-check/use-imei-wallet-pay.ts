@@ -254,8 +254,12 @@ export function useImeiWalletPay({
         },
         pay: async (operationId, proof) => {
           if (!inner) throw new Error('Wallet payment not started');
-          const answer = await inner.pay(operationId, proof);
-          // A payment still pending may already be a listed spend (CodeRabbit).
+          // A payment still pending, or one whose request failed (the sheet
+          // then reads it as pending), may already be a listed spend.
+          const answer = await inner.pay(operationId, proof).catch((error) => {
+            refreshActivity();
+            throw error;
+          });
           if (answer.kind === 'outcome' && answer.outcome.kind === 'pending')
             refreshActivity();
           return answer;

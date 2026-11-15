@@ -334,6 +334,24 @@ describe('cart peer preview', () => {
     expect(result.current).toBeNull();
   });
 
+  it('does not extend the deadline when the other tab settles', () => {
+    vi.useFakeTimers();
+    const t = tabs();
+    const { result } = renderHook(() => useCartPeerPreview(context(), t.open));
+    act(() => t.deliver(peerEdit));
+    act(() => {
+      vi.advanceTimersByTime(9000);
+    });
+    act(() =>
+      t.deliver({ cartId: 'c', kind: 'settled', merchantId: 'm', version: 3 })
+    );
+    expect(result.current).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(result.current).toBeNull();
+  });
+
   it('stays silent and deaf for disabled, unlinked, or finished carts', () => {
     const t = tabs();
     const open = vi.fn(t.open);

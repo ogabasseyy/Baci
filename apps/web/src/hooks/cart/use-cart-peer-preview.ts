@@ -166,15 +166,19 @@ export function useCartPeerPreview(
     };
   }, [pending]);
 
+  // Keyed to the announced lines: each edit or repeat brings a new list
+  // and restarts the clock, while a settled message keeps the same list
+  // and so never extends it.
+  const previewLines = preview?.lines ?? null;
   useEffect(() => {
-    if (preview === null) return;
+    if (previewLines === null) return;
     const timer = setTimeout(() => {
       setPreview(null);
     }, PREVIEW_TIMEOUT_MS);
     return () => {
       clearTimeout(timer);
     };
-  }, [preview]);
+  }, [previewLines]);
 
   if (preview === null || !ready || pending || version === null) return null;
   // This tab's snapshot has moved past the cart the edit was made on, so

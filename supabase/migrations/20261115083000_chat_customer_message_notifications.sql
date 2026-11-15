@@ -45,15 +45,18 @@ CREATE TABLE IF NOT EXISTS private.chat_event_server_secrets (
 ALTER TABLE private.chat_event_server_secrets ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.chat_event_server_secrets FROM PUBLIC, anon, authenticated;
 
--- One row per provider message: the duplicate guard and the audit trail of
--- what was done with it. No message text is stored here.
+-- One row per provider message per store: the duplicate guard and the audit
+-- trail of what was done with it. No message text is stored here. Keys are
+-- unique within a store only, so one store's keys can never collide with,
+-- or pre-occupy, another store's.
 CREATE TABLE IF NOT EXISTS public.chat_message_events (
-  event_key text PRIMARY KEY CHECK (event_key ~ '^[A-Za-z0-9_-]{8,80}$'),
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
+  event_key text NOT NULL CHECK (event_key ~ '^[A-Za-z0-9_-]{8,80}$'),
   conversation_id bigint NOT NULL CHECK (conversation_id > 0),
   outcome text NOT NULL CHECK (outcome IN ('notified', 'coalesced', 'muted')),
   notification_id uuid REFERENCES public.notifications(id) ON DELETE SET NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (merchant_id, event_key)
 );
 CREATE INDEX IF NOT EXISTS chat_message_events_conversation_idx
   ON public.chat_message_events (merchant_id, conversation_id, created_at DESC);
@@ -93,8 +96,10 @@ BEGIN
     OR char_length(v_name) > 80 OR char_length(v_preview) > 280 THEN
     RAISE EXCEPTION 'invalid_chat_event' USING ERRCODE = '22023';
   END IF;
-  -- A proof is only good for five minutes either side of the database clock.
-  IF abs(extract(epoch FROM pg_catalog.now()) - p_issued_at) > 300 THEN
+  -- A proof is good for five minutes, with one minute allowed for a server
+  -- clock running ahead of the database.
+  IF extract(epoch FROM pg_catalog.now()) - p_issued_at > 300
+    OR p_issued_at - extract(epoch FROM pg_catalog.now()) > 60 THEN
     RAISE EXCEPTION 'chat_event_proof_expired' USING ERRCODE = '42501';
   END IF;
 
@@ -108,7 +113,10 @@ BEGIN
     RAISE EXCEPTION 'chat_event_secret_not_configured' USING ERRCODE = '55000';
   END IF;
   FOR v_secret IN SELECT secret FROM private.chat_event_server_secrets LOOP
-    IF pg_catalog.encode(extensions.hmac(v_canonical, v_secret, 'sha256'), 'hex') = p_proof THEN
+    -- Compare digests of both sides so the comparison does not stop at the
+    -- first differing character of the proof itself.
+    IF extensions.digest(pg_catalog.encode(extensions.hmac(v_canonical, v_secret, 'sha256'), 'hex'), 'sha256')
+      = extensions.digest(p_proof, 'sha256') THEN
       v_valid := true;
     END IF;
   END LOOP;
@@ -123,17 +131,15 @@ BEGIN
 
   -- Serialize one store's chat events: duplicate deliveries, bursts in one
   -- conversation and the hourly budget below are all decided one at a time.
-  -- An event key is bound to its store by the proof, so the same key can only
-  -- ever race under this one lock.
+  -- Event keys are unique per store, so the same key can only ever race under
+  -- this one lock.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('chat-events:' || p_merchant_id::text, 0)
   );
 
-  SELECT * INTO v_existing FROM public.chat_message_events WHERE event_key = p_event_key;
+  SELECT * INTO v_existing FROM public.chat_message_events
+    WHERE merchant_id = p_merchant_id AND event_key = p_event_key;
   IF FOUND THEN
-    IF v_existing.merchant_id <> p_merchant_id THEN
-      RAISE EXCEPTION 'chat_event_conflict' USING ERRCODE = '22023';
-    END IF;
     RETURN pg_catalog.jsonb_build_object('outcome', v_existing.outcome, 'duplicate', true);
   END IF;
 
@@ -195,7 +201,7 @@ BEGIN
   -- Bounded housekeeping: the duplicate guard only needs recent rows. A
   -- provider message redelivered after 30 days would be treated as new.
   DELETE FROM public.chat_message_events
-  WHERE event_key IN (
+  WHERE merchant_id = p_merchant_id AND event_key IN (
     SELECT event_key FROM public.chat_message_events
     WHERE merchant_id = p_merchant_id AND created_at < pg_catalog.now() - interval '30 days'
     LIMIT 200

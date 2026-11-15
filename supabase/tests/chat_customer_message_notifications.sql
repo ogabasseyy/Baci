@@ -45,6 +45,9 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'chat_event_proof_invalid' THEN RAISE; END IF; END;
   BEGIN PERFORM pg_temp.send('evt-stale-01', 1, p_age => 301); RAISE EXCEPTION 'stale proof accepted';
   EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'chat_event_proof_expired' THEN RAISE; END IF; END;
+  -- Only a small clock skew into the future is tolerated.
+  BEGIN PERFORM pg_temp.send('evt-future-1', 1, p_age => -61); RAISE EXCEPTION 'future-dated proof accepted';
+  EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'chat_event_proof_expired' THEN RAISE; END IF; END;
   BEGIN PERFORM pg_temp.send('bad key!', 1); RAISE EXCEPTION 'malformed event key accepted';
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
   BEGIN PERFORM pg_temp.send('evt-too-long', 1, p_preview => repeat('x', 281)); RAISE EXCEPTION 'oversized preview accepted';
@@ -184,6 +187,26 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
+
+-- Event keys are per store: another store using the same key is neither
+-- blocked by, nor able to block, this store's event.
+INSERT INTO auth.users (id, instance_id, aud, role, email)
+VALUES ('c4a70000-0000-4000-8000-0000000000a2', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'chat-notify-second@example.invalid');
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.merchants (id, user_id, email, business_name, slug, country, payout_currency)
+VALUES ('c4a70000-0000-4000-8000-0000000000b2', 'c4a70000-0000-4000-8000-0000000000a2', 'chat-notify-second@example.invalid', 'Synthetic Chat Notify Store Two', 'synthetic-chat-notify-two', 'NG', 'NGN');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.role', '', true);
+DO $$ DECLARE v jsonb; v_at bigint := extract(epoch FROM now())::bigint; BEGIN
+  v := public.record_chat_customer_message(
+    pg_temp.chat_proof('synthetic-chat-event-secret-0123456789abcdef', v_at, 'c4a70000-0000-4000-8000-0000000000b2', 'evt-0000001', 7, 'Bola', 'Hi'),
+    v_at, 'c4a70000-0000-4000-8000-0000000000b2', 'evt-0000001', 7, 'Bola', 'Hi');
+  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'same key, other store: %', v; END IF;
+  IF (SELECT count(*) FROM public.chat_message_events WHERE event_key = 'evt-0000001') <> 2 THEN
+    RAISE EXCEPTION 'per-store event keys not kept apart';
+  END IF;
+END $$;
 
 -- An unknown store is ignored without recording anything.
 DO $$ DECLARE v jsonb; v_at bigint := extract(epoch FROM now())::bigint; BEGIN

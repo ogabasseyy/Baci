@@ -79,12 +79,10 @@ export default function MessagesPage() {
                     {inbox.selectedConversation?.customerName ?? 'Customer'}
                   </h2>
                 </header>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  <ConversationThread
-                    messages={inbox.messages}
-                    state={inbox.threadState}
-                  />
-                </div>
+                <ConversationThread
+                  messages={inbox.messages}
+                  state={inbox.threadState}
+                />
                 {/* Keyed so a draft never carries into another conversation. */}
                 <ReplyBox
                   key={inbox.selectedId}

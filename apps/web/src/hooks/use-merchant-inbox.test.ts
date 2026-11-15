@@ -308,4 +308,76 @@ describe('useMerchantInbox', () => {
     );
     expect(api.fetchMerchantInboxThread).toHaveBeenCalledTimes(threads + 1);
   });
+
+  it('ignores an older poll that resolves after a newer one', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useMerchantInbox());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => result.current.selectConversation(7));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    let releaseSlow: (value: unknown) => void = () => undefined;
+    api.fetchMerchantInboxThread
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSlow = resolve;
+          })
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        messages: [message(30), message(33)],
+      });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_THREAD_POLL_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_THREAD_POLL_MS);
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 33]);
+
+    await act(async () => {
+      releaseSlow({ ok: true, messages: [message(30)] });
+    });
+    expect(result.current.messages.map((m) => m.id)).toEqual([30, 33]);
+  });
+
+  it('shows sending only in the conversation whose reply is in flight', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    api.sendMerchantInboxReply.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        })
+    );
+    const { result } = renderHook(() => useMerchantInbox());
+    await waitFor(() => expect(result.current.listState).toBe('ready'));
+    act(() => result.current.selectConversation(7));
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+
+    let pending: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      pending = result.current.sendReply('For seven');
+    });
+    expect(result.current.sending).toBe(true);
+
+    act(() => result.current.selectConversation(8));
+    expect(result.current.sending).toBe(false);
+    await waitFor(() => expect(result.current.threadState).toBe('ready'));
+    let other = false;
+    await act(async () => {
+      other = await result.current.sendReply('For eight');
+    });
+    expect(other).toBe(true);
+    expect(api.sendMerchantInboxReply).toHaveBeenLastCalledWith(8, 'For eight');
+
+    await act(async () => {
+      release({ ok: true, message: message(31, 'store') });
+      await pending;
+    });
+  });
 });

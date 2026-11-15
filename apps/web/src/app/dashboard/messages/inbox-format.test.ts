@@ -10,8 +10,15 @@ describe('formatInboxTime', () => {
   const now = new Date('2026-11-15T18:00:00');
 
   it('shows the time for today and the day otherwise', () => {
-    expect(formatInboxTime('2026-11-15T09:05:00', now)).toMatch(/9:05/);
-    expect(formatInboxTime('2026-11-12T09:05:00', now)).toMatch(/12 Nov/);
+    expect(formatInboxTime('2026-11-15T09:05:00', now, 'en-GB')).toMatch(
+      /9:05/
+    );
+    expect(formatInboxTime('2026-11-12T09:05:00', now, 'en-GB')).toMatch(
+      /12 Nov/
+    );
+    expect(formatInboxTime('2026-11-12T09:05:00', now, 'en-US')).toMatch(
+      /Nov 12/
+    );
   });
 
   it.each([null, '', 'not-a-date'])('is empty for %s', (value) => {
@@ -44,5 +51,15 @@ describe('inboxPreview', () => {
   it('shortens long text', () => {
     const preview = inboxPreview({ sender: 'customer', text: 'a'.repeat(500) });
     expect(preview).toBe(`${'a'.repeat(120)}…`);
+  });
+});
+
+describe('inboxPreview emoji safety', () => {
+  it('does not leave half an emoji at the cut', () => {
+    const preview = inboxPreview({
+      sender: 'customer',
+      text: `${'a'.repeat(119)}😀 and more text to push past the limit`,
+    });
+    expect(preview).toBe(`${'a'.repeat(119)}…`);
   });
 });

@@ -98,12 +98,14 @@ export function useMerchantInbox() {
   const [messages, setMessages] = useState<MerchantInboxMessage[]>([]);
   const [threadState, setThreadState] =
     useState<MerchantInboxThreadState>('idle');
-  const [sending, setSending] = useState(false);
+  const [sendingIds, setSendingIds] = useState<number[]>([]);
   const [sendError, setSendError] = useState<MerchantInboxApiErrorCode | null>(
     null
   );
   // Synchronous guards: state read inside an async handler can be stale.
-  const sendInFlight = useRef(false);
+  // In-flight sends are tracked per conversation, so one slow reply neither
+  // blocks nor shows as "sending" in another conversation.
+  const sendInFlight = useRef(new Set<number>());
   const selectedIdRef = useRef<number | null>(null);
 
   function selectConversation(conversationId: number | null) {
@@ -113,9 +115,13 @@ export function useMerchantInbox() {
 
   useEffect(() => {
     let active = true;
+    let latest = 0;
     async function load() {
+      // Polls can overlap: only the newest request may update the screen.
+      latest += 1;
+      const sequence = latest;
       const result = await fetchMerchantInboxConversations();
-      if (!active) return;
+      if (!active || sequence !== latest) return;
       if (result.ok) {
         setConversations(result.conversations);
         setListState('ready');
@@ -145,9 +151,12 @@ export function useMerchantInbox() {
     setMessages([]);
     setThreadState('loading');
     setSendError(null);
+    let latest = 0;
     async function load() {
+      latest += 1;
+      const sequence = latest;
       const result = await fetchMerchantInboxThread(conversationId);
-      if (!active) return;
+      if (!active || sequence !== latest) return;
       if (result.ok) {
         setMessages((current) => mergePolledMessages(current, result.messages));
         setThreadState('ready');
@@ -167,15 +176,19 @@ export function useMerchantInbox() {
   async function sendReply(content: string): Promise<boolean> {
     const conversationId = selectedIdRef.current;
     const trimmed = content.trim();
-    if (conversationId === null || !trimmed || sendInFlight.current) {
+    if (
+      conversationId === null ||
+      !trimmed ||
+      sendInFlight.current.has(conversationId)
+    ) {
       return false;
     }
-    sendInFlight.current = true;
-    setSending(true);
+    sendInFlight.current.add(conversationId);
+    setSendingIds((current) => [...current, conversationId]);
     setSendError(null);
     const result = await sendMerchantInboxReply(conversationId, trimmed);
-    sendInFlight.current = false;
-    setSending(false);
+    sendInFlight.current.delete(conversationId);
+    setSendingIds((current) => current.filter((id) => id !== conversationId));
     // The merchant may have opened another conversation while this was in
     // flight: never show this reply, or its error, in a different thread.
     const stillOpen = selectedIdRef.current === conversationId;
@@ -200,7 +213,7 @@ export function useMerchantInbox() {
     selectedId,
     sendError,
     sendReply,
-    sending,
+    sending: selectedId !== null && sendingIds.includes(selectedId),
     threadState,
   };
 }

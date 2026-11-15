@@ -5,26 +5,21 @@ import type {
 
 const PREVIEW_MAX_LENGTH = 120;
 
-const SAME_DAY = new Intl.DateTimeFormat('en-NG', {
-  hour: 'numeric',
-  minute: '2-digit',
-});
-const OTHER_DAY = new Intl.DateTimeFormat('en-NG', {
-  day: 'numeric',
-  month: 'short',
-});
-
-/** Time today, otherwise the day; empty for a missing or invalid value. */
+/**
+ * Time today, otherwise the day; empty for a missing or invalid value.
+ * Uses the viewer's own locale unless one is given.
+ */
 export function formatInboxTime(
   iso: string | null,
-  now: Date = new Date()
+  now: Date = new Date(),
+  locale?: string
 ): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   return date.toDateString() === now.toDateString()
-    ? SAME_DAY.format(date)
-    : OTHER_DAY.format(date);
+    ? date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+    : date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
 export function senderLabel(sender: MerchantInboxSender): string {
@@ -40,6 +35,13 @@ export function previewPrefix(sender: MerchantInboxSender): string {
   return '';
 }
 
+/** Cuts at a length without leaving half of a surrogate pair (emoji). */
+function sliceWholeCharacters(value: string, maxLength: number): string {
+  const cut = value.slice(0, maxLength);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
 /** One-line list preview, shortened in content and not only by CSS. */
 export function inboxPreview(
   message: Pick<MerchantInboxMessage, 'sender' | 'text'>
@@ -47,7 +49,7 @@ export function inboxPreview(
   const line = message.text.replace(/\s+/g, ' ').trim();
   const short =
     line.length > PREVIEW_MAX_LENGTH
-      ? `${line.slice(0, PREVIEW_MAX_LENGTH).trimEnd()}…`
+      ? `${sliceWholeCharacters(line, PREVIEW_MAX_LENGTH).trimEnd()}…`
       : line;
   return `${previewPrefix(message.sender)}${short}`;
 }

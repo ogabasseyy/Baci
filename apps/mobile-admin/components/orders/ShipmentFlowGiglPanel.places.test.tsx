@@ -73,6 +73,7 @@ const props = {
   onRefreshFundingAccount: vi.fn(),
   onRetryQuote: vi.fn(),
   onTransferred: vi.fn(),
+  providerName: 'GIG',
   quote: null,
   selected: false,
   state: 'ready' as const,

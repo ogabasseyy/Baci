@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import nobodyDoesItBetter from '@/assets/quiz/audio/nobody-does-it-better.mp3';
 import noDeyDisappointPartOne from '@/assets/quiz/audio/ogabassey-no-dey-disappoint-1.mp3';
-import { useTheme } from '@/hooks/useTheme';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
+import type { QuizThemeColors } from './quiz-theme';
 
 const QUIZ_MUSIC_VOLUME = 0.16;
 const QUIZ_TRACKS = [
@@ -30,7 +31,7 @@ function safelyControlPlaylist(control: () => void) {
 export function QuizMusicPlayerNative({
   gameEndsIn,
 }: QuizMusicPlayerNativeProps) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const playbackIntentRef = useRef(true);
@@ -147,7 +148,7 @@ export function QuizMusicPlayerNative({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function createStyles(colors: QuizThemeColors) {
   return StyleSheet.create({
     musicBar: {
       gap: 8,

@@ -90,4 +90,24 @@ describe('CheckoutReviewStep', () => {
     );
     expect(onEditAddress).toHaveBeenCalledTimes(1);
   });
+
+  it('bugfix: a real prize checkout shows no payment and nothing to pay', () => {
+    render(
+      <CheckoutReviewStep
+        {...commonProps}
+        deliveryFee={3500}
+        prizeCheckout
+        selectedPayment="paystack"
+        total={3500}
+      />
+    );
+
+    expect(screen.getByText('Quiz prize · no payment required')).toBeTruthy();
+    expect(screen.queryByText('Pay with Card')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Edit payment method' })
+    ).toBeNull();
+    expect(screen.getByTestId('review-delivery-fee')).toHaveTextContent('Free');
+    expect(screen.getByTestId('review-total')).toHaveTextContent('₦0');
+  });
 });

@@ -9,7 +9,7 @@ import Animated, {
   FadeInDown,
   FadeInRight,
 } from 'react-native-reanimated';
-import { BRAND, palette, RADIUS, SPACING } from '@/constants/Colors';
+import { BRAND, RADIUS, SPACING } from '@/constants/Colors';
 import type { Customer } from '@/stores/auth-store';
 import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
 import { ProfileQuizBadge } from './ProfileQuizBadge';
@@ -18,27 +18,14 @@ import { ProfileRewardsCard } from './ProfileRewardsCard';
 interface ProfileHeaderProps {
   customer: Customer;
   loyaltyPoints?: number;
+  branded?: boolean;
 }
 
-function getTierInfo(tier?: string) {
-  switch (tier?.toLowerCase()) {
-    case 'gold':
-      return { label: 'Gold', color: '#D4AF37', bg: '#D4AF3720' };
-    case 'silver':
-      return { label: 'Silver', color: '#A8A9AD', bg: '#A8A9AD20' };
-    case 'platinum':
-      return { label: 'Platinum', color: '#E5E4E2', bg: '#E5E4E218' };
-    default:
-      return {
-        label: 'Member',
-        color: palette.amber[500],
-        bg: `${palette.amber[500]}18`,
-      };
-  }
-}
-
-export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
-  const tier = getTierInfo();
+export function ProfileHeader({
+  customer,
+  loyaltyPoints,
+  branded = false,
+}: ProfileHeaderProps) {
   // NativeWind's css-interop drops Pressable style callbacks on device, which
   // left pills unstyled on the red card. Track pressed state ourselves and
   // pass a plain style array instead.
@@ -58,71 +45,71 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
       : 'Store Member';
 
   return (
-    <Animated.View entering={FadeIn.duration(500)} style={styles.container}>
+    <Animated.View
+      entering={FadeIn.duration(500)}
+      style={[styles.container, branded && styles.brandedContainer]}
+    >
       <LinearGradient
-        colors={[BRAND.primary, BRAND.primaryDark, '#1a0505']}
+        colors={
+          branded
+            ? ['#200d16', '#3e1624', '#1a0c13']
+            : [BRAND.primary, BRAND.primaryDark, '#1a0505']
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Edit button */}
-      <Animated.View
-        entering={FadeInRight.delay(300).duration(400)}
-        style={styles.editWrap}
-      >
-        <Pressable
-          style={[
-            styles.editBtn,
-            isEditPressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
-          ]}
-          onPressIn={() => setIsEditPressed(true)}
-          onPressOut={() => setIsEditPressed(false)}
-          onPress={() => {
-            // Pressability already calls onPressOut on release, cancel and
-            // slide-off; clearing here too means the pill can never come back
-            // dimmed when this screen stays mounted under the pushed route.
-            setIsEditPressed(false);
-            router.push('/profile/edit' as Href);
-          }}
-          onBlur={() => setIsEditPressed(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Edit profile"
+      <View style={branded ? styles.identityRow : undefined}>
+        {/* Edit button */}
+        <Animated.View
+          entering={FadeInRight.delay(300).duration(400)}
+          style={[styles.editWrap, branded && styles.inlineEdit]}
         >
-          <Ionicons name="create-outline" size={18} color="#FFFFFF" />
-        </Pressable>
-      </Animated.View>
+          <Pressable
+            style={[
+              styles.editBtn,
+              isEditPressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
+            ]}
+            onPressIn={() => setIsEditPressed(true)}
+            onPressOut={() => setIsEditPressed(false)}
+            onBlur={() => setIsEditPressed(false)}
+            onPress={() => {
+              setIsEditPressed(false);
+              router.push('/profile/edit' as Href);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+          >
+            <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+          </Pressable>
+        </Animated.View>
 
-      {/* Avatar + Name */}
-      <Animated.View
-        entering={FadeInDown.delay(150).duration(500)}
-        style={styles.row}
-      >
-        <View style={styles.avatarFallback}>
-          <Text style={styles.initials}>{initials}</Text>
-        </View>
-
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Text style={styles.email} numberOfLines={1}>
-            {customer.email}
-          </Text>
-          <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-            <Ionicons name="star" size={10} color={tier.color} />
-            <Text style={[styles.tierLabel, { color: tier.color }]}>
-              {tier.label}
-            </Text>
+        {/* Avatar + Name */}
+        <Animated.View
+          entering={FadeInDown.delay(150).duration(500)}
+          style={[styles.row, branded && styles.identityContent]}
+        >
+          <View style={styles.avatarFallback}>
+            <Text style={styles.initials}>{initials}</Text>
           </View>
-          {latestQuizBadge ? (
-            <ProfileQuizBadge
-              eventTitle={latestQuizBadge.eventTitle}
-              label={latestQuizBadge.label}
-            />
-          ) : null}
-        </View>
-      </Animated.View>
+
+          <View style={styles.info}>
+            <Text style={styles.name} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.email} numberOfLines={1}>
+              {customer.email}
+            </Text>
+            {latestQuizBadge ? (
+              <ProfileQuizBadge
+                eventTitle={latestQuizBadge.eventTitle}
+                label={latestQuizBadge.label}
+              />
+            ) : null}
+          </View>
+        </Animated.View>
+      </View>
 
       {/* Loyalty points card */}
       {loyaltyPoints !== undefined && (
@@ -141,6 +128,10 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     paddingHorizontal: SPACING.lg,
   },
+  brandedContainer: { borderRadius: 20, paddingTop: 16 },
+  identityRow: { flexDirection: 'row-reverse', alignItems: 'flex-start' },
+  identityContent: { flex: 1, paddingRight: 8 },
+  inlineEdit: { position: 'relative', top: 0, right: 0 },
   editWrap: {
     position: 'absolute',
     top: SPACING.md,
@@ -199,20 +190,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.65)',
     marginBottom: SPACING.sm,
-  },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-  },
-  tierLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
 });

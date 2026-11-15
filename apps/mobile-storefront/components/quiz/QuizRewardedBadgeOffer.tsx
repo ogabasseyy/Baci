@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
 import { createQuizRewardedBadgeOfferStyles } from './QuizRewardedBadgeOffer.styles';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 interface QuizRewardedBadgeOfferProps {
   available: boolean;
@@ -20,7 +20,7 @@ export function QuizRewardedBadgeOffer({
   watchAd,
   watchFailed,
 }: QuizRewardedBadgeOfferProps) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizRewardedBadgeOfferStyles(colors);
   if (!available) return null;
 

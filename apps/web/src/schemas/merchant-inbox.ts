@@ -12,6 +12,8 @@ export const providerInboxMessageSchema = z.object({
   created_at: unixSeconds,
   content_type: z.string().nullish(),
   content_attributes: z.unknown().optional(),
+  // Presence only: the inbox never reads attachment URLs or metadata.
+  attachments: z.array(z.unknown()).max(50).nullish(),
   sender: z
     .object({ type: z.string().nullish(), name: z.string().nullish() })
     .nullish(),

@@ -81,7 +81,6 @@ describe('listMerchantInboxConversations', () => {
     // A row from another inbox is dropped even if the provider returns it.
     expect(result).toMatchObject({
       ok: true,
-      hasMore: false,
       conversations: [{ id: 1 }],
     });
   });
@@ -108,17 +107,21 @@ describe('listMerchantInboxConversations', () => {
     ).resolves.toMatchObject({ ok: true, hasMore: expected });
   });
 
-  it('falls back to a full page meaning more when no total is given', async () => {
+  it.each([
+    [25, true],
+    [10, true],
+    [0, false],
+  ])('without a provider total, %i rows has more: %s', async (rows, expected) => {
     stubFetch(() => ({
       body: {
         data: {
-          payload: Array.from({ length: 25 }, (_, i) => conversation(i + 1)),
+          payload: Array.from({ length: rows }, (_, i) => conversation(i + 1)),
         },
       },
     }));
     await expect(
       listMerchantInboxConversations(binding, { page: 1, status: 'all' })
-    ).resolves.toMatchObject({ ok: true, hasMore: true });
+    ).resolves.toMatchObject({ ok: true, hasMore: expected });
   });
 
   it.each([

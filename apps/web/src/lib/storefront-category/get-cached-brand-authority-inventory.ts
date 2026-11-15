@@ -185,7 +185,7 @@ async function readInventory(
     const brandQueryValues = brandAuthorityTaxonomy.getBrandQueryValues(entry);
     const baseQuery = supabase
       .from('products')
-      .select(productSelect, budget ? { count: 'exact' } : undefined)
+      .select(productSelect)
       .eq('merchant_id', merchantId)
       .eq('status', 'active');
     const brandQuery =
@@ -201,7 +201,7 @@ async function readInventory(
               ])
               .join(',')
           );
-    const { data, error, count } = await brandQuery
+    const { data, error } = await brandQuery
       .order('updated_at', { ascending: false })
       .order('id', { ascending: true })
       .range(
@@ -216,16 +216,13 @@ async function readInventory(
     }
 
     const rawProducts = (data ?? []) as unknown as RawDbProduct[];
-    // Deterministic oversized pools resolve inside 'use cache' so Next.js
-    // caches the negative outcome; anomalous/truncated counts still throw.
-    if (budget && count != null && count > budget.maxProducts) {
+    // Deterministic oversized pools resolve inside 'use cache' via the
+    // maxProducts + 1 row probe (range(0, maxProducts)) without a COUNT(*) scan.
+    if (budget && rawProducts.length > budget.maxProducts) {
       return {
         ok: false as const,
         errorMessage: 'Brand authority inventory exceeds complete-pool budget',
       };
-    }
-    if (budget && (count == null || count !== rawProducts.length)) {
-      throw new Error('Brand authority inventory exceeds complete-pool budget');
     }
 
     if (

@@ -12,7 +12,7 @@ import { aggregateWebsitePerformance } from './website-performance-aggregation';
 
 export const maxDuration = 30;
 
-const MAX_FALLBACK_EVENT_ROWS = 100_000;
+const MAX_FALLBACK_EVENT_ROWS = 10_000;
 
 // Tight per-provider budget: the route has a 30s total budget and the legacy
 // VPS Gemma fallback below still needs its own 15s window. The overall budget
@@ -156,14 +156,17 @@ export async function GET(request: NextRequest) {
   );
 
   let eventSummary: unknown = databaseEventSummary;
+  let fallbackTruncated = false;
   if (eventsError?.code === 'PGRST202') {
     const eventRows: Array<{ event_data: unknown; event_type: string }> = [];
     const pageSize = 1000;
     for (let from = 0; from < MAX_FALLBACK_EVENT_ROWS; from += pageSize) {
-      const pageEnd = Math.min(
-        from + pageSize - 1,
-        MAX_FALLBACK_EVENT_ROWS - 1
-      );
+      const remaining = MAX_FALLBACK_EVENT_ROWS - from;
+      const isFinalPage = remaining <= pageSize;
+      // Request one extra row on the final page to detect truncation cleanly.
+      const pageEnd = isFinalPage
+        ? MAX_FALLBACK_EVENT_ROWS
+        : from + pageSize - 1;
       const { data: page, error: pageError } = await supabase
         .from('analytics_events')
         .select('event_type, event_data')
@@ -181,10 +184,14 @@ export async function GET(request: NextRequest) {
           { status: 500 }
         );
       }
-      eventRows.push(...(page ?? []).slice(0, MAX_FALLBACK_EVENT_ROWS - from));
-      if (!page || page.length < pageSize) break;
+      const fetched = page ?? [];
+      if (isFinalPage && fetched.length > remaining) {
+        fallbackTruncated = true;
+      }
+      eventRows.push(...fetched.slice(0, remaining));
+      if (fetched.length < pageSize) break;
     }
-    if (eventRows.length === MAX_FALLBACK_EVENT_ROWS) {
+    if (fallbackTruncated) {
       console.warn('[website-performance] Fallback event scan reached limit', {
         maxRows: MAX_FALLBACK_EVENT_ROWS,
         merchantId: merchantContext.merchantId,
@@ -296,5 +303,6 @@ export async function GET(request: NextRequest) {
       topConverting,
     },
     aiInsights,
+    ...(fallbackTruncated ? { incompleteData: true } : {}),
   });
 }

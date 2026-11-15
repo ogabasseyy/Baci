@@ -15,19 +15,51 @@ import {
   type SantaStats,
 } from './actions';
 
+const SANTA_POLL_INTERVAL_MS = 30_000;
+const MAX_SANTA_POLL_ATTEMPTS = 120;
+
 export default function SantaClientPage() {
   const { merchant, loading: merchantLoading } = useMerchant();
   const [stats, setStats] = useState<SantaStats | null>(null);
   const [interactions, setInteractions] = useState<SantaInteraction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pollingPaused, setPollingPaused] = useState(false);
+  const [pollGeneration, setPollGeneration] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally restarts the live polling budget on user refresh.
   useEffect(() => {
     if (!merchant?.id) return;
 
     const merchantId = merchant.id; // Capture for closure
+    setPollingPaused(false);
     let isStale = false;
+    let inFlight = false;
+    let attempts = 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    function stopPolling() {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
 
     function fetchData() {
+      if (isStale || inFlight) return;
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden'
+      ) {
+        return;
+      }
+      if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {
+        stopPolling();
+        if (!isStale) setPollingPaused(true);
+        return;
+      }
+
+      attempts += 1;
+      inFlight = true;
       Promise.all([
         getSantaStats(merchantId),
         getRecentInteractions(merchantId),
@@ -41,20 +73,45 @@ export default function SantaClientPage() {
           console.error('Failed to load Santa data', error);
         })
         .finally(() => {
+          inFlight = false;
           if (isStale) return;
           setLoading(false);
+          if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {
+            stopPolling();
+            setPollingPaused(true);
+          }
         });
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        fetchData();
+      }
     }
 
     fetchData();
 
     // Optional: Poll for updates every 30s for a "live" feel during the campaign
-    const interval = setInterval(fetchData, 30000);
+    interval = setInterval(fetchData, SANTA_POLL_INTERVAL_MS);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     return () => {
       isStale = true;
-      clearInterval(interval);
+      stopPolling();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener(
+          'visibilitychange',
+          handleVisibilityChange
+        );
+      }
     };
-  }, [merchant?.id]);
+  }, [merchant?.id, pollGeneration]);
+
+  const restartPolling = () => {
+    setPollingPaused(false);
+    setPollGeneration((current) => current + 1);
+  };
 
   if (merchantLoading || loading) {
     return (
@@ -83,6 +140,18 @@ export default function SantaClientPage() {
             Real-time insights from the North Pole AI agent.
           </p>
         </div>
+        {pollingPaused ? (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>Live updates paused</span>
+            <button
+              className="rounded-md border px-2.5 py-1 font-medium text-foreground hover:bg-muted"
+              onClick={restartPolling}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Stats Grid */}

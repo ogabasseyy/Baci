@@ -28,30 +28,125 @@ function statusLabel(status: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+const UNLOCK_ORDERS_POLL_INTERVAL_MS = 30_000;
+const UNLOCK_ORDERS_REQUEST_TIMEOUT_MS = 15_000;
+const MAX_UNLOCK_ORDERS_POLL_ATTEMPTS = 60;
+
+async function listWithTimeout(
+  merchantSlug: string,
+  timeoutMs: number
+): Promise<ImeiRemediationOrder[]> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      imeiRemediationApi.list(merchantSlug),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Request timed out')),
+          timeoutMs
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
 export function OgabasseyUnlockOrders() {
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath ?? '';
   const merchantSlug = merchantContext?.merchant?.slug;
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pollingPaused, setPollingPaused] = useState(false);
+  const [pollGeneration, setPollGeneration] = useState(0);
   const [orders, setOrders] = useState<ImeiRemediationOrder[]>([]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally resets the attempt budget on user retry.
   useEffect(() => {
     if (!merchantSlug) return;
+    setPollingPaused(false);
+    setError(null);
     let cancelled = false;
-    const refresh = async () => {
-      const result = await imeiRemediationApi.list(merchantSlug);
-      if (!cancelled) {
-        setOrders(result);
-        setLoading(false);
+    let inFlight = false;
+    let attempts = 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const stopPolling = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
       }
     };
+
+    const refresh = async () => {
+      if (cancelled || inFlight) return;
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden'
+      ) {
+        return;
+      }
+      if (attempts >= MAX_UNLOCK_ORDERS_POLL_ATTEMPTS) {
+        stopPolling();
+        if (!cancelled) {
+          setLoading(false);
+          setPollingPaused(true);
+        }
+        return;
+      }
+      attempts += 1;
+      inFlight = true;
+      try {
+        const result = await listWithTimeout(
+          merchantSlug,
+          UNLOCK_ORDERS_REQUEST_TIMEOUT_MS
+        );
+        if (!cancelled) {
+          setOrders(result);
+          setError(null);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Unable to refresh unlock orders right now.');
+          setLoading(false);
+        }
+      } finally {
+        inFlight = false;
+        if (!cancelled && attempts >= MAX_UNLOCK_ORDERS_POLL_ATTEMPTS) {
+          stopPolling();
+          setPollingPaused(true);
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh();
+      }
+    };
+
     void refresh();
-    const interval = setInterval(refresh, 30_000);
+    interval = setInterval(refresh, UNLOCK_ORDERS_POLL_INTERVAL_MS);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
-  }, [merchantSlug]);
+  }, [merchantSlug, pollGeneration]);
+
+  const restartPolling = () => {
+    setError(null);
+    setPollingPaused(false);
+    setLoading(orders.length === 0);
+    setPollGeneration((current) => current + 1);
+  };
 
   return (
     <main className="min-h-screen bg-[var(--store-background,#f9fafb)] px-4 py-8 md:px-6">
@@ -76,6 +171,21 @@ export function OgabasseyUnlockOrders() {
             New check
           </a>
         </div>
+
+        {error || pollingPaused ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--store-border,#e5e7eb)] bg-[var(--ogabassey-surface)] px-4 py-3 text-sm">
+            <span className="text-store-background-text/80">
+              {error ?? 'Auto-refresh paused after checking for updates.'}
+            </span>
+            <button
+              className="font-bold text-[var(--store-primary,#dc2626)] underline"
+              onClick={restartPolling}
+              type="button"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
 
         {loading ? (
           <div

@@ -1,7 +1,11 @@
 'use client';
 
 import { CircleDollarSign, Copy, Loader2 } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
+import {
+  type UsdtFundingState,
+  useUsdtWalletFundingPolling,
+} from './use-usdt-wallet-funding-polling';
 import { usdtWalletFundingApi } from './usdt-wallet-funding-api';
 
 export function UsdtWalletFundingPanel({
@@ -29,11 +33,7 @@ export function UsdtWalletFundingPanel({
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('NG');
   const [error, setError] = useState<string | null>(null);
-  const [funding, setFunding] = useState<{
-    address: string | null;
-    reference: string;
-    status: string;
-  } | null>(
+  const [funding, setFunding] = useState<UsdtFundingState | null>(
     initialReference
       ? { address: null, reference: initialReference, status: 'pending' }
       : null
@@ -43,42 +43,15 @@ export function UsdtWalletFundingPanel({
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
 
-  useEffect(() => {
-    if (!funding?.reference || funding.status !== 'pending') return;
-    let cancelled = false;
-    const refresh = async () => {
-      const result = await usdtWalletFundingApi.status(
-        funding.reference,
-        merchantSlug
-      );
-      if (cancelled || result.kind !== 'ready') return;
-      if (result.amount !== null) setAmount(String(result.amount));
-      if (
-        result.chain === 'AVAXC' ||
-        result.chain === 'ETH' ||
-        result.chain === 'MATIC' ||
-        result.chain === 'TRX'
-      ) {
-        setChain(result.chain);
-      }
-      setFunding((current) =>
-        current
-          ? {
-              ...current,
-              address: result.depositAddress ?? current.address,
-              status: result.fundingStatus,
-            }
-          : current
-      );
-      if (result.fundingStatus === 'completed') onFunded();
-    };
-    void refresh();
-    const interval = setInterval(refresh, 5_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [funding?.reference, funding?.status, merchantSlug, onFunded]);
+  const { checking, pollingExhausted, restartPolling } =
+    useUsdtWalletFundingPolling({
+      funding,
+      merchantSlug,
+      onAmountChange: setAmount,
+      onChainChange: setChain,
+      onFunded,
+      onFundingChange: setFunding,
+    });
 
   const submit = async () => {
     const numericAmount = Number(amount);
@@ -171,6 +144,21 @@ export function UsdtWalletFundingPanel({
             Status: {funding.status}. The balance updates after network
             confirmation.
           </p>
+          {pollingExhausted && funding.status === 'pending' ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--store-border,#e5e7eb)] bg-[var(--store-surface,#fff)] px-3 py-2 text-xs">
+              <span className="text-[var(--store-muted-text,#6b7280)]">
+                Auto-refresh paused after {60} checks.
+              </span>
+              <button
+                className="font-semibold text-[var(--store-primary,#dc2626)] underline disabled:opacity-60"
+                disabled={checking}
+                onClick={restartPolling}
+                type="button"
+              >
+                {checking ? 'Checking…' : 'Check status'}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

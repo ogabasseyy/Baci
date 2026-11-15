@@ -1,10 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidateBlogPosts } from '@/lib/cache-revalidation';
+import { purgeCloudflareUrls } from '@/lib/cloudflare-purge';
 import {
   getMerchantBlogRevalidationContext,
   type MerchantBlogRevalidationContext,
 } from '@/lib/get-merchant-blog-cache-identifiers';
 import { schedulePrewarmBlogImageTransforms } from '@/lib/ogabassey-blog-image-prewarm';
+import { generateSlug } from '@/lib/seo-utils';
+import { buildStorefrontBlogPurgeUrls } from '@/lib/storefront-purge-urls';
 import { dispatchConfiguredZohoBlogCampaign } from '@/lib/zoho-blog-campaign-server';
 import type { ScheduledPost } from './publish-scheduled-posts-eligibility';
 
@@ -64,14 +67,57 @@ export async function revalidateScheduledPostsByMerchant(
         merchantId
       );
       blogRevalidationByMerchant.set(merchantId, blogRevalidation);
-      revalidateBlogPosts({
-        merchantId,
-        identifiers: blogRevalidation.identifiers,
-        canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
-        listingCategories: Array.from(merchantPosts.categories),
-        listingPages: merchantPosts.listingPages,
-        postSlugs: merchantPosts.postSlugs,
-      });
+      try {
+        revalidateBlogPosts({
+          merchantId,
+          identifiers: blogRevalidation.identifiers,
+          canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
+          listingCategories: Array.from(merchantPosts.categories),
+          listingPages: merchantPosts.listingPages,
+          postSlugs: merchantPosts.postSlugs,
+        });
+      } catch (nextRevalError) {
+        // Standalone VPS workers run outside Next.js's static generation store;
+        // still schedule the Cloudflare edge purge for the published blog URLs.
+        const msg =
+          nextRevalError instanceof Error
+            ? nextRevalError.message
+            : String(nextRevalError);
+        if (!msg.includes('static generation store')) {
+          throw nextRevalError;
+        }
+        const purgeIdentifiers = Array.from(
+          new Set(
+            [
+              ...blogRevalidation.identifiers,
+              blogRevalidation.canonicalMerchantSlug,
+            ]
+              .map((id) => id?.trim().toLowerCase())
+              .filter((id): id is string => Boolean(id))
+          )
+        );
+        const purgeCategorySlugs = Array.from(
+          new Set(
+            Array.from(merchantPosts.categories)
+              .map((category) => (category ? generateSlug(category) : ''))
+              .filter((slug): slug is string => Boolean(slug))
+          )
+        );
+        const purgeSlugs = Array.from(
+          new Set(
+            merchantPosts.postSlugs
+              .map((slug) => slug?.trim().toLowerCase())
+              .filter((slug): slug is string => Boolean(slug))
+          )
+        );
+        void purgeCloudflareUrls(
+          buildStorefrontBlogPurgeUrls(
+            purgeIdentifiers,
+            purgeSlugs,
+            purgeCategorySlugs
+          )
+        );
+      }
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);
       console.log(
         `🔄 Cron: Revalidated blog cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts`

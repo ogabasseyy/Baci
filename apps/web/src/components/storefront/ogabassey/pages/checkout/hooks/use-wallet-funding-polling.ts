@@ -134,6 +134,15 @@ export function useWalletFundingPolling({
     }
 
     let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 60;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const stopPolling = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
     // Bind every request this effect dispatches (initial + each interval tick)
     // to the intent that was active when it subscribed. Mirrors the `checkNow`
     // guard so both the manual and scheduled paths share one rule: a late
@@ -149,6 +158,17 @@ export function useWalletFundingPolling({
       if (cancelled || inFlightRef.current || !mountedRef.current) {
         return;
       }
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden'
+      ) {
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        stopPolling();
+        return;
+      }
+      attempts += 1;
       void runPollAttempt({
         completedRef,
         fetchArgs: { intentId, merchantId, merchantSlug },
@@ -158,14 +178,30 @@ export function useWalletFundingPolling({
         setError,
         setIntent,
         setIsChecking,
+      }).finally(() => {
+        if (!cancelled && attempts >= maxAttempts) {
+          stopPolling();
+        }
       });
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        poll();
+      }
+    };
+
     poll();
-    const interval = setInterval(poll, pollIntervalMs);
+    interval = setInterval(poll, pollIntervalMs);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, [enabled, intentId, merchantId, merchantSlug, pollIntervalMs, stopped]);
 

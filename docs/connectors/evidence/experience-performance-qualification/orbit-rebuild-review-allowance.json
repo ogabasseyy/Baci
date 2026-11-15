@@ -1,1 +1,27 @@
-{"type":"status","phase":"usage","status":"partial","organization":"ogabasseyy","includedReviews":{"state":"available","repository":"ogabasseyy/Baci","fullCapacityInMs":0,"limit":3,"remaining":3,"rollingWindowMs":3600000},"billingPeriod":{"state":"available","scope":"user","usageBillingStatus":"inactive","user":"ogabasseyy","reviewsCount":336,"reviewSpendingCap":null,"resetsAt":"2026-11-01T00:00:00.000Z"},"reviewCredits":{"prepaid":{"state":"unavailable","reason":"lookup_failed"},"legacyCli":{"state":"unavailable","reason":"lookup_failed"}}}
+{
+  "type": "status",
+  "phase": "usage",
+  "status": "partial",
+  "organization": "ogabasseyy",
+  "includedReviews": {
+    "state": "available",
+    "repository": "ogabasseyy/Baci",
+    "fullCapacityInMs": 0,
+    "limit": 3,
+    "remaining": 3,
+    "rollingWindowMs": 3600000
+  },
+  "billingPeriod": {
+    "state": "available",
+    "scope": "user",
+    "usageBillingStatus": "inactive",
+    "user": "ogabasseyy",
+    "reviewsCount": 336,
+    "reviewSpendingCap": null,
+    "resetsAt": "2026-11-01T00:00:00.000Z"
+  },
+  "reviewCredits": {
+    "prepaid": { "state": "unavailable", "reason": "lookup_failed" },
+    "legacyCli": { "state": "unavailable", "reason": "lookup_failed" }
+  }
+}

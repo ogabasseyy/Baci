@@ -1,8 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/env', () => ({
-  getRootDomain: () => 'usebaci.com',
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   resolveMerchantContextIdentifier,
@@ -16,6 +12,14 @@ function createHeaders(entries: [string, string][]) {
 }
 
 describe('resolveRouteIdentifier', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'usebaci.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('returns an empty string when no host header exists', () => {
     expect(resolveRouteIdentifier(createHeaders([]))).toBe('');
   });
@@ -81,6 +85,27 @@ describe('resolveRouteIdentifier', () => {
     expect(
       resolveRouteIdentifier(createHeaders([['host', '127.0.0.1:3000']]))
     ).toBe('');
+  });
+
+  it('trims NEXT_PUBLIC_ROOT_DOMAIN when resolving subdomains', () => {
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', '  custombaci.com  ');
+
+    expect(
+      resolveRouteIdentifier(
+        createHeaders([['host', 'ogabassey.custombaci.com']])
+      )
+    ).toBe('ogabassey');
+    expect(
+      resolveRouteIdentifier(createHeaders([['host', 'custombaci.com']]))
+    ).toBe('');
+  });
+
+  it('falls back to usebaci.com when NEXT_PUBLIC_ROOT_DOMAIN is unset', () => {
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', '');
+
+    expect(
+      resolveRouteIdentifier(createHeaders([['host', 'ogabassey.usebaci.com']]))
+    ).toBe('ogabassey');
   });
 });
 

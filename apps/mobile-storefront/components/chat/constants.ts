@@ -12,6 +12,7 @@ import { resolveApiBaseUrl } from '@/lib/api-url';
  * - Auth screens (user not yet engaged)
  * - Order success (celebration screen, CTAs prominent)
  * - Modal screens (overlay stacking issues)
+ * - Savings setup (the main button sits at the bottom of the form)
  */
 export const HIDDEN_ROUTES = [
   '/checkout',
@@ -29,6 +30,11 @@ export const HIDDEN_ROUTES = [
   '/search',
   '/account',
   '/quiz',
+  // Savings setup: the main button sits at the bottom of a long form.
+  '/wallet/savings/start',
+  // The Wallet PIN pad and its button sit where the chat button floats; the
+  // rest of Settings keeps chat for help.
+  '/settings/wallet-pin',
 ];
 
 // H24 note: These are intentionally static — used only for FAB initial position

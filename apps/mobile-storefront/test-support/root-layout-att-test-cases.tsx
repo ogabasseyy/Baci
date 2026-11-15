@@ -1,11 +1,6 @@
 import type { jest } from '@jest/globals';
 import { expect, it } from '@jest/globals';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import type React from 'react';
 
 interface AuthState {
@@ -16,24 +11,67 @@ interface AuthState {
 interface AttTestDependencies {
   RootLayout: React.ComponentType;
   authState: AuthState;
+  cleanupAuth: jest.Mock;
   initializeStorage: jest.Mock<() => Promise<void>>;
   initializeAdTrackingForStartup: jest.Mock<() => Promise<void>>;
   registerPushNotifications: jest.Mock;
   activateDueSavingsReminderNotification: jest.Mock;
   useAppTrackingTransparency: jest.Mock;
   setTrackingAuthorizationSettled: (settled: boolean) => void;
+  finishNativeSplash: () => Promise<void>;
 }
 
 export function registerRootLayoutAttTests({
   RootLayout,
   authState,
+  cleanupAuth,
   initializeStorage,
   initializeAdTrackingForStartup,
   registerPushNotifications,
   activateDueSavingsReminderNotification,
   useAppTrackingTransparency,
   setTrackingAuthorizationSettled,
+  finishNativeSplash,
 }: AttTestDependencies) {
+  it('keeps the global auth subscription alive when the root view unmounts', async () => {
+    initializeStorage.mockResolvedValue(undefined);
+
+    const { unmount } = render(<RootLayout />);
+
+    await waitFor(() => expect(initializeStorage).toHaveBeenCalledTimes(1));
+
+    unmount();
+
+    expect(cleanupAuth).not.toHaveBeenCalled();
+  });
+
+  it('keeps route navigation mounted while startup ad tracking finishes', async () => {
+    let resolveAdTrackingStartup!: () => void;
+    initializeStorage.mockResolvedValue(undefined);
+    initializeAdTrackingForStartup.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveAdTrackingStartup = resolve;
+      })
+    );
+
+    render(<RootLayout />);
+
+    await waitFor(() => {
+      expect(initializeAdTrackingForStartup).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
+      'adTracking:false;persistence:false;resume:false'
+    );
+
+    await act(async () => resolveAdTrackingStartup());
+
+    await waitFor(() => {
+      expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
+        'adTracking:true;persistence:false;resume:false'
+      );
+    });
+  });
+
   it('waits for ATT settlement before starting ad tracking', async () => {
     initializeStorage.mockResolvedValue(undefined);
     setTrackingAuthorizationSettled(false);
@@ -42,7 +80,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(initializeStorage).toHaveBeenCalledTimes(1);
     });
-    fireEvent.press(screen.getByTestId('animated-splash'));
+    await finishNativeSplash();
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
@@ -74,7 +112,7 @@ export function registerRootLayoutAttTests({
       enabled: false,
     });
 
-    fireEvent.press(screen.getByTestId('animated-splash'));
+    await finishNativeSplash();
 
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
@@ -93,7 +131,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(initializeStorage).toHaveBeenCalledTimes(1);
     });
-    fireEvent.press(screen.getByTestId('animated-splash'));
+    await finishNativeSplash();
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,

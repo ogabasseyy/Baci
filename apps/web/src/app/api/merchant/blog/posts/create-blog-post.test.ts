@@ -129,6 +129,7 @@ describe('createBlogPost', () => {
       expect.objectContaining({
         p_post_data: expect.objectContaining({
           published_at: scheduledAt,
+          requested_publish_at: scheduledAt,
           status: 'scheduled',
         }),
       })

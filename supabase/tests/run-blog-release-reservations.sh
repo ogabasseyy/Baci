@@ -41,7 +41,9 @@ run_psql_file() {
 
 run_psql_file "${ROOT_DIR}/supabase/tests/blog_article_identity_and_release_reservations_fixture.sql"
 
-for migration in "${ROOT_DIR}"/supabase/migrations/202611141045*.sql; do
+for migration in \
+  "${ROOT_DIR}"/supabase/migrations/202611141045*.sql \
+  "${ROOT_DIR}"/supabase/migrations/202611151155*.sql; do
   run_psql_file "${migration}"
 done
 

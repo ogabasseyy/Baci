@@ -222,6 +222,10 @@ export async function createBlogPost(request: NextRequest) {
           : postData.status === 'scheduled'
             ? (postData.published_at ?? null)
             : null,
+      requested_publish_at:
+        postData.status === 'scheduled'
+          ? (postData.published_at ?? null)
+          : null,
     };
     const persistence = await persistBlogPostMutation({
       embeddedProductIds,

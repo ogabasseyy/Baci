@@ -218,4 +218,22 @@ BEGIN
   PERFORM pg_temp.assert_true((v_b ->> 'adopted')::boolean, 'same UUID allowed on Merchant B');
 END $$;
 
+-- Scheduled insert without requested_publish_at backfills requested_publish_at from published_at
+INSERT INTO public.blog_posts (id, merchant_id, title, slug, content, status, published_at)
+VALUES (
+  'd3000000-0000-4000-8000-000000000097',
+  'd2000000-0000-4000-8000-000000000001',
+  'Scheduled Insert Backfill',
+  'scheduled-insert-backfill',
+  'Scheduled body',
+  'scheduled',
+  '2026-11-16T10:00:00Z'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT requested_publish_at = '2026-11-16T10:00:00Z'::timestamptz
+   FROM public.blog_posts WHERE id = 'd3000000-0000-4000-8000-000000000097'),
+  'scheduled INSERT populates requested_publish_at from published_at when omitted'
+);
+
 ROLLBACK;

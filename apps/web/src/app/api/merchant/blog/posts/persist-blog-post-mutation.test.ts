@@ -101,6 +101,7 @@ describe('persistBlogPostMutation', () => {
     ['P0001', 'cannot_reschedule_published_blog_post', 409],
     ['P0001', 'article_identity_conflict', 409],
     ['P0001', 'reservation_request_payload_mismatch', 409],
+    ['42501', 'blog_post_article_identity_immutable', 409],
     ['P0001', 'evergreen_reserve_required', 409],
     ['P0001', 'min_spacing_conflict', 409],
     ['P0001', 'low_demand_game_software_cap_exceeded', 409],

@@ -135,6 +135,7 @@ function readRpcMutationError(
     error?.message?.includes('article_identity_conflict') ||
     error?.message?.includes('article_identity_already_assigned') ||
     error?.message?.includes('blog_post_already_published') ||
+    error?.message?.includes('blog_post_article_identity_immutable') ||
     error?.message?.includes('cannot_reschedule_published_blog_post') ||
     error?.message?.includes('cannot_cancel_published_blog_post') ||
     error?.message?.includes('reservation_request_payload_mismatch')

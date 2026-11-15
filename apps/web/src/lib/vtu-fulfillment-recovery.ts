@@ -57,11 +57,7 @@ export async function recoverStrandedPreVendVtuRow({
   // — fail closed, the next pass retries the check.
   // PiggyVest-paid: payment proves money moved; marker absence, no vend.
   const piggyvestNeverSubmitted =
-    isPiggyvestWalletPaid(row.metadata) &&
-    isUnsubmittedPreparedVtuRow({
-      ...row,
-      metadata: { ...row.metadata, walletDebited: true },
-    });
+    isPiggyvestWalletPaid(row.metadata) && isUnsubmittedPreparedVtuRow(row);
   if (
     isStrandedPreVendVtuRow(row) &&
     (piggyvestNeverSubmitted ||

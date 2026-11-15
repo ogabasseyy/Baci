@@ -189,6 +189,13 @@ describe('invalidateQuizProductCaches boundary and delivery semantics', () => {
     );
     expect(nonThrowingFailureResult).toBe(false);
 
+    mockScheduleOrderProductBlogPurge.mockResolvedValueOnce(undefined);
+    const undefinedResult = await invalidateQuizProductCaches(
+      client as never,
+      makeWatermarks()
+    );
+    expect(undefinedResult).toBe(false);
+
     mockScheduleOrderProductBlogPurge.mockResolvedValue(true);
     const completeResult = await invalidateQuizProductCaches(
       client as never,

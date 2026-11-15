@@ -87,6 +87,25 @@ describe('quiz-sweep-baseline-store', () => {
     const loaded = await loadQuizSweepBaseline();
     expect(loaded.requiresColdStartSweep).toBe(false);
     expect(loaded.baseline).toEqual(baseline);
+
+    // Recomputes hasProbeFailure from restored table statuses
+    const errorBaseline = {
+      watermarks: {
+        ...makeWatermarks(),
+        events: {
+          status: 'error' as const,
+          floor: '2026-09-01T00:00:00.000Z',
+          boundarySnapshots: new Map<string, string>(),
+        },
+        hasProbeFailure: true,
+      },
+      hasPendingRecoverySweep: true,
+    };
+    await saveQuizSweepBaseline(errorBaseline);
+    resetQuizSweepBaselineForTests();
+    expect(
+      (await loadQuizSweepBaseline()).baseline?.watermarks.hasProbeFailure
+    ).toBe(true);
   });
 
   it('requires cold-start sweep when Redis read fails or returns malformed data', async () => {

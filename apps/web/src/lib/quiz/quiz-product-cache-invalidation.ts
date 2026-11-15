@@ -286,7 +286,7 @@ export async function invalidateQuizProductCaches(
                 productIds: Array.from(productIds),
                 supabase: client,
                 ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
-              })) !== false;
+              })) === true;
             if (!purgeSucceeded) {
               deliveryFailed = true;
             }

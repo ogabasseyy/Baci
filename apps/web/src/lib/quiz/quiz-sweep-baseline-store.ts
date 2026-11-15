@@ -111,7 +111,10 @@ function deserializeBaseline(raw: unknown): QuizSweepBaseline | null {
       events,
       reservations,
       awards,
-      hasProbeFailure: false,
+      hasProbeFailure:
+        events.status === 'error' ||
+        reservations.status === 'error' ||
+        awards.status === 'error',
     },
     hasPendingRecoverySweep: record.hasPendingRecoverySweep,
   };

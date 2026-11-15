@@ -36,6 +36,6 @@ it('keeps the same hero owner from initial loading through the first populated c
   rerender(undefined);
   expect(result.current.blackFridayHeroProps).toEqual({
     pendingBlackFridayHeroBlockId: undefined,
-    blackFridayHeroBlockId: undefined,
+    blackFridayHeroBlockId: 'hero',
   });
 });

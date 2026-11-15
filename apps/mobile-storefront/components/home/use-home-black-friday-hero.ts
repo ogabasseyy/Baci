@@ -6,7 +6,7 @@ export function useHomeBlackFridayHero(
   headerBlocks: Block[],
   nextDrop: boolean
 ) {
-  const { data, isError, isLoading } = useBlackFriday();
+  const { data, isLoading } = useBlackFriday();
   const heroBlocks = headerBlocks.filter(
     (block) => block.type === 'HeroCarousel'
   );
@@ -21,8 +21,9 @@ export function useHomeBlackFridayHero(
   return {
     nextDropHero,
     blackFridayHeroProps: {
-      blackFridayHeroBlockId:
-        !isError && data?.length ? campaignCandidate?.props.id : undefined,
+      blackFridayHeroBlockId: data?.length
+        ? campaignCandidate?.props.id
+        : undefined,
       pendingBlackFridayHeroBlockId: isLoading
         ? campaignCandidate?.props.id
         : undefined,

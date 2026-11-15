@@ -101,6 +101,22 @@ describe('CategoryScreen', () => {
     );
   });
 
+  it('prefers the canonical phone alias over the first catalog match', () => {
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'mobile-phones' });
+    mockUseCategories.mockReturnValue({
+      data: [
+        { id: 'smartphones', slug: 'smartphones' },
+        { id: 'phones', slug: 'phones' },
+      ],
+      isLoading: false,
+    });
+
+    render(<CategoryScreen />);
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'phones', enabled: true })
+    );
+  });
+
   it('renders the loading state while category products are being fetched', () => {
     setProductsState({
       isLoading: true,

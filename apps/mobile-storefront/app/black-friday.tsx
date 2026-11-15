@@ -18,8 +18,26 @@ import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 export default function BlackFridayScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { data, isPending, isError, refetch } = useBlackFriday();
-  const products = isOgabasseyApp && !isError ? (data ?? []) : [];
+  const products = isOgabasseyApp ? (data ?? []) : [];
   const hasOffers = products.length > 0;
+
+  const loadError =
+    isOgabasseyApp && isError ? (
+      <View style={styles.message}>
+        <Text style={{ color: colors.text }}>
+          {hasOffers
+            ? 'Couldn’t refresh offers. Showing the last loaded lineup.'
+            : 'Black Friday offers couldn’t load.'}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void refetch()}
+          style={styles.retry}
+        >
+          <Text style={[styles.link, { color: colors.text }]}>Try again</Text>
+        </Pressable>
+      </View>
+    ) : null;
 
   return (
     <StorefrontScreenShell themeBackground>
@@ -29,41 +47,44 @@ export default function BlackFridayScreen() {
         data={products}
         keyExtractor={(product) => product.id}
         ListHeaderComponent={
-          <View style={styles.hero}>
-            <View style={styles.heroCopy}>
-              <Text accessibilityRole="header" style={styles.title}>
-                Black <Text style={styles.accent}>Friday</Text>
-              </Text>
-              {hasOffers && (
-                <Text
-                  style={[
-                    styles.subtitle,
-                    { color: '#ffd5dc', fontWeight: '700' },
-                  ]}
-                >
-                  {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+          <>
+            <View style={styles.hero}>
+              <View style={styles.heroCopy}>
+                <Text accessibilityRole="header" style={styles.title}>
+                  Black <Text style={styles.accent}>Friday</Text>
                 </Text>
-              )}
-              {__DEV__ &&
-                process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN && (
-                  <Text style={styles.subtitle}>
-                    Local preview · Sample lineup
+                {hasOffers && (
+                  <Text
+                    style={[
+                      styles.subtitle,
+                      { color: '#ffd5dc', fontWeight: '700' },
+                    ]}
+                  >
+                    {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
                   </Text>
                 )}
-              {hasOffers && (
-                <Text style={styles.subtitle}>
-                  Find your next upgrade in our Black Friday lineup.
-                </Text>
-              )}
+                {__DEV__ &&
+                  process.env.EXPO_PUBLIC_BLACK_FRIDAY_PREVIEW_ORIGIN && (
+                    <Text style={styles.subtitle}>
+                      Local preview · Sample lineup
+                    </Text>
+                  )}
+                {hasOffers && (
+                  <Text style={styles.subtitle}>
+                    Find your next upgrade in our Black Friday lineup.
+                  </Text>
+                )}
+              </View>
+              <Image
+                accessible={false}
+                contentFit="cover"
+                contentPosition="center"
+                source={require('@/assets/images/campaigns/black-friday.webp')}
+                style={styles.heroArtwork}
+              />
             </View>
-            <Image
-              accessible={false}
-              contentFit="cover"
-              contentPosition="center"
-              source={require('@/assets/images/campaigns/black-friday.webp')}
-              style={styles.heroArtwork}
-            />
-          </View>
+            {hasOffers && loadError}
+          </>
         }
         ListEmptyComponent={
           isOgabasseyApp && isPending ? (
@@ -71,38 +92,25 @@ export default function BlackFridayScreen() {
               accessibilityLabel="Loading Black Friday offers"
               color={colors.text}
             />
-          ) : isError ? (
-            <View style={styles.message}>
-              <Text style={{ color: colors.text }}>
-                Black Friday offers couldn’t load.
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void refetch()}
-                style={styles.retry}
-              >
-                <Text style={[styles.link, { color: colors.text }]}>
-                  Try again
-                </Text>
-              </Pressable>
-            </View>
           ) : (
-            <View style={styles.message}>
-              <Text style={{ color: colors.text }}>
-                {isOgabasseyApp
-                  ? 'Our Black Friday lineup will appear here when it’s ready.'
-                  : 'Black Friday offers are unavailable in this store.'}
-              </Text>
-              <Link
-                href="/"
-                style={StyleSheet.flatten([
-                  styles.link,
-                  { color: colors.text },
-                ])}
-              >
-                Back to home
-              </Link>
-            </View>
+            (loadError ?? (
+              <View style={styles.message}>
+                <Text style={{ color: colors.text }}>
+                  {isOgabasseyApp
+                    ? 'Our Black Friday lineup will appear here when it’s ready.'
+                    : 'Black Friday offers are unavailable in this store.'}
+                </Text>
+                <Link
+                  href="/"
+                  style={StyleSheet.flatten([
+                    styles.link,
+                    { color: colors.text },
+                  ])}
+                >
+                  Back to home
+                </Link>
+              </View>
+            ))
           )
         }
         renderItem={({ item }) => (

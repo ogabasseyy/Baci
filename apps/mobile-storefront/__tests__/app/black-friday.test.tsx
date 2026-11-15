@@ -53,3 +53,16 @@ it('shows the empty state and links available offers to their product pages', ()
     params: { slug: 'phone' },
   });
 });
+
+it('keeps cached offers visible and retries a failed refresh', () => {
+  mockState = {
+    isError: true,
+    data: [{ id: 'one', slug: 'phone', name: 'Phone', price: '₦1' }],
+  };
+  render(<BlackFridayScreen />);
+
+  expect(screen.getByText('Phone')).toBeTruthy();
+  expect(screen.getByText(/showing the last loaded lineup/i)).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  expect(mockRefetch).toHaveBeenCalledTimes(1);
+});

@@ -7,8 +7,16 @@ import {
   OgabasseyBlackFridayPage,
 } from './ogabassey-black-friday-page';
 
-const { getBlackFridayProducts } = vi.hoisted(() => ({
+const { getBlackFridayProducts, campaign } = vi.hoisted(() => ({
   getBlackFridayProducts: vi.fn(),
+  campaign: { slugs: [] as string[] },
+}));
+
+vi.mock('@/config/ogabassey-black-friday', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/config/ogabassey-black-friday')>()),
+  get BLACK_FRIDAY_PRODUCT_SLUGS() {
+    return campaign.slugs;
+  },
 }));
 
 vi.mock('@/lib/ogabassey-black-friday', () => ({ getBlackFridayProducts }));
@@ -29,6 +37,7 @@ vi.mock('next/link', () => ({
 
 beforeEach(() => {
   getBlackFridayProducts.mockReset();
+  campaign.slugs = [];
   vi.stubGlobal('matchMedia', () => ({
     matches: false,
     addEventListener: vi.fn(),
@@ -40,6 +49,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Black Friday storefront page', () => {
   it('renders the hero and keeps the placeholder below it while offers load', () => {
+    campaign.slugs = ['phone'];
     getBlackFridayProducts.mockReturnValue(new Promise(() => {}));
     render(<OgabasseyBlackFridayPage pathPrefix="" />);
 
@@ -55,6 +65,18 @@ describe('Black Friday storefront page', () => {
     ).toContainElement(
       screen.getByRole('status', { name: 'Loading Black Friday offers' })
     );
+  });
+
+  it('hides the date and shopping action after the approved lineup is removed', () => {
+    getBlackFridayProducts.mockReturnValue(new Promise(() => {}));
+    render(<OgabasseyBlackFridayPage pathPrefix="" />);
+
+    expect(
+      screen.queryByText('Friday, 27 November 2026')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Shop the lineup' })
+    ).not.toBeInTheDocument();
   });
 
   it('renders the catalog links and prices in lineup order', async () => {

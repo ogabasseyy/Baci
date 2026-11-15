@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import type { QuizV2Attempt } from '@/services/quiz-types';
 import type { createQuizStyles } from './QuizScreen.styles';
@@ -39,6 +39,10 @@ export function QuizLiveQuestionCard({
   expiryRetryable = false,
 }: QuizLiveQuestionCardProps) {
   const question = attempt.question;
+  const [pressedAnswer, setPressedAnswer] = useState<{
+    questionId: string;
+    optionId: string;
+  } | null>(null);
   const { width: windowWidth } = useWindowDimensions();
   const universalExpiryStartedRef = useRef(false);
   const questionIdRef = useRef(question?.id ?? null);
@@ -139,11 +143,23 @@ export function QuizLiveQuestionCard({
               accessibilityState={{ disabled, selected }}
               disabled={disabled}
               onPress={() => onAnswer(option.id)}
-              style={({ pressed }) => [
+              onPressIn={() =>
+                setPressedAnswer({
+                  questionId: question.id,
+                  optionId: option.id,
+                })
+              }
+              onPressOut={() => setPressedAnswer(null)}
+              onBlur={() => setPressedAnswer(null)}
+              style={[
                 styles.answerTile,
                 useGrid ? styles.answerTileGrid : styles.answerTileRow,
                 disabled && !selected ? styles.answerTileDisabled : undefined,
-                pressed ? styles.answerTilePressed : undefined,
+                !disabled &&
+                pressedAnswer?.questionId === question.id &&
+                pressedAnswer.optionId === option.id
+                  ? styles.answerTilePressed
+                  : undefined,
               ]}
             >
               <QuizTicketBackdrop

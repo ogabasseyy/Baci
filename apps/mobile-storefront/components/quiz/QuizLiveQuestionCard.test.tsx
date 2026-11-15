@@ -48,7 +48,19 @@ describe('QuizLiveQuestionCard', () => {
       />
     );
 
-    fireEvent.press(screen.getByRole('button', { name: 'Answer Lagos' }));
+    const answer = screen.getByRole('button', { name: 'Answer Lagos' });
+    let tile = answer;
+    while (tile.parent?.props.accessibilityLabel === 'Answer Lagos') {
+      tile = tile.parent;
+    }
+    expect(Array.isArray(tile.props.style)).toBe(true);
+
+    fireEvent(answer, 'pressIn');
+    expect(answer).toHaveStyle({ opacity: 0.85 });
+    fireEvent(answer, 'pressOut');
+    expect(answer).not.toHaveStyle({ opacity: 0.85 });
+
+    fireEvent.press(answer);
     expect(onAnswer).toHaveBeenCalledWith('o1');
   });
 

@@ -66,12 +66,13 @@ export default function CategoryScreen() {
   // H10 FIX: Resolve category slug to UUID since Supabase query uses category_id
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
+  // Prefer the exact slug, then the catalog preference in PHONE_CATEGORY_SLUGS.
   const categoryId =
     categories.find((category) => category.slug === slug)?.id ??
     (PHONE_CATEGORY_SLUGS.includes(slug)
-      ? categories.find((category) =>
-          PHONE_CATEGORY_SLUGS.includes(category.slug)
-        )?.id
+      ? PHONE_CATEGORY_SLUGS.map(
+          (alias) => categories.find((category) => category.slug === alias)?.id
+        ).find(Boolean)
       : undefined);
   const isCategoryResolved = slug === 'all' || Boolean(categoryId);
   const sortBy = sort === 'price_asc' || sort === 'newest' ? sort : undefined;

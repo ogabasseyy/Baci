@@ -1,6 +1,6 @@
 export const BLACK_FRIDAY_PATH = '/black-friday';
 
-// Add approved catalog slugs in the order shoppers should see them.
+// Add approved catalog slugs in display order. See docs/runbooks/ogabassey-black-friday.md for launch and removal.
 export const APPROVED_BLACK_FRIDAY_PRODUCT_SLUGS: readonly string[] = [];
 const previewProductSlugs = [
   'iphone-18-pro-max',

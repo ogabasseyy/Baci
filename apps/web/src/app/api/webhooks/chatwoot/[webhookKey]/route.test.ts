@@ -245,6 +245,53 @@ describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {
     });
   });
 
+  it.each([
+    ['a failed push', { status: 'failed' }, 'failed'],
+    [
+      'a missing push secret',
+      { status: 'skipped', reason: 'not_configured' },
+      'skipped:not_configured',
+    ],
+  ])('logs %s without customer text', async (_label, push, status) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.push.mockResolvedValue(push);
+    const response = await call(payload());
+
+    expect(response.status).toBe(200);
+    expect(warn).toHaveBeenCalledWith('Chat message push was not sent', {
+      eventKey: 'chat-msg-2-128',
+      merchantId: binding.merchantId,
+      status,
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('Demo Phone');
+    warn.mockRestore();
+  });
+
+  it('logs a push that threw', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.push.mockRejectedValue(new Error('expo down'));
+    await call(payload());
+    expect(warn).toHaveBeenCalledWith(
+      'Chat message push was not sent',
+      expect.objectContaining({ status: 'failed' })
+    );
+    warn.mockRestore();
+  });
+
+  it.each([
+    ['a sent push', { status: 'sent', sent: 1, failed: 0 }],
+    [
+      'a claim lost to another delivery',
+      { status: 'skipped', reason: 'already_claimed' },
+    ],
+  ])('does not log %s', async (_label, push) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.push.mockResolvedValue(push);
+    await call(payload());
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('does not push when the notification could not be recorded', async () => {
     mocks.record.mockResolvedValue({ ok: false, code: 'unavailable' });
     await call(payload());

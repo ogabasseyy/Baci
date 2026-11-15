@@ -115,10 +115,23 @@ export async function POST(
   // most once (the database hands out one claim per event), and it never
   // changes the answer: the notification itself is already recorded.
   if (result.outcome === 'notified' && !result.duplicate) {
+    let pushStatus = 'failed';
     try {
-      await sendChatEventPush(chatEvent);
+      const push = await sendChatEventPush(chatEvent);
+      pushStatus =
+        push.status === 'skipped' ? `skipped:${push.reason}` : push.status;
     } catch {
       // Swallowed on purpose; see above.
+    }
+    // Losing the claim to a concurrent delivery is normal. Anything else that
+    // stopped the push is logged, without customer text or secrets, so a
+    // broken push path is visible even though the webhook still succeeds.
+    if (pushStatus !== 'sent' && pushStatus !== 'skipped:already_claimed') {
+      console.warn('Chat message push was not sent', {
+        eventKey: chatEvent.eventKey,
+        merchantId: chatEvent.merchantId,
+        status: pushStatus,
+      });
     }
   }
   return respond(200, { received: true, handled: true });

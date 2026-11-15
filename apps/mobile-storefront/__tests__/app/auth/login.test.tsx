@@ -369,7 +369,6 @@ describe('LoginScreen', () => {
       'shopper@example.com'
     );
     fireEvent.press(screen.getByText('Use password instead'));
-    fireEvent.press(screen.getByText('Continue with Password'));
 
     expect(
       await screen.findByText(
@@ -386,5 +385,47 @@ describe('LoginScreen', () => {
       screen.getByRole('button', { name: 'Hide password' })
     ).toBeOnTheScreen();
     expect(passwordInput).toHaveProp('secureTextEntry', false);
+  });
+
+  describe('bugfix: "Use password instead" only relabelled the button', () => {
+    it('opens the password field straight away when the email is valid', async () => {
+      render(<LoginScreen />);
+
+      fireEvent.changeText(
+        screen.getByPlaceholderText('john@example.com'),
+        '  Shopper@Example.com '
+      );
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(
+        await screen.findByText(
+          'Sign in with your password for shopper@example.com'
+        )
+      ).toBeOnTheScreen();
+      expect(screen.getByPlaceholderText('••••••••')).toBeOnTheScreen();
+      expect(mockSignInWithOtp).not.toHaveBeenCalled();
+    });
+
+    it('stays on the email step without an error when no valid email is typed yet', () => {
+      render(<LoginScreen />);
+
+      fireEvent.press(screen.getByText('Use password instead'));
+
+      expect(screen.getByText('Continue with Password')).toBeOnTheScreen();
+      expect(screen.queryByPlaceholderText('••••••••')).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(
+        screen.getByText('Use verification code instead')
+      ).toBeOnTheScreen();
+    });
+
+    it('switches back to the code method from the email step', () => {
+      render(<LoginScreen />);
+
+      fireEvent.press(screen.getByText('Use password instead'));
+      fireEvent.press(screen.getByText('Use verification code instead'));
+
+      expect(screen.getByText('Continue with Code')).toBeOnTheScreen();
+    });
   });
 });

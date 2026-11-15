@@ -18,6 +18,7 @@ import {
   getValidatedLoginEmailHint,
   getValidatedLoginMode,
   normalizeEmail,
+  resolveAuthMethodToggle,
   returnToEmailFromAuthStep,
   validateLoginEmailInput,
 } from './login-screen-controller.helpers';
@@ -182,6 +183,15 @@ export function useLoginScreenController() {
     }
   });
 
+  const handleToggleAuthMethod = () => {
+    const next = resolveAuthMethodToggle(authMethod, email);
+    setAuthMethod(next.authMethod);
+    if (!next.passwordEmail) return;
+    setEmailError(null);
+    setEmail(next.passwordEmail);
+    setStep('password');
+  };
+
   const handlePasswordSignIn = withKeyboardDismiss(async () => {
     if (!password) {
       setPasswordError('Password is required');
@@ -272,6 +282,7 @@ export function useLoginScreenController() {
     handleGoogleSignIn,
     handlePasswordSignIn,
     handleResendOtp,
+    handleToggleAuthMethod,
     isAppleLoading,
     isGoogleLoading,
     isLoading,

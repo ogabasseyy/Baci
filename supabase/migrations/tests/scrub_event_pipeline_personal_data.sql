@@ -78,7 +78,28 @@ BEGIN
     'routed', now() - interval '100 days'
   );
 
+  -- An old row whose block never had the consent flags keeps explicit false flags.
+  INSERT INTO public.domain_event_ledger (
+    domain_event_id, producer, trust_level, idempotency_key, event_name,
+    subject_type, subject_id, envelope, status, created_at
+  ) VALUES (
+    '00000000-0000-4000-8000-00000000e106', 'sql-retention', 'server',
+    'retention-e106', 'analytics.add_to_cart.v1', 'event', 'e106',
+    jsonb_build_object('data', jsonb_build_object(
+      'delivery_user_data', jsonb_build_object('ip', '203.0.113.9'))),
+    'routed', now() - interval '100 days'
+  );
+
   PERFORM * FROM public.cleanup_domain_event_pipeline_v1();
+
+  IF (SELECT envelope FROM public.domain_event_ledger
+      WHERE domain_event_id = '00000000-0000-4000-8000-00000000e106')
+       #>> '{data,delivery_user_data,marketing_consent}' IS DISTINCT FROM 'false'
+     OR (SELECT envelope FROM public.domain_event_ledger
+      WHERE domain_event_id = '00000000-0000-4000-8000-00000000e106')
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
+    RAISE EXCEPTION 'missing consent flags were not defaulted to false, or ip kept';
+  END IF;
 
   IF (SELECT envelope FROM public.domain_event_ledger
       WHERE domain_event_id = '00000000-0000-4000-8000-00000000e105')

@@ -135,8 +135,8 @@ BEGIN
           delivery.payload #- '{data,event_data,user_agent}',
           '{data,delivery_user_data}',
           jsonb_strip_nulls(jsonb_build_object(
-            'analytics_consent', delivery.payload #> '{data,delivery_user_data,analytics_consent}',
-            'marketing_consent', delivery.payload #> '{data,delivery_user_data,marketing_consent}'))
+            'analytics_consent', coalesce(delivery.payload #> '{data,delivery_user_data,analytics_consent}', 'false'::jsonb),
+            'marketing_consent', coalesce(delivery.payload #> '{data,delivery_user_data,marketing_consent}', 'false'::jsonb)))
         ) END
     FROM expired_deliveries AS expired
     WHERE delivery.id = expired.id
@@ -173,8 +173,8 @@ BEGIN
           ledger.envelope #- '{data,event_data,user_agent}',
           '{data,delivery_user_data}',
           jsonb_strip_nulls(jsonb_build_object(
-            'analytics_consent', ledger.envelope #> '{data,delivery_user_data,analytics_consent}',
-            'marketing_consent', ledger.envelope #> '{data,delivery_user_data,marketing_consent}'))
+            'analytics_consent', coalesce(ledger.envelope #> '{data,delivery_user_data,analytics_consent}', 'false'::jsonb),
+            'marketing_consent', coalesce(ledger.envelope #> '{data,delivery_user_data,marketing_consent}', 'false'::jsonb)))
         ) END
     FROM expired_ledger AS expired
     WHERE ledger.domain_event_id = expired.domain_event_id
@@ -210,8 +210,8 @@ BEGIN
           failure.original_envelope #- '{data,event_data,user_agent}',
           '{data,delivery_user_data}',
           jsonb_strip_nulls(jsonb_build_object(
-            'analytics_consent', failure.original_envelope #> '{data,delivery_user_data,analytics_consent}',
-            'marketing_consent', failure.original_envelope #> '{data,delivery_user_data,marketing_consent}'))
+            'analytics_consent', coalesce(failure.original_envelope #> '{data,delivery_user_data,analytics_consent}', 'false'::jsonb),
+            'marketing_consent', coalesce(failure.original_envelope #> '{data,delivery_user_data,marketing_consent}', 'false'::jsonb)))
         ) END
     FROM expired_failures AS expired
     WHERE failure.id = expired.id

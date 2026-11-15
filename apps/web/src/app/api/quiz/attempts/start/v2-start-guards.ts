@@ -1,3 +1,4 @@
+import { QuizAppOnlyError } from '@/app/api/quiz/_shared/quiz-app-only-error';
 import {
   enforceQuizAgeGate,
   type ServerSupabaseClient,
@@ -12,7 +13,10 @@ import { QuizProductionNotApprovedError } from '@/lib/quiz-compliance-gate';
 export async function enforceQuizStartGuards(
   supabase: ServerSupabaseClient,
   eventId: string,
-  userId: string
+  userId: string,
+  // Required (no default) so a new caller cannot silently skip the app-only
+  // browser restriction.
+  authMethod: 'bearer' | 'cookie'
 ): Promise<void> {
   if (getQuizPhaseEnv() !== 'production') return;
   // Players cannot read quiz_events rows directly (RLS restricts v2 rows to
@@ -40,6 +44,11 @@ export async function enforceQuizStartGuards(
     (context.mode !== 'test' && context.mode !== 'live')
   ) {
     throw new Error('Quiz start eligibility could not be verified');
+  }
+  // Live prizes are app-only: a browser session (cookie auth) only carries
+  // the weaker web device identity, so it may not compete for a real prize.
+  if (context.mode === 'live' && authMethod === 'cookie') {
+    throw new QuizAppOnlyError();
   }
   // Live prizes need operations approval plus a positive compliance verdict
   // from the projection; the evidence itself is never player-readable.

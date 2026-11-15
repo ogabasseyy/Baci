@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
-import { StatusBar } from 'react-native';
 import { QuizLeaderboardScreen } from '@/components/quiz/QuizLeaderboardScreen';
+import { QuizStageStatusBar } from '@/components/quiz/QuizStageStatusBar';
 import {
   QUIZ_STAGE_COLORS,
   QUIZ_STAGE_HEADER_OPTIONS,
@@ -10,7 +10,7 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 export default function QuizLeaderboardsRoute() {
   return (
     <>
-      <StatusBar barStyle="light-content" />
+      <QuizStageStatusBar />
       <Stack.Screen
         options={{ ...QUIZ_STAGE_HEADER_OPTIONS, title: 'Past leaderboards' }}
       />

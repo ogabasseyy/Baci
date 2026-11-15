@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { QUIZ_RESULT_CARD_SIDE_PADDING } from './QuizGameplayAdFooter.styles';
 import { createQuizQuestionStyles } from './QuizQuestion.styles';
 import { createQuizResultsStyles } from './QuizResults.styles';
 import type { QuizThemeColors } from './quiz-theme';
@@ -99,7 +100,7 @@ export function createQuizStyles(colors: QuizThemeColors) {
       resultCard: {
         alignItems: 'center',
         gap: 14,
-        paddingHorizontal: 20,
+        paddingHorizontal: QUIZ_RESULT_CARD_SIDE_PADDING,
         paddingVertical: 18,
       },
       resultIcon: {

@@ -1,5 +1,11 @@
 import { StyleSheet } from 'react-native';
 
+/**
+ * Side padding of the results card. The finished-screen ad bleeds through
+ * exactly this much, so the card and the ad share one number.
+ */
+export const QUIZ_RESULT_CARD_SIDE_PADDING = 20;
+
 export function createQuizGameplayAdFooterStyles(colors: {
   background: string;
   border: string;
@@ -24,7 +30,7 @@ export function createQuizGameplayAdFooterStyles(colors: {
     inline: {
       alignItems: 'center',
       alignSelf: 'stretch',
-      marginHorizontal: -20,
+      marginHorizontal: -QUIZ_RESULT_CARD_SIDE_PADDING,
       paddingTop: 8,
     },
     footer: {

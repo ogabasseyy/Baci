@@ -1,8 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack, useRouter } from 'expo-router';
-import { Pressable, StatusBar } from 'react-native';
+import { Pressable } from 'react-native';
 import { QuizRouteBackButton } from '@/components/quiz/QuizRouteBackButton';
 import { QuizScreen } from '@/components/quiz/QuizScreen';
+import { QuizStageStatusBar } from '@/components/quiz/QuizStageStatusBar';
 import {
   QUIZ_STAGE_COLORS,
   QUIZ_STAGE_HEADER_OPTIONS,
@@ -16,7 +17,7 @@ export default function QuizRoute() {
   const { backHandlerRef, onBack } = useQuizRouteNavigation();
   return (
     <>
-      <StatusBar barStyle="light-content" />
+      <QuizStageStatusBar />
       <Stack.Screen
         options={{
           ...QUIZ_STAGE_HEADER_OPTIONS,

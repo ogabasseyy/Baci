@@ -216,6 +216,18 @@ describe('cart peer preview', () => {
     expect(result.current).toBeNull();
   });
 
+  it('still shows the other tab’s edit while only silent import work is queued', () => {
+    const t = tabs();
+    const { result } = renderHook(() =>
+      useCartPeerPreview(
+        context({ queue: [{ ...edit, silent: true }] }),
+        t.open
+      )
+    );
+    act(() => t.deliver(peerEdit));
+    expect(result.current).toEqual([{ id: 'l1', quantity: 3 }]);
+  });
+
   it('gives up after ten seconds if the other tab never settles', () => {
     vi.useFakeTimers();
     const t = tabs();

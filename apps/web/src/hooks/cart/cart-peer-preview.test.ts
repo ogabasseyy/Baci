@@ -58,6 +58,7 @@ describe('cart peer preview messages', () => {
     { kind: 'settled', cartId: 'c', merchantId: 'm', version: 1.5 },
     { kind: 'settled', cartId: 'c', merchantId: 'm', version: -1 },
     { kind: 'edit', cartId: 'c', merchantId: 'm', version: 1 },
+    { kind: 'settled', cartId: 'c', merchantId: 'm', version: 1, lines: [] },
     {
       kind: 'edit',
       cartId: 'c',

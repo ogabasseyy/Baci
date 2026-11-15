@@ -54,8 +54,8 @@ export function useCartPeerPreview(
     state.confirmed !== null &&
     !isTerminalCart(state.confirmed) &&
     (state.importStatus === 'done' || state.importStatus === 'skipped');
-  const busy = state.queue.length > 0;
-  // Silent import work is not a shopper edit and never changes the display.
+  // Silent import work is not a shopper edit and never changes the display,
+  // so it neither announces nor overrides a sibling's edit.
   const pending = state.queue.some((entry) => !entry.silent);
 
   useEffect(() => {
@@ -83,7 +83,11 @@ export function useCartPeerPreview(
       }
       // This tab's own unsaved edit wins; an edit made on an older cart
       // than this tab already holds is resolved by the server instead.
-      if (own.queue.length > 0 || message.version < ownVersion) return;
+      if (
+        own.queue.some((entry) => !entry.silent) ||
+        message.version < ownVersion
+      )
+        return;
       setPreview({ lines: message.lines, settledVersion: null });
     });
     channelRef.current = channel;
@@ -115,8 +119,8 @@ export function useCartPeerPreview(
   }, [ready, pending, version, state.display]);
 
   useEffect(() => {
-    if (busy) setPreview(null);
-  }, [busy]);
+    if (pending) setPreview(null);
+  }, [pending]);
 
   useEffect(() => {
     if (preview === null) return;
@@ -128,7 +132,7 @@ export function useCartPeerPreview(
     };
   }, [preview]);
 
-  if (preview === null || !ready || busy) return null;
+  if (preview === null || !ready || pending) return null;
   if (
     preview.settledVersion !== null &&
     version !== null &&

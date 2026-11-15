@@ -84,7 +84,8 @@ export function readCartPeerMessage(value: unknown): CartPeerMessage | null {
     version < 0
   )
     return null;
-  if (kind === 'settled') return { cartId, kind, merchantId, version };
+  if (kind === 'settled')
+    return lines === undefined ? { cartId, kind, merchantId, version } : null;
   if (kind !== 'edit') return null;
   const parsed = readLines(lines);
   return parsed ? { cartId, kind, lines: parsed, merchantId, version } : null;

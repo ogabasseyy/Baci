@@ -29,6 +29,21 @@
   --color-store-accent-text: var(--store-accent-text, #ffffff);
   --color-store-background: var(--store-background, #ffffff);
   --color-store-background-text: var(--store-background-text, #111827);
+  --color-store-menu-surface: color-mix(
+    in srgb,
+    var(--store-background, #ffffff) 97%,
+    #c78257
+  );
+  --color-store-menu-header: color-mix(
+    in srgb,
+    var(--store-background, #ffffff) 90%,
+    #f5ac79
+  );
+  --color-store-menu-sustainability: color-mix(
+    in srgb,
+    #27804b 60%,
+    var(--store-background-text, #111827)
+  );
   --color-store-foreground: var(--store-foreground, #111827);
   --color-store-border: var(--store-border, #e5e7eb);
   --color-store-rating: var(--store-rating, #facc15);

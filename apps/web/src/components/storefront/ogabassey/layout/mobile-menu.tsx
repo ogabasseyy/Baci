@@ -97,9 +97,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
     <div className="mb-6 px-4 last:mb-0">
-      <h2 className={SECTION_HEADING}>
-        {title}
-      </h2>
+      <h2 className={SECTION_HEADING}>{title}</h2>
       <ul className="space-y-1">
         {items.map((item) => {
           const isActive = item.path === activePath;
@@ -130,7 +128,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 </span>
                 {item.path === '/swap' || item.path === '/repairs' ? (
                   <Leaf
-                    className="shrink-0 text-[color:color-mix(in_srgb,#27804b_60%,var(--store-background-text))]"
+                    className="shrink-0 text-store-menu-sustainability"
                     size={16}
                     aria-hidden="true"
                   />
@@ -167,10 +165,10 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
       />
 
       {/* Sidebar */}
-      <div className="absolute inset-y-0 left-0 flex w-[calc(100%-2rem)] max-w-[360px] flex-col border-store-border border-r bg-[color:color-mix(in_srgb,var(--store-background)_97%,#c78257)] text-store-background-text shadow-2xl motion-safe:slide-in-from-left motion-safe:animate-in motion-safe:duration-300">
-        <div className="flex shrink-0 items-center justify-between border-store-border border-b bg-[color:color-mix(in_srgb,var(--store-background)_90%,#f5ac79)] px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className="absolute inset-y-0 left-0 flex w-[calc(100%_-_2rem)] max-w-[360px] flex-col border-store-border border-r bg-store-menu-surface text-store-background-text shadow-2xl motion-safe:slide-in-from-left motion-safe:animate-in motion-safe:duration-300">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-store-border border-b bg-store-menu-header px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <Logo
-            className="h-6 w-auto text-store-background-text"
+            className="h-6 w-auto min-w-0 text-store-background-text"
             color="current"
           />
           <button
@@ -192,9 +190,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
           {normalizedCategories.length > 0 && (
             <div className="mb-6 px-4">
-              <h2 className={SECTION_HEADING}>
-                Categories
-              </h2>
+              <h2 className={SECTION_HEADING}>Categories</h2>
               <ul className="flex flex-wrap gap-1.5 px-1">
                 {normalizedCategories.map((category) => (
                   <li key={category.slug}>

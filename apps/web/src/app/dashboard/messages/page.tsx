@@ -54,6 +54,12 @@ export default function MessagesPage() {
               selectedId={inbox.selectedId}
               onSelect={inbox.selectConversation}
             />
+            {inbox.hasMoreConversations && (
+              <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+                Showing your most recent conversations. Older ones are not
+                listed here yet.
+              </p>
+            )}
           </section>
 
           <section

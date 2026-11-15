@@ -19,7 +19,14 @@ export function formatInboxTime(
   if (Number.isNaN(date.getTime())) return '';
   return date.toDateString() === now.toDateString()
     ? date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
-    : date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+    : date.toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'short',
+        // A date from another year is ambiguous without it.
+        ...(date.getFullYear() === now.getFullYear()
+          ? null
+          : { year: 'numeric' as const }),
+      });
 }
 
 export function senderLabel(sender: MerchantInboxSender): string {

@@ -93,6 +93,7 @@ export function useMerchantInbox() {
   const [conversations, setConversations] = useState<
     MerchantInboxConversation[]
   >([]);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
   const [listState, setListState] = useState<MerchantInboxListState>('loading');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<MerchantInboxMessage[]>([]);
@@ -127,6 +128,7 @@ export function useMerchantInbox() {
       if (!active || sequence !== latest) return;
       if (result.ok) {
         setConversations(result.conversations);
+        setHasMoreConversations(result.hasMore);
         setListState('ready');
         return;
       }
@@ -207,6 +209,7 @@ export function useMerchantInbox() {
 
   return {
     conversations,
+    hasMoreConversations,
     listState,
     messages,
     selectConversation,

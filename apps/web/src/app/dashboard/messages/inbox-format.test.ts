@@ -21,6 +21,12 @@ describe('formatInboxTime', () => {
     );
   });
 
+  it('adds the year for a date in another year', () => {
+    expect(formatInboxTime('2025-11-12T09:05:00', now, 'en-GB')).toMatch(
+      /12 Nov 2025/
+    );
+  });
+
   it.each([null, '', 'not-a-date'])('is empty for %s', (value) => {
     expect(formatInboxTime(value, now)).toBe('');
   });

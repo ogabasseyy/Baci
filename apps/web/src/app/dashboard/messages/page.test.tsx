@@ -38,6 +38,7 @@ const conversations = [
 function state(overrides: Record<string, unknown> = {}) {
   return {
     conversations,
+    hasMoreConversations: false,
     listState: 'ready',
     messages: [],
     selectConversation: vi.fn(),
@@ -84,6 +85,14 @@ describe('MessagesPage', () => {
 
     await userEvent.click(first);
     expect(inbox.value.selectConversation).toHaveBeenCalledWith(7);
+  });
+
+  it('says so when older conversations are not listed', () => {
+    render(<MessagesPage />);
+    expect(screen.queryByText(/most recent conversations/i)).toBeNull();
+    inbox.value = state({ hasMoreConversations: true });
+    render(<MessagesPage />);
+    expect(screen.getByText(/most recent conversations/i)).toBeInTheDocument();
   });
 
   it('shows an empty inbox message', () => {

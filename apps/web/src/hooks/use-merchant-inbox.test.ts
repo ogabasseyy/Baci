@@ -60,6 +60,7 @@ describe('useMerchantInbox', () => {
     expect(result.current.listState).toBe('loading');
     await waitFor(() => expect(result.current.listState).toBe('ready'));
     expect(result.current.conversations).toHaveLength(2);
+    expect(result.current.hasMoreConversations).toBe(false);
     expect(result.current.threadState).toBe('idle');
 
     act(() => result.current.selectConversation(7));

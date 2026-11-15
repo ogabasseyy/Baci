@@ -33,6 +33,16 @@ describe('critical PDP description geometry', () => {
     );
   });
 
+  it('loads editorial colors with the critical PDP styles without depending on globals', () => {
+    expect(readStorefrontFile('storefront-pdp-critical.css')).toMatch(
+      /@import ["']\.\/storefront-pdp-design-tokens\.css["']/
+    );
+    const tokens = readStorefrontFile('storefront-pdp-design-tokens.css');
+    expect(tokens).toContain('--ogabassey-gallery-accent:');
+    expect(tokens).toContain('--ogabassey-sustainability-surface:');
+    expect(tokens).toContain('--ogabassey-sustainability-text:');
+  });
+
   it('keeps only the initial deferred description geometry in critical PDP CSS', () => {
     const criticalPdpCss = readStorefrontFile('storefront-pdp-critical.css');
     const descriptionCriticalPdpCss = readStorefrontFile(

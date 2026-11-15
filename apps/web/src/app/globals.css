@@ -1429,11 +1429,3 @@
     font: inherit;
   }
 }
-
-@layer base {
-  :root {
-    --ogabassey-gallery-accent: #f5ac79;
-    --ogabassey-sustainability-surface: #dbeccc;
-    --ogabassey-sustainability-text: #234936;
-  }
-}

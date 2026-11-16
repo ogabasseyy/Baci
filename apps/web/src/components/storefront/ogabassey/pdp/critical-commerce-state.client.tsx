@@ -295,10 +295,10 @@ export function OgabasseyPdpCriticalCommerceProvider({
 
   // A blocked tap never fails silently: it states the reason beside the
   // button and brings the missing option group into view.
-  function handleAddToCart() {
+  function handleAddToCart(event?: { currentTarget: Element }) {
     if (addToCartBlocker) {
       setAddToCartBlockedAttempt(true);
-      revealCriticalAddToCartBlocker(addToCartBlocker);
+      revealCriticalAddToCartBlocker(addToCartBlocker, event?.currentTarget);
       return;
     }
 

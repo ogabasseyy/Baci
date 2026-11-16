@@ -41,7 +41,7 @@ export interface OgabasseyPdpCriticalCommerceState {
   canAddToCart: boolean;
   currency: CurrencyConfig;
   explicitSelectedAxes: string[];
-  handleAddToCart: () => void;
+  handleAddToCart: (event?: { currentTarget: Element }) => void;
   handleAttributeSelection: (axis: string, value: string) => void;
   isAtMaxQuantity: boolean;
   maxQuantity: number | null;

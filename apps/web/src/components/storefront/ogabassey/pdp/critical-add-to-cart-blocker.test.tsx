@@ -242,6 +242,29 @@ describe('resolveCriticalAddToCartBlocker', () => {
     ).toMatchObject({ kind: 'missing-selection', axes: ['color'] });
   });
 
+  it('only reveals option groups in the tapped button\'s own product section', () => {
+    document.body.innerHTML = `
+      <section data-ogabassey-pdp-critical-shell id="other">
+        <div data-ogabassey-pdp-commerce-variant-axis data-axis="color">
+          <button data-ogabassey-pdp-commerce-variant-option>Other</button>
+        </div>
+      </section>
+      <section data-ogabassey-pdp-critical-shell id="mine">
+        <div data-ogabassey-pdp-commerce-variant-axis data-axis="color">
+          <button data-ogabassey-pdp-commerce-variant-option>Mine</button>
+        </div>
+        <button id="add">Add to cart</button>
+      </section>`;
+
+    revealCriticalAddToCartBlocker(
+      { kind: 'missing-selection', axes: ['color'], message: 'm' },
+      document.getElementById('add')
+    );
+
+    expect(document.activeElement).toHaveTextContent('Mine');
+    document.body.innerHTML = '';
+  });
+
   it('falls back to an unavailable-combination reason', () => {
     expect(resolveCriticalAddToCartBlocker(base)).toMatchObject({
       kind: 'unavailable',

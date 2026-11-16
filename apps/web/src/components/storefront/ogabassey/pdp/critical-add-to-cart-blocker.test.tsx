@@ -283,6 +283,28 @@ describe('resolveCriticalAddToCartBlocker', () => {
     document.body.innerHTML = '';
   });
 
+  it('skips the smooth scroll when the shopper asks for reduced motion', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    document.body.innerHTML = `
+      <div data-ogabassey-pdp-commerce-variant-axis data-axis="color">
+        <button data-ogabassey-pdp-commerce-variant-option>Black</button>
+      </div>`;
+
+    revealCriticalAddToCartBlocker({
+      kind: 'missing-selection',
+      axes: ['color'],
+      message: 'm',
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'auto',
+      block: 'center',
+    });
+    window.matchMedia = originalMatchMedia;
+    document.body.innerHTML = '';
+  });
+
   it('falls back to an unavailable-combination reason', () => {
     expect(resolveCriticalAddToCartBlocker(base)).toMatchObject({
       kind: 'unavailable',

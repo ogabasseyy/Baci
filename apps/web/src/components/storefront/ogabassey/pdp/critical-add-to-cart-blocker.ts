@@ -120,7 +120,13 @@ export function revealCriticalAddToCartBlocker(
     return;
   }
 
-  target.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  target.scrollIntoView?.({
+    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    block: 'center',
+  });
   // Land on an option not already chosen. The selectors render no
   // disabled options today; the guard keeps focus off one if they do.
   const option =

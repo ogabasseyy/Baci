@@ -41,6 +41,8 @@ vi.mock('@/lib/vtu-fulfillment', () => ({
 }));
 
 const walletPayOff = vi.hoisted(() => ({ on: false }));
+// The fulfil each wallet-pay fulfiller was built with (route wiring check).
+const walletPayFulfils = vi.hoisted((): unknown[] => []);
 // Pay from the PiggyVest wallet (dark): store credit gets no fulfiller, so
 // every existing path below is unchanged; PiggyVest requests reach the step.
 vi.mock('@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller', () => ({
@@ -53,11 +55,14 @@ vi.mock('@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller', () => ({
       : null,
   createVtuWalletPayFulfiller: (input: {
     charge: { paymentMethod?: string };
-  }) =>
-    input.charge.paymentMethod === 'piggyvest_wallet'
+    fulfil?: unknown;
+  }) => {
+    walletPayFulfils.push(input.fulfil);
+    return input.charge.paymentMethod === 'piggyvest_wallet'
       ? (merchantId: string, customerId: string) => (transactionId: string) =>
           mockWalletPayStep({ merchantId, customerId, transactionId })
-      : null,
+      : null;
+  },
 }));
 
 interface MockSupabase {
@@ -788,6 +793,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       transactionId: 'vtu-tx-new',
     });
     expect(mockFulfill).not.toHaveBeenCalled();
+    // The route hands the step its own approved fulfil (the lib never
+    // imports the fulfillment itself).
+    expect(walletPayFulfils.at(-1)).toBe(mockFulfill);
   });
 
   it('PiggyVest wallet (dark): a replay pays or re-checks instead of fulfilling', async () => {

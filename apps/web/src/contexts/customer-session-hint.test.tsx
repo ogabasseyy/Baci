@@ -202,12 +202,17 @@ describe('baci_customer_session_hint tri-state behavior', () => {
     expect(readCustomerSessionHint()).toBeNull();
   });
 
-  it('scopes cookie path to /{merchantSlug} in path-routing mode', () => {
-    window.history.replaceState({}, '', '/ogabassey/products');
-    expect(getCustomerSessionHintScopePath('ogabassey')).toBe('/ogabassey');
+  it('shares cookie path across path-routed storefronts so sign-in invalidates guest hints host-wide', () => {
+    window.history.replaceState({}, '', '/store-a/products');
+    writeCustomerSessionHint('store-a', '0');
+    expect(getCustomerSessionHintScopePath('store-a')).toBe('/');
+    expect(readCustomerSessionHint()).toBe('0');
 
-    window.history.replaceState({}, '', '/products');
-    expect(getCustomerSessionHintScopePath('ogabassey')).toBe('/');
+    window.history.replaceState({}, '', '/store-b/account');
+    writeCustomerSessionHint('store-b', '1');
+
+    window.history.replaceState({}, '', '/store-a/products');
+    expect(readCustomerSessionHint()).toBe('1');
   });
 
   it('expires merchant-scoped cookies during test reset', () => {

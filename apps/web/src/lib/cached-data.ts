@@ -26,6 +26,7 @@ import { isPostgrestNoRowsError } from '@/lib/is-postgrest-no-rows-error';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
+import { extractPlatformSubdomainSlug } from '@/lib/platform-subdomain';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import type { Product } from '@/lib/products';
 import {
@@ -632,25 +633,6 @@ export async function getCachedMerchant(
 
   cacheTag(`features-${merchant.id}`);
   return merchant;
-}
-
-function extractPlatformSubdomainSlug(
-  normalizedIdentifier: string
-): string | null {
-  const rootDomain = (
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com'
-  )
-    .replace(/:\d+$/, '')
-    .toLowerCase();
-  for (const suffix of [`.${rootDomain}`, '.localhost']) {
-    if (normalizedIdentifier.endsWith(suffix)) {
-      const subdomain = normalizedIdentifier.slice(0, -suffix.length);
-      if (subdomain && !subdomain.includes('.')) {
-        return subdomain;
-      }
-    }
-  }
-  return null;
 }
 
 /**

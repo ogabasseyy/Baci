@@ -1,19 +1,25 @@
 import { z } from 'zod';
 
+const nullableStringField = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? '');
+
 export const customerSessionUserSchema = z
   .object({
     id: z.string().min(1),
-    email: z.string().default(''),
-    role: z.string().default('customer'),
+    email: nullableStringField,
+    role: nullableStringField.transform((value) => value || 'customer'),
   })
   .passthrough();
 
 export const customerSessionCustomerSchema = z
   .object({
     id: z.string().min(1),
-    first_name: z.string().default(''),
-    last_name: z.string().default(''),
-    email: z.string().default(''),
+    first_name: nullableStringField,
+    last_name: nullableStringField,
+    email: nullableStringField,
   })
   .passthrough();
 

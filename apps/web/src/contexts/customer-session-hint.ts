@@ -5,19 +5,9 @@ const trackedHintPaths = new Set<string>(['/']);
 
 export type CustomerSessionHint = '1' | '0' | null;
 
-export function getCustomerSessionHintScopePath(merchantSlug: string): string {
-  if (typeof window === 'undefined' || !merchantSlug) {
-    return '/';
-  }
-
-  const pathname = window.location.pathname;
-  if (
-    pathname === `/${merchantSlug}` ||
-    pathname.startsWith(`/${merchantSlug}/`)
-  ) {
-    return `/${merchantSlug}`;
-  }
-
+export function getCustomerSessionHintScopePath(_merchantSlug: string): string {
+  // Supabase auth cookies are host-wide (Path=/), so the session hint must share
+  // Path=/ across path-routed storefronts on the same host.
   return '/';
 }
 

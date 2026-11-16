@@ -1,3 +1,6 @@
+import { OrderShipmentBookingError } from '../order-shipment-booking-error';
+import { BOOKED_SHIPMENT_NOT_SAVED_CODE } from '../order-shipment-booking-failure';
+
 interface PayAfterSaveInput {
   fetchPayment: () => Promise<Response>;
   log: (
@@ -29,8 +32,12 @@ export async function requestTopshipPaymentAfterSave({
       errorCode: (error as { code?: unknown } | null)?.code,
       stack: error instanceof Error ? error.stack : undefined,
     });
-    throw new Error(
-      `Topship payment request failed after the shipment was saved (tracking ${trackingId ?? 'unknown'}).`
+    // A coded booking error keeps the lock (the code is not releasable) and
+    // records outcome booked_not_saved, since the parcel exists at Topship.
+    throw new OrderShipmentBookingError(
+      `The carrier saved the shipment but could not confirm payment (tracking ${trackingId ?? 'unknown'}). Check the shipment before booking again.`,
+      503,
+      BOOKED_SHIPMENT_NOT_SAVED_CODE
     );
   }
 }

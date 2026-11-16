@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { classifyBookingFailure } from '@/lib/shipping/order-shipment-booking-failure';
 import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
 import { requestTopshipPaymentAfterSave } from './topship-pay-after-save';
 
@@ -27,7 +28,7 @@ describe('requestTopshipPaymentAfterSave', () => {
     }).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain('tracking T1');
-    expect((failure as Error).cause).toBeUndefined();
+    expect(classifyBookingFailure(failure).outcome).toBe('booked_not_saved');
     expect(shouldReleaseBookingLock(failure)).toBe(false);
     expect(log).toHaveBeenCalledWith(
       'error',

@@ -34,7 +34,6 @@ const NEVER_REACHED_CODES = new Set([
   'EHOSTUNREACH',
 ]);
 
-/** True when the connection to the provider never opened, so nothing was booked. */
 /** Thrown by the GIG clients when their own booking deadline passes. */
 export class ProviderBookingTimeoutError extends Error {
   constructor(message: string) {
@@ -45,6 +44,7 @@ export class ProviderBookingTimeoutError extends Error {
 
 export const BOOKED_SHIPMENT_NOT_SAVED_CODE = 'BOOKED_SHIPMENT_NOT_SAVED';
 
+/** True when the connection to the provider never opened, so nothing was booked. */
 export function isProviderNeverReachedError(error: unknown): boolean {
   // Node's fetch wraps the system error in `cause`, sometimes one level deeper.
   let current: unknown = error;
@@ -171,9 +171,10 @@ export function toBookingFailureResponseError(
   const { outcome } = classifyBookingFailure(error);
   if (outcome === 'not_submitted') {
     if (options.walletFunded) {
-      // The charge was refunded, so the old quote cannot be reused.
+      // The old quote cannot be reused after a wallet-funded attempt. Do not
+      // claim the refund finished: it is returned automatically.
       return new OrderShipmentBookingError(
-        'We could not reach GIG just now. Nothing was booked and your wallet charge was refunded. Please get a new shipping quote and book again.',
+        'We could not reach GIG just now. Nothing was booked. Any wallet charge for this attempt is returned automatically. Please get a new shipping quote and book again.',
         503,
         'PROVIDER_UNREACHABLE'
       );

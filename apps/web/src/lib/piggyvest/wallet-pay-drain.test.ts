@@ -16,6 +16,7 @@ const deps = {
   worker: () => worker as never,
   reconcilePayment: vi.fn(),
   refund: vi.fn(),
+  midVtuVend: vi.fn(),
 };
 
 beforeEach(() => {
@@ -24,6 +25,7 @@ beforeEach(() => {
   worker.releaseStale.mockResolvedValue(false);
   deps.reconcilePayment.mockResolvedValue('pending');
   deps.refund.mockResolvedValue('pending');
+  deps.midVtuVend.mockResolvedValue(false);
 });
 
 describe('runWalletPayDrain', () => {
@@ -72,6 +74,23 @@ describe('runWalletPayDrain', () => {
       paymentId: B,
       surfaceErrors: true,
     });
+  });
+
+  it('bugfix: takes no claim on a VTU purchase that is mid-vend, leaving it to the recovery pass (Codex P1)', async () => {
+    worker.listWork.mockResolvedValue({
+      settle: [],
+      refund: [],
+      deliver: [{ operationId: B, purpose: 'vtu' }],
+    });
+    deps.midVtuVend.mockResolvedValue(true);
+    const vtu = vi.fn(async () => undefined);
+    const summary = await runWalletPayDrain(
+      { runtime, deliverers: { vtu } },
+      deps
+    );
+    expect(worker.claim).not.toHaveBeenCalled();
+    expect(vtu).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({ delivered: 0, skipped: 1 });
   });
 
   it('hands an uncollected payment to its product, and skips products without a deliverer', async () => {

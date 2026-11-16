@@ -51,7 +51,7 @@ export async function refreshOxygenEligibility(
     state.minimumAmount =
       response.minimum_loan_amount ?? OXYGEN_MINIMUM_LOAN_AMOUNT_NAIRA;
     state.maxTenure = requireValue(response.max_tenure);
-    if (response.offers) {
+    if (response.offers?.length) {
       if (response.tenure_unit?.toLowerCase() !== 'monthly') {
         throw new Error('Invalid eligibility offer period');
       }

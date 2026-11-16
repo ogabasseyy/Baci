@@ -35,7 +35,8 @@ export async function readOxygenFailureDiagnostic(
   input: Record<string, unknown> | FormData,
   secrets: string[],
   startedAt: number,
-  onDetails?: (details: string[]) => void
+  onDetails?: (details: string[]) => void,
+  onRawBytes?: (bytes: Uint8Array) => void
 ): Promise<OxygenProviderDiagnostic> {
   const result = oxygenDiagnostic(
     operation,
@@ -81,6 +82,7 @@ export async function readOxygenFailureDiagnostic(
       bytes.set(chunk, offset);
       offset += chunk.length;
     }
+    onRawBytes?.(bytes);
     let body: unknown;
     try {
       body = JSON.parse(new TextDecoder().decode(bytes));

@@ -83,6 +83,8 @@ BEGIN
     -- Unlike the stale rebuild below, a failure here is not caught: there is
     -- no earlier snapshot to serve, and an empty board with a rank computed
     -- from nothing would be wrong, so the request fails and the app retries.
+    -- The wait for this lock is bounded by the calling role's lock_timeout
+    -- and statement_timeout (8 seconds for API requests in production).
     PERFORM pg_catalog.pg_advisory_xact_lock(v_lock_key);
     SELECT snapshot.* INTO v_snapshot
     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
@@ -94,28 +96,33 @@ BEGIN
       WHERE snapshot.event_id = p_event_id;
     END IF;
   ELSIF v_snapshot.computed_at
-      < pg_catalog.clock_timestamp() - interval '2 seconds'
-    AND pg_catalog.pg_try_advisory_xact_lock(v_lock_key) THEN
-    -- Stale and nobody else is refreshing right now. Another request may have
-    -- refreshed and committed between the read above and this lock, so read
-    -- again and only rebuild a row that is still stale. Requests that do not
-    -- get the lock keep serving the previous snapshot.
-    SELECT snapshot.* INTO v_snapshot
-    FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
-    WHERE snapshot.event_id = p_event_id;
-    IF v_snapshot.computed_at
-        < pg_catalog.clock_timestamp() - interval '2 seconds' THEN
-      -- A failed rebuild must not take the board down: the row read above is
-      -- still a valid, slightly older board, so keep serving it. (A statement
-      -- timeout is not caught by OTHERS and still ends the request.)
-      BEGIN
-        PERFORM private.refresh_quiz_live_leaderboard_snapshot_v2(p_event_id);
-        SELECT snapshot.* INTO v_snapshot
-        FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
-        WHERE snapshot.event_id = p_event_id;
-      EXCEPTION WHEN OTHERS THEN
-        RAISE WARNING 'QUIZ_LIVE_SNAPSHOT_REFRESH_FAILED sqlstate=%', SQLSTATE;
-      END;
+      < pg_catalog.clock_timestamp() - interval '2 seconds' THEN
+    -- Stale. The lock is tried in its own IF, so a request that found a fresh
+    -- snapshot never touches it, whatever order the conditions are evaluated
+    -- in. Requests that do not get the lock keep serving the previous
+    -- snapshot.
+    IF pg_catalog.pg_try_advisory_xact_lock(v_lock_key) THEN
+      -- Nobody else is refreshing right now. Another request may have
+      -- refreshed and committed between the read above and this lock, so
+      -- read again and only rebuild a row that is still stale.
+      SELECT snapshot.* INTO v_snapshot
+      FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
+      WHERE snapshot.event_id = p_event_id;
+      IF v_snapshot.computed_at
+          < pg_catalog.clock_timestamp() - interval '2 seconds' THEN
+        -- A failed rebuild must not take the board down: the row read above
+        -- is still a valid, slightly older board, so keep serving it. (A
+        -- statement timeout is not caught by OTHERS and still ends the
+        -- request.)
+        BEGIN
+          PERFORM private.refresh_quiz_live_leaderboard_snapshot_v2(p_event_id);
+          SELECT snapshot.* INTO v_snapshot
+          FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
+          WHERE snapshot.event_id = p_event_id;
+        EXCEPTION WHEN OTHERS THEN
+          RAISE WARNING 'QUIZ_LIVE_SNAPSHOT_REFRESH_FAILED sqlstate=%', SQLSTATE;
+        END;
+      END IF;
     END IF;
   END IF;
 
@@ -157,8 +164,9 @@ BEGIN
       -- that is not a whole number is skipped rather than failing a cast and
       -- taking the whole board down. CASE fixes the order: test, then cast.
       -- Keys are read as bigint so every possible integer score, negative
-      -- or ten digits long, is still counted.
-      SELECT COALESCE(pg_catalog.sum(bucket.players), 0)
+      -- or ten digits long, is still counted. The total is capped so stored
+      -- counts too large to add up cannot overflow the variable either.
+      SELECT LEAST(COALESCE(pg_catalog.sum(bucket.players), 0), 2147483647)
       INTO v_ahead
       FROM (
         SELECT

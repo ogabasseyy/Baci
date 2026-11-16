@@ -216,18 +216,24 @@ DECLARE
   v_before jsonb := pg_temp.board();
   v_after jsonb;
 BEGIN
-  SET LOCAL session_replication_role = replica;
   UPDATE public.quiz_live_leaderboard_snapshots_v2
   SET score_counts = score_counts
         || '{"not-a-score": 7, "999": "many", "2000000000": 4}'::jsonb,
       computed_at = pg_catalog.clock_timestamp()
   WHERE event_id = '79000000-0000-4000-8000-000000000003';
-  SET LOCAL session_replication_role = origin;
   v_after := pg_temp.board();
   PERFORM pg_temp.expect('damaged tally entries are skipped, valid ones count',
     (v_before->'current_player'->>'rank')::integer = 122
       AND (v_after->'current_player'->>'rank')::integer = 126,
     (v_after->'current_player')::text);
+  -- Stored counts too large to add up as bigint are capped, not fatal.
+  UPDATE public.quiz_live_leaderboard_snapshots_v2
+  SET computed_at = pg_catalog.clock_timestamp(), score_counts = score_counts || (
+    SELECT pg_catalog.jsonb_object_agg((3000000000 + n)::text, 999999999999999999)
+    FROM pg_catalog.generate_series(1, 10) AS n)
+  WHERE event_id = '79000000-0000-4000-8000-000000000003';
+  PERFORM pg_temp.expect('an impossible tally total is capped, not fatal',
+    (pg_temp.board()->'current_player'->>'rank')::bigint > 2147483647);
 END;
 $$;
 

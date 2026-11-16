@@ -27,11 +27,12 @@ describe('requestTopshipPaymentAfterSave', () => {
     }).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain('tracking T1');
+    expect((failure as Error).cause).toBeUndefined();
     expect(shouldReleaseBookingLock(failure)).toBe(false);
     expect(log).toHaveBeenCalledWith(
       'error',
       'Topship payment request failed after save',
-      expect.objectContaining({ trackingId: 'T1' })
+      expect.objectContaining({ trackingId: 'T1', errorCode: 'ECONNREFUSED' })
     );
   });
 });

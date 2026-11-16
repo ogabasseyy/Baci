@@ -500,7 +500,7 @@ export async function PATCH(
             merchantId,
             id,
             error,
-            !lockReleased
+            Boolean(shipmentBookingLockToken) && !lockReleased
           );
           throw toBookingFailureResponseError(error, {
             walletFunded:

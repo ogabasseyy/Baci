@@ -135,7 +135,9 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
           {/* Stable live region beside the button (never inside it), so
               the confirmation is announced as well as shown. */}
           <span role="status" className="sr-only">
-            {isAdded ? `${product.name} added to cart` : ''}
+            {isAdded && !requiresSelection
+              ? `${product.name} added to cart`
+              : ''}
           </span>
           {requiresSelection ? (
             <Link

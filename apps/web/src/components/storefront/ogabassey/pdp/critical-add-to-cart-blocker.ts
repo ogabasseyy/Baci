@@ -121,7 +121,8 @@ export function revealCriticalAddToCartBlocker(
   }
 
   target.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-  // Land on a choice the shopper can still make, not one already made.
+  // Land on an option not already chosen. The selectors render no
+  // disabled options today; the guard keeps focus off one if they do.
   const option =
     target.querySelector<HTMLElement>(
       '[data-ogabassey-pdp-commerce-variant-option]:not([data-selected="true"]):not(:disabled)'

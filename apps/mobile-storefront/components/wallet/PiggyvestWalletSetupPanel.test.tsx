@@ -50,12 +50,10 @@ it('explains when a read-only refresh still has no verified account', async () =
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Check now' })).toBeOnTheScreen()
-  );
-  fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
-  await waitFor(() =>
     expect(screen.getByText('Setting up your account number')).toBeOnTheScreen()
   );
+  // The sheet checks by itself first, so it offers no button yet.
+  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   // Pending proves only that setup is in progress, never that the BVN passed.
   expect(screen.getByText('Details sent for checking')).toBeOnTheScreen();
   expect(screen.queryByText(/BVN (accepted|verified)/)).toBeNull();
@@ -63,49 +61,59 @@ it('explains when a read-only refresh still has no verified account', async () =
 });
 
 it('binds onboarding and refresh to the submitting account', async () => {
-  jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue({
-    provisioningStatus: 'pending',
-    requiresConsent: false,
-    account: null,
-  });
-  jest.mocked(piggyvestPrimaryWalletApi.read).mockResolvedValue({
-    provisioningStatus: 'pending',
-    requiresConsent: false,
-    account: null,
-  });
-  jest.mocked(piggyvestPrimaryWalletApi.create).mockClear();
-  jest.mocked(piggyvestPrimaryWalletApi.read).mockClear();
-  render(
-    <PiggyvestWalletSetupPanel
-      colors={Colors.dark}
-      merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
-      needsPhone={false}
-      onSubmitPhone={async () => ({ success: true })}
-      onRefresh={jest.fn()}
-      onClose={jest.fn()}
-    />
-  );
-  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Create account number' })
-  );
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Check now' })).toBeOnTheScreen()
-  );
-  // The client rejects a mismatched session before the BVN leaves the
-  // device, so a mid-flight switch cannot onboard the new account.
-  expect(piggyvestPrimaryWalletApi.create).toHaveBeenCalledWith(
-    expect.objectContaining({ bvn: '12345678901' }),
-    'user-a-id'
-  );
-  fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
-  await waitFor(() =>
-    expect(piggyvestPrimaryWalletApi.read).toHaveBeenCalledWith(
+  jest.useFakeTimers();
+  try {
+    jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue({
+      provisioningStatus: 'pending',
+      requiresConsent: false,
+      account: null,
+    });
+    jest.mocked(piggyvestPrimaryWalletApi.read).mockResolvedValue({
+      provisioningStatus: 'pending',
+      requiresConsent: false,
+      account: null,
+    });
+    jest.mocked(piggyvestPrimaryWalletApi.create).mockClear();
+    jest.mocked(piggyvestPrimaryWalletApi.read).mockClear();
+    render(
+      <PiggyvestWalletSetupPanel
+        colors={Colors.dark}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        needsPhone={false}
+        onSubmitPhone={async () => ({ success: true })}
+        onRefresh={jest.fn()}
+        onClose={jest.fn()}
+      />
+    );
+    fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+    fireEvent.press(screen.getByRole('checkbox'));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Create account number' })
+    );
+    await screen.findByText('Setting up your account number');
+    // The client rejects a mismatched session before the BVN leaves the
+    // device, so a mid-flight switch cannot onboard the new account.
+    expect(piggyvestPrimaryWalletApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ bvn: '12345678901' }),
+      'user-a-id'
+    );
+    const readsBefore = jest.mocked(piggyvestPrimaryWalletApi.read).mock.calls
+      .length;
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+    });
+    await waitFor(() =>
+      expect(
+        jest.mocked(piggyvestPrimaryWalletApi.read).mock.calls.length
+      ).toBe(readsBefore + 1)
+    );
+    expect(piggyvestPrimaryWalletApi.read).toHaveBeenLastCalledWith(
       '6b5cb8a4-5575-456c-b936-8cdfae30db74',
       'user-a-id'
-    )
-  );
+    );
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 it('keeps the form actionable with input preserved when creation fails', async () => {

@@ -152,6 +152,34 @@ describe('useQuizResultsLeaderboard', () => {
       expect(liveCalls()).toBe(2);
     });
 
+    it('spreads the retry after a temporary 401 instead of a fixed 5 s', async () => {
+      jest.useFakeTimers();
+      const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+      const sessionPending = () =>
+        new QuizServiceError('Session pending', 'unauthorized', 401);
+      jest
+        .mocked(fetchQuizLiveLeaderboard)
+        .mockRejectedValueOnce(sessionPending())
+        .mockRejectedValueOnce(sessionPending())
+        .mockResolvedValue(liveBoard);
+      renderLive();
+
+      // 1st 401: 5 s at the lowest spread is 4 s.
+      await advance(0);
+      await advance(3_999);
+      expect(liveCalls()).toBe(1);
+      // The retry schedules the next one as soon as it fails, so the upper
+      // bound has to be in place before that retry fires.
+      random.mockReturnValue(1);
+      await advance(1);
+      expect(liveCalls()).toBe(2);
+      // 2nd 401: 10 s at the highest spread is 12 s.
+      await advance(11_999);
+      expect(liveCalls()).toBe(2);
+      await advance(1);
+      expect(liveCalls()).toBe(3);
+    });
+
     it('spreads and backs off the final-board retry', async () => {
       jest.useFakeTimers();
       jest.spyOn(Math, 'random').mockReturnValue(0.5);

@@ -11,6 +11,7 @@ const FINAL_RETRY_INTERVAL_MS = 10_000;
 const FAILURE_BACKOFF_CAP_MS = 60_000;
 const OVERLOAD_RETRY_FLOOR_MS = 15_000;
 const AUTH_BACKOFF_BASE_MS = 5_000;
+const AUTH_BACKOFF_CAP_MS = 30_000;
 
 interface UseQuizResultsLeaderboardInput {
   enabled: boolean;
@@ -172,10 +173,13 @@ export function useQuizResultsLeaderboard({
               currentUserIdRef.current() === expectedUserId)
           ) {
             authFailures += 1;
-            retryDelayMs = Math.min(
-              AUTH_BACKOFF_BASE_MS * 2 ** Math.min(authFailures - 1, 3),
-              30_000
-            );
+            // Spread like every other retry here: phones whose sessions
+            // were rejected together must not all retry in the same instant.
+            retryDelayMs = backoffDelay({
+              baseMs: AUTH_BACKOFF_BASE_MS,
+              failures: authFailures,
+              capMs: AUTH_BACKOFF_CAP_MS,
+            });
           } else {
             retryDelayMs = null;
           }

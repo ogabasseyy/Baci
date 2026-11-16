@@ -98,6 +98,9 @@ export function useQuizResultPolling({
     };
     const poll = async () => {
       if (cancelled || !appIsActive || inFlight) return;
+      // This request already answers a pending "results ready" wake-up, so
+      // the delayed wake-up poll must not send a second one behind it.
+      clearWakeup();
       inFlight = true;
       let shouldContinue = false;
       let nextDelayMs = QUIZ_RESULT_POLL_INTERVAL_MS;

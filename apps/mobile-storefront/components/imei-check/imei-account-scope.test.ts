@@ -13,7 +13,7 @@ it('names the store, customer and signed-in user', () => {
 
 it('tells a signed-out screen apart from a signed-in one', () => {
   expect(imeiAccountScope({ merchantId: null, customer: null })).toBe(
-    'undefined:undefined:'
+    ':anonymous:'
   );
   expect(
     imeiAccountScope({ merchantId: 'm1', customer: { id: 'c1' } })

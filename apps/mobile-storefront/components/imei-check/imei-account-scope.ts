@@ -7,5 +7,6 @@ export function imeiAccountScope(state: {
   customer?: { id?: string } | null;
   session?: { user?: { id?: string } | null } | null;
 }) {
-  return `${state.merchantId ?? undefined}:${state.customer?.id}:${state.session?.user?.id ?? ''}`;
+  // Explicit sentinels (as on web): a missing piece never reads 'undefined'.
+  return `${state.merchantId ?? ''}:${state.customer?.id ?? 'anonymous'}:${state.session?.user?.id ?? ''}`;
 }

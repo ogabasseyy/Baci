@@ -11,19 +11,24 @@ export function ImeiBlacklistCheckAction({
   onCheck: () => void;
 }) {
   const availability = useImeiRuntimeAvailability('smartphone');
+  // While availability loads, say so: a blank space reads as "not offered".
+  const loading = availability.loading;
   if (
-    availability.loading ||
-    availability.failed ||
-    !availability.availableTierKeys?.includes('blacklist')
+    !loading &&
+    (availability.failed ||
+      !availability.availableTierKeys?.includes('blacklist'))
   )
     return null;
-  const label = `Check blacklist status · ${formatServicePrice(IMEI_SERVICE_TIERS.blacklist.price)}`;
+  const busy = isChecking || loading;
+  const label = loading
+    ? 'Checking blacklist availability…'
+    : `Check blacklist status · ${formatServicePrice(IMEI_SERVICE_TIERS.blacklist.price)}`;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: isChecking, busy: isChecking }}
-      disabled={isChecking}
+      accessibilityState={{ disabled: busy, busy }}
+      disabled={busy}
       onPress={onCheck}
       style={{
         minHeight: 44,
@@ -31,7 +36,7 @@ export function ImeiBlacklistCheckAction({
         padding: 12,
         borderRadius: 12,
         backgroundColor: BRAND.primary,
-        opacity: isChecking ? 0.6 : 1,
+        opacity: busy ? 0.6 : 1,
       }}
     >
       <Text

@@ -6,11 +6,12 @@ import { ImeiCheckResultView } from './imei-check-result-view';
 import { cleanResult } from './imei-result.test-fixture';
 
 let mockAvailable = true;
+let mockLoading = false;
 jest.mock('./use-imei-runtime-availability', () => ({
   useImeiRuntimeAvailability: () => ({
-    loading: false,
+    loading: mockLoading,
     failed: false,
-    availableTierKeys: mockAvailable ? ['blacklist'] : [],
+    availableTierKeys: mockLoading ? null : mockAvailable ? ['blacklist'] : [],
   }),
 }));
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -33,6 +34,7 @@ const baseProps = {
 };
 beforeEach(() => {
   mockAvailable = true;
+  mockLoading = false;
 });
 it('offers a priced blacklist follow-up only for unchecked phone reports', () => {
   const onCheckBlacklist = jest.fn();
@@ -93,4 +95,22 @@ it('disables the follow-up while checking and preserves the report', () => {
     screen.getByRole('button', { name: 'Check blacklist status · ₦700' })
   ).toBeDisabled();
   expect(screen.getByText('iPhone 13 Pro')).toBeTruthy();
+});
+
+it('shows a disabled row while availability is still loading', () => {
+  mockLoading = true;
+  const onCheckBlacklist = jest.fn();
+  render(
+    <ImeiCheckResultView
+      {...baseProps}
+      currentTier={IMEI_SERVICE_TIERS.simLock}
+      result={{ ...cleanResult, blacklistStatus: 'Unknown' }}
+      onCheckBlacklist={onCheckBlacklist}
+    />
+  );
+  const row = screen.getByRole('button', {
+    name: 'Checking blacklist availability…',
+  });
+  fireEvent.press(row);
+  expect(onCheckBlacklist).not.toHaveBeenCalled();
 });

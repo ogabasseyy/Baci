@@ -1,6 +1,6 @@
 # How CI chooses which web tests run on a pull request
 
-The full web suite is 6 parallel jobs and about 100 job-minutes. Most pull
+The full web suite is 10 parallel jobs and about 105 job-minutes. Most pull
 requests do not need all of it before merge, so a small planner decides.
 
 ## Who decides
@@ -10,7 +10,7 @@ requests do not need all of it before merge, so a small planner decides.
 
 | Mode | What `ci.yml` runs |
 |---|---|
-| `full-affected` | the 6 web shards, plus Turbo tests for the changed non-web packages |
+| `full-affected` | the 10 web shards, plus Turbo tests for the changed non-web packages |
 | `targeted-web-vitest` | `vitest run --changed`, plus two fixture-boundary tests |
 | `targeted-storefront-jest` | `jest --changedSince` for the mobile storefront |
 | `targeted-web-and-storefront-tests` | both of the above |

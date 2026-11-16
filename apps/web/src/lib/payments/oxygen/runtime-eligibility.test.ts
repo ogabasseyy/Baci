@@ -3,6 +3,7 @@ import type {
   OxygenProviderContext,
   OxygenProviderState,
 } from '@/schemas/oxygen-runtime';
+import { oxygenProviderStateSchema } from '@/schemas/oxygen-runtime';
 import { refreshOxygenEligibility } from './runtime-eligibility';
 
 vi.mock('server-only', () => ({}));
@@ -47,6 +48,34 @@ it('does not retain old offers when the provider omits them', async () => {
   await refreshOxygenEligibility(context, state, {
     call: vi.fn().mockResolvedValue(response),
   });
+  expect(state.offers).toBeUndefined();
+});
+it('treats an empty offer list as no bookable options without inventing terms', async () => {
+  const application = '60000000-0000-4000-8000-000000000001';
+  const state: OxygenProviderState = { applicationReference: application };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      loan_request_reference: application,
+      offers: [],
+    }),
+  });
+  expect(state.eligible).toBe(true);
+  expect(state.offers).toBeUndefined();
+  expect(oxygenProviderStateSchema.safeParse(state).success).toBe(true);
+});
+it('keeps an empty pending response pending instead of treating it as a decline', async () => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      status: 'PENDING',
+      is_eligible: false,
+      offers: [],
+    }),
+  });
+  expect(state.eligibilityStatus).toBe('pending');
+  expect(state.eligible).toBeUndefined();
   expect(state.offers).toBeUndefined();
 });
 it('does not interpret offers with an unknown period as months', async () => {

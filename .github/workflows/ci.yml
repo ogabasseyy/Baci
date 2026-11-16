@@ -442,6 +442,7 @@ jobs:
       # The ~50 s pinned-image download runs while the PostgreSQL suites below run; the
       # "Prepare pinned Supabase database image" step waits for it before the replay needs it.
       - name: Start pinned Supabase database image download
+        id: replay-image-start
         run: bash .github/scripts/background-step.sh start replay-image bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test reviewed commerce cart checkout product names
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
@@ -493,8 +494,9 @@ jobs:
       # so replay sql-check is sufficient for the order-offer and
       # product-request suites without a second disposable runner.
       - name: Prepare pinned Supabase database image
-        # Also after an earlier step failed, so the download's output is always shown.
-        if: ${{ !cancelled() }}
+        # Also after an earlier step failed, so the download's output is always shown, but only
+        # when the download was started (as with the builder auth suite in quality-typecheck).
+        if: ${{ !cancelled() && steps.replay-image-start.outcome == 'success' }}
         # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
         run: bash .github/scripts/background-step.sh wait replay-image ${{ job.status == 'failure' && 60 || 900 }}
       - name: Test final order-notification outbox RPC privileges

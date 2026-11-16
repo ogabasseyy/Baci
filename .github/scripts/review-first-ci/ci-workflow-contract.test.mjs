@@ -142,6 +142,25 @@ describe('split speed jobs (2026-11-15) still gate the Quality Gate aggregate', 
   });
 });
 
+describe('background steps (2026-11-16)', () => {
+  for (const [jobId, startName, waitName] of [
+    ['quality-typecheck', 'Start isolated builder auth tests', 'Run isolated builder auth tests'],
+    ['quality-db-replay', 'Start pinned Supabase database image download', 'Prepare pinned Supabase database image'],
+  ]) {
+    it(`${jobId}: the wait step runs only when its start step succeeded, after failures too`, () => {
+      const steps = ci.jobs[jobId].steps;
+      const start = steps.find((step) => step.name === startName);
+      const wait = steps.find((step) => step.name === waitName);
+      assert.ok(start?.id, `${startName} needs an id`);
+      assert.match(start.run, /background-step\.sh start /);
+      assert.match(wait.run, /background-step\.sh wait /);
+      assert.ok(steps.indexOf(wait) > steps.indexOf(start));
+      assert.match(wait.if, /!cancelled\(\)/);
+      assert.ok(wait.if.includes(`steps.${start.id}.outcome == 'success'`), wait.if);
+    });
+  }
+});
+
 describe('the changes job (pinned by the capability-gate contract)', () => {
   const changes = ci.jobs.changes;
   const byId = (id) => changes.steps.find((step) => step.id === id);

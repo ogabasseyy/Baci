@@ -22,6 +22,11 @@ interface BackoffInput {
   baseMs: number;
   /** Consecutive failures so far; 0 or less means no failure. */
   failures: number;
+  /**
+   * Longest delay before the spread is applied. The spread comes after, so
+   * the returned delay can be up to 20% above this: a hard ceiling would put
+   * every capped phone back on the same instant.
+   */
   capMs: number;
   /** Never retry sooner than this (applied after spread). */
   floorMs?: number;
@@ -29,7 +34,7 @@ interface BackoffInput {
 }
 
 /**
- * Exponential backoff (x2 per consecutive failure) capped at `capMs`, with
+ * Exponential backoff (x2 per consecutive failure) capped at `capMs`, then
  * +/- 20% spread. With no failures this is the base interval with spread.
  */
 export function backoffDelay({

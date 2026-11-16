@@ -40,7 +40,9 @@ function getPendingPollDelayMs(
       return QUIZ_RESULT_POLL_MAX_INTERVAL_MS;
     }
     // availableAt is the event end: the same instant for every player. Spread
-    // this poll like the wake-up so the phones do not all ask at once.
+    // this poll like the wake-up so the phones do not all ask at once. The
+    // spread is added after the cap check, so the wait can be up to 4 s over
+    // the cap; the cap is there to stop an hours-long sleep, not as a ceiling.
     return waitMs + randomDelay(QUIZ_RESULT_WAKEUP_MAX_DELAY_MS);
   }
   if (Number.isFinite(availableAtMs)) {

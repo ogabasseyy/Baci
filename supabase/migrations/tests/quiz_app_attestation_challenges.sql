@@ -1,5 +1,5 @@
 -- Regression coverage for 20261115120000_quiz_app_attestation_challenges.sql.
--- Usage: psql $DATABASE_URL -f supabase/migrations/tests/quiz_app_attestation_challenges.sql
+-- Usage: psql -v ON_ERROR_STOP=1 $DATABASE_URL -f supabase/migrations/tests/quiz_app_attestation_challenges.sql
 
 BEGIN;
 

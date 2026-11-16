@@ -34,7 +34,7 @@ export function canonicalQuizAppCheckToken(token: string): string | null {
 
 /** Stores a new single-use challenge; returns its expiry or null on failure. */
 export async function issueQuizAttestationChallenge(
-  supabase: ServerSupabaseClient,
+  supabase: Pick<ServerSupabaseClient, 'rpc'>,
   eventId: string
 ): Promise<{ expiresAt: string; nonce: string } | null> {
   const nonce = generateQuizAttestationNonce();
@@ -48,7 +48,7 @@ export async function issueQuizAttestationChallenge(
 
 /** True only when this call consumed a valid, unexpired, unused challenge. */
 export async function consumeQuizAttestationChallenge(
-  supabase: ServerSupabaseClient,
+  supabase: Pick<ServerSupabaseClient, 'rpc'>,
   input: {
     eventId: string;
     nonce: string;

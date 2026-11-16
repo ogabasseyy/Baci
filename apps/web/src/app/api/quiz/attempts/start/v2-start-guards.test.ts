@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerSupabaseClient } from '@/app/api/quiz/_shared/route-helpers-guards';
 import { enforceQuizStartGuards } from './v2-start-guards';
 
@@ -40,6 +40,9 @@ function client({
   return { from, rpc } as unknown as ServerSupabaseClient;
 }
 
+beforeEach(() => {
+  vi.stubEnv('QUIZ_APP_ATTESTATION', 'off');
+});
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.useRealTimers();

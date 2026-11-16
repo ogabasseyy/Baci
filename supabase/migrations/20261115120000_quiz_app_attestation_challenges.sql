@@ -61,6 +61,10 @@ BEGIN
      ) IS NOT TRUE THEN
     RAISE EXCEPTION 'quiz event not available' USING ERRCODE = 'P0002';
   END IF;
+  -- Serialize per player so concurrent calls cannot both pass the cap check.
+  PERFORM pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('quiz_app_attestation:' || v_user_id::text, 0)
+  );
   -- Opportunistic cleanup keeps the table small without a cron job.
   DELETE FROM public.quiz_app_attestation_challenges
   WHERE user_id = v_user_id AND expires_at < now() - interval '1 day';

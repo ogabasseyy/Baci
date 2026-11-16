@@ -11,7 +11,7 @@ import {
 
 function rpcClient(result: { data: unknown; error: unknown }) {
   const rpc = vi.fn().mockResolvedValue(result);
-  return { client: { rpc } as unknown as ServerSupabaseClient, rpc };
+  return { client: { rpc } as Pick<ServerSupabaseClient, 'rpc'>, rpc };
 }
 const input = {
   eventId: 'e1',

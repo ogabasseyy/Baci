@@ -1,4 +1,5 @@
 // src/env.ts
+
 import z from 'zod';
 import { getAddressAutocompleteKvCredentialIssue } from '@/lib/address-autocomplete-kv-credentials';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
@@ -7,6 +8,7 @@ import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
 import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
+import { quizAttestationModeEnvSchema } from '@/lib/quiz/quiz-attestation-env-schema';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
 import { walletPinPepperEnvSchema } from '@/schemas/wallet-pin-pepper';
 
@@ -353,7 +355,7 @@ const serverSchema = z
     // on live prize starts: off (default), monitor (log only) or enforce.
     // PROJECT_NUMBER is the Firebase project number; APP_IDS is a comma list
     // of Firebase app ids (token subject) that count as the Ogabassey app.
-    QUIZ_APP_ATTESTATION: z.enum(['off', 'monitor', 'enforce']).default('off'),
+    QUIZ_APP_ATTESTATION: quizAttestationModeEnvSchema,
     QUIZ_APP_CHECK_PROJECT_NUMBER: optionalTrimmedStringSchema,
     QUIZ_APP_CHECK_APP_IDS: optionalTrimmedStringSchema,
 

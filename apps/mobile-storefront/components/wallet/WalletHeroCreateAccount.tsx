@@ -38,7 +38,12 @@ export function WalletHeroCreateAccount({
         {isCreating ? (
           <ActivityIndicator size="small" color="#F8B84C" />
         ) : (
-          <Ionicons name="add-circle-outline" size={18} color="#F8B84C" />
+          <Ionicons
+            name="add-circle-outline"
+            size={18}
+            color="#F8B84C"
+            style={styles.icon}
+          />
         )}
         <Text style={styles.label}>Create account number</Text>
       </Pressable>
@@ -60,6 +65,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  label: { color: '#F8B84C', fontSize: 11, fontWeight: '700', flexShrink: 1 },
+  // Icon and label share one line height so the text sits on the icon's
+  // centre line instead of riding above it (owner, 2026-11-16).
+  icon: { width: 18, height: 18, lineHeight: 18 },
+  label: {
+    color: '#F8B84C',
+    fontSize: 11,
+    fontWeight: '700',
+    flexShrink: 1,
+    lineHeight: 18,
+  },
   disabled: { opacity: 0.55 },
 });

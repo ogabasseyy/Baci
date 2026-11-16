@@ -83,4 +83,23 @@ describe('QuizResultsStandings', () => {
     expect(screen.getByText('Bassey  (You)')).toBeTruthy();
     expect(screen.getByLabelText('Rank 7, Bassey, score 4')).toBeTruthy();
   });
+
+  it('bugfix: a held-back board plus a fetch error showed two status lines', () => {
+    render(
+      <QuizResultsStandings
+        leaderboard={null}
+        leaderboardError
+        liveBoardHidden
+        participantCount={null}
+        styles={createQuizStyles(colors)}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Standings are reconnecting. Your result is safely recorded.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText('Standings open when the quiz ends.')).toBeNull();
+  });
 });

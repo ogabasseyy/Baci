@@ -46,7 +46,7 @@ describe('QuizEventsList', () => {
     expect(onResume).toHaveBeenCalledWith('cancelled');
     expect(
       screen.getByRole('button', { name: 'Recover quiz attempt' })
-    ).toHaveStyle({ minHeight: 50 });
+    ).toHaveStyle({ minHeight: 54 });
     expect(onStart).not.toHaveBeenCalled();
   });
   it('resumes the existing attempt without opening rules or starting another attempt', () => {
@@ -217,7 +217,7 @@ describe('QuizEventsList', () => {
       const button = screen.getByRole('button', { name: 'Sign in to play' });
       expect(button).toHaveStyle({
         backgroundColor: themeColors.primary,
-        minHeight: 50,
+        minHeight: 54,
       });
       expect(screen.getByText('Sign in to play')).toHaveStyle({
         color: themeColors.primaryForeground,

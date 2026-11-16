@@ -8,7 +8,9 @@ const {
   mockPrepare,
   mockFulfill,
   mockGetCurrentSlugForAliasStrict,
+  mockWalletPayStep,
 } = vi.hoisted(() => ({
+  mockWalletPayStep: vi.fn(),
   mockAuthenticate: vi.fn(),
   mockCheckCsrf: vi.fn(),
   mockPrepare: vi.fn(),
@@ -36,6 +38,26 @@ vi.mock('@/lib/vtu-pending-transaction', () => ({
 
 vi.mock('@/lib/vtu-fulfillment', () => ({
   fulfillPendingVtuTransaction: mockFulfill,
+}));
+
+const walletPayOff = vi.hoisted(() => ({ on: false }));
+// Pay from the PiggyVest wallet (dark): store credit gets no fulfiller, so
+// every existing path below is unchanged; PiggyVest requests reach the step.
+vi.mock('@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller', () => ({
+  // Wallet pay switched on for these route tests (its own tests cover off).
+  refuseUnavailableWalletPayStart: () =>
+    walletPayOff.on
+      ? new Response(JSON.stringify({ code: 'PIGGYVEST_PAY_UNAVAILABLE' }), {
+          status: 503,
+        })
+      : null,
+  createVtuWalletPayFulfiller: (input: {
+    charge: { paymentMethod?: string };
+  }) =>
+    input.charge.paymentMethod === 'piggyvest_wallet'
+      ? (merchantId: string, customerId: string) => (transactionId: string) =>
+          mockWalletPayStep({ merchantId, customerId, transactionId })
+      : null,
 }));
 
 interface MockSupabase {
@@ -82,6 +104,8 @@ interface ClaimResult {
 }
 
 interface IdempotencyRowState {
+  /** The replayed row was prepared as PiggyVest-paid (owner-scoped read). */
+  piggyvestPaid?: boolean;
   row: {
     key: string;
     vtu_transaction_id: string;
@@ -347,6 +371,11 @@ function buildSupabase(
     }),
     rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
+      if (fn === 'get_vtu_wallet_pay_purchase')
+        return Promise.resolve({
+          data: state.piggyvestPaid ? [{ piggyvest_paid: true }] : [],
+          error: null,
+        });
       if (fn === 'vtu_admission_proof') {
         const stamp =
           state.admissionTimestamp === undefined
@@ -732,6 +761,74 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(fromCalls.some((c) => c[0] === 'transactions')).toBe(false);
   });
 
+  it('PiggyVest wallet (dark): a fresh purchase issues the payment instead of fulfilling', async () => {
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    userSupabaseMockRef.current = buildSupabase(state);
+    mockWalletPayStep.mockResolvedValue(
+      Response.json({ status: 'payment_required' }, { status: 202 })
+    );
+
+    const { status, body } = await callRoute(
+      makeRequest({
+        body: { ...VALID_BODY, paymentMethod: 'piggyvest_wallet' },
+        idempotencyKey: VALID_KEY,
+      })
+    );
+
+    expect(status).toBe(202);
+    expect(body).toEqual({ status: 'payment_required' });
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ paymentMethod: 'piggyvest_wallet' }),
+      })
+    );
+    expect(mockWalletPayStep).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      customerId: 'customer-1',
+      transactionId: 'vtu-tx-new',
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('PiggyVest wallet (dark): a replay pays or re-checks instead of fulfilling', async () => {
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      piggyvestPaid: true,
+    };
+    userSupabaseMockRef.current = buildSupabase(state);
+    mockWalletPayStep.mockResolvedValue(
+      Response.json({ status: 'successful' }, { status: 200 })
+    );
+
+    const { status } = await callRoute(
+      makeRequest({
+        body: {
+          ...VALID_BODY,
+          paymentMethod: 'piggyvest_wallet',
+          walletPayOperationId: '22222222-2222-4222-8222-222222222222',
+          walletPayPinProof: 'a'.repeat(64),
+        },
+        idempotencyKey: VALID_KEY,
+      })
+    );
+
+    expect(status).toBe(200);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockWalletPayStep).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      customerId: 'customer-1',
+      transactionId: 'vtu-tx-existing',
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
   it('returns stale data bundle errors as client-refresh 400s without error logging', async () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -830,6 +927,43 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       transactionId: 'vtu-tx-existing',
     });
     expect(state.insertCalls).toBe(0);
+  });
+
+  it('bugfix: wallet pay off still replays a retained key, refusing only a fresh purchase (Codex P1)', async () => {
+    walletPayOff.on = true;
+    try {
+      const state: IdempotencyRowState = {
+        row: {
+          key: VALID_KEY,
+          vtu_transaction_id: 'vtu-tx-existing',
+          customer_id: 'customer-1',
+          merchant_id: 'merchant-1',
+          request_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+        insertCalls: 0,
+      };
+      userSupabaseMockRef.current = buildSupabase(state);
+      mockFulfill.mockResolvedValue({
+        amount: 1000,
+        reference: 'VTU-REF-OLD',
+        status: 'successful',
+      });
+      const replay = await callRoute(
+        makeRequest({ idempotencyKey: VALID_KEY })
+      );
+      expect(replay.status).toBe(200);
+      expect(mockPrepare).not.toHaveBeenCalled();
+
+      userSupabaseMockRef.current = buildSupabase({
+        row: null,
+        insertCalls: 0,
+      });
+      const fresh = await callRoute(makeRequest({ idempotencyKey: VALID_KEY }));
+      expect(fresh.status).toBe(503);
+      expect(mockPrepare).not.toHaveBeenCalled();
+    } finally {
+      walletPayOff.on = false;
+    }
   });
 
   it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {

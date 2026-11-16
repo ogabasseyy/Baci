@@ -36,4 +36,8 @@ describe('getQuizAttestationHeaders', () => {
     expect(await getQuizAttestationHeaders('e1', {}, provider)).toBeNull();
     expect(provider).not.toHaveBeenCalled();
   });
+  it('does not request a challenge when no provider is registered', async () => {
+    expect(await getQuizAttestationHeaders('e1', {})).toBeNull();
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
 });

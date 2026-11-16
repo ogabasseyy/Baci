@@ -1,13 +1,8 @@
-import { z } from 'zod';
+import { quizAttestationChallengeResponseSchema } from '@/schemas/quiz-attestation-schemas';
 import { requestQuizV2 } from '@/services/quiz-request';
 
 export const QUIZ_APP_CHECK_HEADER = 'X-Firebase-AppCheck';
 export const QUIZ_ATTESTATION_NONCE_HEADER = 'X-Baci-Quiz-Attestation-Nonce';
-
-const challengeSchema = z.object({
-  expiresAt: z.string(),
-  nonce: z.string().min(1),
-});
 
 /** Mints a one-time Firebase App Check token (Play Integrity / App Attest). */
 export type LimitedUseTokenProvider = () => Promise<string | null>;
@@ -41,11 +36,16 @@ export async function getQuizAttestationHeaders(
   options: { baseUrl?: string; expectedUserId?: string },
   tokenProvider: LimitedUseTokenProvider = defaultLimitedUseToken
 ): Promise<Record<string, string> | null> {
+  // Nothing can attest until a provider is registered: skip the challenge
+  // request so an unattestable start is never delayed by it.
+  if (tokenProvider === defaultLimitedUseToken && !registeredProvider) {
+    return null;
+  }
   try {
     const challenge = await requestQuizV2(
       '/api/quiz/attestation/challenge',
       { body: JSON.stringify({ eventId }), method: 'POST' },
-      challengeSchema,
+      quizAttestationChallengeResponseSchema,
       options
     );
     const token = await tokenProvider();

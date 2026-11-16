@@ -263,3 +263,65 @@ it('bugfix: a clear that finishes after a newer start keeps the newer lookup', a
     '33333333-3333-4333-8333-333333333333'
   );
 });
+
+it('bugfix: switching customer in a mixed sign-in state keeps the other user record', async () => {
+  await AsyncStorage.clear();
+  const keyA = pendingImeiStorageKey('merchant-1', 'customer-a');
+  await AsyncStorage.setItem(
+    keyA,
+    JSON.stringify({
+      createdAt: new Date().toISOString(),
+      lookupId: '11111111-1111-4111-8111-111111111111',
+      tier: 'blacklist',
+      ownerUserId: 'user-a',
+    })
+  );
+  // user-b briefly paired with customer-a, then their own customer arrives.
+  const { rerender } = renderHook(
+    ({ customerId }: { customerId: string }) =>
+      useImeiPendingLookup({
+        userId: 'user-b',
+        apiBaseUrl: 'https://test.invalid',
+        customerId,
+        merchantId: 'merchant-1',
+      }),
+    { initialProps: { customerId: 'customer-a' } }
+  );
+  await act(async () => undefined);
+  await act(async () => {
+    rerender({ customerId: 'customer-b' });
+  });
+  await expect(AsyncStorage.getItem(keyA)).resolves.not.toBeNull();
+});
+
+it('still drops the leaving user own record when they switch customer', async () => {
+  await AsyncStorage.clear();
+  const keyA = pendingImeiStorageKey('merchant-1', 'customer-a');
+  await AsyncStorage.setItem(
+    keyA,
+    JSON.stringify({
+      createdAt: new Date().toISOString(),
+      lookupId: '11111111-1111-4111-8111-111111111111',
+      tier: 'blacklist',
+      ownerUserId: 'user-a',
+    })
+  );
+  mockPollImeiLookup.mockResolvedValue({ kind: 'retry', pollAfterMs: 60000 });
+  const { rerender } = renderHook(
+    ({ customerId }: { customerId: string }) =>
+      useImeiPendingLookup({
+        userId: 'user-a',
+        apiBaseUrl: 'https://test.invalid',
+        customerId,
+        merchantId: 'merchant-1',
+      }),
+    { initialProps: { customerId: 'customer-a' } }
+  );
+  await act(async () => undefined);
+  await act(async () => {
+    rerender({ customerId: 'customer-b' });
+  });
+  await waitFor(async () =>
+    expect(await AsyncStorage.getItem(keyA)).toBeNull()
+  );
+});

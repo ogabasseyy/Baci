@@ -49,6 +49,7 @@ export function useImeiPendingLookup({
       : null;
   const scopeKey = `${storageKey}:${userId ?? ''}`;
   const previousStorageKey = useRef<string | null>(null);
+  const previousUserId = useRef<string | undefined>(undefined);
   const pendingMutation = useRef(0);
   const [pending, setPending] = useState<ActivePendingLookup | null>(null);
   const [paused, setPaused] = useState(false);
@@ -59,10 +60,17 @@ export function useImeiPendingLookup({
     const restoreGeneration = pendingMutation.current;
     const restore = async () => {
       const previous = previousStorageKey.current;
-      if (previous && previous !== storageKey) {
-        await clearPendingImeiLookup(previous);
-      }
+      const previousUser = previousUserId.current;
       previousStorageKey.current = storageKey;
+      previousUserId.current = userId;
+      if (previous && previous !== storageKey) {
+        // Leaving a customer drops only the leaving user's own record: in a
+        // sign-in's mixed state the old key can hold another user's paid
+        // check, which must survive for them to resume.
+        const left = await loadPendingImeiLookup(previous);
+        if (left && previousUser && left.ownerUserId === previousUser)
+          await clearPendingImeiLookup(previous);
+      }
 
       if (!storageKey) {
         if (

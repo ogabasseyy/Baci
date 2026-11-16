@@ -159,7 +159,9 @@ BEGIN
       'late', v_received_at >= v_deadline,
       'v2', true
     ),
-    v_received_at,
+    -- Never before the question was issued, matching the clamp on
+    -- answered_in_ms just above.
+    GREATEST(v_received_at, v_question.issued_at),
     LEAST(v_answered_in_ms, 60000)::integer,
     COALESCE(v_score_delta, 0)
   )

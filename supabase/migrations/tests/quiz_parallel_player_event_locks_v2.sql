@@ -44,7 +44,9 @@ BEGIN
       OR v_function.prosrc !~* 'FOR\s+SHARE'
       OR (SELECT pg_catalog.count(*) FROM pg_catalog.regexp_matches(v_function.prosrc, 'FOR\s+(NO\s+KEY\s+)?UPDATE', 'gi'))
         <> v_function.exclusive_locks
-      OR v_function.prosrc ~* 'FOR\s+(NO\s+KEY\s+)?UPDATE\s+OF\s+event' THEN
+      OR v_function.prosrc ~* 'FOR\s+(NO\s+KEY\s+)?UPDATE\s+OF\s+event'
+      -- An UPDATE of the event row is an exclusive row lock as well.
+      OR v_function.prosrc ~* 'UPDATE\s+(ONLY\s+)?(public\.)?quiz_events' THEN
       RAISE EXCEPTION 'player function % changed its row locks: the event row must be shared, never taken exclusively', v_function.name;
     END IF;
   END LOOP;
@@ -150,11 +152,11 @@ END;
 $$;
 SELECT public.dblink_exec('quiz_par_b', $$SET lock_timeout = 0$$);
 
--- 7. Queue time is not charged. B's question two has 5 of its 10 seconds
+-- 7. Queue time is not charged. B's question two has 8 of its 10 seconds
 --    left. B answers correctly now, but stays blocked behind the closer until
 --    the deadline has passed. The answer must still count as on time.
 UPDATE public.quiz_attempt_questions AS question
-SET issued_at = pg_catalog.clock_timestamp() - interval '5 seconds'
+SET issued_at = pg_catalog.clock_timestamp() - interval '2 seconds'
 FROM quiz_par_player AS player
 WHERE player.player = 'b' AND question.id = player.question_id;
 
@@ -186,7 +188,15 @@ BEGIN
 END;
 $$;
 
-SELECT pg_catalog.pg_sleep(6);
+-- Wait until that question's deadline has certainly passed, measured from the
+-- stored issue time rather than a fixed sleep, so a slow runner cannot end
+-- the wait early.
+SELECT pg_catalog.pg_sleep(GREATEST(0, EXTRACT(epoch FROM (
+  question.issued_at + interval '10.5 seconds' - pg_catalog.clock_timestamp()
+))::double precision)) IS NOT NULL AS waited_past_deadline
+FROM public.quiz_attempt_questions AS question
+JOIN quiz_par_player AS player ON player.question_id = question.id
+WHERE player.player = 'b';
 SELECT public.dblink_exec('quiz_par_c', 'COMMIT');
 
 DO $$
@@ -221,7 +231,9 @@ BEGIN
   END IF;
   IF v_answer.score_delta <> 1
     OR (v_answer.answer_payload->>'late')::boolean
-    OR v_answer.answered_in_ms NOT BETWEEN 5000 AND 9999 THEN
+    -- Received between 2 s after issue (where the fixture put it) and the
+    -- 10 s deadline; the wait behind the closer is not in this number.
+    OR v_answer.answered_in_ms NOT BETWEEN 2000 AND 9999 THEN
     RAISE EXCEPTION 'queue time was charged to the player: score %, payload %, ms %',
       v_answer.score_delta, v_answer.answer_payload, v_answer.answered_in_ms;
   END IF;

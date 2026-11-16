@@ -121,7 +121,13 @@ export function revealCriticalAddToCartBlocker(
   }
 
   target.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-  target
-    .querySelector<HTMLElement>('[data-ogabassey-pdp-commerce-variant-option]')
-    ?.focus({ preventScroll: true });
+  // Land on a choice the shopper can still make, not one already made.
+  const option =
+    target.querySelector<HTMLElement>(
+      '[data-ogabassey-pdp-commerce-variant-option]:not([data-selected="true"]):not(:disabled)'
+    ) ??
+    target.querySelector<HTMLElement>(
+      '[data-ogabassey-pdp-commerce-variant-option]'
+    );
+  option?.focus({ preventScroll: true });
 }

@@ -265,6 +265,24 @@ describe('resolveCriticalAddToCartBlocker', () => {
     document.body.innerHTML = '';
   });
 
+  it('focuses a choice still open, not one already made', () => {
+    document.body.innerHTML = `
+      <div data-ogabassey-pdp-commerce-variant-axis data-axis="storage">
+        <button data-ogabassey-pdp-commerce-variant-option data-selected="true">256GB</button>
+        <button data-ogabassey-pdp-commerce-variant-option disabled>512GB</button>
+        <button data-ogabassey-pdp-commerce-variant-option>1TB</button>
+      </div>`;
+
+    revealCriticalAddToCartBlocker({
+      kind: 'unconfirmed-selection',
+      axes: ['storage'],
+      message: 'm',
+    });
+
+    expect(document.activeElement).toHaveTextContent('1TB');
+    document.body.innerHTML = '';
+  });
+
   it('falls back to an unavailable-combination reason', () => {
     expect(resolveCriticalAddToCartBlocker(base)).toMatchObject({
       kind: 'unavailable',

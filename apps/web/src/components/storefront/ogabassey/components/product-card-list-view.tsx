@@ -132,6 +132,11 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
             <ArrowRightLeft size={18} strokeWidth={2} />
           </button>
 
+          {/* Stable live region beside the button (never inside it), so
+              the confirmation is announced as well as shown. */}
+          <span role="status" className="sr-only">
+            {isAdded ? `${product.name} added to cart` : ''}
+          </span>
           {requiresSelection ? (
             <Link
               href={productHref}

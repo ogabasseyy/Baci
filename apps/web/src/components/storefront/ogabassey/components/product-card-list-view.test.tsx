@@ -162,7 +162,9 @@ describe('ProductCardListView', () => {
       screen.getByRole('button', { name: 'iPhone 18 Pro added to cart' })
     ).toBeInTheDocument();
     expect(screen.getByText('Added to cart')).toBeInTheDocument();
-    // The button's own label carries the announcement; no nested region.
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    // Announced from a live region beside the button, never inside it.
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent('iPhone 18 Pro added to cart');
+    expect(region.closest('button')).toBeNull();
   });
 });

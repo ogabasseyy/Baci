@@ -1,6 +1,6 @@
 # How CI chooses which web tests run on a pull request
 
-The full web suite is 6 parallel jobs and about 100 job-minutes. Most pull
+The full web suite is 10 parallel jobs and about 105 job-minutes. Most pull
 requests do not need all of it before merge, so a small planner decides.
 
 ## Who decides

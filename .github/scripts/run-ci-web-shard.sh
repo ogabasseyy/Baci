@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ "${RUNNER_ENVIRONMENT:-}" = "self-hosted" ]; then
-  pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6" --maxWorkers=4
+  pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/10" --maxWorkers=4
 else
-  pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
+  pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/10"
 fi

@@ -9,6 +9,7 @@ import { SavingsProductThumb } from './SavingsProductThumb';
 import { EARLY_CANCEL_INTEREST_NOTE } from './savings-interest-copy';
 import { savingsPaceWords } from './savings-pace-words';
 import { savingsProductImage } from './savings-product-image';
+import { timeToGo } from './savings-time-to-go';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 
@@ -135,10 +136,10 @@ function yoursLine(
 ) {
   if (headStart === 'all' || daysToGo === 0) return 'Yours today';
   if (headStart === 'part' && daysToGo !== null)
-    return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}, not counting your head start`;
+    return `Yours in about ${timeToGo(daysToGo)}, not counting your head start`;
   if (daysToGo === null)
     return `Yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
-  return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;
+  return `Yours in about ${timeToGo(daysToGo)}`;
 }
 
 function timelineLabel(startDate: string, phoneDate: string) {

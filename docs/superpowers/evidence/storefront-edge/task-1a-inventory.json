@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "013ece599b3ae4fe703bdc208be515bdfa96c746",
+  "originMainSha": "152e12186ad9287896eb474e81ec648c65eb92bf",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "d64602eb1d41899946e4e661241b50f82fb2aa97327ed61870d0ce5bb6e9f2f3",
-  "routingProxyInputSha256": "a7c56436c606e46caf4c29a3c58bea8e3c274686689980ded3de76d88e5a1b59",
+  "routeTreeSha256": "3b579f79ce46a7a58ecaaeda81c683650abaf06870672a6c8cda5344e1f5b728",
+  "routingProxyInputSha256": "9ac1cdd980b517e99e2ebaa6a1c2f519f82ee71aa2c602b80fd5484b1355733d",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1167,6 +1167,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/black-friday/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/black-friday",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/black-friday/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/cart/route.ts",
       "methods": [
         "GET",
@@ -1991,6 +2004,30 @@
       "routePattern": "/api/storefront/imei-check/{lookupId}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/[lookupId]/wallet-pay/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/{lookupId}/wallet-pay",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/wallet-pay/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/[lookupId]/wallet-pin/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/{lookupId}/wallet-pin",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/wallet-pin/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -7215,6 +7252,18 @@
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(utility)/unlock-orders/page.tsx"
     },
     {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:black-friday/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/black-friday",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/black-friday/page.tsx"
+    },
+    {
       "decision": "edge_redirect",
       "reason": "redirect_only_storefront_entrypoint",
       "id": "storefront:favicon.ico/route.ts",
@@ -8715,6 +8764,22 @@
     },
     {
       "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:black-friday/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/black-friday",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/black-friday/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "storefront:favicon.ico/route.ts:options:slug-prefixed",
       "methods": [
         "OPTIONS"
@@ -9344,5 +9409,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "5dd2719afacc4c4f815d0ec12375b4a67058eeb2ba886e049b3ec18548d9761a"
+  "inventorySha256": "f8bbe8cb805816fb7c64746e245f6ca2dcd69c66181a45f73209d158e2da2080"
 }

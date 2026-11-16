@@ -1,4 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import {
+  QuizAppAttestationError,
+  quizAppAttestationErrorResponse,
+} from '@/app/api/quiz/_shared/quiz-app-attestation-error';
+import {
+  QuizAppOnlyError,
+  quizAppOnlyErrorResponse,
+} from '@/app/api/quiz/_shared/quiz-app-only-error';
 import { enrichQuizV2AttemptWithSubmissionTime } from '@/app/api/quiz/_shared/quiz-v2-attempt-submission';
 import {
   readQuizDeviceFingerprint,
@@ -29,6 +37,8 @@ import { QuizProductionNotApprovedError } from '@/lib/quiz-compliance-gate';
 import { startQuizAttemptV2RouteSchema } from '@/schemas/quiz';
 import { enforceQuizStartGuards } from './v2-start-guards';
 
+const APP_CHECK_HEADER = 'X-Firebase-AppCheck';
+const CHALLENGE_HEADER = 'X-Baci-Quiz-Attestation-Nonce';
 const START_ACTION = 'start_quiz_attempt_v2';
 const DEVICE_ACTION = 'start_quiz_attempt_with_device_v2';
 
@@ -68,9 +78,18 @@ export async function postQuizStartV2(request: NextRequest) {
     await enforceQuizStartGuards(
       auth.supabase,
       parsed.data.eventId,
-      auth.user.id
+      auth.user.id,
+      auth.authMethod,
+      request.headers.get(APP_CHECK_HEADER)?.trim() || null,
+      request.headers.get(CHALLENGE_HEADER)?.trim() || null
     );
   } catch (error) {
+    if (error instanceof QuizAppAttestationError) {
+      return quizAppAttestationErrorResponse(error);
+    }
+    if (error instanceof QuizAppOnlyError) {
+      return quizAppOnlyErrorResponse(error);
+    }
     if (isQuizAgeGateError(error)) return quizAgeGateErrorResponse(error);
     if (error instanceof QuizProductionNotApprovedError) {
       return prizeGuardErrorResponse(error);

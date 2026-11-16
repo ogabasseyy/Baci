@@ -13,6 +13,7 @@ import { BillerList } from './BillerList';
 import { createDataFormPurchaseHandler } from './create-data-form-purchase-handler';
 import { DataAmountInput } from './DataAmountInput';
 import { DataFormFooter } from './DataFormFooter';
+import { DataPaymentOptions } from './DataPaymentOptions';
 import { DataPlanSelectionSection } from './DataPlanSelectionSection';
 import {
   inferProviderFromDataBillerName,
@@ -27,7 +28,6 @@ import type { DataFormProps } from './data-form.types';
 import { findDataPlanByCode } from './data-plan-selection';
 import { getUtilityFooterOffset } from './get-utility-footer-offset';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
-import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useDataBillerInitialization } from './use-data-biller-initialization';
 import { useDataFormBeneficiaryController } from './use-data-form-beneficiary-controller';
 import { useMountedRef } from './use-mounted-ref';
@@ -267,16 +267,13 @@ export function DataForm({
             scrollToDataPayment(paymentYRef.current, scrollViewRef.current);
           }}
         >
-          <UtilityPaymentOptions
-            amount={planAmount}
-            canFundByBankTransfer={payment.canFundByBankTransfer}
+          <DataPaymentOptions
+            payment={payment}
+            planAmount={planAmount}
+            selectedPlan={selectedPlan}
+            selectedProvider={selectedProvider}
+            phoneNumber={phoneNumber}
             returnToHref={walletReturnToHref}
-            walletBalance={payment.getWalletBalance()}
-            walletError={payment.walletError}
-            walletIsLoading={payment.walletIsLoading}
-            walletIsSettled={payment.isWalletSettled()}
-            walletIsStoreCredit={payment.walletIsStoreCredit}
-            walletPrimaryUnknown={payment.walletPrimaryUnknown}
           />
         </View>
       </ScrollView>

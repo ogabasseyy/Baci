@@ -139,6 +139,9 @@ quiz_db:
   - '.github/scripts/split-sql-statements.test.mjs'
   - '.github/scripts/check-migration-versions.sh'
   - '.github/scripts/check-migration-versions.test.sh'
+  - '.github/scripts/background-step.sh'
+  - '.github/scripts/background-step.test.mjs'
+  - '.github/scripts/prepare-supabase-replay-image.sh'
 cwv_runner:
   - 'infra/cwv-runner/**'
   - '.github/actions/pnpm-install-cached/**'
@@ -291,6 +294,8 @@ deploy_scripts:
 # sources are listed here. Keep this group free of interior comments: the CI
 # workflow tests parse it as one unbroken run of list items.
 web:
+  - '.github/scripts/background-step.sh'
+  - '.github/scripts/background-step.test.mjs'
   - 'public/guides/**'
   - 'supabase/functions/_shared/scheduled-notification*'
   - 'supabase/functions/process-scheduled-notifications/**'

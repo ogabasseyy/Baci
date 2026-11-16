@@ -118,7 +118,10 @@ export function parsePetrockRemediationProduct(input: ProductInput) {
   return {
     carrier,
     categoryId: input.categoryId,
-    costUsd: input.priceUsd,
+    // cost_usd allows only NULL or > 0: a free or negative listing has no
+    // cost to store (it is already excluded as an invalid contract).
+    costUsd:
+      input.priceUsd !== null && input.priceUsd > 0 ? input.priceUsd : null,
     excludedReason,
     fixtureVerified: false,
     isActive: false,

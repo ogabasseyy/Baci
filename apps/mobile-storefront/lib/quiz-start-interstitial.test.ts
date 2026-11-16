@@ -1,95 +1,18 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
-import { trackEvent } from '@/services/analytics-core';
-import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
+import { setQuizRewardedFlowActive } from './quiz-fullscreen-ownership';
 import {
-  resetQuizFullscreenOwnershipForTests,
-  setQuizRewardedFlowActive,
-} from './quiz-fullscreen-ownership';
-import {
+  flushConsentGate,
   maybeShowQuizStartInterstitial,
-  resetQuizStartInterstitialForTests,
-} from './quiz-start-interstitial';
-
-jest.mock('@/services/analytics-core', () => ({
-  trackEvent: jest.fn(),
-}));
-
-jest.mock('@/components/quiz/is-quiz-mobile-ads-available', () => ({
-  isQuizMobileAdsAvailable: jest.fn(() => true),
-}));
-
-jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
-  initializeQuizMobileAds: jest.fn(async () => ({ canRequestAds: true })),
-}));
-
-const mockIsQuizMobileAdsAvailable = jest.mocked(isQuizMobileAdsAvailable);
-const mockInitializeQuizMobileAds = jest.mocked(initializeQuizMobileAds);
-const mockTrackEvent = jest.mocked(trackEvent);
-
-type Listener = (...args: unknown[]) => void;
-
-const listeners: Record<string, Listener[]> = {
-  closed: [],
-  error: [],
-  loaded: [],
-  paid: [],
-};
-const unsubscribes: ReturnType<typeof jest.fn>[] = [];
-
-const mockInterstitialShow = jest.fn<(...args: unknown[]) => Promise<void>>(
-  async () => undefined
-);
-const mockInterstitialLoad = jest.fn<(...args: unknown[]) => void>(
-  () => undefined
-);
-
-jest.mock('react-native-google-mobile-ads', () => ({
-  AdEventType: {
-    CLOSED: 'closed',
-    ERROR: 'error',
-    LOADED: 'loaded',
-    PAID: 'paid',
-  },
-  InterstitialAd: {
-    createForAdRequest: () => ({
-      addAdEventListener: (type: string, listener: Listener) => {
-        listeners[type]?.push(listener);
-        const unsubscribe = jest.fn();
-        unsubscribes.push(unsubscribe);
-        return unsubscribe;
-      },
-      load: (...args: unknown[]) => mockInterstitialLoad(...args),
-      show: (...args: unknown[]) => mockInterstitialShow(...args),
-    }),
-  },
-}));
-
-async function flushConsentGate(): Promise<void> {
-  // The helper awaits UMP consent before constructing the ad; pump the
-  // microtask queue so listeners are registered before firing them.
-  for (let flush = 0; flush < 10; flush += 1) {
-    await Promise.resolve();
-  }
-}
-
-const ORIGINAL_ENV = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
-
-function setAdsEnabled(value: string | undefined) {
-  for (const key of Object.keys(listeners)) listeners[key] = [];
-  unsubscribes.length = 0;
-  mockInterstitialLoad.mockClear();
-  mockInterstitialShow.mockClear();
-  mockInitializeQuizMobileAds.mockClear();
-  mockTrackEvent.mockClear();
-  resetQuizStartInterstitialForTests();
-  resetQuizFullscreenOwnershipForTests();
-  if (value === undefined) {
-    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
-  } else {
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = value;
-  }
-}
+  mockInitializeQuizMobileAds,
+  mockInterstitialLoad,
+  mockInterstitialShow,
+  mockIsQuizMobileAdsAvailable,
+  mockListeners,
+  mockTrackEvent,
+  mockUnsubscribes,
+  ORIGINAL_ENV,
+  setAdsEnabled,
+} from './quiz-start-interstitial-test-harness';
 
 describe('maybeShowQuizStartInterstitial', () => {
   it('skips while ads are disabled', async () => {
@@ -104,7 +27,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     const first = maybeShowQuizStartInterstitial();
     await flushConsentGate();
     expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(first).resolves.toBe('shown');
     await expect(maybeShowQuizStartInterstitial()).resolves.toBe('skipped');
     expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
@@ -119,7 +42,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     const second = maybeShowQuizStartInterstitial();
     await flushConsentGate();
     expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(first).resolves.toBe('shown');
     await expect(second).resolves.toBe('skipped');
     expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
@@ -141,7 +64,7 @@ describe('maybeShowQuizStartInterstitial', () => {
       void maybeShowQuizStartInterstitial();
       await flushConsentGate();
       expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
-      for (const listener of listeners.loaded) listener();
+      for (const listener of mockListeners.loaded) listener();
       await jest.advanceTimersByTimeAsync(31_000);
       // Still owned: no second load may start while presentation is pending.
       await expect(maybeShowQuizStartInterstitial()).resolves.toBe('skipped');
@@ -157,7 +80,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     setAdsEnabled('true');
     const attempt = maybeShowQuizStartInterstitial();
     await flushConsentGate();
-    for (const listener of listeners.error) listener();
+    for (const listener of mockListeners.error) listener();
     await expect(attempt).resolves.toBe('skipped');
     setAdsEnabled(ORIGINAL_ENV);
   });
@@ -171,7 +94,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     });
     await flushConsentGate();
     expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(attempt).resolves.toBe('skipped');
     expect(mockInterstitialShow).not.toHaveBeenCalled();
     setAdsEnabled(ORIGINAL_ENV);
@@ -206,7 +129,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     const attempt = maybeShowQuizStartInterstitial();
     await flushConsentGate();
     setQuizRewardedFlowActive(true);
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(attempt).resolves.toBe('skipped');
     expect(mockInterstitialShow).not.toHaveBeenCalled();
     setQuizRewardedFlowActive(false);
@@ -219,7 +142,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     setAdsEnabled('true');
     const attempt = maybeShowQuizStartInterstitial();
     await flushConsentGate();
-    for (const listener of listeners.paid) {
+    for (const listener of mockListeners.paid) {
       listener({ currency: 'USD', precision: 1, value: 0.000_02 });
     }
     expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -230,26 +153,26 @@ describe('maybeShowQuizStartInterstitial', () => {
         placement: 'QUIZ_START_INTERSTITIAL',
       })
     );
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(attempt).resolves.toBe('shown');
     setAdsEnabled(ORIGINAL_ENV);
   });
 
   it('unsubscribes every listener when the presented interstitial closes', async () => {
     // Regression: the close path settled without releasing native
-    // subscriptions, leaking listeners after every dismissal.
+    // subscriptions, leaking mockListeners after every dismissal.
     setAdsEnabled('true');
     const onClosed = jest.fn();
     const attempt = maybeShowQuizStartInterstitial({ onClosed });
     await flushConsentGate();
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(attempt).resolves.toBe('shown');
-    expect(unsubscribes).toHaveLength(4);
-    for (const unsubscribe of unsubscribes) {
+    expect(mockUnsubscribes).toHaveLength(4);
+    for (const unsubscribe of mockUnsubscribes) {
       expect(unsubscribe).not.toHaveBeenCalled();
     }
-    for (const listener of listeners.closed) listener();
-    for (const unsubscribe of unsubscribes) {
+    for (const listener of mockListeners.closed) listener();
+    for (const unsubscribe of mockUnsubscribes) {
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     }
     expect(onClosed).toHaveBeenCalledTimes(1);
@@ -258,15 +181,15 @@ describe('maybeShowQuizStartInterstitial', () => {
 
   it('unsubscribes every listener when an owned presentation fails', async () => {
     // Regression: a rejected show() settled the owned attempt without
-    // releasing listeners, and no CLOSED ever arrives to clean up.
+    // releasing mockListeners, and no CLOSED ever arrives to clean up.
     setAdsEnabled('true');
     mockInterstitialShow.mockRejectedValueOnce(new Error('dismissed'));
     const attempt = maybeShowQuizStartInterstitial();
     await flushConsentGate();
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     await expect(attempt).resolves.toBe('skipped');
-    expect(unsubscribes).toHaveLength(4);
-    for (const unsubscribe of unsubscribes) {
+    expect(mockUnsubscribes).toHaveLength(4);
+    for (const unsubscribe of mockUnsubscribes) {
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     }
     setAdsEnabled(ORIGINAL_ENV);
@@ -283,7 +206,7 @@ describe('maybeShowQuizStartInterstitial', () => {
     const onPresenting = jest.fn();
     void maybeShowQuizStartInterstitial({ onPresenting });
     await flushConsentGate();
-    for (const listener of listeners.loaded) listener();
+    for (const listener of mockListeners.loaded) listener();
     expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
     expect(onPresenting).toHaveBeenCalledTimes(1);
     setAdsEnabled(ORIGINAL_ENV);

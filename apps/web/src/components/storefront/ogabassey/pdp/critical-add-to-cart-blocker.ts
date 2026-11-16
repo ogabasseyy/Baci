@@ -7,6 +7,7 @@ import { formatVariantAxisLabel } from './critical-variant-selector-options';
  */
 export type CriticalAddToCartBlocker =
   | { kind: 'missing-selection'; axes: string[]; message: string }
+  | { kind: 'unconfirmed-selection'; axes: string[]; message: string }
   | { kind: 'offer-missing'; axes: string[]; message: string }
   | { kind: 'out-of-stock'; axes: string[]; message: string }
   | { kind: 'unavailable'; axes: string[]; message: string };
@@ -16,6 +17,14 @@ interface ResolveCriticalAddToCartBlockerInput {
   maxQuantity: number | null;
   /** Visible option groups the shopper has not chosen from yet. */
   missingAxes: string[];
+  /**
+   * Required option groups the page does not show that are still
+   * unresolved. Any visible choice resolves them, so the shopper is
+   * pointed back at the visible groups.
+   */
+  missingHiddenAxes?: string[];
+  /** Option groups the page shows, in display order. */
+  visibleAxes?: string[];
   routeOfferMissingActive: boolean;
 }
 
@@ -32,7 +41,9 @@ export function resolveCriticalAddToCartBlocker({
   canAddToCart,
   maxQuantity,
   missingAxes,
+  missingHiddenAxes = [],
   routeOfferMissingActive,
+  visibleAxes = [],
 }: ResolveCriticalAddToCartBlockerInput): CriticalAddToCartBlocker | null {
   if (canAddToCart) {
     return null;
@@ -51,6 +62,14 @@ export function resolveCriticalAddToCartBlocker({
       kind: 'missing-selection',
       axes: missingAxes,
       message: `Choose a ${joinAxisLabels(missingAxes)} above to add this to your cart.`,
+    };
+  }
+
+  if (missingHiddenAxes.length > 0 && visibleAxes.length > 0) {
+    return {
+      kind: 'unconfirmed-selection',
+      axes: visibleAxes,
+      message: 'Tap your options above to confirm the exact version.',
     };
   }
 
@@ -73,6 +92,8 @@ export function resolveCriticalAddToCartBlocker({
 /**
  * Brings the option group the shopper still has to choose from into
  * view. On a phone the selectors sit a full screen above the button.
+ * A blocker that names no rendered group moves nothing: the reason
+ * beside the button is the whole answer.
  */
 export function revealCriticalAddToCartBlocker(
   blocker: CriticalAddToCartBlocker
@@ -81,15 +102,11 @@ export function revealCriticalAddToCartBlocker(
     return;
   }
 
-  const groups = Array.from(
+  const target = Array.from(
     document.querySelectorAll<HTMLElement>(
       '[data-ogabassey-pdp-commerce-variant-axis]'
     )
-  );
-  const target =
-    groups.find((group) =>
-      blocker.axes.includes(group.dataset.axis ?? '')
-    ) ?? groups[0];
+  ).find((group) => blocker.axes.includes(group.dataset.axis ?? ''));
   if (!target) {
     return;
   }

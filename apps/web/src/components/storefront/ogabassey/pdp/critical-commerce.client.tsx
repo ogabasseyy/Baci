@@ -223,7 +223,7 @@ export function OgabasseyPdpCriticalCommerceControls({
           data-attention={addToCartBlockedAttempt ? 'true' : undefined}
           data-ogabassey-pdp-commerce-blocker
           id={blockerHintId}
-          role={addToCartBlockedAttempt ? 'alert' : 'status'}
+          role="status"
         >
           {addToCartBlocker.message}
         </p>

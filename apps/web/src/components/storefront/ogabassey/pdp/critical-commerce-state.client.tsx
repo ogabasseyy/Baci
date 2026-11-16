@@ -244,6 +244,8 @@ export function OgabasseyPdpCriticalCommerceProvider({
     canAddToCart,
     maxQuantity,
     missingAxes: missingRenderableVariantAxes,
+    missingHiddenAxes: missingHiddenRequiredVariantAxes,
+    visibleAxes: renderableVariantAxes,
     routeOfferMissingActive,
   });
   const [addToCartBlockedAttempt, setAddToCartBlockedAttempt] =

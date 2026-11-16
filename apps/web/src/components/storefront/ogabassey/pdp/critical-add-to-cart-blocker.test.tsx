@@ -2,7 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
-import { resolveCriticalAddToCartBlocker } from './critical-add-to-cart-blocker';
+import {
+  resolveCriticalAddToCartBlocker,
+  revealCriticalAddToCartBlocker,
+} from './critical-add-to-cart-blocker';
 import { OgabasseyPdpCriticalCommerceClient } from './critical-commerce.client';
 
 const cart = vi.hoisted(() => ({ addToCart: vi.fn(), setIsCartOpen: vi.fn() }));
@@ -82,9 +85,12 @@ describe('critical buy box when an option is still unchosen', () => {
     fireEvent.click(add);
 
     expect(cart.addToCart).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    const reason = screen.getByText(
       'Choose a color above to add this to your cart.'
     );
+    // One stable live region: emphasis changes, the role does not.
+    expect(reason).toHaveAttribute('role', 'status');
+    expect(reason).toHaveAttribute('data-attention', 'true');
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(
       screen.getByRole('button', { name: 'Select Silver color' })
@@ -97,7 +103,6 @@ describe('critical buy box when an option is still unchosen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to cart' }));
     fireEvent.click(screen.getByRole('button', { name: 'Select Black color' }));
 
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/above to add this to your cart/)).toBeNull();
     const add = screen.getByRole('button', { name: 'Add to cart' });
     expect(add).not.toHaveAttribute('aria-disabled');
@@ -167,6 +172,35 @@ describe('resolveCriticalAddToCartBlocker', () => {
         routeOfferMissingActive: true,
       })
     ).toMatchObject({ kind: 'offer-missing', axes: ['condition'] });
+  });
+
+  it('points an unresolved hidden option back at the visible groups', () => {
+    expect(
+      resolveCriticalAddToCartBlocker({
+        ...base,
+        missingHiddenAxes: ['model'],
+        visibleAxes: ['storage', 'color'],
+      })
+    ).toMatchObject({
+      kind: 'unconfirmed-selection',
+      axes: ['storage', 'color'],
+      message: 'Tap your options above to confirm the exact version.',
+    });
+  });
+
+  it('moves nothing when the blocker names no rendered option group', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderBuyBox();
+
+    revealCriticalAddToCartBlocker({
+      kind: 'unavailable',
+      axes: [],
+      message: 'unavailable',
+    });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(document.body).toHaveFocus();
   });
 
   it('falls back to an unavailable-combination reason', () => {

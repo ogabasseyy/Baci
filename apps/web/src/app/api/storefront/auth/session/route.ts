@@ -1,3 +1,4 @@
+import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
@@ -81,7 +82,22 @@ export async function GET(request: Request) {
       error: authError,
     } = await supabase.auth.getUser();
 
-    if (authError || !user) {
+    if (authError) {
+      if (isAuthSessionMissingError(authError)) {
+        return NextResponse.json({
+          authenticated: false,
+          user: null,
+          customer: null,
+        });
+      }
+      console.error('Storefront auth session lookup failed:', authError);
+      return NextResponse.json(
+        { error: 'Session lookup failed' },
+        { status: 503 }
+      );
+    }
+
+    if (!user) {
       return NextResponse.json({
         authenticated: false,
         user: null,

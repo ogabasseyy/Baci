@@ -182,6 +182,25 @@ describe('baci_customer_session_hint tri-state behavior', () => {
     expect(readCustomerSessionHint()).toBeNull();
   });
 
+  it('preserves unknown hint when session endpoint fails with 503', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ error: 'Session lookup failed' }, { status: 503 })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <CustomerAuthProvider merchantSlug="ogabassey">
+        <AuthProbe />
+      </CustomerAuthProvider>
+    );
+
+    expect(await screen.findByText('guest')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readCustomerSessionHint()).toBeNull();
+  });
+
   it('scopes cookie path to /{merchantSlug} in path-routing mode', () => {
     window.history.replaceState({}, '', '/ogabassey/products');
     expect(getCustomerSessionHintScopePath('ogabassey')).toBe('/ogabassey');

@@ -186,8 +186,9 @@ async function runSubdomainRoutingInternal(
     merchantIdentifier: subdomain,
   });
   if (preflight) return preflight;
+  const normalizedHostname = normalizeHostname(hostname);
   const url = request.nextUrl.clone();
-  url.pathname = `/${hostname}${pathname}`;
+  url.pathname = `/${normalizedHostname}${pathname}`;
   if (
     shouldPartitionStorefrontMetadataCache(
       pathname,

@@ -634,6 +634,25 @@ export async function getCachedMerchant(
   return merchant;
 }
 
+function extractPlatformSubdomainSlug(
+  normalizedIdentifier: string
+): string | null {
+  const rootDomain = (
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com'
+  )
+    .replace(/:\d+$/, '')
+    .toLowerCase();
+  for (const suffix of [`.${rootDomain}`, '.localhost']) {
+    if (normalizedIdentifier.endsWith(suffix)) {
+      const subdomain = normalizedIdentifier.slice(0, -suffix.length);
+      if (subdomain && !subdomain.includes('.')) {
+        return subdomain;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Cached merchant data by custom domain.
  * Normalizes the domain to lowercase before lookup.
@@ -646,6 +665,10 @@ export async function getCachedMerchantByDomain(
   'use cache';
   cacheLife('merchant');
   const normalizedDomain = domain.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalizedDomain);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
+  }
   const safeDomain = sanitizeLookupLogValue(normalizedDomain);
   cacheTag('merchants', 'domains', `domain-${normalizedDomain}`);
 
@@ -686,18 +709,9 @@ export async function getMerchantByIdentifier(
   if (!isValidMerchantIdentifier(identifier)) return null;
 
   const normalized = identifier.toLowerCase();
-  const rootDomain = (
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com'
-  )
-    .replace(/:\d+$/, '')
-    .toLowerCase();
-  for (const suffix of [`.${rootDomain}`, '.localhost']) {
-    if (normalized.endsWith(suffix)) {
-      const subdomain = normalized.slice(0, -suffix.length);
-      if (subdomain && !subdomain.includes('.')) {
-        return await getCachedMerchant(subdomain);
-      }
-    }
+  const subdomainSlug = extractPlatformSubdomainSlug(normalized);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
   }
 
   if (isDomainIdentifier(normalized)) {

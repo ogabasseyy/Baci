@@ -24,7 +24,10 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: (...args: unknown[]) => mockCreateClient(...args),
 }));
 
-import { getMerchantByIdentifier } from '@/lib/cached-data';
+import {
+  getCachedMerchantByDomain,
+  getMerchantByIdentifier,
+} from '@/lib/cached-data';
 
 describe('getMerchantByIdentifier subdomain resolution', () => {
   let harness: CachedDataTestHarness;
@@ -87,6 +90,35 @@ describe('getMerchantByIdentifier subdomain resolution', () => {
     expect(harness.mockRpc).toHaveBeenCalledWith(
       'resolve_storefront_public_snapshot_v2',
       { p_identifier: 'shop.example' },
+      { get: true }
+    );
+  });
+
+  it('resolves platform and localhost subdomains through getCachedMerchantByDomain', async () => {
+    harness.mockRpc
+      .mockResolvedValueOnce(
+        resolvedStorefrontMerchantRpcResult({ ...mockMerchant, slug: 'shop' })
+      )
+      .mockResolvedValueOnce(
+        resolvedStorefrontMerchantRpcResult({ ...mockMerchant, slug: 'shop' })
+      );
+
+    const platformMerchant =
+      await getCachedMerchantByDomain('shop.usebaci.com');
+    const localMerchant = await getCachedMerchantByDomain('shop.localhost');
+
+    expect(platformMerchant?.slug).toBe('shop');
+    expect(localMerchant?.slug).toBe('shop');
+    expect(harness.mockRpc).toHaveBeenNthCalledWith(
+      1,
+      'resolve_storefront_public_snapshot_v2',
+      { p_identifier: 'shop' },
+      { get: true }
+    );
+    expect(harness.mockRpc).toHaveBeenNthCalledWith(
+      2,
+      'resolve_storefront_public_snapshot_v2',
+      { p_identifier: 'shop' },
       { get: true }
     );
   });

@@ -175,10 +175,10 @@ export function HomeScreenView({
       )}
 
       <View
-        pointerEvents="none"
         style={[
           styles.headerOverlay,
           {
+            pointerEvents: 'none',
             height: top,
             backgroundColor: isElite ? blackColor : backgroundColor,
             zIndex: 99,

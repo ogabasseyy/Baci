@@ -116,6 +116,8 @@ export function UtilityPaymentOptions({
     balance < amount &&
     savingsKobo < Math.round(amount * 100);
 
+  // The only method is the default; beside the savings row, covering picks.
+  const walletSelected = coversBill || !savingsShort;
   return (
     <View style={styles.container}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -198,12 +200,14 @@ export function UtilityPaymentOptions({
           style={[
             styles.walletRow,
             {
-              backgroundColor: coversBill ? `${BRAND.primary}12` : colors.card,
-              borderColor: coversBill ? BRAND.primary : colors.border,
+              backgroundColor: walletSelected
+                ? `${BRAND.primary}12`
+                : colors.card,
+              borderColor: walletSelected ? BRAND.primary : colors.border,
             },
           ]}
           accessibilityRole="text"
-          accessibilityLabel={`${payLabel}. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
+          accessibilityLabel={`${payLabel}${walletSelected && !coversBill ? ', selected' : ''}. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
         >
           <View
             style={[
@@ -229,11 +233,13 @@ export function UtilityPaymentOptions({
             style={[
               styles.walletRadioOuter,
               {
-                borderColor: coversBill ? BRAND.primary : colors.border,
+                borderColor: walletSelected ? BRAND.primary : colors.border,
               },
             ]}
           >
-            {coversBill ? <View style={styles.walletRadioInner} /> : null}
+            {walletSelected ? (
+              <View testID="wallet-selected" style={styles.walletRadioInner} />
+            ) : null}
           </View>
         </View>
       )}

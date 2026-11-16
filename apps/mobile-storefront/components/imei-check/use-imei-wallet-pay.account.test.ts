@@ -2,6 +2,9 @@ import { act, renderHook } from '@testing-library/react-native';
 import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
 
+jest.mock('./use-imei-wallet-payable-tiers', () => ({
+  useImeiWalletPayableTiers: jest.fn(() => null),
+}));
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'key-1'),
   CryptoDigestAlgorithm: { SHA256: 'SHA-256' },

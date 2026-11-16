@@ -1,9 +1,15 @@
+import { QuizAppAttestationError } from '@/app/api/quiz/_shared/quiz-app-attestation-error';
 import { QuizAppOnlyError } from '@/app/api/quiz/_shared/quiz-app-only-error';
 import {
   enforceQuizAgeGate,
   type ServerSupabaseClient,
 } from '@/app/api/quiz/_shared/route-helpers-guards';
+import { logger } from '@/lib/logger';
+import { verifyQuizAppCheckToken } from '@/lib/quiz/quiz-app-check';
+import { consumeQuizAttestationChallenge } from '@/lib/quiz/quiz-attestation-challenge';
 import {
+  getQuizAppAttestationModeEnv,
+  getQuizAppCheckConfigEnv,
   getQuizPhaseEnv,
   getQuizProductionApprovedEnv,
 } from '@/lib/quiz/quiz-runtime-env';
@@ -16,7 +22,11 @@ export async function enforceQuizStartGuards(
   userId: string,
   // Required (no default) so a new caller cannot silently skip the app-only
   // browser restriction.
-  authMethod: 'bearer' | 'cookie'
+  authMethod: 'bearer' | 'cookie',
+  // Firebase App Check token from the app; null when the request had none.
+  appCheckToken: string | null,
+  // Server-issued single-use challenge nonce from the attestation endpoint.
+  challengeNonce: string | null = null
 ): Promise<void> {
   if (getQuizPhaseEnv() !== 'production') return;
   // Players cannot read quiz_events rows directly (RLS restricts v2 rows to
@@ -50,6 +60,18 @@ export async function enforceQuizStartGuards(
   if (context.mode === 'live' && authMethod === 'cookie') {
     throw new QuizAppOnlyError();
   }
+  // A bearer token alone does not prove the app: a shopper can copy their own
+  // token and replay the start from a script. Live starts therefore also need a
+  // device-attested App Check token, rolled out off -> monitor -> enforce.
+  if (context.mode === 'live' && authMethod === 'bearer') {
+    await enforceQuizAppAttestation(
+      supabase,
+      appCheckToken,
+      challengeNonce,
+      eventId,
+      userId
+    );
+  }
   // Live prizes need operations approval plus a positive compliance verdict
   // from the projection; the evidence itself is never player-readable.
   if (
@@ -59,4 +81,50 @@ export async function enforceQuizStartGuards(
     throw new QuizProductionNotApprovedError();
   }
   await enforceQuizAgeGate(supabase, context.merchant_id, userId);
+}
+
+async function enforceQuizAppAttestation(
+  supabase: ServerSupabaseClient,
+  appCheckToken: string | null,
+  challengeNonce: string | null,
+  eventId: string,
+  userId: string
+): Promise<void> {
+  let mode: ReturnType<typeof getQuizAppAttestationModeEnv>;
+  try {
+    mode = getQuizAppAttestationModeEnv();
+  } catch {
+    // A mistyped mode must never open the gate: treat it as enforce.
+    logger.error({
+      context: 'enforceQuizAppAttestation',
+      message: 'Invalid QUIZ_APP_ATTESTATION; failing closed as enforce',
+    });
+    mode = 'enforce';
+  }
+  if (mode === 'off') return;
+  const result = await verifyQuizAppCheckToken(
+    appCheckToken,
+    getQuizAppCheckConfigEnv()
+  );
+  let reason: string | undefined = result.ok ? undefined : result.reason;
+  if (result.ok && appCheckToken) {
+    const consumed = challengeNonce
+      ? await consumeQuizAttestationChallenge(supabase, {
+          eventId,
+          nonce: challengeNonce,
+          token: appCheckToken,
+          tokenIssuedAt: result.issuedAt,
+        })
+      : false;
+    if (consumed) return;
+    reason = challengeNonce ? 'challenge_rejected' : 'missing_challenge';
+  }
+  if (mode === 'enforce') throw new QuizAppAttestationError();
+  logger.warn({
+    context: 'enforceQuizAppAttestation',
+    eventId,
+    message: 'Live quiz start without a valid app attestation (monitor mode)',
+    reason,
+    userId,
+  });
 }

@@ -8,8 +8,8 @@ Development builds (`eas.json` `development` and `simulator` profiles) switch ad
 
 | Purpose | Secret |
 | --- | --- |
-| App-wide ads switch (placements + quiz-start interstitial + consent gate) | `EXPO_PUBLIC_MOBILE_ADS_ENABLED` = `true` |
-| Quiz gameplay banner on/off | `EXPO_PUBLIC_QUIZ_ADS_ENABLED` (set by the workflow when the banner secret exists) |
+| App-wide ads switch (placements + quiz-start interstitial). Also enables the UMP consent gate, which runs before the ATT prompt | `EXPO_PUBLIC_MOBILE_ADS_ENABLED` = `true` |
+| Quiz gameplay banner on/off. Also enables the UMP consent gate on its own: the gate runs when EITHER this or `EXPO_PUBLIC_MOBILE_ADS_ENABLED` is `true` (`areMobileAdsEnabled`), so quiz-only builds still get UMP before ATT | `EXPO_PUBLIC_QUIZ_ADS_ENABLED` (set by the workflow when the banner secret exists) |
 | AdMob app ids | `STOREFRONT_ADMOB_ANDROID_APP_ID`, `STOREFRONT_ADMOB_IOS_APP_ID` |
 | Quiz gameplay banner | `EXPO_PUBLIC_QUIZ_ADMOB_{ANDROID,IOS}_BANNER_UNIT_ID` |
 | Rewarded | `EXPO_PUBLIC_QUIZ_ADMOB_{ANDROID,IOS}_REWARDED_UNIT_ID` |

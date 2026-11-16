@@ -18,6 +18,7 @@ import {
   trackWalletPayPurchase,
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
+import { useRefreshWalletActivity } from '@/hooks/use-refresh-wallet-activity';
 import { CONFIG } from '@/lib/config';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import { useAuthStore } from '@/stores/auth-store';
@@ -104,6 +105,7 @@ export function useImeiWalletPay({
   canPay?: boolean;
 }) {
   const sheet = useWalletPaySheet<ImeiWalletPayResult>({ onDelivered });
+  const refreshActivity = useRefreshWalletActivity();
   const wallet = walletQuery.data?.wallet;
   // A sheet opened for one account never stays open for another.
   const userId = useAuthStore((state) => state.user?.id ?? null);
@@ -274,14 +276,26 @@ export function useImeiWalletPay({
         },
         pay: async (operationId, proof) => {
           if (!inner) throw new Error('Wallet payment not started');
-          return await inner.pay(operationId, proof);
+          // A payment still pending, or one whose request failed (the sheet
+          // then reads it as pending), may already be a listed spend.
+          const answer = await inner.pay(operationId, proof).catch((error) => {
+            refreshActivity();
+            throw error;
+          });
+          if (answer.kind === 'outcome' && answer.outcome.kind === 'pending')
+            refreshActivity();
+          return answer;
         },
       };
       // Settled purchases may have moved money: show the new balance. The
       // whole payment is bound to the account that opened it.
       await sheet.open(
         trackWalletPayPurchase(lazy, () => purchase, {
-          onSettled: () => void walletQuery.refetch?.(),
+          onSettled: () => {
+            void walletQuery.refetch?.();
+            // The new spend must show in the wallet activity at once (Codex P2).
+            refreshActivity();
+          },
           stillOwner: () => useAuthStore.getState().user?.id === user?.id,
           stillWanted: sheet.nextSession(),
           key: () => usedKey,

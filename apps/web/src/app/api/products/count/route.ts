@@ -1,9 +1,7 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { createAnonClient } from '@/lib/supabase/anon';
-
-const merchantIdSchema = z.string().uuid();
+import { merchantIdSchema } from '@/schemas/products-count';
 
 async function getCachedMerchantProductCount(
   merchantId: string

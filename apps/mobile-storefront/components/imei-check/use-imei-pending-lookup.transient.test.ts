@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { pendingImeiStorageKey } from '@/lib/imei-pending-storage';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 
@@ -14,6 +15,9 @@ const storageKey = pendingImeiStorageKey('merchant-1', 'customer-1');
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  walletPayPurchaseKeys.resetMemory();
+  // The key the check saved before sending, as the flow does.
+  await walletPayPurchaseKeys.keyFor(request.purchase, () => request.key);
   global.fetch = jest.fn(async () => ({
     json: async () => ({
       success: false,
@@ -56,5 +60,10 @@ describe('bugfix: a transient poll failure retired a paid lookup and its key', (
     expect(result.current.pending?.lookupId).toBe(LOOKUP_ID);
     const saved = JSON.parse((await AsyncStorage.getItem(storageKey)) ?? '{}');
     expect(saved).toMatchObject({ lookupId: LOOKUP_ID, request });
+    // The saved Idempotency-Key itself is still kept, after a restart too.
+    walletPayPurchaseKeys.resetMemory();
+    await expect(
+      walletPayPurchaseKeys.keyFor(request.purchase, () => 'minted-anew')
+    ).resolves.toBe(request.key);
   });
 });

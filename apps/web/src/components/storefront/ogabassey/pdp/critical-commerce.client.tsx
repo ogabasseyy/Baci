@@ -225,7 +225,11 @@ export function OgabasseyPdpCriticalCommerceControls({
           id={blockerHintId}
           role="status"
         >
-          {addToCartBlocker.message}
+          {/* Re-inserting the text on a blocked tap makes the stable
+              status region announce it again. */}
+          <span key={addToCartBlockedAttempt ? 'attempted' : 'idle'}>
+            {addToCartBlocker.message}
+          </span>
         </p>
       ) : null}
       <AssuranceDefaultNote

@@ -70,8 +70,10 @@ describe('critical buy box when an option is still unchosen', () => {
     const add = screen.getByRole('button', { name: 'Add to cart' });
     expect(add).toHaveAttribute('aria-disabled', 'true');
     expect(
-      screen.getByText('Choose a color above to add this to your cart.')
-    ).toHaveAttribute('role', 'status');
+      screen
+        .getByText('Choose a color above to add this to your cart.')
+        .closest('[role="status"]')
+    ).not.toBeNull();
   });
 
   it('answers a blocked tap instead of doing nothing', () => {
@@ -89,8 +91,8 @@ describe('critical buy box when an option is still unchosen', () => {
       'Choose a color above to add this to your cart.'
     );
     // One stable live region: emphasis changes, the role does not.
-    expect(reason).toHaveAttribute('role', 'status');
-    expect(reason).toHaveAttribute('data-attention', 'true');
+    const region = reason.closest('[role="status"]');
+    expect(region).toHaveAttribute('data-attention', 'true');
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(
       screen.getByRole('button', { name: 'Select Silver color' })
@@ -132,8 +134,10 @@ describe('critical buy box when an option is still unchosen', () => {
 
     expect(screen.getByRole('button', { name: 'Add to cart' })).toBeDisabled();
     expect(
-      screen.getByText('This item is out of stock right now.')
-    ).toHaveAttribute('role', 'status');
+      screen
+        .getByText('This item is out of stock right now.')
+        .closest('[role="status"]')
+    ).not.toBeNull();
   });
 });
 
@@ -170,8 +174,23 @@ describe('resolveCriticalAddToCartBlocker', () => {
         ...base,
         missingAxes: ['color'],
         routeOfferMissingActive: true,
+        visibleAxes: ['condition', 'color'],
       })
     ).toMatchObject({ kind: 'offer-missing', axes: ['condition'] });
+  });
+
+  it('does not promise a condition choice the page does not show', () => {
+    expect(
+      resolveCriticalAddToCartBlocker({
+        ...base,
+        routeOfferMissingActive: true,
+        visibleAxes: ['color'],
+      })
+    ).toMatchObject({
+      kind: 'offer-missing',
+      axes: [],
+      message: 'This offer is no longer available.',
+    });
   });
 
   it('points an unresolved hidden option back at the visible groups', () => {

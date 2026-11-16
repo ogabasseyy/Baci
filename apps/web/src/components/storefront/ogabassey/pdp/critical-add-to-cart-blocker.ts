@@ -50,10 +50,14 @@ export function resolveCriticalAddToCartBlocker({
   }
 
   if (routeOfferMissingActive) {
+    // Only point at the condition choice when the page shows one.
+    const canChooseCondition = visibleAxes.includes('condition');
     return {
       kind: 'offer-missing',
-      axes: ['condition'],
-      message: 'Choose a condition above to add this to your cart.',
+      axes: canChooseCondition ? ['condition'] : [],
+      message: canChooseCondition
+        ? 'Choose a condition above to add this to your cart.'
+        : 'This offer is no longer available.',
     };
   }
 

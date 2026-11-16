@@ -42,8 +42,7 @@ export function QuizTicketBackdrop({ color }: QuizTicketBackdropProps) {
   return (
     <View
       onLayout={handleLayout}
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
+      style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
       testID="quiz-ticket-backdrop"
     >
       {/* Until measured, a plain rounded tile avoids a frame with bare edges. */}

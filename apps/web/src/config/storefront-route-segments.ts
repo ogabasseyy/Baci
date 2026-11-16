@@ -106,9 +106,21 @@ const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
 // the strip, so it preserves the exact page path; the page checks for a matching
 // retired alias and redirects non-OgaBassey stores to their home. A suffixed
 // `/unlock-orders/<path>` remains eligible for the proxy's retired-alias redirect.
+//
+// `black-friday` (#4252) follows the same exact-path rule: the
+// (storefront)/[slug]/black-friday page owns `/black-friday` only (falling back
+// to the `black-friday` category listing for other stores). As with
+// `unlock-orders`, a suffixed `/black-friday/<path>` stays eligible for the
+// retired-alias redirect when a merchant's retired slug is `black-friday`;
+// otherwise it reaches the categorized PDP as before.
+const RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS = new Set<string>([
+  'black-friday',
+  'unlock-orders',
+]);
+
 const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
   ...STOREFRONT_ROUTE_FIRST_SEGMENTS,
-  'unlock-orders',
+  ...RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS,
 ]);
 
 // First URL segments that are PLATFORM/app routes reachable on a custom domain
@@ -133,7 +145,10 @@ function shouldStripRetiredSlugPrefix(
 ): boolean {
   const livePageCollision =
     RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS.has(firstSegment) &&
-    !(firstSegment === 'unlock-orders' && pathSegmentCount > 1);
+    !(
+      RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS.has(firstSegment) &&
+      pathSegmentCount > 1
+    );
 
   return (
     !livePageCollision &&
@@ -145,6 +160,7 @@ export const storefrontRouteSegments = {
   CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS,
   NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
   RESERVED_STOREFRONT_SEGMENTS,
+  RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS,
   RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS,
   STOREFRONT_ROUTE_FIRST_SEGMENTS,
   shouldStripRetiredSlugPrefix,

@@ -163,6 +163,19 @@ describe('background steps (2026-11-16)', () => {
   }
 });
 
+describe('cancelled typecheck jobs stop the builder-auth suite before container cleanup', () => {
+  it('runs an always() stop step between the wait and the cleanup', () => {
+    const steps = ci.jobs['quality-typecheck'].steps;
+    const wait = steps.findIndex((step) => step.name === 'Run isolated builder auth tests');
+    const stop = steps.findIndex((step) => step.name === 'Stop isolated builder auth tests');
+    const cleanup = steps.findIndex((step) => step.name === 'Clean builder auth test containers');
+    assert.ok(wait >= 0 && stop > wait && cleanup > stop);
+    assert.match(steps[stop].if, /always\(\)/);
+    assert.match(steps[stop].if, /steps\.builder-auth-tests-start\.outcome == 'success'/);
+    assert.equal(steps[stop].run, 'bash .github/scripts/background-step.sh stop builder-auth');
+  });
+});
+
 describe('the changes job (pinned by the capability-gate contract)', () => {
   const changes = ci.jobs.changes;
   const byId = (id) => changes.steps.find((step) => step.id === id);

@@ -140,6 +140,29 @@ test('start fails when the background command cannot be launched', () => {
   });
 });
 
+test('stop ends a running command and is a no-op afterwards or when never started', () => {
+  withTemp((run, dir) => {
+    run('start', 'cancel-step', 'sleep', '30');
+    const pid = Number(readFileSync(join(dir, 'background-steps', 'cancel-step.pid'), 'utf8'));
+    assert.equal(run('stop', 'cancel-step').status, 0);
+    const deadline = Date.now() + 5_000;
+    while (isAlive(pid) && Date.now() < deadline) spawnSync('sleep', ['0.1']);
+    assert.equal(isAlive(pid), false);
+    assert.equal(run('stop', 'cancel-step').status, 0);
+    assert.equal(run('stop', 'never-started').status, 0);
+  });
+});
+
+test('stop leaves a finished command alone', () => {
+  withTemp((run) => {
+    run('start', 'done-step', 'true');
+    assert.equal(run('wait', 'done-step', '30').status, 0);
+    const result = run('stop', 'done-step');
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /Stopping/);
+  });
+});
+
 test('rejects names that could escape the background-steps folder', () => {
   withTemp((run) => {
     assert.equal(run('start', '../x', 'true').status, 2);

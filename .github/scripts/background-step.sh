@@ -5,6 +5,7 @@
 #
 #   background-step.sh start <name> <command> [args...]
 #   background-step.sh wait  <name> [timeout-seconds]   # default 900
+#   background-step.sh stop  <name>                     # stop it if still running; always exits 0
 #
 # The timeout counts from `wait`, not from `start`: time the command already ran during the
 # overlapped steps is not included. The job's timeout-minutes still bounds the total.
@@ -68,6 +69,17 @@ stop_step() {
   kill -KILL "${pids[@]}" 2> /dev/null || true
 }
 
+# Stop the step if it is still running, but only while the PID is still this step's shell (its
+# arguments carry this step's log path), never a process that reused the PID.
+stop_own_step() {
+  local pid
+  [[ -s "$pidfile" && ! -f "$status" ]] || return 0
+  pid="$(cat "$pidfile")"
+  if ps -o args= -p "$pid" 2> /dev/null | grep -qF -- "$log"; then
+    stop_step "$pid"
+  fi
+}
+
 case "$action" in
   start)
     [[ $# -ge 1 ]] || usage
@@ -107,14 +119,7 @@ case "$action" in
     while [[ ! -f "$status" ]]; do
       if (( waited >= timeout )); then
         echo "background step '$name' still running after ${timeout}s; stopping it" >&2
-        # Only while that PID is still this step's shell (its arguments carry this step's log path),
-        # never a process that reused the PID.
-        if [[ -s "$pidfile" ]]; then
-          pid="$(cat "$pidfile")"
-          if ps -o args= -p "$pid" 2> /dev/null | grep -qF -- "$log"; then
-            stop_step "$pid"
-          fi
-        fi
+        stop_own_step
         [[ -f "$log" ]] && cat "$log"
         exit 1
       fi
@@ -125,6 +130,15 @@ case "$action" in
     code="$(cat "$status")"
     echo "Background step '$name' finished with exit status $code (waited ${waited}s here)"
     exit "$code"
+    ;;
+  stop)
+    # For an always() step before cleanup: a cancelled job skips `wait`, and a detached command
+    # would otherwise keep creating resources after the cleanup ran.
+    if [[ -f "$started" && ! -f "$status" ]]; then
+      echo "Stopping background step '$name'"
+      stop_own_step
+    fi
+    exit 0
     ;;
   *)
     usage

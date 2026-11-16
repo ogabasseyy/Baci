@@ -221,6 +221,11 @@ jobs:
         if: ${{ !cancelled() && steps.builder-auth-tests-start.outcome == 'success' }}
         # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
         run: bash .github/scripts/background-step.sh wait builder-auth ${{ job.status == 'failure' && 60 || 900 }}
+      - name: Stop isolated builder auth tests
+        # A cancelled job skips the wait above; stop the detached suite before the container cleanup
+        # so it cannot create fixtures after the cleanup ran.
+        if: ${{ always() && steps.builder-auth-tests-start.outcome == 'success' }}
+        run: bash .github/scripts/background-step.sh stop builder-auth
       - name: Clean builder auth test containers
         if: ${{ always() && runner.environment == 'self-hosted' && (steps.builder-auth-tests-start.outcome == 'success' || steps.builder-auth-tests.outcome == 'success' || steps.builder-auth-tests.outcome == 'failure' || steps.builder-auth-tests.outcome == 'cancelled') }}
         timeout-minutes: 2

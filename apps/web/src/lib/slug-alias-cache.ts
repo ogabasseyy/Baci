@@ -31,31 +31,30 @@
  */
 
 import { createAnonClient } from '@/lib/supabase/anon';
+import { createBackgroundRefresher } from './background-refresh';
+import { invalidateSlugLiveness, isSlugLive } from './slug-liveness-cache';
 
 interface AliasMappingEntry {
   currentSlug: string | null;
   timestamp: number;
 }
 
-interface LivenessEntry {
-  isLive: boolean;
-  timestamp: number;
-}
-
 // old_slug -> merchant's current slug (or null when not a retired alias).
 const aliasMappingCache = new Map<string, AliasMappingEntry>();
-// slug -> whether a live merchant currently owns it.
-const livenessCache = new Map<string, LivenessEntry>();
+let invalidationEpoch = 0;
+const refreshInBackground = createBackgroundRefresher();
 
 // Confirmed alias -> current slug is stable; cache it a while.
 const POSITIVE_TTL = 120_000; // 2 minutes
 // "Not an alias" must expire quickly so a fresh rename starts redirecting fast.
 const NEGATIVE_TTL = 30_000; // 30 seconds
-// Liveness can flip the instant a merchant renames BACK to a retired slug. This
-// is BOTH the redirect-loop residual bound (a rename-back can be served stale
-// for at most this long) AND the liveness DB-read-rate knob under bot floods.
-// Keep it small; raising it toward POSITIVE_TTL re-grows the loop window.
-const LIVENESS_TTL = 10_000; // 10 seconds
+// An expired "not an alias" answer is still served, while it is re-checked in
+// the background, until it is this old. Every live storefront request asks
+// this question, so without it one request per instance pays a database round
+// trip (56-122 ms measured) every NEGATIVE_TTL. The cost: after a rename, each
+// instance answers one more request from the old "not an alias" entry before
+// its redirect starts. Redirect targets (positives) are never served expired.
+const NEGATIVE_STALE_LIMIT = 300_000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
 /**
@@ -68,8 +67,11 @@ const MAX_CACHE_SIZE = 1000;
  * negative TTL).
  */
 export function invalidateAliasCacheForSlug(slug: string): void {
+  // An alias read already in flight predates this rename: its result must
+  // not be written back over the cleared entries.
+  invalidationEpoch += 1;
   aliasMappingCache.delete(slug);
-  livenessCache.delete(slug);
+  invalidateSlugLiveness(slug);
   // Also drop mapping entries whose cached CURRENT-slug value IS this slug. On a
   // repeat rename (X->Y then Y->Z), an older alias cached as `oldAlias -> Y` now
   // points at a retired slug; left stale it would fail the custom-domain
@@ -130,7 +132,7 @@ export async function getCurrentSlugForAliasStrict(
   return currentSlug;
 }
 
-async function resolveAliasMapping(
+function resolveAliasMapping(
   oldSlug: string,
   strict = false
 ): Promise<string | null> {
@@ -143,18 +145,30 @@ async function resolveAliasMapping(
   if (!strict) {
     const cached = aliasMappingCache.get(oldSlug);
     if (cached) {
+      const age = Date.now() - cached.timestamp;
       const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
-      if (Date.now() - cached.timestamp < ttl) {
-        return cached.currentSlug;
+      if (age < ttl) return Promise.resolve(cached.currentSlug);
+      if (cached.currentSlug === null && age < NEGATIVE_STALE_LIMIT) {
+        refreshInBackground(oldSlug, () => loadAliasMapping(oldSlug, false));
+        return Promise.resolve(null);
       }
     }
   }
+  return loadAliasMapping(oldSlug, strict);
+}
 
+async function loadAliasMapping(
+  oldSlug: string,
+  strict: boolean
+): Promise<string | null> {
+  const epoch = invalidationEpoch;
   // Strict failures throw before reaching the cache write, so a
   // transient blip is never cached as a negative.
   const currentSlug = await fetchAliasMapping(oldSlug, strict);
-  evictIfFull(aliasMappingCache);
-  aliasMappingCache.set(oldSlug, { currentSlug, timestamp: Date.now() });
+  if (epoch === invalidationEpoch) {
+    evictIfFull(aliasMappingCache);
+    aliasMappingCache.set(oldSlug, { currentSlug, timestamp: Date.now() });
+  }
   return currentSlug;
 }
 
@@ -221,67 +235,6 @@ function handleAliasMappingError(
     );
   }
   return null;
-}
-
-async function isSlugLive(slug: string, strict = false): Promise<boolean> {
-  // Strict callers bypass the cache read (same failure-negative
-  // reasoning as resolveAliasMapping: a cached live=true may be a
-  // fail-safe from a failed lenient liveness check).
-  if (!strict) {
-    const cached = livenessCache.get(slug);
-    if (cached && Date.now() - cached.timestamp < LIVENESS_TTL) {
-      return cached.isLive;
-    }
-  }
-
-  const isLive = await fetchSlugIsLive(slug, strict);
-  evictIfFull(livenessCache);
-  livenessCache.set(slug, { isLive, timestamp: Date.now() });
-  return isLive;
-}
-
-async function fetchSlugIsLive(slug: string, strict = false): Promise<boolean> {
-  let result: { data: unknown; error: unknown };
-  try {
-    const supabase = createAnonClient();
-
-    result = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('slug', slug)
-      .limit(1)
-      .maybeSingle();
-  } catch (err) {
-    console.error('[Slug Alias Cache] Error in liveness check', {
-      slug,
-      error: err,
-    });
-    if (strict) {
-      throw err;
-    }
-    return true;
-  }
-
-  if (result.error) {
-    // Fail safe: if we can't confirm the slug is free, treat it as LIVE so we
-    // do NOT 301 away from a store that may still be live under this slug. A
-    // straggler 404 on the retired URL is far less harmful than redirecting a
-    // live store's traffic away. Strict callers throw instead: with a known
-    // alias mapping, unknown liveness is indeterminate (retryable), not live.
-    // The throw stays outside the try so the catch above doesn't double-log.
-    console.error('[Slug Alias Cache] Failed liveness check', {
-      slug,
-      error: result.error,
-    });
-    if (strict) {
-      throw new Error(
-        `[Slug Alias Cache] liveness lookup failed for slug: ${slug}`
-      );
-    }
-    return true;
-  }
-
-  return Boolean(result.data);
 }
 
 // Simple FIFO eviction, matching domain-cache-simple.ts.

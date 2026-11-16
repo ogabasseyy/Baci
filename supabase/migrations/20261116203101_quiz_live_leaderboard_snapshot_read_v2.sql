@@ -1,7 +1,8 @@
--- Serve the live quiz leaderboard from a shared snapshot (part 2 of 2).
+-- Serve the live quiz leaderboard from a shared snapshot (part 2 of 3).
 --
--- Replaces the two read functions so they use the snapshot created in
--- 20261116203100; the reasoning is in that file's header.
+-- Replaces the live board read function so it uses the snapshot created in
+-- 20261116203100; the reasoning is in that file's header. The participant
+-- count function follows in 20261116203102.
 --
 -- get_quiz_live_leaderboard_public_v2 keeps its JSON shape and adds one key,
 -- participant_count. A caller in the stored top 100 gets their stored entry,
@@ -207,76 +208,6 @@ $$;
 REVOKE ALL ON FUNCTION public.get_quiz_live_leaderboard_public_v2(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_quiz_live_leaderboard_public_v2(uuid)
-  TO authenticated;
-
--- The count endpoint no longer counts every row per call: a live event reads
--- the snapshot and a published event reads its highest rank.
---
--- Published contract: the count is the number of players ranked when results
--- were published. Ranks are written once as 1..N, so the highest rank is that
--- number, read with one index probe instead of a count over every row at the
--- moment every phone loads the final board. If a ranked player's account is
--- deleted later their row goes (ON DELETE CASCADE) but they still took part,
--- so the count does not drop for them. The one exception is the last-ranked
--- player: deleting that row lowers the highest rank, and the count, by one.
-CREATE OR REPLACE FUNCTION public.get_quiz_participant_count_public_v2(p_event_id uuid)
-RETURNS integer
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-  v_count integer;
-  v_customer_id uuid;
-  v_event public.quiz_events%ROWTYPE;
-BEGIN
-  IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
-  END IF;
-  SELECT event.* INTO v_event
-  FROM public.quiz_events AS event
-  WHERE event.id = p_event_id;
-  SELECT customer.id INTO v_customer_id
-  FROM public.customers AS customer
-  WHERE customer.merchant_id = v_event.merchant_id
-    AND customer.user_id = auth.uid()
-    AND customer.deleted_at IS NULL
-  LIMIT 1;
-  IF v_event.id IS NULL OR v_customer_id IS NULL THEN
-    RAISE EXCEPTION 'not_authorized' USING ERRCODE = 'QZ031';
-  END IF;
-  IF v_event.status = 'cancelled' THEN
-    RETURN 0;
-  END IF;
-  IF v_event.results_published_at IS NOT NULL THEN
-    RETURN COALESCE((
-      SELECT result.rank::integer
-      FROM public.quiz_event_results_v2 AS result
-      WHERE result.event_id = p_event_id
-      ORDER BY result.rank DESC
-      LIMIT 1
-    ), 0);
-  END IF;
-
-  SELECT snapshot.participant_count INTO v_count
-  FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
-  WHERE snapshot.event_id = p_event_id
-    AND snapshot.computed_at
-      >= pg_catalog.clock_timestamp() - interval '10 seconds';
-  IF FOUND THEN
-    RETURN v_count;
-  END IF;
-  RETURN (
-    SELECT pg_catalog.count(*)::integer
-    FROM public.quiz_live_standings_v2 AS live
-    WHERE live.event_id = p_event_id
-  );
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.get_quiz_participant_count_public_v2(uuid)
-  FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.get_quiz_participant_count_public_v2(uuid)
   TO authenticated;
 
 COMMIT;

@@ -17,9 +17,9 @@
 -- the API route can stop making a second database call. Privacy rules for
 -- names (deleted customer, suppressed identity, blank username) are the same.
 --
--- Part 1 of 2: the snapshot table and the function that rebuilds it. Nothing
--- reads it until part 2 (20261116203101) replaces the read functions, so this
--- part is safe on its own.
+-- Part 1 of 3: the snapshot table and the function that rebuilds it. Nothing
+-- reads it until parts 2 and 3 (20261116203101, 20261116203102) replace the
+-- two read functions, so this part is safe on its own.
 
 BEGIN;
 
@@ -31,7 +31,12 @@ CREATE TABLE IF NOT EXISTS public.quiz_live_leaderboard_snapshots_v2 (
   -- {"<score>": <players with that score>}
   score_counts jsonb NOT NULL,
   participant_count integer NOT NULL CHECK (participant_count >= 0),
-  computed_at timestamptz NOT NULL
+  computed_at timestamptz NOT NULL,
+  -- Players ranked when results were published. Stored once by the count
+  -- function (20261116203102) on its first read after publication; NULL
+  -- until then. The rebuild below never touches it.
+  published_participant_count integer
+    CHECK (published_participant_count >= 0)
 );
 
 ALTER TABLE public.quiz_live_leaderboard_snapshots_v2 ENABLE ROW LEVEL SECURITY;

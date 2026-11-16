@@ -228,7 +228,8 @@ END;
 $$;
 
 -- 6. The count endpoint: snapshot while live, exact count without a fresh
---    snapshot, highest rank once published.
+--    snapshot, and once published the number ranked at publication, stored
+--    on the first read so that later deletions do not change it.
 DO $$
 DECLARE
   v_event constant uuid := '79000000-0000-4000-8000-000000000003';
@@ -250,20 +251,25 @@ BEGIN
     AND live.customer_id = ('79000000-0000-4000-a000-' || pg_catalog.lpad(n.player::text, 12, '0'))::uuid;
   UPDATE public.quiz_events SET results_published_at = now() WHERE id = v_event;
   SET LOCAL session_replication_role = origin;
-  PERFORM pg_temp.expect('published count is the highest rank',
+  PERFORM pg_temp.expect('published count without a snapshot row is counted',
     public.get_quiz_participant_count_public_v2(v_event) = 3);
-  -- A ranked player whose row is deleted after publication still took part.
-  SET LOCAL session_replication_role = replica;
-  DELETE FROM public.quiz_event_results_v2 WHERE event_id = v_event AND rank = 2;
-  SET LOCAL session_replication_role = origin;
-  PERFORM pg_temp.expect('published count keeps players ranked at publication',
+  -- With a snapshot row, the first read stores the number ranked...
+  PERFORM pg_temp.board();
+  PERFORM pg_temp.expect('published count with a snapshot row',
     public.get_quiz_participant_count_public_v2(v_event) = 3);
-  -- Only losing the last-ranked row moves the highest rank.
+  -- (A separate statement: the one above cannot see its own function's write.)
+  PERFORM pg_temp.expect('published count is stored on the first read',
+    (SELECT snapshot.published_participant_count
+     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
+     WHERE snapshot.event_id = v_event) = 3);
+  -- ...so players whose rows are deleted later still count, whichever rank
+  -- they held (a middle rank and the last one here).
   SET LOCAL session_replication_role = replica;
-  DELETE FROM public.quiz_event_results_v2 WHERE event_id = v_event AND rank = 3;
+  DELETE FROM public.quiz_event_results_v2
+  WHERE event_id = v_event AND rank IN (2, 3);
   SET LOCAL session_replication_role = origin;
-  PERFORM pg_temp.expect('published count follows the highest remaining rank',
-    public.get_quiz_participant_count_public_v2(v_event) = 1);
+  PERFORM pg_temp.expect('published count survives deleted result rows',
+    public.get_quiz_participant_count_public_v2(v_event) = 3);
 END;
 $$;
 

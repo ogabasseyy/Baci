@@ -73,3 +73,15 @@ describe('bugfix: a held IMEI charge read as a finished purchase (walk M3)', () 
     await expect(markHeldImeiCharges(throwing, raw, rows)).resolves.toBe(rows);
   });
 });
+
+describe('bugfix: a charge being refunded read as a check still running (Muse)', () => {
+  it('marks a refund_pending charge as refunding, not pending', async () => {
+    const db = client({
+      data: [{ id: 'lookup-held', status: 'refund_pending' }],
+      error: null,
+    });
+    const [row] = await markHeldImeiCharges(db, raw, [tx('tx-held')]);
+    expect(row?.refunding).toBe(true);
+    expect(row?.pending).toBeUndefined();
+  });
+});

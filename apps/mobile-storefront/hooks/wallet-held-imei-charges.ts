@@ -6,8 +6,10 @@ const HELD_STATUSES = new Set([
   'provider_submitting',
   'pending_provider',
   'submission_unknown',
-  'refund_pending',
 ]);
+
+/** The check failed and its charge is on its way back to the wallet. */
+const REFUNDING_STATUS = 'refund_pending';
 
 const IMEI_CHARGE_SOURCE = 'imei_wallet_payment';
 
@@ -47,24 +49,23 @@ export async function markHeldImeiCharges(
   }
   if (!result || result.error || !Array.isArray(result.data))
     return transactions;
-  const held = new Set(
-    result.data.flatMap((lookup: unknown) => {
-      const { id, status } = (lookup ?? {}) as Record<string, unknown>;
-      return typeof id === 'string' &&
-        typeof status === 'string' &&
-        HELD_STATUSES.has(status)
-        ? [id]
-        : [];
+  const stateOf = new Map<string, 'pending' | 'refunding'>();
+  for (const lookup of result.data as unknown[]) {
+    const { id, status } = (lookup ?? {}) as Record<string, unknown>;
+    if (typeof id !== 'string' || typeof status !== 'string') continue;
+    if (HELD_STATUSES.has(status)) stateOf.set(id, 'pending');
+    else if (status === REFUNDING_STATUS) stateOf.set(id, 'refunding');
+  }
+  const stateOfTransaction = new Map(
+    charges.flatMap((charge) => {
+      const state = stateOf.get(charge.sourceId);
+      return state ? [[charge.id, state] as const] : [];
     })
   );
-  const heldTransactions = new Set(
-    charges
-      .filter((charge) => held.has(charge.sourceId))
-      .map((charge) => charge.id)
-  );
-  return transactions.map((transaction) =>
-    heldTransactions.has(transaction.id)
-      ? { ...transaction, pending: true }
-      : transaction
-  );
+  return transactions.map((transaction) => {
+    const state = stateOfTransaction.get(transaction.id);
+    if (state === 'pending') return { ...transaction, pending: true };
+    if (state === 'refunding') return { ...transaction, refunding: true };
+    return transaction;
+  });
 }

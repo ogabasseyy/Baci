@@ -180,3 +180,28 @@ describe('bugfix: a held IMEI charge showed as a finished purchase (walk M3)', (
     expect(screen.queryByText(/Pending/)).toBeNull();
   });
 });
+
+describe('bugfix: a refunding IMEI charge read as pending (Muse)', () => {
+  it('says the money is on its way back', () => {
+    render(
+      <WalletPrimaryContext.Provider value>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          transactions={[
+            {
+              amount: -500,
+              created_at: '2026-11-15T10:00:00.000Z',
+              description: 'IMEI check',
+              id: 'tx-imei',
+              type: 'redemption',
+              refunding: true,
+            },
+          ]}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.getByText(/· Refunding/)).toBeTruthy();
+    expect(screen.queryByText(/Pending/)).toBeNull();
+    expect(screen.getByLabelText(/IMEI check\. Refunding\./)).toBeTruthy();
+  });
+});

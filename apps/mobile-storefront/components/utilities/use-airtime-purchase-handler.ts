@@ -224,8 +224,7 @@ export function useAirtimePurchaseHandler({
       selectedProvider,
     });
     if (validationError) {
-      // Pay stays disabled with the reason shown in the form (inline notice),
-      // so an incomplete form never reaches here from a tap: no system alert.
+      // Pay is disabled with the reason shown in-page: no system alert.
       isSubmittingRef.current = false;
       return;
     }

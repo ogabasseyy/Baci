@@ -94,7 +94,22 @@ describe('getQuizAuthHeaders', () => {
     expect(mockGetSession).toHaveBeenCalledTimes(1);
   });
 
-  it('throws QUIZ_AUTH_REQUIRED when the session has a token but no user id', async () => {
+  it('retries once when the session has a token but no user yet, then succeeds', async () => {
+    mockGetSession
+      .mockResolvedValueOnce({
+        data: { session: { access_token: 'tok-3' } }, // half-loaded storage
+        error: null,
+      })
+      .mockResolvedValueOnce(withSession('tok-3', 'user-3'));
+
+    await expect(getQuizAuthHeaders()).resolves.toEqual({
+      headers: { Authorization: 'Bearer tok-3' },
+      userId: 'user-3',
+    });
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws QUIZ_AUTH_REQUIRED when the session still has a token but no user id after the retry', async () => {
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'tok-x' } },
       error: null,
@@ -104,6 +119,7 @@ describe('getQuizAuthHeaders', () => {
       code: 'QUIZ_AUTH_REQUIRED',
       status: 401,
     });
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
     expect(mockGetUser).not.toHaveBeenCalled();
   });
 });

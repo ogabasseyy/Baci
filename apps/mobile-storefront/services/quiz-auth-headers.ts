@@ -79,6 +79,12 @@ export async function getQuizAuthHeaders(): Promise<{
           userId,
         };
       }
+      // A token without its user is storage that has only half loaded. Give
+      // it the same single retry as a missing token before failing.
+      if (canRetry) {
+        await waitForQuizAuthRetry();
+        continue;
+      }
       break;
     } catch (error) {
       log.warn('Unable to read quiz auth session', {

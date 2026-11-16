@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizResult } from '@/services/quiz-results';
 import type { QuizV2Result } from '@/services/quiz-types';
-import { backoffDelay, randomDelay } from './quiz-retry-timing';
+import { backoffDelay, randomDelay, withSpread } from './quiz-retry-timing';
 import { useQuizResultRealtimeWakeup } from './use-quiz-result-realtime-wakeup';
 
 export const QUIZ_RESULT_POLL_INTERVAL_MS = 5_000;
@@ -37,7 +37,9 @@ function getPendingPollDelayMs(
     // HTTP fallback when that channel is unavailable.
     const waitMs = availableAtMs - nowMs;
     if (waitMs >= QUIZ_RESULT_POLL_MAX_INTERVAL_MS) {
-      return QUIZ_RESULT_POLL_MAX_INTERVAL_MS;
+      // Spread (+/- 20%) so phones that finished together do not keep
+      // polling in step every 30 s until the event ends.
+      return withSpread(QUIZ_RESULT_POLL_MAX_INTERVAL_MS);
     }
     // availableAt is the event end: the same instant for every player. Spread
     // this poll like the wake-up so the phones do not all ask at once. The

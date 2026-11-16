@@ -134,6 +134,7 @@ describe('useQuizResultPolling realtime and availability scheduling', () => {
   });
 
   it('caps the fallback when the device clock is behind server time', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5); // centre: exactly the cap
     jest
       .mocked(fetchQuizResult)
       .mockResolvedValueOnce({

@@ -181,4 +181,26 @@ describe('useQuizResultPolling wake-up and ordinary polls', () => {
     await advance(1);
     expect(fetchQuizResult).toHaveBeenCalledTimes(3);
   });
+
+  it('spreads the capped poll for a far-off event end between 24 s and 36 s', async () => {
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const farOff = new Date(Date.now() + 60 * 60 * 1_000).toISOString();
+    jest.mocked(fetchQuizResult).mockResolvedValue(pendingUntil(farOff));
+    renderWakeupHook();
+    await advance(0);
+
+    // 30 s at the lowest spread is 24 s.
+    await advance(23_999);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    // The poll schedules the next one as soon as it resolves, so the upper
+    // bound has to be in place before it fires.
+    random.mockReturnValue(1);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+    // 30 s at the highest spread is 36 s.
+    await advance(35_999);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(3);
+  });
 });

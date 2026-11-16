@@ -15,16 +15,35 @@ export const IMEI_CARE = {
   cardRadius: 15,
 } as const;
 
+/** Red, green and blue (0-255) of a #rgb, #rrggbb(aa) or rgb()/rgba() colour. */
+function readRgb(value: string): [number, number, number] | null {
+  const text = value.trim().toLowerCase();
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])([0-9a-f])?$/.exec(text);
+  if (short)
+    return [short[1], short[2], short[3]].map((d) =>
+      Number.parseInt(`${d}${d}`, 16)
+    ) as [number, number, number];
+  const long = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})?$/.exec(
+    text
+  );
+  if (long)
+    return [long[1], long[2], long[3]].map((h) => Number.parseInt(h, 16)) as [
+      number,
+      number,
+      number,
+    ];
+  const fn = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(text);
+  return fn ? [Number(fn[1]), Number(fn[2]), Number(fn[3])] : null;
+}
+
 /**
  * Dark when the page background is dim, judged by brightness rather than by
  * equality with white, so an off-white light theme still reads as light.
  */
 export function isImeiDark(colors: ImeiCheckerColors) {
-  const hex = /^#?([0-9a-f]{6})/i.exec(colors.background.trim())?.[1];
-  if (!hex) return colors.background !== colors.white;
-  const [r, g, b] = [0, 2, 4].map((at) =>
-    Number.parseInt(hex.slice(at, at + 2), 16)
-  );
+  const rgb = readRgb(colors.background);
+  if (!rgb) return colors.background !== colors.white;
+  const [r, g, b] = rgb;
   return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
 }
 

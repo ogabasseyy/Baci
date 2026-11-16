@@ -19,6 +19,16 @@ describe('imei care look', () => {
     expect(isImeiDark({ ...Colors.light, background: '#121212' })).toBe(true);
   });
 
+  it('reads short, translucent and rgb() backgrounds by brightness (Muse)', () => {
+    const on = (background: string) =>
+      isImeiDark({ ...Colors.light, background });
+    expect(on('#fff')).toBe(false);
+    expect(on('#111')).toBe(true);
+    expect(on('#ffffff00')).toBe(false);
+    expect(on('rgb(18, 18, 18)')).toBe(true);
+    expect(on('rgba(250, 250, 247, 1)')).toBe(false);
+  });
+
   it('uses a soft pink circle in light mode and a deep one in dark mode', () => {
     expect(imeiCareIcon(Colors.light)).toEqual({
       background: '#fce8ed',

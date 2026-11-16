@@ -206,10 +206,84 @@ describe('useQuizResultPolling realtime and availability scheduling', () => {
     });
     expect(fetchQuizResult).toHaveBeenCalledTimes(1);
 
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
     await act(async () => {
       mockQuizResultsWakeup.current?.();
       await Promise.resolve();
     });
+    // The wake-up is spread, not immediate.
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(4_000);
+    });
     expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+  });
+
+  const pendingThenFinal = () => {
+    const availableAt = new Date(Date.now()).toISOString();
+    jest
+      .mocked(fetchQuizResult)
+      .mockResolvedValueOnce({
+        attemptId: 'attempt-1',
+        availability: 'pending',
+        availableAt,
+      })
+      .mockResolvedValue({
+        attemptId: 'attempt-1',
+        availability: 'final',
+        availableAt,
+        rank: 1,
+        score: 4,
+        totalQuestions: 5,
+      });
+  };
+  const renderWakeupHook = () =>
+    renderHook(() =>
+      useQuizResultPolling({
+        attemptId: 'attempt-1',
+        enabled: true,
+        eventId: 'event-1',
+        expectedUserId: 'user-1',
+        onResult: jest.fn(),
+      })
+    );
+
+  it('delays the realtime wake-up poll by a random 0-4 s', async () => {
+    pendingThenFinal();
+    renderWakeupHook();
+    await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
+
+    jest.spyOn(Math, 'random').mockReturnValue(0.25);
+    await act(async () => {
+      mockQuizResultsWakeup.current?.();
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(999);
+    });
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1);
+    });
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a delayed wake-up poll on unmount', async () => {
+    pendingThenFinal();
+    const { unmount } = renderWakeupHook();
+    await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
+
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    const wakeup = mockQuizResultsWakeup.current;
+    await act(async () => {
+      wakeup?.();
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    unmount();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10_000);
+    });
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
   });
 });

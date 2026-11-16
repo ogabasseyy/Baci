@@ -2,12 +2,16 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizResult } from '@/services/quiz-results';
 import type { QuizV2Result } from '@/services/quiz-types';
+import { randomDelay } from './quiz-retry-timing';
 import { useQuizResultRealtimeWakeup } from './use-quiz-result-realtime-wakeup';
 
 export const QUIZ_RESULT_POLL_INTERVAL_MS = 5_000;
 export const QUIZ_RESULT_POLL_MAX_INTERVAL_MS = 30_000;
 export const QUIZ_RESULT_POST_DEADLINE_FALLBACK_MIN_MS = 8_000;
 const QUIZ_RESULT_POST_DEADLINE_FALLBACK_JITTER_MS = 4_000;
+// Spread of the realtime "results ready" wake-up so thousands of phones do
+// not all poll in the same instant.
+export const QUIZ_RESULT_WAKEUP_MAX_DELAY_MS = 4_000;
 
 function getStableFallbackDelayMs(attemptId: string): number {
   let hash = 0;
@@ -82,6 +86,11 @@ export function useQuizResultPolling({
       AppState.currentState !== 'background' &&
       AppState.currentState !== 'inactive';
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let wakeupId: ReturnType<typeof setTimeout> | undefined;
+    const clearWakeup = () => {
+      if (wakeupId) clearTimeout(wakeupId);
+      wakeupId = undefined;
+    };
 
     const schedule = (delayMs = QUIZ_RESULT_POLL_INTERVAL_MS) => {
       if (cancelled || !appIsActive) return;
@@ -125,20 +134,26 @@ export function useQuizResultPolling({
       }
     };
     pollNowRef.current = () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = undefined;
       if (cancelled || !appIsActive) return;
-      if (inFlight) {
-        resumeAfterFlight = true;
-        return;
-      }
-      void poll();
+      clearWakeup();
+      wakeupId = setTimeout(() => {
+        wakeupId = undefined;
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = undefined;
+        if (cancelled || !appIsActive) return;
+        if (inFlight) {
+          resumeAfterFlight = true;
+          return;
+        }
+        void poll();
+      }, randomDelay(QUIZ_RESULT_WAKEUP_MAX_DELAY_MS));
     };
 
     void poll();
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = undefined;
+      if (nextState !== 'active') clearWakeup();
       appIsActive = nextState === 'active';
       if (!appIsActive) return;
       if (inFlight) {
@@ -152,6 +167,7 @@ export function useQuizResultPolling({
     return () => {
       cancelled = true;
       pollNowRef.current = () => undefined;
+      clearWakeup();
       if (timeoutId) clearTimeout(timeoutId);
       subscription.remove();
     };

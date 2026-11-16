@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
+import { backoffDelay, randomDelay, withSpread } from './quiz-retry-timing';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
 import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
@@ -106,7 +107,8 @@ export function useQuizWaitingRoom({
   const startedRef = useRef(false);
   const stoppedRef = useRef(false);
   const suspendedRef = useRef(suspended);
-  const lastBoundaryRefreshAtRef = useRef(0);
+  const nextBoundaryRefreshAtRef = useRef(0);
+  const boundaryFailuresRef = useRef(0);
   const appStateRef = useRef<typeof AppState.currentState>(
     AppState.currentState
   );
@@ -180,6 +182,7 @@ export function useQuizWaitingRoom({
       const nextEvent = events.find(
         (candidate) => candidate.id === eventRef.current.id
       );
+      boundaryFailuresRef.current = 0;
       if (nextEvent) {
         setError(null);
         applyRefreshedEvent(nextEvent);
@@ -192,8 +195,17 @@ export function useQuizWaitingRoom({
       if (
         requestGeneration === refreshGenerationRef.current &&
         inFlightRequestRef.current === requestId
-      )
+      ) {
         setError('Waiting for the latest quiz status.');
+        boundaryFailuresRef.current += 1;
+        nextBoundaryRefreshAtRef.current =
+          Date.now() +
+          backoffDelay({
+            baseMs: BOUNDARY_REFRESH_MIN_INTERVAL_MS,
+            failures: boundaryFailuresRef.current,
+            capMs: 5_000,
+          });
+      }
     } finally {
       if (inFlightRequestRef.current === requestId) {
         inFlightRequestRef.current = null;
@@ -230,6 +242,8 @@ export function useQuizWaitingRoom({
 
   useEffect(() => {
     let mounted = true;
+    // Per-mount offset so phones do not all refresh at countdown zero.
+    const firstRefreshOffsetMs = randomDelay(BOUNDARY_REFRESH_MIN_INTERVAL_MS);
     const tick = () => {
       if (
         !mounted ||
@@ -245,11 +259,11 @@ export function useQuizWaitingRoom({
       setRemainingSeconds(nextRemainingSeconds);
       if (nextRemainingSeconds === 0) {
         const now = Date.now();
-        if (
-          now - lastBoundaryRefreshAtRef.current >=
-          BOUNDARY_REFRESH_MIN_INTERVAL_MS
-        ) {
-          lastBoundaryRefreshAtRef.current = now;
+        if (!nextBoundaryRefreshAtRef.current)
+          nextBoundaryRefreshAtRef.current = now + firstRefreshOffsetMs;
+        if (now >= nextBoundaryRefreshAtRef.current) {
+          nextBoundaryRefreshAtRef.current =
+            now + withSpread(BOUNDARY_REFRESH_MIN_INTERVAL_MS);
           void refreshAuthoritativeRef.current();
         }
       }

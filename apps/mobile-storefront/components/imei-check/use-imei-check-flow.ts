@@ -137,7 +137,7 @@ export function useImeiCheckFlow(
     if (!imeiCheckScreenActions.isValidFor(imei, serviceTier, device))
       return setError(imeiCheckScreenActions.invalidFor(serviceTier, device));
     const decision = await decideImeiVerify({
-      retainedStoreCredit: await requestIdentity.retains(tier, imei, device),
+      retainsStoreCredit: () => requestIdentity.retains(tier, imei, device),
       retainsPiggyvest: () => walletPay.retains(tier, imei),
       ownerAtTap: useAuthStore.getState().user?.id ?? null,
       currentOwner: () => useAuthStore.getState().user?.id ?? null,

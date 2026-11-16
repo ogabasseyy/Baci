@@ -9,6 +9,7 @@ import { SavingsProductThumb } from './SavingsProductThumb';
 import { EARLY_CANCEL_INTEREST_NOTE } from './savings-interest-copy';
 import { savingsPaceWords } from './savings-pace-words';
 import { savingsProductImage } from './savings-product-image';
+import { timeToGo } from './savings-time-to-go';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 
@@ -139,15 +140,6 @@ function yoursLine(
   if (daysToGo === null)
     return `Yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
   return `Yours in about ${timeToGo(daysToGo)}`;
-}
-
-/** Days up to six months, then months, then years past two years. */
-function timeToGo(days: number) {
-  const plural = (n: number, unit: string) =>
-    `${n} ${unit}${n === 1 ? '' : 's'}`;
-  if (days <= 180) return plural(days, 'day');
-  if (days < 730) return plural(Math.round(days / 30.44), 'month');
-  return plural(Math.round(days / 365.25), 'year');
 }
 
 function timelineLabel(startDate: string, phoneDate: string) {

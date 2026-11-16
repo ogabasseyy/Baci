@@ -27,8 +27,8 @@ Screenshots are local only: `/private/tmp/claude-501/-Users-mac-Baci-app/a619119
 | L2 | Low | Start Savings step 3 + cancel review | Interest warnings show on a savings-only plan: "Cancel early and lose your interest" and "Any interest earned isn't refunded". | Pick "No, savings only" | 12, 25 | Start Savings / cancel step |
 | L3 | Low | Cancel review + "Goal cancelled" | "main wallet" where the card says "Savings wallet". | Cancel goal | 25, 28 | cancel step copy |
 | L4 | Low | Savings sheet | The "Savings updated" notice stays pinned above Change phone and its review step. | Add ₦200 → Change | 22, 23 | savings sheet |
-| L5 | Low | Add to savings | The amount pre-fills Max (the whole balance) on open and again after a phone switch. | Open the sheet | 15, 24 | savings sheet (decision) |
-| L6 | Low | Start Savings | No nudge when a plan runs about 42 years (₦500 a month for ₦250,000). | Step 2 | 10 | product decision |
+| L5 | Low | Add to savings | The amount pre-fills Max (the whole balance) on open and again after a phone switch. | Open the sheet | 15, 24 | Fixed (owner decision 2026-11-16): the amount now starts empty; the customer types one or taps Max. |
+| L6 | Low | Start Savings | No nudge when a plan runs about 42 years (₦500 a month for ₦250,000). | Step 2 | 10 | Fixed (owner decision 2026-11-16): a plan longer than 2 years shows a friendly note on step 2 suggesting a bigger amount; Continue stays available. |
 | L7 | Low | Change phone review | No back arrow, only the "Keep …" link. | Change → pick a phone | 23 | savings sheet |
 | L8 | Low | Airtime | The single payment method isn't preselected. | Airtime | 46 | utilities form |
 | D1 | Design | IMEI checker page | "Other options" toggles look like plain text and repeat under each section; the title stays "IMEI Results" after Back; "Out Of Warranty" is shown in green. | IMEI checker | 37–42, 35 | Handed to the IMEI redesign session (builds on #3874) |

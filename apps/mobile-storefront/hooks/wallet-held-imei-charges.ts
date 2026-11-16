@@ -1,7 +1,7 @@
 import type { Transaction } from './wallet-query';
 
 /** IMEI check states where the charge is held: the check has not finished. */
-const HELD_STATUSES = new Set([
+export const HELD_STATUSES = new Set([
   'pending',
   'provider_submitting',
   'pending_provider',
@@ -9,7 +9,16 @@ const HELD_STATUSES = new Set([
 ]);
 
 /** The check failed and its charge is on its way back to the wallet. */
-const REFUNDING_STATUS = 'refund_pending';
+export const REFUNDING_STATUS = 'refund_pending';
+
+/** Finished states: the row reads as a plain charge (or its refund row). */
+export const FINISHED_STATUSES = new Set([
+  'completed',
+  'wallet_rejected',
+  'failed_error',
+  'refunded_error',
+  'refunded_not_found',
+]);
 
 const IMEI_CHARGE_SOURCE = 'imei_wallet_payment';
 

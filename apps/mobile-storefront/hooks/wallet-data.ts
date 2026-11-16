@@ -257,7 +257,7 @@ export async function fetchWalletDataUnbounded(
         return rows;
       }, []);
       transactionRows = await markHeldImeiCharges(
-        readImeiLookupStatuses(merchantId),
+        readImeiLookupStatuses(merchantId, customerId),
         txResult.data,
         transactionRows
       );

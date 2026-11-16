@@ -123,10 +123,15 @@ jest.mock('@/lib/vtu-checkout', () => {
   };
 });
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { customer: null }) => unknown) =>
-    selector({ customer: null }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = Object.assign(
+    (selector: (state: { customer: null }) => unknown) =>
+      selector({ customer: null }),
+    // The wallet pay hand-over reads the signed-in account directly.
+    { getState: () => ({ user: null }) }
+  );
+  return { useAuthStore };
+});
 
 jest.mock('@/hooks/use-vtu-verify', () => ({
   useVTUVerify: () => ({

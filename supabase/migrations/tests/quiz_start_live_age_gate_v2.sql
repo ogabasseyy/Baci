@@ -95,34 +95,41 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+-- Each failed expectation raises a unique SQLSTATE: "T<n>" plus the last three
+-- characters of the real state, so a replay log (which only prints the
+-- SQLSTATE) says which check failed and why.
+CREATE FUNCTION pg_temp.expect(p_n integer, p_expected text, p_actual text)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  IF p_actual IS DISTINCT FROM p_expected THEN
+    RAISE EXCEPTION 'check %: expected %, got %', p_n, p_expected, p_actual
+      USING ERRCODE = 'T' || p_n::text
+        || CASE WHEN p_actual = 'started' THEN 'STA'
+                ELSE pg_catalog.right(COALESCE(p_actual, '000'), 3) END;
+  END IF;
+END;
+$$;
+
 DO $$
 DECLARE
   v_today date := (now() AT TIME ZONE 'UTC')::date;
 BEGIN
-  IF pg_temp.start_state(NULL) <> 'QZ013' THEN
-    RAISE EXCEPTION 'missing date of birth must raise QZ013, got %', pg_temp.start_state(NULL);
-  END IF;
-  IF pg_temp.start_state((v_today - interval '17 years')::date) <> 'QZ014' THEN
-    RAISE EXCEPTION 'age 17 must raise QZ014';
-  END IF;
-  IF pg_temp.start_state((v_today - interval '18 years' + interval '1 day')::date) <> 'QZ014' THEN
-    RAISE EXCEPTION 'day before 18th birthday must raise QZ014';
-  END IF;
-  IF pg_temp.start_state((v_today - interval '18 years')::date) <> 'started' THEN
-    RAISE EXCEPTION 'exactly 18 today must start, got %', pg_temp.start_state((v_today - interval '18 years')::date);
-  END IF;
-  IF pg_temp.start_state((v_today - interval '40 years')::date) <> 'started' THEN
-    RAISE EXCEPTION 'adult must start';
-  END IF;
+  PERFORM pg_temp.expect(1, 'QZ013', pg_temp.start_state(NULL));
+  PERFORM pg_temp.expect(2, 'QZ014',
+    pg_temp.start_state((v_today - interval '17 years')::date));
+  PERFORM pg_temp.expect(3, 'QZ014',
+    pg_temp.start_state((v_today - interval '18 years' + interval '1 day')::date));
+  PERFORM pg_temp.expect(4, 'started',
+    pg_temp.start_state((v_today - interval '18 years')::date));
+  PERFORM pg_temp.expect(5, 'started',
+    pg_temp.start_state((v_today - interval '40 years')::date));
   -- Gate must precede resume: with a started attempt already present, an
   -- under-18 DOB on the same live event is still refused.
-  IF pg_temp.start_state((v_today - interval '17 years')::date) <> 'QZ014' THEN
-    RAISE EXCEPTION 'under-18 must not resume an existing live attempt';
-  END IF;
-  IF pg_temp.start_state((v_today - interval '17 years')::date,
-    '76000000-0000-4000-8000-000000000010'::uuid) <> 'started' THEN
-    RAISE EXCEPTION 'under-18 test-mode start must be unchanged (allowed)';
-  END IF;
+  PERFORM pg_temp.expect(6, 'QZ014',
+    pg_temp.start_state((v_today - interval '17 years')::date));
+  PERFORM pg_temp.expect(7, 'started',
+    pg_temp.start_state((v_today - interval '17 years')::date,
+      '76000000-0000-4000-8000-000000000010'::uuid));
 END;
 $$;
 ROLLBACK;

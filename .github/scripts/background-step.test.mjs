@@ -72,6 +72,31 @@ test('wait stops the command and fails at the timeout while it is still running'
   });
 });
 
+test('a timed-out wait also stops grandchildren of the command where setsid exists', (t) => {
+  if (spawnSync('sh', ['-c', 'command -v setsid']).status !== 0) {
+    t.skip('setsid is not installed here (macOS); the Linux CI runners have it');
+    return;
+  }
+  withTemp((run, dir) => {
+    const grandchildPid = join(dir, 'grandchild.pid');
+    run('start', 'tree-step', 'bash', '-c', `sleep 30 & echo $! > ${grandchildPid}; wait`);
+    const deadline = Date.now() + 5_000;
+    let pid = 0;
+    while (!pid && Date.now() < deadline) {
+      try {
+        pid = Number(readFileSync(grandchildPid, 'utf8'));
+      } catch {
+        spawnSync('sleep', ['0.1']);
+      }
+    }
+    assert.ok(pid > 0, 'grandchild started');
+    assert.equal(run('wait', 'tree-step', '1').status, 1);
+    const stopDeadline = Date.now() + 5_000;
+    while (isAlive(pid) && Date.now() < stopDeadline) spawnSync('sleep', ['0.1']);
+    assert.equal(isAlive(pid), false);
+  });
+});
+
 test('rejects names that could escape the background-steps folder', () => {
   withTemp((run) => {
     assert.equal(run('start', '../x', 'true').status, 2);

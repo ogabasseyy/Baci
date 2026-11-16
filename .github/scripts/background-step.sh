@@ -42,9 +42,12 @@ case "$action" in
     # everything it started (docker pull, pnpm) together.
     launcher=()
     command -v setsid > /dev/null 2>&1 && launcher=(setsid)
-    nohup ${launcher[@]+"${launcher[@]}"} bash -c '"$@" > "$0" 2>&1; echo $? > "$0.status.tmp"; mv "$0.status.tmp" "${0%.log}.status"' \
+    # The inner shell writes its own PID ($$): under setsid it is the session and process-group
+    # leader even if setsid had to fork, so `kill -- -PID` reaches every grandchild.
+    rm -f "$pidfile"
+    nohup ${launcher[@]+"${launcher[@]}"} bash -c 'echo $$ > "${0%.log}.pid"; "$@" > "$0" 2>&1; echo $? > "$0.status.tmp"; mv "$0.status.tmp" "${0%.log}.status"' \
       "$log" "$@" > /dev/null 2>&1 &
-    echo "$!" > "$pidfile"
+    for _ in $(seq 1 50); do [[ -s "$pidfile" ]] && break; sleep 0.1; done
     echo "Started background step '$name'"
     ;;
   wait)

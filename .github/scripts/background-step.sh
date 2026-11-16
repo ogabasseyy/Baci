@@ -10,7 +10,8 @@
 # overlapped steps is not included. The job's timeout-minutes still bounds the total.
 #
 # `wait` prints the command's output and exits with the command's exit status. It fails when the
-# command was never started, or when it is still running at the timeout.
+# command was never started, or when it is still running at the timeout; then it stops the command
+# (its whole process group where `setsid` exists, as on the Linux runners) before exiting.
 set -euo pipefail
 
 usage() {
@@ -27,6 +28,7 @@ dir="${RUNNER_TEMP:?RUNNER_TEMP is required}/background-steps"
 log="$dir/$name.log"
 status="$dir/$name.status"
 started="$dir/$name.started"
+pidfile="$dir/$name.pid"
 
 case "$action" in
   start)
@@ -36,8 +38,13 @@ case "$action" in
     : > "$started"
     # The runner keeps background processes alive across steps and reaps them at job end
     # ("Cleaning up orphan processes"). The inner shell records the exit status atomically.
-    nohup bash -c '"$@" > "$0" 2>&1; echo $? > "$0.status.tmp"; mv "$0.status.tmp" "${0%.log}.status"' \
+    # With setsid the command leads its own process group, so a timed-out `wait` can stop it and
+    # everything it started (docker pull, pnpm) together.
+    launcher=()
+    command -v setsid > /dev/null 2>&1 && launcher=(setsid)
+    nohup ${launcher[@]+"${launcher[@]}"} bash -c '"$@" > "$0" 2>&1; echo $? > "$0.status.tmp"; mv "$0.status.tmp" "${0%.log}.status"' \
       "$log" "$@" > /dev/null 2>&1 &
+    echo "$!" > "$pidfile"
     echo "Started background step '$name'"
     ;;
   wait)
@@ -47,7 +54,11 @@ case "$action" in
     waited=0
     while [[ ! -f "$status" ]]; do
       if (( waited >= timeout )); then
-        echo "background step '$name' still running after ${timeout}s" >&2
+        echo "background step '$name' still running after ${timeout}s; stopping it" >&2
+        if [[ -f "$pidfile" ]]; then
+          pid="$(cat "$pidfile")"
+          kill -TERM -- "-$pid" 2> /dev/null || { pkill -TERM -P "$pid" 2> /dev/null || true; kill -TERM "$pid" 2> /dev/null || true; }
+        fi
         [[ -f "$log" ]] && cat "$log"
         exit 1
       fi

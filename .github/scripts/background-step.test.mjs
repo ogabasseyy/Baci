@@ -1,20 +1,31 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 const script = new URL('./background-step.sh', import.meta.url).pathname;
 
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function withTemp(fn) {
   const dir = mkdtempSync(join(tmpdir(), 'bg-step-'));
   try {
-    return fn((...args) =>
-      spawnSync('bash', [script, ...args], {
-        encoding: 'utf8',
-        env: { PATH: process.env.PATH, RUNNER_TEMP: dir },
-      })
+    return fn(
+      (...args) =>
+        spawnSync('bash', [script, ...args], {
+          encoding: 'utf8',
+          env: { PATH: process.env.PATH, RUNNER_TEMP: dir },
+        }),
+      dir
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -47,14 +58,17 @@ test('wait fails when the step was never started, so a renamed start cannot pass
   });
 });
 
-test('wait fails at the timeout while the command is still running', () => {
-  withTemp((run) => {
-    run('start', 'slow-step', 'sleep', '3');
+test('wait stops the command and fails at the timeout while it is still running', () => {
+  withTemp((run, dir) => {
+    run('start', 'slow-step', 'sleep', '30');
+    const pid = Number(readFileSync(join(dir, 'background-steps', 'slow-step.pid'), 'utf8'));
     const result = run('wait', 'slow-step', '1');
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /still running after 1s/);
-    // Let the sleep finish before the temp folder is removed, so no process outlives the test.
-    assert.equal(run('wait', 'slow-step', '30').status, 0);
+    assert.match(result.stderr, /still running after 1s; stopping it/);
+    // The timed-out command is stopped, not left running into later steps.
+    const deadline = Date.now() + 5_000;
+    while (isAlive(pid) && Date.now() < deadline) spawnSync('sleep', ['0.1']);
+    assert.equal(isAlive(pid), false);
   });
 });
 

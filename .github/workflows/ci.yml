@@ -492,6 +492,8 @@ jobs:
       # so replay sql-check is sufficient for the order-offer and
       # product-request suites without a second disposable runner.
       - name: Prepare pinned Supabase database image
+        # Also after an earlier step failed, so the download's output is always shown.
+        if: ${{ !cancelled() }}
         run: bash .github/scripts/background-step.sh wait replay-image 900
       - name: Test final order-notification outbox RPC privileges
         run: >-

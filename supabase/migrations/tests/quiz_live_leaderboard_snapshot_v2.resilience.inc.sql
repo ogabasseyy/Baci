@@ -2,8 +2,8 @@
 -- transaction, signed in as player 120 (rank 122 once step 5 has run).
 
 -- 5b. A rebuild that fails must not take the board down: the previous
---     snapshot is served. The rebuild is made to fail by a temporary guard on
---     the snapshot table.
+--     snapshot is served, but only while it is less than a minute old. The
+--     rebuild is made to fail by a temporary guard on the snapshot table.
 CREATE FUNCTION pg_temp.fail_snapshot_write() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -15,7 +15,7 @@ BEFORE INSERT OR UPDATE ON public.quiz_live_leaderboard_snapshots_v2
 FOR EACH ROW EXECUTE FUNCTION pg_temp.fail_snapshot_write();
 SET LOCAL session_replication_role = replica;
 UPDATE public.quiz_live_leaderboard_snapshots_v2
-SET computed_at = pg_catalog.clock_timestamp() - interval '1 minute'
+SET computed_at = pg_catalog.clock_timestamp() - interval '30 seconds'
 WHERE event_id = '79000000-0000-4000-8000-000000000003';
 SET LOCAL session_replication_role = origin;
 DO $$
@@ -26,6 +26,18 @@ BEGIN
     v_board->>'status' = 'live'
       AND pg_catalog.jsonb_array_length(v_board->'entries') = 100
       AND (v_board->>'participant_count')::integer = 153);
+END;
+$$;
+SET LOCAL session_replication_role = replica;
+UPDATE public.quiz_live_leaderboard_snapshots_v2
+SET computed_at = pg_catalog.clock_timestamp() - interval '2 minutes'
+WHERE event_id = '79000000-0000-4000-8000-000000000003';
+SET LOCAL session_replication_role = origin;
+DO $$
+BEGIN
+  PERFORM pg_temp.board();
+  RAISE EXCEPTION 'failed: a board more than a minute old was served';
+EXCEPTION WHEN SQLSTATE '55000' THEN NULL;
 END;
 $$;
 DROP TRIGGER quiz_snapshot_regression_guard

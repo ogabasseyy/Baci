@@ -38,16 +38,15 @@ CREATE TABLE IF NOT EXISTS public.quiz_live_leaderboard_snapshots_v2 (
     CHECK (pg_catalog.jsonb_typeof(score_counts) = 'object'),
   participant_count integer NOT NULL CHECK (participant_count >= 0),
   computed_at timestamptz NOT NULL,
-  -- Players ranked when results were published. Stored once by the count
-  -- function (20261116203102) on its first read after publication; NULL
-  -- until then. The rebuild below never touches it.
+  -- Result rows of a published event, as last counted by the count function
+  -- (20261116203102), and when. It recounts at most once a minute, so a
+  -- repair or a deleted account shows within a minute with no manual step.
+  -- NULL until the first read after publication. The rebuild below never
+  -- touches either column.
   published_participant_count integer
-    CHECK (published_participant_count >= 0)
+    CHECK (published_participant_count >= 0),
+  published_count_checked_at timestamptz
 );
--- The caveat lives on the column, where someone repairing data will see it.
-COMMENT ON COLUMN
-  public.quiz_live_leaderboard_snapshots_v2.published_participant_count IS
-  'Players ranked at publication, stored on the first count read after publication. Set to NULL after re-ranking an already published event so the next read recounts.';
 
 ALTER TABLE public.quiz_live_leaderboard_snapshots_v2 ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.quiz_live_leaderboard_snapshots_v2

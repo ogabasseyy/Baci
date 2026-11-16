@@ -12,18 +12,20 @@
 -- those few seconds this count and the board's own participant_count can
 -- differ by the players who finished in between.
 --
--- Published event: the number of players ranked at publication. Results and
--- results_published_at are written in one transaction, so the first read
--- after publication sees every ranked row. That read counts them once and
--- stores the number in the snapshot row; every later read is one primary-key
--- lookup, at the moment every phone loads the final board. The stored number
--- does not change when a ranked player's row is deleted later (ON DELETE
--- CASCADE), whichever rank they held: they still took part. If the event has
--- no snapshot row yet (its live board was never built), the count is stored
--- in a placeholder row whose computed_at is -infinity; the board function
--- treats that as "no board yet" and builds a real one on its first call. One
--- limit: a manual repair that re-ranks a published event must clear
--- published_participant_count.
+-- Published event: the number of result rows, as the function it replaces
+-- returned, but counted at most once a minute instead of on every call.
+-- Results and results_published_at are written in one transaction, so the
+-- first read after publication sees every ranked row. The count is stored in
+-- the snapshot row with the time it was taken; reads within the next minute
+-- are one primary-key lookup, at the moment every phone loads the final
+-- board. After a minute one request recounts (single flight through a
+-- transaction advisory lock) while the others keep returning the stored
+-- number. So a repair that re-ranks a published event, or a deleted account
+-- whose row cascades away, shows within a minute with no manual step. If the
+-- event has no snapshot row yet (its live board was never built), the count
+-- is stored in a placeholder row whose computed_at is -infinity; the board
+-- function treats that as "no board yet" and builds a real one on its first
+-- call.
 --
 -- Access is the same as in the function this replaces: any signed-in
 -- customer of the event's merchant. That has always been a lighter gate than
@@ -39,6 +41,7 @@ SET search_path = ''
 SET lock_timeout = '2s'
 AS $$
 DECLARE
+  v_checked_at timestamptz;
   v_count integer;
   v_customer_id uuid;
   v_event public.quiz_events%ROWTYPE;
@@ -62,31 +65,44 @@ BEGIN
     RETURN 0;
   END IF;
   IF v_event.results_published_at IS NOT NULL THEN
-    SELECT snapshot.published_participant_count INTO v_count
+    SELECT snapshot.published_participant_count,
+      snapshot.published_count_checked_at
+    INTO v_count, v_checked_at
     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
     WHERE snapshot.event_id = p_event_id;
     IF v_count IS NOT NULL THEN
-      RETURN v_count;
+      IF v_checked_at
+          >= pg_catalog.clock_timestamp() - interval '60 seconds' THEN
+        RETURN v_count;
+      END IF;
+      -- Due for a recount. One request does it; the others keep returning
+      -- the stored number instead of all counting at once.
+      IF NOT pg_catalog.pg_try_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+          'quiz_published_participant_count_v2:' || p_event_id::text, 0
+        )
+      ) THEN
+        RETURN v_count;
+      END IF;
     END IF;
     SELECT pg_catalog.count(*)::integer INTO v_count
     FROM public.quiz_event_results_v2 AS result
     WHERE result.event_id = p_event_id;
-    -- Keep the first count, creating a placeholder row when no board was
-    -- ever built. Concurrent first readers queue on the row and the later
-    -- ones change nothing. A failed or slow write (this function's own
+    -- Store the count with its time, creating a placeholder row when no
+    -- board was ever built. A failed or slow write (this function's own
     -- 2-second lock_timeout) must not fail the read. (A statement timeout is
     -- not caught by OTHERS and still ends the request.)
     BEGIN
       INSERT INTO public.quiz_live_leaderboard_snapshots_v2 AS snapshot (
         event_id, entries, score_counts, participant_count, computed_at,
-        published_participant_count
+        published_participant_count, published_count_checked_at
       ) VALUES (
         p_event_id, '[]'::jsonb, '{}'::jsonb, 0, '-infinity'::timestamptz,
-        v_count
+        v_count, pg_catalog.clock_timestamp()
       )
       ON CONFLICT (event_id) DO UPDATE
-      SET published_participant_count = EXCLUDED.published_participant_count
-      WHERE snapshot.published_participant_count IS NULL;
+      SET published_participant_count = EXCLUDED.published_participant_count,
+          published_count_checked_at = EXCLUDED.published_count_checked_at;
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING 'QUIZ_PUBLISHED_COUNT_STORE_FAILED sqlstate=%', SQLSTATE;
     END;

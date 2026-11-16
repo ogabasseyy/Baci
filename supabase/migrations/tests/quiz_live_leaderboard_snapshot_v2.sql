@@ -180,8 +180,8 @@ $$;
 \ir quiz_live_leaderboard_snapshot_v2.resilience.inc.sql
 
 -- 6. The count endpoint: snapshot while live, exact count without a fresh
---    snapshot, and once published the number ranked at publication, stored
---    on the first read so that later deletions do not change it.
+--    snapshot, and once published the number of result rows, stored and
+--    recounted at most once a minute.
 DO $$
 DECLARE
   v_event constant uuid := '79000000-0000-4000-8000-000000000003';
@@ -210,6 +210,7 @@ BEGIN
   -- function's write.)
   PERFORM pg_temp.expect('published count is stored on the first read',
     (SELECT snapshot.published_participant_count = 3
+       AND snapshot.published_count_checked_at IS NOT NULL
        AND snapshot.computed_at = '-infinity'::timestamptz
      FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
      WHERE snapshot.event_id = v_event));
@@ -219,14 +220,25 @@ BEGIN
     pg_catalog.jsonb_array_length(pg_temp.board()->'entries') = 100);
   PERFORM pg_temp.expect('published count after the board is built',
     public.get_quiz_participant_count_public_v2(v_event) = 3);
-  -- ...so players whose rows are deleted later still count, whichever rank
-  -- they held (a middle rank and the last one here).
+  -- Result rows change (a repair, a deleted account): the stored number is
+  -- served for up to a minute, then recounted without any manual step.
   SET LOCAL session_replication_role = replica;
   DELETE FROM public.quiz_event_results_v2
   WHERE event_id = v_event AND rank IN (2, 3);
   SET LOCAL session_replication_role = origin;
-  PERFORM pg_temp.expect('published count survives deleted result rows',
+  PERFORM pg_temp.expect('published count is served from the store for a minute',
     public.get_quiz_participant_count_public_v2(v_event) = 3);
+  UPDATE public.quiz_live_leaderboard_snapshots_v2
+  SET published_count_checked_at = pg_catalog.clock_timestamp() - interval '2 minutes'
+  WHERE event_id = v_event;
+  PERFORM pg_temp.expect('published count is recounted after a minute',
+    public.get_quiz_participant_count_public_v2(v_event) = 1);
+  PERFORM pg_temp.expect('the recount is stored',
+    (SELECT snapshot.published_participant_count = 1
+       AND snapshot.published_count_checked_at
+         > pg_catalog.clock_timestamp() - interval '1 minute'
+     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
+     WHERE snapshot.event_id = v_event));
 END;
 $$;
 

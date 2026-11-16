@@ -15,9 +15,11 @@
 -- Names are as old as the snapshot too. The rules that replace a name with an
 -- alias (deleted customer, suppressed identity, blank username) are applied
 -- when the snapshot is built, not on every call as before. A suppression or
--- deletion therefore reaches the board at the next rebuild: within about 2
--- seconds while anyone is polling, and not until a rebuild succeeds if
--- rebuilds are failing (each failure logs QUIZ_LIVE_SNAPSHOT_REFRESH_FAILED).
+-- deletion therefore reaches the board at the next rebuild, within about 2
+-- seconds while anyone is polling. If rebuilds keep failing (each failure
+-- logs QUIZ_LIVE_SNAPSHOT_REFRESH_FAILED) the last board is served for at
+-- most a minute; after that the request fails rather than show a board that
+-- may still carry a name hidden or deleted since.
 
 BEGIN;
 
@@ -129,6 +131,14 @@ BEGIN
         END;
       END IF;
     END IF;
+  END IF;
+
+  -- Never serve a board more than a minute old. Rebuilds that keep failing,
+  -- or a refresher stuck holding the lock, end in an error here (the app
+  -- retries with backoff) instead of a frozen board.
+  IF v_snapshot.computed_at
+      < pg_catalog.clock_timestamp() - interval '60 seconds' THEN
+    RAISE EXCEPTION 'quiz_live_leaderboard_stale' USING ERRCODE = '55000';
   END IF;
 
   -- Names are served as stored: the refresher applied the alias rules, so a

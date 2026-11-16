@@ -101,9 +101,8 @@ export async function POST(request: NextRequest) {
 
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
-    // Authenticated client for everything except the admission
-    // proof and fulfillment (Phase 2): RLS + JWT-verifying RPCs
-    // own tenant isolation here.
+    // Authenticated client for everything except the admission proof and
+    // fulfillment (Phase 2): RLS + JWT-verifying RPCs own tenant isolation.
     const userSupabase = auth.supabase;
     const adminSupabase = createAdminClient();
     // Pay from the PiggyVest wallet (dark): replaces "fulfil now" below.

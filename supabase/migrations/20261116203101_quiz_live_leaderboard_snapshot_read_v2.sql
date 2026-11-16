@@ -11,6 +11,13 @@
 -- histogram) plus an index range scan inside the caller's own score bucket.
 -- Either way this is a provisional board: final ranks and prizes come only
 -- from quiz_event_results_v2.
+--
+-- Names are as old as the snapshot too. The rules that replace a name with an
+-- alias (deleted customer, suppressed identity, blank username) are applied
+-- when the snapshot is built, not on every call as before. A suppression or
+-- deletion therefore reaches the board at the next rebuild: within about 2
+-- seconds while anyone is polling, and not until a rebuild succeeds if
+-- rebuilds are failing (each failure logs QUIZ_LIVE_SNAPSHOT_REFRESH_FAILED).
 
 BEGIN;
 
@@ -112,6 +119,8 @@ BEGIN
     END IF;
   END IF;
 
+  -- Names are served as stored: the refresher applied the alias rules, so a
+  -- new suppression or deletion shows at the next rebuild (see the header).
   SELECT COALESCE(
     pg_catalog.jsonb_agg(
       (item.entry - 'customer_id') || pg_catalog.jsonb_build_object(

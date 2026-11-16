@@ -208,7 +208,9 @@ DROP TRIGGER quiz_snapshot_regression_guard
 -- 5c. A stored tally entry that is not a number is skipped, instead of
 --     failing a cast and taking the board down for everyone outside the top
 --     100, while any whole-number score still counts (4 players on a
---     ten-digit score here). The first call rebuilds a clean snapshot.
+--     ten-digit score here). v_before is read first, in DECLARE: 5b left the
+--     snapshot stale, so that call rebuilds a clean one. The damaged tally is
+--     then stored as fresh, so v_after has to be computed from it as stored.
 DO $$
 DECLARE
   v_before jsonb := pg_temp.board();

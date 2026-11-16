@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS public.quiz_live_leaderboard_snapshots_v2 (
   published_participant_count integer
     CHECK (published_participant_count >= 0)
 );
+-- The caveat lives on the column, where someone repairing data will see it.
+COMMENT ON COLUMN
+  public.quiz_live_leaderboard_snapshots_v2.published_participant_count IS
+  'Players ranked at publication, stored on the first count read after publication. Set to NULL after re-ranking an already published event so the next read recounts.';
 
 ALTER TABLE public.quiz_live_leaderboard_snapshots_v2 ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.quiz_live_leaderboard_snapshots_v2

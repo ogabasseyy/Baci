@@ -262,6 +262,29 @@ describe('fetchWalletData', () => {
     expect(result.transactions[0]?.pending).toBe(true);
   });
 
+  it('bugfix: marks a held IMEI charge when the wallet is found through the user, not a customer id (Muse)', async () => {
+    setupSupabaseTables({
+      customer_wallet_transactions: createResult([
+        {
+          amount: '-500',
+          created_at: '2026-11-15T10:00:00.000Z',
+          description: 'IMEI check',
+          id: 'tx-imei',
+          source_type: 'imei_wallet_payment',
+          source_id: 'lookup-1',
+          type: 'redemption',
+        },
+      ]),
+      imei_lookups: createResult([
+        { id: 'lookup-1', status: 'pending_provider' },
+      ]),
+    });
+
+    const result = await fetchWalletData(null, 'merchant-1', 'user-1');
+
+    expect(result.transactions[0]?.pending).toBe(true);
+  });
+
   it('selects and preserves the ledger source_type that identifies wallet top-ups', async () => {
     const { selectCalls } = setupSupabaseTables({
       customer_wallet_transactions: createResult([

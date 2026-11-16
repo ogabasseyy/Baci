@@ -95,7 +95,7 @@ export function useImeiPendingLookup({
     return () => {
       cancelled = true;
     };
-  }, [storageKey, scopeKey]);
+  }, [storageKey, scopeKey, userId]);
 
   useEffect(() => {
     if (!pending || pending.scopeKey !== scopeKey) return;

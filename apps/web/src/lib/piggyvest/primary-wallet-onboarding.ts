@@ -13,6 +13,7 @@ import {
 } from './primary-wallet-customer-lookup';
 import { readPrimaryWalletInterestRouting } from './primary-wallet-interest-routing';
 import type {
+  PrimaryWalletClaim,
   PrimaryWalletCustomerRequest,
   PrimaryWalletIntentScope,
   PrimaryWalletOnboardingStorage,
@@ -22,6 +23,7 @@ import {
   judgeCreatedCustomer,
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
+import { claimPrimaryWalletOnboarding } from './primary-wallet-onboarding-claim';
 import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
@@ -93,20 +95,15 @@ export async function onboardPiggyvestPrimaryWallet(
     identity: providerRequest,
   });
 
-  let claim: Awaited<ReturnType<PrimaryWalletOnboardingStorage['claim']>>;
+  let claim: PrimaryWalletClaim;
   try {
-    claim = await input.storage.claim({
-      ...scope,
-      requestFingerprint: fingerprints.current,
+    claim = await claimPrimaryWalletOnboarding({
+      storage: input.storage,
+      scope,
+      fingerprints,
+      thirdPartyIdentifier: providerRequest.third_party_identifier,
+      findCustomers: input.findCustomers,
     });
-    // An intent stored before main-wallet interest routing carries the
-    // earlier commitment to this same identity: reconcile it through the
-    // lookup-gated reclaim below rather than leave it a permanent conflict.
-    if (claim.status === 'conflict')
-      claim = await input.storage.claim({
-        ...scope,
-        requestFingerprint: fingerprints.legacy,
-      });
   } catch {
     return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   }

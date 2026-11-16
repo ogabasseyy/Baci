@@ -6,6 +6,9 @@ import {
   isImeiServiceTierKey,
 } from './service-tiers';
 
+/** Completed reports per history page (the route and the client agree). */
+export const IMEI_REPORT_HISTORY_PAGE_SIZE = 20;
+
 export const ImeiResultSchema = z.object({
   imei: z.string().min(1),
   device: z.string().min(1),
@@ -77,7 +80,7 @@ export const ImeiReportSchema = z.object({
 });
 export type ImeiReport = z.infer<typeof ImeiReportSchema>;
 export const ImeiReportsResponseSchema = z.object({
-  reports: z.array(ImeiReportSchema).max(20),
+  reports: z.array(ImeiReportSchema).max(IMEI_REPORT_HISTORY_PAGE_SIZE),
   hasMore: z.boolean(),
 });
 export async function fetchImeiReports({

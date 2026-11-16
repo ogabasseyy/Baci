@@ -73,6 +73,7 @@ describe('useImeiPendingLookup', () => {
         createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
         lookupId: '11111111-1111-4111-8111-111111111111',
         tier: 'blacklist',
+        ownerUserId: 'user-1',
       })
     );
     mockPollImeiLookup.mockResolvedValue({
@@ -82,6 +83,7 @@ describe('useImeiPendingLookup', () => {
     const { result } = renderHook(() =>
       useImeiPendingLookup({
         accessToken: 'token',
+        userId: 'user-1',
         apiBaseUrl: 'https://shop.example.com',
         customerId: 'customer-1',
         merchantId: 'merchant-1',
@@ -157,4 +159,107 @@ it('does not report failed persistence without a visible pending lookup', async 
   });
   expect(result.current.pending).toBeNull();
   expect(result.current.canResume).toBe(true);
+});
+
+describe('bugfix: a saved pending check is only resumed by the user who started it', () => {
+  const key = pendingImeiStorageKey('merchant-1', 'customer-1');
+  const saved = (ownerUserId?: string) =>
+    AsyncStorage.setItem(
+      key,
+      JSON.stringify({
+        createdAt: new Date().toISOString(),
+        lookupId: '11111111-1111-4111-8111-111111111111',
+        tier: 'blacklist',
+        ...(ownerUserId ? { ownerUserId } : {}),
+      })
+    );
+  const renderFor = (userId: string) =>
+    renderHook(() =>
+      useImeiPendingLookup({
+        accessToken: 'token',
+        userId,
+        apiBaseUrl: 'https://test.invalid',
+        customerId: 'customer-1',
+        merchantId: 'merchant-1',
+      })
+    );
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    mockPollImeiLookup.mockResolvedValue({ kind: 'retry', pollAfterMs: 60000 });
+  });
+
+  it('neither shows nor deletes the previous user record while sign-in pairs a new user with the old customer', async () => {
+    await saved('user-a');
+    const { result } = renderFor('user-b');
+    await act(async () => undefined);
+    expect(result.current.pending).toBeNull();
+    expect(mockPollImeiLookup).not.toHaveBeenCalled();
+    await expect(AsyncStorage.getItem(key)).resolves.not.toBeNull();
+  });
+
+  it('does not resume an unowned legacy record', async () => {
+    await saved();
+    const { result } = renderFor('user-a');
+    await act(async () => undefined);
+    expect(result.current.pending).toBeNull();
+  });
+
+  it('resumes the same user record and saves its owner on start', async () => {
+    await saved('user-a');
+    const { result } = renderFor('user-a');
+    await waitFor(() => expect(result.current.pending).not.toBeNull());
+    await act(async () => {
+      await result.current.start({
+        lookupId: '22222222-2222-4222-8222-222222222222',
+        pollAfterMs: 60000,
+        tier: 'blacklist',
+      });
+    });
+    expect(JSON.parse((await AsyncStorage.getItem(key)) ?? '{}')).toMatchObject(
+      {
+        ownerUserId: 'user-a',
+      }
+    );
+  });
+});
+
+it('bugfix: a clear that finishes after a newer start keeps the newer lookup', async () => {
+  await AsyncStorage.clear();
+  let finishRemove!: () => void;
+  const { result } = renderHook(() =>
+    useImeiPendingLookup({
+      accessToken: 'token',
+      userId: 'user-a',
+      apiBaseUrl: 'https://test.invalid',
+      customerId: 'customer-1',
+      merchantId: 'merchant-1',
+    })
+  );
+  await act(async () => undefined);
+  mockPollImeiLookup.mockResolvedValue({ kind: 'retry', pollAfterMs: 60000 });
+  jest.spyOn(AsyncStorage, 'removeItem').mockImplementationOnce(
+    () =>
+      new Promise<void>((done) => {
+        finishRemove = done;
+      })
+  );
+  let clearing!: Promise<void>;
+  act(() => {
+    clearing = result.current.clear();
+  });
+  await act(async () => {
+    await result.current.start({
+      lookupId: '33333333-3333-4333-8333-333333333333',
+      pollAfterMs: 60000,
+      tier: 'blacklist',
+    });
+  });
+  await act(async () => {
+    finishRemove();
+    await clearing;
+  });
+  expect(result.current.pending?.lookupId).toBe(
+    '33333333-3333-4333-8333-333333333333'
+  );
 });

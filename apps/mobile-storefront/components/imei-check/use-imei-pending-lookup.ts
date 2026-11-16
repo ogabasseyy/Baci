@@ -76,7 +76,10 @@ export function useImeiPendingLookup({
       }
       const saved = await loadPendingImeiLookup(storageKey);
       if (!cancelled && pendingMutation.current === restoreGeneration) {
-        if (saved) {
+        // Sign-in can briefly pair the new user with the previous customer:
+        // only the user who started a check may resume it. Another owner's
+        // (or an unowned legacy) record is left in place, never shown.
+        if (saved && userId && saved.ownerUserId === userId) {
           setPending({
             ...saved,
             pollAfterMs: 0,
@@ -148,8 +151,11 @@ export function useImeiPendingLookup({
 
   return {
     async clear() {
-      pendingMutation.current += 1;
+      const generation = pendingMutation.current + 1;
+      pendingMutation.current = generation;
       if (storageKey) await clearPendingImeiLookup(storageKey);
+      // A check started while the removal ran is newer: keep it.
+      if (pendingMutation.current !== generation) return;
       setPending(null);
       setPaused(false);
     },
@@ -177,6 +183,7 @@ export function useImeiPendingLookup({
         pollAfterMs,
         tier,
         device,
+        ownerUserId: userId,
         scopeKey,
         canResume: false,
       };

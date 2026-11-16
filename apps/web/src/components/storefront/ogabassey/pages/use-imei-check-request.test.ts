@@ -1,3 +1,4 @@
+import type { ImeiDeviceCategory, ImeiReport } from '@baci/shared/imei';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pendingImeiStorageKey } from './imei-pending-storage';
@@ -22,6 +23,29 @@ const report = {
   device: 'iPhone',
   blacklistStatus: 'Unknown',
 };
+/** A complete completed-report row, as the history list returns it. */
+const historyReport = (device: ImeiDeviceCategory | null): ImeiReport => ({
+  lookupId,
+  createdAt: '2026-10-31T00:00:00Z',
+  tier: 'simLock',
+  device,
+  result: {
+    imei: report.imei,
+    device: report.device,
+    modelNumber: '',
+    status: 'Unknown',
+    icloud: 'Unknown',
+    icloudLock: 'Unknown',
+    simLock: 'Unlocked',
+    blacklistStatus: report.blacklistStatus,
+    carrier: 'Unknown',
+    deviceImage: '',
+    score: 50,
+    deviceType: 'apple',
+    verdict: 'Not checked',
+    verdictType: 'caution',
+  },
+});
 const key = () =>
   pendingImeiStorageKey(window.location.host, 'hook-customer', 'ogabassey');
 const outcome = {
@@ -191,13 +215,7 @@ describe('useImeiCheckRequest', () => {
   it('bugfix: a reopened legacy null-device report on a phone-only tier keeps the smartphone device', () => {
     const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
     act(() => {
-      result.current.openReport({
-        lookupId,
-        createdAt: '2026-10-31T00:00:00Z',
-        tier: 'simLock',
-        device: null,
-        result: report,
-      } as unknown as Parameters<typeof result.current.openReport>[0], 'ogabassey:hook-customer:');
+      result.current.openReport(historyReport(null), 'ogabassey:hook-customer:');
     });
     expect(result.current.resultDevice).toBe('smartphone');
     expect(mocks.check).not.toHaveBeenCalled();
@@ -206,13 +224,7 @@ describe('useImeiCheckRequest', () => {
     const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
     act(() => {
       result.current.openReport(
-        {
-          lookupId,
-          createdAt: '2026-10-31T00:00:00Z',
-          tier: 'simLock',
-          device: 'smartphone',
-          result: report,
-        } as unknown as Parameters<typeof result.current.openReport>[0],
+        historyReport('smartphone'),
         'ogabassey:another-customer:'
       );
     });
@@ -224,13 +236,7 @@ describe('useImeiCheckRequest', () => {
     );
     act(() => {
       result.current.openReport(
-        {
-          lookupId,
-          createdAt: '2026-10-31T00:00:00Z',
-          tier: 'simLock',
-          device: 'smartphone',
-          result: report,
-        } as unknown as Parameters<typeof result.current.openReport>[0],
+        historyReport('smartphone'),
         'ogabassey:hook-customer:'
       );
     });
@@ -242,6 +248,32 @@ describe('useImeiCheckRequest', () => {
       expect(result.current.resultDevice).toBeNull();
       expect(result.current.resultLookupId).toBeNull();
       expect(result.current.resultTier).toBeNull();
+    } finally {
+      mocks.customerId = 'hook-customer';
+    }
+  });
+  it('starts a new paid identity when the same check is retried by another account', async () => {
+    mocks.check.mockResolvedValue({
+      ...outcome,
+      error: 'Network error',
+      keepRequestIdentity: true,
+    });
+    const { result, rerender } = renderHook(() =>
+      useImeiCheckRequest('ogabassey')
+    );
+    await act(async () => {
+      await result.current.runCheck('blacklist', report.imei, 'smartphone');
+    });
+    mocks.customerId = 'another-customer';
+    try {
+      rerender();
+      await act(async () => {
+        await result.current.runCheck('blacklist', report.imei, 'smartphone');
+      });
+      expect(mocks.check).toHaveBeenCalledTimes(2);
+      expect(mocks.check.mock.calls[1][3]).not.toBe(
+        mocks.check.mock.calls[0][3]
+      );
     } finally {
       mocks.customerId = 'hook-customer';
     }

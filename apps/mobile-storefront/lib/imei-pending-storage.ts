@@ -14,6 +14,8 @@ export interface PendingImeiLookup {
   lookupId: string;
   tier: ImeiServiceTierKey;
   device?: ImeiDeviceCategory;
+  /** The signed-in user who started it: only they may resume it. */
+  ownerUserId?: string;
 }
 
 export function pendingImeiStorageKey(merchantId: string, customerId: string) {
@@ -66,6 +68,9 @@ export async function loadPendingImeiLookup(
       createdAt: value.createdAt,
       lookupId: value.lookupId,
       tier: value.tier,
+      ...(typeof value.ownerUserId === 'string' && value.ownerUserId
+        ? { ownerUserId: value.ownerUserId }
+        : {}),
       ...(value.device == null
         ? {}
         : {

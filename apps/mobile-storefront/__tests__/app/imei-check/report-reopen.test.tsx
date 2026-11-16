@@ -254,6 +254,8 @@ it('hardware back cannot clear a retained report or pending paid follow-up', asy
     await screen.findByRole('button', { name: 'Check blacklist status · ₦700' })
   );
   await screen.findByText("We're checking");
+  // Back is intercepted while the paid follow-up runs on the reopened report.
+  expect(mockPreventRemoveState.prevent).toBe(true);
   act(() => mockPreventRemoveState.callback?.());
   expect(screen.getByText('iPhone 13 Pro')).toBeTruthy();
   expect(

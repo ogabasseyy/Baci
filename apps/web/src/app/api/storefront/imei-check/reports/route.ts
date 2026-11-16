@@ -1,4 +1,5 @@
 import {
+  IMEI_REPORT_HISTORY_PAGE_SIZE,
   ImeiReportSchema,
   isImeiServiceTierKey,
   resolveImeiReportDevice,
@@ -51,7 +52,7 @@ export async function GET(request: Request | NextRequest) {
   });
   if (!customer || customer.user_id !== auth.user.id)
     return json({ reports: [], hasMore: false });
-  const offset = query.data.page * 20;
+  const offset = query.data.page * IMEI_REPORT_HISTORY_PAGE_SIZE;
   const { data, error } = await auth.supabase
     .from('imei_lookups')
     .select('id,tier,device_category,created_at,cached_response')
@@ -61,23 +62,28 @@ export async function GET(request: Request | NextRequest) {
     .eq('cached_status', 200)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
-    .range(offset, offset + 20);
+    .range(offset, offset + IMEI_REPORT_HISTORY_PAGE_SIZE);
   if (error) return json({ error: 'Unable to load completed reports' }, 500);
   const rows = data ?? [];
-  const reports = rows.slice(0, 20).flatMap((row) => {
-    if (
-      !isImeiServiceTierKey(row.tier) ||
-      row.cached_response?.success !== true
-    )
-      return [];
-    const parsed = ImeiReportSchema.safeParse({
-      lookupId: row.id,
-      createdAt: row.created_at,
-      tier: row.tier,
-      device: resolveImeiReportDevice(row.tier, row.device_category),
-      result: row.cached_response.data,
+  const reports = rows
+    .slice(0, IMEI_REPORT_HISTORY_PAGE_SIZE)
+    .flatMap((row) => {
+      if (
+        !isImeiServiceTierKey(row.tier) ||
+        row.cached_response?.success !== true
+      )
+        return [];
+      const parsed = ImeiReportSchema.safeParse({
+        lookupId: row.id,
+        createdAt: row.created_at,
+        tier: row.tier,
+        device: resolveImeiReportDevice(row.tier, row.device_category),
+        result: row.cached_response.data,
+      });
+      return parsed.success ? [parsed.data] : [];
     });
-    return parsed.success ? [parsed.data] : [];
+  return json({
+    reports,
+    hasMore: rows.length > IMEI_REPORT_HISTORY_PAGE_SIZE,
   });
-  return json({ reports, hasMore: rows.length > 20 });
 }

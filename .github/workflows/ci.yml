@@ -206,8 +206,8 @@ jobs:
       - name: Start isolated builder auth tests
         id: builder-auth-tests-start
         run: |
-          node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
           bash .github/scripts/background-step.sh start builder-auth pnpm --dir apps/web/tools/builder-auth test
+          node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
       - name: Run Typecheck
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then

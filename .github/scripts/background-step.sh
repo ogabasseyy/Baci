@@ -45,8 +45,11 @@ step_pids() {
 
 # TERM first; KILL whatever ignores it after a 5 s grace period.
 stop_step() {
-  local leader="$1" pids alive
-  if kill -0 -- "-$leader" 2> /dev/null; then
+  local leader="$1" pids alive pgid
+  # Signal the whole group only when the leader is alive and really leads its own group (setsid);
+  # a bare PGID number could belong to an unrelated group on a shared runner.
+  pgid="$(ps -o pgid= -p "$leader" 2> /dev/null | tr -d ' ' || true)"
+  if [[ -n "$pgid" && "$pgid" == "$leader" ]]; then
     kill -TERM -- "-$leader" 2> /dev/null || true
     for _ in $(seq 1 50); do kill -0 -- "-$leader" 2> /dev/null || return 0; sleep 0.1; done
     echo "background step still running 5s after TERM; sending KILL" >&2
@@ -87,7 +90,10 @@ case "$action" in
     if [[ ! -s "$pidfile" ]]; then
       echo "background step '$name' did not start (no PID after 5s)" >&2
       # A slow spawn must not turn into an orphan that nothing collects or stops.
-      kill -KILL "$launcher_pid" 2> /dev/null || true
+      # Only while it is still our launcher: a forked setsid frees this PID, which may be reused.
+      if ps -o args= -p "$launcher_pid" 2> /dev/null | grep -qF -- "$log"; then
+        kill -KILL "$launcher_pid" 2> /dev/null || true
+      fi
       rm -f "$started"
       exit 1
     fi

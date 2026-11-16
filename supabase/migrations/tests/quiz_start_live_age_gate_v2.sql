@@ -107,6 +107,11 @@ BEGIN
   IF pg_temp.start_state((v_today - interval '40 years')::date) <> 'started' THEN
     RAISE EXCEPTION 'adult must start';
   END IF;
+  -- Gate must precede resume: with a started attempt already present, an
+  -- under-18 DOB on the same live event is still refused.
+  IF pg_temp.start_state((v_today - interval '17 years')::date) <> 'QZ014' THEN
+    RAISE EXCEPTION 'under-18 must not resume an existing live attempt';
+  END IF;
   IF pg_temp.start_state((v_today - interval '17 years')::date,
     '76000000-0000-4000-8000-000000000010'::uuid) <> 'started' THEN
     RAISE EXCEPTION 'under-18 test-mode start must be unchanged (allowed)';

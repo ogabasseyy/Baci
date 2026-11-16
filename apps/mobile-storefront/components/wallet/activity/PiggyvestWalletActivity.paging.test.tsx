@@ -131,3 +131,16 @@ describe('bugfix: "Show more" re-read page 1 without the cursor', () => {
     expect(cursors().filter((cursor) => cursor === null)).toHaveLength(1);
   }, 10_000);
 });
+
+describe('bugfix: a page of only hidden rows hid the way to older activity', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('offers "Show more" instead of the empty state while another page exists', async () => {
+    mockFetch.mockResolvedValueOnce({ items: [], nextCursor: 'cursor-next' });
+    render(list(0), { wrapper: ActivityQueryWrapper });
+    expect(await screen.findByText('Show more')).toBeTruthy();
+    expect(screen.queryByText('No wallet activity yet')).toBeNull();
+  });
+});

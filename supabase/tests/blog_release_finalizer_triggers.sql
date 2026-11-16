@@ -212,7 +212,10 @@ END $$;
 
 -- 8e. Same-day reserved post respects daily_cap when another draft is manually published earlier the same day
 INSERT INTO public.merchants (id, email, user_id, business_name, slug)
-VALUES ('d2000000-0000-4000-8000-000000000005', 'track1-e@example.invalid', 'd1000000-0000-4000-8000-000000000001', 'Merchant E', 'merchant-e');
+VALUES ('d2000000-0000-4000-8000-000000000005', 'track1-e@example.invalid', NULL, 'Merchant E', 'merchant-e');
+
+INSERT INTO public.staff_members (merchant_id, user_id, email, status, permissions)
+VALUES ('d2000000-0000-4000-8000-000000000005', 'd1000000-0000-4000-8000-000000000001', 'track1-e-staff@example.invalid', 'active', '{"marketing":{"view":true,"edit":true}}'::jsonb);
 
 INSERT INTO public.blog_posts (
   id, merchant_id, title, slug, content, author_name, status

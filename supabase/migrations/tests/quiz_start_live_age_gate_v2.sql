@@ -74,17 +74,10 @@ CREATE OR REPLACE FUNCTION public.quiz_route_proof_valid(
 ) RETURNS boolean LANGUAGE sql AS 'SELECT true';
 
 CREATE FUNCTION pg_temp.start_state(
-  p_dob date,
   p_event uuid DEFAULT '76000000-0000-4000-8000-000000000003'::uuid
 ) RETURNS text
 LANGUAGE plpgsql AS $$
 BEGIN
-  -- Only the fixture DOB edit bypasses triggers; the start itself runs with
-  -- normal (origin) trigger semantics.
-  PERFORM set_config('session_replication_role', 'replica', true);
-  UPDATE public.customers SET date_of_birth = p_dob
-  WHERE id = '76000000-0000-4000-8000-000000000002';
-  PERFORM set_config('session_replication_role', 'origin', true);
   PERFORM private.start_quiz_attempt_v2_core(
     p_event, 'standard', 'age-gate-v2', true,
     gen_random_uuid(), '1.0.0', 'web', '{}'::jsonb,
@@ -110,26 +103,51 @@ BEGIN
 END;
 $$;
 
-DO $$
-DECLARE
-  v_today date := (now() AT TIME ZONE 'UTC')::date;
-BEGIN
-  PERFORM pg_temp.expect(1, 'QZ013', pg_temp.start_state(NULL));
-  PERFORM pg_temp.expect(2, 'QZ014',
-    pg_temp.start_state((v_today - interval '17 years')::date));
-  PERFORM pg_temp.expect(3, 'QZ014',
-    pg_temp.start_state((v_today - interval '18 years' + interval '1 day')::date));
-  PERFORM pg_temp.expect(4, 'started',
-    pg_temp.start_state((v_today - interval '18 years')::date));
-  PERFORM pg_temp.expect(5, 'started',
-    pg_temp.start_state((v_today - interval '40 years')::date));
-  -- Gate must precede resume: with a started attempt already present, an
-  -- under-18 DOB on the same live event is still refused.
-  PERFORM pg_temp.expect(6, 'QZ014',
-    pg_temp.start_state((v_today - interval '17 years')::date));
-  PERFORM pg_temp.expect(7, 'started',
-    pg_temp.start_state((v_today - interval '17 years')::date,
-      '76000000-0000-4000-8000-000000000010'::uuid));
-END;
-$$;
+-- Fixture DOB edits use plain top-level SET LOCAL (as the sibling suites do);
+-- every start below runs under normal (origin) trigger semantics.
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = NULL
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(1, 'QZ013', pg_temp.start_state());
+
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = (((now() AT TIME ZONE 'UTC')::date) - interval '17 years')::date
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(2, 'QZ014', pg_temp.start_state());
+
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = (((now() AT TIME ZONE 'UTC')::date) - interval '18 years' + interval '1 day')::date
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(3, 'QZ014', pg_temp.start_state());
+
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = (((now() AT TIME ZONE 'UTC')::date) - interval '18 years')::date
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(4, 'started', pg_temp.start_state());
+
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = (((now() AT TIME ZONE 'UTC')::date) - interval '40 years')::date
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(5, 'started', pg_temp.start_state());
+
+-- Gate must precede resume: with a started attempt present, an under-18 DOB
+-- on the same live event is still refused.
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = (((now() AT TIME ZONE 'UTC')::date) - interval '17 years')::date
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(6, 'QZ014', pg_temp.start_state());
+
+-- Test mode is unchanged: under-18 may still start.
+SET LOCAL session_replication_role = replica;
+UPDATE public.customers SET date_of_birth = (((now() AT TIME ZONE 'UTC')::date) - interval '17 years')::date
+  WHERE id = '76000000-0000-4000-8000-000000000002';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect(7, 'started', pg_temp.start_state('76000000-0000-4000-8000-000000000010'::uuid));
+
 ROLLBACK;

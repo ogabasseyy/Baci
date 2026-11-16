@@ -97,55 +97,67 @@ async function getCachedSitemapEntries(
     buildStaticSitemapEntries(siteUrl);
 
   // Add dynamic platform blog posts
-  const blogPosts = await getPlatformBlogSitemapPosts();
-  blogPosts.forEach((post) => {
-    if (!post.slug) {
-      return;
-    }
+  try {
+    const blogPosts = await getPlatformBlogSitemapPosts();
+    blogPosts.forEach((post) => {
+      if (!post.slug) {
+        return;
+      }
 
-    const publishedAt = post.published_at ? new Date(post.published_at) : null;
-    const updatedAt = post.updated_at ? new Date(post.updated_at) : null;
-    const lastModified =
-      updatedAt && !Number.isNaN(updatedAt.getTime())
-        ? updatedAt
-        : publishedAt && !Number.isNaN(publishedAt.getTime())
-          ? publishedAt
-          : undefined;
+      const publishedAt = post.published_at
+        ? new Date(post.published_at)
+        : null;
+      const updatedAt = post.updated_at ? new Date(post.updated_at) : null;
+      const lastModified =
+        updatedAt && !Number.isNaN(updatedAt.getTime())
+          ? updatedAt
+          : publishedAt && !Number.isNaN(publishedAt.getTime())
+            ? publishedAt
+            : undefined;
 
-    sitemapEntries.push({
-      url: `${siteUrl}/blog/${post.slug}`,
-      ...(lastModified && { lastModified }),
-      changeFrequency: 'weekly',
-      priority: 0.7,
+      sitemapEntries.push({
+        url: `${siteUrl}/blog/${post.slug}`,
+        ...(lastModified && { lastModified }),
+        changeFrequency: 'weekly',
+        priority: 0.7,
+      });
     });
-  });
+  } catch (error) {
+    console.error('Error loading platform blog sitemap posts:', error);
+  }
 
   // Add merchant storefronts (for SEO discovery)
   // Note: Individual merchant sitemaps are served at /[slug]/sitemap.xml
-  const merchants = await fetchActiveMerchants();
-  merchants.forEach((merchant) => {
-    if (merchant.slug) {
-      // In development, storefronts are at /storefront/[slug]
-      // In production, they're at subdomains, but we still index the main route
-      const storefrontPath =
-        process.env.NODE_ENV === 'development'
-          ? `/storefront/${merchant.slug}`
-          : `/${merchant.slug}`;
+  try {
+    const merchants = await fetchActiveMerchants();
+    merchants.forEach((merchant) => {
+      if (merchant.slug) {
+        // In development, storefronts are at /storefront/[slug]
+        // In production, they're at subdomains, but we still index the main route
+        const storefrontPath =
+          process.env.NODE_ENV === 'development'
+            ? `/storefront/${merchant.slug}`
+            : `/${merchant.slug}`;
 
-      const updatedAt = merchant.updated_at
-        ? new Date(merchant.updated_at)
-        : null;
-      const lastModified =
-        updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined;
+        const updatedAt = merchant.updated_at
+          ? new Date(merchant.updated_at)
+          : null;
+        const lastModified =
+          updatedAt && !Number.isNaN(updatedAt.getTime())
+            ? updatedAt
+            : undefined;
 
-      sitemapEntries.push({
-        url: `${siteUrl}${storefrontPath}`,
-        ...(lastModified && { lastModified }),
-        changeFrequency: 'daily',
-        priority: 0.6,
-      });
-    }
-  });
+        sitemapEntries.push({
+          url: `${siteUrl}${storefrontPath}`,
+          ...(lastModified && { lastModified }),
+          changeFrequency: 'daily',
+          priority: 0.6,
+        });
+      }
+    });
+  } catch (error) {
+    console.error('Error loading active merchants for sitemap:', error);
+  }
 
   return sitemapEntries;
 }

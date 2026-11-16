@@ -152,4 +152,43 @@ describe('root sitemap', () => {
       errorSpy.mockRestore();
     }
   });
+
+  it('preserves merchant entries when blog sitemap lookup fails', async () => {
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      mockGetPlatformBlogSitemapPosts.mockRejectedValueOnce(
+        new Error('blog failure')
+      );
+
+      const { default: sitemap } = await import('./sitemap');
+      const urls = (await sitemap()).map((entry) => entry.url);
+
+      expect(urls).toContain('https://usebaci.com/ogabassey');
+      expect(urls).not.toContain('https://usebaci.com/blog/launch-faster');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('preserves blog entries when merchant sitemap lookup fails', async () => {
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      mockOrder.mockResolvedValue({
+        data: [],
+        error: new Error('db failure'),
+      });
+
+      const { default: sitemap } = await import('./sitemap');
+      const urls = (await sitemap()).map((entry) => entry.url);
+
+      expect(urls).toContain('https://usebaci.com/blog/launch-faster');
+      expect(urls).not.toContain('https://usebaci.com/ogabassey');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

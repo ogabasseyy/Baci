@@ -1,6 +1,9 @@
 import { normalizeCarrierProviderIds } from '@baci/shared/constants';
 import { isPaystackCheckoutAvailable } from '@/lib/checkout/payment-gateway-availability';
+import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { isRepairsCatalogEnabled } from '@/lib/repairs/repairs-feature';
+
+const DEFAULT_SETTINGS = merchantFeatureSettingsDefaults.defaults;
 
 export interface StorefrontFeatures {
   loyaltyEnabled: boolean;
@@ -131,16 +134,34 @@ export function buildPublicStorefrontFeatures({
     creditDirectEnabled: asBoolean(settings.credit_direct_enabled, false),
     credpalEnabled: false,
     klumpEnabled: asBoolean(settings.klump_enabled, false),
-    creditDirectMinAmount: asNumber(settings.credit_direct_min_amount, 10000),
-    creditDirectMaxAmount: asNumber(settings.credit_direct_max_amount, 500000),
-    klumpMinAmount: asNumber(settings.klump_min_amount, 10000),
-    klumpMaxAmount: asNumber(settings.klump_max_amount, 1000000),
+    creditDirectMinAmount: asNumber(
+      settings.credit_direct_min_amount,
+      DEFAULT_SETTINGS.credit_direct_min_amount
+    ),
+    creditDirectMaxAmount: asNumber(
+      settings.credit_direct_max_amount,
+      DEFAULT_SETTINGS.credit_direct_max_amount
+    ),
+    klumpMinAmount: asNumber(
+      settings.klump_min_amount,
+      DEFAULT_SETTINGS.klump_min_amount
+    ),
+    klumpMaxAmount: asNumber(
+      settings.klump_max_amount,
+      DEFAULT_SETTINGS.klump_max_amount
+    ),
     preferredLocalGateway: normalizePreferredGateway(
-      asGateway(settings.preferred_local_gateway, 'paystack'),
+      asGateway(
+        settings.preferred_local_gateway,
+        DEFAULT_SETTINGS.preferred_local_gateway
+      ),
       paystackEnabled
     ),
     preferredInternationalGateway: normalizePreferredGateway(
-      asGateway(settings.preferred_international_gateway, 'korapay'),
+      asGateway(
+        settings.preferred_international_gateway,
+        DEFAULT_SETTINGS.preferred_international_gateway
+      ),
       paystackEnabled
     ),
     shippingProviders: normalizeCarrierProviderIds(settings.shipping_providers),
@@ -158,7 +179,10 @@ export function buildPublicStorefrontFeatures({
     },
     showRecentPurchases: asBoolean(settings.show_recent_purchases, false),
     showStockLevels: asBoolean(settings.show_stock_levels, true),
-    lowStockThreshold: asNumber(settings.low_stock_threshold, 10),
+    lowStockThreshold: asNumber(
+      settings.low_stock_threshold,
+      DEFAULT_SETTINGS.low_stock_threshold
+    ),
     hasGoogleAnalytics: Boolean(settings.google_analytics_id),
     hasFacebookPixel: Boolean(settings.facebook_pixel_id),
     hasTiktokPixel: Boolean(settings.tiktok_pixel_id),
@@ -171,7 +195,7 @@ export function buildPublicStorefrontFeatures({
     ),
     vtuCheckoutAddonAmounts: asNumberArray(
       settings.vtu_checkout_addon_amounts,
-      [100, 200, 500, 1000]
+      DEFAULT_SETTINGS.vtu_checkout_addon_amounts
     ),
     vtuLoyaltyRewardEnabled: asBoolean(
       settings.vtu_loyalty_reward_enabled,

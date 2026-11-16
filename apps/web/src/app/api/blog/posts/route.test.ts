@@ -177,6 +177,42 @@ describe('GET /api/blog/posts', () => {
     expect(mockIncrementPlatformBlogPostViews).not.toHaveBeenCalled();
   });
 
+  it('returns 413 when POST body exceeds the size limit', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'a'.repeat(1200) }),
+      })
+    );
+
+    expect(response.status).toBe(413);
+    expect(mockIncrementPlatformBlogPostViews).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'launch--faster',
+    '-launch',
+    'launch-',
+  ])('accepts persisted slug format %s in POST view tracking', async (slug) => {
+    mockGetPlatformBlogPost.mockResolvedValueOnce({
+      id: 'post-3',
+      slug,
+      title: 'Persisted Slug',
+    });
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockIncrementPlatformBlogPostViews).toHaveBeenCalledWith('post-3');
+  });
+
   it('returns ok=false when POST trackView increment fails', async () => {
     mockGetPlatformBlogPost.mockResolvedValueOnce({
       id: 'post-2',

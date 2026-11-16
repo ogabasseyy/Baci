@@ -44,12 +44,17 @@ async function getCachedMerchantAndSettings({
   }
 
   const supabase = createAnonClient();
-  const merchantLookupQuery = supabase
+  let merchantLookupQuery = supabase
     .from('merchants')
     .select('id, country, business_type');
-  const merchantLookup = slug
-    ? await merchantLookupQuery.eq('slug', slug).single()
-    : await merchantLookupQuery.eq('id', merchantId as string).single();
+  if (slug) {
+    merchantLookupQuery = merchantLookupQuery.eq('slug', slug);
+  } else if (merchantId) {
+    merchantLookupQuery = merchantLookupQuery.eq('id', merchantId);
+  } else {
+    return { status: 404 };
+  }
+  const merchantLookup = await merchantLookupQuery.single();
 
   if (merchantLookup.error) {
     if (merchantLookup.error.code === 'PGRST116') {

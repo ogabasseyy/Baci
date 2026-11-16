@@ -1,4 +1,5 @@
 import { reconcileOrphanedDeferredCartLogout } from '@/hooks/cart/cart-deferred-logout';
+import { customerSessionResponseSchema } from '@/schemas/customer-auth-session';
 import type { Customer, CustomerUser } from './customer-auth-context';
 import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
 import {
@@ -39,11 +40,12 @@ async function fetchCustomerSession(
       httpStatus: response.status,
     };
   }
-  const data = (await response.json()) as {
-    authenticated?: boolean;
-    customer?: Customer;
-    user?: CustomerUser;
-  };
+  const rawData: unknown = await response.json();
+  const parsed = customerSessionResponseSchema.safeParse(rawData);
+  if (!parsed.success) {
+    return { status: 'lookup_failed', userId: null };
+  }
+  const data = parsed.data;
 
   if (data.authenticated === false) {
     return { status: 'unauthenticated' };
@@ -55,8 +57,8 @@ async function fetchCustomerSession(
   return {
     status: 'authenticated',
     session: {
-      customer: data.customer,
-      user: data.user,
+      customer: data.customer as Customer,
+      user: data.user as CustomerUser,
     },
   };
 }

@@ -13,6 +13,7 @@ import {
 import {
   getCustomerSessionHintScopePath,
   readCustomerSessionHint,
+  resetCustomerSessionHintForTests,
   writeCustomerSessionHint,
 } from '@/contexts/customer-session-hint';
 
@@ -207,5 +208,14 @@ describe('baci_customer_session_hint tri-state behavior', () => {
 
     window.history.replaceState({}, '', '/products');
     expect(getCustomerSessionHintScopePath('ogabassey')).toBe('/');
+  });
+
+  it('expires merchant-scoped cookies during test reset', () => {
+    window.history.replaceState({}, '', '/ogabassey/products');
+    writeCustomerSessionHint('ogabassey', '0');
+    expect(readCustomerSessionHint()).toBe('0');
+
+    resetCustomerSessionHintForTests();
+    expect(readCustomerSessionHint()).toBeNull();
   });
 });

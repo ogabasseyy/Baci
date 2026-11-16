@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import {
   getPlatformBlogListing,
   getPlatformBlogPost,
@@ -93,14 +94,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  const bodyResult = await readBoundedJsonBody(request, 1024);
+  if (!bodyResult.ok) {
+    return NextResponse.json(
+      {
+        error:
+          bodyResult.reason === 'too_large'
+            ? 'Request body too large'
+            : 'Invalid JSON body',
+      },
+      { status: bodyResult.reason === 'too_large' ? 413 : 400 }
+    );
   }
 
-  const parsed = trackBlogPostViewSchema.safeParse(body);
+  const parsed = trackBlogPostViewSchema.safeParse(bodyResult.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid blog post slug' },

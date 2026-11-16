@@ -1,6 +1,7 @@
 const CUSTOMER_SESSION_HINT_COOKIE = 'baci_customer_session_hint';
 const CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const CUSTOMER_GUEST_HINT_MAX_AGE_SECONDS = 60 * 60;
+const trackedHintPaths = new Set<string>(['/']);
 
 export type CustomerSessionHint = '1' | '0' | null;
 
@@ -51,6 +52,7 @@ export function writeCustomerSessionHint(
   }
 
   const path = getCustomerSessionHintScopePath(merchantSlug);
+  trackedHintPaths.add(path);
   const secureAttribute =
     typeof window !== 'undefined' && window.location.protocol === 'https:'
       ? '; Secure'
@@ -77,5 +79,9 @@ export function resetCustomerSessionHintForTests(): void {
     typeof window !== 'undefined' && window.location.protocol === 'https:'
       ? '; Secure'
       : '';
-  document.cookie = `${CUSTOMER_SESSION_HINT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secureAttribute}`;
+  for (const path of trackedHintPaths) {
+    document.cookie = `${CUSTOMER_SESSION_HINT_COOKIE}=; Path=${path}; Max-Age=0; SameSite=Lax${secureAttribute}`;
+  }
+  trackedHintPaths.clear();
+  trackedHintPaths.add('/');
 }

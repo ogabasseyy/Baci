@@ -9,7 +9,10 @@ import {
 import { calculateReadingTime, calculateWordCount } from '@/lib/blog-utils';
 import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { createClient } from '@/lib/supabase/server';
-import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
+import {
+  platformBlogPostUpdateSchema,
+  sanitizeBlogPostData,
+} from '@/lib/validations/blog';
 import { platformBlogRouteParamsSchema } from '@/schemas/platform-blog-route-params';
 import type { Json } from '@/types/supabase';
 import { readPlatformPatchError } from './platform-blog-post-patch-error';
@@ -53,7 +56,7 @@ export async function updatePlatformBlogPost(
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
     const body = sanitizeBlogPostData(rawBody as Record<string, unknown>);
-    const validated = blogPostSchema.partial().safeParse(body);
+    const validated = platformBlogPostUpdateSchema.safeParse(body);
 
     if (!validated.success) {
       return NextResponse.json(

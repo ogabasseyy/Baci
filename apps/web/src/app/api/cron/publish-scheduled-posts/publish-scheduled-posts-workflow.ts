@@ -33,17 +33,24 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
-    if (!scheduledPosts || scheduledPosts.length === 0) {
+    const merchantScheduledPosts = (scheduledPosts ?? []).filter(
+      (post) =>
+        typeof post.merchant_id === 'string' && post.merchant_id.length > 0
+    );
+
+    if (merchantScheduledPosts.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No posts to publish',
       });
     }
 
-    console.log(`📦 Cron: Found ${scheduledPosts.length} posts to publish`);
+    console.log(
+      `📦 Cron: Found ${merchantScheduledPosts.length} posts to publish`
+    );
 
     const scheduledMerchantIds = Array.from(
-      new Set(scheduledPosts.map((post) => post.merchant_id))
+      new Set(merchantScheduledPosts.map((post) => post.merchant_id))
     );
     const { data: featureSettings, error: featureSettingsError } =
       await supabase
@@ -63,14 +70,14 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
     }
 
     const { eligiblePosts, skipped, warnings } = getEligibleScheduledPosts(
-      scheduledPosts as ScheduledPost[],
+      merchantScheduledPosts as ScheduledPost[],
       featureSettings ?? []
     );
 
     if (eligiblePosts.length === 0) {
       return NextResponse.json({
         success: true,
-        processed: scheduledPosts.length,
+        processed: merchantScheduledPosts.length,
         published: [],
         skipped,
         warnings,

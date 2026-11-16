@@ -76,6 +76,8 @@ describe('quiz attestation challenge', () => {
       ['padding appended', 'aGVhZA.cGF5bG9hZA.c2ln='],
       ['double padding appended', 'aGVhZA.cGF5bG9hZA.c2ln=='],
       ['non-canonical trailing bits', 'aGVhZA.cGF5bG9hZA.c2l'],
+      ['non-canonical header trailing bits', 'aGVhZB.cGF5bG9hZA.c2ln'],
+      ['non-canonical payload trailing bits', 'aGVhZA.cGF5bG9hZB.c2ln'],
       ['not three segments', 'aGVhZA.cGF5bG9hZA'],
     ])('rejects a token with %s without calling the database', async (_n, token) => {
       const { client, rpc } = rpcClient({ data: true, error: null });

@@ -54,6 +54,7 @@ export async function verifyQuizAppCheckToken(
       options.keyResolver ?? getRemoteKeys(),
       {
         algorithms: ['RS256'],
+        clockTolerance: 30,
         audience: `projects/${config.projectNumber}`,
         currentDate: options.now,
         issuer: `https://firebaseappcheck.googleapis.com/${config.projectNumber}`,

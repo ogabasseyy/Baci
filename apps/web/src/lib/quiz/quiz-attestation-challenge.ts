@@ -25,10 +25,12 @@ export function canonicalQuizAppCheckToken(token: string): string | null {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   if (!parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part))) return null;
-  const signature = parts[2];
-  if (Buffer.from(signature, 'base64url').toString('base64url') !== signature) {
-    return null;
-  }
+  // Every segment must round-trip, so no spelling variant of any part (padding
+  // or unused trailing bits) can yield a second replay hash for one token.
+  const canonical = parts.every(
+    (part) => Buffer.from(part, 'base64url').toString('base64url') === part
+  );
+  if (!canonical) return null;
   return token;
 }
 

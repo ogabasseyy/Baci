@@ -3,11 +3,11 @@ import { getCronSecret } from '@/env';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
 import {
-  fulfilReconciledVtuPurchase,
-  reconcileProcessingVtuTransactions,
-} from '@/lib/vtu-processing-reconciliation';
-import { recoverWalletPaidVtuPurchases } from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
+  type RecoverWalletPaidVtuSummary,
+  recoverWalletPaidVtuPurchases,
+} from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
 
 export const maxDuration = 300;
 
@@ -43,16 +43,26 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createAdminClient();
+    const deadlineMs = invocationStartedAt + maxDuration * 1000;
+    let walletPay: RecoverWalletPaidVtuSummary = {
+      checked: 0,
+      recovered: 0,
+      errored: 0,
+      deferred: 0,
+    };
     const summary = await reconcileProcessingVtuTransactions({
-      deadlineMs: invocationStartedAt + maxDuration * 1000,
+      deadlineMs,
       supabase,
-    });
-    // Purchases paid from the PiggyVest wallet whose vend was interrupted:
-    // re-driven here under the payment's delivery claim (never throws).
-    const walletPay = await recoverWalletPaidVtuPurchases({
-      supabase,
-      deadlineMs: invocationStartedAt + maxDuration * 1000,
-      fulfil: fulfilReconciledVtuPurchase,
+      // Purchases paid from the PiggyVest wallet whose vend was interrupted:
+      // re-driven after reconciliation under the payment's delivery claim
+      // (never throws), vending through the reconciliation's own fulfil.
+      afterReconcile: async (fulfil) => {
+        walletPay = await recoverWalletPaidVtuPurchases({
+          supabase,
+          deadlineMs,
+          fulfil,
+        });
+      },
     });
     if (walletPay.errored > 0) {
       logger.warn({

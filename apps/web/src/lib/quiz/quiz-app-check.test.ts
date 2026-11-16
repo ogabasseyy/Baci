@@ -82,7 +82,7 @@ describe('verifyQuizAppCheckToken', () => {
   });
 
   it('rejects an expired token', async () => {
-    const { publicKey, token } = await signedToken({ exp: nowSeconds - 10 });
+    const { publicKey, token } = await signedToken({ exp: nowSeconds - 120 });
 
     await expect(
       verifyQuizAppCheckToken(token, config, {

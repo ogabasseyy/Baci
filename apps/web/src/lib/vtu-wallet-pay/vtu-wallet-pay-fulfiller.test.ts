@@ -9,12 +9,8 @@ vi.mock('./run-vtu-wallet-pay-step', () => ({
 vi.mock('./vtu-wallet-pay-step-deps', () => ({
   createVtuWalletPayStepDeps: () => 'deps',
 }));
-vi.mock('@/lib/vtu-fulfillment', () => ({
-  fulfillPendingVtuTransaction: mocks.fulfil,
-}));
 
 const auth = { supabase: {} as never, user: {} as never };
-const fulfillSupabase = { admin: true } as never;
 
 beforeEach(() => vi.resetAllMocks());
 
@@ -24,7 +20,7 @@ describe('createVtuWalletPayFulfiller', () => {
       createVtuWalletPayFulfiller({
         charge: { paymentMethod: 'store_credit' } as never,
         auth,
-        fulfillSupabase,
+        fulfil: mocks.fulfil,
       })
     ).toBeNull();
   });
@@ -37,7 +33,7 @@ describe('createVtuWalletPayFulfiller', () => {
         walletPayPinProof: 'proof',
       } as never,
       auth,
-      fulfillSupabase,
+      fulfil: mocks.fulfil,
     });
     mocks.step.mockResolvedValue('response');
     await expect(make?.('merchant-1', 'customer-1')('txn-1')).resolves.toBe(
@@ -53,10 +49,7 @@ describe('createVtuWalletPayFulfiller', () => {
     });
     expect(deps).toBe('deps');
     await input.fulfil(true);
-    expect(mocks.fulfil).toHaveBeenCalledWith({
-      supabase: fulfillSupabase,
-      transactionId: 'txn-1',
-      walletPayClaimed: true,
-    });
+    // The route's injected fulfil gets the purchase and the claim flag.
+    expect(mocks.fulfil).toHaveBeenCalledWith('txn-1', true);
   });
 });

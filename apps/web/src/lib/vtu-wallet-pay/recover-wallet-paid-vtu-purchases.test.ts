@@ -9,9 +9,6 @@ vi.mock('@/lib/piggyvest/wallet-pay-service', () => ({
   refundWalletPayment: vi.fn(),
   walletPayDelivery: vi.fn(),
 }));
-vi.mock('@/lib/vtu-fulfillment', () => ({
-  fulfillPendingVtuTransaction: vi.fn(),
-}));
 
 const OP = '11111111-1111-4111-8111-111111111111';
 const TXN = '33333333-3333-4333-8333-333333333333';
@@ -43,7 +40,6 @@ const deps = {
   worker: () => worker as never,
   delivery: () => delivery as never,
   refund,
-  fulfil,
 } as never;
 
 beforeEach(() => {
@@ -70,7 +66,7 @@ beforeEach(() => {
 describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to return (Codex P1)', () => {
   it('re-drives a purchase left mid-vend under the payment claim and records it', async () => {
     const summary = await recoverWalletPaidVtuPurchases(
-      { supabase },
+      { supabase, fulfil },
       deps as never
     );
     expect(fulfil).toHaveBeenCalledWith({
@@ -95,14 +91,14 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
       error: 'x',
     });
     delivery.finish.mockResolvedValue('refund_owed');
-    await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
+    await recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never);
     expect(delivery.finish).toHaveBeenCalledWith(OP, 'failed', TOKEN);
     expect(refund).toHaveBeenCalledTimes(1);
   });
 
   it('bugfix: takes no claim when too little of the invocation remains', async () => {
     const summary = await recoverWalletPaidVtuPurchases(
-      { supabase, deadlineMs: Date.now() + 10_000 },
+      { supabase, fulfil, deadlineMs: Date.now() + 10_000 },
       deps
     );
     expect(worker.claim).not.toHaveBeenCalled();
@@ -111,14 +107,14 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
 
   it('leaves a purchase that is not mid-vend to the drain, taking no claim', async () => {
     delivery.vtuDeliveryState.mockResolvedValue('failed');
-    await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
+    await recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never);
     expect(worker.claim).not.toHaveBeenCalled();
     expect(fulfil).not.toHaveBeenCalled();
   });
 
   it('vends nothing when another holder has the claim', async () => {
     worker.claim.mockResolvedValue({ status: 'busy' });
-    await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
+    await recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never);
     expect(fulfil).not.toHaveBeenCalled();
   });
 
@@ -127,12 +123,12 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
       data: { amount: 1000, metadata: {} },
       error: null,
     });
-    await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
+    await recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never);
     maybeSingle.mockResolvedValueOnce({
       data: { amount: 999, metadata: { paymentSource: 'piggyvest_wallet' } },
       error: null,
     });
-    await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
+    await recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never);
     expect(fulfil).not.toHaveBeenCalled();
   });
 
@@ -142,7 +138,7 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
       refund: [],
       settle: [],
     });
-    await recoverWalletPaidVtuPurchases({ supabase }, deps as never);
+    await recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never);
     expect(delivery.vtuDeliveryState).not.toHaveBeenCalled();
     const off = {
       ...(deps as object),
@@ -151,14 +147,14 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
       },
     };
     await expect(
-      recoverWalletPaidVtuPurchases({ supabase }, off as never)
+      recoverWalletPaidVtuPurchases({ supabase, fulfil }, off as never)
     ).resolves.toEqual({ checked: 0, recovered: 0, errored: 0, deferred: 0 });
   });
 
   it('counts a failure and carries on, never throwing', async () => {
     worker.claim.mockRejectedValueOnce(new Error('db down'));
     await expect(
-      recoverWalletPaidVtuPurchases({ supabase }, deps as never)
+      recoverWalletPaidVtuPurchases({ supabase, fulfil }, deps as never)
     ).resolves.toMatchObject({ checked: 1, errored: 1 });
   });
 });

@@ -3,7 +3,10 @@ import { getCronSecret } from '@/env';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
+import {
+  fulfilReconciledVtuPurchase,
+  reconcileProcessingVtuTransactions,
+} from '@/lib/vtu-processing-reconciliation';
 import { recoverWalletPaidVtuPurchases } from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
 
 export const maxDuration = 300;
@@ -49,6 +52,7 @@ export async function GET(request: NextRequest) {
     const walletPay = await recoverWalletPaidVtuPurchases({
       supabase,
       deadlineMs: invocationStartedAt + maxDuration * 1000,
+      fulfil: fulfilReconciledVtuPurchase,
     });
     if (walletPay.errored > 0) {
       logger.warn({

@@ -17,6 +17,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 vi.mock('@/lib/vtu-processing-reconciliation', () => ({
+  fulfilReconciledVtuPurchase: vi.fn(),
   reconcileProcessingVtuTransactions: vi.fn(),
 }));
 
@@ -122,6 +123,8 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
       supabase: { admin: true },
       // The recovery shares the invocation's deadline (Codex P2).
       deadlineMs: expect.any(Number),
+      // The route hands in its own approved fulfil operation.
+      fulfil: expect.any(Function),
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith({

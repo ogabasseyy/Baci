@@ -226,3 +226,14 @@ export async function reconcileProcessingVtuTransactions({
 
   return summary;
 }
+
+/**
+ * The fulfil operation this module already runs for processing purchases,
+ * handed to the PiggyVest-paid recovery step by the same cron route, so that
+ * step imports no fulfilment or credential code of its own.
+ */
+export function fulfilReconciledVtuPurchase(
+  input: Parameters<typeof fulfillPendingVtuTransaction>[0]
+) {
+  return fulfillPendingVtuTransaction(input);
+}

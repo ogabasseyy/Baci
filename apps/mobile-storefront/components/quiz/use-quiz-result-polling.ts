@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizResult } from '@/services/quiz-results';
 import type { QuizV2Result } from '@/services/quiz-types';
-import { randomDelay } from './quiz-retry-timing';
+import { backoffDelay, randomDelay } from './quiz-retry-timing';
 import { useQuizResultRealtimeWakeup } from './use-quiz-result-realtime-wakeup';
 
 export const QUIZ_RESULT_POLL_INTERVAL_MS = 5_000;
@@ -35,7 +35,13 @@ function getPendingPollDelayMs(
     // that is behind can otherwise sleep this hook for hours and miss the
     // publication. Realtime normally wakes us sooner; this cap is the safe
     // HTTP fallback when that channel is unavailable.
-    return Math.min(availableAtMs - nowMs, QUIZ_RESULT_POLL_MAX_INTERVAL_MS);
+    const waitMs = availableAtMs - nowMs;
+    if (waitMs >= QUIZ_RESULT_POLL_MAX_INTERVAL_MS) {
+      return QUIZ_RESULT_POLL_MAX_INTERVAL_MS;
+    }
+    // availableAt is the event end: the same instant for every player. Spread
+    // this poll like the wake-up so the phones do not all ask at once.
+    return waitMs + randomDelay(QUIZ_RESULT_WAKEUP_MAX_DELAY_MS);
   }
   if (Number.isFinite(availableAtMs)) {
     return getStableFallbackDelayMs(attemptId);
@@ -43,12 +49,14 @@ function getPendingPollDelayMs(
   return QUIZ_RESULT_POLL_MAX_INTERVAL_MS;
 }
 
+// 5 s doubling to 30 s, with +/- 20% spread so phones that failed the same
+// request do not all retry in the same instant.
 function getFailedPollDelayMs(consecutiveFailures: number): number {
-  const exponent = Math.max(0, consecutiveFailures - 1);
-  return Math.min(
-    QUIZ_RESULT_POLL_INTERVAL_MS * 2 ** exponent,
-    QUIZ_RESULT_POLL_MAX_INTERVAL_MS
-  );
+  return backoffDelay({
+    baseMs: QUIZ_RESULT_POLL_INTERVAL_MS,
+    failures: consecutiveFailures,
+    capMs: QUIZ_RESULT_POLL_MAX_INTERVAL_MS,
+  });
 }
 
 export function useQuizResultPolling({
@@ -137,8 +145,9 @@ export function useQuizResultPolling({
       }
     };
     pollNowRef.current = () => {
-      if (cancelled || !appIsActive) return;
-      clearWakeup();
+      // A wake-up already waiting keeps its delay: repeated wake-ups
+      // (reconnects, duplicate broadcasts) must not keep pushing the poll back.
+      if (cancelled || !appIsActive || wakeupId) return;
       wakeupId = setTimeout(() => {
         wakeupId = undefined;
         if (timeoutId) clearTimeout(timeoutId);

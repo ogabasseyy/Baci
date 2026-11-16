@@ -85,6 +85,7 @@ describe('useQuizResultPolling realtime and availability scheduling', () => {
   });
 
   it('waits until the server availability time before retrying pending results', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0); // no spread after that time
     const availableAt = new Date(Date.now() + 20_000).toISOString();
     jest
       .mocked(fetchQuizResult)

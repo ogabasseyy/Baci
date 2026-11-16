@@ -37,6 +37,8 @@ describe('useQuizResultsLeaderboard', () => {
       );
     const liveCalls = () =>
       jest.mocked(fetchQuizLiveLeaderboard).mock.calls.length;
+    const sessionPending = () =>
+      new QuizServiceError('Session pending', 'unauthorized', 401);
     const advance = async (ms: number) => {
       await act(async () => {
         await jest.advanceTimersByTimeAsync(ms);
@@ -155,8 +157,6 @@ describe('useQuizResultsLeaderboard', () => {
     it('spreads the retry after a temporary 401 instead of a fixed 5 s', async () => {
       jest.useFakeTimers();
       const random = jest.spyOn(Math, 'random').mockReturnValue(0);
-      const sessionPending = () =>
-        new QuizServiceError('Session pending', 'unauthorized', 401);
       jest
         .mocked(fetchQuizLiveLeaderboard)
         .mockRejectedValueOnce(sessionPending())
@@ -178,6 +178,28 @@ describe('useQuizResultsLeaderboard', () => {
       expect(liveCalls()).toBe(2);
       await advance(1);
       expect(liveCalls()).toBe(3);
+    });
+
+    it('does not let 401s lengthen the backoff of a later server error', async () => {
+      jest.useFakeTimers();
+      jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      jest
+        .mocked(fetchQuizLiveLeaderboard)
+        .mockRejectedValueOnce(sessionPending())
+        .mockRejectedValueOnce(sessionPending())
+        .mockRejectedValueOnce(new QuizServiceError('boom', 'server', 500))
+        .mockResolvedValue(liveBoard);
+      renderLive();
+
+      // Two 401s: retries after 5 s, then 10 s.
+      await advance(0);
+      await advance(5_000 + 10_000);
+      expect(liveCalls()).toBe(3);
+      // The first server error waits its own 10 s, not 40 s.
+      await advance(9_999);
+      expect(liveCalls()).toBe(3);
+      await advance(1);
+      expect(liveCalls()).toBe(4);
     });
 
     it('spreads and backs off the final-board retry', async () => {

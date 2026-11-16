@@ -145,17 +145,8 @@ export function useQuizResultsLeaderboard({
         }
       } catch (error) {
         if (!active) return;
-        loadFailures += 1;
-        retryDelayMs = backoffDelay({
-          baseMs: baseIntervalMs,
-          failures: loadFailures,
-          capMs: FAILURE_BACKOFF_CAP_MS,
-          floorMs:
-            error instanceof QuizServiceError &&
-            (error.status === 429 || error.status === 503)
-              ? OVERLOAD_RETRY_FLOOR_MS
-              : 0,
-        });
+        // Access errors and ordinary failures back off on separate ladders: a
+        // burst of 401s must not make the next server error wait longer.
         if (
           error instanceof QuizServiceError &&
           (error.status === 401 ||
@@ -183,6 +174,18 @@ export function useQuizResultsLeaderboard({
           } else {
             retryDelayMs = null;
           }
+        } else {
+          loadFailures += 1;
+          retryDelayMs = backoffDelay({
+            baseMs: baseIntervalMs,
+            failures: loadFailures,
+            capMs: FAILURE_BACKOFF_CAP_MS,
+            floorMs:
+              error instanceof QuizServiceError &&
+              (error.status === 429 || error.status === 503)
+                ? OVERLOAD_RETRY_FLOOR_MS
+                : 0,
+          });
         }
         if (!hasLeaderboard.current) setLeaderboardError(true);
       } finally {

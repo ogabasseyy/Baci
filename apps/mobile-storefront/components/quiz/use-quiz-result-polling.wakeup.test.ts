@@ -22,13 +22,14 @@ jest.mock('@/services/quiz-results', () => ({
   fetchQuizResult: jest.fn(),
 }));
 
-// With no availability time the next ordinary poll is 30 s away, so any
-// earlier request in these tests can only come from the wake-up.
-const pendingResult: QuizV2Result = {
+const pendingUntil = (availableAt: string | null): QuizV2Result => ({
   attemptId: 'attempt-1',
   availability: 'pending',
-  availableAt: null,
-};
+  availableAt,
+});
+// With no availability time the next ordinary poll is 30 s away, so any
+// earlier request in these tests can only come from the wake-up.
+const pendingResult = pendingUntil(null);
 
 describe('useQuizResultPolling wake-up and ordinary polls', () => {
   beforeEach(() => {
@@ -65,18 +66,19 @@ describe('useQuizResultPolling wake-up and ordinary polls', () => {
   };
 
   it('drops a pending wake-up poll once an ordinary poll has run', async () => {
+    // Centre of the retry spread: the failed first request retries at 5 s.
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0.5);
     jest
       .mocked(fetchQuizResult)
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValue(pendingResult);
     renderWakeupHook();
-    // The failed first request retries after 5 s.
     await advance(0);
     expect(fetchQuizResult).toHaveBeenCalledTimes(1);
 
     // At 4 s a wake-up arrives and picks a 3.96 s delay (due at 7.96 s).
     await advance(4_000);
-    jest.spyOn(Math, 'random').mockReturnValue(0.99);
+    random.mockReturnValue(0.99);
     await wakeUp();
     expect(fetchQuizResult).toHaveBeenCalledTimes(1);
 
@@ -116,5 +118,67 @@ describe('useQuizResultPolling wake-up and ordinary polls', () => {
     expect(fetchQuizResult).toHaveBeenCalledTimes(1);
     await advance(1);
     expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the first delay when wake-ups repeat', async () => {
+    jest.mocked(fetchQuizResult).mockResolvedValue(pendingResult);
+    renderWakeupHook();
+    await advance(0);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+
+    // The first wake-up picks 1 s. A second one half a second later would
+    // pick 3.96 s if it restarted the timer.
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0.25);
+    await wakeUp();
+    await advance(500);
+    random.mockReturnValue(0.99);
+    await wakeUp();
+    await advance(499);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('spreads the poll at the event end over 0-4 s', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    const eventEnd = new Date(Date.now() + 10_000).toISOString();
+    jest
+      .mocked(fetchQuizResult)
+      .mockResolvedValueOnce(pendingUntil(eventEnd))
+      .mockResolvedValue(pendingResult);
+    renderWakeupHook();
+    await advance(0);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+
+    // Every phone is told the same event end; this one waits 2 s past it.
+    await advance(10_000 + 1_999);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('spreads a failed poll retry between 4 s and 6 s', async () => {
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+    jest
+      .mocked(fetchQuizResult)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue(pendingResult);
+    renderWakeupHook();
+    await advance(0);
+
+    // 1st failure: 5 s at the lowest spread is 4 s.
+    await advance(3_999);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    // The retry schedules the next one as soon as it fails, so the upper
+    // bound has to be in place before it fires.
+    random.mockReturnValue(1);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+    // 2nd failure: 10 s at the highest spread is 12 s.
+    await advance(11_999);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(3);
   });
 });

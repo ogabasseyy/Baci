@@ -154,7 +154,9 @@ describe('background steps (2026-11-16)', () => {
       assert.ok(start?.id, `${startName} needs an id`);
       // The start step only spawns: a failure in other work there would skip the wait and cleanup
       // while the background command keeps running.
-      assert.match(start.run, /^bash \.github\/scripts\/background-step\.sh start [^\n]+$/);
+      assert.match(start.run, /^bash \.github\/scripts\/background-step\.sh start \S+( \S+)*$/);
+      // No chained or substituted shell: `&&`, `;`, `||`, pipes, backgrounding, redirects, subshells.
+      assert.doesNotMatch(start.run, /[;&|`<>()]|\$\(/);
       assert.match(wait.run, /background-step\.sh wait /);
       assert.ok(steps.indexOf(wait) > steps.indexOf(start));
       assert.match(wait.if, /!cancelled\(\)/);

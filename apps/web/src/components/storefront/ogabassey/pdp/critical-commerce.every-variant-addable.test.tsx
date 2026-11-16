@@ -139,3 +139,72 @@ describe('every version of a product can be added to the cart', () => {
     }
   }
 });
+
+const AXIS_LABELS: Record<string, string> = {
+  color: 'color',
+  ram: 'ram',
+  region: 'region',
+  sim_type: 'sim type',
+  storage: 'storage',
+};
+
+/**
+ * Two versions the shopper cannot tell apart (identical except one
+ * leaves an option blank) are a catalogue data fault: a blank has no
+ * name to offer as a choice. Tapping still buys the named sibling, so
+ * the button never goes dead; the blank twin needs fixing at the source.
+ */
+const INDISTINGUISHABLE_TWINS: Record<string, string> = {
+  'ram-blank': 'ram-8',
+};
+
+describe('a shopper can tap their way to every version', () => {
+  for (const [shape, rows] of Object.entries(shapes)) {
+    const options = axisOptions(rows);
+    const variantAxes = [
+      'condition',
+      ...VISIBLE_AXES.filter((axis) => (options[axis]?.length ?? 0) > 1),
+    ];
+
+    for (const [variantId, condition, attributes] of rows) {
+      it(`${shape}: ${variantId}`, () => {
+        cart.addToCart.mockClear();
+        const product = buildProduct(rows);
+        render(
+          <OgabasseyPdpCriticalCommerceClient
+            cartHref="/cart"
+            cartProduct={product}
+            productName={product.name}
+            variantAxes={variantAxes}
+            variantAxisOptions={options}
+            variantCount={rows.length}
+          />
+        );
+
+        const tap = (name: string) => {
+          const option = screen.queryByRole('button', { name });
+          if (option) {
+            fireEvent.click(option);
+          }
+        };
+        const conditionLabel = condition === 'new' ? 'New' : 'Used';
+        tap(`Select ${conditionLabel} condition`);
+        for (const axis of VISIBLE_AXES) {
+          if (attributes[axis]) {
+            tap(`Select ${attributes[axis]} ${AXIS_LABELS[axis]}`);
+          }
+        }
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add to cart' }));
+        expect(cart.addToCart).toHaveBeenCalledWith(
+          expect.anything(),
+          1,
+          expect.objectContaining({
+            variantId: INDISTINGUISHABLE_TWINS[variantId] ?? variantId,
+          })
+        );
+        cleanup();
+      });
+    }
+  }
+});

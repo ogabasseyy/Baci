@@ -51,7 +51,7 @@ describe('subdomain routing', () => {
       'shop'
     );
     expect(response?.headers.get('x-middleware-rewrite')).toBe(
-      'https://shop.usebaci.com/shop/products/phone?__baci_metadata_cache_bucket=streaming'
+      'https://shop.usebaci.com/shop.usebaci.com/products/phone?__baci_metadata_cache_bucket=streaming'
     );
     expect(getCustomDomainForSlug).not.toHaveBeenCalled();
   });

@@ -40,11 +40,19 @@ export async function GET(request: NextRequest) {
     const THRESHOLD = 500;
     const recommendedMethod = count > THRESHOLD ? 'server' : 'client';
 
-    return NextResponse.json({
-      count,
-      recommendedMethod,
-      threshold: THRESHOLD,
-    });
+    return NextResponse.json(
+      {
+        count,
+        recommendedMethod,
+        threshold: THRESHOLD,
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          'Vercel-Cache-Tag': `products,products-${merchantId}`,
+        },
+      }
+    );
   } catch (error) {
     console.error('Product count error:', error);
     return NextResponse.json(

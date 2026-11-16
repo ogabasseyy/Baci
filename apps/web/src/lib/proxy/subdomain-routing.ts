@@ -187,7 +187,7 @@ async function runSubdomainRoutingInternal(
   });
   if (preflight) return preflight;
   const url = request.nextUrl.clone();
-  url.pathname = `/${subdomain}${pathname}`;
+  url.pathname = `/${hostname}${pathname}`;
   if (
     shouldPartitionStorefrontMetadataCache(
       pathname,

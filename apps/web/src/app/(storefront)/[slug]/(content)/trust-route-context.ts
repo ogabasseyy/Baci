@@ -2,10 +2,7 @@ import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
 
-export async function getTrustRouteContext(
-  slug: string,
-  _options: { requestScopedUrl?: boolean } = {}
-) {
+export async function getTrustRouteContext(slug: string) {
   const merchant = await getRequestScopedMerchant(slug);
 
   if (!merchant) {

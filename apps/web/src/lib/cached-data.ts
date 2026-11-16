@@ -685,10 +685,25 @@ export async function getMerchantByIdentifier(
 ): Promise<CachedMerchant | null> {
   if (!isValidMerchantIdentifier(identifier)) return null;
 
-  if (isDomainIdentifier(identifier)) {
-    return await getCachedMerchantByDomain(identifier.toLowerCase());
+  const normalized = identifier.toLowerCase();
+  const rootDomain = (
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com'
+  )
+    .replace(/:\d+$/, '')
+    .toLowerCase();
+  for (const suffix of [`.${rootDomain}`, '.localhost']) {
+    if (normalized.endsWith(suffix)) {
+      const subdomain = normalized.slice(0, -suffix.length);
+      if (subdomain && !subdomain.includes('.')) {
+        return await getCachedMerchant(subdomain);
+      }
+    }
   }
-  return await getCachedMerchant(identifier.toLowerCase());
+
+  if (isDomainIdentifier(normalized)) {
+    return await getCachedMerchantByDomain(normalized);
+  }
+  return await getCachedMerchant(normalized);
 }
 
 /**

@@ -9,11 +9,15 @@ import type { BillFormProps } from './bill-form.types';
 import { billFormStyles as styles } from './bill-form-styles';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
 import { useBillFormController } from './use-bill-form-controller';
+import { useUtilityPayGate } from './use-utility-pay-gate';
+import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
+import { UTILITY_FOOTER_NOTICE_SPACE } from './utility-pay-readiness';
 
 export function BillForm(props: BillFormProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const {
+    amountIssue,
     beneficiaries,
     billersQuery,
     billItemSelection,
@@ -51,6 +55,20 @@ export function BillForm(props: BillFormProps) {
     verify,
     walletReturnToHref,
   } = useBillFormController(props);
+  const retained = useUtilityRetainedAttempt(payment, purchaseRequest ?? null);
+  const payGate = useUtilityPayGate({
+    amount: numericAmount,
+    formIssue: amountIssue,
+    payment,
+    retained,
+    returnToHref: walletReturnToHref,
+  });
+  // An amount issue is shown under the amount field once something is typed.
+  const amountIssueInline = Boolean(amountIssue && formattedAmount);
+  const footerNotice =
+    payGate.blockedReason && !amountIssueInline
+      ? { action: payGate.action, message: payGate.blockedReason }
+      : null;
 
   // Returning users repeat far more than they add new meters, so when there are
   // beneficiaries the full provider grid collapses behind an "Other providers"
@@ -69,7 +87,11 @@ export function BillForm(props: BillFormProps) {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: footerSpacerHeight },
+          {
+            paddingBottom:
+              footerSpacerHeight +
+              (footerNotice ? UTILITY_FOOTER_NOTICE_SPACE : 0),
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -139,6 +161,7 @@ export function BillForm(props: BillFormProps) {
 
         {canShowPayment ? (
           <BillPaymentSection
+            amountIssue={amountIssue}
             colors={colors}
             formattedAmount={formattedAmount}
             handlePaymentLayout={handlePaymentLayout}
@@ -154,11 +177,13 @@ export function BillForm(props: BillFormProps) {
 
       {canShowPayment ? (
         <BillPaymentFooter
+          blockedReason={payGate.blockedReason}
           colors={colors}
           footerBottomOffset={footerBottomOffset}
           insetsBottom={insets.bottom}
           isBusy={isBusy}
           isKeyboardVisible={isKeyboardVisible}
+          notice={footerNotice}
           numericAmount={numericAmount}
           onPurchase={handlePurchase}
         />

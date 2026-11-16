@@ -68,24 +68,15 @@ export function createDataFormPurchaseHandler({
       return;
     }
 
-    if (!selectedProvider || !phoneNumber || !selectedPlan) {
-      Alert.alert(
-        'Missing Information',
-        'Please enter a phone number and choose a data bundle.'
-      );
-      return;
-    }
-    const phoneError = phoneLengthError(phoneNumber);
-    if (phoneError) {
-      Alert.alert(phoneError.title, phoneError.message);
-      return;
-    }
-    // Bug #64: Prevent submission when planAmount is 0 or not set
-    if (planAmount <= 0) {
-      Alert.alert(
-        'Invalid Amount',
-        'Please enter a valid amount before proceeding.'
-      );
+    // Pay stays disabled with the reason shown in the form (inline notice),
+    // so these never reach here from a tap: refuse quietly, no system alert.
+    if (
+      !selectedProvider ||
+      !selectedPlan ||
+      phoneLengthError(phoneNumber) ||
+      // Bug #64: Prevent submission when planAmount is 0 or not set
+      planAmount <= 0
+    ) {
       return;
     }
     const customerName =

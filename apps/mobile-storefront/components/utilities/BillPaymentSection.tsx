@@ -4,6 +4,7 @@ import type Colors from '@/constants/Colors';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
+import { UtilityFormNotice } from './UtilityFormNotice';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useRetainsPiggyvest } from './use-retains-piggyvest';
 import { sanitizeAmountInput } from './utility-amount-sanitize';
@@ -11,6 +12,8 @@ import { sanitizeAmountInput } from './utility-amount-sanitize';
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
 interface BillPaymentSectionProps {
+  /** Shown under the amount field once something is typed. */
+  amountIssue?: string | null;
   colors: typeof Colors.light;
   formattedAmount: string;
   handlePaymentLayout: (event: LayoutChangeEvent) => void;
@@ -25,6 +28,7 @@ interface BillPaymentSectionProps {
 }
 
 export function BillPaymentSection({
+  amountIssue = null,
   colors,
   formattedAmount,
   handlePaymentLayout,
@@ -70,6 +74,9 @@ export function BillPaymentSection({
           maxLength={10}
           onChangeText={(text) => setAmount(sanitizeAmountInput(text))}
         />
+        {amountIssue && formattedAmount ? (
+          <UtilityFormNotice compact message={amountIssue} />
+        ) : null}
       </View>
 
       <UtilityPaymentOptions

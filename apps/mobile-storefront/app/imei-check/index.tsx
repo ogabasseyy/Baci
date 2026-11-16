@@ -1,42 +1,22 @@
-import { IMEI_SERVICE_TIERS, type ImeiServiceTierKey } from '@baci/shared/imei';
-import * as Crypto from 'expo-crypto';
-import { router } from 'expo-router';
-import { useEffect, useEffectEvent, useState } from 'react';
-import { Keyboard } from 'react-native';
-import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
-import { decideImeiVerify } from '@/components/imei-check/decide-imei-verify';
+import { IMEI_SERVICE_TIERS, resolveImeiReportDevice } from '@baci/shared/imei';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
+import { imeiAccountScope } from '@/components/imei-check/imei-account-scope';
 import { ImeiCheckPending } from '@/components/imei-check/imei-check-pending';
 import { ImeiCheckResultView } from '@/components/imei-check/imei-check-result-view';
-import { imeiCheckScreenActions } from '@/components/imei-check/imei-check-screen-actions';
 import { ImeiCheckScreenHeader } from '@/components/imei-check/imei-check-screen-header';
 import { ImeiCheckTop } from '@/components/imei-check/imei-check-top';
-import { getImeiWalletCopy } from '@/components/imei-check/imei-wallet-copy';
-import { resolveImeiCheckFailure } from '@/components/imei-check/resolve-imei-check-failure';
-import { submitImeiCheck } from '@/components/imei-check/submit-imei-check';
+import { ImeiReportHistory } from '@/components/imei-check/imei-report-history';
+import { useImeiCheckFlow } from '@/components/imei-check/use-imei-check-flow';
 import { useImeiDeviceNavigation } from '@/components/imei-check/use-imei-device-navigation';
-import { useImeiPendingLookup } from '@/components/imei-check/use-imei-pending-lookup';
-import { useImeiRequestIdentity } from '@/components/imei-check/use-imei-request-identity';
 import { useImeiScreenNavigationGuards } from '@/components/imei-check/use-imei-screen-navigation-guards';
-import { useImeiWalletPay } from '@/components/imei-check/use-imei-wallet-pay';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import { WalletPaySheet } from '@/components/wallet-pay/WalletPaySheet';
 import Colors from '@/constants/Colors';
 import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
-import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
-import { useWallet } from '@/hooks/use-wallet';
-import { createLogger } from '@/lib/logger';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
-import {
-  ImeiCheckApiResponseSchema,
-  type ImeiResult,
-  parseApiResponse,
-} from '@/lib/validation';
-import { useAuthStore } from '@/stores/auth-store';
 
-const log = createLogger('ImeiChecker');
 const API_BASE_URL = resolveStorefrontApiBaseUrl(
   process.env.EXPO_PUBLIC_STOREFRONT_API_URL,
   process.env.EXPO_PUBLIC_API_URL
@@ -45,21 +25,6 @@ const API_BASE_URL = resolveStorefrontApiBaseUrl(
 export default function ImeiCheckerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<ImeiResult | null>(null);
-  const [resultLookupId, setResultLookupId] = useState<string | null>(null);
-  const [resultTier, setResultTier] = useState<ImeiServiceTierKey>('full');
-  const [error, setError] = useState<string | null>(null);
-  const showResult = (
-    tier: ImeiServiceTierKey,
-    lookupId: string | null,
-    data: ImeiResult
-  ) => {
-    setError(null);
-    setResultTier(tier);
-    setResultLookupId(lookupId);
-    setResult(data);
-  };
   const {
     deviceOrder,
     handleDeviceTab,
@@ -67,171 +32,34 @@ export default function ImeiCheckerScreen() {
     pagerRef,
     selectedDevice,
     visitedDevices,
-  } = useImeiDeviceNavigation(() => setError(null));
-  const session = useAuthStore((state) => state.session);
-  const customerId = useAuthStore((state) => state.customer?.id);
-  const merchantId = useAuthStore((state) => state.merchantId ?? undefined);
-  const walletQuery = useWallet();
-  const pendingLookup = useImeiPendingLookup({
-    accessToken: session?.access_token,
-    apiBaseUrl: API_BASE_URL,
+  } = useImeiDeviceNavigation(() => {
+    /* UI handlers clear errors after the flow hook is available. */
+  });
+  const {
+    error,
+    isLoading,
+    result,
+    resultDevice,
+    resultLookupId,
+    resultTier,
+    session,
     customerId,
     merchantId,
-  });
-  const requestIdentity = useImeiRequestIdentity(Crypto.randomUUID);
-  const walletPay = useImeiWalletPay({
-    apiBaseUrl: API_BASE_URL,
-    device: selectedDevice,
+    pendingLookup,
+    walletPay,
     walletQuery,
-    onDelivered: (paid) => showResult(paid.tier, paid.lookupId, paid.result),
-  });
-
-  // Checks spend the older balance: store credit for PiggyVest customers.
-  const wallet = walletQuery.data?.wallet;
-  const walletBalance = wallet?.balance ?? 0;
-  const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, wallet);
-  const walletCopy = getImeiWalletCopy(walletIsStoreCredit);
+    walletBalance,
+    walletIsStoreCredit,
+    fundWallet,
+    handleVerify,
+    handleReset,
+    openReport,
+    clearError,
+    dropInvalidIdentifierError,
+  } = useImeiCheckFlow(selectedDevice, API_BASE_URL);
   // Same rule as fundWallet: not ruled out means a card-only top-up.
   const topUpCardOnly = usePiggyvestCapabilityNow(merchantId) !== false;
-  const fundWallet = (amount: number) =>
-    imeiCheckScreenActions.fundWallet(amount, merchantId);
-
-  const clearIdempotencyKey = () => requestIdentity.clear();
-
-  const handlePendingTerminal = useEffectEvent(
-    (terminal: NonNullable<typeof pendingLookup.terminal>) => {
-      clearIdempotencyKey();
-      setIsLoading(false);
-      if (terminal.kind === 'complete') {
-        showResult(terminal.tier, terminal.lookupId, terminal.result);
-      } else {
-        setError(terminal.error);
-      }
-      pendingLookup.clearTerminal();
-    }
-  );
-
-  useEffect(() => {
-    if (pendingLookup.terminal) {
-      handlePendingTerminal(pendingLookup.terminal);
-    }
-  }, [pendingLookup.terminal]);
-
-  const handleVerify = async (tier: ImeiServiceTierKey, imei: string) => {
-    Keyboard.dismiss();
-    if (isLoading || pendingLookup.pending) return;
-
-    const serviceTier = IMEI_SERVICE_TIERS[tier];
-    if (!imeiCheckScreenActions.isValidFor(imei, serviceTier, selectedDevice))
-      return setError(
-        imeiCheckScreenActions.invalidFor(serviceTier, selectedDevice)
-      );
-    const decision = await decideImeiVerify({
-      retainedStoreCredit: requestIdentity.retains(tier, imei, selectedDevice),
-      retainsPiggyvest: () => walletPay.retains(tier, imei),
-      ownerAtTap: useAuthStore.getState().user?.id ?? null,
-      currentOwner: () => useAuthStore.getState().user?.id ?? null,
-      walletLoading: walletQuery.isLoading || walletPay.waitsForWallet,
-      walletError: walletQuery.isError,
-      piggyvestCovers: () => walletPay.covers(tier),
-      walletBalance,
-      price: serviceTier.price,
-    });
-    if (decision.kind === 'ignore') return;
-    if (decision.kind !== 'pay')
-      return setError(
-        decision.kind === 'wait'
-          ? `${walletCopy.loading} Please try again in a moment.`
-          : walletCopy.unavailable
-      );
-    const { rail } = decision;
-    if (rail === 'piggyvest') return void walletPay.open(tier, imei);
-    if (rail === 'top_up')
-      return void fundWallet(serviceTier.price - walletBalance);
-
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-
-    const idempotencyKey = requestIdentity.get(tier, imei, selectedDevice);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30_000);
-
-    const performCheck = async () => {
-      const { rawData, response } = await submitImeiCheck({
-        // The live session: the tap awaited the saved keys (Codex P1).
-        accessToken: useAuthStore.getState().session?.access_token,
-        apiBaseUrl: API_BASE_URL,
-        device: selectedDevice,
-        idempotencyKey,
-        identifier: imei,
-        signal: controller.signal,
-        tier,
-      });
-      if (!response.ok || rawData?.error) {
-        const outcome = resolveImeiCheckFailure({
-          currentTierPrice: serviceTier.price,
-          payload: rawData,
-          responseStatus: response.status,
-          walletBalance,
-        });
-
-        await applyImeiCheckFailure(outcome, {
-          clearKey: clearIdempotencyKey,
-          signIn: () => router.push('/auth/login?returnTo=/imei-check'),
-          topUp: fundWallet,
-          refetchWallet: () => walletQuery.refetch?.(),
-          showError: setError,
-        });
-        return;
-      }
-
-      const validated = parseApiResponse(
-        ImeiCheckApiResponseSchema,
-        rawData,
-        'IMEI check API'
-      );
-      if (
-        validated?.success &&
-        validated.status === 'pending' &&
-        validated.lookupId
-      ) {
-        await pendingLookup.start({
-          lookupId: validated.lookupId,
-          pollAfterMs: validated.pollAfterMs ?? 2_000,
-          tier,
-        });
-        return;
-      }
-      if (!validated?.success || !validated.data) {
-        clearIdempotencyKey();
-        setError('Invalid response from server. Please try again.');
-        return;
-      }
-
-      clearIdempotencyKey();
-      showResult(tier, validated.lookupId ?? null, validated.data);
-    };
-
-    await performCheck()
-      .catch((err: unknown) => {
-        log.error('IMEI check failed:', err);
-        setError(imeiCheckScreenActions.networkErrorMessage(err));
-      })
-      .finally(() => {
-        clearTimeout(timeoutId);
-        setIsLoading(false);
-      });
-  };
-
-  const handleReset = () => {
-    clearIdempotencyKey();
-    void pendingLookup.clear();
-    setResult(null);
-    setResultLookupId(null);
-    setError(null);
-  };
-
+  const busy = isLoading || pendingLookup.pending !== null;
   useImeiScreenNavigationGuards(walletPay.sheet, result !== null, handleReset);
 
   return (
@@ -255,22 +83,66 @@ export default function ImeiCheckerScreen() {
           lookupId={resultLookupId}
           result={result}
           onReset={handleReset}
+          isChecking={busy}
+          pendingPaused={pendingLookup.paused}
+          canResume={pendingLookup.canResume}
+          checkError={error}
+          onCheckBlacklist={
+            resultDevice === 'smartphone' && selectedDevice === 'smartphone'
+              ? () => {
+                  void handleVerify(
+                    'blacklist',
+                    result.imei,
+                    'smartphone',
+                    true
+                  );
+                }
+              : undefined
+          }
         />
       ) : (
         <AppKeyboardContainer style={{ flex: 1 }}>
           <ImeiCheckTop
             colors={colors}
             selected={selectedDevice}
-            onSelect={handleDeviceTab}
+            onSelect={(device) => {
+              clearError();
+              handleDeviceTab(device);
+            }}
+          />
+          <ImeiReportHistory
+            colors={colors}
+            apiBaseUrl={API_BASE_URL}
+            accessToken={session?.access_token}
+            scope={imeiAccountScope({
+              merchantId,
+              customer: { id: customerId },
+              session,
+            })}
+            disabled={busy}
+            onOpen={(report, listedFor) => {
+              // The device tab follows the report, so a follow-up check (and its
+              // PiggyVest key) is made for that report's device.
+              const device = resolveImeiReportDevice(
+                report.tier,
+                report.device
+              );
+              if (device) handleDeviceTab(device);
+              openReport(report, listedFor);
+            }}
           />
           {pendingLookup.pending ? (
-            <ImeiCheckPending colors={colors} paused={pendingLookup.paused} />
+            <ImeiCheckPending
+              colors={colors}
+              paused={pendingLookup.paused}
+              canResume={pendingLookup.canResume}
+            />
           ) : null}
           <ImeiCheckPager
             colors={colors}
             error={error}
             initialPage={deviceOrder.indexOf(selectedDevice)}
-            isLoading={isLoading || pendingLookup.pending !== null}
+            isLoading={busy}
             isWalletError={Boolean(walletQuery.isError)}
             isWalletLoading={Boolean(walletQuery.isLoading)}
             pagerRef={pagerRef}
@@ -279,11 +151,12 @@ export default function ImeiCheckerScreen() {
             walletIsStoreCredit={walletIsStoreCredit}
             walletPay={walletPay.view}
             topUpCardOnly={topUpCardOnly}
-            onPageSelected={handlePageSelected}
+            onPageSelected={(event) => {
+              clearError();
+              handlePageSelected(event);
+            }}
             onVerify={handleVerify}
-            onEditIdentifier={() =>
-              setError(imeiCheckScreenActions.dropInvalidIdentifierError)
-            }
+            onEditIdentifier={dropInvalidIdentifierError}
             onTopUpWallet={fundWallet}
           />
         </AppKeyboardContainer>

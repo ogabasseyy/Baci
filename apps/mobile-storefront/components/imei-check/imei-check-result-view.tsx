@@ -1,7 +1,9 @@
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
 import {
   canAssessImeiNetworkUnlock,
+  getImeiBlacklistState,
   getImeiEffectiveVerdict,
+  isValidDeviceIdentifier,
 } from '@baci/shared/imei';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
@@ -10,7 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ImeiResult } from '@/lib/validation';
+import { ImeiBlacklistCheckAction } from './imei-blacklist-check-action';
 import type { ImeiCheckerColors } from './imei-check.types';
+import { ImeiCheckPending } from './imei-check-pending';
 import { reportStyles as styles } from './imei-check-report.styles';
 import { getImeiResultStatusCards } from './imei-check-result-status-cards';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
@@ -26,6 +30,12 @@ interface ImeiCheckResultViewProps {
   lookupId?: string | null;
   result: ImeiResult;
   onReset: () => void;
+  /** A blacklist follow-up for a reopened report that didn't include it. */
+  onCheckBlacklist?: () => void;
+  isChecking?: boolean;
+  checkError?: string | null;
+  pendingPaused?: boolean;
+  canResume?: boolean;
 }
 
 /**
@@ -41,6 +51,11 @@ export function ImeiCheckResultView({
   lookupId,
   result,
   onReset,
+  onCheckBlacklist,
+  isChecking = false,
+  checkError,
+  pendingPaused = false,
+  canResume = false,
 }: ImeiCheckResultViewProps) {
   const insets = useSafeAreaInsets();
   const verdict = getImeiEffectiveVerdict(result);
@@ -118,6 +133,28 @@ export function ImeiCheckResultView({
       ) : null}
       <ImeiResultStatusList cards={statusCards} colors={colors} />
 
+      {onCheckBlacklist &&
+      !currentTier.checksIncluded.includes('blacklistStatus') &&
+      isValidDeviceIdentifier(result.imei, 'imei') &&
+      getImeiBlacklistState(result.blacklistStatus) === 'unknown' ? (
+        <ImeiBlacklistCheckAction
+          isChecking={isChecking}
+          onCheck={onCheckBlacklist}
+        />
+      ) : null}
+      {isChecking ? (
+        <ImeiCheckPending
+          colors={colors}
+          paused={pendingPaused}
+          canResume={canResume}
+        />
+      ) : null}
+      {checkError ? (
+        <Text accessibilityRole="alert" style={{ color: colors.text }}>
+          {checkError}
+        </Text>
+      ) : null}
+
       {lookupId && apiBaseUrl && canAssessImeiNetworkUnlock(result) ? (
         <ImeiRemediationOffer
           accessToken={accessToken}
@@ -132,6 +169,7 @@ export function ImeiCheckResultView({
         accessibilityRole="button"
         style={[styles.again, { backgroundColor: BRAND.primary }]}
         onPress={onReset}
+        disabled={isChecking}
       >
         <Ionicons name="scan-outline" size={18} color={BRAND.onPrimary} />
         <Text style={[styles.againText, { color: BRAND.onPrimary }]}>

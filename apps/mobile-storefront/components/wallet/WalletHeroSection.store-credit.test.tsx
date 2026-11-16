@@ -108,6 +108,12 @@ describe('bugfix: store credit wrapped onto three lines in the balance column', 
     }
     if (!balanceColumn) throw new Error('balance column not found');
     expect(within(balanceColumn).queryByLabelText(storeCredit)).toBeNull();
+    // Outside the whole balance-and-account row too, so it can't sit in
+    // the account column either: it renders under the row, full width.
+    const row = balanceColumn.parent;
+    if (!row) throw new Error('balance and account row not found');
+    expect(within(row).queryByLabelText(storeCredit)).toBeNull();
+    expect(within(row).getByText('Savings wallet · NGN')).toBeOnTheScreen();
   });
 });
 

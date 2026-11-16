@@ -31,10 +31,10 @@ describe('quiz attestation challenge', () => {
     });
     const issued = await issueQuizAttestationChallenge(client, 'e1');
     const args = rpc.mock.calls[0][1];
-    expect(args.p_nonce_hash).toBe(
-      hashQuizAttestationValue(issued?.nonce ?? '')
-    );
-    expect(args.p_nonce_hash).not.toBe(issued?.nonce);
+    const nonce = issued.status === 'ok' ? issued.nonce : '';
+    expect(nonce).not.toBe('');
+    expect(args.p_nonce_hash).toBe(hashQuizAttestationValue(nonce));
+    expect(args.p_nonce_hash).not.toBe(nonce);
   });
   it('returns null when issuing fails', async () => {
     const { client } = rpcClient({ data: null, error: new Error('x') });

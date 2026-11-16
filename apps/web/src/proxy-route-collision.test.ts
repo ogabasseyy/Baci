@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { resolveStorefrontProductSlugResolution } from '@/lib/storefront-product-slug-membership';
+import { storefrontRouteSegments } from './config/storefront-route-segments';
 import { proxy } from './proxy';
 
 // Self-contained mocks. This lives in its OWN file rather than proxy.test.ts so
@@ -156,6 +157,16 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
     expect(response.headers.get('location')).toBe(
       `https://${CUSTOM_DOMAIN}/summer-sale`
     );
+  });
+
+  it("keeps the sweep's exact-page list in sync with the implementation", () => {
+    // A new exact page added only to the implementation would otherwise be
+    // probed at `/<segment>/my-post` instead of its own exact path.
+    expect(
+      [
+        ...storefrontRouteSegments.RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS,
+      ].sort()
+    ).toEqual([...EXACT_LIVE_PAGE_SEGMENTS].sort());
   });
 
   it('still strips a suffixed retired black-friday alias', async () => {

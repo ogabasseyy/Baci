@@ -6,7 +6,7 @@ import {
   refundWalletPayment,
   walletPayDelivery,
 } from '@/lib/piggyvest/wallet-pay-service';
-import type { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import type { FulfilledVtuResult } from '@/lib/vtu-fulfillment';
 import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 import { deliverVtuWalletPayment } from './deliver-vtu-wallet-payment';
 
@@ -32,15 +32,6 @@ const defaultDeps = {
 };
 
 /**
- * The cron route passes in its own fulfil operation, so this module never
- * imports the fulfillment (and its admin/credential graph) itself: the
- * event-pipeline boundary keeps that authority on the route.
- */
-type RecoverWalletPaidVtuDeps = Partial<typeof defaultDeps> & {
-  fulfil: typeof fulfillPendingVtuTransaction;
-};
-
-/**
  * A PiggyVest-paid purchase whose vend was interrupted or hit a transient
  * provider error stays pending (marked) after the customer leaves. Only the
  * holder of the payment's delivery claim may re-drive it (the vend runs
@@ -50,9 +41,7 @@ type RecoverWalletPaidVtuDeps = Partial<typeof defaultDeps> & {
  * confirmed payment nobody collected and finishes the vend, or records its
  * failure (which opens the one refund). A payment whose purchase is not
  * mid-vend (never vended, failed, delivered) is left to the drain, exactly
- * as before. A vend failure never throws: it is counted (Codex P1). The
- * caller must pass its own `fulfil`; omitting it is a wiring bug that throws
- * a TypeError before any claim is taken.
+ * as before. Never throws: a failure is counted (Codex P1).
  */
 export async function recoverWalletPaidVtuPurchases(
   input: {
@@ -60,13 +49,18 @@ export async function recoverWalletPaidVtuPurchases(
     maxRows?: number;
     /** The invocation's hard stop (epoch ms); unset runs without a budget. */
     deadlineMs?: number;
+    /**
+     * The cron route's approved fulfil operation (fulfillPendingVtuTransaction),
+     * injected so this module imports no fulfilment or credential code.
+     */
+    fulfil: (input: {
+      supabase: SupabaseClient;
+      transactionId: string;
+      walletPayClaimed: boolean;
+    }) => Promise<FulfilledVtuResult>;
   },
-  overrides: RecoverWalletPaidVtuDeps
+  deps: typeof defaultDeps = defaultDeps
 ): Promise<RecoverWalletPaidVtuSummary> {
-  // A wiring bug, not a vend failure: fail loudly before any claim is taken.
-  if (typeof overrides?.fulfil !== 'function')
-    throw new TypeError('recoverWalletPaidVtuPurchases requires a fulfil');
-  const deps = { ...defaultDeps, ...overrides };
   const summary: RecoverWalletPaidVtuSummary = {
     checked: 0,
     recovered: 0,
@@ -141,7 +135,7 @@ export async function recoverWalletPaidVtuPurchases(
             refund: (paymentId) =>
               deps.refund({ runtime: runtime as never, paymentId }),
             fulfil: (walletPayClaimed) =>
-              deps.fulfil({
+              input.fulfil({
                 supabase: input.supabase,
                 transactionId,
                 walletPayClaimed,

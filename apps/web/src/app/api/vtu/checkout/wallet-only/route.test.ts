@@ -794,8 +794,19 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
     // The route hands the step its own approved fulfil (the lib never
-    // imports the fulfillment itself).
-    expect(walletPayFulfils.at(-1)).toBe(mockFulfill);
+    // imports the fulfillment itself): it vends through the route's
+    // fulfillPendingVtuTransaction for the claimed purchase.
+    const fulfil = walletPayFulfils.at(-1) as (
+      transactionId: string,
+      walletPayClaimed: boolean
+    ) => Promise<unknown>;
+    await fulfil('vtu-tx-new', true);
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactionId: 'vtu-tx-new',
+        walletPayClaimed: true,
+      })
+    );
   });
 
   it('PiggyVest wallet (dark): a replay pays or re-checks instead of fulfilling', async () => {

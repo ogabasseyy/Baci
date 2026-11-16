@@ -14,7 +14,10 @@ vi.mock('@/lib/vtu-replay-attribute-overlay', () => ({
   overlayReplayAttributes: overlayReplayAttributesMock,
 }));
 
-import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
+import {
+  fulfilReconciledVtuPurchase,
+  reconcileProcessingVtuTransactions,
+} from '@/lib/vtu-processing-reconciliation';
 
 function createProcessingQuery(response: {
   count?: null | number;
@@ -714,5 +717,20 @@ describe('reconcileProcessingVtuTransactions', () => {
       supabase: second.supabase,
       transactionId: 'tx-c2',
     });
+  });
+});
+
+describe('fulfilReconciledVtuPurchase', () => {
+  it('runs the same fulfil operation the reconciliation uses, with the given input', async () => {
+    fulfillPendingVtuTransactionMock.mockResolvedValue({ status: 'done' });
+    const input = {
+      supabase: {} as never,
+      transactionId: 'txn-1',
+      walletPayClaimed: true,
+    };
+    await expect(fulfilReconciledVtuPurchase(input)).resolves.toEqual({
+      status: 'done',
+    });
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith(input);
   });
 });

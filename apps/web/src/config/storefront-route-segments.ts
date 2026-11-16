@@ -108,9 +108,11 @@ const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
 // `/unlock-orders/<path>` remains eligible for the proxy's retired-alias redirect.
 //
 // `black-friday` (#4252) follows the same exact-path rule: the
-// (storefront)/[slug]/black-friday page owns `/black-friday` only, and falls
-// back to the `black-friday` category listing for other stores, so
-// `/black-friday/<product>` stays a categorized PDP path.
+// (storefront)/[slug]/black-friday page owns `/black-friday` only (falling back
+// to the `black-friday` category listing for other stores). As with
+// `unlock-orders`, a suffixed `/black-friday/<path>` stays eligible for the
+// retired-alias redirect when a merchant's retired slug is `black-friday`;
+// otherwise it reaches the categorized PDP as before.
 const RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS = new Set<string>([
   'black-friday',
   'unlock-orders',

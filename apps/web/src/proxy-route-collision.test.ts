@@ -157,6 +157,24 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       `https://${CUSTOM_DOMAIN}/summer-sale`
     );
   });
+
+  it('still strips a suffixed retired black-friday alias', async () => {
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
+    vi.mocked(getCurrentSlugForAlias).mockImplementation(
+      async (slug: string) => (slug === 'black-friday' ? MERCHANT_SLUG : null)
+    );
+    const request = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/black-friday/iphone-17`
+    );
+    request.headers.set('host', CUSTOM_DOMAIN);
+
+    const response = await proxy(request);
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe(
+      `https://${CUSTOM_DOMAIN}/iphone-17`
+    );
+  });
 });
 
 describe('reserving a route segment must not spill into unrelated proxy paths', () => {

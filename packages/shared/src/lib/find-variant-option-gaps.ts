@@ -7,11 +7,23 @@ export interface VariantOptionGap {
   missingAxes: string[];
 }
 
+/** Text, finite numbers and booleans are values; anything else is blank. */
+function hasOptionValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  return (
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value))
+  );
+}
+
 function readFilledAxes(attributes: Record<string, unknown>): Set<string> {
   const filled = new Set<string>();
   for (const [key, value] of Object.entries(attributes)) {
     const axis = canonicalizeCommerceVariantAxis(key);
-    if (axis && typeof value === 'string' && value.trim()) {
+    if (axis && hasOptionValue(value)) {
       filled.add(axis);
     }
   }

@@ -23,7 +23,7 @@ describe('findVariantOptionGaps', () => {
     ).toEqual([]);
   });
 
-  it('treats whitespace-only and non-text values as blank', () => {
+  it('treats whitespace-only and empty values as blank', () => {
     expect(
       findVariantOptionGaps([
         { ram: '8GB', color: 'Black' },
@@ -34,6 +34,16 @@ describe('findVariantOptionGaps', () => {
       { variantIndex: 1, missingAxes: ['ram'] },
       { variantIndex: 2, missingAxes: ['ram'] },
     ]);
+  });
+
+  it('counts numbers and booleans as filled values', () => {
+    expect(
+      findVariantOptionGaps([
+        { storage: 512, touchbar: true },
+        { storage: 256, touchbar: false },
+        { storage: Number.NaN, touchbar: true },
+      ])
+    ).toEqual([{ variantIndex: 2, missingAxes: ['storage'] }]);
   });
 
   it('matches option names regardless of spelling or casing', () => {

@@ -17,7 +17,6 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 vi.mock('@/lib/vtu-processing-reconciliation', () => ({
-  fulfillPendingVtuTransaction: vi.fn(),
   reconcileProcessingVtuTransactions: vi.fn(),
 }));
 
@@ -97,18 +96,27 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     expect(reconcileProcessingVtuTransactions).toHaveBeenCalledWith({
       deadlineMs: expect.any(Number),
       supabase: { admin: true },
+      afterReconcile: expect.any(Function),
     });
   });
 
   it('bugfix: re-drives interrupted PiggyVest-paid purchases with the same client, after reconciliation (Codex P1)', async () => {
-    vi.mocked(reconcileProcessingVtuTransactions).mockResolvedValue({
-      checked: 0,
-      errored: 0,
-      errors: [],
-      failed: 0,
-      processing: 0,
-      successful: 0,
-    });
+    // The reconciliation hands its own fulfil to the recovery step after
+    // its page is done (single-export module; no fulfilment import here).
+    const reconciliationFulfil = vi.fn();
+    vi.mocked(reconcileProcessingVtuTransactions).mockImplementation(
+      async ({ afterReconcile }) => {
+        await afterReconcile?.(reconciliationFulfil as never);
+        return {
+          checked: 0,
+          errored: 0,
+          errors: [],
+          failed: 0,
+          processing: 0,
+          successful: 0,
+        };
+      }
+    );
     vi.mocked(recoverWalletPaidVtuPurchases).mockResolvedValueOnce({
       checked: 1,
       recovered: 0,
@@ -121,9 +129,10 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     expect(response.status).toBe(200);
     expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith({
       supabase: { admin: true },
-      fulfil: expect.any(Function),
       // The recovery shares the invocation's deadline (Codex P2).
       deadlineMs: expect.any(Number),
+      // It vends through the reconciliation's own fulfil operation.
+      fulfil: reconciliationFulfil,
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith({

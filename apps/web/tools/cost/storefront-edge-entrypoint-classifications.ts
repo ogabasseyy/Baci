@@ -36,7 +36,8 @@ const RELEASE_ENTRYPOINTS = [
 ] as const;
 
 const DYNAMIC_ENTRYPOINTS = [
-  // Publication-gated, request-scoped merchant lookup (connection()/headers()).
+  // Ogabassey Black Friday (#4252): awaits connection()/headers() and reads
+  // filter searchParams, falling back to the category listing elsewhere.
   'black-friday/page.tsx',
   // Full-code profiles require the current trusted origin/runtime composition.
   '(catalog)/(listing)/collections/[handle]/page.tsx',

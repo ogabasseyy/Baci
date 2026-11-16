@@ -7,6 +7,23 @@ import { HomeScreenView } from './HomeScreenView';
 const mockSetNavigationBarStyle = jest.fn();
 let mockColorScheme: 'dark' | 'light' = 'light';
 
+// Ogabassey's elite home is the "next drop" surface with no gadget backdrop
+// (#4252), so the shared elite backdrop is exercised as another store.
+// biome-ignore lint/suspicious/noVar: hoisted so the jest.mock factory can read it during suite load.
+var mockConfig = { MERCHANT_SLUG: 'another-store' };
+jest.mock('@/lib/config', () => ({
+  CONFIG: new Proxy(
+    jest.requireActual<typeof import('@/lib/config')>('@/lib/config').CONFIG,
+    {
+      get: (target, key) =>
+        key === 'MERCHANT_SLUG'
+          ? // Modules read CONFIG while the suite loads, before mockConfig exists.
+            (mockConfig?.MERCHANT_SLUG ?? 'another-store')
+          : Reflect.get(target, key),
+    }
+  ),
+}));
+
 jest.mock('expo-navigation-bar', () => ({
   setStyle: (...args: unknown[]) => mockSetNavigationBarStyle(...args),
 }));
@@ -183,6 +200,16 @@ describe('HomeScreenView', () => {
   beforeEach(() => {
     mockSetNavigationBarStyle.mockClear();
     mockColorScheme = 'light';
+    mockConfig.MERCHANT_SLUG = 'another-store';
+  });
+
+  it("renders no gadget backdrop on Ogabassey's elite next-drop home", () => {
+    mockConfig.MERCHANT_SLUG = 'ogabassey';
+
+    render(<HomeScreenView {...createProps()} isElite={true} />);
+
+    expect(screen.queryByText(/Gadget pattern/)).toBeNull();
+    expect(screen.getByText('Block CategoryRail')).toBeTruthy();
   });
 
   it('renders only one shared backdrop for the elite home surface', () => {

@@ -9,14 +9,9 @@ import {
 } from '@baci/shared/lib/product-default-variant';
 import { useEffect, useState } from 'react';
 import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
-import {
-  canonicalizeVariantAxis,
-} from '@/components/storefront/ogabassey/variant-attributes';
-import {
-  resolveCriticalAddToCartBlocker,
-  revealCriticalAddToCartBlocker,
-} from './critical-add-to-cart-blocker';
-import { getInapplicableCriticalVariantAxes } from './critical-applicable-variant-axes';
+import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
+import { useCriticalAddToCartBlocker } from './critical-add-to-cart-blocker.client';
+import { resolveMissingCriticalVariantAxes } from './critical-applicable-variant-axes';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,
@@ -157,33 +152,16 @@ export function OgabasseyPdpCriticalCommerceProvider({
     ),
     selectedCondition: selectedVariantCondition,
   });
-  // An option group is only required when the selection can have a
-  // value there: a Used console with no region must not wait on a
-  // region that only the New consoles carry.
-  const inapplicableVariantAxes = getInapplicableCriticalVariantAxes(
-    variants,
-    selectedAttributes,
-    [...renderableVariantAxes, ...hiddenRequiredVariantAxes],
-    purchasableVariantSelection?.variant
-  );
-  const missingRenderableVariantAxes = renderableVariantAxes.filter(
-    (axis) =>
-      !selectedAttributes[axis] && !inapplicableVariantAxes.includes(axis)
-  );
+  const { missingHiddenRequiredVariantAxes, missingRenderableVariantAxes } =
+    resolveMissingCriticalVariantAxes({
+      explicitSelectedAxes,
+      hiddenRequiredVariantAxes,
+      renderableVariantAxes,
+      resolvedVariant: purchasableVariantSelection?.variant,
+      selectedAttributes,
+      variants,
+    });
   const hasRequiredVariantSelection = missingRenderableVariantAxes.length === 0;
-  function getSelectedAxisValue(axis: string) {
-    if (axis === 'condition') {
-      return selectedAttributes.condition;
-    }
-
-    return selectedAttributes[axis];
-  }
-
-  const missingHiddenRequiredVariantAxes = hiddenRequiredVariantAxes.filter(
-    (axis) =>
-      !inapplicableVariantAxes.includes(axis) &&
-      !(explicitSelectedAxes.includes(axis) && getSelectedAxisValue(axis))
-  );
   const hasRequiredHiddenVariantSelection =
     missingHiddenRequiredVariantAxes.length === 0;
   const missingHiddenRequiredVariantAxisKey =
@@ -240,16 +218,25 @@ export function OgabasseyPdpCriticalCommerceProvider({
     !routeOfferMissingActive &&
     quantity >= 1 &&
     (maxQuantity === null || (maxQuantity > 0 && quantity <= maxQuantity));
-  const addToCartBlocker = resolveCriticalAddToCartBlocker({
+
+  const { handleAddToCart: submitAddToCart, quantityInCart } =
+    useCriticalCommerceCartActions({
+      activeRouteOffer,
+      canAddToCart,
+      effectivePurchasableVariantSelection,
+      productForCart,
+      quantity,
+    });
+  const { clearAddToCartBlockedAttempt, ...addToCartControls } =
+    useCriticalAddToCartBlocker({
     canAddToCart,
     maxQuantity,
     missingAxes: missingRenderableVariantAxes,
     missingHiddenAxes: missingHiddenRequiredVariantAxes,
-    visibleAxes: renderableVariantAxes,
     routeOfferMissingActive,
+    submitAddToCart,
+    visibleAxes: renderableVariantAxes,
   });
-  const [addToCartBlockedAttempt, setAddToCartBlockedAttempt] =
-    useState(false);
 
   function handleAttributeSelection(axis: string, value: string) {
     const normalizedAxis = canonicalizeVariantAxis(axis);
@@ -269,7 +256,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
       variantAxisOptions
     );
 
-    setAddToCartBlockedAttempt(false);
+    clearAddToCartBlockedAttempt();
     setSelectedVariantId(undefined);
     setExplicitSelectedAxes((current) => {
       const nextAxes = new Set(current);
@@ -284,36 +271,13 @@ export function OgabasseyPdpCriticalCommerceProvider({
     setSelectedAttributes(nextSelection);
   }
 
-  const { handleAddToCart: submitAddToCart, quantityInCart } =
-    useCriticalCommerceCartActions({
-    activeRouteOffer,
-    canAddToCart,
-    effectivePurchasableVariantSelection,
-    productForCart,
-    quantity,
-  });
-
-  // A blocked tap never fails silently: it states the reason beside the
-  // button and brings the missing option group into view.
-  function handleAddToCart(event?: { currentTarget: Element }) {
-    if (addToCartBlocker) {
-      setAddToCartBlockedAttempt(true);
-      revealCriticalAddToCartBlocker(addToCartBlocker, event?.currentTarget);
-      return;
-    }
-
-    submitAddToCart();
-  }
-
   return (
     <OgabasseyPdpCriticalCommerceContext.Provider
       value={{
-        addToCartBlockedAttempt,
-        addToCartBlocker,
+        ...addToCartControls,
         canAddToCart,
         currency,
         explicitSelectedAxes,
-        handleAddToCart,
         handleAttributeSelection,
         isAtMaxQuantity,
         maxQuantity,

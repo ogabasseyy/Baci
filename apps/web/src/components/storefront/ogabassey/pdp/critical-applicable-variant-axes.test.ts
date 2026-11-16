@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/lib/products';
-import { getInapplicableCriticalVariantAxes } from './critical-applicable-variant-axes';
+import {
+  getInapplicableCriticalVariantAxes,
+  resolveMissingCriticalVariantAxes,
+} from './critical-applicable-variant-axes';
 
 type Variants = NonNullable<Product['variants']>;
 
@@ -80,5 +83,61 @@ describe('getInapplicableCriticalVariantAxes', () => {
         rows[1]
       )
     ).toEqual(['ram']);
+  });
+});
+
+describe('resolveMissingCriticalVariantAxes', () => {
+  const consoles = variants([
+    { storage: '825GB' },
+    { storage: '1TB', region: 'Europe' },
+    { storage: '1TB', region: 'Japan' },
+  ]);
+
+  it('asks for nothing when the selected version has no value on the group', () => {
+    expect(
+      resolveMissingCriticalVariantAxes({
+        explicitSelectedAxes: [],
+        hiddenRequiredVariantAxes: [],
+        renderableVariantAxes: ['storage', 'region'],
+        resolvedVariant: consoles[0],
+        selectedAttributes: { storage: '825GB' },
+        variants: consoles,
+      })
+    ).toEqual({
+      missingHiddenRequiredVariantAxes: [],
+      missingRenderableVariantAxes: [],
+    });
+  });
+
+  it('asks for the visible group the selection can still vary on', () => {
+    expect(
+      resolveMissingCriticalVariantAxes({
+        explicitSelectedAxes: [],
+        hiddenRequiredVariantAxes: [],
+        renderableVariantAxes: ['storage', 'region'],
+        selectedAttributes: { storage: '1TB' },
+        variants: consoles,
+      }).missingRenderableVariantAxes
+    ).toEqual(['region']);
+  });
+
+  it('keeps a hidden group missing until the shopper confirms it', () => {
+    const input = {
+      hiddenRequiredVariantAxes: ['region'],
+      renderableVariantAxes: ['storage'],
+      selectedAttributes: { storage: '1TB', region: 'Europe' },
+      variants: consoles,
+    };
+
+    expect(
+      resolveMissingCriticalVariantAxes({ ...input, explicitSelectedAxes: [] })
+        .missingHiddenRequiredVariantAxes
+    ).toEqual(['region']);
+    expect(
+      resolveMissingCriticalVariantAxes({
+        ...input,
+        explicitSelectedAxes: ['region'],
+      }).missingHiddenRequiredVariantAxes
+    ).toEqual([]);
   });
 });

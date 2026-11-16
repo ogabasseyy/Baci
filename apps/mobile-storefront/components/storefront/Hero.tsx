@@ -1,4 +1,5 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
+import type { ImageSource } from 'expo-image';
 import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { type FlatListProps, useWindowDimensions, View } from 'react-native';
@@ -7,6 +8,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from 'react-native-reanimated';
+import { NextDropHeroSlide } from '@/components/home/NextDropHeroSlide';
 import {
   getMobileAdUnitId,
   type MobileAdBannerPlacementKey,
@@ -15,6 +17,7 @@ import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
+import { BlackFridayHeroSlide } from './BlackFridayHeroSlide';
 import { EliteSlide } from './EliteSlide';
 import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
@@ -25,6 +28,9 @@ import { StandardSlide } from './StandardSlide';
 import { useHeroAutoplay } from './use-hero-autoplay';
 
 export interface HeroSlide {
+  campaign?: 'black-friday';
+  artwork?: ImageSource;
+  showSavingsProvider?: boolean;
   title: string;
   subtitle: string;
   image: string;
@@ -62,7 +68,7 @@ export function Hero({
 }: HeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getHeroStyles(colors, isDark);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, fontScale } = useWindowDimensions();
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -156,7 +162,12 @@ export function Hero({
   });
 
   const getHeroHeight = () => {
-    if (template.heroVariant === 'parallax') return ELITE_HEIGHT;
+    if (template.heroVariant === 'parallax') {
+      const extraHeight = slides.some((slide) => slide.artwork)
+        ? Math.max(0, Math.min(fontScale, 1.5) - 1) * 160
+        : 0;
+      return ELITE_HEIGHT + Math.ceil(extraHeight);
+    }
     if (template.heroVariant === 'carousel') return CAROUSEL_HEIGHT;
     return STANDARD_HEIGHT;
   };
@@ -186,6 +197,25 @@ export function Hero({
             adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
           }
         />
+      );
+    }
+    if (item.artwork) {
+      return (
+        <NextDropHeroSlide
+          width={screenWidth}
+          height={getHeroHeight()}
+          artwork={item.artwork}
+          showSavingsProvider={item.showSavingsProvider}
+          title={item.title}
+          subtitle={item.subtitle}
+          ctaText={item.ctaText}
+          ctaLink={item.ctaLink}
+        />
+      );
+    }
+    if (item.campaign === 'black-friday') {
+      return (
+        <BlackFridayHeroSlide width={screenWidth} height={getHeroHeight()} />
       );
     }
     switch (template.heroVariant) {

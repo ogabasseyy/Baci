@@ -76,7 +76,7 @@ export function ImeiCheckResultView({
               onPress={onReset}
               disabled={isChecking}
             >
-              <Ionicons name="arrow-back" size={24} color={colors.text} />
+              <Ionicons name="chevron-back" size={26} color={colors.text} />
             </Pressable>
           ),
         }}

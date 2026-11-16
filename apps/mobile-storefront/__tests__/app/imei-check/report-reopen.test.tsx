@@ -51,6 +51,8 @@ jest.mock('expo-crypto', () => ({
 }));
 
 jest.mock('expo-router', () => ({
+  // The pay sheet closes when the screen loses focus.
+  useNavigation: () => ({ addListener: () => () => undefined }),
   router: { back: jest.fn(), push: jest.fn() },
   Stack: {
     Screen: () => null,
@@ -88,14 +90,20 @@ jest.mock('@/hooks/use-wallet', () => ({
   }),
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      customer: { id: 'customer-1' },
-      merchantId: 'merchant-1',
-      session: { access_token: 'token-123', user: { id: mockUserId } },
-    }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const state = () => ({
+    customer: { id: 'customer-1' },
+    merchantId: 'merchant-1',
+    session: { access_token: 'token-123', user: { id: mockUserId } },
+    user: { id: mockUserId },
+  });
+  return {
+    useAuthStore: Object.assign(
+      (selector: (value: unknown) => unknown) => selector(state()),
+      { getState: state }
+    ),
+  };
+});
 
 import ImeiCheckerScreen from '@/app/imei-check';
 

@@ -3,6 +3,9 @@ import { beforeEach, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 
 let mockUserId = 'user-a';
+let mockBalance = 5000;
+let mockPiggyvestCovers = false;
+const mockWalletPayOpen = jest.fn();
 const mockUuid = jest.fn(() => '11111111-1111-4111-8111-111111111111');
 const mockSubmit = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockPending = {
@@ -21,19 +24,37 @@ jest.mock('./use-imei-pending-lookup', () => ({
 }));
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({
-    data: { wallet: { balance: 5000 } },
+    data: { wallet: { balance: mockBalance } },
     isLoading: false,
     isError: false,
     refetch: jest.fn(),
   }),
 }));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (select: (value: unknown) => unknown) =>
-    select({
-      session: { access_token: 'test-token', user: { id: mockUserId } },
-      customer: { id: 'customer' },
-      merchantId: 'merchant',
-    }),
+jest.mock('@/stores/auth-store', () => {
+  const state = () => ({
+    session: { access_token: 'test-token', user: { id: mockUserId } },
+    user: { id: mockUserId },
+    customer: { id: 'customer' },
+    merchantId: 'merchant',
+  });
+  return {
+    useAuthStore: Object.assign(
+      (select: (value: unknown) => unknown) => select(state()),
+      { getState: state }
+    ),
+  };
+});
+// PiggyVest pay is switched off here: these checks pay from store credit.
+jest.mock('./use-imei-wallet-pay', () => ({
+  useImeiWalletPay: () => ({
+    sheet: { step: 'closed', back: jest.fn(), close: jest.fn() },
+    sheetProps: {},
+    view: { covers: () => mockPiggyvestCovers, savingsKobo: null },
+    waitsForWallet: false,
+    covers: () => mockPiggyvestCovers,
+    retains: async () => false,
+    open: (...args: unknown[]) => mockWalletPayOpen(...args),
+  }),
 }));
 jest.mock('expo-crypto', () => ({
   randomUUID: () => mockUuid(),
@@ -71,6 +92,8 @@ const report: ImeiReport = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'user-a';
+  mockBalance = 5000;
+  mockPiggyvestCovers = false;
   mockUuid.mockReset().mockReturnValue('11111111-1111-4111-8111-111111111111');
 });
 it('reopens a completed report without checkout or provider submission', () => {
@@ -111,7 +134,7 @@ it('preserves the reopened report on follow-up error and uses report device rath
   expect(result.current.error).toBeTruthy();
   expect(result.current.isLoading).toBe(false);
 });
-it('blocks double taps synchronously while keeping the original report visible', async () => {
+it('blocks double taps while keeping the original report visible', async () => {
   let resolve!: (value: unknown) => void;
   mockSubmit.mockImplementation(
     () =>
@@ -137,6 +160,10 @@ it('blocks double taps synchronously while keeping the original report visible',
       'smartphone',
       true
     );
+  });
+  // The rail decision awaits the saved PiggyVest keys before submitting.
+  await act(async () => {
+    await Promise.resolve();
   });
   expect(mockSubmit).toHaveBeenCalledTimes(1);
   expect(result.current.result).toEqual(report.result);
@@ -263,4 +290,27 @@ it('reopening a saved report does not discard an uncertain paid follow-up key', 
     );
   });
   expect(mockUuid).toHaveBeenCalledTimes(1);
+});
+
+it('pays a reopened report follow-up from PiggyVest when store credit cannot cover it', async () => {
+  mockBalance = 0;
+  mockPiggyvestCovers = true;
+  const { result } = renderHook(() =>
+    useImeiCheckFlow('smartphone', 'https://test.invalid')
+  );
+  act(() => result.current.openReport(report));
+  await act(async () => {
+    await result.current.handleVerify(
+      'blacklist',
+      report.result.imei,
+      'smartphone',
+      true
+    );
+  });
+  expect(mockWalletPayOpen).toHaveBeenCalledWith(
+    'blacklist',
+    report.result.imei
+  );
+  expect(mockSubmit).not.toHaveBeenCalled();
+  expect(result.current.result).toEqual(report.result);
 });

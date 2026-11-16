@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineChatPushCredentialPaths } from './event-pipeline-chat-push-credential-paths';
 import { eventPipelineChatwootCartCredentialPaths } from './event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
@@ -273,6 +274,7 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineGatewayCronCredentialPaths,
       ...eventPipelineManualOrderDocumentCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
+      ...eventPipelineChatPushCredentialPaths,
     ]);
   });
 });

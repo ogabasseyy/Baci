@@ -1,3 +1,4 @@
+import { isPiggyvestWalletPaid } from './vtu-piggyvest-wallet-paid';
 import { STRANDED_PRE_VEND_STALE_MS } from './vtu-pre-vend-recovery';
 import { VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY } from './vtu-submission-marker';
 
@@ -37,6 +38,17 @@ export const VTU_SUBMISSION_MARKER_ERA_KEY = 'submissionMarkerEra';
  * R55 6rrU6H). Lives next to the key and its proof predicates so the
  * preparation module doesn't own recovery metadata (Codex R86 P1).
  */
+/**
+ * Money moved for this purchase: the store credit debit persisted its flag, or
+ * the confirmed PiggyVest payment funded it (such a row never writes the flag
+ * and is never debited from store credit) (Codex P1).
+ */
+function hasVtuFundingProof(
+  metadata: Record<string, unknown> | null | undefined
+) {
+  return metadata?.walletDebited === true || isPiggyvestWalletPaid(metadata);
+}
+
 export function buildVtuSubmissionMarkerEraMetadata(): Record<string, true> {
   return { [VTU_SUBMISSION_MARKER_ERA_KEY]: true };
 }
@@ -75,7 +87,7 @@ export function isFlaggedReferenceLessVtuRow(
   if (row.error_message?.trim()) {
     return false;
   }
-  if (row.metadata?.walletDebited !== true) {
+  if (!hasVtuFundingProof(row.metadata)) {
     return false;
   }
   const provider = row.metadata?.provider;
@@ -143,7 +155,7 @@ export function isUnsubmittedPreparedVtuRow(
   }
   // Prepared proof (see docblock): the debit landed, so re-driving
   // is the completion duty — and it short-circuits idempotently.
-  if (row.metadata?.walletDebited !== true) {
+  if (!hasVtuFundingProof(row.metadata)) {
     return false;
   }
   // Unsubmitted proof (see docblock): any marker presence — even
@@ -212,7 +224,7 @@ export function isMarkedUnsubmittedMonnifyVtuRow(
   if (row.error_message?.trim()) {
     return false;
   }
-  if (row.metadata?.walletDebited !== true) {
+  if (!hasVtuFundingProof(row.metadata)) {
     return false;
   }
   if (row.metadata?.provider !== 'monnify') {

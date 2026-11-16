@@ -14,7 +14,7 @@ const BUDGETS = {
   change: { maxRequests: 3, windowMs: WINDOW_MS },
   // Goal-PIN verification, separate from the PIN mutations above.
   'goal-verify': { maxRequests: 5, windowMs: WINDOW_MS },
-  // Wallet pay PIN checks (VTU), so a purchase never spends the goal budget.
+  // Wallet pay PIN checks (IMEI and VTU): a purchase never spends the goal budget.
   'wallet-pay-verify': { maxRequests: 5, windowMs: WINDOW_MS },
 } as const;
 

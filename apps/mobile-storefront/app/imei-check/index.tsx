@@ -1,29 +1,28 @@
-import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
-import Ionicons from '@react-native-vector-icons/ionicons';
-import { router, Stack } from 'expo-router';
-import { usePreventRemove } from 'expo-router/react-navigation';
-import { Pressable, View } from 'react-native';
+import { IMEI_SERVICE_TIERS, resolveImeiReportDevice } from '@baci/shared/imei';
+import { View } from 'react-native';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
 import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
 import HeroCard from '@/components/imei-check/imei-check-hero-card';
 import { ImeiCheckPending } from '@/components/imei-check/imei-check-pending';
 import { ImeiCheckResultView } from '@/components/imei-check/imei-check-result-view';
-import { imeiCheckScreenActions } from '@/components/imei-check/imei-check-screen-actions';
+import { ImeiCheckScreenHeader } from '@/components/imei-check/imei-check-screen-header';
 import { ImeiReportHistory } from '@/components/imei-check/imei-report-history';
 import { useImeiCheckFlow } from '@/components/imei-check/use-imei-check-flow';
 import { useImeiDeviceNavigation } from '@/components/imei-check/use-imei-device-navigation';
+import { useImeiScreenNavigationGuards } from '@/components/imei-check/use-imei-screen-navigation-guards';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
-import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
-import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
+import { WalletPaySheet } from '@/components/wallet-pay/WalletPaySheet';
 import Colors, { SPACING } from '@/constants/Colors';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
 
 const API_BASE_URL = resolveStorefrontApiBaseUrl(
   process.env.EXPO_PUBLIC_STOREFRONT_API_URL,
   process.env.EXPO_PUBLIC_API_URL
 );
+
 export default function ImeiCheckerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -48,49 +47,42 @@ export default function ImeiCheckerScreen() {
     customerId,
     merchantId,
     pendingLookup,
+    walletPay,
     walletQuery,
     walletBalance,
+    walletIsStoreCredit,
+    fundWallet,
     handleVerify,
     handleReset,
     openReport,
     clearError,
   } = useImeiCheckFlow(selectedDevice, API_BASE_URL);
-  const walletIsStoreCredit = useStoreCreditPurchaseCopy(merchantId, walletQuery.data?.wallet);
+  // Same rule as fundWallet: not ruled out means a card-only top-up.
   const topUpCardOnly = usePiggyvestCapabilityNow(merchantId) !== false;
-  const fundWallet = (amount: number) => imeiCheckScreenActions.fundWallet(amount, merchantId);
-  usePreventRemove(result !== null, () => {
-    if (isLoading || pendingLookup.pending) return;
-    handleReset();
-  });
+  const busy = isLoading || pendingLookup.pending !== null;
+  useImeiScreenNavigationGuards(walletPay.sheet, result !== null, handleReset);
 
   return (
     <StorefrontScreenShell
       edges={['left', 'right']}
       style={{ backgroundColor: colors.background }}
     >
-      <Stack.Screen
-        options={{
-          title: 'IMEI Checker',
-          headerLeft: () => (
-            <Pressable
-              accessibilityHint="Returns to the previous screen"
-              accessibilityLabel="Back"
-              accessibilityRole="button"
-              onPress={() => router.back()}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.text} />
-            </Pressable>
-          ),
-        }}
-      />
+      <ImeiCheckScreenHeader textColor={colors.text} />
+      <WalletPaySheet colors={colors} {...walletPay.sheetProps} />
 
       <ImeiReportHistory
         colors={colors}
         apiBaseUrl={API_BASE_URL}
         accessToken={session?.access_token}
         scope={`${merchantId}:${customerId}:${session?.user?.id ?? ''}`}
-        disabled={isLoading || pendingLookup.pending !== null}
-        onOpen={openReport}
+        disabled={busy}
+        onOpen={(report) => {
+          // The device tab follows the report, so a follow-up check (and its
+          // PiggyVest key) is made for that report's device.
+          const device = resolveImeiReportDevice(report.tier, report.device);
+          if (device) handleDeviceTab(device);
+          openReport(report);
+        }}
       />
       {result ? (
         <ImeiCheckResultView
@@ -101,12 +93,12 @@ export default function ImeiCheckerScreen() {
           lookupId={resultLookupId}
           result={result}
           onReset={handleReset}
-          isChecking={isLoading || pendingLookup.pending !== null}
+          isChecking={busy}
           pendingPaused={pendingLookup.paused}
           canResume={pendingLookup.canResume}
           checkError={error}
           onCheckBlacklist={
-            resultDevice === 'smartphone'
+            resultDevice === 'smartphone' && selectedDevice === 'smartphone'
               ? () => {
                   void handleVerify(
                     'blacklist',
@@ -147,13 +139,14 @@ export default function ImeiCheckerScreen() {
             colors={colors}
             error={error}
             initialPage={deviceOrder.indexOf(selectedDevice)}
-            isLoading={isLoading || pendingLookup.pending !== null}
+            isLoading={busy}
             isWalletError={Boolean(walletQuery.isError)}
             isWalletLoading={Boolean(walletQuery.isLoading)}
             pagerRef={pagerRef}
             visitedDevices={visitedDevices}
             walletBalance={walletBalance}
             walletIsStoreCredit={walletIsStoreCredit}
+            walletPay={walletPay.view}
             topUpCardOnly={topUpCardOnly}
             onPageSelected={(event) => {
               clearError();

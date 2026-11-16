@@ -154,6 +154,20 @@ describe('push-storefront-edge-refresh-branch.sh', { timeout: 60_000 }, () => {
     ).rejects.toThrow('refusing to reuse');
   });
 
+  it('refuses to create the branch when the checkout is not at the source SHA', async () => {
+    const fixture = await arrange();
+    const work = await checkout(fixture);
+    await writeFiles(work, { x: 'local drift\n' });
+    await git(work, 'commit', '--quiet', '-am', 'stale checkout');
+
+    await expect(run(work, fixture.sourceSha)).rejects.toThrow(
+      'checkout is not at source SHA'
+    );
+    await expect(
+      git(fixture.remote, 'rev-parse', '--verify', '--quiet', BRANCH)
+    ).rejects.toThrow();
+  });
+
   it('refuses to reuse a branch whose refresh content differs', async () => {
     const fixture = await arrange();
     await run(await checkout(fixture), fixture.sourceSha);

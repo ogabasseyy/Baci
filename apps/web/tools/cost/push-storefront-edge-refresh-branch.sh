@@ -44,6 +44,11 @@ if git_remote fetch --quiet --depth=2 origin "refs/heads/$branch" 2>/dev/null; t
   exit 0
 fi
 
+# The new branch must sit directly on SOURCE_SHA, which its commit names.
+if [ "$(git rev-parse HEAD)" != "$source_sha" ]; then
+  echo "::error::checkout is not at source SHA $source_sha; refusing to create $branch." >&2
+  exit 1
+fi
 git switch --quiet -c "$branch"
 git commit --quiet -m "fix(ci): refresh storefront edge inventory snapshot" \
   ${commit_body:+-m "$commit_body"}

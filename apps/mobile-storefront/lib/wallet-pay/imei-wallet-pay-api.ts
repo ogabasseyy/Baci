@@ -16,7 +16,8 @@ export type WalletPayConnection = {
 /** Same limit as the store credit IMEI request. */
 export const WALLET_PAY_TIMEOUT_MS = 30_000;
 
-async function post(
+/** One wallet pay POST: Bearer token, optional Idempotency-Key, 30 s limit. */
+export async function postWalletPay(
   connection: WalletPayConnection,
   path: string,
   body: Record<string, unknown>,
@@ -89,7 +90,7 @@ export const imeiWalletPayApi = {
       idempotencyKey: string;
     }
   ) =>
-    post(
+    postWalletPay(
       connection,
       '/api/storefront/imei-check',
       {
@@ -106,7 +107,7 @@ export const imeiWalletPayApi = {
     connection: WalletPayConnection,
     input: { lookupId: string; operationId: string; pin: string }
   ) =>
-    post(connection, lookupPath(input.lookupId, 'wallet-pin'), {
+    postWalletPay(connection, lookupPath(input.lookupId, 'wallet-pin'), {
       operationId: input.operationId,
       pin: input.pin,
     }),
@@ -123,7 +124,7 @@ export const imeiWalletPayApi = {
       imei: string;
     }
   ) =>
-    post(connection, lookupPath(input.lookupId, 'wallet-pay'), {
+    postWalletPay(connection, lookupPath(input.lookupId, 'wallet-pay'), {
       imei: input.imei,
       operationId: input.operationId,
       pinProof: input.pinProof,

@@ -127,7 +127,7 @@ export function revealCriticalAddToCartBlocker(
       '[data-ogabassey-pdp-commerce-variant-option]:not([data-selected="true"]):not(:disabled)'
     ) ??
     target.querySelector<HTMLElement>(
-      '[data-ogabassey-pdp-commerce-variant-option]'
+      '[data-ogabassey-pdp-commerce-variant-option]:not(:disabled)'
     );
   option?.focus({ preventScroll: true });
 }

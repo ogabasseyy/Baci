@@ -236,9 +236,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* A thumb covers the small cart button on a phone, so the
             confirmation also shows beside it. */}
+        <span role="status" className="sr-only">
+          {isAdded && !requiresSelection
+            ? `${product.name} added to cart`
+            : ''}
+        </span>
         {isAdded && !requiresSelection && (
           <span
-            role="status"
+            aria-hidden="true"
             className="absolute bottom-2 left-2 md:bottom-3 md:left-3 z-20 rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-lg"
           >
             Added to cart

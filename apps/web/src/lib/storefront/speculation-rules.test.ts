@@ -77,6 +77,12 @@ describe('buildStorefrontSpeculationRules', () => {
       'wishlist',
       'track-order',
       'blog',
+      'swap',
+      'about',
+      'contact',
+      'faq',
+      'terms',
+      'privacy',
       'api',
     ]) {
       expect(reserved).toContain(segment);

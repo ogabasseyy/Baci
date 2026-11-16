@@ -5,7 +5,7 @@ import {
   OGABASSEY_RETURN_SUMMARY,
   OGABASSEY_WARRANTY_DETAILS,
   OGABASSEY_WARRANTY_SUMMARY,
-} from '@baci/shared';
+} from '@baci/shared/storefront/ogabassey-care';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,

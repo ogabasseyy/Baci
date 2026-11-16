@@ -1,11 +1,12 @@
 import { Check, ShoppingCart } from 'lucide-react';
+import type { Route } from 'next';
 import Link from 'next/link';
 import type React from 'react';
 
 interface ProductCardQuickAddProps {
   handleCartClick: (event: React.MouseEvent) => void;
   isAdded: boolean;
-  productHref: React.ComponentProps<typeof Link>['href'];
+  productHref: Route;
   productName: string;
   requiresSelection: boolean;
   showPlusOne: boolean;

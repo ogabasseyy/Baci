@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { Route } from 'next';
 import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ProductCardQuickAdd } from './product-card-quick-add';
@@ -16,7 +17,7 @@ vi.mock('next/link', () => ({
 const base = {
   handleCartClick: vi.fn(),
   isAdded: false,
-  productHref: '/playstation-5/playstation-5-pro',
+  productHref: '/playstation-5/playstation-5-pro' as Route,
   productName: 'PlayStation 5 Pro',
   requiresSelection: false,
   showPlusOne: false,

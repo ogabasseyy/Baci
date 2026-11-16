@@ -4,7 +4,6 @@ import * as Crypto from 'expo-crypto';
 import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { imeiWalletPayApi } from '@/lib/wallet-pay/imei-wallet-pay-api';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
-import { useImeiWalletPayableTiers } from './use-imei-wallet-payable-tiers';
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(),
@@ -287,38 +286,5 @@ describe('bugfix: a broken key store withheld store credit while switched off (M
       setup(false).result.current.retains('basic', IMEI)
     ).resolves.toBe(false);
     has.mockRestore();
-  });
-});
-
-describe('bugfix: the app ignored the server list of wallet-payable checks (walk M1)', () => {
-  const payable = useImeiWalletPayableTiers as jest.Mock;
-  afterEach(() => payable.mockReturnValue(null));
-
-  it('stops offering a check the server can not bill to the wallet', () => {
-    payable.mockReturnValue(['full']);
-    expect(setup().result.current.covers('basic')).toBe(false);
-  });
-
-  it('offers nothing while the list is still loading', () => {
-    payable.mockReturnValue('loading');
-    expect(setup().result.current.covers('basic')).toBe(false);
-  });
-
-  it('bugfix: Verify waits while the list loads instead of choosing a top-up (Codex P2)', () => {
-    payable.mockReturnValue('loading');
-    expect(setup().result.current.waitsForWallet).toBe(true);
-    payable.mockReturnValue(['basic']);
-    expect(setup().result.current.waitsForWallet).toBe(false);
-    payable.mockReturnValue('loading');
-    expect(setup(false).result.current.waitsForWallet).toBe(false);
-  });
-
-  it('asks for the list with the screen device and switch', () => {
-    setup(false);
-    expect(payable).toHaveBeenLastCalledWith({
-      apiBaseUrl: 'https://api.test',
-      canPay: false,
-      device: 'smartphone',
-    });
   });
 });

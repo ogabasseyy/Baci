@@ -1,4 +1,7 @@
-import { markHeldImeiCharges } from './wallet-held-imei-charges';
+import {
+  markHeldImeiCharges,
+  STATUS_READ_TIMEOUT_MS,
+} from './wallet-held-imei-charges';
 import type { Transaction } from './wallet-query';
 
 const tx = (id: string): Transaction => ({
@@ -83,5 +86,20 @@ describe('bugfix: a charge being refunded read as a check still running (Muse)',
     const [row] = await markHeldImeiCharges(db, raw, [tx('tx-held')]);
     expect(row?.refunding).toBe(true);
     expect(row?.pending).toBeUndefined();
+  });
+});
+
+describe('bugfix: a stalled status read could fail the whole wallet load (CodeRabbit)', () => {
+  it('shows the rows unmarked once the read takes too long', async () => {
+    jest.useFakeTimers();
+    try {
+      const rows = [tx('tx-held')];
+      const stalled = jest.fn(() => new Promise<never>(() => undefined));
+      const marked = markHeldImeiCharges(stalled, raw, rows);
+      jest.advanceTimersByTime(STATUS_READ_TIMEOUT_MS);
+      await expect(marked).resolves.toBe(rows);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

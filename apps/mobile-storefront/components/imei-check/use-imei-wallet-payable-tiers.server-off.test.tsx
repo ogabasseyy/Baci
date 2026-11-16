@@ -50,6 +50,30 @@ describe('useImeiWalletPayableTiers', () => {
     }
   });
 
+  it('bugfix: the first render after a device switch is loading, never the old list (CodeRabbit)', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ walletPayableTierKeys: ['basic'] }),
+    } as Response);
+    const seen: unknown[] = [];
+    const { result, rerender } = renderHook(
+      ({ device }: { device: 'smartphone' | 'laptop' }) => {
+        const tiers = useImeiWalletPayableTiers({
+          ...props,
+          device,
+          canPay: true,
+        });
+        seen.push(tiers);
+        return tiers;
+      },
+      { initialProps: { device: 'smartphone' } }
+    );
+    await waitFor(() => expect(result.current).toEqual(['basic']));
+    seen.length = 0;
+    rerender({ device: 'laptop' });
+    expect(seen[0]).toBe('loading');
+  });
+
   it('reads the server list while it is on', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

@@ -22,6 +22,9 @@ export const FINISHED_STATUSES = new Set([
 
 const IMEI_CHARGE_SOURCE = 'imei_wallet_payment';
 
+/** How long the status read may take before rows show unmarked. */
+export const STATUS_READ_TIMEOUT_MS = 5000;
+
 /** Reads `id, status` of the customer's own IMEI checks (RLS-scoped). */
 export type ReadLookupStatuses = (
   ids: string[]
@@ -51,10 +54,19 @@ export async function markHeldImeiCharges(
   if (charges.length === 0) return transactions;
   const ids = [...new Set(charges.map((charge) => charge.sourceId))];
   let result: Awaited<ReturnType<ReadLookupStatuses>>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    result = await readStatuses(ids);
+    // Best effort: a stalled read must never hold up the wallet load.
+    result = await Promise.race([
+      readStatuses(ids),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), STATUS_READ_TIMEOUT_MS);
+      }),
+    ]);
   } catch {
     return transactions;
+  } finally {
+    clearTimeout(timer);
   }
   if (!result || result.error || !Array.isArray(result.data))
     return transactions;

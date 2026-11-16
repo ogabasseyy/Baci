@@ -91,10 +91,17 @@ BEGIN
     WHERE snapshot.event_id = p_event_id;
     IF v_snapshot.computed_at
         < pg_catalog.clock_timestamp() - interval '2 seconds' THEN
-      PERFORM private.refresh_quiz_live_leaderboard_snapshot_v2(p_event_id);
-      SELECT snapshot.* INTO v_snapshot
-      FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
-      WHERE snapshot.event_id = p_event_id;
+      -- A failed rebuild must not take the board down: the row read above is
+      -- still a valid, slightly older board, so keep serving it. (A statement
+      -- timeout is not caught by OTHERS and still ends the request.)
+      BEGIN
+        PERFORM private.refresh_quiz_live_leaderboard_snapshot_v2(p_event_id);
+        SELECT snapshot.* INTO v_snapshot
+        FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
+        WHERE snapshot.event_id = p_event_id;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'QUIZ_LIVE_SNAPSHOT_REFRESH_FAILED sqlstate=%', SQLSTATE;
+      END;
     END IF;
   END IF;
 
@@ -188,8 +195,15 @@ REVOKE ALL ON FUNCTION public.get_quiz_live_leaderboard_public_v2(uuid)
 GRANT EXECUTE ON FUNCTION public.get_quiz_live_leaderboard_public_v2(uuid)
   TO authenticated;
 
--- The count endpoint no longer counts every row per call: a published event
--- reads its highest rank (ranks are 1..N), a live event reads the snapshot.
+-- The count endpoint no longer counts every row per call: a live event reads
+-- the snapshot and a published event reads its highest rank.
+--
+-- Published contract: the count is the number of players ranked when results
+-- were published. Ranks are written once as 1..N, so the highest rank is that
+-- number, read with one index probe instead of a count over every row at the
+-- moment every phone loads the final board. If a ranked player's account is
+-- deleted later their row goes (ON DELETE CASCADE) but they still took part,
+-- so the count deliberately does not drop.
 CREATE OR REPLACE FUNCTION public.get_quiz_participant_count_public_v2(p_event_id uuid)
 RETURNS integer
 LANGUAGE plpgsql

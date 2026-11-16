@@ -5,7 +5,8 @@ import type { ImeiCheckerColors } from './imei-check.types';
 export function ImeiCheckPending({
   colors,
   paused,
-  canResume = true,
+  // Same default as web: unless saving is known to work, promise nothing.
+  canResume = false,
 }: {
   colors: ImeiCheckerColors;
   paused: boolean;

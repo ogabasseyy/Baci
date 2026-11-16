@@ -55,7 +55,7 @@ export function ImeiCheckResultView({
   isChecking = false,
   checkError,
   pendingPaused = false,
-  canResume = true,
+  canResume = false,
 }: ImeiCheckResultViewProps) {
   const insets = useSafeAreaInsets();
   const verdict = getImeiEffectiveVerdict(result);

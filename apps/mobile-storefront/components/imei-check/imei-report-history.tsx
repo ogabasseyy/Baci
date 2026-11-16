@@ -85,7 +85,7 @@ export function ImeiReportHistory({
         disabled={disabled}
         onPress={() => {
           setPage(0);
-          setExpanded(!expanded);
+          setExpanded((open) => !open);
         }}
         style={{ minHeight: 44, justifyContent: 'center' }}
       >

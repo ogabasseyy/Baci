@@ -220,4 +220,17 @@ describe('UtilityPaymentOptions', () => {
 
     expect(screen.getByTestId('wallet-selected')).toBeTruthy();
   });
+
+  it('bugfix: tells screen readers the preselected wallet is selected (Muse)', () => {
+    render(
+      <UtilityPaymentOptions
+        amount={1000}
+        returnToHref={RETURN_TO_HREF}
+        walletBalance={200}
+        walletIsLoading={false}
+      />
+    );
+
+    expect(screen.getByLabelText(/pay with wallet, selected\./i)).toBeTruthy();
+  });
 });

@@ -207,7 +207,7 @@ export function UtilityPaymentOptions({
             },
           ]}
           accessibilityRole="text"
-          accessibilityLabel={`${payLabel}. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
+          accessibilityLabel={`${payLabel}${walletSelected && !coversBill ? ', selected' : ''}. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
         >
           <View
             style={[

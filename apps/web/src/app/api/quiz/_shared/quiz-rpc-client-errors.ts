@@ -49,7 +49,9 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
     status: 409,
   },
   QZ014: {
-    code: 'QUIZ_AGE_RESTRICTED',
+    // Lowercase on purpose: the mobile start flow reopens the DOB gate on
+    // exactly this code (same as the web route guard's QuizAgeGateError).
+    code: 'quiz_age_restricted',
     error: QUIZ_AGE_RESTRICTED_MESSAGE,
     status: 403,
   },

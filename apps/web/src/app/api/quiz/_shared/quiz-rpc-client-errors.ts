@@ -1,3 +1,5 @@
+import { QUIZ_AGE_RESTRICTED_MESSAGE } from '@/schemas/quiz-age-gate-message';
+
 type QuizRpcClientError = {
   code: string;
   error: string;
@@ -45,6 +47,13 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
     code: 'QUIZ_DATE_OF_BIRTH_REQUIRED',
     error: 'Add your date of birth before starting the quiz',
     status: 409,
+  },
+  QZ014: {
+    // Lowercase on purpose: the mobile start flow reopens the DOB gate on
+    // exactly this code (same as the web route guard's QuizAgeGateError).
+    code: 'quiz_age_restricted',
+    error: QUIZ_AGE_RESTRICTED_MESSAGE,
+    status: 403,
   },
   QZ020: {
     code: 'QUIZ_PRIZE_FINALIZATION_NOT_APPROVED',

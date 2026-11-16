@@ -13,7 +13,8 @@ node --test "$repo_root/supabase/tests/mcp-guest-oauth-records.test.mjs"
 
 # One node --test run: it runs these files in parallel (one process each). They only parse
 # migration SQL text, so they share nothing; 50 sequential runs took ~2 min of the job.
-node --test \
+# At most 4 files at once (the hosted runner's cores), which bounds peak memory.
+node --test --test-concurrency=4 \
   "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs" \
   "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_nested_queries.test.mjs" \
   "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs" \

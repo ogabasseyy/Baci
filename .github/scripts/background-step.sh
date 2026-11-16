@@ -82,9 +82,12 @@ case "$action" in
     rm -f "$pidfile"
     nohup ${launcher[@]+"${launcher[@]}"} bash -c 'echo $$ > "${0%.log}.pid"; "$@" > "$0" 2>&1; echo $? > "$0.status.tmp"; mv "$0.status.tmp" "${0%.log}.status"' \
       "$log" "$@" > /dev/null 2>&1 &
+    launcher_pid=$!
     for _ in $(seq 1 50); do [[ -s "$pidfile" ]] && break; sleep 0.1; done
     if [[ ! -s "$pidfile" ]]; then
       echo "background step '$name' did not start (no PID after 5s)" >&2
+      # A slow spawn must not turn into an orphan that nothing collects or stops.
+      kill -KILL "$launcher_pid" 2> /dev/null || true
       rm -f "$started"
       exit 1
     fi

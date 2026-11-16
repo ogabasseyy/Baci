@@ -1,5 +1,6 @@
 import { IMEI_SERVICE_TIERS, resolveImeiReportDevice } from '@baci/shared/imei';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
+import { imeiAccountScope } from '@/components/imei-check/imei-account-scope';
 import { ImeiCheckPending } from '@/components/imei-check/imei-check-pending';
 import { ImeiCheckResultView } from '@/components/imei-check/imei-check-result-view';
 import { ImeiCheckScreenHeader } from '@/components/imei-check/imei-check-screen-header';
@@ -113,7 +114,11 @@ export default function ImeiCheckerScreen() {
             colors={colors}
             apiBaseUrl={API_BASE_URL}
             accessToken={session?.access_token}
-            scope={`${merchantId}:${customerId}:${session?.user?.id ?? ''}`}
+            scope={imeiAccountScope({
+              merchantId,
+              customer: { id: customerId },
+              session,
+            })}
             disabled={busy}
             onOpen={(report, listedFor) => {
               // The device tab follows the report, so a follow-up check (and its

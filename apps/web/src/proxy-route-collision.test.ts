@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { resolveStorefrontProductSlugResolution } from '@/lib/storefront-product-slug-membership';
-import { storefrontRouteSegments } from './config/storefront-route-segments';
 import { proxy } from './proxy';
 
 // Self-contained mocks. This lives in its OWN file rather than proxy.test.ts so
@@ -70,6 +69,8 @@ function collectLiveFirstSegments(
   return found;
 }
 
+const EXACT_LIVE_PAGE_SEGMENTS = new Set(['black-friday', 'unlock-orders']);
+
 describe('bugfix: retired-slug prefix strip shadowed a live storefront route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -96,10 +97,8 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
       vi.mocked(getCurrentSlugForAlias).mockResolvedValue(MERCHANT_SLUG);
       // Exact-path pages own only `/<segment>`; deeper paths are PDPs.
-      const isExactPage =
-        storefrontRouteSegments.RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS.has(
-          segment
-        );
+      // Hardcoded (not read from the implementation set) so a wrong set fails.
+      const isExactPage = EXACT_LIVE_PAGE_SEGMENTS.has(segment);
       const livePath = isExactPage ? `/${segment}` : `/${segment}/my-post`;
       const request = new NextRequest(`https://${CUSTOM_DOMAIN}${livePath}`);
       request.headers.set('host', CUSTOM_DOMAIN);

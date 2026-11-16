@@ -30,6 +30,16 @@ describe('createVtuWalletPayFulfiller', () => {
     ).toBeNull();
   });
 
+  it('throws for a PiggyVest charge when no fulfil is passed', () => {
+    expect(() =>
+      createVtuWalletPayFulfiller({
+        charge: { paymentMethod: 'piggyvest_wallet' } as never,
+        auth,
+        fulfillSupabase,
+      } as never)
+    ).toThrow(TypeError);
+  });
+
   it('runs the PiggyVest step for the purchase, vending only through the claimed fulfil', async () => {
     const make = createVtuWalletPayFulfiller({
       charge: {

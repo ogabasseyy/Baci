@@ -61,6 +61,9 @@ export async function recoverWalletPaidVtuPurchases(
   },
   overrides: RecoverWalletPaidVtuDeps
 ): Promise<RecoverWalletPaidVtuSummary> {
+  // A wiring bug, not a vend failure: fail loudly before any claim is taken.
+  if (typeof overrides?.fulfil !== 'function')
+    throw new TypeError('recoverWalletPaidVtuPurchases requires a fulfil');
   const deps = { ...defaultDeps, ...overrides };
   const summary: RecoverWalletPaidVtuSummary = {
     checked: 0,

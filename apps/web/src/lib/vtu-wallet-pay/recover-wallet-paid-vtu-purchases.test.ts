@@ -162,3 +162,12 @@ describe('bugfix: an interrupted PiggyVest-paid vend waited for the customer to 
     ).resolves.toMatchObject({ checked: 1, errored: 1 });
   });
 });
+
+describe('fulfil injection', () => {
+  it('throws before taking any claim when no fulfil is passed', async () => {
+    await expect(
+      recoverWalletPaidVtuPurchases({ supabase }, {} as never)
+    ).rejects.toThrow(TypeError);
+    expect(worker.claim).not.toHaveBeenCalled();
+  });
+});

@@ -25,6 +25,9 @@ export function createVtuWalletPayFulfiller(input: {
   fulfil: typeof fulfillPendingVtuTransaction;
 }) {
   if (input.charge.paymentMethod !== 'piggyvest_wallet') return null;
+  // A wiring bug, not a vend failure: fail before any payment is issued.
+  if (typeof input.fulfil !== 'function')
+    throw new TypeError('createVtuWalletPayFulfiller requires a fulfil');
   const deps = createVtuWalletPayStepDeps(input.auth);
   return (merchantId: string, customerId: string) => (transactionId: string) =>
     runVtuWalletPayStep(

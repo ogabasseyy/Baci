@@ -80,7 +80,7 @@ describe('bugfix: PiggyVest balance shown as a spendable total', () => {
 });
 
 describe('bugfix: store credit wrapped onto three lines in the balance column', () => {
-  it('renders full width under the balance and account row', () => {
+  it('keeps store credit out of the balance-and-account row', () => {
     const piggyvestAccount = {
       accountName: 'Ogabassey Services Limited/Bassey John',
       accountNumber: '9000002044',

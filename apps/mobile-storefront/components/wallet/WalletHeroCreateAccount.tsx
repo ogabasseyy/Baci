@@ -6,7 +6,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { WALLET_HERO_ACTION_LINE } from '@/constants/wallet-hero';
+
+/**
+ * Shared line metric: the add icon's box and the label's line height must
+ * match so the label sits on the icon's centre line.
+ */
+const WALLET_HERO_ACTION_LINE = 18;
 
 type Props = {
   canCreate: boolean;

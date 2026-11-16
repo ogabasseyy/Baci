@@ -1,8 +1,9 @@
+import type { MerchantTrustProfileDraft } from '@baci/shared';
+// The subpath keeps the shared barrel (and zod) out of the footer client bundle.
 import {
-  type MerchantTrustProfileDraft,
   OGABASSEY_RETURN_SUMMARY,
   OGABASSEY_WARRANTY_SUMMARY,
-} from '@baci/shared';
+} from '@baci/shared/storefront/ogabassey-care';
 import type { MerchantTrustProfileSource } from './merchant-trust-profile-types';
 
 // Owner-approved on 2026-10-25. Keep this versioned contract shared by policy

@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SocialLinks } from '@/components/profile/SocialLinks';
+import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { SUPPORT_WHATSAPP_PHONE } from '@/constants/Support';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useTheme } from '@/hooks/useTheme';
@@ -41,154 +42,162 @@ export function DeviceCareScreen({
   const { data: merchant } = useMerchant();
   if (CONFIG.MERCHANT_SLUG !== 'ogabassey') return <Redirect href="/faq" />;
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={styles.page}
-    >
-      <Stack.Screen options={{ title }} />
-      <View style={styles.hero}>
-        {illustration ? (
-          <Image
-            accessible={false}
-            source={illustration}
-            contentFit="cover"
-            style={styles.illustration}
-          />
-        ) : (
-          <Ionicons name="shield-checkmark-outline" size={28} color="#ffc9d1" />
-        )}
-        <Text accessibilityRole="header" style={styles.heading}>
-          {heading}
-        </Text>
-        <Text style={styles.intro}>{intro}</Text>
-      </View>
-      {timelineCount > 0 && (
-        <Text
-          accessibilityRole="header"
-          style={[
-            styles.heading,
-            styles.timelineHeading,
-            { color: colors.text },
-          ]}
-        >
-          Checks before delivery
-        </Text>
-      )}
-      {sections.map((section, index) => (
-        <View key={section.title} style={styles.actions}>
-          <View
+    <StorefrontScreenShell themeBackground>
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={styles.page}
+      >
+        <Stack.Screen options={{ title }} />
+        <View style={styles.hero}>
+          {illustration ? (
+            <Image
+              accessible={false}
+              source={illustration}
+              contentFit="cover"
+              style={styles.illustration}
+            />
+          ) : (
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={28}
+              color="#ffc9d1"
+            />
+          )}
+          <Text accessibilityRole="header" style={styles.heading}>
+            {heading}
+          </Text>
+          <Text style={styles.intro}>{intro}</Text>
+        </View>
+        {timelineCount > 0 && (
+          <Text
+            accessibilityRole="header"
             style={[
-              styles.section,
-              { backgroundColor: colors.card, borderColor: colors.border },
+              styles.heading,
+              styles.timelineHeading,
+              { color: colors.text },
             ]}
           >
-            <View
-              pointerEvents="none"
-              style={[
-                styles.notch,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
-            />
+            Checks before delivery
+          </Text>
+        )}
+        {sections.map((section, index) => (
+          <View key={section.title} style={styles.actions}>
             <View
               style={[
-                styles.icon,
-                { backgroundColor: isDark ? '#46232e' : '#fce8ed' },
+                styles.section,
+                { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
-              <Ionicons
-                name={section.icon}
-                size={22}
-                color={isDark ? '#fff' : '#a7182c'}
+              <View
+                style={[
+                  styles.notch,
+                  {
+                    pointerEvents: 'none',
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                  },
+                ]}
               />
-            </View>
-            <View style={styles.sectionCopy}>
-              {index < timelineCount && (
-                <Text
-                  style={[
-                    styles.step,
-                    { color: isDark ? '#ffb8c6' : '#a7182c' },
-                  ]}
-                >
-                  Check {index + 1} of {timelineCount}
-                </Text>
-              )}
-              <Text
-                accessibilityRole="header"
-                style={[styles.title, { color: colors.text }]}
+              <View
+                style={[
+                  styles.icon,
+                  { backgroundColor: isDark ? '#46232e' : '#fce8ed' },
+                ]}
               >
-                {section.title}
-              </Text>
-              <Text style={[styles.body, { color: colors.textSecondary }]}>
-                {section.body}
-              </Text>
+                <Ionicons
+                  name={section.icon}
+                  size={22}
+                  color={isDark ? '#fff' : '#a7182c'}
+                />
+              </View>
+              <View style={styles.sectionCopy}>
+                {index < timelineCount && (
+                  <Text
+                    style={[
+                      styles.step,
+                      { color: isDark ? '#ffb8c6' : '#a7182c' },
+                    ]}
+                  >
+                    Check {index + 1} of {timelineCount}
+                  </Text>
+                )}
+                <Text
+                  accessibilityRole="header"
+                  style={[styles.title, { color: colors.text }]}
+                >
+                  {section.title}
+                </Text>
+                <Text style={[styles.body, { color: colors.textSecondary }]}>
+                  {section.body}
+                </Text>
+              </View>
             </View>
+            {betweenSections?.after === index && (
+              <Pressable
+                accessibilityRole="link"
+                style={[styles.promo, { borderColor: colors.border }]}
+                onPress={() => router.push(betweenSections.href)}
+              >
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={20}
+                  color={colors.text}
+                />
+                <Text style={[styles.title, { color: colors.text, flex: 1 }]}>
+                  {betweenSections.label}
+                </Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.text} />
+              </Pressable>
+            )}
           </View>
-          {betweenSections?.after === index && (
+        ))}
+        <View style={styles.actions}>
+          {links.map(({ label, href }) => (
             <Pressable
+              key={label}
               accessibilityRole="link"
-              style={[styles.promo, { borderColor: colors.border }]}
-              onPress={() => router.push(betweenSections.href)}
+              style={styles.link}
+              onPress={() => router.push(href)}
             >
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={20}
-                color={colors.text}
-              />
-              <Text style={[styles.title, { color: colors.text, flex: 1 }]}>
-                {betweenSections.label}
+              <Text style={[styles.title, { color: colors.text }]}>
+                {label}
               </Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.text} />
             </Pressable>
-          )}
-        </View>
-      ))}
-      <View style={styles.actions}>
-        {links.map(({ label, href }) => (
+          ))}
           <Pressable
-            key={label}
             accessibilityRole="link"
             style={styles.link}
-            onPress={() => router.push(href)}
+            onPress={() =>
+              void Linking.openURL(
+                `https://wa.me/${SUPPORT_WHATSAPP_PHONE}`
+              ).catch(() => router.push('/faq'))
+            }
           >
-            <Text style={[styles.title, { color: colors.text }]}>{label}</Text>
+            <Ionicons name="logo-whatsapp" size={20} color={colors.text} />
+            <Text style={[styles.title, { color: colors.text }]}>
+              WhatsApp support
+            </Text>
           </Pressable>
-        ))}
-        <Pressable
-          accessibilityRole="link"
-          style={styles.link}
-          onPress={() =>
-            void Linking.openURL(
-              `https://wa.me/${SUPPORT_WHATSAPP_PHONE}`
-            ).catch(() => router.push('/faq'))
-          }
-        >
-          <Ionicons name="logo-whatsapp" size={20} color={colors.text} />
-          <Text style={[styles.title, { color: colors.text }]}>
-            WhatsApp support
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="link"
-          style={styles.link}
-          onPress={() =>
-            void Linking.openURL('mailto:support@ogabassey.com').catch(() =>
-              router.push('/faq')
-            )
-          }
-        >
-          <Ionicons name="mail-outline" size={20} color={colors.text} />
-          <Text style={[styles.title, { color: colors.text }]}>
-            Email support
-          </Text>
-        </Pressable>
-      </View>
-      {merchant?.social_media && (
-        <SocialLinks socialMedia={merchant.social_media} colors={colors} />
-      )}
-    </ScrollView>
+          <Pressable
+            accessibilityRole="link"
+            style={styles.link}
+            onPress={() =>
+              void Linking.openURL('mailto:support@ogabassey.com').catch(() =>
+                router.push('/faq')
+              )
+            }
+          >
+            <Ionicons name="mail-outline" size={20} color={colors.text} />
+            <Text style={[styles.title, { color: colors.text }]}>
+              Email support
+            </Text>
+          </Pressable>
+        </View>
+        {merchant?.social_media && (
+          <SocialLinks socialMedia={merchant.social_media} colors={colors} />
+        )}
+      </ScrollView>
+    </StorefrontScreenShell>
   );
 }
 

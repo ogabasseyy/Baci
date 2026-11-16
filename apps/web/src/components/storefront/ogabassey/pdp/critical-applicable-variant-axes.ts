@@ -52,15 +52,28 @@ export function getInapplicableCriticalVariantAxes(
       return true;
     }
 
-    const matching = variantValues.filter((values) =>
+    // A blank is "no value", not a wildcard: a version with no storage
+    // is not a 256GB version. Only when nothing matches exactly (the
+    // selection carries an option some versions never record) do blanks
+    // count as compatible.
+    const matchesSelection = (
+      values: Record<string, string>,
+      blankIsCompatible: boolean
+    ) =>
       Object.entries(selectedAttributes).every(
         ([selectedAxis, selectedValue]) =>
           selectedAxis === axis ||
           !selectedValue ||
-          !values[selectedAxis] ||
+          (blankIsCompatible && !values[selectedAxis]) ||
           sameOption(values[selectedAxis], selectedValue)
-      )
+      );
+    const exact = variantValues.filter((values) =>
+      matchesSelection(values, false)
     );
+    const matching =
+      exact.length > 0
+        ? exact
+        : variantValues.filter((values) => matchesSelection(values, true));
 
     return matching.length > 0 && matching.every((values) => !values[axis]);
   });

@@ -160,9 +160,9 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
                 </span>
               )}
               {isAdded ? (
-                <span role="status" className="flex items-center gap-2">
+                <>
                   Added to cart <Check size={16} strokeWidth={3} />
-                </span>
+                </>
               ) : (
                 <>
                   Add to Cart <ShoppingCart size={16} />

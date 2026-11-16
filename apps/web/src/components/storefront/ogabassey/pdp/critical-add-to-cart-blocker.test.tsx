@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import {
   resolveCriticalAddToCartBlocker,
@@ -58,9 +58,20 @@ function renderBuyBox(product: Product = phone) {
   );
 }
 
+// jsdom has no scrollIntoView; stub it per test and put the original back
+// so later suites in the same worker never see the stub.
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+const scrollIntoView = vi.fn();
+
 beforeEach(() => {
   cart.addToCart.mockClear();
   cart.setIsCartOpen.mockClear();
+  scrollIntoView.mockClear();
+  Element.prototype.scrollIntoView = scrollIntoView;
+});
+
+afterEach(() => {
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 describe('critical buy box when an option is still unchosen', () => {
@@ -77,8 +88,6 @@ describe('critical buy box when an option is still unchosen', () => {
   });
 
   it('answers a blocked tap instead of doing nothing', () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
     renderBuyBox();
 
     const add = screen.getByRole('button', { name: 'Add to cart' });
@@ -208,8 +217,6 @@ describe('resolveCriticalAddToCartBlocker', () => {
   });
 
   it('moves nothing when the blocker names no rendered option group', () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
     renderBuyBox();
 
     revealCriticalAddToCartBlocker({

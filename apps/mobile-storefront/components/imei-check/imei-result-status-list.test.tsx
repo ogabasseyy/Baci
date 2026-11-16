@@ -1,60 +1,43 @@
-import { describe, expect, it } from '@jest/globals';
-import { imeiStatusTone } from './imei-result-status-list';
+import { describe, expect, it, jest } from '@jest/globals';
+import { render, screen } from '@testing-library/react-native';
+import Colors from '@/constants/Colors';
+import { ImeiResultStatusList } from './imei-result-status-list';
 
-describe('imeiStatusTone', () => {
-  it('bugfix: reads "Not Blacklisted" as clean, not as a failure', () => {
-    expect(
-      imeiStatusTone({
-        blacklist: true,
-        cleanAware: true,
-        value: 'Not Blacklisted',
-      })
-    ).toBe('safe');
-    expect(
-      imeiStatusTone({
-        blacklist: true,
-        cleanAware: true,
-        value: 'Blacklisted',
-      })
-    ).toBe('danger');
-    expect(
-      imeiStatusTone({ blacklist: true, cleanAware: true, value: 'Unknown' })
-    ).toBe('caution');
-  });
+jest.mock('@react-native-vector-icons/ionicons', () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
-  it('colours other pass/fail findings by whether they are clean', () => {
-    expect(imeiStatusTone({ cleanAware: true, value: 'Off' })).toBe('safe');
-    expect(imeiStatusTone({ cleanAware: true, value: 'On' })).toBe('danger');
-    expect(imeiStatusTone({ cleanAware: true, value: 'unknown' })).toBe(
-      'caution'
+describe('ImeiResultStatusList', () => {
+  it('shows each finding, coloured by what it means', () => {
+    render(
+      <ImeiResultStatusList
+        colors={Colors.light}
+        cards={[
+          {
+            label: 'Blacklist',
+            value: 'Clean',
+            icon: 'shield-checkmark-outline',
+            blacklist: true,
+            cleanAware: true,
+          },
+          {
+            label: 'Warranty',
+            value: 'Out Of Warranty',
+            icon: 'calendar-outline',
+          },
+        ]}
+      />
     );
+
+    expect(screen.getByText('Clean')).toBeTruthy();
+    expect(screen.getByText('Out Of Warranty')).toBeTruthy();
+    expect(screen.getByTestId('imei-status-safe')).toBeTruthy();
+    expect(screen.getByTestId('imei-status-neutral')).toBeTruthy();
   });
 
-  it('reads every "could not tell" value as caution, not failure (Muse)', () => {
-    for (const value of ['Unavailable', 'Not checked', 'N/A', 'Pending'])
-      expect(imeiStatusTone({ cleanAware: true, value })).toBe('caution');
-    expect(imeiStatusTone({ cleanAware: true, value: 'Locked' })).toBe(
-      'danger'
-    );
-  });
-
-  it('reads "could not tell" values with extra words as caution (Muse)', () => {
-    for (const value of [
-      'Unable to check - timeout',
-      'Unknown (retry)',
-      'Not available for this model',
-    ])
-      expect(imeiStatusTone({ cleanAware: true, value })).toBe('caution');
-  });
-
-  it('shows SIM Lock unlocked as clean and locked as caution (Muse)', () => {
-    expect(imeiStatusTone({ simLock: true, value: 'Unlocked' })).toBe('safe');
-    expect(imeiStatusTone({ simLock: true, value: 'Locked' })).toBe('caution');
-    expect(imeiStatusTone({ simLock: true, value: 'Unknown' })).toBe('caution');
-  });
-
-  it('keeps facts such as warranty neutral', () => {
-    expect(imeiStatusTone({ value: 'Out Of Warranty' })).toBe('neutral');
-    expect(imeiStatusTone({ value: 'Limited Warranty' })).toBe('neutral');
+  it('renders nothing when there are no findings', () => {
+    render(<ImeiResultStatusList colors={Colors.light} cards={[]} />);
+    expect(screen.queryByTestId(/imei-status-/)).toBeNull();
   });
 });

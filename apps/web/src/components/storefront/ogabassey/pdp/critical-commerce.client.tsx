@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { Route } from 'next';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { resolveVariantSelection } from '@baci/shared/lib';
 import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
@@ -158,6 +158,8 @@ export function OgabasseyPdpCriticalCommerceControls({
   productName,
 }: OgabasseyPdpCriticalCommerceControlsProps) {
   const {
+    addToCartBlockedAttempt,
+    addToCartBlocker,
     canAddToCart,
     handleAddToCart,
     isAtMaxQuantity,
@@ -166,6 +168,11 @@ export function OgabasseyPdpCriticalCommerceControls({
     quantityInCart,
     setQuantity,
   } = useOgabasseyPdpCriticalCommerce();
+  const blockerHintId = useId();
+  // Only sold-out stock hard-disables the button. Every other blocker is
+  // something the shopper can fix, so the button stays tappable and the
+  // tap explains what to choose instead of doing nothing.
+  const isSoldOut = addToCartBlocker?.kind === 'out-of-stock';
 
   return (
     <div
@@ -202,13 +209,25 @@ export function OgabasseyPdpCriticalCommerceControls({
         </button>
       </div>
       <button
+        aria-describedby={addToCartBlocker ? blockerHintId : undefined}
+        aria-disabled={addToCartBlocker && !isSoldOut ? true : undefined}
         data-ogabassey-pdp-commerce-primary-action
-        disabled={!canAddToCart}
+        disabled={isSoldOut}
         onClick={handleAddToCart}
         type="button"
       >
         Add to cart
       </button>
+      {addToCartBlocker ? (
+        <p
+          data-attention={addToCartBlockedAttempt ? 'true' : undefined}
+          data-ogabassey-pdp-commerce-blocker
+          id={blockerHintId}
+          role={addToCartBlockedAttempt ? 'alert' : 'status'}
+        >
+          {addToCartBlocker.message}
+        </p>
+      ) : null}
       <AssuranceDefaultNote
         canPurchase={canAddToCart}
         quantityInCart={quantityInCart}

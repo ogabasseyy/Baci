@@ -12,6 +12,10 @@ import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-varian
 import {
   canonicalizeVariantAxis,
 } from '@/components/storefront/ogabassey/variant-attributes';
+import {
+  resolveCriticalAddToCartBlocker,
+  revealCriticalAddToCartBlocker,
+} from './critical-add-to-cart-blocker';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,
@@ -222,6 +226,16 @@ export function OgabasseyPdpCriticalCommerceProvider({
     !routeOfferMissingActive &&
     quantity >= 1 &&
     (maxQuantity === null || (maxQuantity > 0 && quantity <= maxQuantity));
+  const addToCartBlocker = resolveCriticalAddToCartBlocker({
+    canAddToCart,
+    maxQuantity,
+    missingAxes: renderableVariantAxes.filter(
+      (axis) => !selectedAttributes[axis]
+    ),
+    routeOfferMissingActive,
+  });
+  const [addToCartBlockedAttempt, setAddToCartBlockedAttempt] =
+    useState(false);
 
   function handleAttributeSelection(axis: string, value: string) {
     const normalizedAxis = canonicalizeVariantAxis(axis);
@@ -241,6 +255,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
       variantAxisOptions
     );
 
+    setAddToCartBlockedAttempt(false);
     setSelectedVariantId(undefined);
     setExplicitSelectedAxes((current) => {
       const nextAxes = new Set(current);
@@ -255,7 +270,8 @@ export function OgabasseyPdpCriticalCommerceProvider({
     setSelectedAttributes(nextSelection);
   }
 
-  const { handleAddToCart, quantityInCart } = useCriticalCommerceCartActions({
+  const { handleAddToCart: submitAddToCart, quantityInCart } =
+    useCriticalCommerceCartActions({
     activeRouteOffer,
     canAddToCart,
     effectivePurchasableVariantSelection,
@@ -263,9 +279,23 @@ export function OgabasseyPdpCriticalCommerceProvider({
     quantity,
   });
 
+  // A blocked tap never fails silently: it states the reason beside the
+  // button and brings the missing option group into view.
+  function handleAddToCart() {
+    if (addToCartBlocker) {
+      setAddToCartBlockedAttempt(true);
+      revealCriticalAddToCartBlocker(addToCartBlocker);
+      return;
+    }
+
+    submitAddToCart();
+  }
+
   return (
     <OgabasseyPdpCriticalCommerceContext.Provider
       value={{
+        addToCartBlockedAttempt,
+        addToCartBlocker,
         canAddToCart,
         currency,
         explicitSelectedAxes,

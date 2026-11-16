@@ -285,4 +285,28 @@ describe('ProductCard', () => {
       'ogabassey-product-card-badge--condition'
     );
   });
+
+  it('confirms a quick add on the card so the tap never looks ignored', () => {
+    const { rerender } = render(
+      <ProductCard
+        product={mockProduct}
+        onAddToCart={vi.fn()}
+        isAdded={false}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Add Test Product to cart' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    rerender(
+      <ProductCard product={mockProduct} onAddToCart={vi.fn()} isAdded />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Test Product added to cart' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Added to cart');
+  });
 });

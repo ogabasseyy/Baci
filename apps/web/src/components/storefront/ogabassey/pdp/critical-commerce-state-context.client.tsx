@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { CurrencyConfig } from '@/lib/currency';
 import type { Product as CartProduct } from '@/lib/products';
+import type { CriticalAddToCartBlocker } from './critical-add-to-cart-blocker';
 import type { InitialCriticalVariantSelection } from './critical-commerce-selection';
 
 export interface OgabasseyPdpCriticalCommerceProviderProps {
@@ -33,6 +34,10 @@ export interface OgabasseyPdpCriticalCommerceProviderProps {
 }
 
 export interface OgabasseyPdpCriticalCommerceState {
+  /** True once the shopper tapped Add to cart while it was blocked. */
+  addToCartBlockedAttempt: boolean;
+  /** Why Add to cart is blocked; null when the selection is buyable. */
+  addToCartBlocker: CriticalAddToCartBlocker | null;
   canAddToCart: boolean;
   currency: CurrencyConfig;
   explicitSelectedAxes: string[];

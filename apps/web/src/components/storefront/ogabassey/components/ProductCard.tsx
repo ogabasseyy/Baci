@@ -1,6 +1,12 @@
 'use client';
 
-import { ArrowRightLeft, Heart, ShoppingCart, Star } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Check,
+  Heart,
+  ShoppingCart,
+  Star,
+} from 'lucide-react';
 import Link from 'next/link';
 import React, { useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -80,6 +86,7 @@ function resolveProductCardBadge(
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onAddToCart,
+  isAdded,
   viewMode = 'grid',
   contentVisibilityClassName,
   imagePriority = false,
@@ -226,6 +233,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </button>
         </div>
 
+        {/* A thumb covers the small cart button on a phone, so the
+            confirmation also shows beside it. */}
+        {isAdded && !requiresSelection && (
+          <span
+            role="status"
+            className="absolute bottom-2 left-2 md:bottom-3 md:left-3 z-20 rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-lg"
+          >
+            Added to cart
+          </span>
+        )}
+
         {requiresSelection ? (
           <Link
             href={productHref}
@@ -243,14 +261,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             type="button"
             onClick={handleCartClick}
-            aria-label={`Add ${product.name} to cart`}
-            className="absolute bottom-2 right-2 md:bottom-3 md:right-3 z-20 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center rounded-full shadow-lg border border-gray-100 transition-all duration-300 pointer-events-auto active:scale-95 bg-white text-gray-900 md:hover:bg-primary md:hover:text-white md:hover:border-primary overflow-visible"
+            aria-label={
+              isAdded
+                ? `${product.name} added to cart`
+                : `Add ${product.name} to cart`
+            }
+            className={`absolute bottom-2 right-2 md:bottom-3 md:right-3 z-20 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center rounded-full shadow-lg border transition-all duration-300 pointer-events-auto active:scale-95 overflow-visible ${
+              isAdded
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-gray-900 border-gray-100 md:hover:bg-primary md:hover:text-white md:hover:border-primary'
+            }`}
           >
-            <ShoppingCart
-              size={16}
-              className={`transition-transform md:w-[18px] md:h-[18px] ${showPlusOne ? 'scale-90' : ''}`}
-              strokeWidth={2}
-            />
+            {isAdded ? (
+              <Check size={16} strokeWidth={3} />
+            ) : (
+              <ShoppingCart
+                size={16}
+                className={`transition-transform md:w-[18px] md:h-[18px] ${showPlusOne ? 'scale-90' : ''}`}
+                strokeWidth={2}
+              />
+            )}
             {showPlusOne && (
               <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-primary font-bold text-sm animate-out fade-out slide-out-to-top-4 duration-1000 fill-mode-forwards z-30 pointer-events-none shadow-sm bg-white px-1.5 rounded-full border border-primary/20">
                 +1

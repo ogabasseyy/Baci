@@ -14,7 +14,9 @@ vi.mock('next/link', () => ({
 
 // Live PlayStation 5 Console catalogue shape: every New console carries a
 // region, the single Used console carries none.
-const variantRows: Array<[string, string, Record<string, string>, number]> = [
+const variantRows: Array<
+  [string, 'new' | 'used', Record<string, string>, number]
+> = [
   ['new-fat-eu', 'new', { model: 'Fat', region: 'Europe', storage: '825GB' }, 1_146_360],
   ['new-slim-eu', 'new', { model: 'Slim', region: 'Europe', storage: '1TB' }, 1_223_280],
   ['new-slim-jp', 'new', { model: 'Slim', region: 'Japan', storage: '1TB' }, 1_232_280],

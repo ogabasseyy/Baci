@@ -12,7 +12,11 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-type Row = [id: string, condition: string, attributes: Record<string, string>];
+type Row = [
+  id: string,
+  condition: 'new' | 'used',
+  attributes: Record<string, string>,
+];
 
 const VISIBLE_AXES = ['storage', 'sim_type', 'color', 'region'];
 

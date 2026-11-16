@@ -2,7 +2,11 @@ import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { useUtilityPayGate } from './use-utility-pay-gate';
 import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
-import { getDataFormIssue, type UtilityFormIssue } from './utility-form-issue';
+import {
+  getDataFormIssue,
+  getFieldIssuePointer,
+  type UtilityFormIssue,
+} from './utility-form-issue';
 
 /**
  * The data form's Pay gate: the form issue (shown at its field when it is
@@ -62,8 +66,9 @@ export function useDataPayGate({
   return {
     blockedReason: gate.blockedReason,
     inlineIssue,
-    notice:
-      gate.blockedReason && !inlineIssue
+    notice: inlineIssue
+      ? { action: null, message: getFieldIssuePointer(inlineIssue.field) }
+      : gate.blockedReason
         ? { action: gate.action, message: gate.blockedReason }
         : null,
   };

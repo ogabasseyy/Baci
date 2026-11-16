@@ -11,6 +11,7 @@ import { RecentUtilityRecipients } from './RecentUtilityRecipients';
 import { useBillFormController } from './use-bill-form-controller';
 import { useUtilityPayGate } from './use-utility-pay-gate';
 import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
+import { getFieldIssuePointer } from './utility-form-issue';
 import { UTILITY_FOOTER_NOTICE_SPACE } from './utility-pay-readiness';
 
 export function BillForm(props: BillFormProps) {
@@ -65,8 +66,9 @@ export function BillForm(props: BillFormProps) {
   });
   // An amount issue is shown under the amount field once something is typed.
   const amountIssueInline = Boolean(amountIssue && formattedAmount);
-  const footerNotice =
-    payGate.blockedReason && !amountIssueInline
+  const footerNotice = amountIssueInline
+    ? { action: null, message: getFieldIssuePointer('amount') }
+    : payGate.blockedReason
       ? { action: payGate.action, message: payGate.blockedReason }
       : null;
 

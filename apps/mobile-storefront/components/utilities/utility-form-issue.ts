@@ -104,3 +104,15 @@ export function getDataFormIssue({
   }
   return null;
 }
+
+/**
+ * The footer line for an issue shown beside its field: the field may be
+ * scrolled out of view, so the disabled Pay still says where to look.
+ */
+export function getFieldIssuePointer(field: UtilityFormIssue['field']): string {
+  return field === 'phone'
+    ? 'Check the phone number above.'
+    : field === 'amount'
+      ? 'Check the amount above.'
+      : 'Check the details above.';
+}

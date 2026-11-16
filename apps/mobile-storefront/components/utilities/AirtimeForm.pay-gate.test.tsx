@@ -164,6 +164,8 @@ describe('AirtimeForm Pay gate', () => {
     expect(
       screen.getByText('Amount must be between ₦50 and ₦50,000.')
     ).toBeOnTheScreen();
+    // The field may be scrolled away: the footer still says where to look.
+    expect(screen.getByText('Check the amount above.')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Pay ₦20' })).toBeDisabled();
     expect(Alert.alert).not.toHaveBeenCalled();
   });

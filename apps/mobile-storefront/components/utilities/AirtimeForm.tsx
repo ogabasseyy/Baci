@@ -19,7 +19,10 @@ import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useAirtimeFormController } from './use-airtime-form-controller';
 import { useRetainsPiggyvest } from './use-retains-piggyvest';
 import { useUtilityPayGate } from './use-utility-pay-gate';
-import { getAirtimeFormIssue } from './utility-form-issue';
+import {
+  getAirtimeFormIssue,
+  getFieldIssuePointer,
+} from './utility-form-issue';
 import { UTILITY_FOOTER_NOTICE_SPACE } from './utility-pay-readiness';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
@@ -70,8 +73,9 @@ export function AirtimeForm(props: AirtimeFormProps) {
     returnToHref: walletReturnToHref,
   });
   const inlineIssue = formIssue?.inline ? formIssue : null;
-  const footerNotice =
-    payGate.blockedReason && !inlineIssue
+  const footerNotice = inlineIssue
+    ? { action: null, message: getFieldIssuePointer(inlineIssue.field) }
+    : payGate.blockedReason
       ? { action: payGate.action, message: payGate.blockedReason }
       : null;
 

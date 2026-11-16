@@ -65,7 +65,7 @@ describe('useDataPayGate with the server keeping PiggyVest off', () => {
     expect(result.current.notice?.message).toBe('Choose a data bundle.');
   });
 
-  it('flags a wrong full-length number at the field, not above Pay', () => {
+  it('flags a wrong full-length number at the field and points to it above Pay', () => {
     const { result } = renderHook(() =>
       useDataPayGate({
         ...complete,
@@ -75,7 +75,10 @@ describe('useDataPayGate with the server keeping PiggyVest off', () => {
     );
 
     expect(result.current.inlineIssue?.field).toBe('phone');
-    expect(result.current.notice).toBeNull();
+    expect(result.current.notice).toEqual({
+      action: null,
+      message: 'Check the phone number above.',
+    });
     expect(result.current.blockedReason).toBe(
       'Enter an 11-digit phone number, like 08012345678.'
     );

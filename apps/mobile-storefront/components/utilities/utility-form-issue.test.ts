@@ -1,4 +1,8 @@
-import { getAirtimeFormIssue, getDataFormIssue } from './utility-form-issue';
+import {
+  getAirtimeFormIssue,
+  getDataFormIssue,
+  getFieldIssuePointer,
+} from './utility-form-issue';
 
 describe('getAirtimeFormIssue', () => {
   const valid = {
@@ -95,5 +99,15 @@ describe('getDataFormIssue', () => {
       field: 'amount',
       message: 'Enter an amount for this bundle.',
     });
+  });
+});
+
+describe('getFieldIssuePointer', () => {
+  it.each([
+    ['phone', 'Check the phone number above.'],
+    ['amount', 'Check the amount above.'],
+    ['bundle', 'Check the details above.'],
+  ] as const)('points to the %s field', (field, message) => {
+    expect(getFieldIssuePointer(field)).toBe(message);
   });
 });

@@ -236,6 +236,12 @@ BEGIN
   SET LOCAL session_replication_role = origin;
   PERFORM pg_temp.expect('published count keeps players ranked at publication',
     public.get_quiz_participant_count_public_v2(v_event) = 3);
+  -- Only losing the last-ranked row moves the highest rank.
+  SET LOCAL session_replication_role = replica;
+  DELETE FROM public.quiz_event_results_v2 WHERE event_id = v_event AND rank = 3;
+  SET LOCAL session_replication_role = origin;
+  PERFORM pg_temp.expect('published count follows the highest remaining rank',
+    public.get_quiz_participant_count_public_v2(v_event) = 1);
 END;
 $$;
 

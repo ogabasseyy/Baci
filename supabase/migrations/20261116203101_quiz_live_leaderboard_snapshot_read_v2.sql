@@ -109,7 +109,7 @@ BEGIN
     pg_catalog.jsonb_agg(
       (item.entry - 'customer_id') || pg_catalog.jsonb_build_object(
         'is_current_customer',
-        (item.entry->>'customer_id')::uuid = v_customer_id
+        item.entry->>'customer_id' = v_customer_id::text
       )
       ORDER BY item.position
     ),
@@ -120,12 +120,13 @@ BEGIN
     WITH ORDINALITY AS item(entry, position);
 
   -- A caller inside the stored top 100 reuses that entry so the highlighted
-  -- row and "your position" always agree.
+  -- row and "your position" always agree. Ids are compared as text so a
+  -- stored entry can never fail a cast and take the whole board down.
   SELECT (item.entry - 'customer_id')
     || pg_catalog.jsonb_build_object('is_current_customer', true)
   INTO v_current
   FROM pg_catalog.jsonb_array_elements(v_snapshot.entries) AS item(entry)
-  WHERE (item.entry->>'customer_id')::uuid = v_customer_id
+  WHERE item.entry->>'customer_id' = v_customer_id::text
   LIMIT 1;
 
   IF v_current IS NULL THEN
@@ -203,7 +204,8 @@ GRANT EXECUTE ON FUNCTION public.get_quiz_live_leaderboard_public_v2(uuid)
 -- number, read with one index probe instead of a count over every row at the
 -- moment every phone loads the final board. If a ranked player's account is
 -- deleted later their row goes (ON DELETE CASCADE) but they still took part,
--- so the count deliberately does not drop.
+-- so the count does not drop for them. The one exception is the last-ranked
+-- player: deleting that row lowers the highest rank, and the count, by one.
 CREATE OR REPLACE FUNCTION public.get_quiz_participant_count_public_v2(p_event_id uuid)
 RETURNS integer
 LANGUAGE plpgsql

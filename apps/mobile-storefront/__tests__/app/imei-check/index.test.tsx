@@ -272,6 +272,22 @@ describe('ImeiCheckerScreen', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('bugfix: the invalid-IMEI message clears as soon as the number is edited (Muse)', () => {
+    renderChoosingFullReport();
+
+    const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
+    fireEvent.changeText(input, '123456789012345');
+    fireEvent(input, 'submitEditing');
+    expect(
+      screen.getByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeTruthy();
+
+    fireEvent.changeText(input, '49015420323751');
+    expect(
+      screen.queryByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeNull();
+  });
+
   it('waits for wallet balance before enabling verification', () => {
     mockWalletIsLoading = true;
     renderChoosingFullReport();

@@ -287,6 +287,9 @@ export default function ImeiCheckerScreen() {
             topUpCardOnly={topUpCardOnly}
             onPageSelected={handlePageSelected}
             onVerify={handleVerify}
+            onEditIdentifier={() =>
+              setError(imeiCheckScreenActions.dropInvalidIdentifierError)
+            }
             onTopUpWallet={fundWallet}
           />
         </AppKeyboardContainer>

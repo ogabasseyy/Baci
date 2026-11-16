@@ -32,6 +32,7 @@ interface ImeiCheckDevicePageProps {
   topUpCardOnly?: boolean;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
+  onEditIdentifier?: () => void;
 }
 
 /**
@@ -52,6 +53,7 @@ export function ImeiCheckDevicePage({
   topUpCardOnly,
   onVerify,
   onTopUpWallet,
+  onEditIdentifier,
 }: ImeiCheckDevicePageProps) {
   const recommendedTier = RECOMMENDED_TIER_BY_DEVICE[device];
   // Nothing is preselected: the customer picks a check before any price is
@@ -184,14 +186,18 @@ export function ImeiCheckDevicePage({
       walletPay={walletPay}
       topUpCardOnly={topUpCardOnly}
       onBrandSelect={handleBrandSelect}
-      onChangeImei={(text) =>
-        setImei(normalizeDeviceIdentifier(text, identifier))
-      }
+      onChangeImei={(text) => {
+        onEditIdentifier?.();
+        setImei(normalizeDeviceIdentifier(text, identifier));
+      }}
       onCheck={() => {
         if (selectedTier && displayedTierKeys.includes(selectedTier))
           onVerify(selectedTier, imei);
       }}
-      onClearImei={() => setImei('')}
+      onClearImei={() => {
+        onEditIdentifier?.();
+        setImei('');
+      }}
       onTierSelect={(tier) => {
         if (displayedTierKeys.includes(tier)) applyTier(tier);
       }}

@@ -13,6 +13,13 @@ export const imeiCheckScreenActions = {
         ? 'Please enter a valid 15-digit IMEI number.'
         : 'Please enter a valid IMEI or serial number.';
   },
+  /** Typing a new number drops only the invalid-number message. */
+  dropInvalidIdentifierError(error: string | null) {
+    const invalid: string[] = (['imei', 'serial', 'both'] as const).map((id) =>
+      imeiCheckScreenActions.invalidIdentifierMessage(id)
+    );
+    return error !== null && invalid.includes(error) ? null : error;
+  },
   fundWallet(
     amount: number,
     merchantId: string | null | undefined = undefined

@@ -38,6 +38,17 @@ describe('imeiCheckScreenActions.invalidIdentifierMessage', () => {
     );
   });
 
+  it('drops only the invalid-number message when the number is edited', () => {
+    const invalid = imeiCheckScreenActions.invalidIdentifierMessage('imei');
+    expect(imeiCheckScreenActions.dropInvalidIdentifierError(invalid)).toBe(
+      null
+    );
+    expect(
+      imeiCheckScreenActions.dropInvalidIdentifierError('Refund on its way.')
+    ).toBe('Refund on its way.');
+    expect(imeiCheckScreenActions.dropInvalidIdentifierError(null)).toBe(null);
+  });
+
   it('asks for the 15-digit IMEI for IMEI-only checks', () => {
     expect(imeiCheckScreenActions.invalidIdentifierMessage('imei')).toBe(
       'Please enter a valid 15-digit IMEI number.'

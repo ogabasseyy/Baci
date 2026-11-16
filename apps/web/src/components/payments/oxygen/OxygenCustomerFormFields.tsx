@@ -68,6 +68,7 @@ export function CustomerFormFields({
 }) {
   const defaults = initialDraft?.fields ?? {};
   const [step, setStep] = useState(Math.min(initialDraft?.step ?? 0, 1));
+  // OxygenCustomerForm keys this entire form by workflow ID, resetting verification.
   const [bankVerified, setBankVerified] = useState(false);
   const [residentialFile, setResidentialFile] = useState<File | null>(null);
   const formRef = useRef<HTMLFormElement>(null);

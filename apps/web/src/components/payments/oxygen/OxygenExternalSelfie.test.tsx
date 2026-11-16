@@ -39,9 +39,18 @@ it('offers a trusted standalone camera link and checks status without claiming s
   expect(confirmed).not.toHaveBeenCalled();
   expect(retry).toHaveBeenCalledTimes(1);
   expect(screen.getByText(/return to this tab/i)).toBeVisible();
+  expect(
+    screen.queryByRole('link', { name: 'Open camera in a new tab' })
+  ).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Check selfie status' }));
   expect(retry).toHaveBeenCalledTimes(2);
   expect(confirmed).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Return to camera options' })
+  );
+  expect(
+    screen.getByRole('link', { name: 'Open camera in a new tab' })
+  ).toBeVisible();
 });
 
 it('does not offer a standalone link for an untrusted or expired provider URL', () => {

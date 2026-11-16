@@ -160,6 +160,7 @@ export function OxygenHostedSelfie({
       {workflowId && !phone && (
         <footer className="shrink-0 border-t border-gray-100 bg-white p-3">
           {trustedOrigin &&
+            !external &&
             !expiredAtClick &&
             !renewal.expired &&
             !renewal.renewing && (

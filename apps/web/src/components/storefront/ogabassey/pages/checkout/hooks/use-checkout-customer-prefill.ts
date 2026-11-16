@@ -68,6 +68,7 @@ export function useCheckoutCustomerPrefill({
       fields.email = true;
     }
 
+    // A partial checkout name may belong to someone other than the signed-in user.
     if (firstName || lastName) fields.name = true;
     if (!fields.name) {
       const profileFirstName = readMetadataString(user, 'first_name');

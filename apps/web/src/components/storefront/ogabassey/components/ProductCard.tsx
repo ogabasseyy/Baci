@@ -269,7 +269,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             onClick={handleCartClick}
             aria-label={
               isAdded
-                ? `${product.name} added to cart`
+                ? `Add another ${product.name} to cart`
                 : `Add ${product.name} to cart`
             }
             className={`absolute bottom-2 right-2 md:bottom-3 md:right-3 z-20 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center rounded-full shadow-lg border transition-all duration-300 pointer-events-auto active:scale-95 overflow-visible ${

@@ -56,7 +56,7 @@ export function resolveCriticalAddToCartBlocker({
       kind: 'offer-missing',
       axes: canChooseCondition ? ['condition'] : [],
       message: canChooseCondition
-        ? 'Choose a condition above to add this to your cart.'
+        ? 'Choose a condition to add this to your cart.'
         : 'This offer is no longer available.',
     };
   }
@@ -65,7 +65,7 @@ export function resolveCriticalAddToCartBlocker({
     return {
       kind: 'missing-selection',
       axes: missingAxes,
-      message: `Choose a ${joinAxisLabels(missingAxes)} above to add this to your cart.`,
+      message: `Choose a ${joinAxisLabels(missingAxes)} to add this to your cart.`,
     };
   }
 
@@ -73,7 +73,7 @@ export function resolveCriticalAddToCartBlocker({
     return {
       kind: 'unconfirmed-selection',
       axes: visibleAxes,
-      message: 'Tap your options above to confirm the exact version.',
+      message: 'Tap your options to confirm the exact version.',
     };
   }
 
@@ -89,7 +89,7 @@ export function resolveCriticalAddToCartBlocker({
     kind: 'unavailable',
     axes: [],
     message:
-      'This combination is not available. Choose another option above.',
+      'This combination is not available. Choose another option.',
   };
 }
 

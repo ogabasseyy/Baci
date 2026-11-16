@@ -159,7 +159,7 @@ describe('ProductCardListView', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: 'iPhone 18 Pro added to cart' })
+      screen.getByRole('button', { name: 'Add another iPhone 18 Pro to cart' })
     ).toBeInTheDocument();
     expect(screen.getByText('Added to cart')).toBeInTheDocument();
     // Announced from a live region beside the button, never inside it.

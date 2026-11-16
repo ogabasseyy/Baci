@@ -82,7 +82,7 @@ describe('critical buy box when an option is still unchosen', () => {
     expect(add).toHaveAttribute('aria-disabled', 'true');
     expect(
       screen
-        .getByText('Choose a color above to add this to your cart.')
+        .getByText('Choose a color to add this to your cart.')
         .closest('[role="status"]')
     ).not.toBeNull();
   });
@@ -97,7 +97,7 @@ describe('critical buy box when an option is still unchosen', () => {
 
     expect(cart.addToCart).not.toHaveBeenCalled();
     const reason = screen.getByText(
-      'Choose a color above to add this to your cart.'
+      'Choose a color to add this to your cart.'
     );
     // One stable live region: emphasis changes, the role does not.
     const region = reason.closest('[role="status"]');
@@ -114,7 +114,7 @@ describe('critical buy box when an option is still unchosen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to cart' }));
     fireEvent.click(screen.getByRole('button', { name: 'Select Black color' }));
 
-    expect(screen.queryByText(/above to add this to your cart/)).toBeNull();
+    expect(screen.queryByText(/to add this to your cart/)).toBeNull();
     const add = screen.getByRole('button', { name: 'Add to cart' });
     expect(add).not.toHaveAttribute('aria-disabled');
     fireEvent.click(add);
@@ -173,7 +173,7 @@ describe('resolveCriticalAddToCartBlocker', () => {
     ).toMatchObject({
       kind: 'missing-selection',
       message:
-        'Choose a storage, sim type and color above to add this to your cart.',
+        'Choose a storage, sim type and color to add this to your cart.',
     });
   });
 
@@ -212,7 +212,7 @@ describe('resolveCriticalAddToCartBlocker', () => {
     ).toMatchObject({
       kind: 'unconfirmed-selection',
       axes: ['storage', 'color'],
-      message: 'Tap your options above to confirm the exact version.',
+      message: 'Tap your options to confirm the exact version.',
     });
   });
 

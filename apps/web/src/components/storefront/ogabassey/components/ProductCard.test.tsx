@@ -307,7 +307,7 @@ describe('ProductCard', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: 'Test Product added to cart' })
+      screen.getByRole('button', { name: 'Add another Test Product to cart' })
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(
       'Test Product added to cart'

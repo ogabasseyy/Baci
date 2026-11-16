@@ -40,8 +40,8 @@ export function imeiWalletPayCovers(input: {
   wallet: PayingWallet | null | undefined;
   tier: ImeiServiceTierKey;
   refusedTiers?: readonly ImeiServiceTierKey[];
-  /** The server's list of wallet-payable checks; null when not known yet. */
-  payableTiers?: readonly ImeiServiceTierKey[] | null;
+  /** The server's wallet-payable checks; null = unknown, 'loading' = wait. */
+  payableTiers?: readonly ImeiServiceTierKey[] | null | 'loading';
 }) {
   const { tier } = input;
   // Only Sickw-backed checks can be paid this way (server rule).
@@ -50,6 +50,7 @@ export function imeiWalletPayCovers(input: {
   if (input.refusedTiers?.includes(tier)) return false;
   // A check the server routes to Petrock today is never offered (walk
   // 2026-11-15, M1), even when its tier can also run on Sickw.
+  if (input.payableTiers === 'loading') return false;
   if (input.payableTiers && !input.payableTiers.includes(tier)) return false;
   return piggyvestWalletCovers({
     canPay: input.canPay,

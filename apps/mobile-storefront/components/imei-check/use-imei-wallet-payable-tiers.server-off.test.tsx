@@ -34,6 +34,29 @@ describe('useImeiWalletPayableTiers', () => {
       useImeiWalletPayableTiers({ ...props, canPay: true })
     );
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current).toBeNull());
+  });
+
+  it('bugfix: offers nothing while a read is in flight, even after a device switch (Muse)', async () => {
+    let resolve: (value: Response) => void = () => undefined;
+    jest.spyOn(global, 'fetch').mockImplementation(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        })
+    );
+    const { result, rerender } = renderHook(
+      ({ device }: { device: 'smartphone' | 'laptop' }) =>
+        useImeiWalletPayableTiers({ ...props, device, canPay: true }),
+      { initialProps: { device: 'smartphone' } }
+    );
+    expect(result.current).toBe('loading');
+    resolve({
+      ok: true,
+      json: async () => ({ walletPayableTierKeys: ['basic'] }),
+    } as Response);
+    await waitFor(() => expect(result.current).toEqual(['basic']));
+    rerender({ device: 'laptop' });
+    expect(result.current).toBe('loading');
   });
 });

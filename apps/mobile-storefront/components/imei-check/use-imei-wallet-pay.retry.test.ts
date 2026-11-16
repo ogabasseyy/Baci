@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import * as Crypto from 'expo-crypto';
 import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { imeiWalletPayApi } from '@/lib/wallet-pay/imei-wallet-pay-api';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
+import { useImeiWalletPayableTiers } from './use-imei-wallet-payable-tiers';
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(),
@@ -12,6 +13,9 @@ jest.mock('expo-crypto', () => ({
     `sha256(${value.length})`,
 }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('./use-imei-wallet-payable-tiers', () => ({
+  useImeiWalletPayableTiers: jest.fn(() => null),
+}));
 jest.mock('@/stores/auth-store', () => {
   const state = { user: { id: 'user-1' }, merchantId: 'merchant-1' };
   const useAuthStore = (selector: (s: typeof state) => unknown) =>
@@ -287,25 +291,25 @@ describe('bugfix: a broken key store withheld store credit while switched off (M
 });
 
 describe('bugfix: the app ignored the server list of wallet-payable checks (walk M1)', () => {
-  it('stops offering a check the server can not bill to the wallet', async () => {
-    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({ walletPayableTierKeys: ['full'] }),
-    } as Response);
-    const hook = setup();
-    await waitFor(() =>
-      expect(hook.result.current.covers('basic')).toBe(false)
-    );
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain(
-      'https://api.test/api/storefront/imei-check?device=smartphone'
-    );
-    fetchSpy.mockRestore();
+  const payable = useImeiWalletPayableTiers as jest.Mock;
+  afterEach(() => payable.mockReturnValue(null));
+
+  it('stops offering a check the server can not bill to the wallet', () => {
+    payable.mockReturnValue(['full']);
+    expect(setup().result.current.covers('basic')).toBe(false);
   });
 
-  it('asks nothing while paying from PiggyVest is switched off', () => {
-    const fetchSpy = jest.spyOn(global, 'fetch');
+  it('offers nothing while the list is still loading', () => {
+    payable.mockReturnValue('loading');
+    expect(setup().result.current.covers('basic')).toBe(false);
+  });
+
+  it('asks for the list with the screen device and switch', () => {
     setup(false);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
+    expect(payable).toHaveBeenLastCalledWith({
+      apiBaseUrl: 'https://api.test',
+      canPay: false,
+      device: 'smartphone',
+    });
   });
 });

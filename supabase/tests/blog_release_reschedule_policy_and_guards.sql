@@ -192,10 +192,18 @@ BEGIN
         'reschedule retry across different session TimeZones must succeed idempotently'
       );
 
-      -- Fill v_today_lagos + 1 as well (v_today_lagos + 1 has 1 scheduled post from Merchant C's tomorrow? No: seed 1 on v_today_lagos + 1 and 1 on v_today_lagos + 2, leave +3 free)
+      -- Fill v_today_lagos, v_today_lagos + 1, and v_today_lagos + 2 so rollover skips all three regardless of Lagos hour, leaving +3 free
       INSERT INTO public.blog_posts (
         id, merchant_id, title, slug, content, author_name, status, published_at, requested_publish_at, article_identity
       ) VALUES
+        (
+          'd3000000-0000-4000-8000-000000000023',
+          'd2000000-0000-4000-8000-000000000003',
+          'Full Today Blocker', 'full-today-blocker', 'Blocker 0', 'Editor C', 'scheduled',
+          (v_today_lagos::timestamp + time '12:00:00') AT TIME ZONE 'Africa/Lagos',
+          (v_today_lagos::timestamp + time '12:00:00') AT TIME ZONE 'Africa/Lagos',
+          'e1000000-0000-4000-8000-000000000023'
+        ),
         (
           'd3000000-0000-4000-8000-000000000018',
           'd2000000-0000-4000-8000-000000000003',

@@ -1,4 +1,5 @@
 import { StyleSheet, View } from 'react-native';
+import Colors from '@/constants/Colors';
 import type { ImeiCheckerColors } from './imei-check.types';
 
 /**
@@ -41,6 +42,9 @@ function readRgb(value: string): [number, number, number] | null {
  * equality with white, so an off-white light theme still reads as light.
  */
 export function isImeiDark(colors: ImeiCheckerColors) {
+  // The app's own themes first; brightness only for anything else.
+  if (colors.background === Colors.dark.background) return true;
+  if (colors.background === Colors.light.background) return false;
   const rgb = readRgb(colors.background);
   if (!rgb) return colors.background !== colors.white;
   const [r, g, b] = rgb;

@@ -17,7 +17,7 @@ export function ImeiCheckTop({
 }) {
   return (
     <View style={{ paddingHorizontal: SPACING.md, paddingTop: SPACING.sm }}>
-      <HeroCard colors={colors} />
+      <HeroCard />
       <ImeiDeviceTabs colors={colors} selected={selected} onSelect={onSelect} />
     </View>
   );

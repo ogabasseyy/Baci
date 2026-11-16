@@ -9,6 +9,10 @@ import { reportStyles as styles } from './imei-check-report.styles';
 import type { ImeiResultStatusCard } from './imei-check-result-status-cards';
 import { isStatusClean } from './is-status-clean';
 
+// Values that mean the report could not tell, not that the check failed.
+const NOT_TOLD =
+  /^(unknown|unavailable|not available|not checked|n\/a|pending|error|unable to check)$/i;
+
 /**
  * How a finding reads. Only pass/fail findings (blacklist, iCloud, MDM...)
  * get a colour: green when clean, red when not, amber when the report could
@@ -23,7 +27,7 @@ export function imeiStatusTone(
     return state === 'clean' ? 'safe' : state === 'risk' ? 'danger' : 'caution';
   }
   if (!card.cleanAware) return 'neutral';
-  if (card.value.trim().toLowerCase() === 'unknown') return 'caution';
+  if (NOT_TOLD.test(card.value.trim())) return 'caution';
   return isStatusClean(card.value) ? 'safe' : 'danger';
 }
 

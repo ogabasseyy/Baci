@@ -12,7 +12,7 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
 
 describe('HeroCard', () => {
   it('renders the heading and trust indicators without a redundant title', () => {
-    render(<HeroCard colors={Colors.light} />);
+    render(<HeroCard />);
 
     expect(screen.getByText('Device verification')).toBeTruthy();
     expect(screen.queryByText('IMEI Checker')).toBeNull();

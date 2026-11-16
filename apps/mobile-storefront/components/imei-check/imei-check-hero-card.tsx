@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import { SPACING } from '@/constants/Colors';
 import { IMEI_CARE } from './imei-care-look';
-import type { ImeiCheckerColors } from './imei-check.types';
 
 const IMEI_TRUST_INDICATORS = [
   '15-digit check',
@@ -14,7 +13,7 @@ const IMEI_TRUST_INDICATORS = [
  * The checker's hero, in the burgundy device-care style of the refreshed
  * home: what the page does in one line, and three quiet promises.
  */
-export default function HeroCard(_props: { colors: ImeiCheckerColors }) {
+export default function HeroCard() {
   return (
     <View style={styles.hero}>
       <View style={styles.titleRow}>

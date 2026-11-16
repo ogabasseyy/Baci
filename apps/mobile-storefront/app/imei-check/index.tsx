@@ -126,12 +126,10 @@ export default function ImeiCheckerScreen() {
     if (isLoading || pendingLookup.pending) return;
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
-    if (!isValidDeviceIdentifier(imei, serviceTier.identifier)) {
-      setError(
-        imeiCheckScreenActions.invalidIdentifierMessage(serviceTier.identifier)
+    if (!isValidDeviceIdentifier(imei, serviceTier.identifier))
+      return setError(
+        imeiCheckScreenActions.invalidFor(serviceTier, selectedDevice)
       );
-      return;
-    }
     const decision = await decideImeiVerify({
       retainedStoreCredit: requestIdentity.retains(tier, imei, selectedDevice),
       retainsPiggyvest: () => walletPay.retains(tier, imei),

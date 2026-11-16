@@ -49,6 +49,19 @@ describe('imeiCheckScreenActions.invalidIdentifierMessage', () => {
     expect(imeiCheckScreenActions.dropInvalidIdentifierError(null)).toBe(null);
   });
 
+  it('names what the device field accepts for an IMEI-or-serial check (Muse)', () => {
+    // Phones take an IMEI or (iPhone) a serial, so both are named.
+    expect(
+      imeiCheckScreenActions.invalidIdentifierMessage('both', 'smartphone')
+    ).toBe('Please enter a valid IMEI or serial number.');
+    expect(
+      imeiCheckScreenActions.invalidIdentifierMessage('both', 'laptop')
+    ).toBe('Please enter a valid device serial number.');
+    expect(
+      imeiCheckScreenActions.invalidFor({ identifier: 'both' }, 'watch')
+    ).toBe('Please enter a valid device serial number.');
+  });
+
   it('asks for the 15-digit IMEI for IMEI-only checks', () => {
     expect(imeiCheckScreenActions.invalidIdentifierMessage('imei')).toBe(
       'Please enter a valid 15-digit IMEI number.'

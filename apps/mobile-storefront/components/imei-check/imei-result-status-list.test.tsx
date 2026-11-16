@@ -30,6 +30,14 @@ describe('imeiStatusTone', () => {
     );
   });
 
+  it('reads every "could not tell" value as caution, not failure (Muse)', () => {
+    for (const value of ['Unavailable', 'Not checked', 'N/A', 'Pending'])
+      expect(imeiStatusTone({ cleanAware: true, value })).toBe('caution');
+    expect(imeiStatusTone({ cleanAware: true, value: 'Locked' })).toBe(
+      'danger'
+    );
+  });
+
   it('keeps facts such as warranty neutral', () => {
     expect(imeiStatusTone({ value: 'Out Of Warranty' })).toBe('neutral');
     expect(imeiStatusTone({ value: 'Limited Warranty' })).toBe('neutral');

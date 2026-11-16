@@ -314,3 +314,16 @@ it('pays a reopened report follow-up from PiggyVest when store credit cannot cov
   expect(mockSubmit).not.toHaveBeenCalled();
   expect(result.current.result).toEqual(report.result);
 });
+
+it('hides the shown report device and lookup as soon as the account changes', () => {
+  const { result, rerender } = renderHook(() =>
+    useImeiCheckFlow('smartphone', 'https://test.invalid')
+  );
+  act(() => result.current.openReport(report));
+  expect(result.current.resultDevice).toBe('smartphone');
+  mockUserId = 'user-b';
+  rerender({});
+  expect(result.current.result).toBeNull();
+  expect(result.current.resultDevice).toBeNull();
+  expect(result.current.resultLookupId).toBeNull();
+});

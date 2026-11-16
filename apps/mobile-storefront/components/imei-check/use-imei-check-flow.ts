@@ -264,9 +264,10 @@ export function useImeiCheckFlow(
   return {
     error,
     isLoading,
+    // Everything about a shown report belongs to the account that opened it.
     result: resultScope === scope ? result : null,
-    resultDevice,
-    resultLookupId,
+    resultDevice: resultScope === scope ? resultDevice : null,
+    resultLookupId: resultScope === scope ? resultLookupId : null,
     resultTier,
     session,
     customerId,

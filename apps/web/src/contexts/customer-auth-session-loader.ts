@@ -70,6 +70,22 @@ export interface SessionSetters {
   setIsLoading: (loading: boolean) => void;
 }
 
+const sessionLifecycleGenerations = new Map<string, number>();
+
+export function getCustomerSessionLifecycleGeneration(
+  merchantSlug: string
+): number {
+  return sessionLifecycleGenerations.get(merchantSlug) ?? 0;
+}
+
+export function invalidateCustomerSessionLifecycle(
+  merchantSlug: string
+): number {
+  const next = getCustomerSessionLifecycleGeneration(merchantSlug) + 1;
+  sessionLifecycleGenerations.set(merchantSlug, next);
+  return next;
+}
+
 /**
  * Module-scope session loader so try/catch/finally stays outside React components.
  */
@@ -79,6 +95,10 @@ export async function loadCustomerSession(
   isCancelled: () => boolean = () => false,
   options: { bypassSessionHint?: boolean } = {}
 ): Promise<void> {
+  const lifecycleGeneration = invalidateCustomerSessionLifecycle(merchantSlug);
+  const isStale = () =>
+    isCancelled() ||
+    getCustomerSessionLifecycleGeneration(merchantSlug) !== lifecycleGeneration;
   invalidateCustomerIdentityObservers(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(
     merchantSlug,
@@ -89,10 +109,10 @@ export async function loadCustomerSession(
     if (isCustomerAuthRollbackPending(merchantSlug)) {
       if (previousUserId) {
         await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
-        if (isCancelled()) return;
+        if (isStale()) return;
       }
       await rollbackCustomerAuthSession(merchantSlug);
-      if (isCancelled()) return;
+      if (isStale()) return;
       writeCustomerSessionHint(merchantSlug, '0');
       setUser(null);
       setCustomer(null);
@@ -112,7 +132,7 @@ export async function loadCustomerSession(
     }
 
     const result = await fetchCustomerSession(merchantSlug);
-    if (isCancelled()) return;
+    if (isStale()) return;
 
     if (result.status === 'authenticated') {
       const { session } = result;
@@ -121,10 +141,10 @@ export async function loadCustomerSession(
           merchantSlug,
           previousUserId
         );
-        if (isCancelled()) return;
+        if (isStale()) return;
         if (!retired) {
           await rollbackCustomerAuthSession(merchantSlug);
-          if (isCancelled()) return;
+          if (isStale()) return;
           writeCustomerSessionHint(merchantSlug, '0');
           setUser(null);
           setCustomer(null);
@@ -144,7 +164,7 @@ export async function loadCustomerSession(
           (result.userId !== null && result.userId !== previousUserId))
       ) {
         await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
-        if (isCancelled()) return;
+        if (isStale()) return;
       }
       if (result.status === 'unauthenticated' || result.httpStatus === 401) {
         writeCustomerSessionHint(merchantSlug, '0');
@@ -154,12 +174,12 @@ export async function loadCustomerSession(
       publishCustomerIdentity(null, null, merchantSlug);
     }
   } catch (error) {
-    if (isCancelled()) return;
+    if (isStale()) return;
     console.error('Session check error:', error);
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);
   } finally {
-    if (!isCancelled()) setIsLoading(false);
+    if (!isStale()) setIsLoading(false);
   }
 }

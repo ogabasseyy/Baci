@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { cacheLife, cacheTag } from 'next/cache';
+import { buildStaticSitemapEntries } from '@/lib/build-static-sitemap-entries';
 import {
   getPlatformBlogSitemapPosts,
   PLATFORM_BLOG_SITEMAP_CACHE_TAG,
@@ -63,26 +64,6 @@ async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
     });
     return !hasActiveCustomDomain;
   });
-}
-
-const STATIC_SITEMAP_PAGES = [
-  { path: '/', changeFreq: 'weekly' as const, priority: 1.0 },
-  { path: '/pricing', changeFreq: 'weekly' as const, priority: 0.9 },
-  { path: '/features', changeFreq: 'monthly' as const, priority: 0.8 },
-  { path: '/about', changeFreq: 'monthly' as const, priority: 0.7 },
-  { path: '/contact', changeFreq: 'monthly' as const, priority: 0.6 },
-  { path: '/blog', changeFreq: 'daily' as const, priority: 0.8 },
-  { path: '/demo', changeFreq: 'monthly' as const, priority: 0.7 },
-  { path: '/terms', changeFreq: 'yearly' as const, priority: 0.3 },
-  { path: '/privacy', changeFreq: 'yearly' as const, priority: 0.3 },
-];
-
-function buildStaticSitemapEntries(siteUrl: string): MetadataRoute.Sitemap {
-  return STATIC_SITEMAP_PAGES.map((page) => ({
-    url: `${siteUrl}${page.path}`,
-    changeFrequency: page.changeFreq,
-    priority: page.priority,
-  }));
 }
 
 async function getCachedSitemapEntries(

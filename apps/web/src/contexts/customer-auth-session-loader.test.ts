@@ -54,7 +54,10 @@ vi.mock('./customer-session-hint', () => ({
     mockWriteCustomerSessionHint(...args),
 }));
 
-import { loadCustomerSession } from './customer-auth-session-loader';
+import {
+  invalidateCustomerSessionLifecycle,
+  loadCustomerSession,
+} from './customer-auth-session-loader';
 
 describe('loadCustomerSession', () => {
   const setUser = vi.fn();
@@ -192,5 +195,43 @@ describe('loadCustomerSession', () => {
     expect(mockWriteCustomerSessionHint).not.toHaveBeenCalled();
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setIsLoading).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores stale authenticated responses that resolve after logout invalidates the lifecycle', async () => {
+    let resolveFetch: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          })
+      )
+    );
+
+    const loadPromise = loadCustomerSession('ogabassey', {
+      setUser,
+      setCustomer,
+      setIsLoading,
+    });
+
+    invalidateCustomerSessionLifecycle('ogabassey');
+    resolveFetch?.(
+      Response.json({
+        authenticated: true,
+        user: { id: 'user-1', email: 'a@example.com', role: 'customer' },
+        customer: {
+          id: 'cust-1',
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+          email: 'a@example.com',
+        },
+      })
+    );
+    await loadPromise;
+
+    expect(setUser).not.toHaveBeenCalled();
+    expect(mockWriteCustomerSessionHint).not.toHaveBeenCalled();
+    expect(setIsLoading).not.toHaveBeenCalled();
   });
 });

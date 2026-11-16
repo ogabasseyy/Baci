@@ -20,7 +20,10 @@ import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
 import { postCustomerAuthLogout } from './customer-auth-mutation';
 import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
 import type { CustomerSession } from './customer-auth-session-loader';
-import { loadCustomerSession } from './customer-auth-session-loader';
+import {
+  invalidateCustomerSessionLifecycle,
+  loadCustomerSession,
+} from './customer-auth-session-loader';
 import {
   clearCustomerAuthRollbackPending,
   getRememberedCustomerUserId,
@@ -51,6 +54,7 @@ export async function commitCustomerAuthSession(
     setOtpState: (otp: OtpState | null) => void;
   }
 ): Promise<boolean> {
+  invalidateCustomerSessionLifecycle(merchantSlug);
   invalidateCustomerIdentityObservers(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(
     merchantSlug,
@@ -88,6 +92,7 @@ export async function performCustomerLogout(
   setOtpState: (otp: OtpState | null) => void,
   userId?: string | null
 ): Promise<void> {
+  invalidateCustomerSessionLifecycle(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);

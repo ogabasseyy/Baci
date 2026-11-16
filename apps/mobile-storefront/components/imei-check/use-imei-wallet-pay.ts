@@ -147,12 +147,7 @@ export function useImeiWalletPay({
   const signIn = () => leaveTo('/auth/login?returnTo=/imei-check');
   return {
     sheet,
-    /**
-     * True while the wallet is being re-read, or the payable checks are
-     * still loading, with paying from PiggyVest on: Verify must not pick a
-     * top-up before it knows the wallet can pay (Codex P2). Always false
-     * while switched off.
-     */
+    /** Verify waits while the wallet or payable checks reload (Codex P2). */
     waitsForWallet:
       canPay &&
       (walletQuery.isRefetching === true || payableTiers === 'loading'),
@@ -259,11 +254,8 @@ export function useImeiWalletPay({
           const answer = await startWithReplayCaution(!minted, () =>
             started.start()
           );
-          // A tier refusal means no lookup exists for this key: the server
-          // answers a key with an earlier lookup from that lookup instead
-          // of refusing (walk 2026-11-15, H2). Nothing is left to recover,
-          // so the key is forgotten and the next tap falls back to store
-          // credit or a top-up, minted or reused (Codex P2).
+          // A tier refusal means no lookup exists for this key (the server
+          // replays an earlier one instead), so it is forgotten (walk H2).
           if (tierRefused && purchase)
             await walletPayPurchaseKeys
               .forget(purchase, idempotencyKey)

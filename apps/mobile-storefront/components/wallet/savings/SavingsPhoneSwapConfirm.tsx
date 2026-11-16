@@ -87,12 +87,28 @@ export function SavingsPhoneSwapConfirm({
   });
   return (
     <View style={styles.root}>
-      <Text
-        accessibilityRole="header"
-        style={[styles.confirmTitle, { color: colors.text }]}
-      >
-        {`Switch to ${row.title}?`}
-      </Text>
+      <View style={styles.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to phone list"
+          accessibilityState={{ disabled: pending }}
+          disabled={pending}
+          onPress={onKeep}
+          style={styles.back}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </Pressable>
+        <Text
+          accessibilityRole="header"
+          style={[
+            styles.confirmTitle,
+            styles.confirmHeading,
+            { color: colors.text },
+          ]}
+        >
+          {`Switch to ${row.title}?`}
+        </Text>
+      </View>
       {row.meta.length > 0 ? (
         <Text style={[styles.note, { color: colors.textSecondary }]}>
           {row.meta.join(' · ')}

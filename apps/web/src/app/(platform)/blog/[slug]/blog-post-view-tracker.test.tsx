@@ -1,31 +1,31 @@
 import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockFetchWithCsrf = vi.fn();
+
+vi.mock('@/lib/api-client', () => ({
+  fetchWithCsrf: (...args: unknown[]) => mockFetchWithCsrf(...args),
+}));
+
 import { BlogPostViewTracker } from './blog-post-view-tracker';
 
 describe('BlogPostViewTracker', () => {
-  const mockFetch =
-    vi.fn<
-      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-    >();
-
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
-    vi.stubGlobal('fetch', mockFetch);
+    mockFetchWithCsrf.mockResolvedValue(new Response(null, { status: 200 }));
   });
 
-  it('tracks views with a normalized slug', async () => {
+  it('tracks views with a normalized slug using CSRF protection', async () => {
     render(<BlogPostViewTracker slug=" Launch-Faster " />);
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
     });
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockFetchWithCsrf).toHaveBeenCalledWith(
       '/api/blog/posts',
       expect.objectContaining({
         body: JSON.stringify({ slug: 'launch-faster' }),
         cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
         keepalive: true,
         method: 'POST',
       })
@@ -35,6 +35,6 @@ describe('BlogPostViewTracker', () => {
   it('skips tracking when the slug is empty', () => {
     render(<BlogPostViewTracker slug="   " />);
 
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockFetchWithCsrf).not.toHaveBeenCalled();
   });
 });

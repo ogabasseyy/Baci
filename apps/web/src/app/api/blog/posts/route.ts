@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { checkCsrfProtection } from '@/lib/csrf';
 import {
   getPlatformBlogListing,
   getPlatformBlogPost,
@@ -84,6 +85,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const { valid, response } = await checkCsrfProtection(request);
+  if (!valid) {
+    return (
+      response ??
+      NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

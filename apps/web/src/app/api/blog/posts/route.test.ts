@@ -1,9 +1,14 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockCheckCsrfProtection = vi.fn();
 const mockGetPlatformBlogListing = vi.fn();
 const mockGetPlatformBlogPost = vi.fn();
 const mockIncrementPlatformBlogPostViews = vi.fn();
+
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: (...args: unknown[]) => mockCheckCsrfProtection(...args),
+}));
 
 vi.mock('@/lib/platform-blog', () => ({
   PLATFORM_BLOG_CACHE_TAG: 'platform-blog',
@@ -21,6 +26,7 @@ import { GET, POST } from './route';
 describe('GET /api/blog/posts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCheckCsrfProtection.mockResolvedValue({ valid: true });
     mockGetPlatformBlogListing.mockResolvedValue({
       hasMore: false,
       limit: 20,
@@ -151,6 +157,24 @@ describe('GET /api/blog/posts', () => {
     expect(response.status).toBe(200);
     expect(mockIncrementPlatformBlogPostViews).toHaveBeenCalledWith('post-2');
     await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('returns 403 when POST CSRF validation fails', async () => {
+    mockCheckCsrfProtection.mockResolvedValueOnce({
+      valid: false,
+      response: Response.json({ error: 'Invalid CSRF token' }, { status: 403 }),
+    });
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'launch-faster' }),
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockIncrementPlatformBlogPostViews).not.toHaveBeenCalled();
   });
 
   it('returns ok=false when POST trackView increment fails', async () => {

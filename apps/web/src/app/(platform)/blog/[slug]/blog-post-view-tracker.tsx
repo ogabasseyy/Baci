@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { fetchWithCsrf } from '@/lib/api-client';
 
 interface BlogPostViewTrackerProps {
   slug: string;
@@ -13,10 +14,9 @@ export function BlogPostViewTracker({ slug }: BlogPostViewTrackerProps) {
       return;
     }
 
-    void fetch('/api/blog/posts', {
+    void fetchWithCsrf('/api/blog/posts', {
       body: JSON.stringify({ slug: normalizedSlug }),
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
       keepalive: true,
       method: 'POST',
     }).catch((error) => {

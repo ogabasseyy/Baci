@@ -163,6 +163,18 @@ describe('background steps (2026-11-16)', () => {
   }
 });
 
+describe('cancelled DB replay jobs stop the image download', () => {
+  it('runs an always() stop step right after the wait', () => {
+    const steps = ci.jobs['quality-db-replay'].steps;
+    const wait = steps.findIndex((step) => step.name === 'Prepare pinned Supabase database image');
+    const stop = steps.findIndex((step) => step.name === 'Stop pinned Supabase database image download');
+    assert.equal(stop, wait + 1);
+    assert.match(steps[stop].if, /always\(\)/);
+    assert.match(steps[stop].if, /steps\.replay-image-start\.outcome == 'success'/);
+    assert.equal(steps[stop].run, 'bash .github/scripts/background-step.sh stop replay-image');
+  });
+});
+
 describe('cancelled typecheck jobs stop the builder-auth suite before container cleanup', () => {
   it('runs an always() stop step between the wait and the cleanup', () => {
     const steps = ci.jobs['quality-typecheck'].steps;

@@ -505,6 +505,10 @@ jobs:
         if: ${{ !cancelled() && steps.replay-image-start.outcome == 'success' }}
         # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
         run: bash .github/scripts/background-step.sh wait replay-image ${{ job.status == 'failure' && 60 || 900 }}
+      - name: Stop pinned Supabase database image download
+        # A cancelled job skips the wait above; stop the detached download so it cannot run on.
+        if: ${{ always() && steps.replay-image-start.outcome == 'success' }}
+        run: bash .github/scripts/background-step.sh stop replay-image
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological

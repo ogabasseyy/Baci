@@ -7,7 +7,7 @@ import {
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
@@ -26,6 +26,7 @@ import { getImeiWalletCopy } from './imei-wallet-copy';
 import { resolveImeiCheckFailure } from './resolve-imei-check-failure';
 import { submitImeiCheck } from './submit-imei-check';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
+import { useImeiPendingTerminal } from './use-imei-pending-terminal';
 import { useImeiRequestIdentity } from './use-imei-request-identity';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
 
@@ -106,29 +107,22 @@ export function useImeiCheckFlow(
     imeiCheckScreenActions.fundWallet(amount, merchantId);
   const clearIdempotencyKey = () => requestIdentity.clear();
 
-  const handlePendingTerminal = useEffectEvent(
-    (terminal: NonNullable<typeof pendingLookup.terminal>) => {
-      clearIdempotencyKey();
-      setIsLoading(false);
-      if (terminal.kind === 'complete') {
-        showResult(
-          terminal.tier,
-          terminal.lookupId,
-          terminal.result,
-          terminal.device ?? null
-        );
-      } else {
-        setError(terminal.error);
-      }
-      pendingLookup.clearTerminal();
+  useImeiPendingTerminal(pendingLookup.terminal, (terminal) => {
+    // Final: the saved key retires (a restored lookup brings its own).
+    requestIdentity.clear(terminal.request);
+    setIsLoading(false);
+    if (terminal.kind === 'complete') {
+      showResult(
+        terminal.tier,
+        terminal.lookupId,
+        terminal.result,
+        terminal.device ?? null
+      );
+    } else {
+      setError(terminal.error);
     }
-  );
-
-  useEffect(() => {
-    if (pendingLookup.terminal) {
-      handlePendingTerminal(pendingLookup.terminal);
-    }
-  }, [pendingLookup.terminal]);
+    pendingLookup.clearTerminal();
+  });
 
   const handleVerify = async (
     tier: ImeiServiceTierKey,
@@ -143,7 +137,7 @@ export function useImeiCheckFlow(
     if (!imeiCheckScreenActions.isValidFor(imei, serviceTier, device))
       return setError(imeiCheckScreenActions.invalidFor(serviceTier, device));
     const decision = await decideImeiVerify({
-      retainedStoreCredit: requestIdentity.retains(tier, imei, device),
+      retainedStoreCredit: await requestIdentity.retains(tier, imei, device),
       retainsPiggyvest: () => walletPay.retains(tier, imei),
       ownerAtTap: useAuthStore.getState().user?.id ?? null,
       currentOwner: () => useAuthStore.getState().user?.id ?? null,
@@ -172,17 +166,21 @@ export function useImeiCheckFlow(
     setError(null);
     if (!preserveResult) setResult(null);
 
-    const idempotencyKey = requestIdentity.get(tier, imei, device);
+    // Saved on the phone before anything is sent: a retry after the app was
+    // killed mid-request replays this key instead of paying again.
+    const identity = await requestIdentity.get(tier, imei, device);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
     const performCheck = async () => {
+      // The account switched while the key was read: nothing is sent.
+      if (!identity || scopeRef.current !== submittedScope) return;
       const { rawData, response } = await submitImeiCheck({
         // The live session: the tap awaited the saved keys (Codex P1).
         accessToken: useAuthStore.getState().session?.access_token,
         apiBaseUrl: API_BASE_URL,
         device,
-        idempotencyKey,
+        idempotencyKey: identity.key,
         identifier: imei,
         signal: controller.signal,
         tier,
@@ -220,6 +218,7 @@ export function useImeiCheckFlow(
           pollAfterMs: validated.pollAfterMs ?? 2_000,
           tier,
           device,
+          request: identity.saved,
         });
         return;
       }

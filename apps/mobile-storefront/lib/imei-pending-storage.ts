@@ -16,6 +16,12 @@ export interface PendingImeiLookup {
   device?: ImeiDeviceCategory;
   /** The signed-in user who started it: only they may resume it. */
   ownerUserId?: string;
+  /**
+   * The saved store credit key that started it (and its saved-key name): it
+   * is retired only once this lookup's poll reports a final result, even
+   * after a restart.
+   */
+  request?: { key: string; purchase: string };
 }
 
 export function pendingImeiStorageKey(merchantId: string, customerId: string) {
@@ -40,6 +46,17 @@ export async function clearPendingImeiLookup(key: string) {
   } catch {
     /* Recovery storage is optional. */
   }
+}
+
+function readRequest(value: unknown) {
+  if (!value || typeof value !== 'object') return {};
+  const { key, purchase } = value as Record<string, unknown>;
+  return typeof key === 'string' &&
+    UUID_PATTERN.test(key) &&
+    typeof purchase === 'string' &&
+    purchase
+    ? { request: { key, purchase } }
+    : {};
 }
 
 export async function loadPendingImeiLookup(
@@ -71,6 +88,7 @@ export async function loadPendingImeiLookup(
       ...(typeof value.ownerUserId === 'string' && value.ownerUserId
         ? { ownerUserId: value.ownerUserId }
         : {}),
+      ...readRequest(value.request),
       ...(value.device == null
         ? {}
         : {

@@ -19,9 +19,9 @@ import {
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { useRefreshWalletActivity } from '@/hooks/use-refresh-wallet-activity';
-import { CONFIG } from '@/lib/config';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import { useAuthStore } from '@/stores/auth-store';
+import { imeiPurchaseName } from './imei-purchase-name';
 import {
   createImeiWalletPayAdapter,
   type ImeiWalletPayResult,
@@ -58,27 +58,6 @@ export function imeiWalletPayCovers(input: {
     wallet: input.wallet,
     price: IMEI_SERVICE_TIERS[tier].price,
   });
-}
-
-/**
- * The saved-key name of one IMEI check (per account, store, device, tier and
- * IMEI). The build's merchant, never the hydrated one: that can still be
- * null at startup, and the key must match after a restart. The IMEI is
- * hashed so the saved purchase doesn't show it in plain text (an identifier,
- * not a secret; the app's own storage is the boundary).
- */
-async function imeiWalletPayPurchase(
-  userId: string,
-  device: ImeiDeviceCategory,
-  tier: ImeiServiceTierKey,
-  imei: string
-) {
-  const imeiHash = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    // One device, one key, however it was typed (spaces, case).
-    normalizeImeiIdentifier(imei)
-  );
-  return `imei|${userId}|${CONFIG.MERCHANT_ID ?? ''}|${device}|${tier}|${imeiHash}`;
 }
 
 /**
@@ -181,7 +160,7 @@ export function useImeiWalletPay({
       if (!userId) return false;
       checkingKept.current = true;
       try {
-        return await imeiWalletPayPurchase(userId, device, tier, imei)
+        return await imeiPurchaseName('imei', userId, device, tier, imei)
           .then((purchase) => walletPayPurchaseKeys.has(purchase))
           // Unreadable: while paying from PiggyVest is on it counts as kept
           // (the sheet opens and says "Try again"; no other rail is chosen
@@ -214,7 +193,13 @@ export function useImeiWalletPay({
           // restarts. The IMEI is hashed so the saved purchase doesn't show
           // it in plain text. The hash is an identifier, not a secret (an
           // IMEI can be brute-forced); the app's own storage is the boundary.
-          purchase = await imeiWalletPayPurchase(user.id, device, tier, imei);
+          purchase = await imeiPurchaseName(
+            'imei',
+            user.id,
+            device,
+            tier,
+            imei
+          );
           // Minted now = a new purchase; reused = a replay of an earlier
           // attempt whose payment may already have gone through.
           let minted = false;

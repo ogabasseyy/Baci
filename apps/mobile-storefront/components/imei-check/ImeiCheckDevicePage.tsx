@@ -151,9 +151,9 @@ export function ImeiCheckDevicePage({
   };
 
   const handleToggleServices = () => {
-    // A different check or brand can expect a different number.
-    onEditIdentifier?.();
     if (!canToggleServices) return;
+    // A different set of checks can expect a different number.
+    onEditIdentifier?.();
     const nextExpanded = !showAllServices;
     setShowAllServices(nextExpanded);
     const nextVisibleTiers = getPublicVisibleImeiServiceTierKeys(

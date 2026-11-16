@@ -207,6 +207,20 @@ describe('runtime capability selection', () => {
 });
 
 describe('bugfix: picking another check wiped a typed IMEI (Fable walk 15)', () => {
+  it('drops an invalid-number note when the shown checks really change', () => {
+    const onEditIdentifier = jest.fn();
+    render(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onEditIdentifier={onEditIdentifier}
+      />
+    );
+
+    fireEvent.press(screen.getByText('See all checks'));
+    expect(onEditIdentifier).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps a typed IMEI the next check also takes', () => {
     render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
     fireEvent.changeText(

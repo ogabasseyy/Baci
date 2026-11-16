@@ -165,7 +165,9 @@ function resolveAliasMapping(
         // Captured now, not when the refresh starts: a rename that lands
         // in between must stop this refresh writing its answer back.
         const epoch = invalidationEpoch;
-        refreshInBackground(oldSlug, () =>
+        // Keyed with the epoch, as lenientLoads is: after any rename the next
+        // request starts its own re-check instead of joining a discarded one.
+        refreshInBackground(`${oldSlug}:${epoch}`, () =>
           // Already overtaken by a rename: skip the wasted database read.
           epoch === invalidationEpoch
             ? loadAliasMapping(oldSlug, false, epoch, true)

@@ -10,7 +10,8 @@ export function ImeiReportHistory({
   disabled = false,
 }: {
   merchantSlug?: string;
-  onOpen: (report: ImeiReport) => void;
+  /** The id is the account the tapped report was listed for. */
+  onOpen: (report: ImeiReport, listedForUserId: string) => void;
   disabled?: boolean;
 }) {
   const auth = useOptionalCustomerAuth();
@@ -135,7 +136,7 @@ export function ImeiReportHistory({
                         disabled={disabled}
                         className="min-h-11 w-full rounded-lg p-2 text-left focus-visible:outline-2"
                         onClick={() => {
-                          onOpen(report);
+                          onOpen(report, auth?.user?.id ?? '');
                           setExpanded(false);
                         }}
                       >

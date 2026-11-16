@@ -42,7 +42,7 @@ it('reopens an owned saved report using only GET, with no initial load or checko
       name: 'Open SIM Lock report for iPhone 13 Pro',
     })
   );
-  expect(props.onOpen).toHaveBeenCalledWith(report);
+  expect(props.onOpen).toHaveBeenCalledWith(report, expect.any(String));
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch).toHaveBeenCalledWith(
     expect.stringContaining('/imei-check/reports?page=0'),

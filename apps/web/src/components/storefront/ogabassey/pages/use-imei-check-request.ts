@@ -180,8 +180,14 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     resultLookupId,
     resultTier,
     runCheck,
-    openReport(report: ImeiReport) {
+    openReport(report: ImeiReport, listedForUserId: string) {
       if (submitting.current || pendingLookup.pending) return;
+      // Only a report listed for the account signed in right now (Muse).
+      if (
+        listedForUserId !== (customerAuth?.user?.id ?? '') ||
+        activeScope.current !== requestScope
+      )
+        return;
       setResultScope(requestScope);
       setResult(report.result);
       setResultLookupId(report.lookupId);

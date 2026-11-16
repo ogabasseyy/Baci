@@ -115,7 +115,7 @@ export default function ImeiCheckerScreen() {
             accessToken={session?.access_token}
             scope={`${merchantId}:${customerId}:${session?.user?.id ?? ''}`}
             disabled={busy}
-            onOpen={(report) => {
+            onOpen={(report, listedFor) => {
               // The device tab follows the report, so a follow-up check (and its
               // PiggyVest key) is made for that report's device.
               const device = resolveImeiReportDevice(
@@ -123,7 +123,7 @@ export default function ImeiCheckerScreen() {
                 report.device
               );
               if (device) handleDeviceTab(device);
-              openReport(report);
+              openReport(report, listedFor);
             }}
           />
           {pendingLookup.pending ? (

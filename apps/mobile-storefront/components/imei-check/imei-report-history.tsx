@@ -19,7 +19,8 @@ export function ImeiReportHistory({
   apiBaseUrl: string;
   scope: string;
   colors: ImeiCheckerColors;
-  onOpen: (report: ImeiReport) => void;
+  /** The scope is the account the tapped report was listed for. */
+  onOpen: (report: ImeiReport, scope: string) => void;
   disabled?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -151,7 +152,7 @@ export function ImeiReportHistory({
                       accessibilityLabel={`Open ${IMEI_SERVICE_TIERS[report.tier].name} report for ${report.result.device}`}
                       style={{ paddingVertical: 12, minHeight: 44 }}
                       onPress={() => {
-                        onOpen(report);
+                        onOpen(report, scope);
                         setExpanded(false);
                       }}
                     >

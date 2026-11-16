@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { applyImeiCheckFailure } from './apply-imei-check-failure';
 import { decideImeiVerify } from './decide-imei-verify';
+import { imeiAccountScope } from './imei-account-scope';
 import { imeiCheckScreenActions } from './imei-check-screen-actions';
 import { getImeiWalletCopy } from './imei-wallet-copy';
 import { resolveImeiCheckFailure } from './resolve-imei-check-failure';
@@ -60,7 +61,11 @@ export function useImeiCheckFlow(
     merchantId,
   });
   const requestIdentity = useImeiRequestIdentity(Crypto.randomUUID);
-  const scope = `${merchantId}:${customerId}:${session?.user?.id ?? ''}`;
+  const scope = imeiAccountScope({
+    merchantId,
+    customer: { id: customerId },
+    session,
+  });
   const scopeRef = useRef(scope);
   const submitting = useRef(false);
   useEffect(() => {
@@ -285,8 +290,10 @@ export function useImeiCheckFlow(
       setError(imeiCheckScreenActions.dropInvalidIdentifierError);
     },
     /** Shows a completed report from history: nothing is paid again. */
-    openReport(report: ImeiReport) {
+    openReport(report: ImeiReport, listedFor: string) {
       if (submitting.current || pendingLookup.pending) return;
+      // Only a report listed for the account signed in right now (Muse).
+      if (listedFor !== imeiAccountScope(useAuthStore.getState())) return;
       showResult(report.tier, report.lookupId, report.result, report.device);
     },
   };

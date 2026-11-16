@@ -67,6 +67,8 @@ jest.mock('@/lib/logger', () => ({
 
 import { useImeiCheckFlow } from './use-imei-check-flow';
 
+const listedFor = () => `merchant:customer:${mockUserId}`;
+
 const report: ImeiReport = {
   lookupId: '11111111-1111-4111-8111-111111111111',
   createdAt: '2026-10-31T00:00:00Z',
@@ -100,7 +102,7 @@ it('reopens a completed report without checkout or provider submission', () => {
   const { result } = renderHook(() =>
     useImeiCheckFlow('tablet', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   expect(result.current.result).toEqual(report.result);
   expect(result.current.resultDevice).toBe('smartphone');
   expect(mockSubmit).not.toHaveBeenCalled();
@@ -114,7 +116,7 @@ it('preserves the reopened report on follow-up error and uses report device rath
   const { result } = renderHook(() =>
     useImeiCheckFlow('tablet', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   await act(async () => {
     await result.current.handleVerify(
       'blacklist',
@@ -145,7 +147,7 @@ it('blocks double taps while keeping the original report visible', async () => {
   const { result } = renderHook(() =>
     useImeiCheckFlow('smartphone', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   let first!: Promise<void>;
   act(() => {
     first = result.current.handleVerify(
@@ -196,11 +198,11 @@ it('accepts a new follow-up after the authenticated user changes', async () => {
   const { result, rerender } = renderHook(() =>
     useImeiCheckFlow('smartphone', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   mockUserId = 'user-b';
   rerender({});
   expect(result.current.result).toBeNull();
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   await act(async () => {
     await result.current.handleVerify(
       'blacklist',
@@ -271,7 +273,7 @@ it('reopening a saved report does not discard an uncertain paid follow-up key', 
   const { result } = renderHook(() =>
     useImeiCheckFlow('smartphone', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   await act(async () => {
     await result.current.handleVerify(
       'blacklist',
@@ -280,7 +282,7 @@ it('reopening a saved report does not discard an uncertain paid follow-up key', 
       true
     );
   });
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   await act(async () => {
     await result.current.handleVerify(
       'blacklist',
@@ -298,7 +300,7 @@ it('pays a reopened report follow-up from PiggyVest when store credit cannot cov
   const { result } = renderHook(() =>
     useImeiCheckFlow('smartphone', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   await act(async () => {
     await result.current.handleVerify(
       'blacklist',
@@ -319,7 +321,7 @@ it('hides the shown report device and lookup as soon as the account changes', ()
   const { result, rerender } = renderHook(() =>
     useImeiCheckFlow('smartphone', 'https://test.invalid')
   );
-  act(() => result.current.openReport(report));
+  act(() => result.current.openReport(report, listedFor()));
   expect(result.current.resultDevice).toBe('smartphone');
   mockUserId = 'user-b';
   rerender({});
@@ -341,4 +343,15 @@ it('shows an invalid number inline and drops it once the number is edited', asyn
   expect(mockSubmit).not.toHaveBeenCalled();
   act(() => result.current.dropInvalidIdentifierError());
   expect(result.current.error).toBeNull();
+});
+
+it('does not show a report listed for the account that just signed out', () => {
+  const { result, rerender } = renderHook(() =>
+    useImeiCheckFlow('smartphone', 'https://test.invalid')
+  );
+  const listedForA = listedFor();
+  mockUserId = 'user-b';
+  rerender({});
+  act(() => result.current.openReport(report, listedForA));
+  expect(result.current.result).toBeNull();
 });

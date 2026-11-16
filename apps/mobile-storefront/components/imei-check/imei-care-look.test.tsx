@@ -14,6 +14,11 @@ describe('imei care look', () => {
     expect(isImeiDark(Colors.dark)).toBe(true);
   });
 
+  it('reads an off-white light theme as light, not dark (Muse)', () => {
+    expect(isImeiDark({ ...Colors.light, background: '#fafaf7' })).toBe(false);
+    expect(isImeiDark({ ...Colors.light, background: '#121212' })).toBe(true);
+  });
+
   it('uses a soft pink circle in light mode and a deep one in dark mode', () => {
     expect(imeiCareIcon(Colors.light)).toEqual({
       background: '#fce8ed',

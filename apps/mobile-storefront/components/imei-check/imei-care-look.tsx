@@ -15,8 +15,17 @@ export const IMEI_CARE = {
   cardRadius: 15,
 } as const;
 
+/**
+ * Dark when the page background is dim, judged by brightness rather than by
+ * equality with white, so an off-white light theme still reads as light.
+ */
 export function isImeiDark(colors: ImeiCheckerColors) {
-  return colors.background !== colors.white;
+  const hex = /^#?([0-9a-f]{6})/i.exec(colors.background.trim())?.[1];
+  if (!hex) return colors.background !== colors.white;
+  const [r, g, b] = [0, 2, 4].map((at) =>
+    Number.parseInt(hex.slice(at, at + 2), 16)
+  );
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
 }
 
 /** Soft pink circle behind an icon, and the icon colour on it. */

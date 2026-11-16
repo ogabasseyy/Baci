@@ -1,7 +1,9 @@
 import {
   markHeldImeiCharges,
   STATUS_READ_TIMEOUT_MS,
+  WALLET_RETURN_MARGIN_MS,
 } from './wallet-held-imei-charges';
+import { WALLET_LOAD_TIMEOUT_MS } from './wallet-load-deadline';
 import type { Transaction } from './wallet-query';
 
 const tx = (id: string): Transaction => ({
@@ -101,5 +103,34 @@ describe('bugfix: a stalled status read could fail the whole wallet load (CodeRa
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('bugfix: the status read could outlast the wallet load deadline (CodeRabbit)', () => {
+  it('gives up before the wallet deadline when earlier reads used most of it', async () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    try {
+      const rows = [tx('tx-held')];
+      // Earlier wallet reads already used 27 of the 30 seconds.
+      const loadStartedAt = Date.now() - 27_000;
+      const stalled = jest.fn(() => new Promise<never>(() => undefined));
+      const marked = markHeldImeiCharges(stalled, raw, rows, loadStartedAt);
+      const budget = WALLET_LOAD_TIMEOUT_MS - 27_000 - WALLET_RETURN_MARGIN_MS;
+      expect(budget).toBeLessThan(STATUS_READ_TIMEOUT_MS);
+      jest.advanceTimersByTime(budget);
+      await expect(marked).resolves.toBe(rows);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('skips the read entirely when no budget is left', async () => {
+    const rows = [tx('tx-held')];
+    const read = jest.fn();
+    const loadStartedAt = Date.now() - WALLET_LOAD_TIMEOUT_MS;
+    await expect(
+      markHeldImeiCharges(read, raw, rows, loadStartedAt)
+    ).resolves.toBe(rows);
+    expect(read).not.toHaveBeenCalled();
   });
 });

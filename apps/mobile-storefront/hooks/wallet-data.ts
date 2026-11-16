@@ -72,6 +72,7 @@ export async function fetchWalletDataUnbounded(
   merchantId: string,
   userId: string | null
 ): Promise<WalletQueryData> {
+  const loadStartedAt = Date.now();
   if (!customerId && !userId) {
     return getEmptyWalletData();
   }
@@ -259,7 +260,8 @@ export async function fetchWalletDataUnbounded(
       transactionRows = await markHeldImeiCharges(
         readImeiLookupStatuses(merchantId, resolvedCustomerId),
         txResult.data,
-        transactionRows
+        transactionRows,
+        loadStartedAt
       );
     }
   }

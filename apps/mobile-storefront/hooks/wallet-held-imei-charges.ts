@@ -1,3 +1,4 @@
+import { WALLET_LOAD_TIMEOUT_MS } from './wallet-load-deadline';
 import type { Transaction } from './wallet-query';
 
 /** IMEI check states where the charge is held: the check has not finished. */
@@ -25,6 +26,9 @@ const IMEI_CHARGE_SOURCE = 'imei_wallet_payment';
 /** How long the status read may take before rows show unmarked. */
 export const STATUS_READ_TIMEOUT_MS = 5000;
 
+/** Time kept back from the wallet deadline to return the loaded data. */
+export const WALLET_RETURN_MARGIN_MS = 2000;
+
 /** Reads `id, status` of the customer's own IMEI checks (RLS-scoped). */
 export type ReadLookupStatuses = (
   ids: string[]
@@ -48,10 +52,20 @@ function sourceIdOf(row: unknown) {
 export async function markHeldImeiCharges(
   readStatuses: ReadLookupStatuses,
   rawRows: readonly unknown[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  /** When the wallet load started: the read never outlasts its deadline. */
+  loadStartedAt: number = Date.now()
 ): Promise<Transaction[]> {
   const charges = rawRows.map(sourceIdOf).filter((row) => row !== null);
   if (charges.length === 0) return transactions;
+  const budget = Math.min(
+    STATUS_READ_TIMEOUT_MS,
+    loadStartedAt +
+      WALLET_LOAD_TIMEOUT_MS -
+      WALLET_RETURN_MARGIN_MS -
+      Date.now()
+  );
+  if (budget <= 0) return transactions;
   const ids = [...new Set(charges.map((charge) => charge.sourceId))];
   let result: Awaited<ReturnType<ReadLookupStatuses>>;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -60,7 +74,7 @@ export async function markHeldImeiCharges(
     result = await Promise.race([
       readStatuses(ids),
       new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), STATUS_READ_TIMEOUT_MS);
+        timer = setTimeout(() => resolve(null), budget);
       }),
     ]);
   } catch {

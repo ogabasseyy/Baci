@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
+import { DEADLINE_PASSED, withinDeadline } from './within-deadline';
 
 // Remembers which access tokens Supabase Auth confirmed recently. The answer
 // route verifies the token's signature on every request and asks Supabase
@@ -68,21 +69,6 @@ export function recordSessionCheck(
   }
 }
 
-const DEADLINE_PASSED = Symbol('shared store deadline passed');
-
-function withinDeadline<T>(
-  work: Promise<T>
-): Promise<T | typeof DEADLINE_PASSED> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<typeof DEADLINE_PASSED>((resolve) => {
-    timer = setTimeout(
-      () => resolve(DEADLINE_PASSED),
-      SHARED_STORE_DEADLINE_MS
-    );
-  });
-  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
-}
-
 // At most one warning every five minutes: during a store outage this runs for
 // every answer.
 function warnSharedStoreTrouble(operation: 'read' | 'write', now: number) {
@@ -108,7 +94,8 @@ export async function wasSessionCheckedRecently(
   if (!redis) return false;
   try {
     const stored = await withinDeadline(
-      redis.get<number>(`${SHARED_KEY_PREFIX}${keyFor(token)}`)
+      redis.get<number>(`${SHARED_KEY_PREFIX}${keyFor(token)}`),
+      SHARED_STORE_DEADLINE_MS
     );
     if (stored === DEADLINE_PASSED) {
       warnSharedStoreTrouble('read', now);
@@ -140,7 +127,8 @@ export async function rememberSessionCheck(
     const outcome = await withinDeadline(
       redis.set(`${SHARED_KEY_PREFIX}${keyFor(token)}`, now, {
         px: RECENT_SESSION_CHECK_TTL_MS,
-      })
+      }),
+      SHARED_STORE_DEADLINE_MS
     );
     if (outcome === DEADLINE_PASSED) warnSharedStoreTrouble('write', now);
   } catch {

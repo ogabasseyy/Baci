@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '@/lib/logger';
 import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
 import { getRedis } from '@/lib/redis';
@@ -46,6 +46,8 @@ function sessionExists() {
 }
 
 describe('quiz route-auth recent session check', () => {
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetRecentSessionChecksForTesting();
@@ -146,6 +148,76 @@ describe('quiz route-auth recent session check', () => {
     expect(getUser).toHaveBeenCalledTimes(2);
     // Not logged per answer.
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('does not make the answer wait for a slow Supabase Auth', async () => {
+    vi.useFakeTimers();
+    getUser.mockReturnValue(new Promise(() => undefined)); // never answers
+
+    const pending = requireQuizUser(answerRequest(), {
+      requireRecentSession: true,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await pending;
+
+    expect(result.response).toBeNull();
+    expect(result.user).toEqual({ id: USER_UUID });
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('counts a slow check that confirms the session once it arrives', async () => {
+    vi.useFakeTimers();
+    let confirm: (value: unknown) => void = () => undefined;
+    getUser.mockReturnValueOnce(
+      new Promise((resolve) => {
+        confirm = resolve;
+      })
+    );
+
+    const first = requireQuizUser(answerRequest(), {
+      requireRecentSession: true,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await first).user).toEqual({ id: USER_UUID });
+
+    confirm(sessionExists());
+    await vi.advanceTimersByTimeAsync(0);
+    const second = await requireQuizUser(answerRequest(), {
+      requireRecentSession: true,
+    });
+
+    expect(second.user).toEqual({ id: USER_UUID });
+    expect(getUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again after a slow check comes back with the session revoked', async () => {
+    vi.useFakeTimers();
+    let answer: (value: unknown) => void = () => undefined;
+    getUser.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const revoked = {
+      data: { user: null },
+      error: { message: 'session does not exist', status: 403 },
+    };
+    getUser.mockResolvedValue(revoked);
+
+    const first = requireQuizUser(answerRequest(), {
+      requireRecentSession: true,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await first).response).toBeNull();
+
+    answer(revoked);
+    await vi.advanceTimersByTimeAsync(0);
+    const second = await requireQuizUser(answerRequest(), {
+      requireRecentSession: true,
+    });
+
+    expect(second.response?.status).toBe(401);
+    expect(getUser).toHaveBeenCalledTimes(2);
   });
 
   it('reuses the check made when the attempt was started', async () => {

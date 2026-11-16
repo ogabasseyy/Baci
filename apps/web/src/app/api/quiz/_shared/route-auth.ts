@@ -5,12 +5,18 @@ import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
+import {
+  getSafeAuthErrorFields,
+  isMissingAuthSession,
+  isRejectedCredentialError,
+} from './quiz-auth-lookup-errors';
 import { mapQuizRpcClientError } from './quiz-rpc-client-errors';
 import {
   rememberSessionCheck,
   wasSessionCheckedRecently,
 } from './quiz-session-recency';
 import type { ServerSupabaseClient } from './route-helpers-guards';
+import { DEADLINE_PASSED, withinDeadline } from './within-deadline';
 
 // Read-path auth and response helpers. Kept apart from route-helpers.ts so that
 // read-only endpoints (e.g. the leaderboard GET) do not statically import the
@@ -43,8 +49,8 @@ export type RequireQuizUserOptions = {
    * session must stop within about a minute, but a Supabase Auth call per
    * answer must not cost a player a question.
    *
-   * Deliberately fails OPEN when Supabase Auth cannot answer: the answer is
-   * accepted on the signature alone. What that exposes is narrow. The token
+   * Deliberately fails OPEN when Supabase Auth cannot answer, or does not
+   * within a second: the answer is accepted on the signature alone. What that exposes is narrow. The token
    * is still signed, unexpired and bound to one player; an attempt can only
    * be started with a live session (the start route fails closed); so the
    * most a revoked token can do is keep answering its own already-started
@@ -68,53 +74,6 @@ type RequireQuizUserResult =
       user: null;
     };
 
-function getSafeAuthErrorFields(error: unknown) {
-  if (!error || typeof error !== 'object') {
-    return { errorMessage: String(error) };
-  }
-
-  const fields: {
-    errorCode?: string;
-    errorMessage?: string;
-    errorStatus?: number;
-  } = {};
-  if (
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    fields.errorMessage = (error as { message: string }).message;
-  }
-  if (
-    'code' in error &&
-    typeof (error as { code?: unknown }).code === 'string'
-  ) {
-    fields.errorCode = (error as { code: string }).code;
-  }
-  if (
-    'status' in error &&
-    typeof (error as { status?: unknown }).status === 'number'
-  ) {
-    fields.errorStatus = (error as { status: number }).status;
-  }
-
-  return fields;
-}
-
-function isMissingAuthSession(error: unknown) {
-  const fields = getSafeAuthErrorFields(error);
-  const errorMessage = fields.errorMessage?.toLowerCase() ?? '';
-  const errorCode = fields.errorCode?.toLowerCase() ?? '';
-
-  return (
-    errorMessage.includes('auth session missing') ||
-    errorMessage.includes('session missing') ||
-    errorCode === 'session_not_found' ||
-    errorCode === 'auth_session_missing' ||
-    errorCode === 'no_authorization' ||
-    (fields.errorStatus === 400 && errorMessage.includes('session'))
-  );
-}
-
 function unauthorizedResult() {
   return {
     response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
@@ -135,29 +94,37 @@ function authUnavailableResult() {
   } as const;
 }
 
-// Supabase Auth answers a bad, expired or revoked token with a 4xx. Request
-// timeout (408) and rate limiting (429) are about the service, not the token.
-function isRejectedCredentialError(error: unknown) {
-  const { errorStatus } = getSafeAuthErrorFields(error);
-  return (
-    errorStatus !== undefined &&
-    errorStatus >= 400 &&
-    errorStatus < 500 &&
-    errorStatus !== 408 &&
-    errorStatus !== 429
-  );
-}
+// Longest the answer path waits for Supabase Auth before it lets a signed
+// token through. Auth normally answers in well under 100 ms; the wait comes
+// out of the player's time on the question.
+const RECENT_SESSION_AUTH_DEADLINE_MS = 1_000;
 
 async function checkBearerWithSupabaseAuth(
   token: string,
-  { logOutage = true }: { logOutage?: boolean } = {}
+  options: { deadlineMs?: number; logOutage?: boolean } = {}
 ): Promise<RequireQuizUserResult> {
+  const { deadlineMs, logOutage = true } = options;
   let user: QuizAuthUser | null = null;
   let error: unknown = null;
   try {
-    const result = await createAnonClient().auth.getUser(token);
-    user = result.data.user;
-    error = result.error;
+    const lookup = createAnonClient().auth.getUser(token);
+    const result =
+      deadlineMs === undefined
+        ? await lookup
+        : await withinDeadline(lookup, deadlineMs);
+    if (result === DEADLINE_PASSED) {
+      // Too slow for this request. If the lookup still confirms the session
+      // when it arrives, remember it so the next answers do not wait again.
+      void lookup
+        .then((late) =>
+          late.data.user && !late.error ? rememberSessionCheck(token) : null
+        )
+        .catch(() => null);
+      error = new Error('Auth lookup timed out');
+    } else {
+      user = result.data.user;
+      error = result.error;
+    }
   } catch (thrown) {
     error = thrown ?? new Error('Auth lookup threw');
   }
@@ -207,15 +174,16 @@ export async function requireQuizUser(
         // Not logged per request: during an Auth outage this runs for every
         // answer, and the routes that must fail closed already log it.
         const session = await checkBearerWithSupabaseAuth(bearerToken, {
+          deadlineMs: RECENT_SESSION_AUTH_DEADLINE_MS,
           logOutage: false,
         });
         if (session.response === null || session.response.status === 401) {
           return session;
         }
-        // Supabase Auth could not answer. The signature is valid, so let the
-        // answer through instead of costing the player a question (see
-        // requireRecentSession for what this exposes); nothing is remembered,
-        // so the next request asks again.
+        // Supabase Auth could not answer, or not within a second. The
+        // signature is valid, so let the answer through instead of costing
+        // the player a question (see requireRecentSession for what this
+        // exposes); nothing is remembered, so the next request asks again.
       }
       return {
         authMethod: 'bearer',
@@ -237,13 +205,7 @@ export async function requireQuizUser(
   } = await supabase.auth.getUser();
 
   if (error) {
-    if (isMissingAuthSession(error)) {
-      return {
-        response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-        supabase: null,
-        user: null,
-      };
-    }
+    if (isMissingAuthSession(error)) return unauthorizedResult();
 
     logger.error({
       message: 'Quiz auth lookup failed',
@@ -252,13 +214,7 @@ export async function requireQuizUser(
     return authUnavailableResult();
   }
 
-  if (!user) {
-    return {
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-      supabase: null,
-      user: null,
-    };
-  }
+  if (!user) return unauthorizedResult();
 
   return {
     authMethod: 'cookie',

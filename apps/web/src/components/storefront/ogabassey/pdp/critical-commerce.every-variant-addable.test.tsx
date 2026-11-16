@@ -18,7 +18,7 @@ type Row = [
   attributes: Record<string, string>,
 ];
 
-const VISIBLE_AXES = ['storage', 'sim_type', 'color', 'region'];
+const VISIBLE_AXES = ['storage', 'ram', 'sim_type', 'color', 'region'];
 
 /**
  * Catalogue guard: merchants do not fill every option on every version
@@ -47,6 +47,11 @@ const shapes: Record<string, Row[]> = {
     ['new-black', 'new', { color: 'Black' }],
     ['new-white', 'new', { color: 'White' }],
     ['used-plain', 'used', {}],
+  ],
+  'two versions differ only by a blank option': [
+    ['ram-8', 'new', { ram: '8GB', storage: '256GB' }],
+    ['ram-blank', 'new', { storage: '256GB' }],
+    ['ram-16', 'new', { ram: '16GB', storage: '512GB' }],
   ],
   'every option filled (control)': [
     ['a', 'new', { color: 'Black', storage: '128GB' }],

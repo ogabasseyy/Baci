@@ -27,17 +27,29 @@ function sameOption(left: string | undefined, right: string | undefined) {
  * a value on that axis (for example a Used console with no region while
  * every New console has one). Demanding a choice there makes the
  * selection unbuyable, because picking any option leaves it.
+ *
+ * `resolvedVariant` is the exact version the selection already
+ * resolves to (for example the advertised default). Its own blanks are
+ * never required either, so a version that differs from a sibling only
+ * by a blank option stays buyable.
  */
 export function getInapplicableCriticalVariantAxes(
   variants: CartProduct['variants'],
   selectedAttributes: Record<string, string>,
-  axes: string[]
+  axes: string[],
+  resolvedVariant?: CriticalVariant | null
 ): string[] {
   const variantValues = (variants ?? []).map(readVariantAxisValues);
+  const resolvedValues = resolvedVariant
+    ? readVariantAxisValues(resolvedVariant)
+    : null;
 
   return axes.filter((axis) => {
     if (selectedAttributes[axis]) {
       return false;
+    }
+    if (resolvedValues && !resolvedValues[axis]) {
+      return true;
     }
 
     const matching = variantValues.filter((values) =>

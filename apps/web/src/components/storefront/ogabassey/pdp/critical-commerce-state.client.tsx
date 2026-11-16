@@ -163,7 +163,8 @@ export function OgabasseyPdpCriticalCommerceProvider({
   const inapplicableVariantAxes = getInapplicableCriticalVariantAxes(
     variants,
     selectedAttributes,
-    [...renderableVariantAxes, ...hiddenRequiredVariantAxes]
+    [...renderableVariantAxes, ...hiddenRequiredVariantAxes],
+    purchasableVariantSelection?.variant
   );
   const missingRenderableVariantAxes = renderableVariantAxes.filter(
     (axis) =>

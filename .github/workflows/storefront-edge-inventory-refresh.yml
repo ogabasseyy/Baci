@@ -40,7 +40,10 @@ env:
 jobs:
   # Install dependencies and run repository code here, with a read-only token
   # and no persisted credentials. Only the two regenerated files cross into the
-  # write job, as an artifact.
+  # write job, as an artifact. The write job installs nothing and runs exactly
+  # one repository script, push-storefront-edge-refresh-branch.sh, from this
+  # main commit: it only pushes automation/storefront-edge-inventory-* branch
+  # heads and reuses a branch only when it carries exactly this refresh.
   regenerate:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
@@ -63,6 +66,7 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          untracked_before="$(git ls-files --others --exclude-standard | sort)"
           result="$(pnpm --dir apps/web exec tsx tools/cost/refresh-storefront-edge-inventory-snapshot.ts \
             --repo-root "$GITHUB_WORKSPACE" --source-sha "$SOURCE_SHA")"
           echo "$result"
@@ -72,8 +76,12 @@ jobs:
             echo "row_count=$(jq -r '.rowCount // ""' <<<"$result")"
             echo "previous_row_count=$(jq -r '.previousRowCount // ""' <<<"$result")"
           } >> "$GITHUB_OUTPUT"
-          # The refresher may only touch the snapshot and its test.
+          # The refresher may only modify the snapshot and its test, and may
+          # create no files (untracked files from the install are excluded by
+          # comparing against the listing taken before the refresh).
           unexpected="$(git diff --name-only | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
+          created="$(comm -13 <(printf '%s\n' "$untracked_before") <(git ls-files --others --exclude-standard | sort) | grep -v '^$' || true)"
+          unexpected="$(printf '%s\n%s\n' "$unexpected" "$created" | grep -v '^$' || true)"
           if [ -n "$unexpected" ]; then
             echo "::error::refresh touched unexpected files:" >&2
             printf '%s\n' "$unexpected" >&2
@@ -134,13 +142,14 @@ jobs:
           PREVIOUS_ROW_COUNT: ${{ needs.regenerate.outputs.previous_row_count }}
           SOURCE_SHA: ${{ github.sha }}
           REFRESHED_DIR: ${{ runner.temp }}/refreshed
+          REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           open_heads="$(gh pr list --state open --base main --limit 200 \
             --json headRefName,isCrossRepository \
             --jq '.[] | select(.isCrossRepository == false) | .headRefName' \
-            | grep -F "$BRANCH_PREFIX" || true)"
+            | grep -Ex "${BRANCH_PREFIX}[a-f0-9]{12}-[a-f0-9]{12}" || true)"
           keep=""
           if [ "$CHANGED" = "true" ]; then
             if ! printf '%s\n' "$DIGEST" | grep -Eqx '[a-f0-9]{64}'; then
@@ -184,6 +193,16 @@ jobs:
           if [ -n "$keep" ]; then new_url="$(gh pr view "$keep" --json url --jq .url)"; fi
           printf '%s\n' "$open_heads" | while IFS= read -r head; do
             if [ -z "$head" ] || [ "$head" = "$keep" ]; then continue; fi
+            # Only close a branch that still holds just the bot's one refresh
+            # commit; a branch with human follow-ups stays open for a person.
+            commits="$(gh api "repos/${REPO}/compare/main...${head}" --jq '[.ahead_by, ([.files[].filename] | join("\n"))] | @tsv' 2>/dev/null || true)"
+            ahead="${commits%%$'\t'*}"
+            files="$(printf '%b' "${commits#*$'\t'}")"
+            foreign="$(printf '%s\n' "$files" | grep -v '^$' | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
+            if [ "$ahead" != "1" ] || [ -n "$foreign" ]; then
+              echo "::warning::Leaving $head open: it carries more than the bot's refresh commit."
+              continue
+            fi
             reason="Main now matches the regenerated snapshot."
             if [ -n "$new_url" ]; then reason="Superseded by $new_url."; fi
             gh pr close "$head" --delete-branch --comment "$reason (closed by $RUN_URL)"

@@ -1,3 +1,4 @@
+import { OGABASSEY_WARRANTY_DETAILS } from '@baci/shared/storefront/ogabassey-care';
 import { describe, expect, it } from 'vitest';
 import { buildMerchantTrustProfile } from './build-merchant-trust-profile';
 
@@ -44,6 +45,18 @@ describe('owner-approved Ogabassey policies', () => {
     );
     expect(profile.shippingPolicy?.regions).toEqual(['Nigeria']);
     expect(profile.shippingPolicy?.shippingFeeType).toBe('calculated');
+  });
+
+  it('keeps the screen, liquid and power-surge exclusions in the warranty details copy', () => {
+    // #4252 moved the exclusions out of the summary into the details copy
+    // shown on the warranty pages; they must not disappear altogether.
+    for (const exclusion of [
+      'screen',
+      'liquid damage',
+      'damage caused by a power surge',
+    ]) {
+      expect(OGABASSEY_WARRANTY_DETAILS).toContain(exclusion);
+    }
   });
 
   it('does not apply Ogabassey business promises to a tenant using the same template or base URL', () => {

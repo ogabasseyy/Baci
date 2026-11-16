@@ -4,7 +4,7 @@ const mockAfter = vi.fn();
 const mockWaitUntil = vi.fn();
 
 vi.mock('next/server', () => ({
-  after: (pending: Promise<unknown>) => mockAfter(pending),
+  after: (task: () => Promise<unknown>) => mockAfter(task),
 }));
 vi.mock('@vercel/functions', () => ({
   waitUntil: (pending: Promise<unknown>) => mockWaitUntil(pending),
@@ -27,10 +27,15 @@ describe('createBackgroundRefresher', () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the instance alive through the Next.js request when there is one', () => {
-    createBackgroundRefresher('Test')('a', async () => undefined);
+  it('keeps the instance alive through the Next.js request when there is one', async () => {
+    const refresh = vi.fn(async () => 'done');
+    createBackgroundRefresher('Test')('a', refresh);
     expect(mockAfter).toHaveBeenCalledTimes(1);
     expect(mockWaitUntil).not.toHaveBeenCalled();
+    // `after` is given a callback, which resolves with the refresh.
+    const task = mockAfter.mock.calls[0]?.[0] as () => Promise<unknown>;
+    expect(typeof task).toBe('function');
+    await expect(task()).resolves.toBe('done');
   });
 
   it('falls back to the platform keep-alive outside a request scope', () => {

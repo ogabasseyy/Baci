@@ -11,7 +11,7 @@ import { SingleFlight } from './single-flight';
  */
 function keepAliveForRequest(pending: Promise<unknown>): void {
   try {
-    after(pending);
+    after(() => pending);
     return;
   } catch {
     // Not inside a Next.js request scope.

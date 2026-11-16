@@ -162,7 +162,10 @@ function resolveAliasMapping(
         // in between must stop this refresh writing its answer back.
         const epoch = invalidationEpoch;
         refreshInBackground(oldSlug, () =>
-          loadAliasMapping(oldSlug, false, epoch)
+          // Already overtaken by a rename: skip the wasted database read.
+          epoch === invalidationEpoch
+            ? loadAliasMapping(oldSlug, false, epoch)
+            : Promise.resolve(null)
         );
         return Promise.resolve(null);
       }

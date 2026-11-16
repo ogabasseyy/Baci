@@ -160,6 +160,8 @@ describe('expired "not a retired slug" answers', () => {
     invalidateAliasCacheForSlug('queued');
     expect(await stale).toBeNull();
     await settle();
+    // The overtaken re-check did not even ask the database.
+    expect(mockAliasMaybeSingle).toHaveBeenCalledTimes(1);
 
     // Nothing was written back, so the next request asks the database.
     mockAliasMaybeSingle.mockResolvedValue(renamedTo('queued-new'));

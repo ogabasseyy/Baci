@@ -115,6 +115,11 @@ function createHistoryTransaction(
   };
 }
 
+// The PiggyVest pay host has its own tests; the screen only mounts it.
+jest.mock('@/components/utilities/VtuWalletPayHost', () => ({
+  VtuWalletPayHost: () => null,
+}));
+
 jest.mock('expo-router', () => ({
   Stack: {
     Screen: () => null,

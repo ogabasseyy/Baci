@@ -3,7 +3,7 @@ import type { WalletPayPurpose } from '@/schemas/piggyvest-wallet-pay';
 import { createWalletPayPorts } from './wallet-pay-ports';
 import { reconcileWalletPayTransfer } from './wallet-pay-reconciliation';
 import type { WalletPayRuntime } from './wallet-pay-runtime';
-import { refundWalletPayment } from './wallet-pay-service';
+import { refundWalletPayment, walletPayDelivery } from './wallet-pay-service';
 
 /**
  * Delivers (or refunds) one confirmed payment nobody collected. It holds the
@@ -34,6 +34,11 @@ const defaultDeps = {
     );
   },
   refund: refundWalletPayment,
+  // A VTU purchase mid-vend is vended only by the VTU recovery pass, under the
+  // delivery claim: the drain takes no claim on it (Codex P1).
+  midVtuVend: async (runtime: WalletPayRuntime, operationId: string) =>
+    (await walletPayDelivery(runtime).vtuDeliveryState(operationId)) ===
+    'processing',
 };
 
 export interface WalletPayDrainSummary {
@@ -82,6 +87,10 @@ export async function runWalletPayDrain(
       id: string
     ) => Promise<string | undefined>;
     refund: typeof refundWalletPayment;
+    midVtuVend: (
+      runtime: WalletPayRuntime,
+      operationId: string
+    ) => Promise<boolean>;
   } = defaultDeps
 ): Promise<WalletPayDrainSummary> {
   const { runtime } = input;
@@ -149,6 +158,13 @@ export async function runWalletPayDrain(
     await attempt(async () => {
       const deliver = input.deliverers[item.purpose];
       if (!deliver) {
+        summary.skipped += 1;
+        return;
+      }
+      if (
+        item.purpose === 'vtu' &&
+        (await deps.midVtuVend(runtime, item.operationId))
+      ) {
         summary.skipped += 1;
         return;
       }

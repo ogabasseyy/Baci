@@ -30,6 +30,16 @@ type PendingTerminal = (
   | { error: string; kind: 'error'; tier: ImeiServiceTierKey }
 ) & { scopeKey: string | null };
 
+/** Runs storage writes one at a time, in call order, on one queue. */
+function inOrder<T>(
+  queue: { current: Promise<unknown> },
+  op: () => Promise<T>
+) {
+  const run = queue.current.then(op, op);
+  queue.current = run.catch(() => undefined);
+  return run;
+}
+
 export function useImeiPendingLookup({
   accessToken,
   userId,
@@ -51,6 +61,9 @@ export function useImeiPendingLookup({
   const previousStorageKey = useRef<string | null>(null);
   const previousUserId = useRef<string | undefined>(undefined);
   const pendingMutation = useRef(0);
+  // Saves and removals run one at a time, in call order: a slow removal
+  // can never land after a newer check's save and delete it.
+  const storageQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [pending, setPending] = useState<ActivePendingLookup | null>(null);
   const [paused, setPaused] = useState(false);
   const [terminal, setTerminal] = useState<PendingTerminal | null>(null);
@@ -69,7 +82,7 @@ export function useImeiPendingLookup({
         // check, which must survive for them to resume.
         const left = await loadPendingImeiLookup(previous);
         if (left && previousUser && left.ownerUserId === previousUser)
-          await clearPendingImeiLookup(previous);
+          await inOrder(storageQueue, () => clearPendingImeiLookup(previous));
       }
 
       if (!storageKey) {
@@ -130,7 +143,8 @@ export function useImeiPendingLookup({
           return;
         }
 
-        if (storageKey) await clearPendingImeiLookup(storageKey);
+        if (storageKey)
+          await inOrder(storageQueue, () => clearPendingImeiLookup(storageKey));
         if (cancelled) return;
         setPending(null);
         setPaused(false);
@@ -161,7 +175,8 @@ export function useImeiPendingLookup({
     async clear() {
       const generation = pendingMutation.current + 1;
       pendingMutation.current = generation;
-      if (storageKey) await clearPendingImeiLookup(storageKey);
+      if (storageKey)
+        await inOrder(storageQueue, () => clearPendingImeiLookup(storageKey));
       // A check started while the removal ran is newer: keep it.
       if (pendingMutation.current !== generation) return;
       setPending(null);
@@ -199,7 +214,9 @@ export function useImeiPendingLookup({
       setPaused(false);
       setPending(next);
       const canResume = storageKey
-        ? await savePendingImeiLookup(storageKey, next)
+        ? await inOrder(storageQueue, () =>
+            savePendingImeiLookup(storageKey, next)
+          )
         : false;
       setPending((current) =>
         current?.lookupId === lookupId && current.scopeKey === scopeKey

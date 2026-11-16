@@ -238,29 +238,53 @@ it('bugfix: a clear that finishes after a newer start keeps the newer lookup', a
   );
   await act(async () => undefined);
   mockPollImeiLookup.mockResolvedValue({ kind: 'retry', pollAfterMs: 60000 });
-  jest.spyOn(AsyncStorage, 'removeItem').mockImplementationOnce(
-    () =>
+  const realRemove = AsyncStorage.removeItem.bind(AsyncStorage);
+  // The removal really deletes the record, just late (the race in review).
+  const removeSpy = jest.spyOn(AsyncStorage, 'removeItem');
+  removeSpy.mockImplementationOnce(
+    (key: string) =>
       new Promise<void>((done) => {
-        finishRemove = done;
+        finishRemove = () => {
+          void realRemove(key).then(() => done());
+        };
       })
   );
   let clearing!: Promise<void>;
   act(() => {
     clearing = result.current.clear();
   });
-  await act(async () => {
-    await result.current.start({
+  let starting!: Promise<void>;
+  act(() => {
+    starting = result.current.start({
       lookupId: '33333333-3333-4333-8333-333333333333',
-      pollAfterMs: 60000,
+      pollAfterMs: 0,
       tier: 'blacklist',
     });
   });
+  await waitFor(() => expect(removeSpy).toHaveBeenCalled());
   await act(async () => {
     finishRemove();
     await clearing;
+    await starting;
   });
   expect(result.current.pending?.lookupId).toBe(
     '33333333-3333-4333-8333-333333333333'
+  );
+  // The newer check's saved record survives, so it can still be resumed.
+  expect(
+    JSON.parse(
+      (await AsyncStorage.getItem(
+        pendingImeiStorageKey('merchant-1', 'customer-1')
+      )) ?? 'null'
+    )
+  ).toMatchObject({ lookupId: '33333333-3333-4333-8333-333333333333' });
+  expect(result.current.canResume).toBe(true);
+  await waitFor(() =>
+    expect(mockPollImeiLookup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lookupId: '33333333-3333-4333-8333-333333333333',
+      })
+    )
   );
 });
 

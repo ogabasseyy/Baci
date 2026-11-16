@@ -6,7 +6,11 @@ import {
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { piggyvestPayingBalanceKobo } from '@/components/wallet-pay/piggyvest-wallet-covers';
+import {
+  type PayingWallet,
+  piggyvestPayingBalanceKobo,
+  piggyvestWalletCovers,
+} from '@/components/wallet-pay/piggyvest-wallet-covers';
 import { startWithReplayCaution } from '@/components/wallet-pay/replay-start-caution';
 import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
 import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
@@ -16,22 +20,12 @@ import {
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { CONFIG } from '@/lib/config';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
-import {
-  isWalletStoreCredit,
-  type WalletPrimaryLike,
-} from '@/lib/wallet-store-credit';
 import { useAuthStore } from '@/stores/auth-store';
 import {
   createImeiWalletPayAdapter,
   type ImeiWalletPayResult,
 } from './imei-wallet-pay-adapter';
 import { normalizeImeiIdentifier } from './normalize-imei-identifier';
-
-type PayingWallet = WalletPrimaryLike & {
-  balance?: number;
-  /** A remembered PiggyVest balance served when a fresh read failed. */
-  primary_stale?: boolean | null;
-};
 
 /**
  * True when this check should be paid from the PiggyVest wallet: paying from
@@ -46,26 +40,16 @@ export function imeiWalletPayCovers(input: {
   tier: ImeiServiceTierKey;
   refusedTiers?: readonly ImeiServiceTierKey[];
 }) {
-  const { wallet, tier } = input;
-  if (!input.canPay || !wallet || !isWalletStoreCredit(wallet)) return false;
+  const { tier } = input;
   // Only Sickw-backed checks can be paid this way (server rule).
   if (IMEI_SERVICE_TIERS[tier].providerServiceId === 'petrock-only')
     return false;
   if (input.refusedTiers?.includes(tier)) return false;
-  // Only a fresh, settled PiggyVest answer for one known customer counts.
-  if (
-    wallet.primary_stale === true ||
-    wallet.primary_pending === true ||
-    wallet.primary_unavailable === true ||
-    wallet.owner_unresolved === true
-  )
-    return false;
-  const price = IMEI_SERVICE_TIERS[tier].price;
-  const priceKobo = Math.round(price * 100);
-  return (
-    (wallet.balance ?? 0) < price &&
-    (wallet.primary_balance_kobo ?? 0) >= priceKobo
-  );
+  return piggyvestWalletCovers({
+    canPay: input.canPay,
+    wallet: input.wallet,
+    price: IMEI_SERVICE_TIERS[tier].price,
+  });
 }
 
 /**

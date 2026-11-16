@@ -4,9 +4,12 @@
 -- 20261116203100; the reasoning is in that file's header.
 --
 -- get_quiz_live_leaderboard_public_v2 keeps its JSON shape and adds one key,
--- participant_count. A caller's own rank is the number of players with a
--- higher score (from the stored histogram) plus an index range scan inside
--- the caller's own score bucket.
+-- participant_count. A caller in the stored top 100 gets their stored entry,
+-- so their rank is as old as the snapshot (up to 2 seconds). Any other
+-- caller's rank is the number of players with a higher score (from the stored
+-- histogram) plus an index range scan inside the caller's own score bucket.
+-- Either way this is a provisional board: final ranks and prizes come only
+-- from quiz_event_results_v2.
 
 BEGIN;
 
@@ -120,7 +123,8 @@ BEGIN
     WITH ORDINALITY AS item(entry, position);
 
   -- A caller inside the stored top 100 reuses that entry so the highlighted
-  -- row and "your position" always agree. Ids are compared as text so a
+  -- row and "your position" always agree with each other. Both are as old as
+  -- the snapshot (up to 2 seconds), not live. Ids are compared as text so a
   -- stored entry can never fail a cast and take the whole board down.
   SELECT (item.entry - 'customer_id')
     || pg_catalog.jsonb_build_object('is_current_customer', true)
@@ -136,10 +140,19 @@ BEGIN
       AND live.customer_id = v_customer_id;
 
     IF v_mine.attempt_id IS NOT NULL THEN
-      SELECT COALESCE(pg_catalog.sum(bucket.value::bigint), 0)
+      -- Only the refresher writes the histogram, but a stored key or count
+      -- that is not a whole number is skipped rather than failing a cast and
+      -- taking the whole board down. CASE fixes the order: test, then cast.
+      SELECT COALESCE(pg_catalog.sum(bucket.players), 0)
       INTO v_ahead
-      FROM pg_catalog.jsonb_each_text(v_snapshot.score_counts) AS bucket
-      WHERE bucket.key::integer > v_mine.score;
+      FROM (
+        SELECT
+          CASE WHEN raw.key ~ '^[0-9]{1,9}$' THEN raw.key::integer END AS score,
+          CASE WHEN raw.value ~ '^[0-9]{1,18}$' THEN raw.value::bigint END
+            AS players
+        FROM pg_catalog.jsonb_each_text(v_snapshot.score_counts) AS raw
+      ) AS bucket
+      WHERE bucket.score > v_mine.score;
 
       -- Same score: only the players who beat this caller's time (then
       -- submission instant, then attempt id). Served by

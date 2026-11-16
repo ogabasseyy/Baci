@@ -1,7 +1,7 @@
 -- REGRESSION TEST: the live quiz leaderboard is served from one shared
 -- snapshot per event (top 100, participant count, per-score histogram), a
--- caller's own rank stays exact, names keep their privacy rules, and the
--- snapshot table is not readable by clients.
+-- caller's own rank matches the standings, names keep their privacy rules,
+-- and the snapshot table is not readable by clients.
 \set ON_ERROR_STOP on
 BEGIN;
 SET LOCAL session_replication_role = replica;
@@ -204,6 +204,28 @@ END;
 $$;
 DROP TRIGGER quiz_snapshot_regression_guard
   ON public.quiz_live_leaderboard_snapshots_v2;
+
+-- 5c. A stored tally entry that is not a number is skipped, instead of
+--     failing a cast and taking the board down for everyone outside the top
+--     100. The first call rebuilds a clean snapshot to compare against.
+DO $$
+DECLARE
+  v_before jsonb := pg_temp.board();
+  v_after jsonb;
+BEGIN
+  SET LOCAL session_replication_role = replica;
+  UPDATE public.quiz_live_leaderboard_snapshots_v2
+  SET score_counts = score_counts || '{"not-a-score": 7, "999": "many"}'::jsonb,
+      computed_at = pg_catalog.clock_timestamp()
+  WHERE event_id = '79000000-0000-4000-8000-000000000003';
+  SET LOCAL session_replication_role = origin;
+  v_after := pg_temp.board();
+  PERFORM pg_temp.expect('a damaged tally entry is skipped, not fatal',
+    (v_before->'current_player'->>'rank')::integer = 122
+      AND (v_after->'current_player'->>'rank')::integer = 122,
+    (v_after->'current_player')::text);
+END;
+$$;
 
 -- 6. The count endpoint: snapshot while live, exact count without a fresh
 --    snapshot, highest rank once published.

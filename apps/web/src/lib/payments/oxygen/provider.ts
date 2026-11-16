@@ -198,8 +198,12 @@ export function createOxygenProvider(deps: {
             operation === 'eligibility' &&
             diagnostic.httpStatus === 400 &&
             diagnostic.outcome === 'rejected' &&
-            diagnostic.providerMessage ===
-              'We have sent the account linking details to link your account to your email.';
+            diagnostic.providerMessage
+              ?.trim()
+              .replace(/\s+/g, ' ')
+              .replace(/[.!?]+$/, '')
+              .toLowerCase() ===
+              'we have sent the account linking details to link your account to your email';
           const activeLoan =
             operation === 'book' &&
             diagnostic.httpStatus === 400 &&

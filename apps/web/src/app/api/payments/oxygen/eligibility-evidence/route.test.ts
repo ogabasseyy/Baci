@@ -137,6 +137,13 @@ it('denies unauthenticated requests, staging workflows and rate-limited reads', 
   expect(mocks.evidence).not.toHaveBeenCalled();
 });
 
+it('rate limits the operator without checking whether the requested workflow exists', async () => {
+  mocks.limit.mockResolvedValueOnce({ allowed: false });
+  expect((await GET(request())).status).toBe(429);
+  expect(mocks.snapshot).not.toHaveBeenCalled();
+  expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
 it('does not disclose evidence when command binding or decryption fails', async () => {
   mocks.evidence.mockRejectedValueOnce(new Error('mismatched command'));
   expect((await GET(request())).status).toBe(404);

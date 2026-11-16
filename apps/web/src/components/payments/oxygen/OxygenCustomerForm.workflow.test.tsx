@@ -1,7 +1,9 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ fetch: vi.fn() }));
+const api = vi.hoisted(() => ({
+  fetch: vi.fn<(url: string, options: RequestInit) => Promise<Response>>(),
+}));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: api.fetch }));
 vi.mock('./use-oxygen-draft', () => ({
   useOxygenDraft: () => ({
@@ -105,7 +107,7 @@ it('does not carry verification to an application without the previous bank', as
     screen.getByRole('button', { name: 'Continue to income details' })
   ).toBeDisabled();
   expect(
-    api.fetch.mock.calls.some(([, options]: [string, RequestInit]) => {
+    api.fetch.mock.calls.some(([, options]) => {
       const request = JSON.parse(String(options.body));
       return (
         request.workflowId === secondWorkflow && request.action === 'resolve'

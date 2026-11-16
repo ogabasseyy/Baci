@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
   )
     return unavailable();
   try {
+    // The operator-wide limit is checked before any workflow or evidence lookup.
     if (
       !(
         await checkOxygenProviderRateLimit(

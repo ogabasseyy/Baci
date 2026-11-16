@@ -247,4 +247,23 @@ describe('API security stage', () => {
     expect(checkRateLimit).toHaveBeenCalledWith(request, '/api/orders');
     expect(response?.status).toBe(429);
   });
+
+  it('exempts Authorization Bearer requests from the cross-origin CSRF check while still rate-limiting', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(checkRateLimit).mockClear();
+    const request = new NextRequest('https://usebaci.com/api/orders', {
+      method: 'POST',
+      headers: {
+        origin: 'https://evil.example',
+        authorization: 'Bearer mobile-or-api-token',
+        'content-type': 'application/json',
+      },
+    });
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/orders', 'usebaci.com', 'POST')
+    );
+    expect(checkRateLimit).toHaveBeenCalledWith(request, '/api/orders');
+    expect(response).toBeNull();
+  });
 });

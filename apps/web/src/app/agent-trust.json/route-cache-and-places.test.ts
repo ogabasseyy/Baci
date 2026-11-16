@@ -111,6 +111,7 @@ describe('GET /agent-trust.json cache headers and Places key guard', () => {
     'skips Google Places enrichment cleanly when GOOGLE_PLACES_API_KEY is missing',
     async () => {
       vi.stubEnv('GOOGLE_PLACES_API_KEY', '');
+      vi.stubEnv('GOOGLE_MAPS_API_KEY', '');
       mockGetMerchantByIdentifier.mockResolvedValueOnce({
         ...baseMerchant(),
         feature_settings: {

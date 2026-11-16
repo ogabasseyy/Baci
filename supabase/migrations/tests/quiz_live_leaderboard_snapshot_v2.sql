@@ -207,7 +207,8 @@ DROP TRIGGER quiz_snapshot_regression_guard
 
 -- 5c. A stored tally entry that is not a number is skipped, instead of
 --     failing a cast and taking the board down for everyone outside the top
---     100. The first call rebuilds a clean snapshot to compare against.
+--     100, while any whole-number score still counts (4 players on a
+--     ten-digit score here). The first call rebuilds a clean snapshot.
 DO $$
 DECLARE
   v_before jsonb := pg_temp.board();
@@ -215,14 +216,15 @@ DECLARE
 BEGIN
   SET LOCAL session_replication_role = replica;
   UPDATE public.quiz_live_leaderboard_snapshots_v2
-  SET score_counts = score_counts || '{"not-a-score": 7, "999": "many"}'::jsonb,
+  SET score_counts = score_counts
+        || '{"not-a-score": 7, "999": "many", "2000000000": 4}'::jsonb,
       computed_at = pg_catalog.clock_timestamp()
   WHERE event_id = '79000000-0000-4000-8000-000000000003';
   SET LOCAL session_replication_role = origin;
   v_after := pg_temp.board();
-  PERFORM pg_temp.expect('a damaged tally entry is skipped, not fatal',
+  PERFORM pg_temp.expect('damaged tally entries are skipped, valid ones count',
     (v_before->'current_player'->>'rank')::integer = 122
-      AND (v_after->'current_player'->>'rank')::integer = 122,
+      AND (v_after->'current_player'->>'rank')::integer = 126,
     (v_after->'current_player')::text);
 END;
 $$;

@@ -73,6 +73,9 @@ BEGIN
   IF v_snapshot.event_id IS NULL THEN
     -- First reader of this event: wait for whoever is building the first
     -- snapshot instead of showing an empty board, then build it if nobody did.
+    -- Unlike the stale rebuild below, a failure here is not caught: there is
+    -- no earlier snapshot to serve, and an empty board with a rank computed
+    -- from nothing would be wrong, so the request fails and the app retries.
     PERFORM pg_catalog.pg_advisory_xact_lock(v_lock_key);
     SELECT snapshot.* INTO v_snapshot
     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
@@ -144,11 +147,14 @@ BEGIN
       -- Only the refresher writes the histogram, but a stored key or count
       -- that is not a whole number is skipped rather than failing a cast and
       -- taking the whole board down. CASE fixes the order: test, then cast.
+      -- Keys are read as bigint so every possible integer score, negative
+      -- or ten digits long, is still counted.
       SELECT COALESCE(pg_catalog.sum(bucket.players), 0)
       INTO v_ahead
       FROM (
         SELECT
-          CASE WHEN raw.key ~ '^[0-9]{1,9}$' THEN raw.key::integer END AS score,
+          CASE WHEN raw.key ~ '^-?[0-9]{1,18}$' THEN raw.key::bigint END
+            AS score,
           CASE WHEN raw.value ~ '^[0-9]{1,18}$' THEN raw.value::bigint END
             AS players
         FROM pg_catalog.jsonb_each_text(v_snapshot.score_counts) AS raw

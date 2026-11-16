@@ -55,7 +55,7 @@ describe('mobile pending IMEI storage', () => {
         createdAt: '2026-07-10T12:00:00.000Z',
         lookupId: '11111111-1111-4111-8111-111111111111',
         tier: 'blacklist',
-        request: { key: 'not-a-uuid', purchase: 'imei-credit|x' },
+        request: { key: '', purchase: 'imei-credit|x' },
       })
     );
 

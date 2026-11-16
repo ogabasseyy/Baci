@@ -173,8 +173,9 @@ export function useImeiCheckFlow(
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
     const performCheck = async () => {
-      // The account switched while the key was read: nothing is sent.
-      if (!identity || scopeRef.current !== submittedScope) return;
+      // Switched account (nothing sent) or an unsaved key (fails closed).
+      if (!('key' in identity)) return void setError(identity.error);
+      if (scopeRef.current !== submittedScope) return;
       const { rawData, response } = await submitImeiCheck({
         // The live session: the tap awaited the saved keys (Codex P1).
         accessToken: useAuthStore.getState().session?.access_token,

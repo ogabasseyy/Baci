@@ -195,4 +195,21 @@ describe('bugfix: a killed app paid a store credit IMEI check twice', () => {
       })
     );
   });
+
+  it('shows try again and pays nothing when the key cannot be saved', async () => {
+    const setItem = jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockRejectedValue(new Error('disk full'));
+    const { result } = renderHook(() =>
+      useImeiCheckFlow('smartphone', 'https://test.invalid')
+    );
+    await act(async () => {
+      await result.current.handleVerify('blacklist', IMEI);
+    });
+    setItem.mockRestore();
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/try again/i);
+    expect(result.current.isLoading).toBe(false);
+  });
 });

@@ -51,8 +51,10 @@ export async function clearPendingImeiLookup(key: string) {
 function readRequest(value: unknown) {
   if (!value || typeof value !== 'object') return {};
   const { key, purchase } = value as Record<string, unknown>;
+  // The key store's own rule (any non-empty key): a saved key it keeps is
+  // never dropped here, or a restored lookup could not retire it (Muse).
   return typeof key === 'string' &&
-    UUID_PATTERN.test(key) &&
+    key &&
     typeof purchase === 'string' &&
     purchase
     ? { request: { key, purchase } }

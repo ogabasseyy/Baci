@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
 import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
-import { useImeiRequestIdentity } from './use-imei-request-identity';
+import {
+  IMEI_KEY_UNAVAILABLE,
+  useImeiRequestIdentity,
+} from './use-imei-request-identity';
 
 const mockAuth: { user: { id: string } | null } = { user: { id: 'user-1' } };
 jest.mock('@/stores/auth-store', () => ({
@@ -18,7 +21,10 @@ const keys = (...values: string[]) => {
 const keyOf = async (
   identity: ReturnType<typeof useImeiRequestIdentity>,
   ...args: Parameters<ReturnType<typeof useImeiRequestIdentity>['get']>
-) => (await identity.get(...args))?.key;
+) => {
+  const identity_ = await identity.get(...args);
+  return 'key' in identity_ ? identity_.key : null;
+};
 /** Waits for the key store's queued removals to land. */
 const settle = () => walletPayPurchaseKeys.has('flush');
 
@@ -51,11 +57,12 @@ describe('useImeiRequestIdentity', () => {
 
     const identity = await result.current.get('blacklist', IMEI, 'smartphone');
 
-    expect(identity?.saved?.key).toBe('key-1');
-    expect(identity?.saved?.purchase).toMatch(/^imei-credit\|user-1\|/);
+    const saved = 'key' in identity ? identity.saved : undefined;
+    expect(saved?.key).toBe('key-1');
+    expect(saved?.purchase).toMatch(/^imei-credit\|user-1\|/);
     walletPayPurchaseKeys.resetMemory();
     await expect(
-      walletPayPurchaseKeys.has(identity?.saved?.purchase ?? '')
+      walletPayPurchaseKeys.has(saved?.purchase ?? '')
     ).resolves.toBe(true);
   });
 });
@@ -87,7 +94,9 @@ describe('bugfix: a killed app minted a second key for a paid check', () => {
     walletPayPurchaseKeys.resetMemory();
 
     const after = renderHook(() => useImeiRequestIdentity(keys('key-2')));
-    act(() => after.result.current.clear(first?.saved));
+    act(() =>
+      after.result.current.clear('key' in first ? first.saved : undefined)
+    );
     await settle();
 
     await expect(
@@ -97,8 +106,10 @@ describe('bugfix: a killed app minted a second key for a paid check', () => {
       keyOf(after.result.current, 'blacklist', IMEI, 'smartphone')
     ).resolves.toBe('key-2');
   });
+});
 
-  it('keeps an in-memory key when the phone cannot save it', async () => {
+describe('bugfix: a key the phone could not save was sent anyway (Muse)', () => {
+  it('sends nothing when the key cannot be saved first', async () => {
     const setItem = jest
       .spyOn(AsyncStorage, 'setItem')
       .mockRejectedValue(new Error('disk full'));
@@ -106,13 +117,46 @@ describe('bugfix: a killed app minted a second key for a paid check', () => {
       useImeiRequestIdentity(keys('key-1', 'key-2'))
     );
 
-    const identity = await result.current.get('blacklist', IMEI);
+    await expect(result.current.get('blacklist', IMEI)).resolves.toEqual({
+      error: IMEI_KEY_UNAVAILABLE,
+    });
+    setItem.mockRestore();
+  });
 
-    expect(identity).toEqual({ key: 'key-2', saved: undefined });
+  it('counts an unreadable key store as a kept request', async () => {
+    const getItem = jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValue(new Error('unreadable'));
+    const { result } = renderHook(() => useImeiRequestIdentity(keys('key-1')));
+
+    await expect(result.current.retains('blacklist', IMEI)).resolves.toBe(true);
+    await expect(result.current.get('blacklist', IMEI)).resolves.toEqual({
+      error: IMEI_KEY_UNAVAILABLE,
+    });
+    getItem.mockRestore();
+  });
+});
+
+describe('bugfix: a finished key whose removal failed was sent again (Muse)', () => {
+  it('mints a fresh key for the next check once saving works again', async () => {
+    const { result } = renderHook(() =>
+      useImeiRequestIdentity(keys('key-1', 'key-2'))
+    );
+    await result.current.get('blacklist', IMEI);
+    const setItem = jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockRejectedValue(new Error('disk full'));
+    act(() => result.current.clear());
+    await settle();
+    setItem.mockRestore();
+
     await expect(keyOf(result.current, 'blacklist', IMEI)).resolves.toBe(
       'key-2'
     );
-    setItem.mockRestore();
+    walletPayPurchaseKeys.resetMemory();
+    await expect(keyOf(result.current, 'blacklist', IMEI)).resolves.toBe(
+      'key-2'
+    );
   });
 });
 
@@ -151,7 +195,9 @@ describe('bugfix: a store credit key replayed for another account (Muse)', () =>
     });
     const { result } = renderHook(() => useImeiRequestIdentity(createKey));
 
-    await expect(result.current.get('basic', IMEI)).resolves.toBeNull();
+    await expect(result.current.get('basic', IMEI)).resolves.toEqual({
+      error: null,
+    });
   });
 });
 

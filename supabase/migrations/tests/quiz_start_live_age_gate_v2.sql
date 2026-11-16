@@ -32,6 +32,29 @@ VALUES ('76000000-0000-4000-8000-000000000003',
   'live', 2, 'age-gate-v2', 1, 5, 5, 360, 1, 'Africa/Lagos', true,
   'free_skill_competition', 'NG', 'test-fixture-evidence-ref');
 
+-- A second, test-mode event (under-18 must still be allowed there) plus one
+-- question each so a passing age gate really reaches 'started'.
+INSERT INTO public.quiz_events (id, merchant_id, slug, title, status, starts_at,
+  ends_at, mode, contract_version, rules_version, question_count,
+  time_per_question_seconds, maximum_play_seconds, live_window_seconds,
+  max_attempts, time_zone)
+VALUES ('76000000-0000-4000-8000-000000000010',
+  '76000000-0000-4000-8000-000000000001', 'quiz-age-gate-test', 'Quiz age gate test mode',
+  'active', now() - interval '1 minute', now() + interval '5 minutes',
+  'test', 2, 'age-gate-v2', 1, 5, 5, 360, 1, 'Africa/Lagos');
+INSERT INTO public.quiz_event_testers (event_id, merchant_id, user_id)
+VALUES ('76000000-0000-4000-8000-000000000010',
+  '76000000-0000-4000-8000-000000000001',
+  '76000000-0000-4000-8000-000000000000');
+INSERT INTO public.quiz_question_slots (id, event_id, slot_index, active) VALUES
+  ('76000000-0000-4000-8000-000000000004', '76000000-0000-4000-8000-000000000003', 1, true),
+  ('76000000-0000-4000-8000-000000000014', '76000000-0000-4000-8000-000000000010', 1, true);
+INSERT INTO public.quiz_question_variants (id, slot_id, variant_key, prompt, options, answer_key_hash, active) VALUES
+  ('76000000-0000-4000-8000-000000000005', '76000000-0000-4000-8000-000000000004', 'age-gate', 'Age gate?',
+   '[{"id":"a","text":"A"},{"id":"b","text":"B"}]'::jsonb, repeat('a', 64), true),
+  ('76000000-0000-4000-8000-000000000015', '76000000-0000-4000-8000-000000000014', 'age-gate-t', 'Age gate test?',
+   '[{"id":"a","text":"A"},{"id":"b","text":"B"}]'::jsonb, repeat('a', 64), true);
+
 -- Authenticate as the fixture player (auth.uid() must equal p_user_id).
 SELECT set_config('request.jwt.claim.sub', '76000000-0000-4000-8000-000000000000', true);
 SELECT set_config('request.jwt.claims',
@@ -41,16 +64,22 @@ SELECT set_config('request.jwt.claims',
 -- stubbed to true so the test reaches the age gate. This DDL is rolled back
 -- with the transaction below.
 CREATE OR REPLACE FUNCTION public.quiz_route_proof_valid(
-  jsonb, text, text, uuid
+  p_route_proof jsonb,
+  p_expected_action text DEFAULT NULL,
+  p_expected_subject_id text DEFAULT NULL,
+  p_expected_user_id uuid DEFAULT NULL
 ) RETURNS boolean LANGUAGE sql AS 'SELECT true';
 
-CREATE FUNCTION pg_temp.start_state(p_dob date) RETURNS text
+CREATE FUNCTION pg_temp.start_state(
+  p_dob date,
+  p_event uuid DEFAULT '76000000-0000-4000-8000-000000000003'::uuid
+) RETURNS text
 LANGUAGE plpgsql AS $$
 BEGIN
   UPDATE public.customers SET date_of_birth = p_dob
   WHERE id = '76000000-0000-4000-8000-000000000002';
   PERFORM private.start_quiz_attempt_v2_core(
-    '76000000-0000-4000-8000-000000000003'::uuid, 'standard', 'age-gate-v2', true,
+    p_event, 'standard', 'age-gate-v2', true,
     gen_random_uuid(), '1.0.0', 'web', '{}'::jsonb,
     '76000000-0000-4000-8000-000000000000'::uuid, true);
   RETURN 'started';
@@ -72,11 +101,15 @@ BEGIN
   IF pg_temp.start_state((v_today - interval '18 years' + interval '1 day')::date) <> 'QZ014' THEN
     RAISE EXCEPTION 'day before 18th birthday must raise QZ014';
   END IF;
-  IF pg_temp.start_state((v_today - interval '18 years')::date) = 'QZ014' THEN
-    RAISE EXCEPTION 'exactly 18 today must NOT be age restricted';
+  IF pg_temp.start_state((v_today - interval '18 years')::date) <> 'started' THEN
+    RAISE EXCEPTION 'exactly 18 today must start, got %', pg_temp.start_state((v_today - interval '18 years')::date);
   END IF;
-  IF pg_temp.start_state((v_today - interval '40 years')::date) = 'QZ014' THEN
-    RAISE EXCEPTION 'adult must NOT be age restricted';
+  IF pg_temp.start_state((v_today - interval '40 years')::date) <> 'started' THEN
+    RAISE EXCEPTION 'adult must start';
+  END IF;
+  IF pg_temp.start_state((v_today - interval '17 years')::date,
+    '76000000-0000-4000-8000-000000000010'::uuid) <> 'started' THEN
+    RAISE EXCEPTION 'under-18 test-mode start must be unchanged (allowed)';
   END IF;
 END;
 $$;

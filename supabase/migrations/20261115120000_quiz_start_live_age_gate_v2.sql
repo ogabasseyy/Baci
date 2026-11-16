@@ -105,7 +105,7 @@ BEGIN
   -- the database must refuse under-18 players itself. Exact 18th birthday passes.
   IF v_event.mode = 'live'
     AND v_customer.date_of_birth > (
-      (pg_catalog.clock_timestamp() AT TIME ZONE 'UTC')::date
+      (v_now AT TIME ZONE 'UTC')::date
       - INTERVAL '18 years'
     )::date THEN
     RAISE EXCEPTION 'quiz_age_restricted' USING ERRCODE = 'QZ014';

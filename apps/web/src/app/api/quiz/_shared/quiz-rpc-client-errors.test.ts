@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { QUIZ_AGE_RESTRICTED_MESSAGE } from '@/schemas/quiz-age-gate-message';
 import { mapQuizRpcClientError } from './quiz-rpc-client-errors';
 
 describe('mapQuizRpcClientError', () => {
@@ -17,7 +18,7 @@ describe('mapQuizRpcClientError', () => {
   it('maps the database age gate (QZ014) to a 403 for under-18 players', () => {
     expect(mapQuizRpcClientError({ code: 'QZ014' })).toEqual({
       code: 'QUIZ_AGE_RESTRICTED',
-      error: 'You must be 18 or older to play this quiz',
+      error: QUIZ_AGE_RESTRICTED_MESSAGE,
       status: 403,
     });
   });

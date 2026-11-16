@@ -1,3 +1,5 @@
+import { QUIZ_AGE_RESTRICTED_MESSAGE } from '@/schemas/quiz-age-gate-message';
+
 type QuizRpcClientError = {
   code: string;
   error: string;
@@ -48,7 +50,7 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
   },
   QZ014: {
     code: 'QUIZ_AGE_RESTRICTED',
-    error: 'You must be 18 or older to play this quiz',
+    error: QUIZ_AGE_RESTRICTED_MESSAGE,
     status: 403,
   },
   QZ020: {

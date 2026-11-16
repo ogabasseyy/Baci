@@ -146,6 +146,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         }
         handleCartClick={handleCartClick}
         imagePriority={imagePriority}
+        isAdded={isAdded}
         isComparing={isComparing}
         isLiked={isLiked}
         linkAriaLabel={linkAriaLabel}

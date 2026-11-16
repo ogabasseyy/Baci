@@ -135,4 +135,32 @@ describe('ProductCardListView', () => {
       screen.getByRole('link', { name: 'Choose options for iPhone 18 Pro' })
     ).toHaveAttribute('href', '/smartphones/iphone-18-pro');
   });
+
+  it('confirms a quick add on the list-view button', () => {
+    render(
+      <ProductCardListView
+        badge={null}
+        contentVisibilityClasses=""
+        descriptionPreview="A flagship smartphone"
+        handleCartClick={vi.fn()}
+        isAdded
+        isComparing={false}
+        isLiked={false}
+        linkAriaLabel="Buy iPhone 18 Pro for ₦2,078,000"
+        linkTitle="iPhone 18 Pro - New"
+        product={baseProduct}
+        productHref={'/smartphones/iphone-18-pro' as Route}
+        requiresSelection={false}
+        showPlusOne={false}
+        showRating={false}
+        toggleCompare={vi.fn()}
+        toggleLike={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'iPhone 18 Pro added to cart' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Added to cart');
+  });
 });

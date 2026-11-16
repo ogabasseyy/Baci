@@ -203,6 +203,19 @@ describe('resolveCriticalAddToCartBlocker', () => {
     expect(document.body).toHaveFocus();
   });
 
+  it('asks for the missing option before reporting stock, which depends on it', () => {
+    // Stock belongs to the chosen version: until the shopper picks the
+    // missing option, the count is the default version's, and another
+    // option may be in stock. Hard-disabling here would strand it.
+    expect(
+      resolveCriticalAddToCartBlocker({
+        ...base,
+        maxQuantity: 0,
+        missingAxes: ['color'],
+      })
+    ).toMatchObject({ kind: 'missing-selection', axes: ['color'] });
+  });
+
   it('falls back to an unavailable-combination reason', () => {
     expect(resolveCriticalAddToCartBlocker(base)).toMatchObject({
       kind: 'unavailable',

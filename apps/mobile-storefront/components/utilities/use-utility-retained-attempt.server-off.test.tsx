@@ -29,8 +29,16 @@ describe('useUtilityRetainedAttempt with the server keeping PiggyVest off', () =
     const { result } = renderHook(() =>
       useUtilityRetainedAttempt({ hasRetainedVtuAttempt }, request)
     );
-    await waitFor(() => expect(hasRetainedVtuAttempt).toHaveBeenCalled());
-    expect(result.current).toBe(false);
+    await waitFor(() => expect(result.current).toBe(false));
+    expect(hasRetainedVtuAttempt).toHaveBeenCalled();
+  });
+
+  it('does not count as short while the lookup has not answered', () => {
+    useVtuWalletPayStore.setState({ retains: () => new Promise(() => {}) });
+    const { result } = renderHook(() =>
+      useUtilityRetainedAttempt({ hasRetainedVtuAttempt: () => false }, request)
+    );
+    expect(result.current).toBe(true);
   });
 
   it('reports nothing kept without a purchase', () => {

@@ -1,5 +1,10 @@
 import { jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { AirtimeForm } from './AirtimeForm';
 import { useVtuWalletPayStore } from './vtu-wallet-pay-store';
@@ -76,13 +81,16 @@ describe('AirtimeForm Pay gate', () => {
   });
 
   describe('bugfix: Pay stayed red and enabled with ₦0 store credit', () => {
-    it('disables Pay ₦100 and says why when store credit is ₦0', () => {
+    it('disables Pay ₦100 and says why when store credit is ₦0', async () => {
       render(<AirtimeForm onSuccess={jest.fn()} />);
       enterPhone('08031234567');
       fireEvent.press(screen.getByRole('button', { name: '₦100' }));
 
+      // Disabled once the kept-attempt lookup answers "none kept".
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Pay ₦100' })).toBeDisabled()
+      );
       const pay = screen.getByRole('button', { name: 'Pay ₦100' });
-      expect(pay).toBeDisabled();
       expect(pay.props.accessibilityState).toMatchObject({ disabled: true });
       expect(
         screen.getByText('Not enough store credit to pay this.')
@@ -125,6 +133,15 @@ describe('AirtimeForm Pay gate', () => {
 
       expect(screen.getByRole('button', { name: 'Pay ₦100' })).toBeEnabled();
     });
+  });
+
+  it('keeps Pay enabled while the PiggyVest kept-attempt lookup is unanswered', () => {
+    useVtuWalletPayStore.setState({ retains: () => new Promise(() => {}) });
+    render(<AirtimeForm onSuccess={jest.fn()} />);
+    enterPhone('08031234567');
+    fireEvent.press(screen.getByRole('button', { name: '₦100' }));
+
+    expect(screen.getByRole('button', { name: 'Pay ₦100' })).toBeEnabled();
   });
 
   describe('bugfix: tapping Pay with no phone number showed a system alert', () => {

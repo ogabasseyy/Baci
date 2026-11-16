@@ -1,8 +1,10 @@
 /**
  * Extra scroll space under a utility form while the Pay footer shows a notice
- * above the button, so the last field is never hidden behind it.
+ * above the button, so the last field is never hidden behind it. Sized for a
+ * three-line message plus its link at larger text sizes; extra blank space at
+ * the end of the scroll is harmless, a clipped field is not.
  */
-export const UTILITY_FOOTER_NOTICE_SPACE = 72;
+export const UTILITY_FOOTER_NOTICE_SPACE = 120;
 
 /** The wallet reads the Pay button needs, as the payment hook exposes them. */
 export interface UtilityPayWalletSnapshot {

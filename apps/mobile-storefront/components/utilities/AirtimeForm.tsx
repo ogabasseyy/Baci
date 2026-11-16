@@ -19,6 +19,7 @@ import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useAirtimeFormController } from './use-airtime-form-controller';
 import { useRetainsPiggyvest } from './use-retains-piggyvest';
 import { useUtilityPayGate } from './use-utility-pay-gate';
+import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
 import {
   getAirtimeFormIssue,
   getFieldIssuePointer,
@@ -65,11 +66,12 @@ export function AirtimeForm(props: AirtimeFormProps) {
     phoneNumber,
     selectedProvider,
   });
+  const retained = useUtilityRetainedAttempt(payment, purchaseRequest);
   const payGate = useUtilityPayGate({
     amount: numericAmount,
     formIssue: formIssue?.message ?? null,
     payment,
-    retained: retainedStoreCredit || retainedPiggyvest,
+    retained,
     returnToHref: walletReturnToHref,
   });
   const inlineIssue = formIssue?.inline ? formIssue : null;

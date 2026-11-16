@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react-native';
+import { renderHook, waitFor } from '@testing-library/react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { useDataPayGate } from './use-data-pay-gate';
@@ -84,11 +84,13 @@ describe('useDataPayGate with the server keeping PiggyVest off', () => {
     );
   });
 
-  it('blocks a short wallet with a link to open it', () => {
+  it('blocks a short wallet with a link to open it', async () => {
     const { result } = renderHook(() =>
       useDataPayGate({ ...complete, payment: payment(100) })
     );
 
+    // Once the kept-attempt lookup answers "none kept".
+    await waitFor(() => expect(result.current.notice).not.toBeNull());
     expect(result.current.notice).toMatchObject({
       action: { label: 'Open wallet' },
       message: 'Not enough in your wallet to pay this.',

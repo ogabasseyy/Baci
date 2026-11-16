@@ -27,9 +27,13 @@ CREATE TABLE IF NOT EXISTS public.quiz_live_leaderboard_snapshots_v2 (
   event_id uuid PRIMARY KEY REFERENCES public.quiz_events(id) ON DELETE CASCADE,
   -- Top 100 in rank order. Each entry carries customer_id for the per-caller
   -- is_current_customer flag; the read function strips it before returning.
-  entries jsonb NOT NULL,
+  -- The shape checks mean a stored board can never be something the read
+  -- function cannot unpack.
+  entries jsonb NOT NULL
+    CHECK (pg_catalog.jsonb_typeof(entries) = 'array'),
   -- {"<score>": <players with that score>}
-  score_counts jsonb NOT NULL,
+  score_counts jsonb NOT NULL
+    CHECK (pg_catalog.jsonb_typeof(score_counts) = 'object'),
   participant_count integer NOT NULL CHECK (participant_count >= 0),
   computed_at timestamptz NOT NULL,
   -- Players ranked when results were published. Stored once by the count

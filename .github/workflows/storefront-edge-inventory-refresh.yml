@@ -12,8 +12,12 @@ name: Storefront edge inventory refresh
 on:
   push:
     branches: [main]
+    # Must cover every inventory routing input; storefront-edge-inventory-refresh-workflow-paths.test.ts
+    # in apps/web/tools/cost fails when an input falls outside these globs.
     paths:
       - 'apps/web/**'
+      - 'packages/shared/**'
+      - 'supabase/migrations/**'
       - 'docs/superpowers/evidence/storefront-edge/**'
       - '.github/workflows/storefront-edge-inventory-refresh.yml'
   workflow_dispatch:
@@ -75,6 +79,15 @@ jobs:
             printf '%s\n' "$unexpected" >&2
             exit 1
           fi
+      # Never open a draft that would still fail the binding it exists to fix.
+      # Only the binding test runs: other assertions in that file guard route
+      # decisions, and failing those is a human call on the route PR.
+      - name: Check the refreshed snapshot passes its binding test
+        if: steps.refresh.outputs.changed == 'true'
+        run: >-
+          pnpm --dir apps/web exec vitest run
+          tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
+          -t 'binds the checked-in inventory snapshot to current committed source content'
       - name: Stage the regenerated files
         if: steps.refresh.outputs.changed == 'true'
         run: |

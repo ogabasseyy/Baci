@@ -24,6 +24,17 @@ describe('updateStorefrontEdgeSnapshotExpectations', () => {
     );
   });
 
+  it('handles double quotes and a missing trailing comma', () => {
+    const reformatted = `snapshotSha256: "${OLD_SHA}",\nrowCount: 641\n`;
+
+    expect(
+      updateStorefrontEdgeSnapshotExpectations(reformatted, {
+        snapshotSha256: NEW_SHA,
+        rowCount: 7,
+      })
+    ).toBe(`snapshotSha256: "${NEW_SHA}",\nrowCount: 7\n`);
+  });
+
   it('is a no-op when the expectations already match', () => {
     expect(
       updateStorefrontEdgeSnapshotExpectations(source, {

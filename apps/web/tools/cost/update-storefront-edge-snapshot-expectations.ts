@@ -1,10 +1,13 @@
-const SNAPSHOT_SHA_PATTERN = /(snapshotSha256:\s*')([a-f0-9]{64})(')/g;
-const ROW_COUNT_PATTERN = /(\browCount:\s*)(\d+)(,)/g;
+// Accept either quote style and an optional trailing comma, so a formatter
+// change does not break the refresh; the exactly-one-match guard still fails
+// closed on anything ambiguous.
+const SNAPSHOT_SHA_PATTERN = /(snapshotSha256:\s*)(['"])[a-f0-9]{64}\2/g;
+const ROW_COUNT_PATTERN = /(\browCount:\s*)\d+\b/g;
 
 function replaceExactlyOnce(
   source: string,
   pattern: RegExp,
-  value: string,
+  replace: (match: string, ...groups: string[]) => string,
   label: string
 ) {
   const matches = source.match(pattern) ?? [];
@@ -12,11 +15,7 @@ function replaceExactlyOnce(
     throw new Error(
       `snapshot test must contain exactly one ${label} expectation (found ${matches.length})`
     );
-  return source.replace(
-    pattern,
-    (_match, prefix: string, _old: string, suffix: string) =>
-      `${prefix}${value}${suffix}`
-  );
+  return source.replace(pattern, replace);
 }
 
 /**
@@ -34,13 +33,14 @@ export function updateStorefrontEdgeSnapshotExpectations(
   const withDigest = replaceExactlyOnce(
     testSource,
     SNAPSHOT_SHA_PATTERN,
-    expected.snapshotSha256,
+    (_match, prefix, quote) =>
+      `${prefix}${quote}${expected.snapshotSha256}${quote}`,
     'snapshotSha256'
   );
   return replaceExactlyOnce(
     withDigest,
     ROW_COUNT_PATTERN,
-    String(expected.rowCount),
+    (_match, prefix) => `${prefix}${expected.rowCount}`,
     'rowCount'
   );
 }

@@ -90,7 +90,17 @@ async function enforceQuizAppAttestation(
   eventId: string,
   userId: string
 ): Promise<void> {
-  const mode = getQuizAppAttestationModeEnv();
+  let mode: ReturnType<typeof getQuizAppAttestationModeEnv>;
+  try {
+    mode = getQuizAppAttestationModeEnv();
+  } catch {
+    // A mistyped mode must never open the gate: treat it as enforce.
+    logger.error({
+      context: 'enforceQuizAppAttestation',
+      message: 'Invalid QUIZ_APP_ATTESTATION; failing closed as enforce',
+    });
+    mode = 'enforce';
+  }
   if (mode === 'off') return;
   const result = await verifyQuizAppCheckToken(
     appCheckToken,

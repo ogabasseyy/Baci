@@ -32,18 +32,27 @@ export function canonicalQuizAppCheckToken(token: string): string | null {
   return token;
 }
 
-/** Stores a new single-use challenge; returns its expiry or null on failure. */
+export type QuizAttestationChallengeResult =
+  | { expiresAt: string; nonce: string; status: 'ok' }
+  | { status: 'error' | 'limit' };
+
+/** Stores a new single-use challenge; reports a cap hit separately. */
 export async function issueQuizAttestationChallenge(
   supabase: Pick<ServerSupabaseClient, 'rpc'>,
   eventId: string
-): Promise<{ expiresAt: string; nonce: string } | null> {
+): Promise<QuizAttestationChallengeResult> {
   const nonce = generateQuizAttestationNonce();
   const { data, error } = await supabase.rpc(
     'issue_quiz_app_attestation_challenge_v1',
     { p_event_id: eventId, p_nonce_hash: hashQuizAttestationValue(nonce) }
   );
-  if (error || typeof data !== 'string') return null;
-  return { expiresAt: data, nonce };
+  if (error) {
+    // 54000 = the per-player open-challenge cap in the issuing function.
+    const code = (error as { code?: unknown }).code;
+    return { status: code === '54000' ? 'limit' : 'error' };
+  }
+  if (typeof data !== 'string') return { status: 'error' };
+  return { expiresAt: data, nonce, status: 'ok' };
 }
 
 /** True only when this call consumed a valid, unexpired, unused challenge. */

@@ -13,19 +13,19 @@ describe('getQuizAttestationHeaders', () => {
   beforeEach(() => mockRequest.mockReset());
 
   it('fetches a challenge then a fresh token and returns both headers', async () => {
-    mockRequest.mockResolvedValue({ expiresAt: 'x', nonce: 'n1' });
+    mockRequest.mockResolvedValue({ expiresAt: 'x', nonce: 'n'.repeat(43) });
     const provider = jest.fn().mockResolvedValue('tok');
     const headers = await getQuizAttestationHeaders('e1', {}, provider);
     expect(headers).toEqual({
       [QUIZ_APP_CHECK_HEADER]: 'tok',
-      [QUIZ_ATTESTATION_NONCE_HEADER]: 'n1',
+      [QUIZ_ATTESTATION_NONCE_HEADER]: 'n'.repeat(43),
     });
     expect(mockRequest.mock.invocationCallOrder[0]).toBeLessThan(
       provider.mock.invocationCallOrder[0]
     );
   });
   it('returns null when the device cannot mint a token', async () => {
-    mockRequest.mockResolvedValue({ expiresAt: 'x', nonce: 'n1' });
+    mockRequest.mockResolvedValue({ expiresAt: 'x', nonce: 'n'.repeat(43) });
     expect(
       await getQuizAttestationHeaders('e1', {}, async () => null)
     ).toBeNull();

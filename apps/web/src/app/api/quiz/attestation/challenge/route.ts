@@ -39,8 +39,20 @@ export async function POST(request: NextRequest) {
     auth.supabase,
     parsed.data.eventId
   );
-  if (!challenge) return rpcErrorResponse();
-  return NextResponse.json(challenge, {
-    headers: { 'Cache-Control': 'no-store' },
-  });
+  if (challenge.status === 'limit') {
+    return NextResponse.json(
+      {
+        code: 'QUIZ_ATTESTATION_RATE_LIMITED',
+        error: 'Too many attempts. Please wait a moment and try again.',
+      },
+      { headers: { 'Retry-After': '120' }, status: 429 }
+    );
+  }
+  if (challenge.status !== 'ok') return rpcErrorResponse();
+  return NextResponse.json(
+    { expiresAt: challenge.expiresAt, nonce: challenge.nonce },
+    {
+      headers: { 'Cache-Control': 'no-store' },
+    }
+  );
 }

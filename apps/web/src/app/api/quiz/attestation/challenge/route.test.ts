@@ -66,6 +66,7 @@ describe('quiz attestation challenge route', () => {
     vi.mocked(issueQuizAttestationChallenge).mockResolvedValue({
       expiresAt: '2026-11-15T10:02:00Z',
       nonce: 'a'.repeat(43),
+      status: 'ok',
     });
     const res = await POST(request({ eventId: EVENT_ID }));
     expect(res.status).toBe(200);
@@ -74,7 +75,18 @@ describe('quiz attestation challenge route', () => {
   });
   it('returns 500 when the challenge cannot be stored', async () => {
     signedIn('bearer');
-    vi.mocked(issueQuizAttestationChallenge).mockResolvedValue(null);
+    vi.mocked(issueQuizAttestationChallenge).mockResolvedValue({
+      status: 'error',
+    });
     expect((await POST(request({ eventId: EVENT_ID }))).status).toBe(500);
+  });
+  it('returns 429 when the player has too many open challenges', async () => {
+    signedIn('bearer');
+    vi.mocked(issueQuizAttestationChallenge).mockResolvedValue({
+      status: 'limit',
+    });
+    const res = await POST(request({ eventId: EVENT_ID }));
+    expect(res.status).toBe(429);
+    expect((await res.json()).code).toBe('QUIZ_ATTESTATION_RATE_LIMITED');
   });
 });

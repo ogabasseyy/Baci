@@ -5,15 +5,15 @@ describe('quizAttestationChallengeResponseSchema', () => {
     expect(
       quizAttestationChallengeResponseSchema.safeParse({
         expiresAt: '2026-11-16T10:00:00Z',
-        nonce: 'abc',
+        nonce: 'a'.repeat(43),
       }).success
     ).toBe(true);
   });
-  it('rejects an empty nonce or a missing expiry', () => {
+  it('rejects a malformed nonce or a missing expiry', () => {
     expect(
       quizAttestationChallengeResponseSchema.safeParse({
         expiresAt: 'x',
-        nonce: '',
+        nonce: 'short',
       }).success
     ).toBe(false);
     expect(

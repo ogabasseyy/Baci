@@ -222,4 +222,17 @@ describe('bugfix: copied bearer token replayed as the app for a live prize', () 
     ).rejects.toMatchObject({ code: 'QUIZ_APP_ONLY' });
     expect(verifyQuizAppCheckToken).not.toHaveBeenCalled();
   });
+
+  it('fails closed (not a 500) when the attestation mode is mistyped', async () => {
+    production('enforce');
+    vi.stubEnv('QUIZ_APP_ATTESTATION', 'Enforcee');
+    vi.mocked(verifyQuizAppCheckToken).mockResolvedValue({
+      ok: false,
+      reason: 'missing_token',
+    });
+
+    await expect(
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer', null)
+    ).rejects.toMatchObject({ code: 'QUIZ_APP_ATTESTATION_REQUIRED' });
+  });
 });

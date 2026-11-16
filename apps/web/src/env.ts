@@ -1,5 +1,4 @@
 // src/env.ts
-
 import z from 'zod';
 import { getAddressAutocompleteKvCredentialIssue } from '@/lib/address-autocomplete-kv-credentials';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
@@ -8,7 +7,6 @@ import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
 import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
-import { quizAttestationModeEnvSchema } from '@/lib/quiz/quiz-attestation-env-schema';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
 import { walletPinPepperEnvSchema } from '@/schemas/wallet-pin-pepper';
 
@@ -351,13 +349,6 @@ const serverSchema = z
     QUIZ_RPC_SERVER_SECRET: optionalTrimmedStringSchema,
     QUIZ_DEVICE_HASH_PEPPER: quizDeviceHashPepperSchema,
     QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON: quizIntegrityTierOverridesSchema,
-    // Rollout for requiring Firebase App Check (Play Integrity / App Attest)
-    // on live prize starts: off (default), monitor (log only) or enforce.
-    // PROJECT_NUMBER is the Firebase project number; APP_IDS is a comma list
-    // of Firebase app ids (token subject) that count as the Ogabassey app.
-    QUIZ_APP_ATTESTATION: quizAttestationModeEnvSchema,
-    QUIZ_APP_CHECK_PROJECT_NUMBER: optionalTrimmedStringSchema,
-    QUIZ_APP_CHECK_APP_IDS: optionalTrimmedStringSchema,
 
     // Push Notifications
     EXPO_ACCESS_TOKEN: z.string().optional(),
@@ -825,10 +816,6 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         QUIZ_DEVICE_HASH_PEPPER: process.env.QUIZ_DEVICE_HASH_PEPPER,
         QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON:
           process.env.QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON,
-        QUIZ_APP_ATTESTATION: process.env.QUIZ_APP_ATTESTATION,
-        QUIZ_APP_CHECK_PROJECT_NUMBER:
-          process.env.QUIZ_APP_CHECK_PROJECT_NUMBER,
-        QUIZ_APP_CHECK_APP_IDS: process.env.QUIZ_APP_CHECK_APP_IDS,
         EXPO_ACCESS_TOKEN: process.env.EXPO_ACCESS_TOKEN,
         MONNIFY_API_KEY: process.env.MONNIFY_API_KEY,
         MONNIFY_SECRET_KEY: process.env.MONNIFY_SECRET_KEY,

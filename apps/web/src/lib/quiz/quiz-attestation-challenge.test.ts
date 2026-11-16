@@ -38,7 +38,18 @@ describe('quiz attestation challenge', () => {
   });
   it('returns null when issuing fails', async () => {
     const { client } = rpcClient({ data: null, error: new Error('x') });
-    expect(await issueQuizAttestationChallenge(client, 'e1')).toBeNull();
+    expect(await issueQuizAttestationChallenge(client, 'e1')).toEqual({
+      status: 'error',
+    });
+  });
+  it('reports the per-player cap (SQLSTATE 54000) as a limit, not an error', async () => {
+    const { client } = rpcClient({
+      data: null,
+      error: { code: '54000', message: 'too many open challenges' },
+    });
+    expect(await issueQuizAttestationChallenge(client, 'e1')).toEqual({
+      status: 'limit',
+    });
   });
   it('accepts a challenge the database consumed', async () => {
     const { client } = rpcClient({ data: true, error: null });

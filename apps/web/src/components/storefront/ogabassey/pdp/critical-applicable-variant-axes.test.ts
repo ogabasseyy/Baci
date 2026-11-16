@@ -10,6 +10,9 @@ function variants(rows: Array<Record<string, string>>): Variants {
     product_id: 'product',
     merchant_id: 'merchant',
     condition: 'new' as const,
+    inventory_tracking_policy: 'off',
+    stock_quantity: 0,
+    price_override: 1000,
     attributes,
   }));
 }

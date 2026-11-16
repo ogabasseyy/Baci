@@ -80,7 +80,10 @@ function hasAllowedAlgorithm(token: string): boolean | null {
   }
 }
 
-let warnedAboutUnexpectedClaim = false;
+// Repeat the warning at most once every five minutes: once is too easy to
+// miss, and a persistent mismatch sends every request back to Supabase Auth.
+const UNEXPECTED_CLAIM_WARNING_INTERVAL_MS = 5 * 60_000;
+let lastUnexpectedClaimWarningAt = Number.NEGATIVE_INFINITY;
 
 /**
  * An issuer or audience this deployment did not expect points at
@@ -145,8 +148,12 @@ export async function verifyQuizAccessToken(
   } catch (error) {
     const unexpectedClaim = getUnexpectedConfigurationClaim(error);
     if (unexpectedClaim) {
-      if (!warnedAboutUnexpectedClaim) {
-        warnedAboutUnexpectedClaim = true;
+      const now = Date.now();
+      if (
+        now - lastUnexpectedClaimWarningAt >=
+        UNEXPECTED_CLAIM_WARNING_INTERVAL_MS
+      ) {
+        lastUnexpectedClaimWarningAt = now;
         logger.warn({
           claim: unexpectedClaim,
           message:

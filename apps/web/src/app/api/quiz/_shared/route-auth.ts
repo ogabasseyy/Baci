@@ -6,6 +6,10 @@ import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
 import { mapQuizRpcClientError } from './quiz-rpc-client-errors';
+import {
+  hasRecentSessionCheck,
+  recordSessionCheck,
+} from './quiz-session-recency';
 import type { ServerSupabaseClient } from './route-helpers-guards';
 
 // Read-path auth and response helpers. Kept apart from route-helpers.ts so that
@@ -23,6 +27,14 @@ export type RequireQuizUserOptions = {
    * a locally verified token. Use for routes that create or claim something.
    */
   requireFreshSession?: boolean;
+  /**
+   * Verify the token locally on every request and also ask Supabase Auth
+   * about the session at most once a minute per token. For the answer route:
+   * it changes state, so a signed-out or revoked session must stop within
+   * about a minute, but a Supabase Auth call per answer (or an Auth outage)
+   * must not cost a player a question.
+   */
+  requireRecentSession?: boolean;
 };
 
 type RequireQuizUserResult =
@@ -119,7 +131,8 @@ function isRejectedCredentialError(error: unknown) {
 }
 
 async function checkBearerWithSupabaseAuth(
-  token: string
+  token: string,
+  { logOutage = true }: { logOutage?: boolean } = {}
 ): Promise<RequireQuizUserResult> {
   let user: QuizAuthUser | null = null;
   let error: unknown = null;
@@ -133,14 +146,17 @@ async function checkBearerWithSupabaseAuth(
 
   if (error) {
     if (isRejectedCredentialError(error)) return unauthorizedResult();
-    logger.error({
-      message: 'Quiz auth lookup failed',
-      ...getSafeAuthErrorFields(error),
-    });
+    if (logOutage) {
+      logger.error({
+        message: 'Quiz auth lookup failed',
+        ...getSafeAuthErrorFields(error),
+      });
+    }
     return authUnavailableResult();
   }
   if (!user) return unauthorizedResult();
 
+  recordSessionCheck(token);
   return {
     authMethod: 'bearer',
     response: null,
@@ -166,6 +182,19 @@ export async function requireQuizUser(
 
     const verified = await verifyQuizAccessToken(bearerToken);
     if (verified.status === 'verified') {
+      if (options.requireRecentSession && !hasRecentSessionCheck(bearerToken)) {
+        // Not logged per request: during an Auth outage this runs for every
+        // answer, and the routes that must fail closed already log it.
+        const session = await checkBearerWithSupabaseAuth(bearerToken, {
+          logOutage: false,
+        });
+        if (session.response === null || session.response.status === 401) {
+          return session;
+        }
+        // Supabase Auth could not answer. The signature is valid, so let the
+        // answer through instead of costing the player a question; nothing is
+        // remembered, so the next request asks again.
+      }
       return {
         authMethod: 'bearer',
         response: null,
@@ -198,15 +227,7 @@ export async function requireQuizUser(
       message: 'Quiz auth lookup failed',
       ...getSafeAuthErrorFields(error),
     });
-    return {
-      // Supabase auth lookup errors are service failures, not bad credentials.
-      response: NextResponse.json(
-        { code: 'auth_unavailable', error: 'Authentication lookup failed' },
-        { status: 503 }
-      ),
-      supabase: null,
-      user: null,
-    };
+    return authUnavailableResult();
   }
 
   if (!user) {
@@ -242,6 +263,11 @@ export function quizRpcClientErrorResponse(error: unknown) {
 
   return NextResponse.json(
     { code: mapped.code, error: mapped.error },
-    { status: mapped.status }
+    {
+      status: mapped.status,
+      ...(mapped.retryAfterSeconds
+        ? { headers: { 'Retry-After': String(mapped.retryAfterSeconds) } }
+        : {}),
+    }
   );
 }

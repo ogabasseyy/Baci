@@ -112,6 +112,7 @@ describe('quiz route-auth', () => {
       const result = await requireQuizUser();
 
       expect(result.response?.status).toBe(503);
+      expect(result.response?.headers.get('Retry-After')).toBe('5');
       expect(await readJson(result.response as Response)).toEqual({
         code: 'auth_unavailable',
         error: 'Authentication lookup failed',
@@ -196,6 +197,17 @@ describe('quiz route-auth', () => {
       expect(await readJson(response as Response)).toEqual({
         code: 'QUIZ_ATTEMPT_LIMIT_REACHED',
         error: "You've reached the maximum number of attempts for this quiz.",
+      });
+    });
+
+    it('quizRpcClientErrorResponse tells the app when to retry a busy database', async () => {
+      const response = quizRpcClientErrorResponse({ code: '55P03' });
+
+      expect(response?.status).toBe(503);
+      expect(response?.headers.get('Retry-After')).toBe('2');
+      expect(await readJson(response as Response)).toEqual({
+        code: 'QUIZ_BUSY',
+        error: 'The quiz is busy. Please try again.',
       });
     });
 

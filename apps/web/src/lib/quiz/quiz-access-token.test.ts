@@ -97,6 +97,22 @@ describe('verifyQuizAccessToken', () => {
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
+  it('repeats the mismatch warning after five minutes', async () => {
+    const token = await sign({}, { issuer: 'https://other.example/auth/v1' });
+    await verify(token);
+    const warningsSoFar = vi.mocked(logger.warn).mock.calls.length;
+    const later = Date.now() + 5 * 60_000 + 1;
+    const now = vi.spyOn(Date, 'now').mockReturnValue(later);
+    try {
+      await verify(token);
+      await verify(token);
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(vi.mocked(logger.warn).mock.calls.length).toBe(warningsSoFar + 1);
+  });
+
   it('leaves an unexpected audience to Supabase Auth', async () => {
     const token = await sign({}, { audience: 'service' });
     expect(await verify(token)).toEqual({ status: 'unverifiable' });

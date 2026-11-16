@@ -23,15 +23,29 @@ describe('mapQuizRpcClientError', () => {
     });
   });
 
-  it.each([
-    '55P03',
-    '57014',
-  ])('maps database timeout %s to a retryable 503 busy error', (code) => {
-    expect(mapQuizRpcClientError({ code })).toEqual({
+  it('maps a lock timeout to a retryable 503 busy error', () => {
+    expect(mapQuizRpcClientError({ code: '55P03' })).toEqual({
       code: 'QUIZ_BUSY',
       error: 'The quiz is busy. Please try again.',
+      retryAfterSeconds: 2,
       status: 503,
     });
+  });
+
+  it('maps a statement timeout to busy, but not an operator cancelling a query', () => {
+    expect(
+      mapQuizRpcClientError({
+        code: '57014',
+        message: 'canceling statement due to statement timeout',
+      })
+    ).toMatchObject({ code: 'QUIZ_BUSY', status: 503 });
+    expect(
+      mapQuizRpcClientError({
+        code: '57014',
+        message: 'canceling statement due to user request',
+      })
+    ).toBe(null);
+    expect(mapQuizRpcClientError({ code: '57014' })).toBe(null);
   });
 
   it('does not expose unknown or malformed database errors', () => {

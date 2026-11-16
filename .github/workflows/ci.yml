@@ -201,14 +201,15 @@ jobs:
       - uses: ./.github/actions/pnpm-install-cached
       - name: Install isolated builder auth typecheck dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
-      # The ~55 s builder auth suite (Docker fixtures, little CPU) runs while the compiler runs;
-      # "Run isolated builder auth tests" below collects its result.
-      - name: Start isolated builder auth tests
-        id: builder-auth-tests-start
-        # Only the spawn: its outcome alone gates the wait and the container cleanup below.
-        run: bash .github/scripts/background-step.sh start builder-auth pnpm --dir apps/web/tools/builder-auth test
-      - name: Test builder container label contracts
-        run: node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
+      - name: Run isolated builder auth tests
+        id: builder-auth-tests
+        run: |
+          node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
+          pnpm --dir apps/web/tools/builder-auth test
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.builder-auth-tests.outcome == 'success' || steps.builder-auth-tests.outcome == 'failure' || steps.builder-auth-tests.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
       - name: Run Typecheck
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -216,20 +217,6 @@ jobs:
           else
             pnpm turbo typecheck
           fi
-      - name: Run isolated builder auth tests
-        id: builder-auth-tests
-        if: ${{ !cancelled() && steps.builder-auth-tests-start.outcome == 'success' }}
-        # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
-        run: bash .github/scripts/background-step.sh wait builder-auth ${{ job.status == 'failure' && 60 || 900 }}
-      - name: Stop isolated builder auth tests
-        # A cancelled job skips the wait above; stop the detached suite before the container cleanup
-        # so it cannot create fixtures after the cleanup ran.
-        if: ${{ always() && steps.builder-auth-tests-start.outcome == 'success' }}
-        run: bash .github/scripts/background-step.sh stop builder-auth
-      - name: Clean builder auth test containers
-        if: ${{ always() && runner.environment == 'self-hosted' && (steps.builder-auth-tests-start.outcome == 'success' || steps.builder-auth-tests.outcome == 'success' || steps.builder-auth-tests.outcome == 'failure' || steps.builder-auth-tests.outcome == 'cancelled') }}
-        timeout-minutes: 2
-        run: node .github/scripts/cleanup-builder-ci-containers.mjs
 
   # Split out of "Quality Gate - Typecheck" (2026-11-15): the two compiler passes ran one after
   # the other (~2 + ~2.5 min) and made Typecheck the slowest quick job. Same condition, same runner.

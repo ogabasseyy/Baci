@@ -144,7 +144,6 @@ describe('split speed jobs (2026-11-15) still gate the Quality Gate aggregate', 
 
 describe('background steps (2026-11-16)', () => {
   for (const [jobId, startName, waitName] of [
-    ['quality-typecheck', 'Start isolated builder auth tests', 'Run isolated builder auth tests'],
     ['quality-db-replay', 'Start pinned Supabase database image download', 'Prepare pinned Supabase database image'],
   ]) {
     it(`${jobId}: the wait step runs only when its start step succeeded, after failures too`, () => {
@@ -174,19 +173,6 @@ describe('cancelled DB replay jobs stop the image download', () => {
     assert.match(steps[stop].if, /always\(\)/);
     assert.match(steps[stop].if, /steps\.replay-image-start\.outcome == 'success'/);
     assert.equal(steps[stop].run, 'bash .github/scripts/background-step.sh stop replay-image');
-  });
-});
-
-describe('cancelled typecheck jobs stop the builder-auth suite before container cleanup', () => {
-  it('runs an always() stop step between the wait and the cleanup', () => {
-    const steps = ci.jobs['quality-typecheck'].steps;
-    const wait = steps.findIndex((step) => step.name === 'Run isolated builder auth tests');
-    const stop = steps.findIndex((step) => step.name === 'Stop isolated builder auth tests');
-    const cleanup = steps.findIndex((step) => step.name === 'Clean builder auth test containers');
-    assert.ok(wait >= 0 && stop > wait && cleanup > stop);
-    assert.match(steps[stop].if, /always\(\)/);
-    assert.match(steps[stop].if, /steps\.builder-auth-tests-start\.outcome == 'success'/);
-    assert.equal(steps[stop].run, 'bash .github/scripts/background-step.sh stop builder-auth');
   });
 });
 

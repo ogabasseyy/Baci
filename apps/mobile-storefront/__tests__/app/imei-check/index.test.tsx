@@ -272,6 +272,21 @@ describe('ImeiCheckerScreen', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('bugfix: tapping pay with a wrong IMEI explains it inline, never a dead button (Muse)', () => {
+    renderChoosingFullReport();
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '123456789012345'
+    );
+    fireEvent.press(screen.getByRole('button', { name: /Verify Now/ }));
+
+    expect(
+      screen.getByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('bugfix: switching to another check clears the invalid-IMEI message (Muse)', () => {
     renderChoosingFullReport();
 

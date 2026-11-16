@@ -33,6 +33,13 @@ export function isImeiDark(colors: ImeiCheckerColors) {
   const rgb = readRgb(colors.background);
   // Can't tell: light, the safer look on the app's white cards.
   if (!rgb) return false;
-  const [r, g, b] = rgb;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
+  const [r, g, b] = rgb.map(toLinear) as [number, number, number];
+  // WCAG relative luminance; below ~0.18 white text reads better than black.
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.179;
+}
+
+/** An sRGB channel (0-255) as linear light (0-1), per WCAG. */
+function toLinear(channel: number) {
+  const c = channel / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }

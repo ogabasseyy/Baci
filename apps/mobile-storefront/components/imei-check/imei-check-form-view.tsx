@@ -131,7 +131,14 @@ export function ImeiCheckFormView({
     displayedTierKeys.includes(selectedTier) &&
     isValidDeviceIdentifier(imei, identifier) &&
     (needsTopUp || isWalletError);
-  const goesThroughVerify = canVerify || canRecover;
+  // A typed number that is not valid yet still reaches the verify tap, which
+  // says what is wrong inline instead of a dead button or a top-up first.
+  const typedInvalid =
+    selectedTier !== null &&
+    displayedTierKeys.includes(selectedTier) &&
+    imei.length > 0 &&
+    !isValidDeviceIdentifier(imei, identifier);
+  const goesThroughVerify = canVerify || canRecover || typedInvalid;
   const payDisabled = isLoading || (!needsTopUp && !goesThroughVerify);
   const walletStatusText = isWalletLoading
     ? walletCopy.loading

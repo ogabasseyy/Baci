@@ -33,6 +33,7 @@ const SHARED_STORE_WARNING_INTERVAL_MS = 5 * 60_000;
 // Insertion order is age order: a token is re-inserted on every new check.
 const checkedAtByToken = new Map<string, number>();
 let lastSharedStoreWarningAt = Number.NEGATIVE_INFINITY;
+let lastSkippedCheckWarningAt = Number.NEGATIVE_INFINITY;
 
 // Tokens are kept as hashes so neither a memory dump of this map nor the
 // shared store holds a credential.
@@ -136,7 +137,24 @@ export async function rememberSessionCheck(
   }
 }
 
+/**
+ * Records that a signed token was let through because Supabase Auth could
+ * not confirm its session in time. Warns at most once every five minutes per
+ * instance: enough to see that the fail-open window is in use, without a log
+ * line per answer.
+ */
+export function noteSessionCheckSkipped(now: number = Date.now()): void {
+  if (now - lastSkippedCheckWarningAt < SHARED_STORE_WARNING_INTERVAL_MS)
+    return;
+  lastSkippedCheckWarningAt = now;
+  logger.warn({
+    message:
+      'Quiz requests are being accepted on the token signature alone: Supabase Auth did not confirm the session in time',
+  });
+}
+
 export function resetRecentSessionChecksForTesting(): void {
   checkedAtByToken.clear();
   lastSharedStoreWarningAt = Number.NEGATIVE_INFINITY;
+  lastSkippedCheckWarningAt = Number.NEGATIVE_INFINITY;
 }

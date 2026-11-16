@@ -146,8 +146,30 @@ describe('quiz route-auth recent session check', () => {
     expect(afterOutage.user).toEqual({ id: USER_UUID });
     // The outage was not remembered as a successful check.
     expect(getUser).toHaveBeenCalledTimes(2);
-    // Not logged per answer.
+    // Not logged per answer, but the fail-open is visible in the logs.
     expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns once, not per answer, while answers go through unchecked', async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'upstream down', status: 503 },
+    });
+
+    await requireQuizUser(answerRequest('token-a'), {
+      requireRecentSession: true,
+    });
+    await requireQuizUser(answerRequest('token-b'), {
+      requireRecentSession: true,
+    });
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('token signature alone'),
+      })
+    );
   });
 
   it('does not make the answer wait for a slow Supabase Auth', async () => {

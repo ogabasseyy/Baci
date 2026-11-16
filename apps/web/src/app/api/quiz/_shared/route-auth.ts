@@ -12,6 +12,7 @@ import {
 } from './quiz-auth-lookup-errors';
 import { mapQuizRpcClientError } from './quiz-rpc-client-errors';
 import {
+  noteSessionCheckSkipped,
   rememberSessionCheck,
   wasSessionCheckedRecently,
 } from './quiz-session-recency';
@@ -36,6 +37,10 @@ export type QuizAuthUser = { id: string };
 //   Supabase Auth at most once a minute per token.
 // - requireFreshSession (start, attestation, claims, awards): Supabase Auth on
 //   every request; these fail closed when Supabase Auth cannot answer.
+// These options shape the app's bearer path only. A browser (cookie) session
+// is asked of Supabase Auth on every request whatever the option, because
+// that call also refreshes the cookie, and it fails closed with a 503. Live
+// quizzes can only be started from the app, so browser requests are few.
 export type RequireQuizUserOptions = {
   /**
    * Always ask Supabase Auth (session revocation matters) instead of trusting
@@ -184,6 +189,7 @@ export async function requireQuizUser(
         // signature is valid, so let the answer through instead of costing
         // the player a question (see requireRecentSession for what this
         // exposes); nothing is remembered, so the next request asks again.
+        noteSessionCheckSkipped();
       }
       return {
         authMethod: 'bearer',

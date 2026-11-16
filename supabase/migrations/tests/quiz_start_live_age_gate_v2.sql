@@ -55,6 +55,9 @@ INSERT INTO public.quiz_question_variants (id, slot_id, variant_key, prompt, opt
   ('76000000-0000-4000-8000-000000000015', '76000000-0000-4000-8000-000000000014', 'age-gate-t', 'Age gate test?',
    '[{"id":"a","text":"A"},{"id":"b","text":"B"}]'::jsonb, repeat('a', 64), true);
 
+-- Fixtures are in; run the function under normal trigger semantics.
+SET LOCAL session_replication_role = origin;
+
 -- Authenticate as the fixture player (auth.uid() must equal p_user_id).
 SELECT set_config('request.jwt.claim.sub', '76000000-0000-4000-8000-000000000000', true);
 SELECT set_config('request.jwt.claims',
@@ -76,8 +79,12 @@ CREATE FUNCTION pg_temp.start_state(
 ) RETURNS text
 LANGUAGE plpgsql AS $$
 BEGIN
+  -- Only the fixture DOB edit bypasses triggers; the start itself runs with
+  -- normal (origin) trigger semantics.
+  PERFORM set_config('session_replication_role', 'replica', true);
   UPDATE public.customers SET date_of_birth = p_dob
   WHERE id = '76000000-0000-4000-8000-000000000002';
+  PERFORM set_config('session_replication_role', 'origin', true);
   PERFORM private.start_quiz_attempt_v2_core(
     p_event, 'standard', 'age-gate-v2', true,
     gen_random_uuid(), '1.0.0', 'web', '{}'::jsonb,

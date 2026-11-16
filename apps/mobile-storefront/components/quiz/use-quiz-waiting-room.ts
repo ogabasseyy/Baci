@@ -8,7 +8,7 @@ import { useQuizStartHold } from './use-quiz-start-hold';
 import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
 
 const CLOCK_TICK_MS = 250;
-const BOUNDARY_REFRESH_MIN_INTERVAL_MS = 1_000;
+const BOUNDARY_REFRESH_INTERVAL_MS = 1_000;
 
 function getRemainingMs(event: QuizEvent, offsetMs: number): number {
   if (!event.startsAt) return 0;
@@ -201,7 +201,7 @@ export function useQuizWaitingRoom({
         nextBoundaryRefreshAtRef.current =
           Date.now() +
           backoffDelay({
-            baseMs: BOUNDARY_REFRESH_MIN_INTERVAL_MS,
+            baseMs: BOUNDARY_REFRESH_INTERVAL_MS,
             failures: boundaryFailuresRef.current,
             capMs: 5_000,
           });
@@ -243,7 +243,7 @@ export function useQuizWaitingRoom({
   useEffect(() => {
     let mounted = true;
     // Per-mount offset so phones do not all refresh at countdown zero.
-    const firstRefreshOffsetMs = randomDelay(BOUNDARY_REFRESH_MIN_INTERVAL_MS);
+    const firstRefreshOffsetMs = randomDelay(BOUNDARY_REFRESH_INTERVAL_MS);
     const tick = () => {
       if (
         !mounted ||
@@ -263,7 +263,7 @@ export function useQuizWaitingRoom({
           nextBoundaryRefreshAtRef.current = now + firstRefreshOffsetMs;
         if (now >= nextBoundaryRefreshAtRef.current) {
           nextBoundaryRefreshAtRef.current =
-            now + withSpread(BOUNDARY_REFRESH_MIN_INTERVAL_MS);
+            now + withSpread(BOUNDARY_REFRESH_INTERVAL_MS);
           void refreshAuthoritativeRef.current();
         }
       }

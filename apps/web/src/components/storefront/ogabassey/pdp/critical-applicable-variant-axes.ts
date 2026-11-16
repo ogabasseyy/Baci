@@ -1,0 +1,55 @@
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
+import type { Product as CartProduct } from '@/lib/products';
+import { normalizeCriticalVariantAttributes } from './critical-commerce-selection';
+
+type CriticalVariant = NonNullable<CartProduct['variants']>[number];
+
+function readVariantAxisValues(variant: CriticalVariant) {
+  const attributes = normalizeCriticalVariantAttributes(variant.attributes);
+  const condition =
+    attributes.condition ||
+    normalizeCanonicalProductCondition(variant.condition ?? '');
+
+  return condition ? { ...attributes, condition } : attributes;
+}
+
+function sameOption(left: string | undefined, right: string | undefined) {
+  return (
+    Boolean(left) &&
+    Boolean(right) &&
+    left?.trim().toLowerCase() === right?.trim().toLowerCase()
+  );
+}
+
+/**
+ * Option groups the shopper cannot be asked to choose from for the
+ * current selection: no variant matching the other chosen options has
+ * a value on that axis (for example a Used console with no region while
+ * every New console has one). Demanding a choice there makes the
+ * selection unbuyable, because picking any option leaves it.
+ */
+export function getInapplicableCriticalVariantAxes(
+  variants: CartProduct['variants'],
+  selectedAttributes: Record<string, string>,
+  axes: string[]
+): string[] {
+  const variantValues = (variants ?? []).map(readVariantAxisValues);
+
+  return axes.filter((axis) => {
+    if (selectedAttributes[axis]) {
+      return false;
+    }
+
+    const matching = variantValues.filter((values) =>
+      Object.entries(selectedAttributes).every(
+        ([selectedAxis, selectedValue]) =>
+          selectedAxis === axis ||
+          !selectedValue ||
+          !values[selectedAxis] ||
+          sameOption(values[selectedAxis], selectedValue)
+      )
+    );
+
+    return matching.length > 0 && matching.every((values) => !values[axis]);
+  });
+}

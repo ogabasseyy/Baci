@@ -16,6 +16,7 @@ import {
   resolveCriticalAddToCartBlocker,
   revealCriticalAddToCartBlocker,
 } from './critical-add-to-cart-blocker';
+import { getInapplicableCriticalVariantAxes } from './critical-applicable-variant-axes';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,
@@ -156,9 +157,19 @@ export function OgabasseyPdpCriticalCommerceProvider({
     ),
     selectedCondition: selectedVariantCondition,
   });
-  const hasRequiredVariantSelection =
-    renderableVariantAxes.length === 0 ||
-    renderableVariantAxes.every((axis) => selectedAttributes[axis]);
+  // An option group is only required when the selection can have a
+  // value there: a Used console with no region must not wait on a
+  // region that only the New consoles carry.
+  const inapplicableVariantAxes = getInapplicableCriticalVariantAxes(
+    variants,
+    selectedAttributes,
+    [...renderableVariantAxes, ...hiddenRequiredVariantAxes]
+  );
+  const missingRenderableVariantAxes = renderableVariantAxes.filter(
+    (axis) =>
+      !selectedAttributes[axis] && !inapplicableVariantAxes.includes(axis)
+  );
+  const hasRequiredVariantSelection = missingRenderableVariantAxes.length === 0;
   function getSelectedAxisValue(axis: string) {
     if (axis === 'condition') {
       return selectedAttributes.condition;
@@ -168,7 +179,9 @@ export function OgabasseyPdpCriticalCommerceProvider({
   }
 
   const missingHiddenRequiredVariantAxes = hiddenRequiredVariantAxes.filter(
-    (axis) => !(explicitSelectedAxes.includes(axis) && getSelectedAxisValue(axis))
+    (axis) =>
+      !inapplicableVariantAxes.includes(axis) &&
+      !(explicitSelectedAxes.includes(axis) && getSelectedAxisValue(axis))
   );
   const hasRequiredHiddenVariantSelection =
     missingHiddenRequiredVariantAxes.length === 0;
@@ -229,9 +242,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
   const addToCartBlocker = resolveCriticalAddToCartBlocker({
     canAddToCart,
     maxQuantity,
-    missingAxes: renderableVariantAxes.filter(
-      (axis) => !selectedAttributes[axis]
-    ),
+    missingAxes: missingRenderableVariantAxes,
     routeOfferMissingActive,
   });
   const [addToCartBlockedAttempt, setAddToCartBlockedAttempt] =

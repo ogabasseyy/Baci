@@ -184,4 +184,18 @@ describe('useImeiCheckRequest', () => {
     expect(result.current.needsWalletFunding).toBe(true);
     expect(result.current.isLoading).toBe(false);
   });
+  it('bugfix: a reopened legacy null-device report on a phone-only tier keeps the smartphone device', () => {
+    const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+    act(() => {
+      result.current.openReport({
+        lookupId,
+        createdAt: '2026-10-31T00:00:00Z',
+        tier: 'simLock',
+        device: null,
+        result: report,
+      } as unknown as Parameters<typeof result.current.openReport>[0]);
+    });
+    expect(result.current.resultDevice).toBe('smartphone');
+    expect(mocks.check).not.toHaveBeenCalled();
+  });
 });

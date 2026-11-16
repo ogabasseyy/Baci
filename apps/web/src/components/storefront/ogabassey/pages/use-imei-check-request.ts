@@ -7,6 +7,7 @@ import {
   type ImeiServiceTierDefinition,
   type ImeiServiceTierKey,
   isValidDeviceIdentifier,
+  resolveImeiReportDevice,
 } from '@baci/shared/imei';
 import { useEffect, useRef, useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
@@ -185,7 +186,9 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       setResult(report.result);
       setResultLookupId(report.lookupId);
       setResultTier(IMEI_SERVICE_TIERS[report.tier]);
-      setResultDevice(report.device);
+      // Same fallback as the pending path: a legacy null-device report on a
+      // single-category tier still belongs to that category.
+      setResultDevice(resolveImeiReportDevice(report.tier, report.device));
       setError(null);
       setNeedsSignIn(false);
       setNeedsWalletFunding(false);

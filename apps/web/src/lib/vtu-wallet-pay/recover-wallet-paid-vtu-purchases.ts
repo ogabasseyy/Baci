@@ -6,7 +6,7 @@ import {
   refundWalletPayment,
   walletPayDelivery,
 } from '@/lib/piggyvest/wallet-pay-service';
-import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import type { FulfilledVtuResult } from '@/lib/vtu-fulfillment';
 import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 import { deliverVtuWalletPayment } from './deliver-vtu-wallet-payment';
 
@@ -29,7 +29,6 @@ const defaultDeps = {
   delivery: (runtime: ReturnType<typeof readWalletPayRecoveryRuntime>) =>
     walletPayDelivery(runtime),
   refund: refundWalletPayment,
-  fulfil: fulfillPendingVtuTransaction,
 };
 
 /**
@@ -50,6 +49,15 @@ export async function recoverWalletPaidVtuPurchases(
     maxRows?: number;
     /** The invocation's hard stop (epoch ms); unset runs without a budget. */
     deadlineMs?: number;
+    /**
+     * The cron route's approved fulfil operation (fulfillPendingVtuTransaction),
+     * injected so this module imports no fulfilment or credential code.
+     */
+    fulfil: (input: {
+      supabase: SupabaseClient;
+      transactionId: string;
+      walletPayClaimed: boolean;
+    }) => Promise<FulfilledVtuResult>;
   },
   deps: typeof defaultDeps = defaultDeps
 ): Promise<RecoverWalletPaidVtuSummary> {
@@ -127,7 +135,7 @@ export async function recoverWalletPaidVtuPurchases(
             refund: (paymentId) =>
               deps.refund({ runtime: runtime as never, paymentId }),
             fulfil: (walletPayClaimed) =>
-              deps.fulfil({
+              input.fulfil({
                 supabase: input.supabase,
                 transactionId,
                 walletPayClaimed,

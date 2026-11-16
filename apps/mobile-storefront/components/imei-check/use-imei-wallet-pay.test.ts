@@ -3,6 +3,9 @@ import { imeiWalletPayCovers, useImeiWalletPay } from './use-imei-wallet-pay';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('./use-imei-wallet-payable-tiers', () => ({
+  useImeiWalletPayableTiers: jest.fn(() => null),
+}));
 jest.mock('@/stores/auth-store', () => {
   const state = { user: null, merchantId: null };
   const useAuthStore = (selector: (s: typeof state) => unknown) =>
@@ -121,5 +124,50 @@ describe('bugfix: a stale balance chose PiggyVest during a refresh (Muse)', () =
     expect(refreshing.covers('basic')).toBe(false);
     expect(refreshing.view.covers('basic')).toBe(false);
     expect(refreshing.view.savingsKobo).toBeNull();
+  });
+});
+
+describe('bugfix: wallet offered for a check the server routes to Petrock (walk M1)', () => {
+  const ready = { balance: 0, primary_balance_kobo: 100_000_000 };
+
+  it('follows the server list when it has one', () => {
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: [],
+      })
+    ).toBe(false);
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: ['basic'],
+      })
+    ).toBe(true);
+  });
+
+  it('bugfix: offers nothing while the list is loading (Muse)', () => {
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: 'loading',
+      })
+    ).toBe(false);
+  });
+
+  it('keeps the app rule while the list is unknown', () => {
+    expect(
+      imeiWalletPayCovers({
+        canPay: true,
+        wallet: ready,
+        tier: 'basic',
+        payableTiers: null,
+      })
+    ).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import type { ImeiServiceTierKey } from '@baci/shared/imei';
+import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
 import { useEffect, useRef, useState } from 'react';
 import {
   clearPendingImeiLookup,
@@ -15,24 +15,40 @@ const PAUSED_POLL_MS = 60 * 1000;
 
 interface ActivePendingLookup extends PendingImeiLookup {
   pollAfterMs: number;
+  scopeKey: string | null;
+  canResume: boolean;
 }
 
-type PendingTerminal =
+type PendingTerminal = (
   | {
       kind: 'complete';
+      device?: ImeiDeviceCategory;
       lookupId: string;
       result: ImeiResult;
       tier: ImeiServiceTierKey;
     }
-  | { error: string; kind: 'error'; tier: ImeiServiceTierKey };
+  | { error: string; kind: 'error'; tier: ImeiServiceTierKey }
+) & { scopeKey: string | null };
+
+/** Runs storage writes one at a time, in call order, on one queue. */
+function inOrder<T>(
+  queue: { current: Promise<unknown> },
+  op: () => Promise<T>
+) {
+  const run = queue.current.then(op, op);
+  queue.current = run.catch(() => undefined);
+  return run;
+}
 
 export function useImeiPendingLookup({
   accessToken,
+  userId,
   apiBaseUrl,
   customerId,
   merchantId,
 }: {
   accessToken?: string;
+  userId?: string;
   apiBaseUrl: string;
   customerId?: string;
   merchantId?: string;
@@ -41,8 +57,13 @@ export function useImeiPendingLookup({
     merchantId && customerId
       ? pendingImeiStorageKey(merchantId, customerId)
       : null;
+  const scopeKey = `${storageKey}:${userId ?? ''}`;
   const previousStorageKey = useRef<string | null>(null);
+  const previousUserId = useRef<string | undefined>(undefined);
   const pendingMutation = useRef(0);
+  // Saves and removals run one at a time, in call order: a slow removal
+  // can never land after a newer check's save and delete it.
+  const storageQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [pending, setPending] = useState<ActivePendingLookup | null>(null);
   const [paused, setPaused] = useState(false);
   const [terminal, setTerminal] = useState<PendingTerminal | null>(null);
@@ -52,10 +73,20 @@ export function useImeiPendingLookup({
     const restoreGeneration = pendingMutation.current;
     const restore = async () => {
       const previous = previousStorageKey.current;
-      if (previous && previous !== storageKey) {
-        await clearPendingImeiLookup(previous);
-      }
+      const previousUser = previousUserId.current;
       previousStorageKey.current = storageKey;
+      previousUserId.current = userId;
+      if (previous && previous !== storageKey) {
+        // Leaving a customer drops only the leaving user's own record: in a
+        // sign-in's mixed state the old key can hold another user's paid
+        // check, which must survive for them to resume.
+        // Reads go on the queue too: loading drops a corrupt record.
+        const left = await inOrder(storageQueue, () =>
+          loadPendingImeiLookup(previous)
+        );
+        if (left && previousUser && left.ownerUserId === previousUser)
+          await inOrder(storageQueue, () => clearPendingImeiLookup(previous));
+      }
 
       if (!storageKey) {
         if (
@@ -67,10 +98,20 @@ export function useImeiPendingLookup({
         }
         return;
       }
-      const saved = await loadPendingImeiLookup(storageKey);
+      const saved = await inOrder(storageQueue, () =>
+        loadPendingImeiLookup(storageKey)
+      );
       if (!cancelled && pendingMutation.current === restoreGeneration) {
-        if (saved) {
-          setPending({ ...saved, pollAfterMs: 0 });
+        // Sign-in can briefly pair the new user with the previous customer:
+        // only the user who started a check may resume it. Another owner's
+        // (or an unowned legacy) record is left in place, never shown.
+        if (saved && userId && saved.ownerUserId === userId) {
+          setPending({
+            ...saved,
+            pollAfterMs: 0,
+            scopeKey,
+            canResume: true,
+          });
         } else if (previous && previous !== storageKey) {
           setPending(null);
         }
@@ -80,10 +121,10 @@ export function useImeiPendingLookup({
     return () => {
       cancelled = true;
     };
-  }, [storageKey]);
+  }, [storageKey, scopeKey, userId]);
 
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || pending.scopeKey !== scopeKey) return;
     const isStale =
       Date.now() - Date.parse(pending.createdAt) >= MAX_ACTIVE_POLL_MS;
     if (isStale) {
@@ -107,19 +148,23 @@ export function useImeiPendingLookup({
           return;
         }
 
-        if (storageKey) await clearPendingImeiLookup(storageKey);
+        if (storageKey)
+          await inOrder(storageQueue, () => clearPendingImeiLookup(storageKey));
+        if (cancelled) return;
         setPending(null);
         setPaused(false);
-        setTerminal(
-          outcome.kind === 'complete'
+        setTerminal({
+          scopeKey,
+          ...(outcome.kind === 'complete'
             ? {
                 kind: 'complete',
                 lookupId: pending.lookupId,
                 result: outcome.result,
                 tier: pending.tier,
+                device: pending.device,
               }
-            : { error: outcome.error, kind: 'error', tier: pending.tier }
-        );
+            : { error: outcome.error, kind: 'error', tier: pending.tier }),
+        });
       },
       isStale ? PAUSED_POLL_MS : pending.pollAfterMs
     );
@@ -127,12 +172,18 @@ export function useImeiPendingLookup({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [accessToken, apiBaseUrl, pending, storageKey]);
+  }, [accessToken, apiBaseUrl, pending, storageKey, scopeKey]);
+
+  const visiblePending = pending?.scopeKey === scopeKey ? pending : null;
 
   return {
     async clear() {
-      pendingMutation.current += 1;
-      if (storageKey) await clearPendingImeiLookup(storageKey);
+      const generation = pendingMutation.current + 1;
+      pendingMutation.current = generation;
+      if (storageKey)
+        await inOrder(storageQueue, () => clearPendingImeiLookup(storageKey));
+      // A check started while the removal ran is newer: keep it.
+      if (pendingMutation.current !== generation) return;
       setPending(null);
       setPaused(false);
     },
@@ -140,15 +191,18 @@ export function useImeiPendingLookup({
       setTerminal(null);
     },
     paused,
-    pending,
+    pending: visiblePending,
+    canResume: visiblePending?.canResume ?? true,
     async start({
       lookupId,
       pollAfterMs,
       tier,
+      device,
     }: {
       lookupId: string;
       pollAfterMs: number;
       tier: ImeiServiceTierKey;
+      device?: ImeiDeviceCategory;
     }) {
       pendingMutation.current += 1;
       const next = {
@@ -156,12 +210,25 @@ export function useImeiPendingLookup({
         lookupId,
         pollAfterMs,
         tier,
+        device,
+        ownerUserId: userId,
+        scopeKey,
+        canResume: false,
       };
-      if (storageKey) await savePendingImeiLookup(storageKey, next);
       setTerminal(null);
       setPaused(false);
       setPending(next);
+      const canResume = storageKey
+        ? await inOrder(storageQueue, () =>
+            savePendingImeiLookup(storageKey, next)
+          )
+        : false;
+      setPending((current) =>
+        current?.lookupId === lookupId && current.scopeKey === scopeKey
+          ? { ...current, canResume }
+          : current
+      );
     },
-    terminal,
+    terminal: terminal?.scopeKey === scopeKey ? terminal : null,
   };
 }

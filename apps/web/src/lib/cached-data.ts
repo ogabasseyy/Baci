@@ -630,11 +630,6 @@ export async function getCachedMerchant(
     return null;
   }
 
-  console.log(
-    'Successfully fetched merchant:',
-    sanitizeLookupLogValue(slug),
-    merchant.id
-  );
   cacheTag(`features-${merchant.id}`);
   return merchant;
 }
@@ -670,12 +665,6 @@ export async function getCachedMerchantByDomain(
     console.warn('No domain mapping found for:', safeDomain);
     return null;
   }
-
-  console.log('Successfully fetched merchant by domain', {
-    domain: safeDomain,
-    slug: resolvedMerchant.slug,
-    merchantId: resolvedMerchant.id,
-  });
 
   cacheTag(`features-${resolvedMerchant.id}`);
   return resolvedMerchant;

@@ -11,6 +11,7 @@ export const styles = StyleSheet.create({
     marginLeft: -8,
     width: 36,
   },
+  confirmHeading: { flex: 1 },
   title: { fontSize: 18, fontWeight: TYPOGRAPHY.weight.bold },
   current: {
     alignItems: 'center',

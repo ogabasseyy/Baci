@@ -14,6 +14,8 @@ Request/response bodies, authorization/cookies, files, hosted links, OTPs, ident
 
 Eligibility responses alone additionally have a bounded, byte-exact capture in the separately encrypted `oxygen_private.response_evidence` record, including non-2xx responses. Bodies up to 12,000 bytes are encrypted before the database write; larger or incomplete bodies carry a capture status rather than a partial body. Other Oxygen operations do not gain raw response retention. The existing worker-only RPC and authenticated encryption bind evidence to its workflow, command and sequence. Evidence expires from reads after 24 hours; physical cleanup remains opportunistic, not a guaranteed scheduled deletion.
 
+The later `20261101190557_oxygen_activation_environment_interlocks.sql` migration supersedes the original staging-only evidence function. It allows either environment only when the worker binding and workflow environments match.
+
 The raw eligibility inspection endpoint is disabled unless both `OXYGEN_PRODUCTION_ELIGIBILITY_DIAGNOSTIC_ENABLED=true` and the exact `OXYGEN_PRODUCTION_ELIGIBILITY_DIAGNOSTIC_USER_ID` are configured. It also requires an authenticated owner of the production workflow, an exact command binding, and rate limiting. Responses are private and non-cacheable. Raw bodies can contain bearer links or sensitive information: do not write them to logs, analytics, tickets, or messages without reviewing and removing secrets. Older discarded bodies cannot be recovered.
 
 Successful responses do not create error evidence. Public customer responses continue to contain static safe messages; operator diagnostics are never attached to customer snapshots, analytics or normal API responses.

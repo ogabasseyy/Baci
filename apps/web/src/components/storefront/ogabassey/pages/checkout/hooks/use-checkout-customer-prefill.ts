@@ -28,23 +28,54 @@ export function useCheckoutCustomerPrefill({
   setFields,
 }: UseCheckoutCustomerPrefillOptions) {
   const { customerEmail, customerPhone, firstName, lastName } = values;
-  const prefilledUserId = useRef<string | null>(null);
+  const initialized = useRef<{
+    userId: string | null;
+    email: boolean;
+    name: boolean;
+    phone: boolean;
+  }>({
+    userId: null,
+    email: false,
+    name: false,
+    phone: false,
+  });
 
   useEffect(() => {
-    if (!user || prefilledUserId.current === user.id) return;
-    prefilledUserId.current = user.id;
+    if (user === null) {
+      initialized.current = {
+        userId: null,
+        email: false,
+        name: false,
+        phone: false,
+      };
+      return;
+    }
+    if (!user) return;
+    if (initialized.current.userId !== user.id) {
+      initialized.current = {
+        userId: user.id,
+        email: false,
+        name: false,
+        phone: false,
+      };
+    }
+    const fields = initialized.current;
 
     const updates: Partial<ContactValues> = {};
-    if (user.email && !customerEmail) {
+    if (customerEmail) fields.email = true;
+    if (!fields.email && user.email) {
       updates.customerEmail = user.email;
+      fields.email = true;
     }
 
-    if (!firstName && !lastName) {
+    if (firstName || lastName) fields.name = true;
+    if (!fields.name) {
       const profileFirstName = readMetadataString(user, 'first_name');
       const profileLastName = readMetadataString(user, 'last_name');
       if (profileFirstName || profileLastName) {
         updates.firstName = profileFirstName || '';
         updates.lastName = profileLastName || '';
+        fields.name = true;
       } else {
         const profileName =
           readMetadataString(user, 'full_name') ||
@@ -53,13 +84,16 @@ export function useCheckoutCustomerPrefill({
           const [profileFirst, ...profileRest] = profileName.split(' ');
           updates.firstName = profileFirst || '';
           updates.lastName = profileRest.join(' ') || '';
+          fields.name = true;
         }
       }
     }
 
     const profilePhone = readMetadataString(user, 'phone');
-    if (profilePhone && !customerPhone) {
+    if (customerPhone) fields.phone = true;
+    if (!fields.phone && profilePhone) {
       updates.customerPhone = profilePhone;
+      fields.phone = true;
     }
 
     if (Object.keys(updates).length > 0) {

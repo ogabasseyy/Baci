@@ -36,7 +36,12 @@ export function createBackgroundRefresher(
   const flights = new SingleFlight<unknown>();
   return (key, refresh) => {
     const pending = flights.run(key, refresh).catch((error: unknown) => {
-      console.error(`[${label}] Background refresh failed`, { key, error });
+      // Constant message: the label and key go in the data, not the format.
+      console.error('[Background Refresh] Refresh failed', {
+        label,
+        key,
+        error,
+      });
     });
     keepAlive(pending);
   };

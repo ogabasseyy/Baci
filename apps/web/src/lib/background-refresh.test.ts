@@ -65,8 +65,8 @@ describe('createBackgroundRefresher', () => {
     });
     await expect(handed).resolves.toBeUndefined();
     expect(logged).toHaveBeenCalledWith(
-      '[Test] Background refresh failed',
-      expect.objectContaining({ key: 'a' })
+      '[Background Refresh] Refresh failed',
+      expect.objectContaining({ key: 'a', label: 'Test' })
     );
   });
 });

@@ -38,6 +38,21 @@ describe('imeiStatusTone', () => {
     );
   });
 
+  it('reads "could not tell" values with extra words as caution (Muse)', () => {
+    for (const value of [
+      'Unable to check - timeout',
+      'Unknown (retry)',
+      'Not available for this model',
+    ])
+      expect(imeiStatusTone({ cleanAware: true, value })).toBe('caution');
+  });
+
+  it('shows SIM Lock unlocked as clean and locked as caution (Muse)', () => {
+    expect(imeiStatusTone({ simLock: true, value: 'Unlocked' })).toBe('safe');
+    expect(imeiStatusTone({ simLock: true, value: 'Locked' })).toBe('caution');
+    expect(imeiStatusTone({ simLock: true, value: 'Unknown' })).toBe('caution');
+  });
+
   it('keeps facts such as warranty neutral', () => {
     expect(imeiStatusTone({ value: 'Out Of Warranty' })).toBe('neutral');
     expect(imeiStatusTone({ value: 'Limited Warranty' })).toBe('neutral');

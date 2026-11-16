@@ -6,6 +6,8 @@ export interface ImeiResultStatusCard {
   cleanAware?: boolean;
   /** Read with the shared blacklist rules ("Not Blacklisted" is clean). */
   blacklist?: boolean;
+  /** Unlocked reads clean; locked to one network reads as caution. */
+  simLock?: boolean;
   icon: IoniconsIconName;
   label: string;
   value: string;
@@ -67,6 +69,7 @@ export function getImeiResultStatusCards(
       ? {
           icon: 'globe' as const,
           label: 'SIM Lock',
+          simLock: true,
           value: result.simLock,
         }
       : null,

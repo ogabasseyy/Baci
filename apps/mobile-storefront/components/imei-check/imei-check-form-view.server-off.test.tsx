@@ -79,7 +79,7 @@ describe('bugfix: IMEI check offered PiggyVest money it cannot spend', () => {
 
     // Assert: only store credit is shown, never the ₦5,000.
     expect(screen.getByLabelText('Store credit ₦0')).toBeOnTheScreen();
-    expect(screen.getByText('Store credit ₦0')).toBeOnTheScreen();
+    expect(screen.getByText('Store credit · ₦0')).toBeOnTheScreen();
     expect(screen.queryByText(/₦5,000/)).toBeNull();
     expect(
       screen.getByText('Add ₦1,000 store credit by card to run this check')
@@ -172,7 +172,7 @@ describe('bugfix: the badge read store credit ₦0 for a funded savings wallet (
         walletPay={{ covers: () => true, savingsKobo: 54_970_000 }}
       />
     );
-    expect(screen.getByText('Savings ₦549,700')).toBeOnTheScreen();
+    expect(screen.getByText('PiggyVest savings · ₦549,700')).toBeOnTheScreen();
     expect(screen.queryByText(/₦0$/)).toBeNull();
   });
 

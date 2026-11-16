@@ -1,21 +1,16 @@
-import {
-  IMEI_SERVICE_TIERS,
-  type ImeiServiceTierKey,
-  isValidDeviceIdentifier,
-} from '@baci/shared/imei';
+import { IMEI_SERVICE_TIERS, type ImeiServiceTierKey } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { Keyboard, View } from 'react-native';
+import { Keyboard } from 'react-native';
 import { applyImeiCheckFailure } from '@/components/imei-check/apply-imei-check-failure';
 import { decideImeiVerify } from '@/components/imei-check/decide-imei-verify';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
-import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
-import HeroCard from '@/components/imei-check/imei-check-hero-card';
 import { ImeiCheckPending } from '@/components/imei-check/imei-check-pending';
 import { ImeiCheckResultView } from '@/components/imei-check/imei-check-result-view';
 import { imeiCheckScreenActions } from '@/components/imei-check/imei-check-screen-actions';
 import { ImeiCheckScreenHeader } from '@/components/imei-check/imei-check-screen-header';
+import { ImeiCheckTop } from '@/components/imei-check/imei-check-top';
 import { getImeiWalletCopy } from '@/components/imei-check/imei-wallet-copy';
 import { resolveImeiCheckFailure } from '@/components/imei-check/resolve-imei-check-failure';
 import { submitImeiCheck } from '@/components/imei-check/submit-imei-check';
@@ -28,7 +23,7 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import { WalletPaySheet } from '@/components/wallet-pay/WalletPaySheet';
-import Colors, { SPACING } from '@/constants/Colors';
+import Colors from '@/constants/Colors';
 import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { useStoreCreditPurchaseCopy } from '@/hooks/use-store-credit-purchase-copy';
 import { useWallet } from '@/hooks/use-wallet';
@@ -127,10 +122,10 @@ export default function ImeiCheckerScreen() {
     if (isLoading || pendingLookup.pending) return;
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
-    if (!isValidDeviceIdentifier(imei, serviceTier.identifier)) {
-      imeiCheckScreenActions.alertInvalidIdentifier(serviceTier.identifier);
-      return;
-    }
+    if (!imeiCheckScreenActions.isValidFor(imei, serviceTier, selectedDevice))
+      return setError(
+        imeiCheckScreenActions.invalidFor(serviceTier, selectedDevice)
+      );
     const decision = await decideImeiVerify({
       retainedStoreCredit: requestIdentity.retains(tier, imei, selectedDevice),
       retainsPiggyvest: () => walletPay.retains(tier, imei),
@@ -244,7 +239,11 @@ export default function ImeiCheckerScreen() {
       edges={['left', 'right']}
       style={{ backgroundColor: colors.background }}
     >
-      <ImeiCheckScreenHeader textColor={colors.text} />
+      <ImeiCheckScreenHeader
+        step={result ? 'report' : 'pick'}
+        textColor={colors.text}
+        onBackFromReport={handleReset}
+      />
       <WalletPaySheet colors={colors} {...walletPay.sheetProps} />
 
       {result ? (
@@ -259,19 +258,11 @@ export default function ImeiCheckerScreen() {
         />
       ) : (
         <AppKeyboardContainer style={{ flex: 1 }}>
-          <View
-            style={{
-              paddingHorizontal: SPACING.md,
-              paddingTop: SPACING.sm,
-            }}
-          >
-            <HeroCard colors={colors} />
-            <ImeiDeviceTabs
-              colors={colors}
-              selected={selectedDevice}
-              onSelect={handleDeviceTab}
-            />
-          </View>
+          <ImeiCheckTop
+            colors={colors}
+            selected={selectedDevice}
+            onSelect={handleDeviceTab}
+          />
           {pendingLookup.pending ? (
             <ImeiCheckPending colors={colors} paused={pendingLookup.paused} />
           ) : null}
@@ -290,6 +281,9 @@ export default function ImeiCheckerScreen() {
             topUpCardOnly={topUpCardOnly}
             onPageSelected={handlePageSelected}
             onVerify={handleVerify}
+            onEditIdentifier={() =>
+              setError(imeiCheckScreenActions.dropInvalidIdentifierError)
+            }
             onTopUpWallet={fundWallet}
           />
         </AppKeyboardContainer>

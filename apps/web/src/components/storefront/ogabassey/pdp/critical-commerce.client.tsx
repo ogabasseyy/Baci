@@ -220,14 +220,14 @@ export function OgabasseyPdpCriticalCommerceControls({
       </button>
       {addToCartBlocker ? (
         <p
-          data-attention={addToCartBlockedAttempt ? 'true' : undefined}
+          data-attention={addToCartBlockedAttempt > 0 ? 'true' : undefined}
           data-ogabassey-pdp-commerce-blocker
           id={blockerHintId}
           role="status"
         >
-          {/* Re-inserting the text on a blocked tap makes the stable
+          {/* Re-inserting the text on every blocked tap makes the stable
               status region announce it again. */}
-          <span key={addToCartBlockedAttempt ? 'attempted' : 'idle'}>
+          <span key={addToCartBlockedAttempt}>
             {addToCartBlocker.message}
           </span>
         </p>

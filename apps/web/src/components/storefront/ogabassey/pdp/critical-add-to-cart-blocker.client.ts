@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  resolveCriticalAddToCartBlocker,
-  revealCriticalAddToCartBlocker,
-} from './critical-add-to-cart-blocker';
+import { resolveCriticalAddToCartBlocker } from './critical-add-to-cart-blocker';
+import { revealCriticalAddToCartBlocker } from './reveal-critical-add-to-cart-blocker';
 
 interface UseCriticalAddToCartBlockerInput {
   canAddToCart: boolean;
@@ -26,12 +24,13 @@ export function useCriticalAddToCartBlocker({
   ...blockerInput
 }: UseCriticalAddToCartBlockerInput) {
   const addToCartBlocker = resolveCriticalAddToCartBlocker(blockerInput);
-  const [addToCartBlockedAttempt, setAddToCartBlockedAttempt] =
-    useState(false);
+  // Counts blocked taps since the last choice, so every tap (not only
+  // the first) refreshes the announced reason.
+  const [addToCartBlockedAttempt, setAddToCartBlockedAttempt] = useState(0);
 
   function handleAddToCart(event?: { currentTarget: Element }) {
     if (addToCartBlocker) {
-      setAddToCartBlockedAttempt(true);
+      setAddToCartBlockedAttempt((count) => count + 1);
       revealCriticalAddToCartBlocker(addToCartBlocker, event?.currentTarget);
       return;
     }
@@ -42,7 +41,7 @@ export function useCriticalAddToCartBlocker({
   return {
     addToCartBlockedAttempt,
     addToCartBlocker,
-    clearAddToCartBlockedAttempt: () => setAddToCartBlockedAttempt(false),
+    clearAddToCartBlockedAttempt: () => setAddToCartBlockedAttempt(0),
     handleAddToCart,
   };
 }

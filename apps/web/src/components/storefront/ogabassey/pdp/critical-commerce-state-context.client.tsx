@@ -35,7 +35,8 @@ export interface OgabasseyPdpCriticalCommerceProviderProps {
 
 export interface OgabasseyPdpCriticalCommerceState {
   /** True once the shopper tapped Add to cart while it was blocked. */
-  addToCartBlockedAttempt: boolean;
+  /** Blocked Add to cart taps since the last option choice. */
+  addToCartBlockedAttempt: number;
   /** Why Add to cart is blocked; null when the selection is buyable. */
   addToCartBlocker: CriticalAddToCartBlocker | null;
   canAddToCart: boolean;

@@ -2,10 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
-import {
-  resolveCriticalAddToCartBlocker,
-  revealCriticalAddToCartBlocker,
-} from './critical-add-to-cart-blocker';
 import { OgabasseyPdpCriticalCommerceClient } from './critical-commerce.client';
 
 const cart = vi.hoisted(() => ({ addToCart: vi.fn(), setIsCartOpen: vi.fn() }));
@@ -108,6 +104,26 @@ describe('critical buy box when an option is still unchosen', () => {
     ).toHaveFocus();
   });
 
+  it('re-inserts the reason on every blocked tap so each one is announced', () => {
+    renderBuyBox();
+    const add = screen.getByRole('button', { name: 'Add to cart' });
+    const message = 'Choose a color to add this to your cart.';
+
+    fireEvent.click(add);
+    const afterFirstTap = screen.getByText(message);
+    fireEvent.click(add);
+    const afterSecondTap = screen.getByText(message);
+    fireEvent.click(add);
+
+    // A status region only announces content that changes: each tap
+    // must mount a fresh text node, not keep the previous one.
+    expect(afterSecondTap).not.toBe(afterFirstTap);
+    expect(screen.getByText(message)).not.toBe(afterSecondTap);
+    expect(afterFirstTap).not.toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledTimes(3);
+    expect(cart.addToCart).not.toHaveBeenCalled();
+  });
+
   it('clears the reason and adds once the option is chosen', () => {
     renderBuyBox();
 
@@ -147,167 +163,5 @@ describe('critical buy box when an option is still unchosen', () => {
         .getByText('This item is out of stock right now.')
         .closest('[role="status"]')
     ).not.toBeNull();
-  });
-});
-
-describe('resolveCriticalAddToCartBlocker', () => {
-  const base = {
-    canAddToCart: false,
-    maxQuantity: null,
-    missingAxes: [],
-    routeOfferMissingActive: false,
-  };
-
-  it('returns null when the selection is buyable', () => {
-    expect(
-      resolveCriticalAddToCartBlocker({ ...base, canAddToCart: true })
-    ).toBeNull();
-  });
-
-  it('names every missing option group', () => {
-    expect(
-      resolveCriticalAddToCartBlocker({
-        ...base,
-        missingAxes: ['storage', 'sim_type', 'color'],
-      })
-    ).toMatchObject({
-      kind: 'missing-selection',
-      message:
-        'Choose a storage, sim type and color to add this to your cart.',
-    });
-  });
-
-  it('points a removed offer at the condition choice', () => {
-    expect(
-      resolveCriticalAddToCartBlocker({
-        ...base,
-        missingAxes: ['color'],
-        routeOfferMissingActive: true,
-        visibleAxes: ['condition', 'color'],
-      })
-    ).toMatchObject({ kind: 'offer-missing', axes: ['condition'] });
-  });
-
-  it('does not promise a condition choice the page does not show', () => {
-    expect(
-      resolveCriticalAddToCartBlocker({
-        ...base,
-        routeOfferMissingActive: true,
-        visibleAxes: ['color'],
-      })
-    ).toMatchObject({
-      kind: 'offer-missing',
-      axes: [],
-      message: 'This offer is no longer available.',
-    });
-  });
-
-  it('points an unresolved hidden option back at the visible groups', () => {
-    expect(
-      resolveCriticalAddToCartBlocker({
-        ...base,
-        missingHiddenAxes: ['model'],
-        visibleAxes: ['storage', 'color'],
-      })
-    ).toMatchObject({
-      kind: 'unconfirmed-selection',
-      axes: ['storage', 'color'],
-      message: 'Tap your options to confirm the exact version.',
-    });
-  });
-
-  it('moves nothing when the blocker names no rendered option group', () => {
-    renderBuyBox();
-
-    revealCriticalAddToCartBlocker({
-      kind: 'unavailable',
-      axes: [],
-      message: 'unavailable',
-    });
-
-    expect(scrollIntoView).not.toHaveBeenCalled();
-    expect(document.body).toHaveFocus();
-  });
-
-  it('asks for the missing option before reporting stock, which depends on it', () => {
-    // Stock belongs to the chosen version: until the shopper picks the
-    // missing option, the count is the default version's, and another
-    // option may be in stock. Hard-disabling here would strand it.
-    expect(
-      resolveCriticalAddToCartBlocker({
-        ...base,
-        maxQuantity: 0,
-        missingAxes: ['color'],
-      })
-    ).toMatchObject({ kind: 'missing-selection', axes: ['color'] });
-  });
-
-  it('only reveals option groups in the tapped button\'s own product section', () => {
-    document.body.innerHTML = `
-      <section data-ogabassey-pdp-critical-shell id="other">
-        <div data-ogabassey-pdp-commerce-variant-axis data-axis="color">
-          <button data-ogabassey-pdp-commerce-variant-option>Other</button>
-        </div>
-      </section>
-      <section data-ogabassey-pdp-critical-shell id="mine">
-        <div data-ogabassey-pdp-commerce-variant-axis data-axis="color">
-          <button data-ogabassey-pdp-commerce-variant-option>Mine</button>
-        </div>
-        <button id="add">Add to cart</button>
-      </section>`;
-
-    revealCriticalAddToCartBlocker(
-      { kind: 'missing-selection', axes: ['color'], message: 'm' },
-      document.getElementById('add')
-    );
-
-    expect(document.activeElement).toHaveTextContent('Mine');
-    document.body.innerHTML = '';
-  });
-
-  it('focuses a choice still open, not one already made', () => {
-    document.body.innerHTML = `
-      <div data-ogabassey-pdp-commerce-variant-axis data-axis="storage">
-        <button data-ogabassey-pdp-commerce-variant-option data-selected="true">256GB</button>
-        <button data-ogabassey-pdp-commerce-variant-option disabled>512GB</button>
-        <button data-ogabassey-pdp-commerce-variant-option>1TB</button>
-      </div>`;
-
-    revealCriticalAddToCartBlocker({
-      kind: 'unconfirmed-selection',
-      axes: ['storage'],
-      message: 'm',
-    });
-
-    expect(document.activeElement).toHaveTextContent('1TB');
-    document.body.innerHTML = '';
-  });
-
-  it('skips the smooth scroll when the shopper asks for reduced motion', () => {
-    const originalMatchMedia = window.matchMedia;
-    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
-    document.body.innerHTML = `
-      <div data-ogabassey-pdp-commerce-variant-axis data-axis="color">
-        <button data-ogabassey-pdp-commerce-variant-option>Black</button>
-      </div>`;
-
-    revealCriticalAddToCartBlocker({
-      kind: 'missing-selection',
-      axes: ['color'],
-      message: 'm',
-    });
-
-    expect(scrollIntoView).toHaveBeenCalledWith({
-      behavior: 'auto',
-      block: 'center',
-    });
-    window.matchMedia = originalMatchMedia;
-    document.body.innerHTML = '';
-  });
-
-  it('falls back to an unavailable-combination reason', () => {
-    expect(resolveCriticalAddToCartBlocker(base)).toMatchObject({
-      kind: 'unavailable',
-    });
   });
 });

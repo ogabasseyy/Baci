@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { useCriticalAddToCartBlocker } from './critical-add-to-cart-blocker.client';
-import { resolveMissingCriticalVariantAxes } from './critical-applicable-variant-axes';
+import { resolveMissingCriticalVariantAxes } from './critical-missing-variant-axes';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,

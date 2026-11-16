@@ -22,7 +22,7 @@ describe('useCriticalAddToCartBlocker', () => {
 
     expect(submitAddToCart).toHaveBeenCalledTimes(1);
     expect(result.current.addToCartBlocker).toBeNull();
-    expect(result.current.addToCartBlockedAttempt).toBe(false);
+    expect(result.current.addToCartBlockedAttempt).toBe(0);
   });
 
   it('records a blocked tap without submitting, and clears it again', () => {
@@ -40,9 +40,12 @@ describe('useCriticalAddToCartBlocker', () => {
     act(() => result.current.handleAddToCart());
 
     expect(submitAddToCart).not.toHaveBeenCalled();
-    expect(result.current.addToCartBlockedAttempt).toBe(true);
+    expect(result.current.addToCartBlockedAttempt).toBe(1);
+
+    act(() => result.current.handleAddToCart());
+    expect(result.current.addToCartBlockedAttempt).toBe(2);
 
     act(() => result.current.clearAddToCartBlockedAttempt());
-    expect(result.current.addToCartBlockedAttempt).toBe(false);
+    expect(result.current.addToCartBlockedAttempt).toBe(0);
   });
 });

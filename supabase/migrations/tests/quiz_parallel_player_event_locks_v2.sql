@@ -15,30 +15,37 @@ SELECT public.dblink_connect('quiz_par_c', pg_catalog.format('hostaddr=%s port=%
 \ir quiz_parallel_player_event_locks_v2.fixtures.inc.sql
 
 -- 1. Static guard: each player function shares the event row exactly once and
---    never asks for the exclusive event lock.
+--    holds no exclusive row lock beyond its known attempt, question and device
+--    locks. The exclusive count is exact on purpose: any new FOR UPDATE (bare,
+--    "OF event" or "NO KEY") fails here and has to be reviewed, because a
+--    single one on the event row puts every player back in one queue.
 DO $$
 DECLARE
   v_checked integer := 0;
   v_function record;
 BEGIN
   FOR v_function IN
-    SELECT proc.oid::regprocedure::text AS name, proc.prosrc
-    FROM pg_catalog.pg_proc AS proc
-    JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = proc.pronamespace
-    WHERE (namespace.nspname, proc.proname) IN (
-      ('private', 'quiz_attempt_state_v2'),
-      ('private', 'quiz_bind_attempt_device_v2'),
-      ('private', 'start_quiz_attempt_v2_core'),
-      ('public', 'start_quiz_attempt_with_device_v2'),
-      ('public', 'submit_quiz_answer_v2'),
-      ('public', 'resume_quiz_attempt_v2')
-    )
+    SELECT expected.name, expected.exclusive_locks, proc.prosrc
+    FROM (VALUES
+      ('private', 'quiz_attempt_state_v2', 3),
+      ('private', 'quiz_bind_attempt_device_v2', 2),
+      ('private', 'start_quiz_attempt_v2_core', 2),
+      ('public', 'start_quiz_attempt_with_device_v2', 0),
+      ('public', 'submit_quiz_answer_v2', 2),
+      ('public', 'resume_quiz_attempt_v2', 2)
+    ) AS expected(schema_name, name, exclusive_locks)
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.nspname = expected.schema_name
+    JOIN pg_catalog.pg_proc AS proc
+      ON proc.pronamespace = namespace.oid AND proc.proname = expected.name
   LOOP
     v_checked := v_checked + 1;
-    IF (SELECT pg_catalog.count(*) FROM pg_catalog.regexp_matches(v_function.prosrc, 'FOR SHARE', 'g')) <> 1
-      OR v_function.prosrc ~ 'FOR UPDATE OF event'
-      OR v_function.prosrc ~ 'WHERE event\.id = p_event_id\s+(AND event\.contract_version = 2\s+)?FOR UPDATE' THEN
-      RAISE EXCEPTION 'player function % still takes the exclusive event lock', v_function.name;
+    IF (SELECT pg_catalog.count(*) FROM pg_catalog.regexp_matches(v_function.prosrc, 'FOR\s+(KEY\s+)?SHARE', 'gi')) <> 1
+      OR v_function.prosrc !~* 'FOR\s+SHARE'
+      OR (SELECT pg_catalog.count(*) FROM pg_catalog.regexp_matches(v_function.prosrc, 'FOR\s+(NO\s+KEY\s+)?UPDATE', 'gi'))
+        <> v_function.exclusive_locks
+      OR v_function.prosrc ~* 'FOR\s+(NO\s+KEY\s+)?UPDATE\s+OF\s+event' THEN
+      RAISE EXCEPTION 'player function % changed its row locks: the event row must be shared, never taken exclusively', v_function.name;
     END IF;
   END LOOP;
   IF v_checked <> 6 THEN

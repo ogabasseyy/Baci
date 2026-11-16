@@ -16,7 +16,7 @@ function rpcClient(result: { data: unknown; error: unknown }) {
 const input = {
   eventId: 'e1',
   nonce: generateQuizAttestationNonce(),
-  token: 'tok',
+  token: 'aGVhZA.cGF5bG9hZA.c2ln',
   tokenIssuedAt: new Date('2026-11-15T10:00:00Z'),
 };
 
@@ -58,5 +58,20 @@ describe('quiz attestation challenge', () => {
       await consumeQuizAttestationChallenge(client, { ...input, nonce: 'bad' })
     ).toBe(false);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  describe('bugfix: one token replayed through a re-encoded signature', () => {
+    it.each([
+      ['padding appended', 'aGVhZA.cGF5bG9hZA.c2ln='],
+      ['double padding appended', 'aGVhZA.cGF5bG9hZA.c2ln=='],
+      ['non-canonical trailing bits', 'aGVhZA.cGF5bG9hZA.c2l'],
+      ['not three segments', 'aGVhZA.cGF5bG9hZA'],
+    ])('rejects a token with %s without calling the database', async (_n, token) => {
+      const { client, rpc } = rpcClient({ data: true, error: null });
+      expect(
+        await consumeQuizAttestationChallenge(client, { ...input, token })
+      ).toBe(false);
+      expect(rpc).not.toHaveBeenCalled();
+    });
   });
 });

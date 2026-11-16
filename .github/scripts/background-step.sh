@@ -6,6 +6,9 @@
 #   background-step.sh start <name> <command> [args...]
 #   background-step.sh wait  <name> [timeout-seconds]   # default 900
 #
+# The timeout counts from `wait`, not from `start`: time the command already ran during the
+# overlapped steps is not included. The job's timeout-minutes still bounds the total.
+#
 # `wait` prints the command's output and exits with the command's exit status. It fails when the
 # command was never started, or when it is still running at the timeout.
 set -euo pipefail

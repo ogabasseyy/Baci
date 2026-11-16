@@ -49,10 +49,12 @@ test('wait fails when the step was never started, so a renamed start cannot pass
 
 test('wait fails at the timeout while the command is still running', () => {
   withTemp((run) => {
-    run('start', 'slow-step', 'sleep', '20');
+    run('start', 'slow-step', 'sleep', '3');
     const result = run('wait', 'slow-step', '1');
     assert.equal(result.status, 1);
     assert.match(result.stderr, /still running after 1s/);
+    // Let the sleep finish before the temp folder is removed, so no process outlives the test.
+    assert.equal(run('wait', 'slow-step', '30').status, 0);
   });
 });
 

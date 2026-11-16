@@ -25,6 +25,7 @@ describe('createVtuWalletPayFulfiller', () => {
         charge: { paymentMethod: 'store_credit' } as never,
         auth,
         fulfillSupabase,
+        fulfil: mocks.fulfil,
       })
     ).toBeNull();
   });
@@ -38,6 +39,7 @@ describe('createVtuWalletPayFulfiller', () => {
       } as never,
       auth,
       fulfillSupabase,
+      fulfil: mocks.fulfil,
     });
     mocks.step.mockResolvedValue('response');
     await expect(make?.('merchant-1', 'customer-1')('txn-1')).resolves.toBe(

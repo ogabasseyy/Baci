@@ -3,6 +3,7 @@ import { getCronSecret } from '@/env';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
 import { recoverWalletPaidVtuPurchases } from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
 
@@ -46,10 +47,13 @@ export async function GET(request: NextRequest) {
     });
     // Purchases paid from the PiggyVest wallet whose vend was interrupted:
     // re-driven here under the payment's delivery claim (never throws).
-    const walletPay = await recoverWalletPaidVtuPurchases({
-      supabase,
-      deadlineMs: invocationStartedAt + maxDuration * 1000,
-    });
+    const walletPay = await recoverWalletPaidVtuPurchases(
+      {
+        supabase,
+        deadlineMs: invocationStartedAt + maxDuration * 1000,
+      },
+      { fulfil: fulfillPendingVtuTransaction }
+    );
     if (walletPay.errored > 0) {
       logger.warn({
         message: 'PiggyVest-paid VTU recovery completed with errors',

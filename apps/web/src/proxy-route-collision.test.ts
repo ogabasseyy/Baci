@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { resolveStorefrontProductSlugResolution } from '@/lib/storefront-product-slug-membership';
+import { storefrontRouteSegments } from './config/storefront-route-segments';
 import { proxy } from './proxy';
 
 // Self-contained mocks. This lives in its OWN file rather than proxy.test.ts so
@@ -94,8 +95,12 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       // the alias lookup would resolve to them — the live route must still win.
       vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
       vi.mocked(getCurrentSlugForAlias).mockResolvedValue(MERCHANT_SLUG);
-      const livePath =
-        segment === 'unlock-orders' ? `/${segment}` : `/${segment}/my-post`;
+      // Exact-path pages own only `/<segment>`; deeper paths are PDPs.
+      const isExactPage =
+        storefrontRouteSegments.RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS.has(
+          segment
+        );
+      const livePath = isExactPage ? `/${segment}` : `/${segment}/my-post`;
       const request = new NextRequest(`https://${CUSTOM_DOMAIN}${livePath}`);
       request.headers.set('host', CUSTOM_DOMAIN);
 
@@ -105,8 +110,7 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       // Assert (collected, so a failure names every offending segment at once)
       const location = response.headers.get('location');
       const strippedPath = location ? new URL(location).pathname : null;
-      const unexpectedRedirectPath =
-        segment === 'unlock-orders' ? '/' : '/my-post';
+      const unexpectedRedirectPath = isExactPage ? '/' : '/my-post';
       if (strippedPath === unexpectedRedirectPath) {
         stripped.push(segment);
       }

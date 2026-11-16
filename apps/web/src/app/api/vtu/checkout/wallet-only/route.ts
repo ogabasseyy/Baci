@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
       charge: input,
       auth: { supabase: auth.supabase, user: auth.user },
       fulfillSupabase: adminSupabase,
+      fulfil: fulfillPendingVtuTransaction,
     });
     // Admission (Codex R3 P1, R4 P1): key lookup + atomic DB
     // admission proof (stamp + live-scope snapshot) for the claim

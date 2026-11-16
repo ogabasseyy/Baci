@@ -25,18 +25,20 @@ describe('owner-approved Ogabassey policies', () => {
       'https://ogabassey.com'
     );
     expect(profile.returnPolicy?.windowDays).toBe(14);
-    expect(profile.returnPolicy?.summary).toContain('defects');
+    // Approved copy rewritten in #4252 (shared ogabassey-care.ts).
+    expect(profile.returnPolicy?.summary).toContain(
+      'undisclosed technical defect within 14 days of delivery'
+    );
     expect(profile.returnPolicy?.summary).not.toContain('Unused');
     expect(profile.returnPolicy?.returnMethod).toBeUndefined();
     expect(profile.returnPolicy?.returnFees).toBeUndefined();
-    expect(profile.warrantyPolicy?.summary).toContain('one-year');
-    for (const exclusion of [
-      'power surges',
-      'screen damage',
-      'liquid damage',
-    ]) {
-      expect(profile.warrantyPolicy?.summary).toContain(exclusion);
-    }
+    expect(profile.warrantyPolicy?.summary).toContain(
+      'one-year Ogabassey store warranty'
+    );
+    expect(profile.warrantyPolicy?.summary).toContain('manufacturer warranty');
+    expect(profile.warrantyPolicy?.summary).not.toBe(
+      stalePolicy.warranty_policy.summary
+    );
     expect(profile.derivedLinks.warranty).toBe(
       'https://ogabassey.com/warranty'
     );

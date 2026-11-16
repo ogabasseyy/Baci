@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { walletPayRefuse } from '@/lib/piggyvest/wallet-pay-http';
 import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
-import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import type { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu-wallet-only';
 import { runVtuWalletPayStep } from './run-vtu-wallet-pay-step';
 import { createVtuWalletPayStepDeps } from './vtu-wallet-pay-step-deps';
@@ -14,12 +14,15 @@ import { createVtuWalletPayStepDeps } from './vtu-wallet-pay-step-deps';
  * for store credit, so those paths stay exactly as they were. The privileged
  * client only ever reaches fulfillPendingVtuTransaction (the route's
  * approved fulfil operation); every PiggyVest call uses the wallet pay
- * ledger's own logins.
+ * ledger's own logins. The route passes in its own fulfil operation, so this
+ * module never imports the fulfillment (and its admin/credential graph)
+ * itself: the event-pipeline boundary keeps that authority on the route.
  */
 export function createVtuWalletPayFulfiller(input: {
   charge: VtuWalletOnlyChargeInput;
   auth: { supabase: SupabaseClient; user: User };
   fulfillSupabase: SupabaseClient;
+  fulfil: typeof fulfillPendingVtuTransaction;
 }) {
   if (input.charge.paymentMethod !== 'piggyvest_wallet') return null;
   const deps = createVtuWalletPayStepDeps(input.auth);
@@ -33,7 +36,7 @@ export function createVtuWalletPayFulfiller(input: {
         pinProof: input.charge.walletPayPinProof,
         cancel: input.charge.walletPayCancel,
         fulfil: (walletPayClaimed) =>
-          fulfillPendingVtuTransaction({
+          input.fulfil({
             supabase: input.fulfillSupabase,
             transactionId,
             walletPayClaimed,

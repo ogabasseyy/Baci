@@ -6,7 +6,7 @@ import {
   refundWalletPayment,
   walletPayDelivery,
 } from '@/lib/piggyvest/wallet-pay-service';
-import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import type { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 import { deliverVtuWalletPayment } from './deliver-vtu-wallet-payment';
 
@@ -29,7 +29,15 @@ const defaultDeps = {
   delivery: (runtime: ReturnType<typeof readWalletPayRecoveryRuntime>) =>
     walletPayDelivery(runtime),
   refund: refundWalletPayment,
-  fulfil: fulfillPendingVtuTransaction,
+};
+
+/**
+ * The cron route passes in its own fulfil operation, so this module never
+ * imports the fulfillment (and its admin/credential graph) itself: the
+ * event-pipeline boundary keeps that authority on the route.
+ */
+type RecoverWalletPaidVtuDeps = Partial<typeof defaultDeps> & {
+  fulfil: typeof fulfillPendingVtuTransaction;
 };
 
 /**
@@ -51,8 +59,9 @@ export async function recoverWalletPaidVtuPurchases(
     /** The invocation's hard stop (epoch ms); unset runs without a budget. */
     deadlineMs?: number;
   },
-  deps: typeof defaultDeps = defaultDeps
+  overrides: RecoverWalletPaidVtuDeps
 ): Promise<RecoverWalletPaidVtuSummary> {
+  const deps = { ...defaultDeps, ...overrides };
   const summary: RecoverWalletPaidVtuSummary = {
     checked: 0,
     recovered: 0,

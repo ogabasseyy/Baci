@@ -32,8 +32,7 @@ export function BlackFridayHeroSlide({
           locations={[0, 0.34, 0.57]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
         />
         <Text
           accessibilityElementsHidden

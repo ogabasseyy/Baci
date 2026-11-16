@@ -16,6 +16,10 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
+vi.mock('@/lib/vtu-fulfillment', () => ({
+  fulfillPendingVtuTransaction: vi.fn(),
+}));
+
 vi.mock('@/lib/vtu-processing-reconciliation', () => ({
   reconcileProcessingVtuTransactions: vi.fn(),
 }));
@@ -32,6 +36,7 @@ vi.mock('@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases', () => ({
 import { getCronSecret } from '@/env';
 import { logger } from '@/lib/logger';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
 import { recoverWalletPaidVtuPurchases } from '@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases';
 import { GET, maxDuration } from './route';
@@ -118,11 +123,16 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     const response = await GET(createCronRequest());
 
     expect(response.status).toBe(200);
-    expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith({
-      supabase: { admin: true },
-      // The recovery shares the invocation's deadline (Codex P2).
-      deadlineMs: expect.any(Number),
-    });
+    expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith(
+      {
+        supabase: { admin: true },
+        // The recovery shares the invocation's deadline (Codex P2).
+        deadlineMs: expect.any(Number),
+      },
+      // The route owns the fulfil operation; the recovery module never
+      // imports it (event-pipeline boundary).
+      { fulfil: fulfillPendingVtuTransaction }
+    );
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith({
       message: 'PiggyVest-paid VTU recovery completed with errors',

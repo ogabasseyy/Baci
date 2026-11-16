@@ -362,7 +362,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        # Keep in step with --shard=N/10 in .github/scripts/run-ci-web-shard.sh. 6 -> 10 on 2026-11-15:
+        # the slowest of six shards took 9-12 min while the fastest took ~7.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -430,6 +432,11 @@ jobs:
           SUPABASE_CLI_SHA256: 31ee8a152e9c8c8eddae072c6bc7c9119748a96c8cdaf21a6d31c9ce7e62cc18
           SUPABASE_CLI_VERSION: 2.111.0
         run: bash .github/scripts/install-supabase-replay-toolchain.sh
+      # The ~50 s pinned-image download runs while the PostgreSQL suites below run; the
+      # "Prepare pinned Supabase database image" step waits for it before the replay needs it.
+      - name: Start pinned Supabase database image download
+        id: replay-image-start
+        run: bash .github/scripts/background-step.sh start replay-image bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test reviewed commerce cart checkout product names
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Test shared cart validated-price order binding
@@ -440,8 +447,6 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_cart_provider_dispatch_fence.py
       - name: Test agentic DVA provider-success evidence boundary
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_dva_provider_success_evidence.py
-      - name: Prepare pinned Supabase database image
-        run: bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test loyalty checkout replay fixture against PostgreSQL
         env:
           PG_BINDIR: /usr/lib/postgresql/18/bin
@@ -481,6 +486,16 @@ jobs:
       # all surface here (e.g. the id_snapshot 23505 caught pre-merge),
       # so replay sql-check is sufficient for the order-offer and
       # product-request suites without a second disposable runner.
+      - name: Prepare pinned Supabase database image
+        # Also after an earlier step failed, so the download's output is always shown, but only
+        # when the download was started (as with the builder auth suite in quality-typecheck).
+        if: ${{ !cancelled() && steps.replay-image-start.outcome == 'success' }}
+        # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
+        run: bash .github/scripts/background-step.sh wait replay-image ${{ job.status == 'failure' && 60 || 900 }}
+      - name: Stop pinned Supabase database image download
+        # A cancelled job skips the wait above; stop the detached download so it cannot run on.
+        if: ${{ always() && steps.replay-image-start.outcome == 'success' }}
+        run: bash .github/scripts/background-step.sh stop replay-image
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological
@@ -654,6 +669,8 @@ jobs:
         run: bash .github/scripts/check-mobile-gem-floors.test.sh
       - name: Verify Mobile Gem Floors
         run: bash .github/scripts/check-mobile-gem-floors.sh
+      - name: Test background CI step helper
+        run: node --test .github/scripts/background-step.test.mjs
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs

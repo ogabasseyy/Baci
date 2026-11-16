@@ -3,7 +3,6 @@ import {
   type ImeiDeviceCategory,
   type ImeiReport,
   type ImeiServiceTierKey,
-  isValidDeviceIdentifier,
   resolveImeiReportDevice,
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
@@ -136,10 +135,8 @@ export function useImeiCheckFlow(
     if (submitting.current || pendingLookup.pending) return;
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
-    if (!isValidDeviceIdentifier(imei, serviceTier.identifier)) {
-      imeiCheckScreenActions.alertInvalidIdentifier(serviceTier.identifier);
-      return;
-    }
+    if (!imeiCheckScreenActions.isValidFor(imei, serviceTier, device))
+      return setError(imeiCheckScreenActions.invalidFor(serviceTier, device));
     const decision = await decideImeiVerify({
       retainedStoreCredit: requestIdentity.retains(tier, imei, device),
       retainsPiggyvest: () => walletPay.retains(tier, imei),
@@ -282,6 +279,10 @@ export function useImeiCheckFlow(
     handleReset,
     clearError() {
       setError(null);
+    },
+    /** Typing a new number drops only the invalid-number message. */
+    dropInvalidIdentifierError() {
+      setError(imeiCheckScreenActions.dropInvalidIdentifierError);
     },
     /** Shows a completed report from history: nothing is paid again. */
     openReport(report: ImeiReport) {

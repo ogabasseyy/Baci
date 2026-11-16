@@ -2,8 +2,10 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
+import { readImeiLookupStatuses } from './imei-lookup-statuses';
 import { primaryPendingField } from './primary-pending-field';
 import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
+import { markHeldImeiCharges } from './wallet-held-imei-charges';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import {
   primaryBalanceField,
@@ -70,6 +72,7 @@ export async function fetchWalletDataUnbounded(
   merchantId: string,
   userId: string | null
 ): Promise<WalletQueryData> {
+  const loadStartedAt = Date.now();
   if (!customerId && !userId) {
     return getEmptyWalletData();
   }
@@ -234,7 +237,9 @@ export async function fetchWalletDataUnbounded(
   if (walletResult.data?.id) {
     const txResult = await supabase
       .from('customer_wallet_transactions')
-      .select('id, type, amount, description, created_at, source_type')
+      .select(
+        'id, type, amount, description, created_at, source_type, source_id'
+      )
       .eq('wallet_id', walletResult.data.id)
       .eq('merchant_id', merchantId)
       .order('created_at', { ascending: false })
@@ -252,6 +257,12 @@ export async function fetchWalletDataUnbounded(
         }
         return rows;
       }, []);
+      transactionRows = await markHeldImeiCharges(
+        readImeiLookupStatuses(merchantId, resolvedCustomerId),
+        txResult.data,
+        transactionRows,
+        loadStartedAt
+      );
     }
   }
 

@@ -19,13 +19,18 @@ jest.mock('./use-imei-pending-lookup', () => ({
     clearTerminal: jest.fn(),
   }),
 }));
-jest.mock('./imei-check-screen-actions', () => ({
-  imeiCheckScreenActions: {
-    alertInvalidIdentifier: jest.fn(),
-    fundWallet: (...args: unknown[]) => mockFundWallet(...args),
-    networkErrorMessage: () => 'Network error',
-  },
-}));
+jest.mock('./imei-check-screen-actions', () => {
+  const actual = jest.requireActual<
+    typeof import('./imei-check-screen-actions')
+  >('./imei-check-screen-actions');
+  return {
+    imeiCheckScreenActions: {
+      ...actual.imeiCheckScreenActions,
+      fundWallet: (...args: unknown[]) => mockFundWallet(...args),
+      networkErrorMessage: () => 'Network error',
+    },
+  };
+});
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({
     // A funded PiggyVest customer with no store credit.

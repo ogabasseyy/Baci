@@ -327,3 +327,18 @@ it('hides the shown report device and lookup as soon as the account changes', ()
   expect(result.current.resultDevice).toBeNull();
   expect(result.current.resultLookupId).toBeNull();
 });
+
+it('shows an invalid number inline and drops it once the number is edited', async () => {
+  const { result } = renderHook(() =>
+    useImeiCheckFlow('smartphone', 'https://test.invalid')
+  );
+  await act(async () => {
+    await result.current.handleVerify('blacklist', '123');
+  });
+  expect(result.current.error).toBe(
+    'Please enter a valid 15-digit IMEI number.'
+  );
+  expect(mockSubmit).not.toHaveBeenCalled();
+  act(() => result.current.dropInvalidIdentifierError());
+  expect(result.current.error).toBeNull();
+});

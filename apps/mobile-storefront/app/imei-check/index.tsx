@@ -1,11 +1,9 @@
 import { IMEI_SERVICE_TIERS, resolveImeiReportDevice } from '@baci/shared/imei';
-import { View } from 'react-native';
 import { ImeiCheckPager } from '@/components/imei-check/ImeiCheckPager';
-import { ImeiDeviceTabs } from '@/components/imei-check/ImeiDeviceTabs';
-import HeroCard from '@/components/imei-check/imei-check-hero-card';
 import { ImeiCheckPending } from '@/components/imei-check/imei-check-pending';
 import { ImeiCheckResultView } from '@/components/imei-check/imei-check-result-view';
 import { ImeiCheckScreenHeader } from '@/components/imei-check/imei-check-screen-header';
+import { ImeiCheckTop } from '@/components/imei-check/imei-check-top';
 import { ImeiReportHistory } from '@/components/imei-check/imei-report-history';
 import { useImeiCheckFlow } from '@/components/imei-check/use-imei-check-flow';
 import { useImeiDeviceNavigation } from '@/components/imei-check/use-imei-device-navigation';
@@ -14,7 +12,7 @@ import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenS
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useColorScheme } from '@/components/useColorScheme';
 import { WalletPaySheet } from '@/components/wallet-pay/WalletPaySheet';
-import Colors, { SPACING } from '@/constants/Colors';
+import Colors from '@/constants/Colors';
 import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import { resolveStorefrontApiBaseUrl } from '@/lib/storefront-api-url';
 
@@ -56,6 +54,7 @@ export default function ImeiCheckerScreen() {
     handleReset,
     openReport,
     clearError,
+    dropInvalidIdentifierError,
   } = useImeiCheckFlow(selectedDevice, API_BASE_URL);
   // Same rule as fundWallet: not ruled out means a card-only top-up.
   const topUpCardOnly = usePiggyvestCapabilityNow(merchantId) !== false;
@@ -67,23 +66,13 @@ export default function ImeiCheckerScreen() {
       edges={['left', 'right']}
       style={{ backgroundColor: colors.background }}
     >
-      <ImeiCheckScreenHeader textColor={colors.text} />
+      <ImeiCheckScreenHeader
+        step={result ? 'report' : 'pick'}
+        textColor={colors.text}
+        onBackFromReport={handleReset}
+      />
       <WalletPaySheet colors={colors} {...walletPay.sheetProps} />
 
-      <ImeiReportHistory
-        colors={colors}
-        apiBaseUrl={API_BASE_URL}
-        accessToken={session?.access_token}
-        scope={`${merchantId}:${customerId}:${session?.user?.id ?? ''}`}
-        disabled={busy}
-        onOpen={(report) => {
-          // The device tab follows the report, so a follow-up check (and its
-          // PiggyVest key) is made for that report's device.
-          const device = resolveImeiReportDevice(report.tier, report.device);
-          if (device) handleDeviceTab(device);
-          openReport(report);
-        }}
-      />
       {result ? (
         <ImeiCheckResultView
           accessToken={session?.access_token}
@@ -112,22 +101,31 @@ export default function ImeiCheckerScreen() {
         />
       ) : (
         <AppKeyboardContainer style={{ flex: 1 }}>
-          <View
-            style={{
-              paddingHorizontal: SPACING.md,
-              paddingTop: SPACING.sm,
+          <ImeiCheckTop
+            colors={colors}
+            selected={selectedDevice}
+            onSelect={(device) => {
+              clearError();
+              handleDeviceTab(device);
             }}
-          >
-            <HeroCard colors={colors} />
-            <ImeiDeviceTabs
-              colors={colors}
-              selected={selectedDevice}
-              onSelect={(device) => {
-                clearError();
-                handleDeviceTab(device);
-              }}
-            />
-          </View>
+          />
+          <ImeiReportHistory
+            colors={colors}
+            apiBaseUrl={API_BASE_URL}
+            accessToken={session?.access_token}
+            scope={`${merchantId}:${customerId}:${session?.user?.id ?? ''}`}
+            disabled={busy}
+            onOpen={(report) => {
+              // The device tab follows the report, so a follow-up check (and its
+              // PiggyVest key) is made for that report's device.
+              const device = resolveImeiReportDevice(
+                report.tier,
+                report.device
+              );
+              if (device) handleDeviceTab(device);
+              openReport(report);
+            }}
+          />
           {pendingLookup.pending ? (
             <ImeiCheckPending
               colors={colors}
@@ -153,6 +151,7 @@ export default function ImeiCheckerScreen() {
               handlePageSelected(event);
             }}
             onVerify={handleVerify}
+            onEditIdentifier={dropInvalidIdentifierError}
             onTopUpWallet={fundWallet}
           />
         </AppKeyboardContainer>

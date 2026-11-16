@@ -145,3 +145,63 @@ describe('bugfix: empty "Older store credit" shown to a brand-new customer', () 
     expect(screen.getByText('Recent Transactions')).toBeOnTheScreen();
   });
 });
+
+describe('bugfix: a held IMEI charge showed as a finished purchase (walk M3)', () => {
+  const charge = {
+    amount: -500,
+    created_at: '2026-11-15T10:00:00.000Z',
+    description: 'IMEI check',
+    id: 'tx-imei',
+    type: 'redemption' as const,
+  };
+
+  it('marks a held charge as pending, for sight and screen readers', () => {
+    render(
+      <WalletPrimaryContext.Provider value>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          transactions={[{ ...charge, pending: true }]}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.getByText(/· Pending/)).toBeTruthy();
+    expect(screen.getByLabelText(/IMEI check\. Pending\./)).toBeTruthy();
+  });
+
+  it('shows a finished charge without the mark', () => {
+    render(
+      <WalletPrimaryContext.Provider value>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          transactions={[charge]}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.queryByText(/Pending/)).toBeNull();
+  });
+});
+
+describe('bugfix: a refunding IMEI charge read as pending (Muse)', () => {
+  it('says the money is on its way back', () => {
+    render(
+      <WalletPrimaryContext.Provider value>
+        <WalletTransactionHistory
+          colors={Colors.light}
+          transactions={[
+            {
+              amount: -500,
+              created_at: '2026-11-15T10:00:00.000Z',
+              description: 'IMEI check',
+              id: 'tx-imei',
+              type: 'redemption',
+              refunding: true,
+            },
+          ]}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    expect(screen.getByText(/· Refunding/)).toBeTruthy();
+    expect(screen.queryByText(/Pending/)).toBeNull();
+    expect(screen.getByLabelText(/IMEI check\. Refunding\./)).toBeTruthy();
+  });
+});

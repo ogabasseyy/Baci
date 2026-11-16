@@ -74,6 +74,29 @@ describe('useImeiWalletPayableTiers', () => {
     expect(seen[0]).toBe('loading');
   });
 
+  it('bugfix: switching away and back is loading until the new read settles (CodeRabbit)', async () => {
+    let calls = 0;
+    jest.spyOn(global, 'fetch').mockImplementation(() => {
+      calls += 1;
+      // Only the first read answers; later ones stay in flight.
+      return calls === 1
+        ? Promise.resolve({
+            ok: true,
+            json: async () => ({ walletPayableTierKeys: ['basic'] }),
+          } as Response)
+        : new Promise<Response>(() => undefined);
+    });
+    const { result, rerender } = renderHook(
+      ({ device }: { device: 'smartphone' | 'laptop' }) =>
+        useImeiWalletPayableTiers({ ...props, device, canPay: true }),
+      { initialProps: { device: 'smartphone' } }
+    );
+    await waitFor(() => expect(result.current).toEqual(['basic']));
+    rerender({ device: 'laptop' });
+    rerender({ device: 'smartphone' });
+    expect(result.current).toBe('loading');
+  });
+
   it('reads the server list while it is on', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

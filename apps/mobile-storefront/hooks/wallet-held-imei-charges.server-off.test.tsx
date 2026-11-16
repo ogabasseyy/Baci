@@ -1,7 +1,10 @@
 import {
-  markHeldImeiCharges,
   STATUS_READ_TIMEOUT_MS,
   WALLET_RETURN_MARGIN_MS,
+} from './wallet-held-imei-charge-constants';
+import {
+  markHeldImeiCharges,
+  type ReadLookupStatuses,
 } from './wallet-held-imei-charges';
 import { WALLET_LOAD_TIMEOUT_MS } from './wallet-load-deadline';
 import type { Transaction } from './wallet-query';
@@ -15,9 +18,8 @@ const tx = (id: string): Transaction => ({
   source_type: 'imei_wallet_payment',
 });
 
-function client(result: unknown) {
-  const read = jest.fn(async (_ids: string[]) => result as never);
-  return read;
+function client(result: Awaited<ReturnType<ReadLookupStatuses>>) {
+  return jest.fn(async (_ids: string[]) => result);
 }
 
 const raw = [

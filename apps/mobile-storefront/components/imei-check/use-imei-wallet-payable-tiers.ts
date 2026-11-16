@@ -52,6 +52,9 @@ export function useImeiWalletPayableTiers({
       current = false;
       clearTimeout(giveUp);
       controller.abort();
+      // An ended request's answer never stands in for the next one, even
+      // for the same device (CodeRabbit).
+      setAnswer(null);
     };
   }, [apiBaseUrl, canPay, device, requestKey]);
   if (!canPay) return null;

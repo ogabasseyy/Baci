@@ -4,7 +4,7 @@ import {
   FINISHED_STATUSES,
   HELD_STATUSES,
   REFUNDING_STATUS,
-} from './wallet-held-imei-charges';
+} from './wallet-held-imei-charge-constants';
 
 // Pins the app's status classification to the database's allowed values, so
 // a new or renamed IMEI check state fails here instead of silently reading

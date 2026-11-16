@@ -1,33 +1,12 @@
+import {
+  HELD_STATUSES,
+  IMEI_CHARGE_SOURCE,
+  REFUNDING_STATUS,
+  STATUS_READ_TIMEOUT_MS,
+  WALLET_RETURN_MARGIN_MS,
+} from './wallet-held-imei-charge-constants';
 import { WALLET_LOAD_TIMEOUT_MS } from './wallet-load-deadline';
 import type { Transaction } from './wallet-query';
-
-/** IMEI check states where the charge is held: the check has not finished. */
-export const HELD_STATUSES = new Set([
-  'pending',
-  'provider_submitting',
-  'pending_provider',
-  'submission_unknown',
-]);
-
-/** The check failed and its charge is on its way back to the wallet. */
-export const REFUNDING_STATUS = 'refund_pending';
-
-/** Finished states: the row reads as a plain charge (or its refund row). */
-export const FINISHED_STATUSES = new Set([
-  'completed',
-  'wallet_rejected',
-  'failed_error',
-  'refunded_error',
-  'refunded_not_found',
-]);
-
-const IMEI_CHARGE_SOURCE = 'imei_wallet_payment';
-
-/** How long the status read may take before rows show unmarked. */
-export const STATUS_READ_TIMEOUT_MS = 5000;
-
-/** Time kept back from the wallet deadline to return the loaded data. */
-export const WALLET_RETURN_MARGIN_MS = 2000;
 
 /** Reads `id, status` of the customer's own IMEI checks (RLS-scoped). */
 export type ReadLookupStatuses = (
@@ -35,12 +14,33 @@ export type ReadLookupStatuses = (
 ) => PromiseLike<{ data: unknown; error: unknown } | null | undefined>;
 
 function sourceIdOf(row: unknown) {
-  if (!row || typeof row !== 'object') return null;
-  const { id, source_type, source_id } = row as Record<string, unknown>;
+  if (
+    typeof row !== 'object' ||
+    row === null ||
+    !('id' in row) ||
+    !('source_type' in row) ||
+    !('source_id' in row)
+  )
+    return null;
+  const { id, source_type, source_id } = row;
   return source_type === IMEI_CHARGE_SOURCE &&
     typeof id === 'string' &&
     typeof source_id === 'string'
     ? { id, sourceId: source_id }
+    : null;
+}
+
+function lookupStatusOf(lookup: unknown) {
+  if (
+    typeof lookup !== 'object' ||
+    lookup === null ||
+    !('id' in lookup) ||
+    !('status' in lookup)
+  )
+    return null;
+  const { id, status } = lookup;
+  return typeof id === 'string' && typeof status === 'string'
+    ? { id, status }
     : null;
 }
 
@@ -85,11 +85,11 @@ export async function markHeldImeiCharges(
   if (!result || result.error || !Array.isArray(result.data))
     return transactions;
   const stateOf = new Map<string, 'pending' | 'refunding'>();
-  for (const lookup of result.data as unknown[]) {
-    const { id, status } = (lookup ?? {}) as Record<string, unknown>;
-    if (typeof id !== 'string' || typeof status !== 'string') continue;
-    if (HELD_STATUSES.has(status)) stateOf.set(id, 'pending');
-    else if (status === REFUNDING_STATUS) stateOf.set(id, 'refunding');
+  for (const lookup of result.data) {
+    const row = lookupStatusOf(lookup);
+    if (!row) continue;
+    if (HELD_STATUSES.has(row.status)) stateOf.set(row.id, 'pending');
+    else if (row.status === REFUNDING_STATUS) stateOf.set(row.id, 'refunding');
   }
   const stateOfTransaction = new Map(
     charges.flatMap((charge) => {

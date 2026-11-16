@@ -149,3 +149,17 @@ it('keeps comparison order stable after selecting an alternative', () => {
     screen.getAllByRole('radio').map((e) => e.props.accessibilityLabel)
   ).toEqual(before);
 });
+
+it('names the folded checks for screen readers (Muse)', () => {
+  render(
+    <ImeiCheckServiceSelector
+      {...baseProps}
+      displayedTierKeys={['basic', 'appleBasic', 'serialInfo']}
+      selectedTier="basic"
+    />
+  );
+  expect(screen.getByLabelText('More Device details options')).toHaveProp(
+    'accessibilityHint',
+    'Apple Basic Info, Serial Info'
+  );
+});

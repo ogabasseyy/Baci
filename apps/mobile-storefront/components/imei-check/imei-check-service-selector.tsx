@@ -216,6 +216,8 @@ function GroupFoldRow({
       accessibilityLabel={
         open ? `Fewer ${groupLabel} options` : `More ${groupLabel} options`
       }
+      // Screen readers hear which checks are folded away, not just a count.
+      accessibilityHint={open ? undefined : hiddenNames.join(', ')}
       accessibilityState={{ expanded: open }}
       onPress={onPress}
       style={[styles.moreRow, { borderTopColor: colors.border }]}
@@ -233,7 +235,7 @@ function GroupFoldRow({
         </Text>
         {open ? null : (
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             style={[styles.moreNames, { color: colors.textSecondary }]}
           >
             {hiddenNames.join(' · ')}

@@ -46,7 +46,6 @@ export function ImeiCheckResultView({
   const verdict = getImeiEffectiveVerdict(result);
   const statusCards = getImeiResultStatusCards(
     result,
-    colors,
     currentTier.checksIncluded
   );
 

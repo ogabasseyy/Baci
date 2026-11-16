@@ -1,7 +1,6 @@
 import type { ImeiCheckField } from '@baci/shared/imei';
 import type { IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import type { ImeiResult } from '@/lib/validation';
-import type { ImeiCheckerColors } from './imei-check.types';
 
 export interface ImeiResultStatusCard {
   cleanAware?: boolean;
@@ -9,13 +8,11 @@ export interface ImeiResultStatusCard {
   blacklist?: boolean;
   icon: IoniconsIconName;
   label: string;
-  tint?: string;
   value: string;
 }
 
 export function getImeiResultStatusCards(
   result: ImeiResult,
-  colors: ImeiCheckerColors,
   checksIncluded: readonly ImeiCheckField[]
 ): ImeiResultStatusCard[] {
   // The core status cards render "Unknown" when the provider omits them, so
@@ -37,7 +34,6 @@ export function getImeiResultStatusCards(
     optionalStatusCard(result.activationStatus, {
       icon: 'sparkles',
       label: 'Activation Status',
-      tint: colors.primary,
     }),
     optionalStatusCard(result.miLockStatus, {
       cleanAware: true,
@@ -71,7 +67,6 @@ export function getImeiResultStatusCards(
       ? {
           icon: 'globe' as const,
           label: 'SIM Lock',
-          tint: colors.primary,
           value: result.simLock,
         }
       : null,
@@ -79,29 +74,24 @@ export function getImeiResultStatusCards(
       ? {
           icon: 'cellular' as const,
           label: 'Carrier',
-          tint: colors.accent,
           value: result.carrier,
         }
       : null,
     optionalStatusCard(result.serialNumber, {
       icon: 'barcode-outline',
       label: 'Serial Number',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.purchaseDate, {
       icon: 'calendar-outline',
       label: 'Purchase Date',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.purchaseCountry, {
       icon: 'earth-outline',
       label: 'Purchase Country',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.warranty, {
       icon: 'shield-checkmark-outline',
       label: 'Warranty',
-      tint: colors.success,
     }),
     optionalStatusCard(result.refurbished, {
       cleanAware: true,
@@ -124,16 +114,14 @@ export function getImeiResultStatusCards(
       label: 'Knox Guard',
     }),
     optionalStatusCard(result.gsxCoverage, {
-      // Neutral tint: gsxCoverage is raw Sickw text that can read
+      // Neutral: gsxCoverage is raw provider text that can read
       // "Expired"/"Out of Coverage", so a fixed success green would mislead.
       icon: 'shield-checkmark-outline',
       label: 'Coverage',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.repairEligibility, {
       icon: 'build-outline',
       label: 'Repair Eligibility',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.repairHistory, {
       cleanAware: true,
@@ -148,12 +136,10 @@ export function getImeiResultStatusCards(
     optionalStatusCard(result.partNumber, {
       icon: 'pricetag-outline',
       label: 'Part Number',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.esimCompatibility, {
       icon: 'radio-outline',
       label: 'eSIM Compatibility',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.financeStatus, {
       cleanAware: true,
@@ -168,17 +154,14 @@ export function getImeiResultStatusCards(
     optionalStatusCard(result.soldBy, {
       icon: 'business-outline',
       label: 'Sold By',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.wifiMac, {
       icon: 'wifi-outline',
       label: 'Wi-Fi MAC',
-      tint: colors.textSecondary,
     }),
     optionalStatusCard(result.devicePhoto, {
       icon: 'image-outline',
       label: 'Device Photo',
-      tint: colors.textSecondary,
     }),
   ].filter((card): card is ImeiResultStatusCard => Boolean(card));
 }

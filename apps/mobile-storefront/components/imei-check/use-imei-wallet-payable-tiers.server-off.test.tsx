@@ -1,5 +1,8 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
-import { useImeiWalletPayableTiers } from './use-imei-wallet-payable-tiers';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import {
+  PAYABLE_TIERS_TIMEOUT_MS,
+  useImeiWalletPayableTiers,
+} from './use-imei-wallet-payable-tiers';
 
 const props = { apiBaseUrl: 'https://api.test', device: 'smartphone' as const };
 
@@ -28,6 +31,23 @@ describe('useImeiWalletPayableTiers', () => {
     await waitFor(() => expect(result.current).toEqual(['basic']));
     rerender({ canPay: false });
     expect(result.current).toBeNull();
+  });
+
+  it('bugfix: a server that never answers falls back to the app rule (Codex P2)', () => {
+    jest.useFakeTimers();
+    try {
+      jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() => new Promise<Response>(() => undefined));
+      const { result } = renderHook(() =>
+        useImeiWalletPayableTiers({ ...props, canPay: true })
+      );
+      expect(result.current).toBe('loading');
+      act(() => jest.advanceTimersByTime(PAYABLE_TIERS_TIMEOUT_MS));
+      expect(result.current).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('reads the server list while it is on', async () => {

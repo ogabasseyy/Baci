@@ -146,11 +146,14 @@ export function useImeiWalletPay({
   return {
     sheet,
     /**
-     * True while the wallet is being re-read with paying from PiggyVest on:
-     * the cached store credit may be out of date, and store credit must pay
-     * first whenever it covers the check. Always false while switched off.
+     * True while the wallet is being re-read, or the payable checks are
+     * still loading, with paying from PiggyVest on: Verify must not pick a
+     * top-up before it knows the wallet can pay (Codex P2). Always false
+     * while switched off.
      */
-    waitsForWallet: canPay && walletQuery.isRefetching === true,
+    waitsForWallet:
+      canPay &&
+      (walletQuery.isRefetching === true || payableTiers === 'loading'),
     /** Everything WalletPaySheet needs besides colors. */
     sheetProps: {
       purchase: 'IMEI check',

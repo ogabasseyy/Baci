@@ -304,6 +304,15 @@ describe('bugfix: the app ignored the server list of wallet-payable checks (walk
     expect(setup().result.current.covers('basic')).toBe(false);
   });
 
+  it('bugfix: Verify waits while the list loads instead of choosing a top-up (Codex P2)', () => {
+    payable.mockReturnValue('loading');
+    expect(setup().result.current.waitsForWallet).toBe(true);
+    payable.mockReturnValue(['basic']);
+    expect(setup().result.current.waitsForWallet).toBe(false);
+    payable.mockReturnValue('loading');
+    expect(setup(false).result.current.waitsForWallet).toBe(false);
+  });
+
   it('asks for the list with the screen device and switch', () => {
     setup(false);
     expect(payable).toHaveBeenLastCalledWith({

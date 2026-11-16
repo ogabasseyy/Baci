@@ -9,6 +9,8 @@ import { fetchImeiWalletPayableTiers } from '@/lib/imei-wallet-payable-tiers';
  * list); null when the read fails or the server doesn't say, so the app
  * keeps its own rule and the server still refuses what it can't bill.
  */
+export const PAYABLE_TIERS_TIMEOUT_MS = 8000;
+
 export function useImeiWalletPayableTiers({
   apiBaseUrl,
   canPay,
@@ -27,19 +29,30 @@ export function useImeiWalletPayableTiers({
       return;
     }
     const controller = new AbortController();
+    let current = true;
+    const settle = (tiers: readonly ImeiServiceTierKey[] | null) => {
+      if (current) setPayableTiers(tiers);
+      current = false;
+    };
+    // Verify waits while this loads, so a slow server falls back to the
+    // app rule instead of holding the button forever.
+    const giveUp = setTimeout(() => {
+      settle(null);
+      controller.abort();
+    }, PAYABLE_TIERS_TIMEOUT_MS);
     setPayableTiers('loading');
     fetchImeiWalletPayableTiers({
       device,
       apiBaseUrl,
       signal: controller.signal,
     })
-      .then((tiers) => {
-        if (!controller.signal.aborted) setPayableTiers(tiers);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setPayableTiers(null);
-      });
-    return () => controller.abort();
+      .then(settle, () => settle(null))
+      .finally(() => clearTimeout(giveUp));
+    return () => {
+      current = false;
+      clearTimeout(giveUp);
+      controller.abort();
+    };
   }, [apiBaseUrl, canPay, device]);
   return payableTiers;
 }

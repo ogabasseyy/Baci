@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -94,6 +94,49 @@ test('a timed-out wait also stops grandchildren of the command where setsid exis
     const stopDeadline = Date.now() + 5_000;
     while (isAlive(pid) && Date.now() < stopDeadline) spawnSync('sleep', ['0.1']);
     assert.equal(isAlive(pid), false);
+  });
+});
+
+test('a timed-out wait kills a command that ignores TERM', () => {
+  withTemp((run, dir) => {
+    const stubbornPid = join(dir, 'stubborn.pid');
+    run('start', 'stubborn-step', 'bash', '-c', `echo $$ > ${stubbornPid}; trap '' TERM; while :; do sleep 0.2; done`);
+    const deadline = Date.now() + 5_000;
+    let pid = 0;
+    while (!pid && Date.now() < deadline) {
+      try {
+        pid = Number(readFileSync(stubbornPid, 'utf8'));
+      } catch {
+        spawnSync('sleep', ['0.1']);
+      }
+    }
+    assert.ok(pid > 0, 'stubborn command started');
+    const result = run('wait', 'stubborn-step', '1');
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /sending KILL/);
+    const stopDeadline = Date.now() + 5_000;
+    while (isAlive(pid) && Date.now() < stopDeadline) spawnSync('sleep', ['0.1']);
+    assert.equal(isAlive(pid), false);
+  });
+});
+
+test('start fails when the background command cannot be launched', () => {
+  withTemp((run, dir) => {
+    // A PATH with every tool the helper needs except nohup: the spawn fails, so start must fail
+    // now instead of at the wait timeout.
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    for (const tool of ['bash', 'mkdir', 'rm', 'seq', 'sleep', 'cat']) {
+      const found = spawnSync('sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim();
+      symlinkSync(found, join(bin, tool));
+    }
+    const result = spawnSync(join(bin, 'bash'), [script, 'start', 'no-launch', 'true'], {
+      encoding: 'utf8',
+      env: { PATH: bin, RUNNER_TEMP: dir },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /did not start/);
+    assert.equal(run('wait', 'no-launch', '1').status, 1);
   });
 });
 

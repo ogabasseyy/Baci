@@ -30,6 +30,41 @@ status="$dir/$name.status"
 started="$dir/$name.started"
 pidfile="$dir/$name.pid"
 
+# The step's process tree: its group (setsid on Linux) when that exists, otherwise the PID and all
+# its descendants, collected once so a child that outlives its parent is still tracked.
+step_pids() {
+  local queue=("$1") pids=() next
+  while ((${#queue[@]})); do
+    next="${queue[0]}"
+    queue=("${queue[@]:1}")
+    pids+=("$next")
+    while read -r child; do [[ -n "$child" ]] && queue+=("$child"); done < <(pgrep -P "$next" 2> /dev/null || true)
+  done
+  echo "${pids[@]}"
+}
+
+# TERM first; KILL whatever ignores it after a 5 s grace period.
+stop_step() {
+  local leader="$1" pids alive
+  if kill -0 -- "-$leader" 2> /dev/null; then
+    kill -TERM -- "-$leader" 2> /dev/null || true
+    for _ in $(seq 1 50); do kill -0 -- "-$leader" 2> /dev/null || return 0; sleep 0.1; done
+    echo "background step still running 5s after TERM; sending KILL" >&2
+    kill -KILL -- "-$leader" 2> /dev/null || true
+    return 0
+  fi
+  read -r -a pids <<< "$(step_pids "$leader")"
+  kill -TERM "${pids[@]}" 2> /dev/null || true
+  for _ in $(seq 1 50); do
+    alive=false
+    for pid in "${pids[@]}"; do kill -0 "$pid" 2> /dev/null && alive=true; done
+    [[ "$alive" == true ]] || return 0
+    sleep 0.1
+  done
+  echo "background step still running 5s after TERM; sending KILL" >&2
+  kill -KILL "${pids[@]}" 2> /dev/null || true
+}
+
 case "$action" in
   start)
     [[ $# -ge 1 ]] || usage
@@ -48,6 +83,11 @@ case "$action" in
     nohup ${launcher[@]+"${launcher[@]}"} bash -c 'echo $$ > "${0%.log}.pid"; "$@" > "$0" 2>&1; echo $? > "$0.status.tmp"; mv "$0.status.tmp" "${0%.log}.status"' \
       "$log" "$@" > /dev/null 2>&1 &
     for _ in $(seq 1 50); do [[ -s "$pidfile" ]] && break; sleep 0.1; done
+    if [[ ! -s "$pidfile" ]]; then
+      echo "background step '$name' did not start (no PID after 5s)" >&2
+      rm -f "$started"
+      exit 1
+    fi
     echo "Started background step '$name'"
     ;;
   wait)
@@ -58,10 +98,7 @@ case "$action" in
     while [[ ! -f "$status" ]]; do
       if (( waited >= timeout )); then
         echo "background step '$name' still running after ${timeout}s; stopping it" >&2
-        if [[ -f "$pidfile" ]]; then
-          pid="$(cat "$pidfile")"
-          kill -TERM -- "-$pid" 2> /dev/null || { pkill -TERM -P "$pid" 2> /dev/null || true; kill -TERM "$pid" 2> /dev/null || true; }
-        fi
+        [[ -s "$pidfile" ]] && stop_step "$(cat "$pidfile")"
         [[ -f "$log" ]] && cat "$log"
         exit 1
       fi

@@ -9,11 +9,12 @@ import Ionicons, {
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BRAND, withAlpha } from '@/constants/Colors';
-import { ImeiTicketNotch, imeiCareIcon } from './imei-care-look';
+import { imeiCareIcon } from './imei-care-icon';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { pickerStyles as styles } from './imei-check-picker.styles';
 import { ImeiCheckTierRow } from './imei-check-tier-row';
 import { ImeiServiceDetailsSheet } from './imei-service-details-sheet';
+import { ImeiTicketNotch } from './imei-ticket-notch';
 
 const GROUP_ICONS: Record<string, IoniconsIconName> = {
   details: 'phone-portrait-outline',

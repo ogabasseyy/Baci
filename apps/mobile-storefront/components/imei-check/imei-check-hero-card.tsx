@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import { SPACING } from '@/constants/Colors';
-import { IMEI_CARE } from './imei-care-look';
+import { IMEI_CARE } from './imei-care-palette';
 
 const IMEI_TRUST_INDICATORS = [
   '15-digit check',

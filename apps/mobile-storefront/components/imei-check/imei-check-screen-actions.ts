@@ -1,6 +1,7 @@
 import {
   IMEI_IDENTIFIER_BY_DEVICE,
   type ImeiDeviceCategory,
+  isValidDeviceIdentifier,
   resolveInputIdentifier,
 } from '@baci/shared/imei';
 import { router } from 'expo-router';
@@ -28,6 +29,17 @@ export const imeiCheckScreenActions = {
       : identifier === 'imei'
         ? 'Please enter a valid 15-digit IMEI number.'
         : 'Please enter a valid IMEI or serial number.';
+  },
+  /** Same rule as the field: the check's identifier as this tab takes it. */
+  isValidFor(
+    imei: string,
+    tier: { identifier: 'imei' | 'serial' | 'both' },
+    device: ImeiDeviceCategory
+  ) {
+    return isValidDeviceIdentifier(
+      imei,
+      resolveInputIdentifier(tier.identifier, IMEI_IDENTIFIER_BY_DEVICE[device])
+    );
   },
   /** The invalid-number message for a check on this device tab. */
   invalidFor(

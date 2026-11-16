@@ -64,8 +64,8 @@ export const formStyles = StyleSheet.create({
     gap: SPACING.sm,
     height: 54,
     paddingHorizontal: SPACING.md,
-    borderWidth: 1.5,
-    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderRadius: 12,
   },
   imeiInput: {
     flex: 1,

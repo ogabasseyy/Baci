@@ -58,4 +58,11 @@ describe('ImeiCheckTierRow', () => {
     );
     expect(screen.getByText('Best value')).toBeOnTheScreen();
   });
+
+  it('keeps the info button outside the selectable area (Muse)', () => {
+    renderRow(false);
+    const row = screen.getByRole('radio', { name: 'Stolen Check, ₦700' });
+    const info = screen.getByLabelText('What Stolen Check includes');
+    expect(row).not.toContainElement(info);
+  });
 });

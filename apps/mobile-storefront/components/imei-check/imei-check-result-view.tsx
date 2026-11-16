@@ -10,13 +10,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ImeiResult } from '@/lib/validation';
-import { ImeiTicketNotch } from './imei-care-look';
 import type { ImeiCheckerColors } from './imei-check.types';
 import { reportStyles as styles } from './imei-check-report.styles';
 import { getImeiResultStatusCards } from './imei-check-result-status-cards';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
 import { ImeiResultStatusList } from './imei-result-status-list';
 import { ImeiResultVerdictBanner } from './imei-result-verdict-banner';
+import { ImeiTicketNotch } from './imei-ticket-notch';
 
 interface ImeiCheckResultViewProps {
   accessToken?: string;

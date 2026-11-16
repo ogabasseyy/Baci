@@ -62,6 +62,17 @@ describe('imeiCheckScreenActions.invalidIdentifierMessage', () => {
     ).toBe('Please enter a valid device serial number.');
   });
 
+  it('validates on submit with the same rule as the field (Muse)', () => {
+    const both = { identifier: 'both' as const };
+    // A valid 15-digit IMEI: fine on a phone, not on a serial-only Mac tab.
+    expect(
+      imeiCheckScreenActions.isValidFor('490154203237518', both, 'smartphone')
+    ).toBe(true);
+    expect(
+      imeiCheckScreenActions.isValidFor('490154203237518', both, 'laptop')
+    ).toBe(false);
+  });
+
   it('asks for the 15-digit IMEI for IMEI-only checks', () => {
     expect(imeiCheckScreenActions.invalidIdentifierMessage('imei')).toBe(
       'Please enter a valid 15-digit IMEI number.'

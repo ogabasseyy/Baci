@@ -1,8 +1,4 @@
-import {
-  IMEI_SERVICE_TIERS,
-  type ImeiServiceTierKey,
-  isValidDeviceIdentifier,
-} from '@baci/shared/imei';
+import { IMEI_SERVICE_TIERS, type ImeiServiceTierKey } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useEffectEvent, useState } from 'react';
@@ -126,7 +122,7 @@ export default function ImeiCheckerScreen() {
     if (isLoading || pendingLookup.pending) return;
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
-    if (!isValidDeviceIdentifier(imei, serviceTier.identifier))
+    if (!imeiCheckScreenActions.isValidFor(imei, serviceTier, selectedDevice))
       return setError(
         imeiCheckScreenActions.invalidFor(serviceTier, selectedDevice)
       );

@@ -29,6 +29,12 @@ export const pickerStyles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 10,
   },
+  rowSelect: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
   radio: {
     alignItems: 'center',
     borderRadius: 11,

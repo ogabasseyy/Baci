@@ -205,9 +205,10 @@ jobs:
       # "Run isolated builder auth tests" below collects its result.
       - name: Start isolated builder auth tests
         id: builder-auth-tests-start
-        run: |
-          bash .github/scripts/background-step.sh start builder-auth pnpm --dir apps/web/tools/builder-auth test
-          node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
+        # Only the spawn: its outcome alone gates the wait and the container cleanup below.
+        run: bash .github/scripts/background-step.sh start builder-auth pnpm --dir apps/web/tools/builder-auth test
+      - name: Test builder container label contracts
+        run: node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
       - name: Run Typecheck
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then

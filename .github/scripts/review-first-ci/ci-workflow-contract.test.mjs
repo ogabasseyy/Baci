@@ -152,7 +152,9 @@ describe('background steps (2026-11-16)', () => {
       const start = steps.find((step) => step.name === startName);
       const wait = steps.find((step) => step.name === waitName);
       assert.ok(start?.id, `${startName} needs an id`);
-      assert.match(start.run, /background-step\.sh start /);
+      // The start step only spawns: a failure in other work there would skip the wait and cleanup
+      // while the background command keeps running.
+      assert.match(start.run, /^bash \.github\/scripts\/background-step\.sh start [^\n]+$/);
       assert.match(wait.run, /background-step\.sh wait /);
       assert.ok(steps.indexOf(wait) > steps.indexOf(start));
       assert.match(wait.if, /!cancelled\(\)/);

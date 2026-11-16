@@ -37,6 +37,7 @@ describe('useQuizResultPolling realtime and availability scheduling', () => {
   });
 
   it('uses the fallback when no publication wakeup arrives and then stops', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5); // centre: exactly 30 s
     const onResult = jest.fn();
     jest
       .mocked(fetchQuizResult)

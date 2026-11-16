@@ -50,7 +50,8 @@ function getPendingPollDelayMs(
   if (Number.isFinite(availableAtMs)) {
     return getStableFallbackDelayMs(attemptId);
   }
-  return QUIZ_RESULT_POLL_MAX_INTERVAL_MS;
+  // No time given: same slow fallback, spread for the same reason.
+  return withSpread(QUIZ_RESULT_POLL_MAX_INTERVAL_MS);
 }
 
 // 5 s doubling to 30 s, with +/- 20% spread so phones that failed the same

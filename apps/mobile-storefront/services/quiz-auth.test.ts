@@ -52,7 +52,9 @@ describe('quiz service authentication and transport errors', () => {
         error: { message: 'network timeout' },
       })
       .mockResolvedValueOnce({
-        data: { session: { access_token: 'token-123' } },
+        data: {
+          session: { access_token: 'token-123', user: { id: 'user-1' } },
+        },
         error: null,
       });
     mockFetch.mockResolvedValueOnce(
@@ -86,29 +88,49 @@ describe('quiz service authentication and transport errors', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fails closed when the mobile bearer token cannot be validated', async () => {
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: null },
-      error: { message: 'token invalid' },
-    });
+  it('does not ask Supabase Auth to validate the token: the server does', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ entryMode: 'free-v1', events: [] }), {
+        status: 200,
+      })
+    );
 
     await expect(
       fetchQuizEvents({ baseUrl: 'https://example.com' })
-    ).rejects.toMatchObject({ code: 'QUIZ_AUTH_REQUIRED', status: 401 });
-    expect(mockGetUser).toHaveBeenCalledTimes(1);
+    ).resolves.toEqual([]);
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockGetUser).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the stored session has a token but never a user', async () => {
+    jest.useFakeTimers();
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'token-123' } },
+    });
+
+    const resultPromise = fetchQuizEvents({ baseUrl: 'https://example.com' });
+    const expectation = expect(resultPromise).rejects.toMatchObject({
+      code: 'QUIZ_AUTH_REQUIRED',
+      status: 401,
+    });
+    await jest.advanceTimersByTimeAsync(300);
+    await expectation;
+
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+    expect(mockGetUser).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('retries transient mobile bearer token validation errors once', async () => {
+  it('retries once when the stored session has a token but no user yet', async () => {
     jest.useFakeTimers();
-    mockGetUser
+    mockGetSession
       .mockResolvedValueOnce({
-        data: { user: null },
-        error: { message: 'network timeout' },
+        data: { session: { access_token: 'token-123' } },
       })
       .mockResolvedValueOnce({
-        data: { user: { id: 'user-1' } },
-        error: null,
+        data: {
+          session: { access_token: 'token-123', user: { id: 'user-1' } },
+        },
       });
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ entryMode: 'free-v1', events: [] }), {
@@ -121,11 +143,7 @@ describe('quiz service authentication and transport errors', () => {
 
     await expect(resultPromise).resolves.toEqual([]);
     expect(mockGetSession).toHaveBeenCalledTimes(2);
-    expect(mockGetUser).toHaveBeenCalledTimes(2);
-    expect(mockLogWarn).toHaveBeenCalledWith(
-      'Unable to validate quiz auth session',
-      expect.objectContaining({ attempt: 1, message: 'network timeout' })
-    );
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 
   it('propagates network-level fetch failures', async () => {

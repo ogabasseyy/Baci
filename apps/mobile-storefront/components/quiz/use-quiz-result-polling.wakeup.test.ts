@@ -27,8 +27,8 @@ const pendingUntil = (availableAt: string | null): QuizV2Result => ({
   availability: 'pending',
   availableAt,
 });
-// With no availability time the next ordinary poll is 30 s away, so any
-// earlier request in these tests can only come from the wake-up.
+// With no availability time the next ordinary poll is at least 24 s away,
+// so any earlier request in these tests can only come from the wake-up.
 const pendingResult = pendingUntil(null);
 
 describe('useQuizResultPolling wake-up and ordinary polls', () => {
@@ -182,10 +182,15 @@ describe('useQuizResultPolling wake-up and ordinary polls', () => {
     expect(fetchQuizResult).toHaveBeenCalledTimes(3);
   });
 
-  it('spreads the capped poll for a far-off event end between 24 s and 36 s', async () => {
+  it.each([
+    [
+      'a far-off event end',
+      () => new Date(Date.now() + 3_600_000).toISOString(),
+    ],
+    ['no availability time', () => null],
+  ])('spreads the slow fallback poll for %s between 24 s and 36 s', async (_case, availableAt) => {
     const random = jest.spyOn(Math, 'random').mockReturnValue(0);
-    const farOff = new Date(Date.now() + 60 * 60 * 1_000).toISOString();
-    jest.mocked(fetchQuizResult).mockResolvedValue(pendingUntil(farOff));
+    jest.mocked(fetchQuizResult).mockResolvedValue(pendingUntil(availableAt()));
     renderWakeupHook();
     await advance(0);
 

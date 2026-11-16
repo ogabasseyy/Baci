@@ -1,5 +1,8 @@
+import { createLogger } from '@/lib/logger';
 import { quizAttestationChallengeResponseSchema } from '@/schemas/quiz-attestation-schemas';
 import { requestQuizV2 } from '@/services/quiz-request';
+
+const log = createLogger('QuizAttestation');
 
 export const QUIZ_APP_CHECK_HEADER = 'X-Firebase-AppCheck';
 export const QUIZ_ATTESTATION_NONCE_HEADER = 'X-Baci-Quiz-Attestation-Nonce';
@@ -54,7 +57,9 @@ export async function getQuizAttestationHeaders(
       [QUIZ_APP_CHECK_HEADER]: token,
       [QUIZ_ATTESTATION_NONCE_HEADER]: challenge.nonce,
     };
-  } catch {
+  } catch (error) {
+    // Keep the real cause visible in dev logs; the server decides the outcome.
+    log.warn('Could not obtain a quiz attestation', error);
     return null;
   }
 }

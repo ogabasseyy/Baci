@@ -107,7 +107,14 @@ case "$action" in
     while [[ ! -f "$status" ]]; do
       if (( waited >= timeout )); then
         echo "background step '$name' still running after ${timeout}s; stopping it" >&2
-        [[ -s "$pidfile" ]] && stop_step "$(cat "$pidfile")"
+        # Only while that PID is still this step's shell (its arguments carry this step's log path),
+        # never a process that reused the PID.
+        if [[ -s "$pidfile" ]]; then
+          pid="$(cat "$pidfile")"
+          if ps -o args= -p "$pid" 2> /dev/null | grep -qF -- "$log"; then
+            stop_step "$pid"
+          fi
+        fi
         [[ -f "$log" ]] && cat "$log"
         exit 1
       fi

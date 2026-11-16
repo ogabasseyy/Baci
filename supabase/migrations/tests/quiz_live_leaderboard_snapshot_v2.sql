@@ -205,15 +205,20 @@ BEGIN
   SET LOCAL session_replication_role = origin;
   PERFORM pg_temp.expect('published count without a snapshot row is counted',
     public.get_quiz_participant_count_public_v2(v_event) = 3);
-  -- With a snapshot row, the first read stores the number ranked...
-  PERFORM pg_temp.board();
-  PERFORM pg_temp.expect('published count with a snapshot row',
-    public.get_quiz_participant_count_public_v2(v_event) = 3);
-  -- (A separate statement: the one above cannot see its own function's write.)
+  -- The first read stores the number ranked, in a placeholder row because no
+  -- board exists. (A separate statement: the read above cannot see its own
+  -- function's write.)
   PERFORM pg_temp.expect('published count is stored on the first read',
-    (SELECT snapshot.published_participant_count
+    (SELECT snapshot.published_participant_count = 3
+       AND snapshot.computed_at = '-infinity'::timestamptz
      FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
-     WHERE snapshot.event_id = v_event) = 3);
+     WHERE snapshot.event_id = v_event));
+  -- The board treats the placeholder as "no board yet" and builds a real
+  -- one, which keeps the stored count.
+  PERFORM pg_temp.expect('a placeholder row never serves an empty board',
+    pg_catalog.jsonb_array_length(pg_temp.board()->'entries') = 100);
+  PERFORM pg_temp.expect('published count after the board is built',
+    public.get_quiz_participant_count_public_v2(v_event) = 3);
   -- ...so players whose rows are deleted later still count, whichever rank
   -- they held (a middle rank and the last one here).
   SET LOCAL session_replication_role = replica;
@@ -236,5 +241,12 @@ SELECT pg_temp.expect('function grants',
   AND NOT pg_catalog.has_function_privilege('anon', 'public.get_quiz_live_leaderboard_public_v2(uuid)', 'EXECUTE')
   AND NOT pg_catalog.has_function_privilege('authenticated', 'private.refresh_quiz_live_leaderboard_snapshot_v2(uuid)', 'EXECUTE')
   AND NOT pg_catalog.has_function_privilege('anon', 'public.get_quiz_participant_count_public_v2(uuid)', 'EXECUTE'));
+-- Both read functions bound their own lock waits, whatever the role is set to.
+SELECT pg_temp.expect('read functions set their own lock_timeout',
+  (SELECT pg_catalog.count(*) FROM pg_catalog.pg_proc AS fn
+   WHERE fn.oid IN (
+       'public.get_quiz_live_leaderboard_public_v2(uuid)'::regprocedure,
+       'public.get_quiz_participant_count_public_v2(uuid)'::regprocedure)
+     AND fn.proconfig::text ~ 'lock_timeout=') = 2);
 
 ROLLBACK;

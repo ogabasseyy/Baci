@@ -18,10 +18,12 @@
 -- stores the number in the snapshot row; every later read is one primary-key
 -- lookup, at the moment every phone loads the final board. The stored number
 -- does not change when a ranked player's row is deleted later (ON DELETE
--- CASCADE), whichever rank they held: they still took part. Two limits: an
--- event with no snapshot row (nobody ever opened its live board) stores
--- nothing and counts the result rows on each call; and a manual repair that
--- re-ranks a published event must clear published_participant_count.
+-- CASCADE), whichever rank they held: they still took part. If the event has
+-- no snapshot row yet (its live board was never built), the count is stored
+-- in a placeholder row whose computed_at is -infinity; the board function
+-- treats that as "no board yet" and builds a real one on its first call. One
+-- limit: a manual repair that re-ranks a published event must clear
+-- published_participant_count.
 --
 -- Access is the same as in the function this replaces: any signed-in
 -- customer of the event's merchant. That has always been a lighter gate than
@@ -34,6 +36,7 @@ RETURNS integer
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
+SET lock_timeout = '2s'
 AS $$
 DECLARE
   v_count integer;
@@ -68,14 +71,22 @@ BEGIN
     SELECT pg_catalog.count(*)::integer INTO v_count
     FROM public.quiz_event_results_v2 AS result
     WHERE result.event_id = p_event_id;
-    -- Keep the first count. Concurrent first readers queue on the row and the
-    -- later ones change nothing. A failed write must not fail the read. (A
-    -- statement timeout is not caught by OTHERS and still ends the request.)
+    -- Keep the first count, creating a placeholder row when no board was
+    -- ever built. Concurrent first readers queue on the row and the later
+    -- ones change nothing. A failed or slow write (this function's own
+    -- 2-second lock_timeout) must not fail the read. (A statement timeout is
+    -- not caught by OTHERS and still ends the request.)
     BEGIN
-      UPDATE public.quiz_live_leaderboard_snapshots_v2 AS snapshot
-      SET published_participant_count = v_count
-      WHERE snapshot.event_id = p_event_id
-        AND snapshot.published_participant_count IS NULL;
+      INSERT INTO public.quiz_live_leaderboard_snapshots_v2 AS snapshot (
+        event_id, entries, score_counts, participant_count, computed_at,
+        published_participant_count
+      ) VALUES (
+        p_event_id, '[]'::jsonb, '{}'::jsonb, 0, '-infinity'::timestamptz,
+        v_count
+      )
+      ON CONFLICT (event_id) DO UPDATE
+      SET published_participant_count = EXCLUDED.published_participant_count
+      WHERE snapshot.published_participant_count IS NULL;
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING 'QUIZ_PUBLISHED_COUNT_STORE_FAILED sqlstate=%', SQLSTATE;
     END;

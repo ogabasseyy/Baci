@@ -26,6 +26,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
+SET lock_timeout = '5s'
 AS $$
 DECLARE
   v_ahead bigint;
@@ -77,19 +78,23 @@ BEGIN
   v_lock_key := pg_catalog.hashtextextended(
     'quiz_live_leaderboard_snapshot_v2:' || p_event_id::text, 0
   );
-  IF v_snapshot.event_id IS NULL THEN
+  -- A row whose computed_at is -infinity is only a placeholder left by the
+  -- count function to hold a published count: no board has been built yet.
+  IF v_snapshot.event_id IS NULL
+    OR v_snapshot.computed_at = '-infinity'::timestamptz THEN
     -- First reader of this event: wait for whoever is building the first
     -- snapshot instead of showing an empty board, then build it if nobody did.
     -- Unlike the stale rebuild below, a failure here is not caught: there is
     -- no earlier snapshot to serve, and an empty board with a rank computed
     -- from nothing would be wrong, so the request fails and the app retries.
-    -- The wait for this lock is bounded by the calling role's lock_timeout
-    -- and statement_timeout (8 seconds for API requests in production).
+    -- The wait is bounded by this function's own lock_timeout (5 seconds),
+    -- whatever the calling role is configured with.
     PERFORM pg_catalog.pg_advisory_xact_lock(v_lock_key);
     SELECT snapshot.* INTO v_snapshot
     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
     WHERE snapshot.event_id = p_event_id;
-    IF v_snapshot.event_id IS NULL THEN
+    IF v_snapshot.event_id IS NULL
+      OR v_snapshot.computed_at = '-infinity'::timestamptz THEN
       PERFORM private.refresh_quiz_live_leaderboard_snapshot_v2(p_event_id);
       SELECT snapshot.* INTO v_snapshot
       FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot

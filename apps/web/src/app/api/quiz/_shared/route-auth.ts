@@ -1,11 +1,9 @@
-import type { User } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
-import {
-  authenticateApiRequest,
-  getBearerTokenFromRequest,
-  hasBearerAuthScheme,
-} from '@/lib/api-auth';
+import { getBearerTokenFromRequest, hasBearerAuthScheme } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
+import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
+import { createAnonClient } from '@/lib/supabase/anon';
+import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
 import { mapQuizRpcClientError } from './quiz-rpc-client-errors';
 import type { ServerSupabaseClient } from './route-helpers-guards';
@@ -17,11 +15,21 @@ import type { ServerSupabaseClient } from './route-helpers-guards';
 // whose import graph reaches that credential authority, so this split is load-
 // bearing, not cosmetic.
 
+export type QuizAuthUser = { id: string };
+
+export type RequireQuizUserOptions = {
+  /**
+   * Always ask Supabase Auth (session revocation matters) instead of trusting
+   * a locally verified token. Use for routes that create or claim something.
+   */
+  requireFreshSession?: boolean;
+};
+
 type RequireQuizUserResult =
   | {
       response: null;
       supabase: ServerSupabaseClient;
-      user: User;
+      user: QuizAuthUser;
       authMethod: 'bearer' | 'cookie';
     }
   | {
@@ -77,37 +85,98 @@ function isMissingAuthSession(error: unknown) {
   );
 }
 
+function unauthorizedResult() {
+  return {
+    response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    supabase: null,
+    user: null,
+  } as const;
+}
+
+function authUnavailableResult() {
+  return {
+    // Supabase auth lookup errors are service failures, not bad credentials.
+    response: NextResponse.json(
+      { code: 'auth_unavailable', error: 'Authentication lookup failed' },
+      { status: 503, headers: { 'Retry-After': '5' } }
+    ),
+    supabase: null,
+    user: null,
+  } as const;
+}
+
+// Supabase Auth answers a bad, expired or revoked token with a 4xx. Request
+// timeout (408) and rate limiting (429) are about the service, not the token.
+function isRejectedCredentialError(error: unknown) {
+  const { errorStatus } = getSafeAuthErrorFields(error);
+  return (
+    errorStatus !== undefined &&
+    errorStatus >= 400 &&
+    errorStatus < 500 &&
+    errorStatus !== 408 &&
+    errorStatus !== 429
+  );
+}
+
+async function checkBearerWithSupabaseAuth(
+  token: string
+): Promise<RequireQuizUserResult> {
+  let user: QuizAuthUser | null = null;
+  let error: unknown = null;
+  try {
+    const result = await createAnonClient().auth.getUser(token);
+    user = result.data.user;
+    error = result.error;
+  } catch (thrown) {
+    error = thrown ?? new Error('Auth lookup threw');
+  }
+
+  if (error) {
+    if (isRejectedCredentialError(error)) return unauthorizedResult();
+    logger.error({
+      message: 'Quiz auth lookup failed',
+      ...getSafeAuthErrorFields(error),
+    });
+    return authUnavailableResult();
+  }
+  if (!user) return unauthorizedResult();
+
+  return {
+    authMethod: 'bearer',
+    response: null,
+    // The scoped client is the real Supabase client; this local structural
+    // type only narrows the quiz routes to the methods they use.
+    supabase: createScopedClient(token) as unknown as ServerSupabaseClient,
+    user: { id: user.id },
+  };
+}
+
 export async function requireQuizUser(
-  request?: NextRequest
+  request?: NextRequest,
+  options: RequireQuizUserOptions = {}
 ): Promise<RequireQuizUserResult> {
   const hasBearerScheme = request ? hasBearerAuthScheme(request) : false;
   const bearerToken = request ? getBearerTokenFromRequest(request) : null;
   if (request && hasBearerScheme) {
-    if (!bearerToken) {
-      return {
-        response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-        supabase: null,
-        user: null,
-      };
+    if (!bearerToken) return unauthorizedResult();
+
+    if (options.requireFreshSession) {
+      return checkBearerWithSupabaseAuth(bearerToken);
     }
 
-    const auth = await authenticateApiRequest(request);
-    if (auth.user && auth.supabase) {
+    const verified = await verifyQuizAccessToken(bearerToken);
+    if (verified.status === 'verified') {
       return {
         authMethod: 'bearer',
         response: null,
-        // authenticateApiRequest returns the real Supabase client; this local
-        // structural type only narrows the quiz routes to the methods they use.
-        supabase: auth.supabase as unknown as ServerSupabaseClient,
-        user: auth.user,
+        supabase: createScopedClient(
+          bearerToken
+        ) as unknown as ServerSupabaseClient,
+        user: { id: verified.userId },
       };
     }
-
-    return {
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-      supabase: null,
-      user: null,
-    };
+    if (verified.status === 'invalid') return unauthorizedResult();
+    return checkBearerWithSupabaseAuth(bearerToken);
   }
 
   const supabase = (await createClient()) as unknown as ServerSupabaseClient;
@@ -148,7 +217,12 @@ export async function requireQuizUser(
     };
   }
 
-  return { authMethod: 'cookie', response: null, supabase, user };
+  return {
+    authMethod: 'cookie',
+    response: null,
+    supabase,
+    user: { id: user.id },
+  };
 }
 
 export function invalidInputResponse(details: unknown) {

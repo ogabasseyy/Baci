@@ -12,6 +12,12 @@ const ATTEMPT_LIMIT_ERROR: QuizRpcClientError = {
   status: 409,
 };
 
+const QUIZ_BUSY_ERROR: QuizRpcClientError = {
+  code: 'QUIZ_BUSY',
+  error: 'The quiz is busy. Please try again.',
+  status: 503,
+};
+
 const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
   QZ001: {
     code: 'QUIZ_CUSTOMER_NOT_FOUND',
@@ -130,6 +136,10 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
     error: 'This private test quiz is not available to this account.',
     status: 403,
   },
+  // PostgreSQL lock_not_available (lock timeout) and query_canceled
+  // (statement timeout): the database is overloaded, not the request invalid.
+  '55P03': QUIZ_BUSY_ERROR,
+  '57014': QUIZ_BUSY_ERROR,
 };
 
 export function mapQuizRpcClientError(

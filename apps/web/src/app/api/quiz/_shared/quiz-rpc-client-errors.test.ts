@@ -23,6 +23,17 @@ describe('mapQuizRpcClientError', () => {
     });
   });
 
+  it.each([
+    '55P03',
+    '57014',
+  ])('maps database timeout %s to a retryable 503 busy error', (code) => {
+    expect(mapQuizRpcClientError({ code })).toEqual({
+      code: 'QUIZ_BUSY',
+      error: 'The quiz is busy. Please try again.',
+      status: 503,
+    });
+  });
+
   it('does not expose unknown or malformed database errors', () => {
     expect(mapQuizRpcClientError({ code: 'XX001', message: 'secret' })).toBe(
       null

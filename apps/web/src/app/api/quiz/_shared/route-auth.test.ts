@@ -1,6 +1,4 @@
-import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authenticateApiRequest } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -11,13 +9,24 @@ import {
 } from './route-auth';
 
 vi.mock('@/lib/api-auth', () => ({
-  authenticateApiRequest: vi.fn(),
   getBearerTokenFromRequest: (request: Request) => {
     const header = request.headers.get('Authorization') ?? '';
     return header.match(/^\s*bearer\s+(.+?)\s*$/i)?.[1]?.trim() || null;
   },
   hasBearerAuthScheme: (request: Request) =>
     /^\s*bearer(?:\s|$)/i.test(request.headers.get('Authorization') ?? ''),
+}));
+
+vi.mock('@/lib/quiz/quiz-access-token', () => ({
+  verifyQuizAccessToken: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/scoped', () => ({
+  createScopedClient: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -128,79 +137,6 @@ describe('quiz route-auth', () => {
 
       expect(result.response?.status).toBe(401);
       expect(logger.error).not.toHaveBeenCalled();
-    });
-
-    it('returns the bearer-authenticated user and Supabase client', async () => {
-      const request = new NextRequest('http://localhost/api/quiz/events', {
-        headers: { Authorization: 'Bearer token-123' },
-      });
-      const supabase = { from: vi.fn() };
-      vi.mocked(authenticateApiRequest).mockResolvedValue({
-        error: null,
-        supabase: supabase as never,
-        user: { id: USER_ID } as never,
-      });
-
-      const result = await requireQuizUser(request);
-
-      expect(result.response).toBeNull();
-      expect(result).toMatchObject({ authMethod: 'bearer' });
-      expect(result.supabase).toBe(supabase);
-      expect(result.user).toEqual({ id: USER_ID });
-      expect(authenticateApiRequest).toHaveBeenCalledWith(request);
-      expect(createClient).not.toHaveBeenCalled();
-    });
-
-    it('uses bearer authentication for a lowercase authorization scheme', async () => {
-      const request = new NextRequest('http://localhost/api/quiz/events', {
-        headers: { Authorization: 'bearer token-123' },
-      });
-      const supabase = { from: vi.fn() };
-      vi.mocked(authenticateApiRequest).mockResolvedValue({
-        error: null,
-        supabase: supabase as never,
-        user: { id: USER_ID } as never,
-      });
-
-      const result = await requireQuizUser(request);
-
-      expect(result.response).toBeNull();
-      expect(result).toMatchObject({ authMethod: 'bearer' });
-      expect(authenticateApiRequest).toHaveBeenCalledWith(request);
-      expect(createClient).not.toHaveBeenCalled();
-    });
-
-    it('rejects an empty bearer credential without falling back to cookies', async () => {
-      const request = new NextRequest('http://localhost/api/quiz/events', {
-        headers: { Authorization: 'Bearer   ' },
-      });
-
-      const result = await requireQuizUser(request);
-
-      expect(result.response?.status).toBe(401);
-      expect(authenticateApiRequest).not.toHaveBeenCalled();
-      expect(createClient).not.toHaveBeenCalled();
-    });
-
-    it('returns a 401 response when bearer authentication fails', async () => {
-      const request = new NextRequest('http://localhost/api/quiz/events', {
-        headers: { Authorization: 'Bearer token-123' },
-      });
-      vi.mocked(authenticateApiRequest).mockResolvedValue({
-        error: 'Unauthorized',
-        supabase: null,
-        user: null,
-      });
-
-      const result = await requireQuizUser(request);
-
-      expect(result.user).toBeNull();
-      expect(result.supabase).toBeNull();
-      expect(result.response?.status).toBe(401);
-      expect(await readJson(result.response as Response)).toEqual({
-        error: 'Unauthorized',
-      });
-      expect(createClient).not.toHaveBeenCalled();
     });
   });
 

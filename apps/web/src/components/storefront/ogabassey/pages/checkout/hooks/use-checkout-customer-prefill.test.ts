@@ -52,8 +52,8 @@ describe('useCheckoutCustomerPrefill', () => {
       firstName: '',
       lastName: '',
     };
-    const { rerender } = renderHook(
-      ({ signedIn }: { signedIn: User | null }) =>
+    const { rerender } = renderHook<void, { signedIn: User | null }>(
+      ({ signedIn }) =>
         useCheckoutCustomerPrefill({ user: signedIn, values, setFields }),
       { initialProps: { signedIn: user } }
     );

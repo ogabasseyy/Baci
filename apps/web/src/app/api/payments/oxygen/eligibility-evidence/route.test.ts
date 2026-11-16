@@ -141,3 +141,10 @@ it('does not disclose evidence when command binding or decryption fails', async 
   mocks.evidence.mockRejectedValueOnce(new Error('mismatched command'));
   expect((await GET(request())).status).toBe(404);
 });
+
+it('returns unavailable when the evidence RPC has expired the record', async () => {
+  mocks.evidence.mockResolvedValueOnce([]);
+  const response = await GET(request());
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: 'Unavailable' });
+});

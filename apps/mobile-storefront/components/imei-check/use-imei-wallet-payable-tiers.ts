@@ -22,7 +22,10 @@ export function useImeiWalletPayableTiers({
     readonly ImeiServiceTierKey[] | null | 'loading'
   >(canPay ? 'loading' : null);
   useEffect(() => {
-    if (!canPay) return;
+    if (!canPay) {
+      setPayableTiers(null);
+      return;
+    }
     const controller = new AbortController();
     setPayableTiers('loading');
     fetchImeiWalletPayableTiers({

@@ -36,6 +36,12 @@ describe('SavingsContributionSection long-plan note', () => {
     expect(screen.queryByText(/Saving more each time/)).toBeNull();
   });
 
+  it('bugfix: says nothing for exactly two years across a leap day (Muse)', () => {
+    // 2026-11-16 to 2028-11-16 is 731 days (29 February 2028).
+    renderWith('2028-11-16');
+    expect(screen.queryByText(/Saving more each time/)).toBeNull();
+  });
+
   it('says nothing when the end date is unknown', () => {
     renderWith('');
     expect(screen.queryByText(/Saving more each time/)).toBeNull();

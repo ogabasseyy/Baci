@@ -15,6 +15,21 @@ describe('useImeiWalletPayableTiers', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('bugfix: goes back to unknown when wallet pay is switched off (Muse)', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ walletPayableTierKeys: ['basic'] }),
+    } as Response);
+    const { result, rerender } = renderHook(
+      ({ canPay }: { canPay: boolean }) =>
+        useImeiWalletPayableTiers({ ...props, canPay }),
+      { initialProps: { canPay: true } }
+    );
+    await waitFor(() => expect(result.current).toEqual(['basic']));
+    rerender({ canPay: false });
+    expect(result.current).toBeNull();
+  });
+
   it('reads the server list while it is on', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

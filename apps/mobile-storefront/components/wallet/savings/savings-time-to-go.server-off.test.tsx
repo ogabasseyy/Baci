@@ -14,6 +14,6 @@ describe('timeToGo', () => {
   });
 
   it('nudges plans longer than two years', () => {
-    expect(LONG_PLAN_DAYS).toBe(730);
+    expect(LONG_PLAN_DAYS).toBe(731);
   });
 });

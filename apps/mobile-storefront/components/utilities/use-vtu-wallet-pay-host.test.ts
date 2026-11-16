@@ -12,6 +12,10 @@ const mockWallet: { data: unknown; isRefetching: boolean; refetch: jest.Mock } =
     refetch: jest.fn(),
   };
 jest.mock('@/hooks/use-wallet', () => ({ useWallet: () => mockWallet }));
+const mockRefreshActivity = jest.fn();
+jest.mock('@/hooks/use-refresh-wallet-activity', () => ({
+  useRefreshWalletActivity: () => mockRefreshActivity,
+}));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'key-1'),
@@ -338,6 +342,39 @@ describe("bugfix: a delayed settled answer removed a newer attempt's key (Codex 
       await submitted;
     });
     expect(String(await AsyncStorage.getItem(STORE))).toContain('key-newer');
+    hook.unmount();
+  });
+});
+
+describe('bugfix: a settled VTU wallet payment left the wallet activity stale (Codex P2)', () => {
+  it('invalidates the activity list next to the balance refetch when the payment settles', async () => {
+    start.mockResolvedValue({
+      httpStatus: 202,
+      body: {
+        status: 'payment_required',
+        transactionId: '33333333-3333-4333-8333-333333333333',
+        operationId: '11111111-1111-4111-8111-111111111111',
+        amountKobo: 50_000,
+      },
+    });
+    (vtuWalletPayApi.verifyPin as jest.Mock).mockResolvedValue({
+      httpStatus: 200,
+      body: { proof: 'a'.repeat(64) },
+    });
+    (vtuWalletPayApi.pay as jest.Mock).mockResolvedValue({
+      httpStatus: 202,
+      body: { status: 'payment_refunding' },
+    });
+    const hook = renderHook(() => useVtuWalletPayHost({ canPay: true }));
+    await act(async () => {
+      openVtuWalletPay(request, jest.fn());
+    });
+    act(() => hook.result.current.sheet.setPin('1234'));
+    await act(async () => {
+      await hook.result.current.sheet.submit();
+    });
+    expect(mockWallet.refetch).toHaveBeenCalled();
+    expect(mockRefreshActivity).toHaveBeenCalled();
     hook.unmount();
   });
 });

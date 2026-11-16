@@ -38,6 +38,19 @@ env:
   TEST_PATH: apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
 
 jobs:
+  # A manual dispatch from another branch would otherwise skip both jobs
+  # silently; fail it visibly instead.
+  require-main:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Refuse to run off main
+        run: |
+          echo "::error::Run this workflow from main; it only refreshes main's snapshot." >&2
+          exit 1
+
   # Install dependencies and run repository code here, with a read-only token
   # and no persisted credentials. Only the two regenerated files cross into the
   # write job, as an artifact. The write job installs nothing and runs exactly
@@ -146,9 +159,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          open_heads="$(gh pr list --state open --base main --limit 200 \
-            --json headRefName,isCrossRepository \
-            --jq '.[] | select(.isCrossRepository == false) | .headRefName' \
+          # Paginated, so no open-PR count can hide an older refresh PR.
+          open_heads="$(gh api --paginate "repos/${REPO}/pulls?state=open&base=main&per_page=100" \
+            --jq '.[] | select(.head.repo.full_name == env.REPO) | .head.ref' \
             | grep -Ex "${BRANCH_PREFIX}[a-f0-9]{12}-[a-f0-9]{12}" || true)"
           keep=""
           if [ "$CHANGED" = "true" ]; then
@@ -205,5 +218,7 @@ jobs:
             fi
             reason="Main now matches the regenerated snapshot."
             if [ -n "$new_url" ]; then reason="Superseded by $new_url."; fi
-            gh pr close "$head" --delete-branch --comment "$reason (closed by $RUN_URL)"
+            # Best effort: one failed close must not skip the rest.
+            gh pr close "$head" --delete-branch --comment "$reason (closed by $RUN_URL)" \
+              || echo "::warning::Could not close $head; leaving it for the next run."
           done

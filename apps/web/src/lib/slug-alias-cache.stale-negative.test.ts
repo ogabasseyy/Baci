@@ -181,6 +181,42 @@ describe('expired "not a retired slug" answers', () => {
     expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
+  it('keeps the old answer when the background re-check cannot reach the database', async () => {
+    mockAliasMaybeSingle.mockResolvedValue(notAnAlias);
+    expect(await getCurrentSlugForAlias('outage')).toBeNull();
+
+    vi.advanceTimersByTime(31_000);
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'unavailable' },
+    });
+    expect(await getCurrentSlugForAlias('outage')).toBeNull();
+    await settle();
+
+    // A minute on, requests are still answered at once and retry behind.
+    vi.advanceTimersByTime(60_000);
+    const slow = slowAnswer();
+    mockAliasMaybeSingle.mockReturnValue(slow.pending);
+    expect(await getCurrentSlugForAlias('outage')).toBeNull();
+    await settle();
+    expect(mockAliasMaybeSingle).toHaveBeenCalledTimes(3);
+    slow.release(notAnAlias);
+  });
+
+  it('shares one database read between concurrent first lookups', async () => {
+    const slow = slowAnswer();
+    mockAliasMaybeSingle.mockReturnValue(slow.pending);
+    const lookups = Promise.all([
+      getCurrentSlugForAlias('burst'),
+      getCurrentSlugForAlias('burst'),
+      getCurrentSlugForAlias('burst'),
+    ]);
+    await settle();
+    slow.release(renamedTo('burst-new'));
+    expect(await lookups).toEqual(['burst-new', 'burst-new', 'burst-new']);
+    expect(mockAliasMaybeSingle).toHaveBeenCalledTimes(1);
+  });
+
   it('always asks the database for strict callers', async () => {
     mockAliasMaybeSingle.mockResolvedValue(notAnAlias);
     expect(await getCurrentSlugForAlias('strict-store')).toBeNull();

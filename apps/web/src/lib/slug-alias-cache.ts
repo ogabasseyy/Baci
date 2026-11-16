@@ -32,6 +32,7 @@
 
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createBackgroundRefresher } from './background-refresh';
+import { SingleFlight } from './single-flight';
 import { invalidateSlugLiveness, isSlugLive } from './slug-liveness-cache';
 
 interface AliasMappingEntry {
@@ -48,6 +49,9 @@ const LOOKUP_FAILED = Symbol('alias lookup failed');
 const aliasMappingCache = new Map<string, AliasMappingEntry>();
 let invalidationEpoch = 0;
 const refreshInBackground = createBackgroundRefresher('Slug Alias Cache');
+// Concurrent lenient misses for one slug share a read. The epoch is in the
+// key so a request arriving after a rename never joins a read from before it.
+const lenientLoads = new SingleFlight<string | null>();
 
 // Confirmed alias -> current slug is stable; cache it a while.
 const POSITIVE_TTL = 120_000; // 2 minutes
@@ -164,27 +168,35 @@ function resolveAliasMapping(
         refreshInBackground(oldSlug, () =>
           // Already overtaken by a rename: skip the wasted database read.
           epoch === invalidationEpoch
-            ? loadAliasMapping(oldSlug, false, epoch)
+            ? loadAliasMapping(oldSlug, false, epoch, true)
             : Promise.resolve(null)
         );
         return Promise.resolve(null);
       }
     }
   }
-  return loadAliasMapping(oldSlug, strict, invalidationEpoch);
+  const epoch = invalidationEpoch;
+  if (strict) return loadAliasMapping(oldSlug, true, epoch);
+  return lenientLoads.run(`${oldSlug}:${epoch}`, () =>
+    loadAliasMapping(oldSlug, false, epoch)
+  );
 }
 
 async function loadAliasMapping(
   oldSlug: string,
   strict: boolean,
-  epoch: number
+  epoch: number,
+  keepEntryOnFailure = false
 ): Promise<string | null> {
   // Strict failures throw before reaching the cache write, so a
   // transient blip is never cached as a negative.
   const result = await fetchAliasMapping(oldSlug, strict);
   const failed = result === LOOKUP_FAILED;
   const currentSlug = result === LOOKUP_FAILED ? null : result;
-  if (epoch === invalidationEpoch) {
+  // A background re-check that could not reach the database leaves the
+  // entry it was refreshing alone: that answer stays usable up to the stale
+  // limit and the next request retries, instead of every request waiting.
+  if (epoch === invalidationEpoch && !(failed && keepEntryOnFailure)) {
     evictIfFull(aliasMappingCache);
     aliasMappingCache.set(oldSlug, {
       currentSlug,

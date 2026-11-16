@@ -101,21 +101,20 @@ export async function POST(request: NextRequest) {
 
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
-    // Authenticated client for everything except the admission
-    // proof and fulfillment (Phase 2): RLS + JWT-verifying RPCs
-    // own tenant isolation here.
+    // User client everywhere but admission proof and fulfillment (Phase 2).
     const userSupabase = auth.supabase;
     const adminSupabase = createAdminClient();
-    // Pay from the PiggyVest wallet (dark): replaces "fulfil now" below.
+    // Sole service-role use (narrowed exception); also the PiggyVest step's.
+    const fulfil = (transactionId: string, walletPayClaimed?: boolean) =>
+      fulfillPendingVtuTransaction({
+        supabase: adminSupabase,
+        transactionId,
+        walletPayClaimed,
+      });
     const walletPay = createVtuWalletPayFulfiller({
       charge: input,
       auth: { supabase: auth.supabase, user: auth.user },
-      fulfil: (transactionId, walletPayClaimed) =>
-        fulfillPendingVtuTransaction({
-          supabase: adminSupabase,
-          transactionId,
-          walletPayClaimed,
-        }),
+      fulfil,
     });
     // Admission (Codex R3 P1, R4 P1): key lookup + atomic DB
     // admission proof (stamp + live-scope snapshot) for the claim
@@ -283,11 +282,7 @@ export async function POST(request: NextRequest) {
         prepared.merchant.id,
         prepared.customer.id
       )(prepared.transaction.id);
-    // Sole service-role use on this route (narrowed exception).
-    const fulfillment = await fulfillPendingVtuTransaction({
-      supabase: adminSupabase,
-      transactionId: prepared.transaction.id,
-    });
+    const fulfillment = await fulfil(prepared.transaction.id);
     return mapFulfillmentToResponse(fulfillment);
   } catch (error) {
     // Don't echo raw errors (PostgREST fragments can leak Supabase URL /

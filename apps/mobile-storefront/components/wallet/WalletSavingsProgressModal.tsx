@@ -167,6 +167,10 @@ export function WalletSavingsProgressModal({
         ? 'This savings goal is complete.'
         : 'Purchase requested. Your savings have moved to your order.'
       : 'This goal is funded by scheduled auto-debit.';
+  const changeDevice = () => {
+    clearSavingsNotice();
+    onChangeDevice();
+  };
 
   return (
     <SavingsBottomSheet
@@ -241,16 +245,7 @@ export function WalletSavingsProgressModal({
               // Not while an add is in flight: the Change phone step would
               // replace the sheet and drop the add's PIN prompt.
               onChangeDevice={
-                canChangeDevice && !isAdding
-                  ? () => {
-                      // Moving on to Change phone: the last outcome (e.g.
-                      // "Savings updated") is old news and must not stay
-                      // pinned above that step. A swap failure still posts
-                      // its own notice there.
-                      clearSavingsNotice();
-                      onChangeDevice();
-                    }
-                  : undefined
+                canChangeDevice && !isAdding ? changeDevice : undefined
               }
               onResolveVariant={onResolveVariant}
             />

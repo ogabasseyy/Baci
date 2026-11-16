@@ -116,8 +116,7 @@ export function UtilityPaymentOptions({
     balance < amount &&
     savingsKobo < Math.round(amount * 100);
 
-  // With one method on offer it is the default; only when the savings wallet
-  // row sits beside it does covering the bill pick between the two.
+  // The only method is the default; beside the savings row, covering picks.
   const walletSelected = coversBill || !savingsShort;
   return (
     <View style={styles.container}>
@@ -239,10 +238,7 @@ export function UtilityPaymentOptions({
             ]}
           >
             {walletSelected ? (
-              <View
-                testID="wallet-method-selected"
-                style={styles.walletRadioInner}
-              />
+              <View testID="wallet-selected" style={styles.walletRadioInner} />
             ) : null}
           </View>
         </View>

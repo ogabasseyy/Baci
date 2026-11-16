@@ -19,7 +19,6 @@ import {
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { CONFIG } from '@/lib/config';
-import { fetchImeiWalletPayableTiers } from '@/lib/imei-wallet-payable-tiers';
 import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
 import { useAuthStore } from '@/stores/auth-store';
 import {
@@ -27,6 +26,7 @@ import {
   type ImeiWalletPayResult,
 } from './imei-wallet-pay-adapter';
 import { normalizeImeiIdentifier } from './normalize-imei-identifier';
+import { useImeiWalletPayableTiers } from './use-imei-wallet-payable-tiers';
 
 /**
  * True when this check should be paid from the PiggyVest wallet: paying from
@@ -118,26 +118,11 @@ export function useImeiWalletPay({
     closeForSwitch();
   }, [userId]);
   const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
-  const [payableTiers, setPayableTiers] = useState<
-    readonly ImeiServiceTierKey[] | null
-  >(null);
-  // Asked only while paying from PiggyVest is on. A failed read keeps the
-  // app's own rule (null), and the server still refuses what it can't bill.
-  useEffect(() => {
-    if (!canPay) return;
-    const controller = new AbortController();
-    setPayableTiers(null);
-    fetchImeiWalletPayableTiers({
-      device,
-      apiBaseUrl,
-      signal: controller.signal,
-    })
-      .then((tiers) => {
-        if (!controller.signal.aborted) setPayableTiers(tiers);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [apiBaseUrl, canPay, device]);
+  const payableTiers = useImeiWalletPayableTiers({
+    apiBaseUrl,
+    canPay,
+    device,
+  });
   const checkingKept = useRef(false);
   const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
     sheet.close();

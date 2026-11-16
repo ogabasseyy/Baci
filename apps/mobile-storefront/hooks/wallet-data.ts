@@ -2,6 +2,7 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
+import { readImeiLookupStatuses } from './imei-lookup-statuses';
 import { primaryPendingField } from './primary-pending-field';
 import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
 import { markHeldImeiCharges } from './wallet-held-imei-charges';
@@ -256,13 +257,7 @@ export async function fetchWalletDataUnbounded(
         return rows;
       }, []);
       transactionRows = await markHeldImeiCharges(
-        async (ids) =>
-          await supabase
-            .from('imei_lookups')
-            .select('id, status')
-            .eq('merchant_id', merchantId)
-            .in('id', ids)
-            .limit(ids.length),
+        readImeiLookupStatuses(merchantId),
         txResult.data,
         transactionRows
       );

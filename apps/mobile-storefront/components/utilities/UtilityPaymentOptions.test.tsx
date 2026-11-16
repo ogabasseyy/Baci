@@ -205,7 +205,7 @@ describe('UtilityPaymentOptions', () => {
       />
     );
 
-    expect(screen.getByTestId('wallet-method-selected')).toBeTruthy();
+    expect(screen.getByTestId('wallet-selected')).toBeTruthy();
   });
 
   it('bugfix: preselects the wallet before an amount is entered', () => {
@@ -218,6 +218,6 @@ describe('UtilityPaymentOptions', () => {
       />
     );
 
-    expect(screen.getByTestId('wallet-method-selected')).toBeTruthy();
+    expect(screen.getByTestId('wallet-selected')).toBeTruthy();
   });
 });

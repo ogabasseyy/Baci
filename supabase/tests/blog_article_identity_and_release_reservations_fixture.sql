@@ -106,6 +106,7 @@ CREATE TABLE public.products (
 CREATE TABLE public.categories (
   id uuid PRIMARY KEY,
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
+  name text,
   slug text
 );
 

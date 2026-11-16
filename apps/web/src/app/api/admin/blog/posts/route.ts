@@ -194,7 +194,11 @@ export async function POST(request: NextRequest) {
     }
 
     const publishedAt =
-      postData.status === 'published' ? new Date().toISOString() : null;
+      postData.status === 'published'
+        ? new Date().toISOString()
+        : postData.status === 'scheduled'
+          ? (postData.published_at ?? null)
+          : null;
 
     // Scope is forced in SQL, so the guard columns must not travel:
     // the create whitelist rejects them as unknown fields.

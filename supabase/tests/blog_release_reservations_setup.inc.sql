@@ -95,19 +95,23 @@ INSERT INTO public.staff_members (merchant_id, user_id, email, status, permissio
   ('d2000000-0000-4000-8000-000000000001', 'd1000000-0000-4000-8000-000000000003', 'track1-viewer-a@example.invalid', 'active', '{"marketing":{"view":true,"edit":false}}'::jsonb);
 
 
+INSERT INTO public.categories (id, merchant_id, name, slug) VALUES
+  ('d4000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', 'Smartphones', 'smartphones');
+
 -- Seed posts across merchants + non-pilot + platform post
 INSERT INTO public.blog_posts (
-  id, merchant_id, title, slug, content, author_name, status, published_at, metadata_status, is_platform_post
+  id, merchant_id, title, slug, content, author_name, status, published_at,
+  metadata_status, guide_scope, guide_kind, cluster_category_id, metadata_source_revision, is_platform_post
 ) VALUES
-  ('d3000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', 'Legacy Published Post', 'legacy-published-post', 'Original content', 'Editor', 'published', '2026-10-01T10:00:00Z', 'verified', false),
-  ('d3000000-0000-4000-8000-000000000002', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 2', 'draft-post-2', 'Draft content 2', 'Editor', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000003', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 3', 'draft-post-3', 'Draft content 3', 'Editor', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000004', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 4', 'draft-post-4', 'Draft content 4', 'Editor', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000005', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 5', 'draft-post-5', 'Draft content 5', 'Editor', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000006', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 6', 'draft-post-6', 'Draft content 6', 'Editor', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000007', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 7', 'draft-post-7', 'Draft content 7', 'Editor', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000008', 'd2000000-0000-4000-8000-000000000001', 'Archived Post', 'archived-post', 'Archived content', 'Editor', 'archived', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000009', 'd2000000-0000-4000-8000-000000000001', 'Non-Pilot Scheduled', 'non-pilot-scheduled', 'Non-pilot scheduled content', 'Editor', 'scheduled', transaction_timestamp() - interval '5 minutes', 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000099', 'd2000000-0000-4000-8000-000000000002', 'Merchant B Draft', 'merchant-b-draft', 'Merchant B content', 'Editor B', 'draft', NULL, 'unverified', false),
-  ('d3000000-0000-4000-8000-000000000098', NULL, 'Platform Scheduled', 'platform-scheduled', 'Platform content', 'Platform', 'scheduled', transaction_timestamp() - interval '5 minutes', 'unverified', true);
+  ('d3000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', 'Legacy Published Post', 'legacy-published-post', 'Original content', 'Editor', 'published', '2026-10-01T10:00:00Z', 'verified', 'product_specific', 'buyer-guide', 'd4000000-0000-4000-8000-000000000001', 'rev-1', false),
+  ('d3000000-0000-4000-8000-000000000002', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 2', 'draft-post-2', 'Draft content 2', 'Editor', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000003', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 3', 'draft-post-3', 'Draft content 3', 'Editor', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000004', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 4', 'draft-post-4', 'Draft content 4', 'Editor', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000005', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 5', 'draft-post-5', 'Draft content 5', 'Editor', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000006', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 6', 'draft-post-6', 'Draft content 6', 'Editor', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000007', 'd2000000-0000-4000-8000-000000000001', 'Draft Post 7', 'draft-post-7', 'Draft content 7', 'Editor', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000008', 'd2000000-0000-4000-8000-000000000001', 'Archived Post', 'archived-post', 'Archived content', 'Editor', 'archived', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000009', 'd2000000-0000-4000-8000-000000000001', 'Non-Pilot Scheduled', 'non-pilot-scheduled', 'Non-pilot scheduled content', 'Editor', 'scheduled', transaction_timestamp() - interval '5 minutes', 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000099', 'd2000000-0000-4000-8000-000000000002', 'Merchant B Draft', 'merchant-b-draft', 'Merchant B content', 'Editor B', 'draft', NULL, 'unverified', NULL, NULL, NULL, NULL, false),
+  ('d3000000-0000-4000-8000-000000000098', NULL, 'Platform Scheduled', 'platform-scheduled', 'Platform content', 'Platform', 'scheduled', transaction_timestamp() - interval '5 minutes', 'unverified', NULL, NULL, NULL, NULL, true);
 

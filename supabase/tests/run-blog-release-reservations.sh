@@ -43,7 +43,8 @@ run_psql_file "${ROOT_DIR}/supabase/tests/blog_article_identity_and_release_rese
 
 for migration in \
   "${ROOT_DIR}"/supabase/migrations/202611141045*.sql \
-  "${ROOT_DIR}"/supabase/migrations/20261115*.sql; do
+  "${ROOT_DIR}"/supabase/migrations/20261115115500_blog_post_scheduled_insert_requested_publish_at.sql \
+  "${ROOT_DIR}"/supabase/migrations/20261115154000_blog_release_usage_unmanaged_published_at.sql; do
   run_psql_file "${migration}"
 done
 

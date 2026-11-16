@@ -7,7 +7,10 @@ import {
 } from '@/lib/blog-discover-readiness';
 import { calculateReadingTime, calculateWordCount } from '@/lib/blog-utils';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
+import {
+  sanitizeBlogPostData,
+  updateBlogPostSchema,
+} from '@/lib/validations/blog';
 import { parseBlogPostMutationBody } from '../blog-post-mutation-body';
 import { persistBlogPostMutation } from '../persist-blog-post-mutation';
 import { applyFeaturedImageDefaults } from './apply-featured-image-defaults';
@@ -71,7 +74,7 @@ export async function updateBlogPost(
     if (parsedBody.error) {
       return NextResponse.json({ error: parsedBody.error }, { status: 400 });
     }
-    const validated = blogPostSchema.safeParse(
+    const validated = updateBlogPostSchema.safeParse(
       sanitizeBlogPostData(parsedBody.body)
     );
     if (!validated.success) {

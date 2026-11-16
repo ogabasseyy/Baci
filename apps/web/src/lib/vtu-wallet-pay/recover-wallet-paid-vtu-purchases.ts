@@ -50,7 +50,9 @@ type RecoverWalletPaidVtuDeps = Partial<typeof defaultDeps> & {
  * confirmed payment nobody collected and finishes the vend, or records its
  * failure (which opens the one refund). A payment whose purchase is not
  * mid-vend (never vended, failed, delivered) is left to the drain, exactly
- * as before. Never throws: a failure is counted (Codex P1).
+ * as before. A vend failure never throws: it is counted (Codex P1). The
+ * caller must pass its own `fulfil`; omitting it is a wiring bug that throws
+ * a TypeError before any claim is taken.
  */
 export async function recoverWalletPaidVtuPurchases(
   input: {

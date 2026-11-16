@@ -86,11 +86,11 @@ BEGIN
            (payment.state IN ('reserved', 'dispatched', 'confirmed')
              OR (payment.state = 'needs_review'
                  AND payment.review_reason IS DISTINCT FROM 'failed_with_fee')
-             -- Only with the provider's proof the money moved, as a late
-             -- refund success requires below (Muse).
+             -- settle_wallet_payment writes this reason only after verifying
+             -- the provider's proof, without storing its id on a deferral:
+             -- the reason itself is the proof the money moved (Codex P2).
              OR (payment.state = 'released'
-                 AND payment.review_reason = 'late_success_deferred'
-                 AND payment.provider_transaction_id IS NOT NULL)) AS listed,
+                 AND payment.review_reason = 'late_success_deferred')) AS listed,
            -- Set once when the PIN reserved it: a row never moves between
            -- keyset pages as the payment settles.
            COALESCE(payment.reserved_at, payment.issued_at) AS occurred_at,

@@ -148,6 +148,46 @@ describe('quiz leaderboard route', () => {
     });
   });
 
+  it('reuses the live board count instead of counting again before publication', async () => {
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data:
+          name === 'get_quiz_leaderboard_public_v2'
+            ? { current_player: null, entries: [], status: 'live_hidden' }
+            : {
+                current_player: null,
+                entries: [ROW],
+                participant_count: 640,
+                status: 'live',
+              },
+        error: null,
+      })
+    );
+    const supabase = {
+      auth: {
+        getUser: vi
+          .fn()
+          .mockResolvedValue({ data: { user: { id: USER_ID } }, error: null }),
+      },
+      rpc,
+    };
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      supabase: supabase as never,
+      user: { id: USER_ID } as never,
+    });
+    vi.mocked(createClient).mockResolvedValue(supabase as never);
+    const { GET } = await import('./route');
+    const body = await (await GET(request())).json();
+
+    expect(body.participantCount).toBe(640);
+    expect(body.status).toBe('live');
+    expect(rpc).not.toHaveBeenCalledWith(
+      'get_quiz_participant_count_public_v2',
+      expect.anything()
+    );
+  });
+
   it('maps authorization failure and hides malformed or failed projections', async () => {
     mockSupabase({
       data: null,

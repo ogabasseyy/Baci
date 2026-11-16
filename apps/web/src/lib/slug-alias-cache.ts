@@ -37,12 +37,17 @@ import { invalidateSlugLiveness, isSlugLive } from './slug-liveness-cache';
 interface AliasMappingEntry {
   currentSlug: string | null;
   timestamp: number;
+  /** A failed lookup recorded as "not an alias": never served past its TTL. */
+  failed?: boolean;
 }
+
+/** A lenient lookup that could not reach or read the alias table. */
+const LOOKUP_FAILED = Symbol('alias lookup failed');
 
 // old_slug -> merchant's current slug (or null when not a retired alias).
 const aliasMappingCache = new Map<string, AliasMappingEntry>();
 let invalidationEpoch = 0;
-const refreshInBackground = createBackgroundRefresher();
+const refreshInBackground = createBackgroundRefresher('Slug Alias Cache');
 
 // Confirmed alias -> current slug is stable; cache it a while.
 const POSITIVE_TTL = 120_000; // 2 minutes
@@ -148,26 +153,41 @@ function resolveAliasMapping(
       const age = Date.now() - cached.timestamp;
       const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
       if (age < ttl) return Promise.resolve(cached.currentSlug);
-      if (cached.currentSlug === null && age < NEGATIVE_STALE_LIMIT) {
-        refreshInBackground(oldSlug, () => loadAliasMapping(oldSlug, false));
+      if (
+        cached.currentSlug === null &&
+        !cached.failed &&
+        age < NEGATIVE_STALE_LIMIT
+      ) {
+        // Captured now, not when the refresh starts: a rename that lands
+        // in between must stop this refresh writing its answer back.
+        const epoch = invalidationEpoch;
+        refreshInBackground(oldSlug, () =>
+          loadAliasMapping(oldSlug, false, epoch)
+        );
         return Promise.resolve(null);
       }
     }
   }
-  return loadAliasMapping(oldSlug, strict);
+  return loadAliasMapping(oldSlug, strict, invalidationEpoch);
 }
 
 async function loadAliasMapping(
   oldSlug: string,
-  strict: boolean
+  strict: boolean,
+  epoch: number
 ): Promise<string | null> {
-  const epoch = invalidationEpoch;
   // Strict failures throw before reaching the cache write, so a
   // transient blip is never cached as a negative.
-  const currentSlug = await fetchAliasMapping(oldSlug, strict);
+  const result = await fetchAliasMapping(oldSlug, strict);
+  const failed = result === LOOKUP_FAILED;
+  const currentSlug = result === LOOKUP_FAILED ? null : result;
   if (epoch === invalidationEpoch) {
     evictIfFull(aliasMappingCache);
-    aliasMappingCache.set(oldSlug, { currentSlug, timestamp: Date.now() });
+    aliasMappingCache.set(oldSlug, {
+      currentSlug,
+      timestamp: Date.now(),
+      ...(failed ? { failed } : {}),
+    });
   }
   return currentSlug;
 }
@@ -175,7 +195,7 @@ async function loadAliasMapping(
 async function fetchAliasMapping(
   oldSlug: string,
   strict = false
-): Promise<string | null> {
+): Promise<string | null | typeof LOOKUP_FAILED> {
   let result: { data: unknown; error: unknown };
   try {
     const supabase = createAnonClient();
@@ -194,7 +214,7 @@ async function fetchAliasMapping(
     if (strict) {
       throw err;
     }
-    return null;
+    return LOOKUP_FAILED;
   }
 
   // Strict throws stay outside the try so the catch above doesn't log
@@ -224,7 +244,7 @@ function handleAliasMappingError(
   oldSlug: string,
   error: unknown,
   strict: boolean
-): null {
+): typeof LOOKUP_FAILED {
   console.error('[Slug Alias Cache] Failed to resolve alias', {
     oldSlug,
     error,
@@ -234,7 +254,7 @@ function handleAliasMappingError(
       `[Slug Alias Cache] alias lookup failed for slug: ${oldSlug}`
     );
   }
-  return null;
+  return LOOKUP_FAILED;
 }
 
 // Simple FIFO eviction, matching domain-cache-simple.ts.

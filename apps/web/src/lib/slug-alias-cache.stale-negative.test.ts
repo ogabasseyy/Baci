@@ -8,6 +8,13 @@ vi.mock('@vercel/functions', () => ({
   waitUntil: (pending: Promise<unknown>) => mockWaitUntil(pending),
 }));
 
+// Outside a Next.js request `after` refuses, as it does in this test run.
+vi.mock('next/server', () => ({
+  after: () => {
+    throw new Error('after was called outside a request scope');
+  },
+}));
+
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({
     from: (table: string) => {
@@ -141,6 +148,35 @@ describe('expired "not a retired slug" answers', () => {
 
     mockAliasMaybeSingle.mockResolvedValue(renamedTo('racing-new'));
     expect(await getCurrentSlugForAlias('racing')).toBe('racing-new');
+  });
+
+  it('discards a re-check when the rename lands before it starts', async () => {
+    mockAliasMaybeSingle.mockResolvedValue(notAnAlias);
+    expect(await getCurrentSlugForAlias('queued')).toBeNull();
+
+    vi.advanceTimersByTime(31_000);
+    // Scheduled, but its first step has not run when the rename clears it.
+    const stale = getCurrentSlugForAlias('queued');
+    invalidateAliasCacheForSlug('queued');
+    expect(await stale).toBeNull();
+    await settle();
+
+    // Nothing was written back, so the next request asks the database.
+    mockAliasMaybeSingle.mockResolvedValue(renamedTo('queued-new'));
+    expect(await getCurrentSlugForAlias('queued')).toBe('queued-new');
+  });
+
+  it('never serves a failed lookup past its thirty seconds', async () => {
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'unavailable' },
+    });
+    expect(await getCurrentSlugForAlias('blip')).toBeNull();
+
+    vi.advanceTimersByTime(31_000);
+    mockAliasMaybeSingle.mockResolvedValue(renamedTo('blip-new'));
+    expect(await getCurrentSlugForAlias('blip')).toBe('blip-new');
+    expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
   it('always asks the database for strict callers', async () => {

@@ -14,9 +14,12 @@ const livenessCache = new Map<string, LivenessEntry>();
 // Keep it small; raising it toward POSITIVE_TTL re-grows the loop window.
 const LIVENESS_TTL = 10_000; // 10 seconds
 const MAX_CACHE_SIZE = 1000;
+let invalidationEpoch = 0;
 
 /** Drop this instance's cached liveness for a slug (rename flow). */
 export function invalidateSlugLiveness(slug: string): void {
+  // A read already in flight predates the rename and must not write back.
+  invalidationEpoch += 1;
   livenessCache.delete(slug);
 }
 
@@ -38,9 +41,12 @@ export async function isSlugLive(
     }
   }
 
+  const epoch = invalidationEpoch;
   const isLive = await fetchSlugIsLive(slug, strict);
-  evictIfFull(livenessCache);
-  livenessCache.set(slug, { isLive, timestamp: Date.now() });
+  if (epoch === invalidationEpoch) {
+    evictIfFull(livenessCache);
+    livenessCache.set(slug, { isLive, timestamp: Date.now() });
+  }
   return isLive;
 }
 

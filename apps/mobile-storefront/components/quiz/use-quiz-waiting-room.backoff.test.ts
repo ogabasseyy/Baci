@@ -130,5 +130,24 @@ describe('useQuizWaitingRoom', () => {
       await advance(1);
       expect(refresh).toHaveBeenCalledTimes(4);
     });
+
+    it('spreads the refresh again when a moved start brings the countdown back to zero', async () => {
+      randomSpy.mockReturnValue(0.999);
+      const refresh = jest
+        .fn<() => Promise<QuizEvent[]>>()
+        .mockResolvedValue([
+          event({ serverNow: undefined, startsAt: '2026-08-23T12:00:30.000Z' }),
+        ]);
+      renderAtCountdownZero(refresh);
+
+      // First zero at 12:00:00, refreshed one offset later: start moved 30 s.
+      await advance(61_000);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      // Second zero at 12:00:30: the offset applies again, not an instant call.
+      await advance(29_000 + 750);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      await advance(250);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
   });
 });

@@ -242,7 +242,7 @@ export function useQuizWaitingRoom({
 
   useEffect(() => {
     let mounted = true;
-    // Per-mount offset so phones do not all refresh at countdown zero.
+    // Per-mount offset, re-armed while counting down, to spread phones at zero.
     const firstRefreshOffsetMs = randomDelay(BOUNDARY_REFRESH_INTERVAL_MS);
     const tick = () => {
       if (
@@ -257,10 +257,10 @@ export function useQuizWaitingRoom({
         offsetRef.current
       );
       setRemainingSeconds(nextRemainingSeconds);
+      if (nextRemainingSeconds !== 0) nextBoundaryRefreshAtRef.current = 0;
       if (nextRemainingSeconds === 0) {
         const now = Date.now();
-        if (!nextBoundaryRefreshAtRef.current)
-          nextBoundaryRefreshAtRef.current = now + firstRefreshOffsetMs;
+        nextBoundaryRefreshAtRef.current ||= now + firstRefreshOffsetMs;
         if (now >= nextBoundaryRefreshAtRef.current) {
           nextBoundaryRefreshAtRef.current =
             now + withSpread(BOUNDARY_REFRESH_INTERVAL_MS);

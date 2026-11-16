@@ -36,6 +36,8 @@ const RELEASE_ENTRYPOINTS = [
 ] as const;
 
 const DYNAMIC_ENTRYPOINTS = [
+  // Publication-gated, request-scoped merchant lookup (connection()/headers()).
+  'black-friday/page.tsx',
   // Full-code profiles require the current trusted origin/runtime composition.
   '(catalog)/(listing)/collections/[handle]/page.tsx',
   '(content)/pages/[...experiencePath]/page.tsx',

@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+
+// Re-exported so the cron route can hand the same approved fulfil operation
+// to the wallet-pay recovery step without a new import chain.
+export { fulfillPendingVtuTransaction };
+
 import {
   getReconciliableStatusFilter,
   RECONCILABLE_VTU_TYPES,

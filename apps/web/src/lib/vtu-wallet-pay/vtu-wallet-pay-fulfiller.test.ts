@@ -9,9 +9,6 @@ vi.mock('./run-vtu-wallet-pay-step', () => ({
 vi.mock('./vtu-wallet-pay-step-deps', () => ({
   createVtuWalletPayStepDeps: () => 'deps',
 }));
-vi.mock('@/lib/vtu-fulfillment', () => ({
-  fulfillPendingVtuTransaction: mocks.fulfil,
-}));
 
 const auth = { supabase: {} as never, user: {} as never };
 const fulfillSupabase = { admin: true } as never;
@@ -25,6 +22,7 @@ describe('createVtuWalletPayFulfiller', () => {
         charge: { paymentMethod: 'store_credit' } as never,
         auth,
         fulfillSupabase,
+        fulfilPending: mocks.fulfil as never,
       })
     ).toBeNull();
   });
@@ -38,6 +36,7 @@ describe('createVtuWalletPayFulfiller', () => {
       } as never,
       auth,
       fulfillSupabase,
+      fulfilPending: mocks.fulfil as never,
     });
     mocks.step.mockResolvedValue('response');
     await expect(make?.('merchant-1', 'customer-1')('txn-1')).resolves.toBe(

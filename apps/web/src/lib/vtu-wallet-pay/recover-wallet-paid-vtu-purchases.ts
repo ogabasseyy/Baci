@@ -6,7 +6,7 @@ import {
   refundWalletPayment,
   walletPayDelivery,
 } from '@/lib/piggyvest/wallet-pay-service';
-import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import type { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 import { deliverVtuWalletPayment } from './deliver-vtu-wallet-payment';
 
@@ -29,7 +29,6 @@ const defaultDeps = {
   delivery: (runtime: ReturnType<typeof readWalletPayRecoveryRuntime>) =>
     walletPayDelivery(runtime),
   refund: refundWalletPayment,
-  fulfil: fulfillPendingVtuTransaction,
 };
 
 /**
@@ -47,6 +46,11 @@ const defaultDeps = {
 export async function recoverWalletPaidVtuPurchases(
   input: {
     supabase: SupabaseClient;
+    /**
+     * The route's approved fulfil operation, passed in so this module never
+     * imports the fulfilment graph (admin client, mail, push) itself.
+     */
+    fulfil: typeof fulfillPendingVtuTransaction;
     maxRows?: number;
     /** The invocation's hard stop (epoch ms); unset runs without a budget. */
     deadlineMs?: number;
@@ -127,7 +131,7 @@ export async function recoverWalletPaidVtuPurchases(
             refund: (paymentId) =>
               deps.refund({ runtime: runtime as never, paymentId }),
             fulfil: (walletPayClaimed) =>
-              deps.fulfil({
+              input.fulfil({
                 supabase: input.supabase,
                 transactionId,
                 walletPayClaimed,

@@ -17,6 +17,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 vi.mock('@/lib/vtu-processing-reconciliation', () => ({
+  fulfillPendingVtuTransaction: vi.fn(),
   reconcileProcessingVtuTransactions: vi.fn(),
 }));
 
@@ -120,6 +121,7 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     expect(response.status).toBe(200);
     expect(recoverWalletPaidVtuPurchases).toHaveBeenCalledWith({
       supabase: { admin: true },
+      fulfil: expect.any(Function),
       // The recovery shares the invocation's deadline (Codex P2).
       deadlineMs: expect.any(Number),
     });

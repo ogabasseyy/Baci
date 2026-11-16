@@ -1,6 +1,9 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createAnonClient } from '@/lib/supabase/anon';
+
+const merchantIdSchema = z.string().uuid();
 
 async function getCachedMerchantProductCount(
   merchantId: string
@@ -24,14 +27,23 @@ async function getCachedMerchantProductCount(
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const merchantId = searchParams.get('merchant_id');
+  const rawMerchantId = searchParams.get('merchant_id');
 
-  if (!merchantId) {
+  if (!rawMerchantId) {
     return NextResponse.json(
       { error: 'Missing merchant_id parameter' },
       { status: 400 }
     );
   }
+
+  const parsedMerchantId = merchantIdSchema.safeParse(rawMerchantId);
+  if (!parsedMerchantId.success) {
+    return NextResponse.json(
+      { error: 'Invalid merchant_id parameter' },
+      { status: 400 }
+    );
+  }
+  const merchantId = parsedMerchantId.data;
 
   try {
     const count = await getCachedMerchantProductCount(merchantId);

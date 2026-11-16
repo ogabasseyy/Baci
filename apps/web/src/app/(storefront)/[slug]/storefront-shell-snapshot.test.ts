@@ -168,6 +168,20 @@ describe('getStorefrontShellSnapshot', () => {
     expect(mockHeaders).not.toHaveBeenCalled();
   });
 
+  it('returns domain-routed shell data for subdomain host identifiers rewritten by proxy', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
+
+    const shellSnapshotBase = await getStorefrontShellSnapshotBase(
+      'ogabassey.usebaci.com'
+    );
+
+    expect(shellSnapshotBase).toMatchObject({
+      routingMode: 'domain',
+      basePath: '',
+    });
+    expect(mockHeaders).not.toHaveBeenCalled();
+  });
+
   it('expands a precomputed base snapshot without repeating merchant lookup work', async () => {
     const shellSnapshotBase = {
       merchant: {

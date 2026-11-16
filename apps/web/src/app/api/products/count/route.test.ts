@@ -16,6 +16,8 @@ vi.mock('@/lib/supabase/anon', () => ({
 
 import { GET } from './route';
 
+const TEST_MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
+
 describe('GET /api/products/count', () => {
   beforeEach(() => {
     mockRpc.mockReset();
@@ -32,16 +34,32 @@ describe('GET /api/products/count', () => {
     });
   });
 
+  it('returns 400 when merchant_id is not a valid UUID', async () => {
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/products/count?merchant_id=not-uuid'
+      )
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid merchant_id parameter',
+    });
+  });
+
   it('returns client recommendedMethod when count <= 500', async () => {
     mockRpc.mockResolvedValueOnce({ data: 42, error: null });
 
     const response = await GET(
-      new NextRequest('http://localhost/api/products/count?merchant_id=m-1')
+      new NextRequest(
+        `http://localhost/api/products/count?merchant_id=${TEST_MERCHANT_ID}`
+      )
     );
 
     expect(response.status).toBe(200);
     expect(mockRpc).toHaveBeenCalledWith('get_merchant_product_count', {
-      merchant_id_param: 'm-1',
+      merchant_id_param: TEST_MERCHANT_ID,
     });
     await expect(response.json()).resolves.toEqual({
       count: 42,
@@ -54,7 +72,9 @@ describe('GET /api/products/count', () => {
     mockRpc.mockResolvedValueOnce({ data: 501, error: null });
 
     const response = await GET(
-      new NextRequest('http://localhost/api/products/count?merchant_id=m-1')
+      new NextRequest(
+        `http://localhost/api/products/count?merchant_id=${TEST_MERCHANT_ID}`
+      )
     );
 
     expect(response.status).toBe(200);
@@ -74,7 +94,9 @@ describe('GET /api/products/count', () => {
       });
 
       const response = await GET(
-        new NextRequest('http://localhost/api/products/count?merchant_id=m-1')
+        new NextRequest(
+          `http://localhost/api/products/count?merchant_id=${TEST_MERCHANT_ID}`
+        )
       );
 
       expect(response.status).toBe(500);

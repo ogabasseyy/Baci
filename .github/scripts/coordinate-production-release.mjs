@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 // Pinned by contract test against the workflow file: a rename must
 // update this constant or post-promotion failures go undetected.
 export const DEPLOY_PROMOTE_STEP_NAME = 'Deploy to Vercel (with retry)';
+export const WORKER_ACTIVATE_STEP_NAME = 'Install and activate the exact worker release';
 
 export function releaseLockPath(root, commonDirectory) {
   return resolve(root, commonDirectory, 'baci-production-release.lock');
@@ -75,9 +76,10 @@ export async function coordinateRelease(operations, coordinationId) {
   if (await operations.readMain() !== commit) throw new Error('main changed; prepare a clean current checkout');
   const before = await operations.listRuns();
   if (before.some(run => run.status !== 'completed' || run.conclusion === 'action_required')) throw new Error('production deployment in flight');
-  await operations.updateWorkers(commit);
-  await operations.verifyWorkers(commit);
-  if (await operations.readMain() !== commit) throw new Error('main changed during worker preparation; publication refused');
+  // deploy.yml installs and verifies this exact SHA using the isolated worker
+  // identity before it runs migrations or publishes. The legacy installer is
+  // intentionally forbidden on hosts migrated to isolated worker releases.
+  if (await operations.readMain() !== commit) throw new Error('main changed during release preflight; publication refused');
   const baseline = await operations.listRuns();
   if (baseline.some(run => run.status !== 'completed' || run.conclusion === 'action_required')) throw new Error('production deployment in flight');
   // Re-check main immediately before dispatch: dispatch pins --ref
@@ -169,6 +171,25 @@ export async function coordinateRelease(operations, coordinationId) {
   // skipping live verification.
   if (!Array.isArray(jobs) || !jobs.every(job => job && typeof job.name === 'string' && typeof job.conclusion === 'string')) {
     tagIndeterminate(new Error('production publication state unreadable; inspect the workflow before retrying'));
+  }
+  const workerJobs = jobs.filter(job => job.name === 'vps-worker-sync');
+  if (workerJobs.length !== 1) {
+    tagIndeterminate(new Error('worker sync outcome unreadable; reconcile before retrying'));
+  }
+  for (const job of workerJobs) {
+    if (job.conclusion === 'success' || job.conclusion === 'skipped') continue;
+    const activationMayHaveRun = !Array.isArray(job.steps) ||
+      !job.steps.every(step => step && typeof step.name === 'string' && typeof step.conclusion === 'string') ||
+      job.steps.some(
+        step => step && step.name === WORKER_ACTIVATE_STEP_NAME && step.conclusion !== 'skipped'
+      );
+    if (activationMayHaveRun) {
+      tagIndeterminate(new Error('worker sync may have changed the active worker; reconcile before retrying'));
+    }
+  }
+  if (jobs.some(job => job.name === 'deploy-production' && job.conclusion === 'success') &&
+      workerJobs[0].conclusion !== 'success') {
+    tagIndeterminate(new Error('production published without a proven worker sync; reconcile before retrying'));
   }
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
     // Attempt supersession is invisible in the jobs listing: if

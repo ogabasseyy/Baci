@@ -80,7 +80,10 @@ export function useImeiPendingLookup({
         // Leaving a customer drops only the leaving user's own record: in a
         // sign-in's mixed state the old key can hold another user's paid
         // check, which must survive for them to resume.
-        const left = await loadPendingImeiLookup(previous);
+        // Reads go on the queue too: loading drops a corrupt record.
+        const left = await inOrder(storageQueue, () =>
+          loadPendingImeiLookup(previous)
+        );
         if (left && previousUser && left.ownerUserId === previousUser)
           await inOrder(storageQueue, () => clearPendingImeiLookup(previous));
       }
@@ -95,7 +98,9 @@ export function useImeiPendingLookup({
         }
         return;
       }
-      const saved = await loadPendingImeiLookup(storageKey);
+      const saved = await inOrder(storageQueue, () =>
+        loadPendingImeiLookup(storageKey)
+      );
       if (!cancelled && pendingMutation.current === restoreGeneration) {
         // Sign-in can briefly pair the new user with the previous customer:
         // only the user who started a check may resume it. Another owner's

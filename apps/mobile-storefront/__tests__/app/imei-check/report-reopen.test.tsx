@@ -250,9 +250,12 @@ it('hardware back cannot clear a retained report or pending paid follow-up', asy
       name: 'Open SIM Lock report for iPhone 13 Pro',
     })
   );
-  fireEvent.press(
-    await screen.findByRole('button', { name: 'Check blacklist status · ₦700' })
-  );
+  const followUp = await screen.findByRole('button', {
+    name: 'Check blacklist status · ₦700',
+  });
+  // A shown report already intercepts back (it returns to the picker).
+  expect(mockPreventRemoveState.prevent).toBe(true);
+  fireEvent.press(followUp);
   await screen.findByText("We're checking");
   // Back is intercepted while the paid follow-up runs on the reopened report.
   expect(mockPreventRemoveState.prevent).toBe(true);

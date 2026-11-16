@@ -24,11 +24,25 @@ VALUES ('76000000-0000-4000-8000-000000000002',
 INSERT INTO public.quiz_events (id, merchant_id, slug, title, status, starts_at,
   ends_at, mode, contract_version, rules_version, question_count,
   time_per_question_seconds, maximum_play_seconds, live_window_seconds,
-  max_attempts, time_zone)
+  max_attempts, time_zone, compliance_verified, regulatory_basis,
+  regulatory_jurisdiction, regulatory_evidence_ref)
 VALUES ('76000000-0000-4000-8000-000000000003',
   '76000000-0000-4000-8000-000000000001', 'quiz-age-gate', 'Quiz age gate',
   'active', now() - interval '1 minute', now() + interval '5 minutes',
-  'live', 2, 'age-gate-v2', 1, 5, 5, 360, 1, 'Africa/Lagos');
+  'live', 2, 'age-gate-v2', 1, 5, 5, 360, 1, 'Africa/Lagos', true,
+  'free_skill_competition', 'NG', 'test-fixture-evidence-ref');
+
+-- Authenticate as the fixture player (auth.uid() must equal p_user_id).
+SELECT set_config('request.jwt.claim.sub', '76000000-0000-4000-8000-000000000000', true);
+SELECT set_config('request.jwt.claims',
+  '{"sub":"76000000-0000-4000-8000-000000000000","role":"authenticated"}', true);
+
+-- The HMAC route proof is covered by quiz_phase1a_foundation.sql. Here it is
+-- stubbed to true so the test reaches the age gate. This DDL is rolled back
+-- with the transaction below.
+CREATE OR REPLACE FUNCTION public.quiz_route_proof_valid(
+  jsonb, text, text, uuid
+) RETURNS boolean LANGUAGE sql AS 'SELECT true';
 
 CREATE FUNCTION pg_temp.start_state(p_dob date) RETURNS text
 LANGUAGE plpgsql AS $$

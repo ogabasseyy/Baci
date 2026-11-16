@@ -175,4 +175,35 @@ describe('StorefrontMerchantProvider', () => {
     expect(result.current.routingMode).toBe('path');
     expect(result.current.basePath).toBe('/ogabassey');
   });
+
+  it('preserves server path routing on unknown non-platform hostnames', () => {
+    vi.stubGlobal('window', {
+      ...window,
+      location: { ...window.location, hostname: 'proxy.example.com' },
+    });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontMerchantProvider
+        shellSnapshot={{
+          merchant: {
+            id: 'merchant-1',
+            user_id: '',
+            business_name: 'Ogabassey',
+            business_type: 'gadgets',
+            slug: 'ogabassey',
+          },
+          routingMode: 'path',
+          basePath: '/ogabassey',
+          navigationCategories: [],
+        }}
+      >
+        {children}
+      </StorefrontMerchantProvider>
+    );
+
+    const { result } = renderHook(() => useMerchant(), { wrapper });
+
+    expect(result.current.routingMode).toBe('path');
+    expect(result.current.basePath).toBe('/ogabassey');
+  });
 });

@@ -60,7 +60,7 @@ function detectClientRoutingMode(
     return 'domain';
   }
 
-  return 'domain';
+  return serverRoutingMode;
 }
 
 export function StorefrontMerchantProvider({

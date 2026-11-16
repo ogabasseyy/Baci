@@ -1,5 +1,6 @@
 const CUSTOMER_SESSION_HINT_COOKIE = 'baci_customer_session_hint';
 const CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const CUSTOMER_GUEST_HINT_MAX_AGE_SECONDS = 60 * 60;
 
 export type CustomerSessionHint = '1' | '0' | null;
 
@@ -60,7 +61,11 @@ export function writeCustomerSessionHint(
     return;
   }
 
-  document.cookie = `${CUSTOMER_SESSION_HINT_COOKIE}=${value}; Path=${path}; Max-Age=${CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS}; SameSite=Lax${secureAttribute}`;
+  const maxAgeSeconds =
+    value === '0'
+      ? CUSTOMER_GUEST_HINT_MAX_AGE_SECONDS
+      : CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS;
+  document.cookie = `${CUSTOMER_SESSION_HINT_COOKIE}=${value}; Path=${path}; Max-Age=${maxAgeSeconds}; SameSite=Lax${secureAttribute}`;
 }
 
 export function resetCustomerSessionHintForTests(): void {

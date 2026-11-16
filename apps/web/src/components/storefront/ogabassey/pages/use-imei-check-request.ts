@@ -15,6 +15,7 @@ import { createImeiIdempotencyKey } from './imei-checker-idempotency-key';
 import { performImeiCheck } from './imei-checker-request';
 import type { ImeiRequestIdentity, ImeiResult } from './imei-checker-types';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
+import { imeiAccountScope } from './imei-account-scope';
 
 export function useImeiCheckRequest(merchantSlug?: string) {
   const customerAuth = useOptionalCustomerAuth();
@@ -34,7 +35,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
   const requestIdentityRef = useRef<
     (ImeiRequestIdentity & { scope: string }) | null
   >(null);
-  const requestScope = `${merchantSlug ?? ''}:${customerAuth?.customer?.id ?? 'anonymous'}:${customerAuth?.user?.id ?? ''}`;
+  const requestScope = imeiAccountScope(merchantSlug, customerAuth);
   const submitting = useRef(false);
   const [resultScope, setResultScope] = useState('');
   const activeScope = useRef(requestScope);
@@ -175,18 +176,16 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     needsSignIn,
     needsWalletFunding,
     pendingLookup,
+    // Everything about a shown result belongs to the account that opened it.
     result: resultScope === requestScope ? result : null,
-    resultDevice,
-    resultLookupId,
-    resultTier,
+    resultDevice: resultScope === requestScope ? resultDevice : null,
+    resultLookupId: resultScope === requestScope ? resultLookupId : null,
+    resultTier: resultScope === requestScope ? resultTier : null,
     runCheck,
-    openReport(report: ImeiReport, listedForUserId: string) {
+    openReport(report: ImeiReport, listedFor: string) {
       if (submitting.current || pendingLookup.pending) return;
       // Only a report listed for the account signed in right now (Muse).
-      if (
-        listedForUserId !== (customerAuth?.user?.id ?? '') ||
-        activeScope.current !== requestScope
-      )
+      if (listedFor !== requestScope || activeScope.current !== requestScope)
         return;
       setResultScope(requestScope);
       setResult(report.result);

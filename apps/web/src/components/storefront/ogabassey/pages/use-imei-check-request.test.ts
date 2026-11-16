@@ -3,13 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pendingImeiStorageKey } from './imei-pending-storage';
 import { useImeiCheckRequest } from './use-imei-check-request';
 
-const mocks = vi.hoisted(() => ({ check: vi.fn(), poll: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  check: vi.fn(),
+  poll: vi.fn(),
+  customerId: 'hook-customer',
+}));
 vi.mock('./imei-checker-request', () => ({
   performImeiCheck: mocks.check,
   pollImeiCheck: mocks.poll,
 }));
 vi.mock('@/contexts/customer-auth-context', () => ({
-  useOptionalCustomerAuth: () => ({ customer: { id: 'hook-customer' } }),
+  useOptionalCustomerAuth: () => ({ customer: { id: mocks.customerId } }),
 }));
 
 const lookupId = '11111111-1111-4111-8111-111111111111';
@@ -193,7 +197,7 @@ describe('useImeiCheckRequest', () => {
         tier: 'simLock',
         device: null,
         result: report,
-      } as unknown as Parameters<typeof result.current.openReport>[0], '');
+      } as unknown as Parameters<typeof result.current.openReport>[0], 'ogabassey:hook-customer:');
     });
     expect(result.current.resultDevice).toBe('smartphone');
     expect(mocks.check).not.toHaveBeenCalled();
@@ -209,9 +213,37 @@ describe('useImeiCheckRequest', () => {
           device: 'smartphone',
           result: report,
         } as unknown as Parameters<typeof result.current.openReport>[0],
-        'another-user'
+        'ogabassey:another-customer:'
       );
     });
     expect(result.current.result).toBeNull();
+  });
+  it('hides a shown report device, lookup and tier once the account changes', () => {
+    const { result, rerender } = renderHook(() =>
+      useImeiCheckRequest('ogabassey')
+    );
+    act(() => {
+      result.current.openReport(
+        {
+          lookupId,
+          createdAt: '2026-10-31T00:00:00Z',
+          tier: 'simLock',
+          device: 'smartphone',
+          result: report,
+        } as unknown as Parameters<typeof result.current.openReport>[0],
+        'ogabassey:hook-customer:'
+      );
+    });
+    expect(result.current.resultDevice).toBe('smartphone');
+    mocks.customerId = 'another-customer';
+    try {
+      rerender();
+      expect(result.current.result).toBeNull();
+      expect(result.current.resultDevice).toBeNull();
+      expect(result.current.resultLookupId).toBeNull();
+      expect(result.current.resultTier).toBeNull();
+    } finally {
+      mocks.customerId = 'hook-customer';
+    }
   });
 });

@@ -3,6 +3,7 @@
 import { IMEI_SERVICE_TIERS, type ImeiReport } from '@baci/shared/imei';
 import { useEffect, useId, useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
+import { imeiAccountScope } from './imei-account-scope';
 import { ImeiCheckerError } from './imei-checker-error';
 export function ImeiReportHistory({
   merchantSlug,
@@ -10,13 +11,13 @@ export function ImeiReportHistory({
   disabled = false,
 }: {
   merchantSlug?: string;
-  /** The id is the account the tapped report was listed for. */
-  onOpen: (report: ImeiReport, listedForUserId: string) => void;
+  /** The scope is the account the tapped report was listed for. */
+  onOpen: (report: ImeiReport, listedFor: string) => void;
   disabled?: boolean;
 }) {
   const auth = useOptionalCustomerAuth();
   const customerId = auth?.customer?.id;
-  const scope = `${merchantSlug}:${customerId}:${auth?.user?.id ?? ''}`;
+  const scope = imeiAccountScope(merchantSlug, auth);
   const id = useId();
   const [expanded, setExpanded] = useState(false);
   const [page, setPage] = useState(0);
@@ -136,7 +137,7 @@ export function ImeiReportHistory({
                         disabled={disabled}
                         className="min-h-11 w-full rounded-lg p-2 text-left focus-visible:outline-2"
                         onClick={() => {
-                          onOpen(report, auth?.user?.id ?? '');
+                          onOpen(report, scope);
                           setExpanded(false);
                         }}
                       >

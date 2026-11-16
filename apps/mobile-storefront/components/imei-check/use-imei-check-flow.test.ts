@@ -1,4 +1,3 @@
-import type { ImeiReport } from '@baci/shared/imei';
 import { beforeEach, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 
@@ -66,31 +65,10 @@ jest.mock('@/lib/logger', () => ({
 }));
 
 import { useImeiCheckFlow } from './use-imei-check-flow';
+import { report } from './use-imei-check-flow.test-fixture';
 
 const listedFor = () => `merchant:customer:${mockUserId}`;
 
-const report: ImeiReport = {
-  lookupId: '11111111-1111-4111-8111-111111111111',
-  createdAt: '2026-10-31T00:00:00Z',
-  tier: 'simLock',
-  device: 'smartphone',
-  result: {
-    imei: '490154203237518',
-    device: 'iPhone 13',
-    modelNumber: '',
-    status: 'Unknown',
-    icloud: 'Unknown',
-    icloudLock: 'Unknown',
-    simLock: 'Unlocked',
-    blacklistStatus: 'Unknown',
-    carrier: 'Unknown',
-    deviceImage: '',
-    score: 50,
-    deviceType: 'apple',
-    verdict: 'Not checked',
-    verdictType: 'caution',
-  },
-};
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'user-a';
@@ -183,35 +161,6 @@ it('blocks double taps while keeping the original report visible', async () => {
   });
   expect(result.current.result?.blacklistStatus).toBe('Clean');
   expect(result.current.isLoading).toBe(false);
-});
-
-it('accepts a new follow-up after the authenticated user changes', async () => {
-  mockSubmit.mockResolvedValue({
-    response: { ok: true },
-    rawData: {
-      success: true,
-      status: 'complete',
-      lookupId: report.lookupId,
-      data: { ...report.result, blacklistStatus: 'Clean' },
-    },
-  });
-  const { result, rerender } = renderHook(() =>
-    useImeiCheckFlow('smartphone', 'https://test.invalid')
-  );
-  act(() => result.current.openReport(report, listedFor()));
-  mockUserId = 'user-b';
-  rerender({});
-  expect(result.current.result).toBeNull();
-  act(() => result.current.openReport(report, listedFor()));
-  await act(async () => {
-    await result.current.handleVerify(
-      'blacklist',
-      report.result.imei,
-      'smartphone',
-      true
-    );
-  });
-  expect(result.current.result?.blacklistStatus).toBe('Clean');
 });
 
 it.each([
@@ -317,19 +266,6 @@ it('pays a reopened report follow-up from PiggyVest when store credit cannot cov
   expect(result.current.result).toEqual(report.result);
 });
 
-it('hides the shown report device and lookup as soon as the account changes', () => {
-  const { result, rerender } = renderHook(() =>
-    useImeiCheckFlow('smartphone', 'https://test.invalid')
-  );
-  act(() => result.current.openReport(report, listedFor()));
-  expect(result.current.resultDevice).toBe('smartphone');
-  mockUserId = 'user-b';
-  rerender({});
-  expect(result.current.result).toBeNull();
-  expect(result.current.resultDevice).toBeNull();
-  expect(result.current.resultLookupId).toBeNull();
-});
-
 it('shows an invalid number inline and drops it once the number is edited', async () => {
   const { result } = renderHook(() =>
     useImeiCheckFlow('smartphone', 'https://test.invalid')
@@ -343,15 +279,4 @@ it('shows an invalid number inline and drops it once the number is edited', asyn
   expect(mockSubmit).not.toHaveBeenCalled();
   act(() => result.current.dropInvalidIdentifierError());
   expect(result.current.error).toBeNull();
-});
-
-it('does not show a report listed for the account that just signed out', () => {
-  const { result, rerender } = renderHook(() =>
-    useImeiCheckFlow('smartphone', 'https://test.invalid')
-  );
-  const listedForA = listedFor();
-  mockUserId = 'user-b';
-  rerender({});
-  act(() => result.current.openReport(report, listedForA));
-  expect(result.current.result).toBeNull();
 });

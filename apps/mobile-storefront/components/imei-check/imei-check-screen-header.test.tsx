@@ -31,4 +31,20 @@ describe('ImeiCheckScreenHeader', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Back' }));
     expect(router.back).toHaveBeenCalled();
   });
+
+  it('titles a report and returns to the checker from it', () => {
+    jest.mocked(router.back).mockClear();
+    const onBackFromReport = jest.fn();
+    render(
+      <ImeiCheckScreenHeader
+        step="report"
+        textColor="#000"
+        onBackFromReport={onBackFromReport}
+      />
+    );
+    expect(screen.getByLabelText('IMEI Report')).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(onBackFromReport).toHaveBeenCalledTimes(1);
+    expect(router.back).not.toHaveBeenCalled();
+  });
 });

@@ -1,24 +1,26 @@
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
 import {
   canAssessImeiNetworkUnlock,
+  getImeiBlacklistState,
   getImeiEffectiveVerdict,
+  isValidDeviceIdentifier,
 } from '@baci/shared/imei';
-import Ionicons, {
-  type IoniconsIconName,
-} from '@react-native-vector-icons/ionicons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
-import { Stack } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BRAND, SPACING, withAlpha } from '@/constants/Colors';
+import { BRAND, SPACING } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ImeiResult } from '@/lib/validation';
-import { getVerdictColors } from './get-verdict-colors';
-import { styles } from './imei-check.styles';
+import { ImeiBlacklistCheckAction } from './imei-blacklist-check-action';
 import type { ImeiCheckerColors } from './imei-check.types';
+import { ImeiCheckPending } from './imei-check-pending';
+import { reportStyles as styles } from './imei-check-report.styles';
 import { getImeiResultStatusCards } from './imei-check-result-status-cards';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
-import { isStatusClean } from './is-status-clean';
+import { ImeiResultStatusList } from './imei-result-status-list';
+import { ImeiResultVerdictBanner } from './imei-result-verdict-banner';
+import { ImeiTicketNotch } from './imei-ticket-notch';
 
 interface ImeiCheckResultViewProps {
   accessToken?: string;
@@ -28,8 +30,19 @@ interface ImeiCheckResultViewProps {
   lookupId?: string | null;
   result: ImeiResult;
   onReset: () => void;
+  /** A blacklist follow-up for a reopened report that didn't include it. */
+  onCheckBlacklist?: () => void;
+  isChecking?: boolean;
+  checkError?: string | null;
+  pendingPaused?: boolean;
+  canResume?: boolean;
 }
 
+/**
+ * The report: the verdict first (coloured by what it means), then the
+ * device, then every finding in one list. The screen owns the header, so
+ * its title and back button follow the step (see ImeiCheckScreenHeader).
+ */
 export function ImeiCheckResultView({
   accessToken,
   apiBaseUrl,
@@ -38,142 +51,132 @@ export function ImeiCheckResultView({
   lookupId,
   result,
   onReset,
+  onCheckBlacklist,
+  isChecking = false,
+  checkError,
+  pendingPaused = false,
+  canResume = false,
 }: ImeiCheckResultViewProps) {
   const insets = useSafeAreaInsets();
-  const effectiveVerdict = getImeiEffectiveVerdict(result);
-  const verdictColors = getVerdictColors(effectiveVerdict.type, colors);
+  const verdict = getImeiEffectiveVerdict(result);
   const statusCards = getImeiResultStatusCards(
     result,
-    colors,
     currentTier.checksIncluded
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen
-        options={{
-          title: 'IMEI Results',
-          headerLeft: () => (
-            <Pressable
-              accessibilityHint="Returns to the IMEI checker"
-              accessibilityLabel="Back"
-              accessibilityRole="button"
-              // Back = leave the result, not the checker: the result is a
-              // conditional render on this route, so router.back() would pop
-              // the whole screen and land on home.
-              onPress={onReset}
-            >
-              <Ionicons name="chevron-back" size={26} color={colors.text} />
-            </Pressable>
-          ),
-        }}
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: insets.bottom + SPACING.lg },
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
+      <ImeiResultVerdictBanner
+        colors={colors}
+        score={result.score}
+        text={verdict.text}
+        type={verdict.type}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + SPACING.lg },
+      <View
+        style={[
+          styles.device,
+          { backgroundColor: colors.card, borderColor: colors.border },
         ]}
-        showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[
-            styles.resultHeader,
-            { backgroundColor: colors.card, borderColor: verdictColors.border },
-          ]}
-        >
-          <DeviceImage result={result} colors={colors} />
-          <View style={styles.deviceInfo}>
-            <Text style={[styles.tierBadge, { color: colors.textSecondary }]}>
-              {currentTier.name}
-            </Text>
-            <Text style={[styles.deviceName, { color: colors.text }]}>
-              {result.deviceProfile?.model ?? result.device}
-            </Text>
-            {result.deviceProfile && (
-              <>
-                {(result.deviceProfile.color ||
-                  result.deviceProfile.storage) && (
-                  <Text
-                    style={[styles.imeiText, { color: colors.textSecondary }]}
-                  >
-                    {[result.deviceProfile.color, result.deviceProfile.storage]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
-                )}
-                {result.deviceProfile.imageMatch !== 'none' && (
-                  <Text
-                    style={[styles.imeiText, { color: colors.textSecondary }]}
-                  >
-                    {result.deviceProfile.imageMatch === 'color' &&
-                    result.deviceProfile.color
-                      ? `Catalog illustration · ${result.deviceProfile.color}`
-                      : 'Model illustration · colour may differ'}
-                  </Text>
-                )}
-              </>
-            )}
-            <Text style={[styles.imeiText, { color: colors.textSecondary }]}>
-              IMEI: {result.imei}
-            </Text>
-            {result.modelNumber && (
-              <Text style={[styles.modelText, { color: colors.textSecondary }]}>
-                Model: {result.modelNumber}
-              </Text>
-            )}
-          </View>
-          <TrustScore result={result} colors={colors} />
-        </View>
-
-        <View style={styles.statusGrid}>
-          {statusCards.map((card) => (
-            <StatusCard key={card.label} colors={colors} {...card} />
-          ))}
-        </View>
-
-        <View
-          style={[
-            styles.verdictContainer,
-            {
-              backgroundColor: verdictColors.bg,
-              borderColor: verdictColors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.verdictText, { color: verdictColors.text }]}>
-            {effectiveVerdict.text}
+        <ImeiTicketNotch colors={colors} />
+        <DeviceImage result={result} colors={colors} />
+        <View style={styles.deviceInfo}>
+          <Text style={[styles.tierName, { color: colors.textSecondary }]}>
+            {currentTier.name}
           </Text>
-        </View>
-
-        {lookupId && apiBaseUrl && canAssessImeiNetworkUnlock(result) ? (
-          <ImeiRemediationOffer
-            accessToken={accessToken}
-            apiBaseUrl={apiBaseUrl}
-            colors={colors}
-            identifier={result.imei}
-            lookupId={lookupId}
-          />
-        ) : null}
-
-        <Pressable
-          style={[
-            styles.resetButton,
-            {
-              backgroundColor: withAlpha(BRAND.primary, 0.06),
-              borderColor: withAlpha(BRAND.primary, 0.18),
-            },
-          ]}
-          onPress={onReset}
-        >
-          <Ionicons name="scan-outline" size={18} color={BRAND.primary} />
-          <Text style={[styles.resetButtonText, { color: BRAND.primary }]}>
-            Check Another Device
+          <Text style={[styles.deviceName, { color: colors.text }]}>
+            {result.deviceProfile?.model ?? result.device}
           </Text>
-        </Pressable>
-      </ScrollView>
-    </View>
+          {result.deviceProfile &&
+          (result.deviceProfile.color || result.deviceProfile.storage) ? (
+            <Text style={[styles.deviceMeta, { color: colors.textSecondary }]}>
+              {[result.deviceProfile.color, result.deviceProfile.storage]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          ) : null}
+          {result.deviceProfile &&
+          result.deviceProfile.imageMatch !== 'none' ? (
+            <Text style={[styles.deviceMeta, { color: colors.textSecondary }]}>
+              {result.deviceProfile.imageMatch === 'color' &&
+              result.deviceProfile.color
+                ? `Catalog illustration · ${result.deviceProfile.color}`
+                : 'Model illustration · colour may differ'}
+            </Text>
+          ) : null}
+          <Text style={[styles.imei, { color: colors.textSecondary }]}>
+            IMEI: {result.imei}
+          </Text>
+          {result.modelNumber ? (
+            <Text style={[styles.deviceMeta, { color: colors.textSecondary }]}>
+              Model: {result.modelNumber}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      {statusCards.length > 0 ? (
+        <Text
+          accessibilityRole="header"
+          style={[styles.sectionTitle, { color: colors.text }]}
+        >
+          What we checked
+        </Text>
+      ) : null}
+      <ImeiResultStatusList cards={statusCards} colors={colors} />
+
+      {onCheckBlacklist &&
+      !currentTier.checksIncluded.includes('blacklistStatus') &&
+      isValidDeviceIdentifier(result.imei, 'imei') &&
+      getImeiBlacklistState(result.blacklistStatus) === 'unknown' ? (
+        <ImeiBlacklistCheckAction
+          isChecking={isChecking}
+          onCheck={onCheckBlacklist}
+        />
+      ) : null}
+      {isChecking ? (
+        <ImeiCheckPending
+          colors={colors}
+          paused={pendingPaused}
+          canResume={canResume}
+        />
+      ) : null}
+      {checkError ? (
+        <Text accessibilityRole="alert" style={{ color: colors.text }}>
+          {checkError}
+        </Text>
+      ) : null}
+
+      {lookupId && apiBaseUrl && canAssessImeiNetworkUnlock(result) ? (
+        <ImeiRemediationOffer
+          accessToken={accessToken}
+          apiBaseUrl={apiBaseUrl}
+          colors={colors}
+          identifier={result.imei}
+          lookupId={lookupId}
+        />
+      ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        style={[styles.again, { backgroundColor: BRAND.primary }]}
+        onPress={onReset}
+        disabled={isChecking}
+      >
+        <Ionicons name="scan-outline" size={18} color={BRAND.onPrimary} />
+        <Text style={[styles.againText, { color: BRAND.onPrimary }]}>
+          Check another device
+        </Text>
+      </Pressable>
+    </ScrollView>
   );
 }
 
@@ -185,13 +188,13 @@ function DeviceImage({
   result: ImeiResult;
 }) {
   return (
-    <View style={styles.deviceImageContainer}>
+    <View style={styles.deviceImageBox}>
       {result.deviceImage ? (
         <Image
           source={createSafeBoundedImageSource({
-            height: 60,
+            height: 56,
             uri: result.deviceImage,
-            width: 60,
+            width: 56,
           })}
           style={styles.deviceImage}
           contentFit="contain"
@@ -199,83 +202,10 @@ function DeviceImage({
       ) : (
         <Ionicons
           name="phone-portrait-outline"
-          size={48}
+          size={40}
           color={colors.textSecondary}
         />
       )}
-    </View>
-  );
-}
-
-function TrustScore({
-  colors,
-  result,
-}: {
-  colors: ImeiCheckerColors;
-  result: ImeiResult;
-}) {
-  const palette = getVerdictColors(
-    getImeiEffectiveVerdict(result).type,
-    colors
-  );
-
-  return (
-    <View style={[styles.scoreContainer, { backgroundColor: palette.bg }]}>
-      <Text style={[styles.scoreValue, { color: palette.text }]}>
-        {result.score}%
-      </Text>
-      <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>
-        Trust
-      </Text>
-    </View>
-  );
-}
-
-function StatusCard({
-  cleanAware = false,
-  colors,
-  icon,
-  label,
-  tint,
-  value,
-}: {
-  cleanAware?: boolean;
-  colors: ImeiCheckerColors;
-  icon: IoniconsIconName;
-  label: string;
-  tint?: string;
-  value: string;
-}) {
-  const clean = isStatusClean(value);
-  const cleanPalette = getVerdictColors('safe', colors);
-  const dangerPalette = getVerdictColors('danger', colors);
-  const color = cleanAware
-    ? clean
-      ? cleanPalette.text
-      : dangerPalette.text
-    : tint || colors.text;
-  const backgroundColor = cleanAware
-    ? clean
-      ? cleanPalette.bg
-      : dangerPalette.bg
-    : withAlpha(color, 0.12);
-
-  return (
-    <View
-      style={[
-        styles.statusCard,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
-      <View style={[styles.statusIcon, { backgroundColor }]}>
-        <Ionicons name={icon} size={20} color={color} />
-      </View>
-      <View style={styles.statusInfo}>
-        <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>
-          {label}
-        </Text>
-        <Text style={[styles.statusValue, { color }]}>{value}</Text>
-      </View>
     </View>
   );
 }

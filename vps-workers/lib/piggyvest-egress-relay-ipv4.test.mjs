@@ -35,7 +35,7 @@ describe('piggyvest egress relay IPv4 pinning', () => {
     const relay = createRelayServer({
       secret: SECRET,
       now: () => NOW_SECONDS * 1000,
-      log: () => {},
+      log: () => undefined,
       upstream,
     });
     const relayPort = await listen(relay);

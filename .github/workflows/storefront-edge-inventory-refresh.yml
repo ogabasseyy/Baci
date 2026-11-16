@@ -92,7 +92,7 @@ jobs:
           # The refresher may only modify the snapshot and its test, and may
           # create no files (untracked files from the install are excluded by
           # comparing against the listing taken before the refresh).
-          unexpected="$(git diff --name-only | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
+          unexpected="$(git diff HEAD --name-only | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
           created="$(comm -13 <(printf '%s\n' "$untracked_before") <(git ls-files --others --exclude-standard | sort) | grep -v '^$' || true)"
           unexpected="$(printf '%s\n%s\n' "$unexpected" "$created" | grep -v '^$' || true)"
           if [ -n "$unexpected" ]; then
@@ -105,10 +105,21 @@ jobs:
       # decisions, and failing those is a human call on the route PR.
       - name: Check the refreshed snapshot passes its binding test
         if: steps.refresh.outputs.changed == 'true'
-        run: >-
-          pnpm --dir apps/web exec vitest run
-          tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
-          -t 'binds the checked-in inventory snapshot to current committed source content'
+        env:
+          RESULT_JSON: ${{ runner.temp }}/binding-test.json
+        run: |
+          set -euo pipefail
+          pnpm --dir apps/web exec vitest run \
+            tools/cost/storefront-edge-inventory-snapshot.repository.test.ts \
+            -t 'binds the checked-in inventory snapshot to current committed source content' \
+            --reporter=default --reporter=json --outputFile.json="$RESULT_JSON"
+          # A name filter that matches nothing exits 0: require exactly one
+          # executed, passing test so a renamed title cannot pass vacuously.
+          if ! jq -e '.numPassedTests == 1 and .numFailedTests == 0' "$RESULT_JSON" >/dev/null; then
+            echo "::error::the snapshot binding test did not run exactly once and pass" >&2
+            jq '{numTotalTests, numPassedTests, numFailedTests, numPendingTests}' "$RESULT_JSON" >&2
+            exit 1
+          fi
       - name: Stage the regenerated files
         if: steps.refresh.outputs.changed == 'true'
         run: |
@@ -149,6 +160,7 @@ jobs:
           # Configure BACI_AUTOMATION_PR_TOKEN (contents + pull-requests write)
           # so the draft gets CI and reviewers without a manual close/reopen.
           GH_TOKEN: ${{ secrets.BACI_AUTOMATION_PR_TOKEN || github.token }}
+          HAS_AUTOMATION_TOKEN: ${{ secrets.BACI_AUTOMATION_PR_TOKEN != '' }}
           CHANGED: ${{ needs.regenerate.outputs.changed }}
           DIGEST: ${{ needs.regenerate.outputs.digest }}
           ROW_COUNT: ${{ needs.regenerate.outputs.row_count }}
@@ -157,8 +169,13 @@ jobs:
           REFRESHED_DIR: ${{ runner.temp }}/refreshed
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BOT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           set -euo pipefail
+          if [ "$HAS_AUTOMATION_TOKEN" != "true" ]; then
+            echo "::warning::BACI_AUTOMATION_PR_TOKEN is not set: a refresh draft opened with GITHUB_TOKEN gets no pull_request CI until someone closes and reopens it."
+            echo "BACI_AUTOMATION_PR_TOKEN is not set; refresh drafts need a close/reopen to start CI." >> "$GITHUB_STEP_SUMMARY"
+          fi
           # Paginated, so no open-PR count can hide an older refresh PR.
           open_heads="$(gh api --paginate "repos/${REPO}/pulls?state=open&base=main&per_page=100" \
             --jq '.[] | select(.head.repo.full_name == env.REPO) | .head.ref' \
@@ -178,7 +195,7 @@ jobs:
               cp "$REFRESHED_DIR/task-1a-inventory.json" "$INVENTORY_PATH"
               cp "$REFRESHED_DIR/storefront-edge-inventory-snapshot.repository.test.ts" "$TEST_PATH"
               git config user.name "github-actions[bot]"
-              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git config user.email "$BOT_EMAIL"
               # Reuses the branch when a rerun finds this exact refresh already
               # pushed (the earlier attempt never reached `gh pr create`).
               GIT_PUSH_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
@@ -208,12 +225,16 @@ jobs:
             if [ -z "$head" ] || [ "$head" = "$keep" ]; then continue; fi
             # Only close a branch that still holds just the bot's one refresh
             # commit; a branch with human follow-ups stays open for a person.
-            commits="$(gh api "repos/${REPO}/compare/main...${head}" --jq '[.ahead_by, ([.files[].filename] | join("\n"))] | @tsv' 2>/dev/null || true)"
-            ahead="${commits%%$'\t'*}"
-            files="$(printf '%b' "${commits#*$'\t'}")"
-            foreign="$(printf '%s\n' "$files" | grep -v '^$' | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
-            if [ "$ahead" != "1" ] || [ -n "$foreign" ]; then
-              echo "::warning::Leaving $head open: it carries more than the bot's refresh commit."
+            # Amending or replacing that commit changes its committer, so a
+            # human-edited refresh is never closed or deleted here.
+            compare="$(gh api "repos/${REPO}/compare/main...${head}" 2>/dev/null || true)"
+            ahead="$(jq -r '.ahead_by // ""' <<<"${compare:-null}")"
+            bot_authored="$(jq -r --arg bot "$BOT_EMAIL" \
+              '[.commits[]? | .commit.author.email == $bot and .commit.committer.email == $bot] | (length == 1 and all)' \
+              <<<"${compare:-null}")"
+            foreign="$(jq -r '.files[]?.filename' <<<"${compare:-null}" | grep -vxF -e "$INVENTORY_PATH" -e "$TEST_PATH" || true)"
+            if [ "$ahead" != "1" ] || [ "$bot_authored" != "true" ] || [ -n "$foreign" ]; then
+              echo "::warning::Leaving $head open: it carries more than the bot's own refresh commit."
               continue
             fi
             reason="Main now matches the regenerated snapshot."

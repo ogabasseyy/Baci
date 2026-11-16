@@ -219,13 +219,14 @@ BEGIN
 END $$;
 
 -- Scheduled insert without requested_publish_at backfills requested_publish_at from published_at
-INSERT INTO public.blog_posts (id, merchant_id, title, slug, content, status, published_at)
+INSERT INTO public.blog_posts (id, merchant_id, title, slug, content, author_name, status, published_at)
 VALUES (
   'd3000000-0000-4000-8000-000000000097',
   'd2000000-0000-4000-8000-000000000001',
   'Scheduled Insert Backfill',
   'scheduled-insert-backfill',
   'Scheduled body',
+  'Editor',
   'scheduled',
   '2026-11-26T10:00:00Z'
 );

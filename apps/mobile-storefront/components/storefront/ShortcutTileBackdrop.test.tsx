@@ -18,5 +18,5 @@ it.each([
     (view) => StyleSheet.flatten(view.props.style)?.backgroundColor === color
   );
   expect(fills).toHaveLength(fillCount);
-  expect(views[0]?.props.pointerEvents).toBe('none');
+  expect(StyleSheet.flatten(views[0]?.props.style)?.pointerEvents).toBe('none');
 });

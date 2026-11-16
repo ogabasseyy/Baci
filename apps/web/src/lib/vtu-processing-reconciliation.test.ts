@@ -14,10 +14,7 @@ vi.mock('@/lib/vtu-replay-attribute-overlay', () => ({
   overlayReplayAttributes: overlayReplayAttributesMock,
 }));
 
-import {
-  fulfilReconciledVtuPurchase,
-  reconcileProcessingVtuTransactions,
-} from '@/lib/vtu-processing-reconciliation';
+import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
 
 function createProcessingQuery(response: {
   count?: null | number;
@@ -720,17 +717,30 @@ describe('reconcileProcessingVtuTransactions', () => {
   });
 });
 
-describe('fulfilReconciledVtuPurchase', () => {
-  it('runs the same fulfil operation the reconciliation uses, with the given input', async () => {
+describe('afterReconcile', () => {
+  it('runs once after the page, handed the same fulfil operation the reconciliation uses', async () => {
+    const supabase = createSupabase({
+      dataQuery: createProcessingQuery({ data: [] }),
+    });
+    const afterReconcile = vi.fn(async () => {});
+
+    await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      supabase: supabase as never,
+      afterReconcile,
+    });
+
+    expect(afterReconcile).toHaveBeenCalledTimes(1);
+    const [fulfil] = afterReconcile.mock.calls[0] as unknown as [
+      (input: unknown) => Promise<unknown>,
+    ];
     fulfillPendingVtuTransactionMock.mockResolvedValue({ status: 'done' });
     const input = {
-      supabase: {} as never,
+      supabase: {},
       transactionId: 'txn-1',
       walletPayClaimed: true,
     };
-    await expect(fulfilReconciledVtuPurchase(input)).resolves.toEqual({
-      status: 'done',
-    });
+    await expect(fulfil(input)).resolves.toEqual({ status: 'done' });
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith(input);
   });
 });

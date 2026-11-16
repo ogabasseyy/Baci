@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '@/lib/logger';
 import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
+import { getRedis } from '@/lib/redis';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { resetRecentSessionChecksForTesting } from './quiz-session-recency';
@@ -22,6 +23,7 @@ vi.mock('@/lib/api-auth', () => ({
 vi.mock('@/lib/quiz/quiz-access-token', () => ({
   verifyQuizAccessToken: vi.fn(),
 }));
+vi.mock('@/lib/redis', () => ({ getRedis: vi.fn() }));
 vi.mock('@/lib/supabase/anon', () => ({ createAnonClient: vi.fn() }));
 vi.mock('@/lib/supabase/scoped', () => ({ createScopedClient: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
@@ -47,6 +49,7 @@ describe('quiz route-auth recent session check', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetRecentSessionChecksForTesting();
+    vi.mocked(getRedis).mockReturnValue(null);
     getUser.mockReset();
     vi.mocked(createAnonClient).mockReturnValue({ auth: { getUser } } as never);
     vi.mocked(createScopedClient).mockReturnValue({ from: vi.fn() } as never);
@@ -98,6 +101,28 @@ describe('quiz route-auth recent session check', () => {
     });
 
     expect(getUser).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask Supabase Auth again when another server instance already did', async () => {
+    const values = new Map<string, unknown>();
+    vi.mocked(getRedis).mockReturnValue({
+      get: vi.fn(async (key: string) => values.get(key) ?? null),
+      set: vi.fn(async (key: string, value: unknown) => {
+        values.set(key, value);
+        return 'OK';
+      }),
+    } as never);
+    getUser.mockResolvedValue(sessionExists());
+
+    await requireQuizUser(answerRequest(), { requireRecentSession: true });
+    // A different instance: nothing in its own memory, only the shared store.
+    resetRecentSessionChecksForTesting();
+    const second = await requireQuizUser(answerRequest(), {
+      requireRecentSession: true,
+    });
+
+    expect(second.user).toEqual({ id: USER_UUID });
+    expect(getUser).toHaveBeenCalledTimes(1);
   });
 
   it('lets the answer through when Supabase Auth cannot answer, and asks again next time', async () => {

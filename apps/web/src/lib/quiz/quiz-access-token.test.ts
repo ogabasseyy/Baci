@@ -51,6 +51,13 @@ async function sign(
     .sign(key);
 }
 
+// A token nobody signed: header and claims, empty signature.
+function unsignedToken(header: Record<string, unknown>) {
+  const encode = (value: unknown) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode(header)}.${encode({ role: 'authenticated', sub: USER_ID })}.`;
+}
+
 function verify(token: string, resolver: JWTVerifyGetKey = keyResolver) {
   return verifyQuizAccessToken(token, {
     keyResolver: resolver,
@@ -159,6 +166,22 @@ describe('verifyQuizAccessToken', () => {
 
   it('rejects a malformed token as invalid', async () => {
     expect(await verify('not-a-jwt')).toEqual({ status: 'invalid' });
+  });
+
+  it.each([
+    'none',
+    'None',
+    'NONE',
+  ])('rejects an unsigned alg=%s token as invalid', async (alg) => {
+    expect(await verify(unsignedToken({ alg, typ: 'JWT' }))).toEqual({
+      status: 'invalid',
+    });
+  });
+
+  it('rejects a token that names no algorithm as invalid', async () => {
+    expect(await verify(unsignedToken({ typ: 'JWT' }))).toEqual({
+      status: 'invalid',
+    });
   });
 
   it('treats a legacy HS256 token as unverifiable', async () => {

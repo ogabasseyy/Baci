@@ -67,16 +67,25 @@ function resolveSupabaseUrl(override?: string): string | null {
   }
 }
 
-/** true = allowed alg, false = another alg, null = not a decodable JWT. */
-function hasAllowedAlgorithm(token: string): boolean | null {
+/**
+ * - `allowed`: an algorithm this process can verify against the JWKS.
+ * - `other`: a real signing algorithm it cannot verify here (legacy HS256, or
+ *   one the project moves to later), so Supabase Auth decides.
+ * - `rejected`: not a decodable JWT, no algorithm, or the unsigned `none`
+ *   algorithm. Never a real access token, so it must not cost a Supabase
+ *   Auth call.
+ */
+function classifyAlgorithm(token: string): 'allowed' | 'other' | 'rejected' {
   try {
     const { alg } = decodeProtectedHeader(token);
-    return (
-      typeof alg === 'string' &&
-      (ALLOWED_ALGORITHMS as readonly string[]).includes(alg)
-    );
+    if (typeof alg !== 'string') return 'rejected';
+    const name = alg.trim().toLowerCase();
+    if (name === '' || name === 'none') return 'rejected';
+    return (ALLOWED_ALGORITHMS as readonly string[]).includes(alg)
+      ? 'allowed'
+      : 'other';
   } catch {
-    return null;
+    return 'rejected';
   }
 }
 
@@ -107,18 +116,18 @@ function getErrorCode(error: unknown): string | null {
 
 /**
  * Verifies a Supabase access token against the project's published JWKS.
- * Never throws. `invalid` means the token is provably bad; `unverifiable`
- * means this process could not decide (legacy HS256 token, unknown key id,
- * JWKS unreachable, unexpected issuer or audience) and the caller should ask
- * Supabase Auth instead.
+ * Never throws. `invalid` means the token is provably bad (including an
+ * unsigned `alg: none` token); `unverifiable` means this process could not
+ * decide (legacy HS256 token, unknown key id, JWKS unreachable, unexpected
+ * issuer or audience) and the caller should ask Supabase Auth instead.
  */
 export async function verifyQuizAccessToken(
   token: string,
   options: QuizAccessTokenOptions = {}
 ): Promise<QuizAccessTokenResult> {
-  const algorithmAllowed = hasAllowedAlgorithm(token);
-  if (algorithmAllowed === null) return { status: 'invalid' };
-  if (!algorithmAllowed) return { status: 'unverifiable' };
+  const algorithm = classifyAlgorithm(token);
+  if (algorithm === 'rejected') return { status: 'invalid' };
+  if (algorithm === 'other') return { status: 'unverifiable' };
 
   const supabaseUrl = resolveSupabaseUrl(options.supabaseUrl);
   if (!supabaseUrl) return { status: 'unverifiable' };

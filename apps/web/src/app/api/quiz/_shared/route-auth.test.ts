@@ -17,6 +17,8 @@ vi.mock('@/lib/api-auth', () => ({
     /^\s*bearer(?:\s|$)/i.test(request.headers.get('Authorization') ?? ''),
 }));
 
+// No shared store here: these tests cover this instance's own behaviour.
+vi.mock('@/lib/redis', () => ({ getRedis: () => null }));
 vi.mock('@/lib/quiz/quiz-access-token', () => ({
   verifyQuizAccessToken: vi.fn(),
 }));

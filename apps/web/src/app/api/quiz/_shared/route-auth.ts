@@ -7,8 +7,8 @@ import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
 import { mapQuizRpcClientError } from './quiz-rpc-client-errors';
 import {
-  hasRecentSessionCheck,
-  recordSessionCheck,
+  rememberSessionCheck,
+  wasSessionCheckedRecently,
 } from './quiz-session-recency';
 import type { ServerSupabaseClient } from './route-helpers-guards';
 
@@ -21,6 +21,15 @@ import type { ServerSupabaseClient } from './route-helpers-guards';
 
 export type QuizAuthUser = { id: string };
 
+// How much each kind of quiz route trusts a token on its signature alone:
+// - neither option (boards, counts, events, own result): signature only. A
+//   signed-out or revoked token keeps READ access until it expires (access
+//   tokens live one hour by default). Accepted so that polling by every
+//   player during a live quiz never depends on Supabase Auth.
+// - requireRecentSession (answers, resume): signature on every request,
+//   Supabase Auth at most once a minute per token.
+// - requireFreshSession (start, attestation, claims, awards): Supabase Auth on
+//   every request; these fail closed when Supabase Auth cannot answer.
 export type RequireQuizUserOptions = {
   /**
    * Always ask Supabase Auth (session revocation matters) instead of trusting
@@ -29,10 +38,19 @@ export type RequireQuizUserOptions = {
   requireFreshSession?: boolean;
   /**
    * Verify the token locally on every request and also ask Supabase Auth
-   * about the session at most once a minute per token. For the answer route:
-   * it changes state, so a signed-out or revoked session must stop within
-   * about a minute, but a Supabase Auth call per answer (or an Auth outage)
-   * must not cost a player a question.
+   * about the session at most once a minute per token. For the answer and
+   * resume routes: they act on the live attempt, so a signed-out or revoked
+   * session must stop within about a minute, but a Supabase Auth call per
+   * answer must not cost a player a question.
+   *
+   * Deliberately fails OPEN when Supabase Auth cannot answer: the answer is
+   * accepted on the signature alone. What that exposes is narrow. The token
+   * is still signed, unexpired and bound to one player; an attempt can only
+   * be started with a live session (the start route fails closed); so the
+   * most a revoked token can do is keep answering its own already-started
+   * attempt for the length of the outage, capped by the token's expiry.
+   * Failing closed instead would stop the quiz for every player whenever
+   * Supabase Auth is slow.
    */
   requireRecentSession?: boolean;
 };
@@ -156,7 +174,7 @@ async function checkBearerWithSupabaseAuth(
   }
   if (!user) return unauthorizedResult();
 
-  recordSessionCheck(token);
+  await rememberSessionCheck(token);
   return {
     authMethod: 'bearer',
     response: null,
@@ -182,7 +200,10 @@ export async function requireQuizUser(
 
     const verified = await verifyQuizAccessToken(bearerToken);
     if (verified.status === 'verified') {
-      if (options.requireRecentSession && !hasRecentSessionCheck(bearerToken)) {
+      if (
+        options.requireRecentSession &&
+        !(await wasSessionCheckedRecently(bearerToken))
+      ) {
         // Not logged per request: during an Auth outage this runs for every
         // answer, and the routes that must fail closed already log it.
         const session = await checkBearerWithSupabaseAuth(bearerToken, {
@@ -192,8 +213,9 @@ export async function requireQuizUser(
           return session;
         }
         // Supabase Auth could not answer. The signature is valid, so let the
-        // answer through instead of costing the player a question; nothing is
-        // remembered, so the next request asks again.
+        // answer through instead of costing the player a question (see
+        // requireRecentSession for what this exposes); nothing is remembered,
+        // so the next request asks again.
       }
       return {
         authMethod: 'bearer',

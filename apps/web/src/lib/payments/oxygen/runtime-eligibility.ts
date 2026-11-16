@@ -36,6 +36,17 @@ export async function refreshOxygenEligibility(
       : response.status === 'FAILED'
         ? 'failed'
         : 'pending';
+  // Retain only a known, customer-safe reason, never the provider's message.
+  if (
+    response.status === 'FAILED' &&
+    /^your financial details do not match(?:[.!]|$)/i.test(
+      response.message.trim()
+    )
+  ) {
+    state.eligibilityFailureReason = 'financial_details_mismatch';
+  } else {
+    delete state.eligibilityFailureReason;
+  }
   if (response.status === 'COMPLETED') state.eligible = response.is_eligible;
   else delete state.eligible;
   if (state.eligible) {

@@ -78,6 +78,52 @@ it('keeps an empty pending response pending instead of treating it as a decline'
   expect(state.eligible).toBeUndefined();
   expect(state.offers).toBeUndefined();
 });
+it('retains a safe reason for the observed financial-details mismatch', async () => {
+  const state: OxygenProviderState = {
+    applicationReference: '60000000-0000-4000-8000-000000000001',
+  };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      loan_request_reference: state.applicationReference,
+      status: 'FAILED',
+      is_eligible: false,
+      offers: [],
+      message:
+        'Your financial details do not match. Please visit your bank to regularize or contact support for help private@example.test',
+    }),
+  });
+  expect(state).toMatchObject({
+    eligibilityStatus: 'failed',
+    eligibilityFailureReason: 'financial_details_mismatch',
+  });
+  expect(state.eligible).toBeUndefined();
+  expect(oxygenProviderStateSchema.parse(state)).toEqual(state);
+  expect(JSON.stringify(state)).not.toContain('private@example.test');
+});
+
+it.each([
+  ['FAILED', 'An unexpected failure for private@example.test'],
+  ['PENDING', 'Your financial details do not match. Please visit your bank.'],
+  ['COMPLETED', 'Your financial details do not match. Please visit your bank.'],
+])('clears an old reason for %s without retaining provider text', async (status, message) => {
+  const state = {
+    applicationReference: '60000000-0000-4000-8000-000000000001',
+    eligibilityFailureReason: 'financial_details_mismatch',
+  } as OxygenProviderState;
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      loan_request_reference: state.applicationReference,
+      status,
+      is_eligible: false,
+      offers: [],
+      message,
+    }),
+  });
+  expect(state.eligibilityFailureReason).toBeUndefined();
+  expect(JSON.stringify(state)).not.toContain(message);
+});
 it('does not interpret offers with an unknown period as months', async () => {
   await expect(
     refreshOxygenEligibility(

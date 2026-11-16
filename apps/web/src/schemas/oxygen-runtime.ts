@@ -105,6 +105,9 @@ export const oxygenProviderStateSchema = z
     validated: z.boolean().optional(),
     eligible: z.boolean().optional(),
     eligibilityStatus: z.enum(['pending', 'failed', 'completed']).optional(),
+    eligibilityFailureReason: z
+      .literal('financial_details_mismatch')
+      .optional(),
     eligibleAmount: amount.optional(),
     minimumAmount: amount.optional(),
     maxTenure: z.number().int().positive().optional(),

@@ -113,3 +113,32 @@ REVOKE ALL ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
   TO authenticated;
+
+-- Grant-path sweep (Codex review): get_user_merchant_context() is a SECURITY DEFINER
+-- function executable by `authenticated` that returned to_jsonb() of the WHOLE
+-- merchant_feature_settings row, so any active staff member could still read the four
+-- secrets through POST /rpc/get_user_merchant_context even after the column revoke.
+-- Rewrite its feature_settings projection in place (same technique as earlier
+-- migrations): drop the four secret keys and add `<secret>_configured` booleans, which
+-- is exactly the shape the dashboard's redaction helper produced from the raw values.
+-- A catalog sweep of production found no other function or view exposing them.
+DO $rewrite$
+DECLARE
+  v_definition text;
+  v_needle constant text := 'pg_catalog.to_jsonb(fs)';
+  v_replacement constant text :=
+    '(pg_catalog.to_jsonb(fs) - ARRAY[''facebook_capi_token'', ''tiktok_access_token'', '
+    || '''snapchat_capi_token'', ''ga4_api_secret'']::text[]) || pg_catalog.jsonb_build_object('
+    || '''facebook_capi_token_configured'', NULLIF(pg_catalog.btrim(COALESCE(fs.facebook_capi_token, '''')), '''') IS NOT NULL, '
+    || '''tiktok_access_token_configured'', NULLIF(pg_catalog.btrim(COALESCE(fs.tiktok_access_token, '''')), '''') IS NOT NULL, '
+    || '''snapchat_capi_token_configured'', NULLIF(pg_catalog.btrim(COALESCE(fs.snapchat_capi_token, '''')), '''') IS NOT NULL, '
+    || '''ga4_api_secret_configured'', NULLIF(pg_catalog.btrim(COALESCE(fs.ga4_api_secret, '''')), '''') IS NOT NULL)';
+BEGIN
+  v_definition := pg_catalog.pg_get_functiondef('public.get_user_merchant_context()'::pg_catalog.regprocedure);
+  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle, '')))
+       / pg_catalog.length(v_needle) <> 1 THEN
+    RAISE EXCEPTION 'get_user_merchant_context feature_settings projection changed; review before rewriting';
+  END IF;
+  EXECUTE pg_catalog.replace(v_definition, v_needle, v_replacement);
+END
+$rewrite$;

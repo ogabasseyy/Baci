@@ -104,6 +104,27 @@ BEGIN
   PERFORM merchant_id, blog_enabled FROM public.merchant_feature_settings;
 END $$;
 
+-- The dashboard context RPC (SECURITY DEFINER) must not hand the secrets back either.
+DO $$
+DECLARE v_ctx jsonb; v_fs jsonb;
+BEGIN
+  v_ctx := public.get_user_merchant_context();
+  v_fs := v_ctx -> 'feature_settings';
+  IF v_fs IS NULL THEN
+    RAISE EXCEPTION 'R2: context RPC returned no feature_settings for the owner';
+  END IF;
+  IF v_fs ?| ARRAY['facebook_capi_token','tiktok_access_token','snapchat_capi_token','ga4_api_secret'] THEN
+    RAISE EXCEPTION 'R2: context RPC still returns a secret key';
+  END IF;
+  IF pg_catalog.strpos(v_ctx::text, 'synthetic-meta-token') > 0 THEN
+    RAISE EXCEPTION 'R2: context RPC leaks the token value';
+  END IF;
+  IF (v_fs ->> 'facebook_capi_token_configured')::boolean IS NOT TRUE
+     OR (v_fs ->> 'ga4_api_secret_configured')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'R2: context RPC configured flags wrong: %', v_fs;
+  END IF;
+END $$;
+
 SELECT set_config('request.jwt.claim.sub', 'cccccccc-3333-4333-8333-cccccccccccc', true);
 DO $$
 BEGIN

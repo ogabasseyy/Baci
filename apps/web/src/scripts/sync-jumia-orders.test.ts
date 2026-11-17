@@ -142,3 +142,76 @@ describe('runJumiaOrderSyncCli', () => {
     );
   });
 });
+
+describe('sync-jumia-orders production env validation', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('GITHUB_ACTIONS', 'false');
+    vi.stubEnv('QUIZ_PHASE', '1a');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.com');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
+    vi.stubEnv('SUPABASE_JUMIA_CREDENTIAL_KEY', 'jumia-credential-key');
+    delete process.env.QUIZ_RPC_SERVER_SECRET;
+    delete process.env.SUPABASE_JWT_SECRET;
+    delete process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK;
+    delete process.env.BACI_WORKER_PROFILE;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('succeeds in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is sync-jumia-orders', async () => {
+    vi.stubEnv('BACI_WORKER_PROFILE', 'sync-jumia-orders');
+    vi.doUnmock('../lib/supabase/service');
+    vi.doUnmock('../lib/jumia/server-credential-client');
+    vi.doMock('@supabase/supabase-js', () => ({
+      createClient: vi.fn(() => ({ mockedSupabase: true })),
+    }));
+    vi.doMock('../lib/jumia/order-sync', () => ({
+      syncJumiaOrdersForActiveIntegrations: vi.fn().mockResolvedValue({
+        integrations: 0,
+        synced: 0,
+        canonicalCreated: 0,
+        canonicalUpdated: 0,
+        notified: 0,
+        stockUpdated: 0,
+        orderErrors: 0,
+        errors: [],
+      }),
+    }));
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { runJumiaOrderSyncCli: runWithRealEnv } = await import(
+      './sync-jumia-orders'
+    );
+
+    await expect(runWithRealEnv()).resolves.toBe(0);
+  });
+
+  it('fails in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is missing (web runtime)', async () => {
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'jwt-secret');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.doUnmock('../lib/supabase/service');
+    vi.doUnmock('../lib/jumia/server-credential-client');
+    vi.doMock('@supabase/supabase-js', () => ({
+      createClient: vi.fn(() => ({ mockedSupabase: true })),
+    }));
+    vi.doMock('../lib/jumia/order-sync', () => ({
+      syncJumiaOrdersForActiveIntegrations: vi.fn(),
+    }));
+
+    const { runJumiaOrderSyncCli: runWithRealEnv } = await import(
+      './sync-jumia-orders'
+    );
+
+    await expect(runWithRealEnv()).rejects.toThrow(
+      /QUIZ_RPC_SERVER_SECRET is required in production for negotiated checkout proofs/
+    );
+  });
+});

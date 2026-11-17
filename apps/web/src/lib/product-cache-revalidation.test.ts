@@ -12,7 +12,10 @@ import { logger } from '@/lib/logger';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 
 describe('productCacheRevalidation', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    revalidateTag.mockReset();
+  });
 
   it('revalidates merchant-wide, feed, dashboard, and product-slug tags', () => {
     productCacheRevalidation.revalidateProducts('merchant-1', ' phone ');
@@ -148,10 +151,51 @@ describe('productCacheRevalidation', () => {
     );
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
+        error: 'Error: cache unavailable',
         message: 'Failed to revalidate product cache tag',
         tag: 'products-merchant-1',
       })
     );
     expect(revalidated).toBe(false);
+  });
+
+  it('skips error logging and remaining tags when Next static generation store is missing', () => {
+    revalidateTag.mockImplementation(() => {
+      throw new Error(
+        'Invariant: static generation store missing in revalidateTag("products-merchant-1")'
+      );
+    });
+
+    const revalidated =
+      productCacheRevalidation.revalidateProducts('merchant-1');
+
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(revalidated).toBe(false);
+  });
+
+  it('skips error logging and remaining tags when incrementalCache is missing across slug, feed, and dashboard helpers', () => {
+    revalidateTag.mockImplementation(() => {
+      throw new Error('incrementalCache missing');
+    });
+
+    productCacheRevalidation.revalidateProductSlugs('merchant-1', [
+      'slug-1',
+      'slug-2',
+    ]);
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+
+    revalidateTag.mockClear();
+    const feedRevalidated =
+      productCacheRevalidation.revalidateMerchantFeed('merchant-1');
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(feedRevalidated).toBe(false);
+
+    revalidateTag.mockClear();
+    productCacheRevalidation.revalidateDashboard('merchant-1');
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });

@@ -23,21 +23,74 @@ function resolveProfile(
   return options.expireImmediately ? { expire: 0 } : profile;
 }
 
+type ProductTagRevalidationOutcome = 'ok' | 'missing_context' | 'failed';
+
+interface ProductTagEntry {
+  readonly profile: ProductCacheProfile;
+  readonly tag: string;
+}
+
+function isMissingNextCacheContextError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return (
+    message.includes('static generation store missing') ||
+    message.includes('incrementalCache') ||
+    message.includes('missing Next request context')
+  );
+}
+
 function revalidateProductTag(
   tag: string,
   profile: ProductCacheProfile
-): boolean {
+): ProductTagRevalidationOutcome {
   try {
     revalidateTag(tag, profile);
-    return true;
+    return 'ok';
   } catch (error) {
+    if (isMissingNextCacheContextError(error)) {
+      return 'missing_context';
+    }
     logger.error({
       error: sanitizeForLog(error),
       message: 'Failed to revalidate product cache tag',
       tag: sanitizeForLog(tag),
     });
-    return false;
+    return 'failed';
   }
+}
+
+function revalidateProductTagBatch(
+  entries: readonly ProductTagEntry[]
+): boolean {
+  let allRevalidated = true;
+  for (const { tag, profile } of entries) {
+    const outcome = revalidateProductTag(tag, profile);
+    if (outcome === 'missing_context') {
+      return false;
+    }
+    if (outcome !== 'ok') {
+      allRevalidated = false;
+    }
+  }
+  return allRevalidated;
+}
+
+function getMerchantFeedTagEntries(
+  normalizedMerchantId: string,
+  options: ProductRevalidationOptions
+): ProductTagEntry[] {
+  const profile = resolveProfile('products', options);
+  return [
+    { profile, tag: 'google-merchant-feed' },
+    { profile, tag: 'openai-product-feed' },
+    { profile, tag: `merchant-feed-${normalizedMerchantId}` },
+    { profile, tag: `merchant-feed-review-signals-${normalizedMerchantId}` },
+  ];
 }
 
 function revalidateMerchantFeed(
@@ -53,24 +106,9 @@ function revalidateMerchantFeed(
     return false;
   }
 
-  return [
-    revalidateProductTag(
-      'google-merchant-feed',
-      resolveProfile('products', options)
-    ),
-    revalidateProductTag(
-      'openai-product-feed',
-      resolveProfile('products', options)
-    ),
-    revalidateProductTag(
-      `merchant-feed-${normalizedMerchantId}`,
-      resolveProfile('products', options)
-    ),
-    revalidateProductTag(
-      `merchant-feed-review-signals-${normalizedMerchantId}`,
-      resolveProfile('products', options)
-    ),
-  ].every(Boolean);
+  return revalidateProductTagBatch(
+    getMerchantFeedTagEntries(normalizedMerchantId, options)
+  );
 }
 
 function revalidateDashboard(merchantId: string): void {
@@ -100,83 +138,66 @@ function revalidateProducts(
     return false;
   }
 
-  const results = [
-    revalidateProductTag(
-      `products-${normalizedMerchantId}`,
-      resolveProfile('products', options)
-    ),
+  const productsProfile = resolveProfile('products', options);
+  const storefrontProfile = resolveProfile('storefront-page', options);
+  const merchantProfile = resolveProfile('merchant', options);
+
+  const entries: ProductTagEntry[] = [
+    { profile: productsProfile, tag: `products-${normalizedMerchantId}` },
+    ...buildStorefrontProductsCacheTags(normalizedMerchantId).map((tag) => ({
+      profile: productsProfile,
+      tag,
+    })),
   ];
-  for (const tag of buildStorefrontProductsCacheTags(normalizedMerchantId)) {
-    results.push(
-      revalidateProductTag(tag, resolveProfile('products', options))
-    );
-  }
+
   const normalizedProductSlug = productSlug?.trim();
   if (normalizedProductSlug) {
-    results.push(
-      revalidateProductTag(
-        getProductScopedCacheTag(
-          'product',
-          normalizedMerchantId,
-          normalizedProductSlug
-        ),
-        resolveProfile('products', options)
-      )
-    );
+    entries.push({
+      profile: productsProfile,
+      tag: getProductScopedCacheTag(
+        'product',
+        normalizedMerchantId,
+        normalizedProductSlug
+      ),
+    });
   }
-  results.push(
-    revalidateProductTag('product-details', resolveProfile('products', options))
+
+  entries.push(
+    { profile: productsProfile, tag: 'product-details' },
+    {
+      profile: storefrontProfile,
+      tag: getCategoryPageDataCacheTag(normalizedMerchantId),
+    },
+    {
+      profile: productsProfile,
+      tag: `product-index-${normalizedMerchantId}`,
+    },
+    {
+      profile: productsProfile,
+      tag: getProductSlugSetCacheTag(normalizedMerchantId),
+    },
+    { profile: productsProfile, tag: 'product-canonical-redirect' },
+    { profile: productsProfile, tag: 'product-legacy-redirect' }
   );
-  results.push(
-    revalidateProductTag(
-      getCategoryPageDataCacheTag(normalizedMerchantId),
-      resolveProfile('storefront-page', options)
-    )
-  );
-  results.push(
-    revalidateProductTag(
-      `product-index-${normalizedMerchantId}`,
-      resolveProfile('products', options)
-    )
-  );
-  results.push(
-    revalidateProductTag(
-      getProductSlugSetCacheTag(normalizedMerchantId),
-      resolveProfile('products', options)
-    )
-  );
-  results.push(
-    revalidateProductTag(
-      'product-canonical-redirect',
-      resolveProfile('products', options)
-    )
-  );
-  results.push(
-    revalidateProductTag(
-      'product-legacy-redirect',
-      resolveProfile('products', options)
-    )
-  );
+
   const feedScope = options.feedScope ?? 'all';
   if (feedScope === 'all') {
-    results.push(revalidateMerchantFeed(normalizedMerchantId, options));
+    entries.push(...getMerchantFeedTagEntries(normalizedMerchantId, options));
   } else if (feedScope === 'merchant') {
     // The merchant-scoped tag is sufficient to evict this merchant's Google
     // and OpenAI feed entries without churning every merchant's feed cache.
-    results.push(
-      revalidateProductTag(
-        `merchant-feed-${normalizedMerchantId}`,
-        resolveProfile('products', options)
-      )
-    );
+    entries.push({
+      profile: productsProfile,
+      tag: `merchant-feed-${normalizedMerchantId}`,
+    });
   }
-  results.push(
-    revalidateProductTag(
-      `dashboard-${normalizedMerchantId}`,
-      resolveProfile('merchant', options)
-    )
-  );
-  return results.every(Boolean);
+
+  entries.push({
+    profile: merchantProfile,
+    tag: `dashboard-${normalizedMerchantId}`,
+  });
+
+  return revalidateProductTagBatch(entries);
 }
 
 function revalidateProductSlugs(
@@ -199,15 +220,18 @@ function revalidateProductSlugs(
   // the edge with stale stock.
   const profile = resolveProfile('products', options);
   const seen = new Set<string>();
+  const entries: ProductTagEntry[] = [];
   for (const rawSlug of slugs) {
     const slug = rawSlug?.trim();
     if (!slug || seen.has(slug)) continue;
     seen.add(slug);
-    revalidateProductTag(
-      getProductScopedCacheTag('product', normalizedMerchantId, slug),
-      profile
-    );
+    entries.push({
+      profile,
+      tag: getProductScopedCacheTag('product', normalizedMerchantId, slug),
+    });
   }
+
+  revalidateProductTagBatch(entries);
 }
 
 export const productCacheRevalidation = {

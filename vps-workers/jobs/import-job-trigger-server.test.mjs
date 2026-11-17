@@ -185,6 +185,10 @@ describe('import job trigger server', () => {
       '11111111-1111-4111-8111-111111111111'
     );
     assert.equal(spawnCall.options.env.IMPORT_JOB_TRIGGER_SOURCE, 'api');
+    assert.equal(
+      spawnCall.options.env.BACI_WORKER_PROFILE,
+      'process-import-jobs'
+    );
     assert.equal(spawnCall.options.env.NODE_ENV, 'production');
   });
 

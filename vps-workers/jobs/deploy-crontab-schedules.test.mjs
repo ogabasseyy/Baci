@@ -310,4 +310,17 @@ describe('deploy crontab schedules', () => {
       /systemctl --user restart baci-vercel-log-drain-receiver\.service/
     );
   });
+
+  it('exports non-agentic BACI_WORKER_PROFILE on sync-jumia-orders and process-import-jobs cron lines', () => {
+    const deployScript = readDeployScript();
+
+    assert.match(
+      deployScript,
+      /export BACI_WORKER_PROFILE=sync-jumia-orders && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/sync-jumia-orders\.sh/
+    );
+    assert.match(
+      deployScript,
+      /export BACI_WORKER_PROFILE=process-import-jobs && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/process-import-jobs\.sh/
+    );
+  });
 });

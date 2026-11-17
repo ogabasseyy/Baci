@@ -91,9 +91,13 @@ const PRODUCT_SEMANTIC_INVENTORY_SELECT = `
  */
 export async function getCachedProductSemanticInventory(
   merchantId: string,
-  categorySlug: string
+  categorySlug: string,
+  signal?: AbortSignal
 ): Promise<ProductSemanticCandidate[]> {
   const supabase = getPublicSupabaseClient();
+  const timeoutSignal = AbortSignal.timeout(
+    PRODUCT_SEMANTIC_INVENTORY_TIMEOUT_MS
+  );
   const inventoryQuery = supabase
     .from('products')
     .select(PRODUCT_SEMANTIC_INVENTORY_SELECT)
@@ -103,7 +107,9 @@ export async function getCachedProductSemanticInventory(
     .order('created_at', { ascending: false })
     .order('id', { ascending: true })
     .limit(PRODUCT_SEMANTIC_INVENTORY_LIMIT)
-    .abortSignal(AbortSignal.timeout(PRODUCT_SEMANTIC_INVENTORY_TIMEOUT_MS));
+    .abortSignal(
+      signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+    );
 
   // Disable PostgREST's automatic GET retry. The shared cached Supabase client
   // bounds each fetch with AbortSignal.timeout(), which rejects with a NATIVE

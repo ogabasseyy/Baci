@@ -21,7 +21,7 @@ type ParticipantCountResponse = {
 
 /**
  * Participant count is useful context, but it must never hold up standings.
- * The count RPC is intentionally optional and bounded so a slow database
+ * This fallback count call is optional and bounded so a slow database
  * aggregate cannot make the live leaderboard appear unavailable.
  */
 async function fetchParticipantCountWithTimeout(
@@ -58,21 +58,10 @@ export async function GET(request: NextRequest) {
   });
   if (!parsed.success)
     return invalidInputResponse(parsed.error.flatten().fieldErrors);
-  // Keep the count in the same authenticated request as live standings. A
-  // separate client poll would double the request rate for every player, but
-  // the bounded helper ensures an optional aggregate cannot delay standings.
-  const participantCountResponsePromise = fetchParticipantCountWithTimeout(() =>
-    auth.supabase.rpc('get_quiz_participant_count_public_v2', {
-      p_event_id: parsed.data.eventId,
-    })
-  );
-  const leaderboardResponse = await auth.supabase.rpc(
+  const { data, error } = await auth.supabase.rpc(
     'get_quiz_live_leaderboard_public_v2',
-    {
-      p_event_id: parsed.data.eventId,
-    }
+    { p_event_id: parsed.data.eventId }
   );
-  const { data, error } = leaderboardResponse;
   if (error) {
     const clientErrorResponse = quizRpcClientErrorResponse(error);
     if (clientErrorResponse) return clientErrorResponse;
@@ -87,13 +76,23 @@ export async function GET(request: NextRequest) {
   }
   const projection = quizLeaderboardProjectionSchema.safeParse(data);
   if (!projection.success) return rpcErrorResponse();
-  const participantCountResponse = await participantCountResponsePromise;
-  const participantCount =
-    typeof participantCountResponse.data === 'number' &&
-    Number.isInteger(participantCountResponse.data) &&
-    participantCountResponse.data >= 0
-      ? participantCountResponse.data
-      : null;
+  // The live projection carries the count from the same shared snapshot, so a
+  // poll costs one database call. Only a database that predates the snapshot
+  // omits it; then fall back to the bounded, optional count call.
+  let participantCount = projection.data.participant_count;
+  if (participantCount === undefined) {
+    const fallback = await fetchParticipantCountWithTimeout(() =>
+      auth.supabase.rpc('get_quiz_participant_count_public_v2', {
+        p_event_id: parsed.data.eventId,
+      })
+    );
+    participantCount =
+      typeof fallback.data === 'number' &&
+      Number.isInteger(fallback.data) &&
+      fallback.data >= 0
+        ? fallback.data
+        : null;
+  }
   return NextResponse.json({
     currentPlayer: projection.data.current_player
       ? (mapQuizLeaderboardRows([projection.data.current_player])[0] ?? null)

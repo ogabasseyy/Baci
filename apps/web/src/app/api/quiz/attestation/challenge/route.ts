@@ -15,7 +15,7 @@ import { quizAttestationChallengeRequestSchema } from '@/schemas/quiz-schema-att
  * (bearer) sessions get one: browser sessions can never start a live prize.
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireQuizUser(request);
+  const auth = await requireQuizUser(request, { requireFreshSession: true });
   if (auth.response) return auth.response;
   if (auth.authMethod !== 'bearer') {
     return NextResponse.json(

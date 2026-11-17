@@ -71,6 +71,8 @@ jobs:
         run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/android-release-sdk-platform.test.mjs .github/scripts/android-release-sdk-compat.test.mjs .github/scripts/android-admin-release-budget.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
+      - name: Test Muse comment review concurrency routing
+        run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening
@@ -792,6 +794,7 @@ jobs:
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
           .github/scripts/coordinate-production-release.test.mjs
+          .github/scripts/coordinate-isolated-release.test.mjs
           .github/scripts/coordinate-publication.test.mjs
           .github/scripts/release-production.test.mjs
           .github/scripts/release-subprocess.test.mjs

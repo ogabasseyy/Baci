@@ -1,7 +1,10 @@
+import { Text } from 'react-native';
+import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
 import { lastGoalSetupPhase } from './savings/goal-setup-memory';
 import { SavingsPlanStatusNote } from './savings/SavingsPlanStatusNote';
 import { shownGoalSetupPhase } from './savings/shown-goal-setup-phase';
+import { useAutoWalletHeadStart } from './savings/use-auto-wallet-head-start';
 import { useGoalWalletSetupPoll } from './savings/use-goal-wallet-setup-poll';
 import { useSavingsPlanFunding } from './savings/use-savings-plan-funding';
 import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
@@ -30,8 +33,24 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
     // Setup starts with the plan, so "slow" counts from its creation.
     pendingSince: goal.created_at ? Date.parse(goal.created_at) : null,
   });
+  // A head start the customer chose to pay now: started here, once, as soon
+  // as the plan is ready, so they only confirm their PIN.
+  const waitingHeadStart = useAutoWalletHeadStart({
+    goalId: goal.id,
+    ready: phase === 'ready',
+    addAmount: props.addAmount,
+    busy: props.isAdding || props.isFundPending,
+    onAddSavings: props.onAddSavings,
+  });
   return (
     <>
+      {waitingHeadStart !== null && phase !== 'ready' ? (
+        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+          Your {formatNgnCurrency(waitingHeadStart)} head start moves from your
+          wallet once your plan is ready. Keep this open to confirm with your
+          PIN.
+        </Text>
+      ) : null}
       <SavingsPlanStatusNote
         colors={colors}
         goalId={goal.id}

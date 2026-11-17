@@ -5,6 +5,10 @@ import { Alert } from 'react-native';
 import { createSavingsGoal } from '@/lib/customer-savings';
 import { useAuthStore } from '@/stores/auth-store';
 import {
+  pendingWalletHeadStart,
+  takeWalletHeadStart,
+} from './pending-wallet-head-start';
+import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
   PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
@@ -77,6 +81,34 @@ describe('PiggyVest head start balance check at submit', () => {
         savingsAmount: '20000',
       },
     });
+  });
+
+  it('leaves a pay-now head start waiting for the new plan, and only then', async () => {
+    const withGoal = () =>
+      createInput({
+        refetch: jest.fn(async () => ({
+          isError: false,
+          data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
+        })),
+      });
+    takeWalletHeadStart('goal-1');
+    readBalance.mockResolvedValueOnce(2_000_000);
+    const later = renderHook(() => useStartSavingsSubmit(withGoal()));
+    await act(async () => {
+      await later.result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(pendingWalletHeadStart('goal-1')).toBeNull();
+
+    readBalance.mockResolvedValueOnce(2_000_000);
+    const now = renderHook(() => useStartSavingsSubmit(withGoal()));
+    await act(async () => {
+      await now.result.current.submitSavingsGoal({
+        ...primaryOptions,
+        payHeadStartFromWallet: true,
+      });
+    });
+    expect(pendingWalletHeadStart('goal-1')).toBe(20000);
+    takeWalletHeadStart('goal-1');
   });
 
   it('never opens the wallet for a plan that does not continue there', async () => {

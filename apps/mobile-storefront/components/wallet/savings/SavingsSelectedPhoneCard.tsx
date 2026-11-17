@@ -35,9 +35,7 @@ export function SavingsSelectedPhoneCard({
         </Text>
         <View style={styles.metaRow}>
           {product.conditionLabel ? (
-            <Text style={[styles.tag, { color: colors.text }]}>
-              {product.conditionLabel}
-            </Text>
+            <Text style={styles.tag}>{product.conditionLabel}</Text>
           ) : null}
           <Text
             style={[
@@ -103,7 +101,10 @@ const styles = StyleSheet.create({
   tag: {
     overflow: 'hidden',
     borderRadius: 999,
-    backgroundColor: palette.red[100],
+    // Solid brand red with white text, like the plan sheet's tag: theme
+    // text on pale pink was unreadable in dark mode.
+    backgroundColor: BRAND.primary,
+    color: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 2,
     fontSize: 11,

@@ -471,4 +471,119 @@ describe('runOgabasseyCatalogAgent', () => {
       'mac-exact-2m',
     ]);
   });
+
+  it('triggers fallback for pixel, bare galaxy, and gaming cues and generates per-request session ids', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const pixelProduct = {
+      ...sampleProduct,
+      brand: 'Google',
+      category: 'Phones',
+      description: 'Google Pixel 9 Pro',
+      id: 'pixel-9',
+      name: 'Google Pixel 9',
+      slug: 'google-pixel-9',
+    };
+    const galaxyProduct = {
+      ...sampleProduct,
+      brand: 'Samsung',
+      category: 'Phones',
+      description: 'Samsung Galaxy S24',
+      id: 'galaxy-s24',
+      name: 'Samsung Galaxy S24',
+      slug: 'samsung-galaxy-s24',
+    };
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [pixelProduct],
+        total: 1,
+      });
+      return { text: 'Google Pixel 9 is ₦1,450,000.' };
+    });
+    const pixelResult = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [{ role: 'user', content: 'Best Pixel?' }],
+    });
+    expect(pixelResult?.events[0]?.products[0]?.id).toBe('pixel-9');
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [galaxyProduct],
+        total: 1,
+      });
+      return { text: 'Samsung Galaxy S24 is ₦1,450,000.' };
+    });
+    const galaxyResult = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [{ role: 'user', content: 'Any Galaxy?' }],
+    });
+    expect(galaxyResult?.events[0]?.products[0]?.id).toBe('galaxy-s24');
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return { text: 'Apple MacBook Air M2 is ₦1,450,000.' };
+    });
+    const gamingResult = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [{ role: 'user', content: 'Gaming rig?' }],
+    });
+    expect(gamingResult?.events[0]?.products[0]?.id).toBe('mac-1');
+
+    const sessionIds = mocks.createTools.mock.calls.map(([id]) => id);
+    expect(new Set(sessionIds).size).toBe(sessionIds.length);
+  });
+
+  it('preserves prior conversation budget across over-ear and over there follow-ups', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const overBudgetHeadphone = {
+      ...sampleProduct,
+      brand: 'Sony',
+      category: 'Audio',
+      description: 'Sony WH-1000XM5 over-ear headphones',
+      id: 'sony-xm5-high',
+      name: 'Sony WH-1000XM5 Studio',
+      price: 2_300_000,
+      slug: 'sony-wh-1000xm5-studio',
+    };
+    const withinBudgetHeadphone = {
+      ...sampleProduct,
+      brand: 'Sony',
+      category: 'Audio',
+      description: 'Sony WH-1000XM4 over-ear headphones',
+      id: 'sony-xm4-low',
+      name: 'Sony WH-1000XM4',
+      price: 450_000,
+      slug: 'sony-wh-1000xm4',
+    };
+
+    for (const followUp of [
+      'Can you check over-ear headphones instead?',
+      'Or look over there for another one',
+    ]) {
+      mocks.generateText.mockImplementationOnce(async () => {
+        reportToolResult?.('searchProducts', {
+          products: [withinBudgetHeadphone, overBudgetHeadphone],
+          total: 2,
+        });
+        return { text: 'Sony WH-1000XM4 is ₦450,000.' };
+      });
+      const result = await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [
+          { role: 'user', content: 'I need headphones below 2m' },
+          {
+            role: 'assistant',
+            content: 'Checking headphones under ₦2,000,000.',
+          },
+          { role: 'user', content: followUp },
+        ],
+      });
+      expect(result?.events[0]?.products.map((p) => p.id)).toEqual([
+        'sony-xm4-low',
+      ]);
+    }
+  });
 });

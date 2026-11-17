@@ -107,11 +107,40 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           providers, payment processors, delivery partners, and support providers
           to run the store and fulfil orders. When you use our ChatGPT app,
           OpenAI processes your conversation under its own privacy terms and
-          sends us the tool inputs needed to answer your request. We do not sell
-          your personal information. When semantic catalog search is enabled,
-          we send product search text to Google Gemini to find matching items.
-          We do not deliberately include account, order, or payment records in
-          those requests.
+          sends us the tool inputs needed to answer your request. For
+          storefront chat, we send your message text and recent conversation
+          context to{' '}
+          <a
+            href="https://openai.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            OpenAI
+          </a>
+          ,{' '}
+          <a
+            href="https://www.facebook.com/privacy/policy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Meta
+          </a>
+          , or{' '}
+          <a
+            href="https://en.deepseek.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            DeepSeek
+          </a>{' '}
+          to generate shopping and support replies under each provider&apos;s
+          privacy terms. We do not sell your personal information. When
+          semantic catalog search is enabled, we send product search text to
+          Google Gemini to find matching items. We do not deliberately include
+          account, order, or payment records in those requests.
         </p>
       ) : (
         <p>
@@ -164,10 +193,13 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                   Ogabassey account search history. Our server processes the
                   tool request to return products; ChatGPT controls the
                   retention of your conversation under OpenAI&apos;s own policy.
-                  When semantic search is enabled, Google may retain the search
-                  request for up to 55 days for abuse monitoring under its
-                  Gemini API terms. Its Paid Tier terms say these requests are
-                  not used to improve Google products.
+                  Storefront chat prompts processed through OpenAI, Meta, or
+                  DeepSeek APIs are retained only as governed by each
+                  provider&apos;s API terms and are not kept in a saved account
+                  search history. When semantic search is enabled, Google may
+                  retain the search request for up to 55 days for abuse
+                  monitoring under its Gemini API terms. Its Paid Tier terms say
+                  these requests are not used to improve Google products.
                 </p>
               </div>
             ),
@@ -251,11 +283,43 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           )}
 
           {isOgabassey && (
-            <section className="rounded-xl bg-[var(--ogabassey-surface,#fff)] p-4 text-[var(--ogabassey-surface-text,#111827)] text-sm md:text-base leading-relaxed">
+            <section className="rounded-xl bg-[var(--ogabassey-surface,#fff)] p-4 text-[var(--ogabassey-surface-text,#111827)] text-sm md:text-base leading-relaxed space-y-2">
               <h2 className="text-xl font-bold mb-3">Storefront chat</h2>
               <p>
                 Storefront chat messages may be sent to OpenAI, Meta, or
                 DeepSeek to generate responses.
+              </p>
+              <p>
+                We send only your message text and recent conversation context
+                (never intentionally account, order, or payment records) under
+                the{' '}
+                <a
+                  href="https://openai.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  OpenAI
+                </a>
+                ,{' '}
+                <a
+                  href="https://www.facebook.com/privacy/policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Meta
+                </a>
+                , and{' '}
+                <a
+                  href="https://en.deepseek.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  DeepSeek
+                </a>{' '}
+                privacy policies.
               </p>
             </section>
           )}

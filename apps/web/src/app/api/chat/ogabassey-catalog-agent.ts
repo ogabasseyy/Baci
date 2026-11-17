@@ -41,7 +41,7 @@ const COURTESY =
   /^(?:hi|hello|hey|thanks|thank\s+you|how\s+are\s+you)[\s.!?]*$/i;
 
 const CATALOG_AGENT_CUE =
-  /[₦$€£]|\b(?:recommend\w*|suggest\w*|looking\s+for|find|show|need|want|buy|shop|gifts?|present|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|laptops?|macbooks?|notebooks?|tablets?|watches|smartwatches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|under|below|within|budget|at\s+most|max(?:imum)?|cheap\w*|affordable|available|availability|stock|price|cost|do\s+you\s+(?:have|stock|carry|sell)|have\s+you\s+got)\b/i;
+  /[₦$€£]|\b(?:recommend\w*|suggest\w*|looking\s+for|find|show|need|want|buy|shop|gifts?|present|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|pixel\w*|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|watches|smartwatches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|gaming|editing|photography|under|below|within|budget|at\s+most|max(?:imum)?|cheap\w*|affordable|available|availability|stock|price|cost|do\s+you\s+(?:have|stock|carry|sell)|have\s+you\s+got)\b/i;
 
 const FOLLOW_UP_CUE =
   /\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around)\b|[₦$€£\d]/i;
@@ -166,6 +166,7 @@ export async function runOgabasseyCatalogAgent(options: {
     options.currencyCode
   );
 
+  const sessionId = `catalog-readonly-${crypto.randomUUID()}`;
   let presentationCollector = createChatPresentationEventCollector();
   let toolCallsInAttempt = 0;
 
@@ -175,7 +176,7 @@ export async function runOgabasseyCatalogAgent(options: {
     toolCallsInAttempt = 0;
 
     return buildBudgetEnforcedReadOnlyTools(
-      'catalog-readonly',
+      sessionId,
       budgetLimit,
       (toolName, filteredResult, context) => {
         toolCallsInAttempt += 1;

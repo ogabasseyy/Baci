@@ -12,7 +12,7 @@ export type CatalogChatMessage = {
 };
 
 const BUDGET_OVERRIDE_CUE =
-  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|more\s+expensive|above|over)\b/i;
+  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|more\s+expensive|over\s+(?:my\s+|the\s+)?budget|above\s+(?:my\s+|the\s+)?budget|(?:over|above)\s+(?:₦|ngn\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|thousand|[km]))?)\b/i;
 
 export const UNGROUNDED_EMPTY_RESULT_CLAIM = /[₦$€£]|\b(?:naira|ngn)\b/i;
 

@@ -3,7 +3,9 @@ import type { FetchImplementation } from '@/types/fetch';
 
 type MockAuthError = { message?: string; status?: number } | null;
 type MockSessionResult = {
-  data: { session: { access_token: string } | null };
+  data: {
+    session: { access_token: string; user?: { id: string } } | null;
+  };
   error?: MockAuthError;
 };
 type MockUserResult = {
@@ -82,8 +84,10 @@ export function resetQuizServiceMocks() {
       merchantSlug: 'ogabassey',
     },
   };
+  // The service takes the user id from the stored session; getUser is kept
+  // mocked only so tests can assert that it is never called.
   mockGetSession.mockResolvedValue({
-    data: { session: { access_token: 'token-123' } },
+    data: { session: { access_token: 'token-123', user: { id: 'user-1' } } },
   });
   mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
   mockConfig.MERCHANT_ID = '';

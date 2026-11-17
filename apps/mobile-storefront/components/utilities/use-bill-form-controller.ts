@@ -8,6 +8,7 @@ import { useVTUBillers } from '@/hooks/use-vtu-billers';
 import { useVTUVerify } from '@/hooks/use-vtu-verify';
 import type { UtilityBeneficiary } from '@/lib/utility-beneficiaries';
 import { useAuthStore } from '@/stores/auth-store';
+import { scrollToAirtimePaymentSection } from './airtime-form-controller.helpers';
 import {
   BILL_FORM_FOOTER_ERROR_BUFFER,
   BILL_FORM_FOOTER_HEIGHT,
@@ -16,6 +17,7 @@ import {
 import { parseUtilityAmount } from './bill-form.helpers';
 import type { BillFormProps } from './bill-form.types';
 import type { BillFormController } from './bill-form-controller.types';
+import { getBillPaymentAmountError } from './bill-payment-amount-validation';
 import { billPurchaseRequest } from './bill-retains-store-credit';
 import { buildBillFormWalletReturnTo } from './build-bill-form-wallet-return-to';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
@@ -223,22 +225,20 @@ export function useBillFormController({
   };
   const handlePurchase = () => createBillFormPurchaseHandler(purchaseInput)();
 
-  const handlePaymentLayout = (event: LayoutChangeEvent) => {
-    if (!shouldScrollToPayment) {
-      return;
-    }
-    const paymentY = event.nativeEvent.layout.y;
-    setShouldScrollToPayment(false);
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({
-        animated: true,
-        y: Math.max(paymentY - SPACING.md, 0),
-      });
+  const handlePaymentLayout = (event: LayoutChangeEvent) =>
+    scrollToAirtimePaymentSection({
+      event,
+      scrollViewRef,
+      setShouldScrollToPayment,
+      shouldScrollToPayment,
     });
-  };
 
   return {
     amount,
+    // Shown in the form (Pay stays disabled), never as a system alert.
+    amountIssue: amount
+      ? getBillPaymentAmountError(numericAmount, selectedBillItem)
+      : 'Enter an amount to pay.',
     beneficiaries,
     billersQuery,
     billItemSelection,

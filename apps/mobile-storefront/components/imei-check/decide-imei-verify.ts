@@ -18,7 +18,8 @@ export type ImeiVerifyDecision =
  * so nothing is paid or shown for the wrong account (Codex P1).
  */
 export async function decideImeiVerify(input: {
-  retainedStoreCredit: boolean;
+  /** Reads the saved store credit key (after a restart too). */
+  retainsStoreCredit: () => Promise<boolean>;
   retainsPiggyvest: () => Promise<boolean | null>;
   ownerAtTap: string | null;
   currentOwner: () => string | null;
@@ -28,13 +29,16 @@ export async function decideImeiVerify(input: {
   walletBalance: number;
   price: number;
 }): Promise<ImeiVerifyDecision> {
+  // Both saved-key reads finish before the owner is checked again, so an
+  // account switch during either one stops the tap (Codex P2).
+  const retainedStoreCredit = await input.retainsStoreCredit();
   const retainedPiggyvest = await input.retainsPiggyvest();
   if (retainedPiggyvest === null) return { kind: 'ignore' };
   if (input.currentOwner() !== input.ownerAtTap) return { kind: 'ignore' };
   // A kept attempt of either rail replays on that rail before the wallet
   // read is consulted: neither replay needs the balance (Muse). A store
   // credit request still holding its key wins.
-  if (input.retainedStoreCredit) return { kind: 'pay', rail: 'store_credit' };
+  if (retainedStoreCredit) return { kind: 'pay', rail: 'store_credit' };
   if (retainedPiggyvest === true) return { kind: 'pay', rail: 'piggyvest' };
   if (input.walletLoading) return { kind: 'wait' };
   if (input.walletError) return { kind: 'unavailable' };

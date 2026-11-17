@@ -1,0 +1,130 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildStuckBnplAlert,
+  getStuckAgeDays,
+  hasConfirmationSignal,
+  hasProviderCheckoutEvidence,
+  type StuckBnplOrderRow,
+  shouldAlertMerchant,
+} from './stuck-bnpl-alert';
+
+const NOW = new Date('2026-07-04T08:00:00.000Z');
+
+function order(overrides: Partial<StuckBnplOrderRow> = {}): StuckBnplOrderRow {
+  return {
+    id: 'order-1-abcdef',
+    order_number: 'ORD-1',
+    merchant_id: 'merchant-1',
+    total: 100000,
+    payment_method: 'credit_direct',
+    payment_status: 'bnpl_pending',
+    updated_at: '2026-07-03T00:00:00.000Z',
+    notes: '{"credit_directTransactionId":"txn-1"}',
+    ...overrides,
+  };
+}
+
+describe('stuck BNPL signals', () => {
+  it('treats a session reference as checkout evidence but not confirmation', () => {
+    const sessionOnly = order();
+
+    expect(hasProviderCheckoutEvidence(sessionOnly.notes)).toBe(true);
+    expect(hasConfirmationSignal(sessionOnly)).toBe(false);
+    expect(hasProviderCheckoutEvidence(null)).toBe(false);
+  });
+
+  it('treats provider approval or reported completion as confirmation', () => {
+    expect(
+      hasConfirmationSignal(order({ payment_status: 'bnpl_approved' }))
+    ).toBe(true);
+    expect(
+      hasConfirmationSignal(
+        order({ notes: '{"creditDirectClientCompletedAt":"2026-07-03"}' })
+      )
+    ).toBe(true);
+  });
+
+  it('mutes session-only Credit Direct orders unless a payment progressed', () => {
+    expect(shouldAlertMerchant(order(), false)).toBe(false);
+    expect(shouldAlertMerchant(order(), true)).toBe(true);
+  });
+
+  it('keeps alerting for providers without a completion marker', () => {
+    expect(shouldAlertMerchant(order({ payment_method: 'klump' }), false)).toBe(
+      true
+    );
+    expect(
+      shouldAlertMerchant(order({ payment_method: 'credpal' }), false)
+    ).toBe(true);
+  });
+});
+
+describe('getStuckAgeDays', () => {
+  it('counts whole days and never goes negative', () => {
+    expect(getStuckAgeDays('2026-07-01T07:00:00.000Z', NOW)).toBe(3);
+    expect(getStuckAgeDays('2026-07-05T00:00:00.000Z', NOW)).toBe(0);
+  });
+
+  it('returns 0 for an invalid timestamp', () => {
+    expect(getStuckAgeDays('not-a-date', NOW)).toBe(0);
+  });
+});
+
+describe('buildStuckBnplAlert', () => {
+  it('names the order, provider and action for a single order', () => {
+    const alert = buildStuckBnplAlert([order()], NOW);
+
+    expect(alert.title).toBe('⚠️ BNPL payment to confirm');
+    expect(alert.body).toBe(
+      'Order #ORD-1 (₦100,000) went through Credit Direct checkout over a day ago, but the payment is not confirmed yet. Check with Credit Direct before you fulfil it.'
+    );
+    expect(alert.data).toEqual({
+      type: 'stuck_bnpl_alert',
+      stuck_order_count: 1,
+      total_amount: 100000,
+      oldest_order_id: 'order-1-abcdef',
+      order_id: 'order-1-abcdef',
+    });
+  });
+
+  it('summarises several orders and leaves out the single-order link', () => {
+    const alert = buildStuckBnplAlert(
+      [
+        order({ updated_at: '2026-07-01T00:00:00.000Z' }),
+        order({ id: 'order-2', total: '50000.5' }),
+      ],
+      NOW
+    );
+
+    expect(alert.title).toBe('⚠️ 2 BNPL payments to confirm');
+    expect(alert.body).toContain('2 orders totalling ₦150,000.5');
+    expect(alert.body).toContain('Oldest: #ORD-1 (3 days)');
+    expect(alert.data).not.toHaveProperty('order_id');
+  });
+
+  it('uses a generic provider name when providers are mixed or unknown', () => {
+    const mixed = buildStuckBnplAlert(
+      [order(), order({ id: 'order-2', payment_method: 'klump' })],
+      NOW
+    );
+    const unknown = buildStuckBnplAlert(
+      [order({ payment_method: 'other' })],
+      NOW
+    );
+
+    expect(mixed.body).toContain('Check with the BNPL provider');
+    expect(unknown.body).toContain('Check with the BNPL provider');
+  });
+
+  it('falls back to a short id when the order has no number', () => {
+    const alert = buildStuckBnplAlert([order({ order_number: null })], NOW);
+
+    expect(alert.body).toContain('Order #order-1-');
+  });
+
+  it('rejects an empty order list', () => {
+    expect(() => buildStuckBnplAlert([], NOW)).toThrow(
+      'buildStuckBnplAlert needs at least one order'
+    );
+  });
+});

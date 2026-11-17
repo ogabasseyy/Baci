@@ -44,6 +44,21 @@ export function hasConfirmationSignal(order: StuckBnplOrderRow) {
   );
 }
 
+// Only Credit Direct reports checkout completion, so only its session-only
+// orders can be told apart from real unconfirmed payments. Klump and CredPal
+// have no such marker: muting them would hide a lost webhook entirely, so
+// they keep paging on the scan's provider-evidence rule.
+export function shouldAlertMerchant(
+  order: StuckBnplOrderRow,
+  hasProgressedTransaction: boolean
+) {
+  return (
+    hasConfirmationSignal(order) ||
+    hasProgressedTransaction ||
+    order.payment_method !== 'credit_direct'
+  );
+}
+
 export function getStuckAgeDays(lastMovementAt: string, now: Date) {
   const lastMovement = new Date(lastMovementAt).getTime();
   if (!Number.isFinite(lastMovement)) return 0;
@@ -72,6 +87,9 @@ export function buildStuckBnplAlert(
   merchantOrders: StuckBnplOrderRow[],
   now: Date
 ) {
+  if (merchantOrders.length === 0) {
+    throw new Error('buildStuckBnplAlert needs at least one order');
+  }
   const totalAmount = merchantOrders.reduce(
     (sum, order) => sum + (Number(order.total) || 0),
     0

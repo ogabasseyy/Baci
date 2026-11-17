@@ -167,6 +167,34 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(mocks.notifyMerchant).not.toHaveBeenCalled();
   });
 
+  it('keeps paging for a provider that reports no checkout completion', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [
+        stuckOrder({
+          id: 'order-klump',
+          order_number: 'ORD-KLUMP',
+          payment_method: 'klump',
+          notes: '{"klumpTransactionId":"txn-9"}',
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createCronRequest());
+    const data = await response.json();
+
+    expect(data).toEqual(
+      expect.objectContaining({ stuckOrders: 1, alertOrders: 1 })
+    );
+    expect(mocks.notifyMerchant).toHaveBeenCalledWith(
+      'merchant-1',
+      '⚠️ BNPL payment to confirm',
+      expect.stringContaining('Check with Klump before you fulfil it.'),
+      expect.objectContaining({ order_id: 'order-klump' }),
+      'orders'
+    );
+  });
+
   it('pages only for the orders with an approval or completion signal', async () => {
     mocks.limit.mockResolvedValue({
       data: [
@@ -587,10 +615,17 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
 
     expect(response.status).toBe(200);
     expect(data.stuckOrders).toBe(2);
-    // A bare provider reference keeps the order in the scan, but it is not
-    // enough on its own to page the merchant.
-    expect(data.alertOrders).toBe(0);
-    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
+    // CredPal reports no checkout completion, so its provider reference still
+    // pages the merchant. The Credit Direct order without any signal does not.
+    expect(data.alertOrders).toBe(1);
+    expect(mocks.notifyMerchant).toHaveBeenCalledTimes(1);
+    expect(mocks.notifyMerchant).toHaveBeenCalledWith(
+      'merchant-1',
+      '⚠️ BNPL payment to confirm',
+      expect.stringContaining('Check with CredPal before you fulfil it.'),
+      expect.objectContaining({ order_id: 'order-2' }),
+      'orders'
+    );
   });
 
   it('reports merchants whose push delivery failed', async () => {

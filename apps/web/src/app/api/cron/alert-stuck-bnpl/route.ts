@@ -10,6 +10,7 @@ import {
   hasConfirmationSignal,
   hasProviderCheckoutEvidence,
   type StuckBnplOrderRow,
+  shouldAlertMerchant,
 } from './stuck-bnpl-alert';
 import { STUCK_BNPL_CONFIG } from './stuck-bnpl-config';
 
@@ -158,12 +159,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Page merchants only for orders that show the customer got through the
-    // provider. Session-only orders stay in the ops review queue above but
-    // are overwhelmingly abandoned applications, not unconfirmed payments.
-    const alertOrders = orders.filter(
-      (order) =>
-        hasConfirmationSignal(order) ||
-        orderIdsWithTransactionEvidence.has(order.id)
+    // provider. Session-only Credit Direct orders stay in the ops review
+    // queue above but are overwhelmingly abandoned applications.
+    const alertOrders = orders.filter((order) =>
+      shouldAlertMerchant(order, orderIdsWithTransactionEvidence.has(order.id))
     );
     const sessionOnlyOrders = orders.length - alertOrders.length;
     if (sessionOnlyOrders > 0) {

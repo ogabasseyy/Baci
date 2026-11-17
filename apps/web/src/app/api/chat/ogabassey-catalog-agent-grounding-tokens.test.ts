@@ -45,5 +45,17 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
     expect(isFeatureVersionPhrase(['bluetooth', '5', '3'])).toBe(true);
     expect(isFeatureVersionPhrase(['android', 'phone'])).toBe(false);
     expect(isFeatureVersionPhrase(['iphone', '15', 'pro'])).toBe(false);
+    expect(isFeatureVersionPhrase(['gorilla', 'glass', '5'])).toBe(true);
+    expect(isFeatureVersionPhrase(['glass', '5'], ['has', 'gorilla'])).toBe(
+      true
+    );
+    expect(isFeatureVersionPhrase(['glass', '5'], ['shatterproof'])).toBe(
+      false
+    );
+    expect(isFeatureVersionPhrase(['snapdragon', '8', 'gen', '3'])).toBe(true);
+    expect(
+      isFeatureVersionPhrase(['gen', '3'], ['with', 'snapdragon', '8'])
+    ).toBe(true);
+    expect(isFeatureVersionPhrase(['android', 'tablet', '15'])).toBe(false);
   });
 });

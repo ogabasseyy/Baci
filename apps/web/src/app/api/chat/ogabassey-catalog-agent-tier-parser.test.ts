@@ -44,5 +44,33 @@ describe('ogabassey-catalog-agent-tier-parser', () => {
         new Set(['apple', 'iphone', '16', '256gb'])
       ),
     ]).toEqual([]);
+
+    expect([
+      ...collectModelAttachedTierTokens(
+        'Motorola Edge 50 plus 256GB',
+        new Set(['motorola', 'edge', '50'])
+      ),
+    ]).toEqual(['edge', 'plus']);
+
+    expect([
+      ...collectModelAttachedTierTokens(
+        'Samsung Galaxy A15 5G ultra',
+        new Set(['samsung', 'galaxy', 'a15', '5g'])
+      ),
+    ]).toEqual(['ultra']);
+
+    expect([
+      ...collectModelAttachedTierTokens(
+        'Samsung Galaxy S25 has Bluetooth 5 plus 8GB RAM',
+        new Set(['samsung', 'galaxy', 's25'])
+      ),
+    ]).toEqual([]);
+
+    expect([
+      ...collectModelAttachedTierTokens(
+        'Samsung Galaxy S25 offers 5G ultra-fast connectivity',
+        new Set(['samsung', 'galaxy', 's25'])
+      ),
+    ]).toEqual([]);
   });
 });

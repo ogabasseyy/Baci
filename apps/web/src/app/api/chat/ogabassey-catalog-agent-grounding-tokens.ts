@@ -1,4 +1,8 @@
 import type { StorefrontAgentUiProduct } from '@/schemas/storefront-agent-ui-contract';
+import {
+  KNOWN_BRAND_OR_LINE_TOKENS,
+  VARIANT_TIER_TOKENS,
+} from './ogabassey-catalog-agent-lexicon';
 
 export interface ProductGroundingTokenSet {
   product: StorefrontAgentUiProduct;
@@ -10,10 +14,16 @@ const NUMERIC_FEATURE_TOKEN =
   /^(?:\d+(?:\.\d+)?(?:gb|tb|mb|mah|k?hz|mhz|ghz|nits|ppi|mp|mm|cm|w|watts?)|1080p|720p|1440p|2160p|4k|5k|8k|5g|4g|wifi\d*)$/i;
 
 const FEATURE_VERSION_PREFIXES = new Set(
-  'wifi bluetooth usb hdmi pcie thunderbolt displayport ufs lpddr ddr emmc nvme gorilla magsafe ios ipados macos watchos android windows ip'.split(
+  'wifi bluetooth usb hdmi pcie thunderbolt displayport ufs lpddr ddr emmc nvme magsafe ios ipados macos watchos android windows ip snapdragon dimensity exynos helio kirin tensor ryzen radeon geforce rtx gtx'.split(
     ' '
   )
 );
+
+const MULTIWORD_FEATURE_VERSION_PREFIXES: ReadonlyArray<readonly string[]> = [
+  ['wi', 'fi'],
+  ['gorilla', 'glass'],
+  ['ceramic', 'shield'],
+];
 
 /** Tokenizes alphanumeric words keeping single digits for model versions like "5". */
 export function tokenizeIdentityWords(value: string): string[] {
@@ -27,16 +37,81 @@ export function isNumericFeatureToken(token: string): boolean {
   return NUMERIC_FEATURE_TOKEN.test(token);
 }
 
-/** Returns true when a standard/connectivity prefix immediately precedes a version token (e.g. Wi-Fi 6, USB 3.2, Bluetooth 5.3). */
-export function isFeatureVersionPhrase(words: string[]): boolean {
+function collectCoveredVersionIndices(words: string[]): Set<number> {
   const isVersionToken = (token: string | undefined) =>
     token !== undefined && /^\d+[a-z]?$/.test(token);
-  return words.some(
-    (word, idx) =>
-      (FEATURE_VERSION_PREFIXES.has(word) && isVersionToken(words[idx + 1])) ||
-      (word === 'wi' &&
-        words[idx + 1] === 'fi' &&
-        isVersionToken(words[idx + 2]))
+  const covered = new Set<number>();
+  let hasPrefix = false;
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (FEATURE_VERSION_PREFIXES.has(word)) {
+      hasPrefix = true;
+      if (isVersionToken(words[i + 1])) covered.add(i + 1);
+    }
+    if (word === 'gen' && hasPrefix && isVersionToken(words[i + 1])) {
+      covered.add(i + 1);
+    }
+    for (const prefix of MULTIWORD_FEATURE_VERSION_PREFIXES) {
+      if (
+        prefix.every((part, partIdx) => words[i + partIdx] === part) &&
+        isVersionToken(words[i + prefix.length])
+      ) {
+        hasPrefix = true;
+        covered.add(i + prefix.length);
+      }
+    }
+    if (covered.has(i) && isVersionToken(words[i + 1])) {
+      covered.add(i + 1);
+    }
+  }
+  return covered;
+}
+
+/** Returns true when `words[index]` is a numeric version token anchored to a feature prefix (e.g. "5" in "Bluetooth 5"). */
+export function isFeatureVersionNumberAt(
+  words: string[],
+  index: number
+): boolean {
+  const start = Math.max(0, index - 4);
+  const covered = collectCoveredVersionIndices(words.slice(start, index + 1));
+  return covered.has(index - start);
+}
+
+/** Returns true when every numeric version token in `words` is anchored to a recognized standard/component prefix (e.g. Wi-Fi 6, Gorilla Glass 5, Snapdragon 8 Gen 3). */
+export function isFeatureVersionPhrase(
+  words: string[],
+  precedingWords: string[] = []
+): boolean {
+  const context = precedingWords.slice(-3);
+  const combined = [...context, ...words];
+  const offset = context.length;
+  const covered = collectCoveredVersionIndices(combined);
+
+  let hasMatchedVersionInWords = false;
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (!/\d/.test(word) || isNumericFeatureToken(word)) continue;
+    if (!covered.has(offset + i)) return false;
+    hasMatchedVersionInWords = true;
+  }
+  return hasMatchedVersionInWords;
+}
+
+/** Returns true when numeric tokens in a phrase describe specs or versioned standards rather than model identity. */
+export function allowsDescriptionFeature(
+  words: string[],
+  precedingWords: string[] = []
+): boolean {
+  return (
+    (words.some((token) => /\d/.test(token)) &&
+      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
+    (isFeatureVersionPhrase(words, precedingWords) &&
+      !words.some(
+        (token) =>
+          KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
+          VARIANT_TIER_TOKENS.has(token)
+      ))
   );
 }
 

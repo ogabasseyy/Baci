@@ -1,4 +1,7 @@
-import { isNumericFeatureToken } from './ogabassey-catalog-agent-grounding-tokens';
+import {
+  isFeatureVersionNumberAt,
+  isNumericFeatureToken,
+} from './ogabassey-catalog-agent-grounding-tokens';
 import {
   GENERIC_PRODUCT_NAME_WORDS,
   KNOWN_BRAND_OR_LINE_TOKENS,
@@ -19,10 +22,52 @@ const CHIP_OR_CODE_TIER_TOKENS = new Set([
 const PROSE_PLUS_FOLLOWERS =
   /^(?:a|an|the|free|bonus|extra|accessories|earbuds|airpods|charger|chargers|case|cases|warranty|delivery|buds|cable|cables)$/i;
 
-function isModelAnchorToken(
-  token: string,
-  productIdentityTokens: Set<string>
+const CONNECTIVITY_MODEL_TOKENS = new Set(['4g', '5g']);
+
+interface ParsedToken {
+  raw: string;
+  lower: string;
+  start: number;
+  end: number;
+}
+
+function isContiguousPair(
+  segment: string,
+  tokens: ParsedToken[],
+  i: number,
+  j: number
 ): boolean {
+  return (
+    i >= 0 &&
+    j < tokens.length &&
+    /^[\s-]+$/.test(segment.slice(tokens[i].end, tokens[j].start))
+  );
+}
+
+function isModelAnchorToken(
+  segment: string,
+  tokens: ParsedToken[],
+  lowerTokens: string[],
+  index: number,
+  productIdentityTokens: Set<string>,
+  allowConnectivity = true
+): boolean {
+  const token = lowerTokens[index];
+  if (isFeatureVersionNumberAt(lowerTokens, index)) return false;
+  if (CONNECTIVITY_MODEL_TOKENS.has(token)) {
+    return (
+      allowConnectivity &&
+      isContiguousPair(segment, tokens, index - 1, index) &&
+      isModelAnchorToken(
+        segment,
+        tokens,
+        lowerTokens,
+        index - 1,
+        productIdentityTokens,
+        false
+      )
+    );
+  }
   if (isNumericFeatureToken(token)) return false;
   if (/\d/.test(token) || KNOWN_BRAND_OR_LINE_TOKENS.has(token)) return true;
   return (
@@ -37,16 +82,15 @@ export function collectModelAttachedTierTokens(
   segment: string,
   productIdentityTokens: Set<string>
 ): Set<string> {
-  const tokens = [...segment.matchAll(/[A-Za-z0-9]+/g)].map((m) => ({
-    raw: m[0],
-    lower: m[0].toLowerCase(),
-    start: m.index ?? 0,
-    end: (m.index ?? 0) + m[0].length,
-  }));
-  const contiguous = (i: number, j: number) =>
-    i >= 0 &&
-    j < tokens.length &&
-    /^[\s-]+$/.test(segment.slice(tokens[i].end, tokens[j].start));
+  const tokens: ParsedToken[] = [...segment.matchAll(/[A-Za-z0-9]+/g)].map(
+    (m) => ({
+      raw: m[0],
+      lower: m[0].toLowerCase(),
+      start: m.index ?? 0,
+      end: (m.index ?? 0) + m[0].length,
+    })
+  );
+  const lowerTokens = tokens.map((token) => token.lower);
   const attached = new Set<string>();
   const attachedIdx = new Set<number>();
 
@@ -54,23 +98,35 @@ export function collectModelAttachedTierTokens(
     for (let i = 0; i < tokens.length; i++) {
       const { raw, lower } = tokens[i];
       if (!VARIANT_TIER_TOKENS.has(lower) || attachedIdx.has(i)) continue;
+      const prevLinked =
+        isContiguousPair(segment, tokens, i - 1, i) &&
+        (attachedIdx.has(i - 1) ||
+          isModelAnchorToken(
+            segment,
+            tokens,
+            lowerTokens,
+            i - 1,
+            productIdentityTokens
+          ));
+      const nextLinked =
+        isContiguousPair(segment, tokens, i, i + 1) &&
+        (attachedIdx.has(i + 1) ||
+          isModelAnchorToken(
+            segment,
+            tokens,
+            lowerTokens,
+            i + 1,
+            productIdentityTokens
+          ));
       if (
         lower === 'plus' &&
         raw === 'plus' &&
-        contiguous(i, i + 1) &&
+        isContiguousPair(segment, tokens, i, i + 1) &&
         (PROSE_PLUS_FOLLOWERS.test(tokens[i + 1].lower) ||
-          isNumericFeatureToken(tokens[i + 1].lower))
+          (!prevLinked && isNumericFeatureToken(tokens[i + 1].lower)))
       ) {
         continue;
       }
-      const prevLinked =
-        contiguous(i - 1, i) &&
-        (attachedIdx.has(i - 1) ||
-          isModelAnchorToken(tokens[i - 1].lower, productIdentityTokens));
-      const nextLinked =
-        contiguous(i, i + 1) &&
-        (attachedIdx.has(i + 1) ||
-          isModelAnchorToken(tokens[i + 1].lower, productIdentityTokens));
       if (CHIP_OR_CODE_TIER_TOKENS.has(lower) || prevLinked || nextLinked) {
         attached.add(lower);
         attachedIdx.add(i);

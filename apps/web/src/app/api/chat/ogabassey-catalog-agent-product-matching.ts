@@ -3,8 +3,8 @@ import type {
   StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
 import {
+  allowsDescriptionFeature,
   collectProductGroundingTokens,
-  isFeatureVersionPhrase,
   isNumericFeatureToken,
   type ProductGroundingTokenSet,
   tokenizeIdentityWords,
@@ -184,22 +184,16 @@ export function hasUnreturnedProductPhrase(
         (token.length >= 2 || /^\d$/.test(token)) &&
         !CAPITALIZED_PHRASE_IGNORE.has(token)
     );
-  const allowsDescriptionFeature = (words: string[]) =>
-    (words.some((token) => /\d/.test(token)) &&
-      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
-    (isFeatureVersionPhrase(words) &&
-      !words.some(
-        (token) =>
-          KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
-          VARIANT_TIER_TOKENS.has(token)
-      ));
-
-  const hasSingleProductMatch = (words: string[], allowDescription = false) =>
+  const hasSingleProductMatch = (
+    words: string[],
+    allowDescription = false,
+    precedingWords: string[] = []
+  ) =>
     perProductTokens.length > 0
       ? perProductTokens.some((productSet) =>
           allowDescription
             ? words.every((token) => productSet.features.has(token)) &&
-              (allowsDescriptionFeature(words)
+              (allowsDescriptionFeature(words, precedingWords)
                 ? true
                 : words
                     .filter(isModelIdentityToken)
@@ -228,9 +222,18 @@ export function hasUnreturnedProductPhrase(
   for (const match of clause.matchAll(LOWERCASE_MODEL_NUMBER_PATTERN)) {
     if (NON_PRODUCT_PREDECESSOR_WORDS.has(match[1]?.toLowerCase() ?? ''))
       continue;
+    const before = clause
+      .slice(0, match.index ?? 0)
+      .split(/[.,;!?]/)
+      .pop();
+    const precedingWords = extractWords(before ?? '');
     const words = extractWords(match[0]);
-    const isDesc = allowsDescriptionFeature(words);
-    if (words.length > 0 && !hasSingleProductMatch(words, isDesc)) return true;
+    const isDesc = allowsDescriptionFeature(words, precedingWords);
+    if (
+      words.length > 0 &&
+      !hasSingleProductMatch(words, isDesc, precedingWords)
+    )
+      return true;
   }
   return false;
 }

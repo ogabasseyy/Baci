@@ -228,6 +228,65 @@ describe('ogabassey-catalog-agent-product-matching', () => {
         makeEvent([{ ...iphone16, description: '8GB RAM and 256GB storage' }])
       )
     ).toBe(true);
+
+    const galaxyS25WithFeatures = makeProduct({
+      id: 's25',
+      brand: 'Samsung',
+      name: 'Samsung Galaxy S25',
+      slug: 'samsung-galaxy-s25',
+      description:
+        'Corning Gorilla Glass 5 display and Snapdragon 8 Gen 3 chip',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Samsung Galaxy S25 has Gorilla Glass 5 and Snapdragon 8 Gen 3.',
+        makeEvent([galaxyS25WithFeatures])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Samsung Galaxy S25 has Gorilla Glass 6.',
+        makeEvent([galaxyS25WithFeatures])
+      )
+    ).toBe(false);
+    expect(
+      hasGroundedProductMentions(
+        'Motorola Edge 50 plus 256GB is available.',
+        makeEvent([
+          makeProduct({
+            id: 'edge-50',
+            brand: 'Motorola',
+            name: 'Motorola Edge 50',
+            slug: 'motorola-edge-50',
+            description: '256GB storage',
+          }),
+        ])
+      )
+    ).toBe(false);
+    expect(
+      hasGroundedProductMentions(
+        'Samsung Galaxy A15 5G ultra is available.',
+        makeEvent([
+          makeProduct({
+            id: 'a15-5g',
+            brand: 'Samsung',
+            name: 'Samsung Galaxy A15 5G',
+            slug: 'samsung-galaxy-a15-5g',
+          }),
+        ])
+      )
+    ).toBe(false);
+    expect(
+      hasGroundedProductMentions(
+        'Samsung Galaxy S25 has Bluetooth 5 plus 8GB RAM and 5G ultra-fast connectivity.',
+        makeEvent([
+          {
+            ...galaxyS25WithFeatures,
+            description: 'Bluetooth 5, 8GB RAM, 5G connectivity',
+          },
+        ])
+      )
+    ).toBe(true);
   });
 
   it('binds all products in a grouped comma-separated clause', () => {

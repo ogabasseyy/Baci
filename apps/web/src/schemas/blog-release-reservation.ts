@@ -23,11 +23,9 @@ export const reserveBlogReleaseSchema = z
     window_end_hour: z.number().int().min(0).max(23).optional(),
   })
   .superRefine((data, ctx) => {
-    if (
-      data.window_start_hour !== undefined &&
-      data.window_end_hour !== undefined &&
-      data.window_end_hour < data.window_start_hour
-    ) {
+    const effectiveStart = data.window_start_hour ?? 8;
+    const effectiveEnd = data.window_end_hour ?? 20;
+    if (effectiveEnd < effectiveStart) {
       ctx.addIssue({
         code: 'custom',
         message: 'window_end_hour must be >= window_start_hour',

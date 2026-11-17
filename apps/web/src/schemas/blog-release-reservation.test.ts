@@ -44,6 +44,12 @@ describe('blog-release-reservation schemas', () => {
         window_start_hour: 8,
       }).success
     ).toBe(false);
+    expect(
+      reserveBlogReleaseSchema.safeParse({
+        ...validInput,
+        window_start_hour: 22,
+      }).success
+    ).toBe(false);
     expect(cancelBlogReleaseSchema.safeParse({ reason: '   ' }).success).toBe(
       false
     );

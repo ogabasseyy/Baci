@@ -182,7 +182,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
 
     if (error || !data || typeof data !== 'object') {
-      const mapped = readRpcMutationError(error);
+      const mapped = readRpcMutationError(
+        error,
+        'Failed to reserve blog release slot'
+      );
       return NextResponse.json(
         mapped.code
           ? { error: mapped.error, code: mapped.code }
@@ -250,7 +253,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     );
 
     if (error || !data || typeof data !== 'object') {
-      const mapped = readRpcMutationError(error);
+      const mapped = readRpcMutationError(
+        error,
+        'Failed to reserve blog release slot'
+      );
       return NextResponse.json(
         mapped.code
           ? { error: mapped.error, code: mapped.code }

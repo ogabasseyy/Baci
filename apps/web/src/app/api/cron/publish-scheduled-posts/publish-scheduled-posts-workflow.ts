@@ -70,6 +70,8 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
+    // Intentionally scoped to merchants with due scheduled posts in this batch;
+    // merchants without due posts can trigger /api/merchant/blog/release-reservations/recover.
     const reservationRecovery = await recoverMerchantBlogReleaseReservations(
       supabase,
       scheduledMerchantIds

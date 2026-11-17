@@ -46,7 +46,8 @@ export function readRpcMutationError(
     code?: string;
     details?: string;
     message?: string;
-  } | null
+  } | null,
+  fallbackError = 'Failed to persist post'
 ): {
   code?: string;
   error: string;
@@ -145,7 +146,7 @@ export function readRpcMutationError(
       status: 409,
     };
   }
-  return { error: 'Failed to persist post', status: 500 };
+  return { error: fallbackError, status: 500 };
 }
 
 function readMutationPost({

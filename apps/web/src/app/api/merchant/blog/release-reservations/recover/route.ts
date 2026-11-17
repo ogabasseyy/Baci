@@ -49,7 +49,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (error || !data || typeof data !== 'object') {
-      const mapped = readRpcMutationError(error);
+      const mapped = readRpcMutationError(
+        error,
+        'Failed to recover abandoned blog release reservations'
+      );
       return NextResponse.json(
         mapped.code
           ? { error: mapped.error, code: mapped.code }

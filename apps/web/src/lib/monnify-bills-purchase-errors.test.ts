@@ -18,7 +18,7 @@ vi.mock('@/lib/monnify-provider-config', () => ({
   getMonnifyBaseUrl: () => 'https://sandbox.monnify.com',
 }));
 
-import { purchaseBill } from './monnify-bills';
+import { MonnifyTransientVendError, purchaseBill } from './monnify-bills';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -110,13 +110,10 @@ describe('Monnify bill purchase errors', () => {
       );
     }
 
-    it('never hands a 408 timeout to Kuda', async () => {
+    it('treats HTTP 408 as an unknown outcome to resubmit', async () => {
       mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 
-      await expect(vend()).resolves.toMatchObject({
-        providerDefiniteFailure: false,
-        status: 'failed',
-      });
+      await expect(vend()).rejects.toBeInstanceOf(MonnifyTransientVendError);
     });
 
     it.each([
@@ -175,6 +172,37 @@ describe('Monnify bill purchase errors', () => {
       });
     });
 
+    it('never marks code 99 as definite, even with refusal wording', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '99',
+          responseMessage: 'Service unavailable',
+        }),
+      });
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
+    it('never marks a FAILED vend that reports a duplicate as definite', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: true,
+          responseCode: '0',
+          responseMessage: 'Duplicate vendReference',
+          responseBody: { vendReference: 'MFBP-1', vendStatus: 'FAILED' },
+        }),
+      });
+
+      const result = await vend();
+      expect(result.status).toBe('failed');
+      expect(result.providerDefiniteFailure).toBeUndefined();
+    });
+
     it('never marks Monnify code 99 (unexpected error) as definite', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -196,7 +224,7 @@ describe('Monnify bill purchase errors', () => {
         ok: true,
         json: vi.fn().mockResolvedValue({
           requestSuccessful: false,
-          responseCode: '99',
+          responseCode: '01',
           responseMessage: 'Insufficient balance for customer 08012345678',
         }),
       });
@@ -236,7 +264,7 @@ describe('Monnify bill purchase errors', () => {
         ok: true,
         json: vi.fn().mockResolvedValue({
           requestSuccessful: false,
-          responseCode: '99',
+          responseCode: '01',
           responseMessage: 'Insufficient Balance',
         }),
       });

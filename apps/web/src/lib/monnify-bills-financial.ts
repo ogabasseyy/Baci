@@ -133,7 +133,10 @@ export async function purchaseBill(
         message: sanitizeMonnifyErrorDetail(rawMessage),
         status: 'failed',
         amount,
+        // Code 99 is Monnify's "unexpected error, re-query" answer: never a
+        // refusal, whatever its message says.
         providerDefiniteFailure:
+          parsedEnvelope.responseCode?.trim() !== '99' &&
           isMonnifyKnownVendRefusalText(rawMessage) &&
           !isMonnifyDuplicateReferenceText(
             `${parsedEnvelope.responseCode ?? ''} ${rawMessage}`
@@ -182,9 +185,13 @@ export async function purchaseBill(
       ),
       status,
       amount,
-      // Only an explicit FAILED status is a refusal; an unrecognised status
-      // still fails as before but is never handed to another provider.
-      ...(isFailed ? { providerDefiniteFailure: true } : {}),
+      // Only an explicit FAILED status is a refusal, and never one that talks
+      // about a duplicate; an unrecognised status still fails as before but
+      // is never handed to another provider.
+      ...(isFailed &&
+      !isMonnifyDuplicateReferenceText(parsedEnvelope.responseMessage)
+        ? { providerDefiniteFailure: true }
+        : {}),
     };
   } catch (error) {
     if (error instanceof MonnifyHttpError && error.isClientError) {
@@ -197,10 +204,10 @@ export async function purchaseBill(
         status: 'failed',
         amount,
         // A refusal Monnify gave before vending: an authentication rejection
-        // (401/403, e.g. revoked credentials) or a known refusal. A timeout
-        // (408) or anything that may be a duplicate never qualifies.
+        // (401/403, e.g. revoked credentials) or a known refusal. Anything
+        // that may be a duplicate never qualifies (408 is thrown above as an
+        // unknown outcome).
         providerDefiniteFailure:
-          error.status !== 408 &&
           !error.isDuplicateReference &&
           (error.status === 401 ||
             error.status === 403 ||

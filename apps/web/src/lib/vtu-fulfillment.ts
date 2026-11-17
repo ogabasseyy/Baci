@@ -1943,6 +1943,14 @@ async function executeVtuPurchase(
     );
 
     if (!isMonnifyAirtimeKudaFallbackEligible(row, monnifyResult)) {
+      if (row.type === 'airtime' && monnifyResult.status === 'failed') {
+        // Seen so new Monnify refusal wordings can join the allow-list.
+        console.warn('Monnify airtime failure not handed to Kuda:', {
+          monnifyError:
+            monnifyResult.providerErrorDetail ?? monnifyResult.message,
+          transactionId: row.id,
+        });
+      }
       return monnifyResult;
     }
 

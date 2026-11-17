@@ -36,8 +36,13 @@ export class MonnifyHttpError extends Error {
     this.statusText = statusText;
   }
 
+  /**
+   * A 4xx answer. 408 (timed out) is excluded: the vend may have registered,
+   * so it stays an unknown outcome and is resubmitted under the same vend
+   * reference, which Monnify accepts once or reports as a duplicate.
+   */
   get isClientError() {
-    return this.status >= 400 && this.status < 500;
+    return this.status >= 400 && this.status < 500 && this.status !== 408;
   }
 
   /** The full answer, for classification only (see rawDetail). */

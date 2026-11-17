@@ -61,6 +61,7 @@ export function projectChatwootDeliveryOptions(input: {
       !Number.isFinite(quote.price) ||
       quote.price < 0 ||
       !isMajorAmountRepresentable(quote.price, input.currency) ||
+      typeof quote.currency !== 'string' ||
       quote.currency.trim().toUpperCase() !== input.currency
     ) {
       droppedInvalidQuote = true;

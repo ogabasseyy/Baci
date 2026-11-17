@@ -47,6 +47,38 @@ it('clears the retained operation only after confirmed settlement', async () => 
   expect(props.clearAmount).toHaveBeenCalledTimes(1);
   expect(props.refetchWallet).toHaveBeenCalledTimes(1);
 });
+it('bugfix (Codex): keeps the operation until the wallet refresh is in', async () => {
+  const props = input();
+  const order: string[] = [];
+  props.refetchWallet.mockImplementation(async () => {
+    order.push('refresh');
+  });
+  props.clearOperation.mockImplementation(() => {
+    order.push('clear');
+  });
+  mockCheck.mockResolvedValue({
+    status: 'confirmed',
+    operationId: 'operation',
+  });
+  await checkPendingPrimarySavings(props);
+  // Until the new balance is in, the pending card stays up.
+  expect(order).toEqual(['refresh', 'clear']);
+});
+it('bugfix (Muse): a cancelled contribution says to pull to refresh when the refresh failed', async () => {
+  const props = input();
+  props.refetchWallet.mockRejectedValue(new Error('offline'));
+  mockCheck.mockResolvedValue({
+    status: 'cancelled',
+    operationId: 'operation',
+  });
+  await expect(checkPendingPrimarySavings(props)).resolves.toBe('cancelled');
+  expect(props.clearOperation).toHaveBeenCalledTimes(1);
+  expect(notifySavings).toHaveBeenCalledWith(
+    'Contribution cancelled',
+    expect.stringContaining('Pull to refresh'),
+    'info'
+  );
+});
 it('preserves retry identity when status is unavailable', async () => {
   const props = input();
   mockCheck.mockRejectedValue(new Error('unavailable'));

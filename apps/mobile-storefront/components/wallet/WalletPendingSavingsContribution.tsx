@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 
@@ -28,6 +29,9 @@ export function WalletPendingSavingsContribution({
   retry?: boolean;
 }) {
   const copy = retry ? RETRY_COPY : CHECK_COPY;
+  // A second tap before the parent re-renders is ignored, so a retry can
+  // never start twice.
+  const pressing = useRef(false);
   // The automatic re-checks live with the pending operation in the wallet
   // screen (usePendingSavingsStatusPolling), so they keep going whether or
   // not this card is on screen. This button only asks once more, now.
@@ -40,7 +44,8 @@ export function WalletPendingSavingsContribution({
         accessibilityState={{ disabled: isChecking, busy: isChecking }}
         disabled={isChecking || !onCheck}
         onPress={() => {
-          if (isChecking || !onCheck) return;
+          if (isChecking || !onCheck || pressing.current) return;
+          pressing.current = true;
           // The check reports its own outcome in the wallet notice; only an
           // unexpected failure is logged, so real bugs stay visible.
           // .then() also catches a synchronous throw from onCheck.
@@ -48,6 +53,9 @@ export function WalletPendingSavingsContribution({
             .then(onCheck)
             .catch((error: unknown) => {
               console.warn('[Savings] Status check failed unexpectedly', error);
+            })
+            .finally(() => {
+              pressing.current = false;
             });
         }}
         style={{

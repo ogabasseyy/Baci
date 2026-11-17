@@ -100,4 +100,31 @@ describe('pending contribution card with the server off', () => {
     expect(getByRole('button', { name: 'Retry contribution' })).toBeTruthy();
     expect(getByText(/won't be charged twice/)).toBeTruthy();
   });
+
+  it('bugfix (Codex): a fast double tap starts the retry only once', async () => {
+    let finish: () => void = () => undefined;
+    const onCheck = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { getByRole } = render(
+      <WalletPendingSavingsContribution
+        colors={Colors.light}
+        isChecking={false}
+        onCheck={onCheck}
+        retry
+      />
+    );
+    const button = getByRole('button', { name: 'Retry contribution' });
+    fireEvent.press(button);
+    fireEvent.press(button);
+    await act(async () => {});
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    fireEvent.press(button);
+    await act(async () => {});
+    expect(onCheck).toHaveBeenCalledTimes(2);
+  });
 });

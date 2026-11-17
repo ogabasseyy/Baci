@@ -39,10 +39,13 @@ export async function checkPendingPrimarySavings(input: {
       operationId: input.operationId,
     });
     if (result.status === 'confirmed') {
+      // Refresh before releasing the operation: until the new balance is in,
+      // the pending card stays up, so no new contribution starts from the
+      // pre-confirmation wallet and goal figures.
+      const refreshFailed = !(await walletRefreshWorked(input.refetchWallet));
       input.clearOperation();
       input.clearAmount();
       if (input.isOurs?.() !== false) triggerHaptic('success');
-      const refreshFailed = !(await walletRefreshWorked(input.refetchWallet));
       // The status endpoint returns neither the amount nor the goal balance,
       // and the amount field may have been edited since the transfer began,
       // so the cheer names the goal without an amount or percentage.
@@ -64,11 +67,13 @@ export async function checkPendingPrimarySavings(input: {
       return 'confirmed';
     }
     if (result.status === 'cancelled') {
+      const refreshFailed = !(await walletRefreshWorked(input.refetchWallet));
       input.clearOperation();
-      await input.refetchWallet().catch(() => undefined);
       notify(
         'Contribution cancelled',
-        'Nothing was taken from your wallet.',
+        `Nothing was taken from your wallet.${
+          refreshFailed ? ' Pull to refresh your latest balance.' : ''
+        }`,
         'info'
       );
       return 'cancelled';

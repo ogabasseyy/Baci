@@ -6,12 +6,8 @@ import {
   checkPendingPrimarySavings,
   type PendingSavingsCheckOutcome,
 } from './check-pending-primary-savings';
-import { savingsNotifier } from './savings/savings-notice';
 import type { ContributionRail } from './savings/stored-contribution-operation';
-import {
-  EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
-  planWalletSavingsRail,
-} from './wallet-savings-rail';
+import { planWalletSavingsRail } from './wallet-savings-rail';
 
 /** A status read's outcome, or why none was sent. */
 export type SavingsStatusCheckResult =
@@ -42,9 +38,6 @@ export function usePendingSavingsStatusCheck(input: {
   // One read at a time: a tap, the timer and a return to the app must not
   // race two reads on the same operation and notice.
   const inFlight = useRef(false);
-  // The operation already told "Still checking": a blocked rail warns once,
-  // not on every automatic tick.
-  const blockedNoticeFor = useRef<string | null>(null);
   // A read still running when the wallet goes away drops its "still
   // waiting" news instead of posting it after the screen is gone.
   const live = useRef(true);
@@ -65,24 +58,21 @@ export function usePendingSavingsStatusCheck(input: {
     if (input.submittingRef?.current) return 'busy';
     if (inFlight.current) return 'busy';
     const { merchantId } = input;
-    const plan = planWalletSavingsRail({
-      hasStoredId: true,
-      isPrimary:
-        isPiggyvestPrimaryMerchant(merchantId) &&
-        readPiggyvestCapabilityNow(merchantId) !== false,
-      storedRail: input.operationRailRef.current,
-    });
-    if (plan.kind === 'blocked') {
-      if (blockedNoticeFor.current !== operationId) {
-        blockedNoticeFor.current = operationId;
-        savingsNotifier()(
-          'Still checking',
-          EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
-          'warning'
-        );
-      }
-      return 'blocked';
-    }
+    // An id already bound to the primary rail is always read: the server
+    // answers status reads even while submissions are switched off (a
+    // rollback), so a dispatched transfer can still settle here.
+    const plan =
+      input.operationRailRef.current === 'primary'
+        ? ({ kind: 'check-primary' } as const)
+        : planWalletSavingsRail({
+            hasStoredId: true,
+            isPrimary:
+              isPiggyvestPrimaryMerchant(merchantId) &&
+              readPiggyvestCapabilityNow(merchantId) !== false,
+            storedRail: input.operationRailRef.current,
+          });
+    // Unbound id while submissions are off: kept, not read, no notice.
+    if (plan.kind === 'blocked') return 'blocked';
     // A legacy id has no status read: only its own add retries it.
     if (plan.kind !== 'check-primary') return 'no-operation';
     inFlight.current = true;

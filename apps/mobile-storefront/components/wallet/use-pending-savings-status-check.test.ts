@@ -86,30 +86,18 @@ it('never checks a legacy id (only its own add retries it)', async () => {
   expect(mockFetchJson).not.toHaveBeenCalled();
 });
 
-it('keeps a primary id whose rail is gone, without a read', async () => {
+it('still reads a primary id while submissions are switched off (rollback)', async () => {
   mockVerdict = false;
+  mockFetchJson.mockResolvedValue({
+    status: 'pending',
+    operationId: OPERATION,
+  });
   const { props, view } = setup();
   await act(async () => {
-    expect(await view.result.current.checkStatus()).toBe('blocked');
+    expect(await view.result.current.checkStatus()).toBe('pending');
   });
-  expect(mockFetchJson).not.toHaveBeenCalled();
+  expect(mockFetchJson).toHaveBeenCalledTimes(1);
   expect(props.idempotencyKeyRef.current).toBe(OPERATION);
-});
-
-it('warns "Still checking" once per operation while the rail stays blocked', async () => {
-  mockVerdict = false;
-  const { view } = setup();
-  await act(async () => {
-    await view.result.current.checkStatus();
-    await view.result.current.checkStatus();
-    await view.result.current.checkStatus();
-  });
-  expect(mockNotify).toHaveBeenCalledTimes(1);
-  expect(mockNotify).toHaveBeenCalledWith(
-    'Still checking',
-    expect.any(String),
-    'warning'
-  );
 });
 
 it('drops "still waiting" news from a read that ends after the wallet left', async () => {

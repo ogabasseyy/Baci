@@ -155,7 +155,7 @@ describe('OgabasseyV2Swap', () => {
       screen.queryByText('The video is too blurry')
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /select video/i })
+      screen.getByRole('button', { name: /select photos or video/i })
     ).toBeInTheDocument();
   });
 

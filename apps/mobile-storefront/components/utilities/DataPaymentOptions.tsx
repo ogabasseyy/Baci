@@ -2,6 +2,7 @@ import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useRetainsPiggyvest } from './use-retains-piggyvest';
+import type { UtilityRetainedAttempt } from './use-utility-retained-attempt';
 
 /**
  * The data form's payment section: the shared utility options plus whether
@@ -15,6 +16,7 @@ export function DataPaymentOptions({
   selectedPlan,
   selectedProvider,
   phoneNumber,
+  retained,
   returnToHref,
 }: {
   payment: ReturnType<typeof useUtilityPayment>;
@@ -22,6 +24,8 @@ export function DataPaymentOptions({
   selectedPlan: string | null | undefined;
   selectedProvider: string | null | undefined;
   phoneNumber: string;
+  /** The form's shared kept-attempt answer, when it has one. */
+  retained?: UtilityRetainedAttempt;
   returnToHref: WalletReturnHref;
 }) {
   const request = {
@@ -32,11 +36,17 @@ export function DataPaymentOptions({
     type: 'data' as const,
     walletAmount: planAmount,
   };
-  const retainedStoreCredit =
-    planAmount > 0 && payment.hasRetainedVtuAttempt?.(request) === true;
-  const retainedPiggyvest = useRetainsPiggyvest(
-    planAmount > 0 ? request : null
+  // The form's shared lookup when given (the Pay gate reads the same one);
+  // otherwise this section looks up the kept attempt itself.
+  const ownPiggyvest = useRetainsPiggyvest(
+    retained || planAmount <= 0 ? null : request
   );
+  const retainedStoreCredit = retained
+    ? retained.retainedStoreCredit
+    : planAmount > 0 && payment.hasRetainedVtuAttempt?.(request) === true;
+  const retainedPiggyvest = retained
+    ? retained.retainedPiggyvest
+    : ownPiggyvest;
   return (
     <UtilityPaymentOptions
       amount={planAmount}

@@ -1,13 +1,23 @@
-import { INTERNAL_AUTH_HEADER } from '@/lib/internal-auth-header';
+import type { CategoryCompareHubStatus } from '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/resolve-category-compare-hub-status';
+import { resolveCategoryCompareHubStatusDirect } from '@/lib/resolve-category-compare-hub-status-direct';
+import { SingleFlight } from '@/lib/single-flight';
+import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
-import { internalCompareHubStatusBodySchema } from '@/schemas/internal-slug-set-route';
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
 
 const DEFAULT_TIMEOUT_MS = 2_500;
+const RENDERABLE_CACHE_TTL_MS = 60_000;
+const MAX_CACHE_SIZE = 1_000;
+
+export type CompareHubStatusResolver = (input: {
+  merchantSlug: string;
+  categorySlug: string;
+  signal?: AbortSignal;
+}) => Promise<CategoryCompareHubStatus>;
 
 interface CompareHubStatusOptions {
-  /** Public request origin the internal self-fetch targets. */
-  origin: string;
+  /** Retained for caller compatibility; in-process lookup does not fetch over HTTP. */
+  origin?: string;
   /** Storefront slug or custom domain the proxy resolved. */
   identifier: string;
   /** The category slug from the hub path (`/{category}/compare`). */
@@ -18,8 +28,10 @@ interface CompareHubStatusOptions {
    * without a deploy.
    */
   secret: string | undefined;
-  /** Injectable for tests. */
+  /** Retained for caller compatibility; unused now that lookup is in-process. */
   fetchImpl?: typeof fetch;
+  /** Injectable for tests. */
+  resolverImpl?: CompareHubStatusResolver;
   /** Tight budget — a slow verdict must not delay navigations. */
   timeoutMs?: number;
 }
@@ -28,27 +40,102 @@ export type StorefrontCompareHubStatusResolution =
   | { kind: 'empty' }
   | { kind: 'renderable-or-unknown' };
 
+interface CacheEntry {
+  resolution: StorefrontCompareHubStatusResolution;
+  expiresAt: number;
+}
+
+const compareHubStatusCache = new Map<string, CacheEntry>();
+const compareHubStatusFlights =
+  new SingleFlight<StorefrontCompareHubStatusResolution>();
+
+function getCacheKey(identifier: string, categorySlug: string): string {
+  return `${identifier.trim().toLowerCase()}:${categorySlug.trim().toLowerCase()}`;
+}
+
+function getCachedResolution(
+  key: string
+): StorefrontCompareHubStatusResolution | null {
+  const entry = compareHubStatusCache.get(key);
+  if (!entry) {
+    return null;
+  }
+  if (Date.now() >= entry.expiresAt) {
+    compareHubStatusCache.delete(key);
+    return null;
+  }
+  return entry.resolution;
+}
+
+function setCachedResolution(
+  key: string,
+  resolution: StorefrontCompareHubStatusResolution,
+  ttlMs: number
+): void {
+  if (
+    !compareHubStatusCache.has(key) &&
+    compareHubStatusCache.size >= MAX_CACHE_SIZE
+  ) {
+    const oldestKey = compareHubStatusCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      compareHubStatusCache.delete(oldestKey);
+    }
+  }
+  compareHubStatusCache.set(key, {
+    resolution,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+export function clearStorefrontCompareHubStatusCache(): void {
+  compareHubStatusCache.clear();
+}
+
+class CompareHubLookupTimeoutError extends Error {
+  constructor() {
+    super('Compare hub status lookup timed out');
+    this.name = 'CompareHubLookupTimeoutError';
+  }
+}
+
+async function withTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run(controller.signal),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new CompareHubLookupTimeoutError());
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 /**
  * Resolves whether a `/{category}/compare` hub is confirmed empty for the
  * proxy's crawl-budget hard-404 (the page-level thin-hub `notFound()` only
  * yields a PPR soft-404 — 200 + noindex shell — so crawlers never see a true
  * status without this preflight).
  *
- * The verdict comes from the internal `/api/internal/compare-hub-status` route
- * — a deliberate HTTP self-fetch, NOT a direct RPC like the PDP/blog
- * preflights: hub emptiness is decided by the compare-link spec-eligibility
- * logic that lives in TypeScript, and the route runs EXACTLY the code the hub
- * page runs (`resolveCategoryCompareHubStatus`), so proxy and page can never
- * disagree about which hubs exist. Hub navigations are orders of magnitude
- * rarer than PDP navigations, so the self-fetch latency tail the RPC migration
- * eliminated is acceptable here.
+ * Runs `resolveCategoryCompareHubStatus` in-process with SingleFlight
+ * coalescing and a short bounded TTL cache, avoiding a self-HTTP invocation.
  *
  * Fail-open by construction: a missing secret, unsafe category segment,
- * transport error, timeout, non-200 response, malformed body, or a
- * `hasError` (degraded-resolver) body all return `renderable-or-unknown` so
- * the proxy never hard-404s a live hub on stale/unavailable data.
+ * resolver error, timeout, or `unknown` (degraded-resolver) status all return
+ * `renderable-or-unknown` (uncached) so the proxy never hard-404s a live hub
+ * on stale/unavailable data.
  */
-export async function resolveStorefrontCompareHubStatus(
+export function resolveStorefrontCompareHubStatus(
   opts: CompareHubStatusOptions
 ): Promise<StorefrontCompareHubStatusResolution> {
   const failOpenContext = {
@@ -65,7 +152,7 @@ export async function resolveStorefrontCompareHubStatus(
       ...failOpenContext,
       reason: slugSafety.reason,
     });
-    return { kind: 'renderable-or-unknown' };
+    return Promise.resolve({ kind: 'renderable-or-unknown' });
   }
 
   if (!opts.secret) {
@@ -73,71 +160,69 @@ export async function resolveStorefrontCompareHubStatus(
       ...failOpenContext,
       reason: 'no-secret',
     });
-    return { kind: 'renderable-or-unknown' };
+    return Promise.resolve({ kind: 'renderable-or-unknown' });
   }
 
-  // The secret only travels to a TRUSTED origin: loopback in dev, the
-  // configured platform root domain otherwise — never the request's own
-  // origin. A merchant custom domain's DNS is merchant-controlled, so a
-  // self-fetch to the incoming origin could exfiltrate the internal secret to
-  // whatever that domain resolves to tomorrow. `redirect: 'manual'` pairs with
-  // readJsonResponse's 3xx fail-open so the secret is never replayed to a
-  // redirect target either.
-  const baseUrl = storefrontInternalPreflight.resolveBaseUrl(opts.origin);
-  if (!baseUrl) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'no-base-url',
-    });
-    return { kind: 'renderable-or-unknown' };
+  const normalizedIdentifier = opts.identifier.trim().toLowerCase();
+  const normalizedCategorySlug =
+    canonicalizeCategorySlug(opts.categorySlug) ??
+    opts.categorySlug.trim().toLowerCase();
+  const cacheKey = getCacheKey(normalizedIdentifier, normalizedCategorySlug);
+  const cached = getCachedResolution(cacheKey);
+  if (cached) {
+    return Promise.resolve(cached);
   }
 
-  const fetchImpl = opts.fetchImpl ?? fetch;
-  const url = `${baseUrl}/api/internal/compare-hub-status/${encodeURIComponent(
-    opts.identifier
-  )}?category=${encodeURIComponent(opts.categorySlug)}`;
+  const resolverImpl =
+    opts.resolverImpl ?? resolveCategoryCompareHubStatusDirect;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  let response: Response;
-  try {
-    response = await fetchImpl(url, {
-      headers: { [INTERNAL_AUTH_HEADER]: opts.secret },
-      redirect: 'manual',
-      signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-    });
-  } catch (error) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: storefrontInternalPreflight.getFetchErrorReason(error),
-    });
-    return { kind: 'renderable-or-unknown' };
-  }
+  return compareHubStatusFlights.run(cacheKey, async () => {
+    const refreshed = getCachedResolution(cacheKey);
+    if (refreshed) {
+      return refreshed;
+    }
 
-  const body = await storefrontInternalPreflight.readJsonResponse(
-    response,
-    failOpenContext
-  );
-  if (body === null) {
-    return { kind: 'renderable-or-unknown' };
-  }
+    let status: CategoryCompareHubStatus;
+    try {
+      status = await withTimeout(
+        (signal) =>
+          resolverImpl({
+            merchantSlug: normalizedIdentifier,
+            categorySlug: normalizedCategorySlug,
+            signal,
+          }),
+        timeoutMs
+      );
+    } catch (error) {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason:
+          error instanceof CompareHubLookupTimeoutError
+            ? 'timeout'
+            : 'fetch-error',
+      });
+      return { kind: 'renderable-or-unknown' };
+    }
 
-  const parsed = internalCompareHubStatusBodySchema.safeParse(body);
-  if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
-    return { kind: 'renderable-or-unknown' };
-  }
+    if (status.kind === 'unknown') {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'has-error',
+      });
+      return { kind: 'renderable-or-unknown' };
+    }
 
-  if (parsed.data.hasError) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'has-error',
-    });
-    return { kind: 'renderable-or-unknown' };
-  }
+    if (status.kind === 'empty') {
+      // Do not cache empty verdicts: a category that gains its first eligible
+      // product must serve 200 on the very next crawl (matching route no-store).
+      return { kind: 'empty' };
+    }
 
-  return parsed.data.empty
-    ? { kind: 'empty' }
-    : { kind: 'renderable-or-unknown' };
+    const resolution: StorefrontCompareHubStatusResolution = {
+      kind: 'renderable-or-unknown',
+    };
+    setCachedResolution(cacheKey, resolution, RENDERABLE_CACHE_TTL_MS);
+    return resolution;
+  });
 }

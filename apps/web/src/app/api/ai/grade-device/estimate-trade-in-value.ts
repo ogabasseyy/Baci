@@ -13,12 +13,20 @@ const GRADE_OFFER_PERCENT: Record<DeviceGradingAiResult['grade'], number> = {
   Poor: 30,
 };
 
+/** Listings fetched per page (name and price only). */
+const PAGE_SIZE = 100;
+
 /**
- * Listings fetched per check (name and price only), so accessories can be
- * skipped in code. Sized so a store's cheap accessories for one model cannot
- * fill the whole window and hide the device listing behind them.
+ * Pages read before giving up. Results are cheapest-first, so a store's
+ * accessories for a model come before the device; paging keeps them from
+ * hiding it while bounding the work for one check.
  */
-const MATCH_LIMIT = 100;
+const MAX_PAGES = 5;
+
+interface ProductMatch {
+  name: string;
+  price: number;
+}
 
 /**
  * A model name also appears in accessory listings ("iPhone 13 Pro case").
@@ -39,6 +47,39 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+/** The store's cheapest active listing for the model that is not an accessory. */
+async function findCheapestDevice(
+  merchantId: string,
+  model: string
+): Promise<ProductMatch | undefined> {
+  const pattern = `%${escapeLikePattern(model)}%`;
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const { data, error } = await createAnonClient()
+      .from('products')
+      .select('name, price')
+      .eq('merchant_id', merchantId)
+      .eq('status', 'active')
+      .ilike('name', pattern)
+      .gt('price', 0)
+      .order('price', { ascending: true })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      .returns<ProductMatch[]>();
+
+    if (error) {
+      console.error('[grade-device] product lookup failed', {
+        code: error.code,
+      });
+      return undefined;
+    }
+
+    const device = data?.find((product) => !ACCESSORY_NAME.test(product.name));
+    if (device || !data || data.length < PAGE_SIZE) return device;
+  }
+
+  return undefined;
+}
+
 /**
  * Prices the graded device against the resolved store's own active catalogue,
  * starting from the cheapest matching device listing (accessories are
@@ -52,26 +93,7 @@ export async function estimateTradeInValue(
   grading: DeviceGradingAiResult
 ): Promise<TradeInEstimate> {
   const offerPercent = GRADE_OFFER_PERCENT[grading.grade];
-  const { data, error } = await createAnonClient()
-    .from('products')
-    .select('name, price')
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active')
-    .ilike('name', `%${escapeLikePattern(grading.model)}%`)
-    .gt('price', 0)
-    .order('price', { ascending: true })
-    .limit(MATCH_LIMIT)
-    .returns<Array<{ name: string; price: number }>>();
-
-  if (error) {
-    console.error('[grade-device] product lookup failed', {
-      code: error.code,
-    });
-  }
-
-  const match = error
-    ? undefined
-    : data?.find((product) => !ACCESSORY_NAME.test(product.name));
+  const match = await findCheapestDevice(merchantId, grading.model);
   const basePrice =
     match && Number.isFinite(match.price) && match.price > 0 ? match.price : 0;
 

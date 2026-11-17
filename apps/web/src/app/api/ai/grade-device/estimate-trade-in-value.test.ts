@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const query = vi.hoisted(() => ({
   calls: [] as [string, ...unknown[]][],
   result: { data: [] as unknown, error: null as unknown },
+  pages: [] as { data: unknown; error: unknown }[],
 }));
 
 vi.mock('@/lib/supabase/anon', () => ({
@@ -14,7 +15,7 @@ vi.mock('@/lib/supabase/anon', () => ({
         {
           get: (_target, method: string) =>
             method === 'returns'
-              ? () => Promise.resolve(query.result)
+              ? () => Promise.resolve(query.pages.shift() ?? query.result)
               : (...args: unknown[]) => {
                   query.calls.push([method, ...args]);
                   return chain;
@@ -37,6 +38,7 @@ const grading = (grade: 'Excellent' | 'Good' | 'Fair' | 'Poor') => ({
 describe('estimateTradeInValue', () => {
   beforeEach(() => {
     query.calls = [];
+    query.pages = [];
     query.result = {
       data: [{ name: 'Apple iPhone 13 Pro 128GB', price: 500000 }],
       error: null,
@@ -69,7 +71,7 @@ describe('estimateTradeInValue', () => {
       ['ilike', 'name', '%iPhone 13 Pro%'],
       ['gt', 'price', 0],
       ['order', 'price', { ascending: true }],
-      ['limit', 100],
+      ['range', 0, 99],
     ]);
   });
 
@@ -90,21 +92,38 @@ describe('estimateTradeInValue', () => {
     expect(estimate.estimatedValue).toBe(300000);
   });
 
-  it('finds the device behind a long run of cheaper accessories', async () => {
-    query.result = {
-      data: [
-        ...Array.from({ length: 60 }, (_unused, index) => ({
-          name: `iPhone 13 Pro Case ${index + 1}`,
-          price: 2000 + index,
-        })),
-        { name: 'Apple iPhone 13 Pro 128GB', price: 500000 },
-      ],
-      error: null,
-    };
+  it('reads the next page when a full page holds only accessories', async () => {
+    const accessories = Array.from({ length: 100 }, (_unused, index) => ({
+      name: `iPhone 13 Pro Case ${index + 1}`,
+      price: 2000 + index,
+    }));
+    query.pages = [
+      { data: accessories, error: null },
+      {
+        data: [{ name: 'Apple iPhone 13 Pro 128GB', price: 500000 }],
+        error: null,
+      },
+    ];
 
     const estimate = await estimateTradeInValue('merchant-1', grading('Good'));
 
     expect(estimate.matchedProduct).toBe('Apple iPhone 13 Pro 128GB');
+    expect(query.calls).toContainEqual(['range', 100, 199]);
+  });
+
+  it('stops after five full pages of accessories', async () => {
+    const accessories = Array.from({ length: 100 }, () => ({
+      name: 'iPhone 13 Pro Case',
+      price: 2000,
+    }));
+    query.result = { data: accessories, error: null };
+
+    const estimate = await estimateTradeInValue('merchant-1', grading('Good'));
+
+    expect(estimate.estimatedValue).toBe(0);
+    expect(query.calls.filter(([method]) => method === 'range')).toHaveLength(
+      5
+    );
   });
 
   it('gives no estimate when only accessories match', async () => {

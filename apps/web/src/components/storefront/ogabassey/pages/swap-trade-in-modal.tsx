@@ -8,6 +8,11 @@ import {
 } from '@/lib/storefront/request-device-grading';
 import { SparklesIcon } from './swap-sparkles-icon';
 
+/**
+ * Callers must mount this only while it is open (as the swap page does): its
+ * upload, result and error state lives for the life of the component, so
+ * unmounting on close is what gives each visit a fresh upload step.
+ */
 export function TradeInModal({
   isOpen,
   onClose,

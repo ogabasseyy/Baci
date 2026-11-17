@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ resolveMerchant: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  resolveMerchant: vi.fn(),
+  configuredSlug: vi.fn(),
+}));
+
+vi.mock('@/lib/agentic/agentic-merchant-slug', () => ({
+  getConfiguredAgenticMerchantSlug: mocks.configuredSlug,
+}));
 
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/storefront-merchant', () => ({
@@ -25,6 +32,7 @@ function resolvedHost(): string {
 
 describe('resolveDeviceCheckStorefront', () => {
   beforeEach(() => {
+    mocks.configuredSlug.mockReset().mockReturnValue('ogabassey');
     mocks.resolveMerchant.mockReset().mockResolvedValue({
       success: true,
       identifier: 'ogabassey',
@@ -67,6 +75,34 @@ describe('resolveDeviceCheckStorefront', () => {
     );
 
     expect(resolvedHost()).toBe('shop.evil.vercel.app');
+  });
+
+  it('falls back to the server-configured store when the native app sends no slug', async () => {
+    await resolveDeviceCheckStorefront(requestFor('usebaci.com'), null);
+
+    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackIdentifier: 'ogabassey' })
+    );
+  });
+
+  it('prefers the slug the page sent over the configured store', async () => {
+    mocks.configuredSlug.mockReturnValue('other-store');
+
+    await resolveDeviceCheckStorefront(requestFor('usebaci.com'), 'ogabassey');
+
+    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackIdentifier: 'ogabassey' })
+    );
+  });
+
+  it('passes no fallback when nothing is configured', async () => {
+    mocks.configuredSlug.mockReturnValue(undefined);
+
+    await resolveDeviceCheckStorefront(requestFor('usebaci.com'), null);
+
+    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackIdentifier: undefined })
+    );
   });
 
   it('returns the resolver failure unchanged', async () => {

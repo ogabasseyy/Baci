@@ -1,4 +1,5 @@
 import { getRootDomain } from '@/env';
+import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { isVercelPreview } from '@/lib/proxy/host';
 import { getRequestHost } from '@/lib/storefront-host';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
@@ -14,7 +15,9 @@ export type DeviceCheckStorefront =
  * decides whenever it names a store (subdomain or custom domain); the
  * client-supplied slug is only a fallback for platform hosts, where stores
  * are reached by path. Vercel preview deployments are platform hosts too, so
- * their host is not treated as a store's custom domain.
+ * their host is not treated as a store's custom domain. The native app sends
+ * no slug, so on a platform host it falls back to the server-configured
+ * store, the same identity the app's chat uses.
  */
 export async function resolveDeviceCheckStorefront(
   request: Request,
@@ -26,7 +29,7 @@ export async function resolveDeviceCheckStorefront(
     : request;
 
   const resolution = await resolveStorefrontMerchantFromRequest({
-    fallbackIdentifier: merchantSlug,
+    fallbackIdentifier: merchantSlug ?? getConfiguredAgenticMerchantSlug(),
     lookupError: 'Failed to validate storefront host',
     notFoundError: NOT_FOUND_ERROR,
     request: resolutionRequest,

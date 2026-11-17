@@ -48,7 +48,7 @@ vi.mock('@/lib/supabase/anon', () => ({
           mocks.productQuery.order(...args);
           return chain;
         },
-        limit: () => chain,
+        range: () => chain,
         returns: () => Promise.resolve(mocks.productQuery.result),
       };
       return chain;

@@ -1,6 +1,9 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
+/** Numbers written in groups, e.g. "+234 801 234 5678" or "0801-234-5678". */
+const SENSITIVE_GROUPED_NUMBER_PATTERN =
+  /\+?(?<![\d])\d(?:[ -]?\d){6,}(?![\d])/g;
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
@@ -31,18 +34,18 @@ export class MonnifyHttpError extends Error {
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
     this.name = 'MonnifyHttpError';
     this.detail = detail;
-    this.rawDetail = rawDetail;
+    // Not enumerable, so logging or serialising the error never carries
+    // the unscrubbed body (it is read directly, for classification only).
+    Object.defineProperty(this, 'rawDetail', {
+      enumerable: false,
+      value: rawDetail,
+    });
     this.status = status;
     this.statusText = statusText;
   }
 
-  /**
-   * A 4xx answer. 408 (timed out) is excluded: the vend may have registered,
-   * so it stays an unknown outcome and is resubmitted under the same vend
-   * reference, which Monnify accepts once or reports as a duplicate.
-   */
   get isClientError() {
-    return this.status >= 400 && this.status < 500 && this.status !== 408;
+    return this.status >= 400 && this.status < 500;
   }
 
   /** The full answer, for classification only (see rawDetail). */
@@ -90,6 +93,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
 
   return boundedValue
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
+    .replace(SENSITIVE_GROUPED_NUMBER_PATTERN, '[redacted]')
     .slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH)
     .trim();
 }

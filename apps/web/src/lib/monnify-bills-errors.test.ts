@@ -19,6 +19,7 @@ vi.mock('@/lib/monnify-provider-config', () => ({
 }));
 
 import { sanitizeMonnifyErrorDetail } from './monnify-bills';
+import { MonnifyHttpError } from './monnify-bills-errors';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -38,6 +39,34 @@ describe('sanitizeMonnifyErrorDetail', () => {
     expect(sanitizeMonnifyErrorDetail('customer_08012345678 id12345678')).toBe(
       'customer_[redacted] id[redacted]'
     );
+  });
+
+  it('redacts phone numbers written in groups', () => {
+    expect(
+      sanitizeMonnifyErrorDetail(
+        'Insufficient wallet balance for +234 801 234 5678 or 0801-234-5678'
+      )
+    ).toBe('Insufficient wallet balance for [redacted] or [redacted]');
+  });
+
+  it('keeps short numbers such as status codes and amounts', () => {
+    expect(sanitizeMonnifyErrorDetail('400 Bad Request: amount 50,000')).toBe(
+      '400 Bad Request: amount 50,000'
+    );
+  });
+
+  it('never serialises the unscrubbed body of an HTTP error', () => {
+    const error = new MonnifyHttpError({
+      detail: '[redacted]',
+      prefix: 'Monnify API error',
+      rawDetail: 'Balance low for 08012345678',
+      status: 400,
+      statusText: 'Bad Request',
+    });
+
+    expect(error.rawDetail).toBe('Balance low for 08012345678');
+    expect(JSON.stringify(error)).not.toContain('08012345678');
+    expect(Object.keys(error)).not.toContain('rawDetail');
   });
 
   it('truncates long messages to the configured detail cap', () => {

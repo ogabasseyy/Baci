@@ -18,7 +18,7 @@ vi.mock('@/lib/monnify-provider-config', () => ({
   getMonnifyBaseUrl: () => 'https://sandbox.monnify.com',
 }));
 
-import { MonnifyTransientVendError, purchaseBill } from './monnify-bills';
+import { purchaseBill } from './monnify-bills';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -110,20 +110,11 @@ describe('Monnify bill purchase errors', () => {
       );
     }
 
-    it('treats HTTP 408 as an unknown outcome to resubmit', async () => {
+    it('never hands a 408 timeout to Kuda', async () => {
       mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 
-      await expect(vend()).rejects.toBeInstanceOf(MonnifyTransientVendError);
-    });
-
-    it.each([
-      [401, 'Unauthorized'],
-      [403, 'Forbidden'],
-    ])('marks an authentication rejection (%i) as definite', async (status, statusText) => {
-      mockHttpError(status, statusText, 'Access denied');
-
       await expect(vend()).resolves.toMatchObject({
-        providerDefiniteFailure: true,
+        providerDefiniteFailure: false,
         status: 'failed',
       });
     });
@@ -297,29 +288,22 @@ describe('Monnify bill purchase errors', () => {
       });
     });
 
-    it('marks only an explicit FAILED vend status as definite', async () => {
-      function mockVendStatus(vendStatus: string) {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: vi.fn().mockResolvedValue({
-            requestSuccessful: true,
-            responseCode: '0',
-            responseMessage: 'success',
-            responseBody: { vendReference: 'MFBP-1', vendStatus },
-          }),
-        });
-      }
-
-      mockVendStatus('FAILED');
-      await expect(vend()).resolves.toMatchObject({
-        providerDefiniteFailure: true,
-        status: 'failed',
+    it('never marks a FAILED vend status as definite', async () => {
+      // FAILED can follow a hand-off to the network, so it is not proof
+      // that nothing was delivered.
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: true,
+          responseCode: '0',
+          responseMessage: 'success',
+          responseBody: { vendReference: 'MFBP-1', vendStatus: 'FAILED' },
+        }),
       });
 
-      mockVendStatus('SOMETHING_NEW');
-      const unknown = await vend();
-      expect(unknown.status).toBe('failed');
-      expect(unknown.providerDefiniteFailure).toBeUndefined();
+      const result = await vend();
+      expect(result.status).toBe('failed');
+      expect(result.providerDefiniteFailure).toBeUndefined();
     });
   });
 

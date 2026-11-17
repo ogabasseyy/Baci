@@ -82,7 +82,7 @@ describe('bugfix: equal-timestamp MPIK vs demoted MSHC, and repeated origin scan
       'W21',
       OBSERVED_AT
     );
-    expect(result.status).not.toBe('pickup_scheduled');
+    expect(result.status).toBe('picked_up');
   });
 
   it('does not treat a repeated origin scan as arrival for a same-city shipment', () => {

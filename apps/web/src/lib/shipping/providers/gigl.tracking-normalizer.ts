@@ -12,10 +12,8 @@ import {
   PickupOptions,
 } from './gigl.constants';
 import type { giglSchemas } from './gigl.schemas';
-import {
-  applyLifecycleGuards,
-  currentStatusRank,
-} from './gigl.tracking-lifecycle-guards';
+import { applyLifecycleGuards } from './gigl.tracking-lifecycle-guards';
+import { currentStatusRank } from './gigl.tracking-status-rank';
 
 type GiglTrackingShipment = z.input<typeof giglSchemas.trackingShipment>;
 

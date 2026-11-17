@@ -4,11 +4,8 @@ import {
   GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
 } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent } from '../types';
-import {
-  applyLifecycleGuards,
-  currentStatusRank,
-  type Guardable,
-} from './gigl.tracking-lifecycle-guards';
+import { applyLifecycleGuards } from './gigl.tracking-lifecycle-guards';
+import type { Guardable } from './gigl.tracking-status-rank';
 
 function scan(
   providerStatus: string,
@@ -72,17 +69,5 @@ describe('applyLifecycleGuards', () => {
     const atOrigin = scan('MSVC', 'in_transit', 11, 'WUSE ABUJA (Wuse)');
     applyLifecycleGuards([noLocation, atOrigin], 'ABUJA', 'ABUJA');
     expect(atOrigin.event.rawStatus).toBe('MSVC');
-  });
-});
-
-describe('currentStatusRank', () => {
-  it('ranks terminal above MSHC above other scans above pickup-scheduled', () => {
-    const terminal = currentStatusRank(scan('SHD', 'delivered', 10));
-    const mshc = currentStatusRank(scan('MSHC', 'out_for_delivery', 10));
-    const other = currentStatusRank(scan('MSVC', 'in_transit', 10));
-    const pickup = currentStatusRank(scan('MSHC', 'pickup_scheduled', 10));
-    expect(terminal).toBeGreaterThan(mshc);
-    expect(mshc).toBeGreaterThan(other);
-    expect(other).toBeGreaterThan(pickup);
   });
 });

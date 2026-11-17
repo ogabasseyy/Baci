@@ -1195,6 +1195,25 @@ describe('preparePendingVtuTransaction', () => {
       });
 
       it('routes and prices as Kuda when provider is omitted, both field sets exist, and Kuda is preferred', async () => {
+        mockGetBillersByType.mockResolvedValueOnce([
+          {
+            billerId: 'dstv',
+            billerName: 'DSTV',
+            billerType: 'Cable',
+            categoryId: 'cable',
+            categoryName: 'CableTv',
+            billItems: [
+              {
+                amount: 5000,
+                isAmountFixed: true,
+                itemCode: 'dstv-compact',
+                itemCurrencySymbol: 'NGN',
+                itemFee: 0,
+                itemName: 'DStv Compact',
+              },
+            ],
+          },
+        ]);
         const { insert, supabase } = createMockSupabase();
         await preparePendingVtuTransaction({
           supabase,
@@ -1285,7 +1304,7 @@ describe('preparePendingVtuTransaction', () => {
             source: 'checkout',
           })
         ).rejects.toThrow(
-          'The price of DStv Compact has changed. Please refresh and choose your package again.'
+          'The price of this package has changed. Please refresh and choose your package again.'
         );
         expect(mockGetBillersByType).toHaveBeenCalledWith('CableTv');
         expect(insert).not.toHaveBeenCalled();

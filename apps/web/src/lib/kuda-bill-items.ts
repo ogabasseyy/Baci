@@ -52,6 +52,9 @@ function toNumber(value: number | string | undefined, fallback = 0) {
  * back as 100000, StarTimes "DTT SUPER MONTHLY 9500NGN" as 950000), while the
  * rest of Baci works in naira and converts back to kobo only when it calls
  * Kuda to buy. Without this, customers saw and paid 100x the price.
+ * Every list shares this unit; Kuda's airtime items are all open-amount
+ * (amount 0) in production on 2026-11-17, so the conversion leaves them as
+ * they were.
  */
 function koboToNaira(value: number | string | undefined) {
   return Math.round(toNumber(value)) / 100;

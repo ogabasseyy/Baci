@@ -1,4 +1,9 @@
+import { stripProviderNames } from '@baci/shared/lib';
 import type { Biller } from './kuda';
+import {
+  KUDA_BILL_PRICE_CHANGED_MESSAGE,
+  KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,
+} from './kuda-bill-item-price-messages';
 import type { BillItem } from './kuda-bill-items';
 import { getBillersByCategory } from './kuda-bills';
 import { logger } from './logger';
@@ -6,6 +11,8 @@ import { logger } from './logger';
 const PRICE_LIST_CACHE_TTL_MS = 60_000;
 /** How long a list may stand in for an unreachable Kuda (apps cache a day). */
 const PRICE_LIST_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
+/** Kuda bill types sold as fixed-price packages. */
+const FIXED_PRICE_BILL_TYPES = new Set(['cable_tv']);
 
 const priceListCache = new Map<
   string,
@@ -16,36 +23,60 @@ export function clearKudaBillItemPriceCacheForTests() {
   priceListCache.clear();
 }
 
-async function loadPriceList(type: string) {
+/**
+ * The current price list, or the last good one from the past day when Kuda
+ * fails or answers with an empty list (an application-level Kuda failure
+ * resolves to [] rather than throwing). Returns null when neither exists.
+ */
+async function loadPriceList(type: string): Promise<Biller[] | null> {
   const now = Date.now();
   const cached = priceListCache.get(type);
   if (cached && cached.expiresAt > now) {
     return cached.billers;
   }
+  const lastGood =
+    cached && now - cached.loadedAt < PRICE_LIST_LAST_GOOD_MS
+      ? cached.billers
+      : null;
 
+  let billers: Biller[];
   try {
-    const billers = await getBillersByCategory(type);
-    priceListCache.set(type, {
-      billers,
-      expiresAt: now + PRICE_LIST_CACHE_TTL_MS,
-      loadedAt: now,
-    });
-    return billers;
+    billers = await getBillersByCategory(type);
   } catch (error) {
-    // Kuda unreachable: the last list that loaded still knows today's
-    // naira prices, so stale 100x amounts stay blocked through the outage.
-    if (cached && now - cached.loadedAt < PRICE_LIST_LAST_GOOD_MS) {
-      return cached.billers;
-    }
-    throw error;
+    logger.warn({
+      message: 'Kuda price list unavailable',
+      error: error instanceof Error ? error.message : String(error),
+      hasLastGoodList: lastGood !== null,
+      type,
+    });
+    return lastGood;
   }
+  if (billers.length === 0) {
+    logger.warn({
+      message: 'Kuda price list came back empty',
+      hasLastGoodList: lastGood !== null,
+      type,
+    });
+    return lastGood;
+  }
+
+  priceListCache.set(type, {
+    billers,
+    expiresAt: now + PRICE_LIST_CACHE_TTL_MS,
+    loadedAt: now,
+  });
+  return billers;
 }
 
+function normalizeBillerName(name: string) {
+  return stripProviderNames(name).trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** The purchase names this biller, as the billers list showed it. */
 function isChosenBiller(biller: Biller, billerName: string) {
-  return (
-    billerName === biller.billerName ||
-    billerName.startsWith(`${biller.billerName} - `)
-  );
+  const listed = normalizeBillerName(biller.billerName);
+  const sent = normalizeBillerName(billerName);
+  return listed !== '' && (sent === listed || sent.startsWith(`${listed} - `));
 }
 
 function collectBillItems(
@@ -60,12 +91,12 @@ function collectBillItems(
   return found;
 }
 
-function isStalePrice(item: BillItem, amount: number) {
-  return (
-    item.isAmountFixed &&
-    item.amount > 0 &&
-    Math.round(item.amount * 100) !== Math.round(amount * 100)
-  );
+function hasFixedPrice(item: BillItem) {
+  return item.isAmountFixed && item.amount > 0;
+}
+
+function priceMatches(item: BillItem, amount: number) {
+  return Math.round(item.amount * 100) === Math.round(amount * 100);
 }
 
 /**
@@ -73,12 +104,15 @@ function isStalePrice(item: BillItem, amount: number) {
  * Kuda's, before the wallet is charged. Data bundles get the same check in
  * kuda-data-plans; this covers the other Kuda bill types (cable TV packages
  * today), whose saved lists could still hold the old 100x prices from before
- * Kuda's kobo amounts were converted. Open-amount items always pass, unknown
- * items are left for Kuda to judge, and every biller listing the item is
- * checked (only the chosen biller's, when the purchase names one that lists
- * it). If Kuda cannot be reached, the last list loaded in the past day is
- * used; with none, the purchase continues like the data check rather than
- * blocking every bill payment during a Kuda outage.
+ * Kuda's kobo amounts were converted.
+ *
+ * When the purchase names a biller that lists the item, that biller's price
+ * must match. Otherwise the amount must match at least one listing, so a
+ * different price at another biller never declines a valid purchase while a
+ * stale 100x amount (which matches none) is still caught. Open-amount and
+ * unknown items pass. If no price list is available (Kuda down or empty,
+ * with no good list in the past day), fixed-price types fail closed and the
+ * others continue, as the data check does.
  */
 export async function assertKudaBillItemPriceCurrent({
   amount,
@@ -91,34 +125,36 @@ export async function assertKudaBillItemPriceCurrent({
   billerName?: string;
   type: string;
 }): Promise<void> {
-  let billers: Biller[];
-  try {
-    billers = await loadPriceList(type);
-  } catch (error) {
-    logger.warn({
-      message: 'Kuda price list unavailable; bill price not rechecked',
-      error: error instanceof Error ? error.message : String(error),
-      type,
-    });
+  const billers = await loadPriceList(type);
+  if (billers === null) {
+    if (FIXED_PRICE_BILL_TYPES.has(type)) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     return;
   }
 
   const listing = billers
     .map((biller) => ({
       biller,
-      items: collectBillItems(biller.billItems, billItemIdentifier, []),
+      items: collectBillItems(biller.billItems, billItemIdentifier, []).filter(
+        hasFixedPrice
+      ),
     }))
     .filter(({ items }) => items.length > 0);
+  if (listing.length === 0) return;
+
   const chosen = billerName
     ? listing.filter(({ biller }) => isChosenBiller(biller, billerName))
     : [];
-  const matches = (chosen.length > 0 ? chosen : listing).flatMap(
-    ({ items }) => items
-  );
-  const stale = matches.find((item) => isStalePrice(item, amount));
-  if (stale) {
-    throw new Error(
-      `The price of ${stale.itemName} has changed. Please refresh and choose your package again.`
-    );
+  const isCurrent =
+    chosen.length > 0
+      ? chosen.every(({ items }) =>
+          items.every((item) => priceMatches(item, amount))
+        )
+      : listing.some(({ items }) =>
+          items.some((item) => priceMatches(item, amount))
+        );
+  if (!isCurrent) {
+    throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }
 }

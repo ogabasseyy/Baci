@@ -80,4 +80,31 @@ describe('Chatwoot commerce request schemas', () => {
       }).success
     ).toBe(false);
   });
+
+  it('accepts only a boolean snapshot opt-in and rejects unknown authorize fields', () => {
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        includeCartSnapshot: true,
+      }).success
+    ).toBe(true);
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        includeCartSnapshot: false,
+      }).success
+    ).toBe(true);
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        includeCartSnapshot: 'true',
+      }).success
+    ).toBe(false);
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        merchantId: 'caller-selected',
+      }).success
+    ).toBe(false);
+  });
 });

@@ -90,6 +90,11 @@ describe('v2 quiz answer route', () => {
     } as never);
     expect((await postQuizAnswerV2(request({}), context())).status).toBe(401);
     expect(requireQuizCsrf).not.toHaveBeenCalled();
+    // Answers change state, so the session is re-checked (at most once a
+    // minute per token), not only the token signature.
+    expect(requireQuizUser).toHaveBeenCalledWith(expect.anything(), {
+      requireRecentSession: true,
+    });
 
     authenticated();
     vi.mocked(requireQuizCsrf).mockResolvedValue(

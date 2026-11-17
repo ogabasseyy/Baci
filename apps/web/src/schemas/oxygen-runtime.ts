@@ -108,6 +108,18 @@ export const oxygenProviderStateSchema = z
     eligibleAmount: amount.optional(),
     minimumAmount: amount.optional(),
     maxTenure: z.number().int().positive().optional(),
+    offers: z
+      .array(
+        z
+          .object({
+            loanAmount: amount.positive(),
+            tenure: z.number().int().min(1).max(12),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(12)
+      .optional(),
     schedule: z
       .array(
         z.object({

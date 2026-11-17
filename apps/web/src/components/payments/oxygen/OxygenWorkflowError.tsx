@@ -3,6 +3,7 @@ import type { OxygenRuntimeAction } from '@/schemas/oxygen-runtime';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { OxygenApplicationError } from './OxygenApplicationError';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
+import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 import { oxygenRateLimitMessage } from './use-oxygen-provider';
 
 /** Retry only the failed read check; uncertain financial commands remain untouched. */
@@ -33,10 +34,11 @@ export function OxygenWorkflowError({
       error !== oxygenRateLimitMessage &&
       snapshot?.executionEnabled &&
       !snapshot.pending &&
-      !snapshot.state.bookingReference &&
-      snapshot.state.eligible !== true &&
-      ['eligibility_required', 'kyc_required'].includes(snapshot.stage) &&
-      oxygenEligibilityPrerequisites(snapshot.state)
+      oxygenEligibilityPrerequisites(snapshot.state) &&
+      (canRefreshSavedOxygenOffers(snapshot) ||
+        (!snapshot.state.bookingReference &&
+          snapshot.state.eligible !== true &&
+          ['eligibility_required', 'kyc_required'].includes(snapshot.stage)))
   );
   const retryNin = Boolean(
     action === 'validate_nin' &&

@@ -1,0 +1,1 @@
+supabase/migrations/tests/quiz_live_leaderboard_snapshot_v2.sql

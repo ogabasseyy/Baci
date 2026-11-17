@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { getRuntimePlatform } from '@/config/runtime-platform';
 import { getVirtualizedListProps } from './virtualized-list-props';

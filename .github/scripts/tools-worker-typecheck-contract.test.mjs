@@ -71,6 +71,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     '../../tools/staging/prefunded-card/treasury-snapshot-cli.test.ts',
     'tools/events/**/*.ts',
     'tools/db/**/*.ts',
+    'tools/piggyvest-capture-replay/**/*.ts',
     'tools/cost/**/*.ts',
     'tools/messaging/**/*.ts',
     'src/scripts/process-domain-events.ts',

@@ -154,6 +154,26 @@ export function validateLoginEmailInput(value: string) {
   };
 }
 
+/**
+ * "Use password instead" opens the password field straight away when the
+ * email is already valid, instead of only relabelling the Continue button.
+ * With no valid email yet it only switches the method: the shopper has not
+ * tried to continue, so no error is raised.
+ */
+export function resolveAuthMethodToggle(
+  authMethod: 'otp' | 'password',
+  email: string
+): { authMethod: 'otp' | 'password'; passwordEmail: string | null } {
+  if (authMethod === 'password') {
+    return { authMethod: 'otp', passwordEmail: null };
+  }
+  const { error, normalizedEmail } = validateLoginEmailInput(email);
+  return {
+    authMethod: 'password',
+    passwordEmail: error ? null : normalizedEmail,
+  };
+}
+
 function getSafeReturnToHref(returnTo: string): Href | null {
   try {
     const decodedReturnTo = decodeURIComponent(returnTo);

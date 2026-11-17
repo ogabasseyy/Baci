@@ -92,13 +92,21 @@ function getReconciliationPageOffset({
  * single row remains, and leftovers ride the next page rotation.
  * Required: unbounded sequential batches can overrun maxDuration
  * and strand charged rows mid-backlog (Codex R43 rnTRm).
+ *
+ * `afterReconcile` runs once the page is done, handed this module's own
+ * fulfil operation: the cron's PiggyVest-paid recovery step vends through it,
+ * so that step imports no fulfilment or credential code of its own.
  */
 export async function reconcileProcessingVtuTransactions({
+  afterReconcile,
   deadlineMs,
   limit,
   now = new Date(),
   supabase,
 }: {
+  afterReconcile?: (
+    fulfil: typeof fulfillPendingVtuTransaction
+  ) => Promise<void>;
   deadlineMs: number;
   limit?: number;
   now?: Date;
@@ -224,5 +232,6 @@ export async function reconcileProcessingVtuTransactions({
     }
   }
 
+  if (afterReconcile) await afterReconcile(fulfillPendingVtuTransaction);
   return summary;
 }

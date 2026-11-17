@@ -16,8 +16,8 @@ concurrency:
   # GitHub evaluates concurrency before job `if:` and treats `''` as falsy in
   # `cond && a || b`, so non-triggering comments take the truthy `-ignored`
   # branch while legitimate triggers fall through to `''`. `startsWith` keeps
-  # mid-comment mentions from cancelling an active run (only leading extra text
-  # on line 1 remains a residual no-op cancellation).
+  # mid-comment mentions from cancelling an active run (only trailing text
+  # on line 1, e.g. `@muse review please`, remains a residual no-op cancellation).
   group: >-
     muse-comment-review-${{ github.event.issue.number }}-attempt-${{ github.run_attempt }}${{ !(github.event.issue.pull_request != null && startsWith(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR')) && '-ignored' || '' }}
   cancel-in-progress: ${{ github.run_attempt == 1 && github.event.issue.pull_request != null && startsWith(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR') }}

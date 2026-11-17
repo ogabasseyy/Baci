@@ -7,10 +7,26 @@ import test from 'node:test';
 const WORKFLOW_PATH = resolve('.github/workflows/muse-comment-review.yml');
 const workflowText = readFileSync(WORKFLOW_PATH, 'utf8');
 
-function extractScalarAfter(label) {
+function extractSectionLines(sectionKey) {
   const lines = workflowText.split(/\r?\n/);
+  const idx = lines.findIndex((line) => line.trim() === `${sectionKey}:`);
+  assert.notEqual(idx, -1, `Expected to find section "${sectionKey}:" in workflow`);
+  const sectionIndent = lines[idx].length - lines[idx].trimStart().length;
+  const out = [];
+  for (let i = idx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim() === '' || line.trim().startsWith('#')) continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent <= sectionIndent) break;
+    out.push(line);
+  }
+  return out;
+}
+
+function extractScalarFromSection(sectionKey, label) {
+  const lines = extractSectionLines(sectionKey);
   const idx = lines.findIndex((line) => line.trim().startsWith(`${label}:`));
-  assert.notEqual(idx, -1, `Expected to find "${label}:" in workflow`);
+  assert.notEqual(idx, -1, `Expected to find "${label}:" inside "${sectionKey}:"`);
   const keyIndent = lines[idx].length - lines[idx].trimStart().length;
   const value = lines[idx].slice(lines[idx].indexOf(':') + 1).trim();
   if (value === '>-' || value === '>') {
@@ -148,12 +164,12 @@ function evalWorkflowPredicate(expr, ctx) {
   return parseOr();
 }
 
-const groupLine = extractScalarAfter('group');
-const cancelRaw = unwrapExpr(extractScalarAfter('cancel-in-progress'));
-const jobIfRaw = extractScalarAfter('if');
+const groupLine = extractScalarFromSection('concurrency', 'group');
+const cancelRaw = unwrapExpr(extractScalarFromSection('concurrency', 'cancel-in-progress'));
+const jobIfRaw = extractScalarFromSection('muse-comment-review', 'if');
 
-const groupExprMatch = groupLine.match(/\$\{\{\s*(!(?:.*?))\s*\}\}$/);
-assert.ok(groupExprMatch, 'Expected inverted group suffix ternary expression in concurrency.group');
+const groupExprMatch = groupLine.match(/\$\{\{\s*([^}]+?)\s*\}\}$/);
+assert.ok(groupExprMatch, 'Expected concurrency.group to end with a ${{ ... }} suffix expression');
 const groupSuffixExpr = groupExprMatch[1];
 
 function evaluateRouting(ctx) {

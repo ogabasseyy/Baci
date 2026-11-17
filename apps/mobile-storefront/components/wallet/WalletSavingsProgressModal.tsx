@@ -15,7 +15,10 @@ import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { isFundedUnsettledGoal } from './savings/goal-settlement';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
-import { useGoalCancelSheetHeight } from './savings/use-goal-cancel-sheet-height';
+import {
+  useGoalCancelSheetHeight,
+  useStepSheetHeight,
+} from './savings/use-goal-cancel-sheet-height';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { usePlanStillSettingUp } from './savings/use-plan-still-setting-up';
 import { WalletPinSheet } from './savings/WalletPinSheet';
@@ -66,7 +69,7 @@ export function WalletSavingsProgressModal({
   };
   // The sheet is sized to what it shows, so it never ends in empty space.
   const cancelSheet = useGoalCancelSheetHeight(cancel);
-  const [swapHeight, setSwapHeight] = useState(0);
+  const swapSheet = useStepSheetHeight(phoneSwapStep ? 'swap' : null, false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
   // An add in flight hides a few links: keep the height under the PIN step.
@@ -134,16 +137,14 @@ export function WalletSavingsProgressModal({
         visible={visible}
         colors={colors}
         snapPoints={COMPACT_SNAP_POINTS}
-        contentHeight={swapHeight}
+        contentHeight={swapSheet.height}
         onClose={closeSheet}
       >
         <BottomSheetScrollView
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={(_width, height) =>
-            setSwapHeight(Math.ceil(height))
-          }
+          onContentSizeChange={swapSheet.measure}
         >
           <SavingsNoticeCard colors={colors} goalId={goal?.id} inSheet />
           {phoneSwapStep}

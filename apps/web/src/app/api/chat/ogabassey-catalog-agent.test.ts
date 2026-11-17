@@ -180,6 +180,8 @@ describe('runOgabasseyCatalogAgent', () => {
   it.each([
     'Hello!',
     'Tell me a joke',
+    'Tips for photo editing',
+    'Why is my number 2 failing?',
     'What is your WhatsApp number?',
     'What is your last price for iPhone 16?',
     'Cancel my order',
@@ -585,5 +587,35 @@ describe('runOgabasseyCatalogAgent', () => {
         'sony-xm4-low',
       ]);
     }
+  });
+
+  it('rejects getProductDetails results with non-numeric or missing prices when a budget cap is active', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('getProductDetails', {
+        ...sampleProduct,
+        id: 'mac-string-price',
+        price: '2500000',
+      });
+      return { text: 'Apple MacBook Air M2 is available now.' };
+    });
+
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('getProductDetails', {
+        ...sampleProduct,
+        id: 'mac-missing-price',
+        price: undefined,
+      });
+      return {
+        text: "Sorry, I couldn't confirm any matching laptop within your budget.",
+      };
+    });
+
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toEqual({
+      events: [],
+      text: "Sorry, I couldn't confirm any matching laptop within your budget.",
+    });
   });
 });

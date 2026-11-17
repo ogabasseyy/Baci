@@ -352,8 +352,11 @@ export function filterToolResultByBudget(
   }
 
   if (toolName === 'getProductDetails') {
-    const price = (result as { price?: unknown }).price;
-    if (typeof price === 'number' && !isProductWithinBudget(price, budget)) {
+    const record = result as { error?: unknown; price?: unknown };
+    if (typeof record.error === 'string' && record.price === undefined) {
+      return result;
+    }
+    if (!isProductWithinBudget(record.price, budget)) {
       return null;
     }
   }

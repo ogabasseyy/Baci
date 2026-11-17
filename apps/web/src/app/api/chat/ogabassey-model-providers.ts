@@ -37,6 +37,9 @@ export function getOgabasseyPreferredProviders(
 ): TextProvider[] {
   const providers: TextProvider[] = [];
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  // Intentionally require Meta-scoped META_MODEL_API_KEY rather than Meta's
+  // generic doc name (MODEL_API_KEY) so multi-provider deployments cannot
+  // silently route an unrelated vendor's MODEL_API_KEY to https://api.meta.ai/v1.
   const metaKey = process.env.META_MODEL_API_KEY?.trim();
   const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
 

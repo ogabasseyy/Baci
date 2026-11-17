@@ -120,7 +120,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           </a>
           ,{' '}
           <a
-            href="https://www.facebook.com/privacy/policy"
+            href="https://dev.meta.ai/legal"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
@@ -303,7 +303,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                 </a>
                 ,{' '}
                 <a
-                  href="https://www.facebook.com/privacy/policy"
+                  href="https://dev.meta.ai/legal"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"

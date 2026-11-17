@@ -62,10 +62,9 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       expect(screen.getByText(/storefront chat messages may be sent to OpenAI, Meta, or DeepSeek/i)).toBeInTheDocument();
       expect(screen.getByText(/for storefront chat, we send your message text and recent conversation context/i)).toBeInTheDocument();
       expect(screen.getByText(/storefront chat prompts processed through OpenAI, Meta, or DeepSeek APIs/i)).toBeInTheDocument();
-      expect(screen.getAllByRole('link', { name: 'Meta' })[0]).toHaveAttribute(
-        'href',
-        'https://www.facebook.com/privacy/policy',
-      );
+      for (const metaLink of screen.getAllByRole('link', { name: 'Meta' })) {
+        expect(metaLink).toHaveAttribute('href', 'https://dev.meta.ai/legal');
+      }
       expect(screen.getAllByRole('link', { name: 'DeepSeek' })[0]).toHaveAttribute(
         'href',
         'https://en.deepseek.com/privacy',

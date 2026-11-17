@@ -91,7 +91,8 @@ export const oxygenBookingSchema = z.object({
   total_upfront_payment: amount.nullish(),
   first_repayment: amount.nullish(),
 });
-export const oxygenProviderStateSchema = z
+// For projections only. Use a refined state schema at runtime boundaries.
+export const oxygenProviderStateFieldsSchema = z
   .object({
     applicationReference: z.uuid().optional(),
     bookingReference: z.uuid().optional(),
@@ -149,6 +150,25 @@ export const oxygenProviderStateSchema = z
     selfieUrl: z.string().optional(),
   })
   .strict();
+const consistentEligibilityFailure = (state: {
+  eligibilityFailureReason?: string;
+  eligibilityStatus?: string;
+  eligible?: boolean;
+}) =>
+  state.eligibilityFailureReason === undefined ||
+  (state.eligibilityStatus === 'failed' && state.eligible === undefined);
+const eligibilityFailureValidation = {
+  message: 'Eligibility failure reason requires a failed, undecided result',
+  path: ['eligibilityFailureReason'],
+};
+export const oxygenProviderStateSchema = oxygenProviderStateFieldsSchema.refine(
+  consistentEligibilityFailure,
+  eligibilityFailureValidation
+);
+export const oxygenCustomerProviderStateSchema = oxygenProviderStateFieldsSchema
+  .omit({ newUserToken: true, activityToken: true, phone: true })
+  .strict()
+  .refine(consistentEligibilityFailure, eligibilityFailureValidation);
 export type OxygenProviderState = z.infer<typeof oxygenProviderStateSchema>;
 export const oxygenProviderContextSchema = z
   .object({

@@ -23,6 +23,21 @@ it('allows only the supported eligibility failure reason', () => {
   }
 });
 
+it.each([
+  { eligibilityStatus: 'pending' },
+  { eligibilityStatus: 'completed' },
+  {},
+  { eligibilityStatus: 'failed', eligible: true },
+  { eligibilityStatus: 'failed', eligible: false },
+])('rejects a mismatch reason inconsistent with the eligibility result: %j', (state) => {
+  expect(
+    oxygenProviderStateSchema.safeParse({
+      ...state,
+      eligibilityFailureReason: 'financial_details_mismatch',
+    }).success
+  ).toBe(false);
+});
+
 it('accepts decimal equity within 25 to 90 and rejects out-of-contract plans', () => {
   expect(
     oxygenRuntimeActionSchema.safeParse({

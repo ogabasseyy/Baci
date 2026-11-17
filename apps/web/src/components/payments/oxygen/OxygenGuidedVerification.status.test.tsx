@@ -105,6 +105,8 @@ it('shows a recoverable service error and retries only eligibility once on click
   ).toBeVisible();
   expect(screen.queryByText(/under review/i)).toBeNull();
   expect(screen.queryByText(/No installment plan/)).toBeNull();
+  expect(screen.getByText(/Oxygen couldn’t complete the check/i)).toBeVisible();
+  expect(screen.getByText(/contact support for help/i)).toBeVisible();
   expect(submit).not.toHaveBeenCalled();
   const retry = screen.getByRole('button', { name: 'Try again' });
   retry.click();

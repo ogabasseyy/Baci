@@ -251,7 +251,7 @@ export function OxygenGuidedVerification({
                         ? state.eligibilityFailureReason ===
                           'financial_details_mismatch'
                           ? 'Oxygen says your financial details do not match. Please contact your bank to check and update your details, or contact support for help. Then try again.'
-                          : 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
+                          : 'Oxygen couldn’t complete the check. Try again, or contact support for help. Your progress is saved.'
                         : review
                           ? 'Oxygen is still processing your check. Your details are saved, and you can check again when you’re ready.'
                           : selfieConfirmed

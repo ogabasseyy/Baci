@@ -103,7 +103,46 @@ it('retains a safe reason for the observed financial-details mismatch', async ()
 });
 
 it.each([
+  'Your financial details do not match, please visit your bank.',
+  'YOUR  FINANCIAL DETAILS\nDO NOT MATCH - please visit your bank.',
+])('recognizes a whitespace or punctuation variant of the mismatch', async (message) => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      status: 'FAILED',
+      is_eligible: false,
+      message,
+    }),
+  });
+  expect(state.eligibilityFailureReason).toBe('financial_details_mismatch');
+});
+
+it('records an unknown failure without logging provider text or identifiers', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const state: OxygenProviderState = { applicationReference: 'application' };
+    await refreshOxygenEligibility(context, state, {
+      call: vi.fn().mockResolvedValue({
+        ...response,
+        status: 'FAILED',
+        is_eligible: false,
+        message: 'Unexpected provider error for private@example.test',
+      }),
+    });
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      'oxygen_eligibility_failure_unclassified'
+    );
+    expect(state.eligibilityFailureReason).toBeUndefined();
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it.each([
   ['FAILED', 'An unexpected failure for private@example.test'],
+  ['FAILED', 'Your financial details do not matchmaker.'],
+  ['FAILED', 'Ignore this text: your financial details do not match.'],
   ['PENDING', 'Your financial details do not match. Please visit your bank.'],
   ['COMPLETED', 'Your financial details do not match. Please visit your bank.'],
 ])('clears an old reason for %s without retaining provider text', async (status, message) => {

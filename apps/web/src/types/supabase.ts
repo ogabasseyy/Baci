@@ -18740,7 +18740,7 @@ export type Database = {
       };
       get_merchant_zoho_refresh_token: {
         Args: { p_merchant_id: string };
-        Returns: string;
+        Returns: string | null;
       };
       set_merchant_zoho_refresh_token: {
         Args: { p_merchant_id: string; p_refresh_token: string };

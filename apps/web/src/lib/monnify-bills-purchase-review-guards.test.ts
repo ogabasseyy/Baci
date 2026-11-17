@@ -183,3 +183,58 @@ describe('bugfix: "vend transaction failed" wording never goes to Kuda', () => {
     });
   });
 });
+
+describe('bugfix: HTTP rejections showing a vend, or unsuccessful wording, stay off Kuda', () => {
+  it('keeps a 4xx whose JSON body carries vend evidence off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      JSON.stringify({
+        responseMessage: 'Insufficient wallet balance',
+        responseBody: { vendStatus: 'FAILED', vendReference: 'MFBP-1' },
+      })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('keeps an "unsuccessful" vend answer off Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage:
+        'Vend transaction was unsuccessful: insufficient wallet balance',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});
+
+describe('bugfix: a 429 rate-limit rejection goes to Kuda', () => {
+  it('hands a plain 429 to Kuda', async () => {
+    mockHttpError(
+      429,
+      'Too Many Requests',
+      JSON.stringify({ responseMessage: 'Rate limit exceeded' })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+
+  it('keeps a 429 that reports code 99 off Kuda', async () => {
+    mockHttpError(
+      429,
+      'Too Many Requests',
+      JSON.stringify({ responseCode: '99', responseMessage: 'Rate limited' })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

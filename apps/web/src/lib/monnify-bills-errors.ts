@@ -1,5 +1,6 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
-import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error';
+import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
+import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
@@ -19,6 +20,15 @@ interface MonnifyAnswerReading {
   mentionsVendOutcome: boolean;
   reportsUnexpectedError: boolean;
   readsAsAuthRejection: boolean;
+  showsVendEvidence: boolean;
+}
+
+function parseJsonOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -36,6 +46,7 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
       /unauthori[sz]ed|forbidden|access denied|invalid (?:access )?token|(?:expired|revoked) token|token (?:expired|revoked)|invalid credentials?|authenticat/i.test(
         body
       ),
+    showsVendEvidence: hasMonnifyVendEvidence(parseJsonOrNull(body)),
   };
 }
 
@@ -92,6 +103,11 @@ export class MonnifyHttpError extends Error {
   /** The answer reads as an authentication rejection, not just its status. */
   get readsAsAuthRejection() {
     return this.#reading.readsAsAuthRejection;
+  }
+
+  /** The JSON body carries a vend status or reference: a vend may exist. */
+  get showsVendEvidence() {
+    return this.#reading.showsVendEvidence;
   }
 
   /** The answer talks about a vend outcome or an unavailable service. */

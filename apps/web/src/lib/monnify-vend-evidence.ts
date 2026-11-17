@@ -5,20 +5,11 @@ const MONNIFY_VEND_EVIDENCE_FIELDS = [
   'vendReference',
 ] as const;
 
-/**
- * Whether a Monnify envelope's body carries any sign of a vend (a status or a
- * reference). A rejection with such a body may have reached the network, so
- * it never counts as a pre-vend refusal.
- */
-export function hasMonnifyVendEvidence(envelope: unknown): boolean {
-  if (!envelope || typeof envelope !== 'object') {
+function carriesVendField(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
     return false;
   }
-  const body = (envelope as Record<string, unknown>).responseBody;
-  if (!body || typeof body !== 'object') {
-    return false;
-  }
-  const record = body as Record<string, unknown>;
+  const record = value as Record<string, unknown>;
   return MONNIFY_VEND_EVIDENCE_FIELDS.some((field) => {
     const value = record[field];
     return (
@@ -26,4 +17,20 @@ export function hasMonnifyVendEvidence(envelope: unknown): boolean {
       typeof value === 'number'
     );
   });
+}
+
+/**
+ * Whether a Monnify answer (a business envelope or a parsed HTTP error body)
+ * carries any sign of a vend: a status or a reference, at the top level or in
+ * its responseBody. A rejection with such a sign may have reached the
+ * network, so it never counts as a pre-vend refusal.
+ */
+export function hasMonnifyVendEvidence(answer: unknown): boolean {
+  if (!answer || typeof answer !== 'object') {
+    return false;
+  }
+  return (
+    carriesVendField(answer) ||
+    carriesVendField((answer as Record<string, unknown>).responseBody)
+  );
 }

@@ -7,6 +7,7 @@ describe('hasMonnifyVendEvidence', () => {
     { responseBody: { transactionReference: 'MFBP-1' } },
     { responseBody: { vendReference: 'BACI-REF-123' } },
     { responseBody: { transactionReference: 12345 } },
+    { vendStatus: 'FAILED', responseMessage: 'Insufficient wallet balance' },
   ])('sees vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(true);
   });

@@ -7,6 +7,7 @@ describe('isMonnifyVendOutcomeText', () => {
     'Vend request failed',
     'Vend transaction failed: insufficient wallet balance',
     'Vend request has failed',
+    'Vend transaction was unsuccessful: insufficient wallet balance',
     'Failed to vend airtime',
     'Airtime delivered',
     'Request processed',

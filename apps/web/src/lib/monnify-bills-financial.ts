@@ -214,14 +214,18 @@ export async function purchaseBill(
         // (408) or anything that may be a duplicate never qualifies.
         // Any answer that talks about the service being unavailable or a
         // failed vend may come after a vend that ran (e.g. from a gateway),
-        // so it never qualifies, whatever else it says.
+        // so it never qualifies, whatever else it says, and nor does a body
+        // that carries a vend status or reference. A 429 means the request
+        // was not admitted at all, so it qualifies like a refusal.
         providerDefiniteFailure:
           error.status !== 408 &&
           !error.isDuplicateReference &&
           !error.reportsUnexpectedError &&
           !error.mentionsVendOutcome &&
-          (((error.status === 401 || error.status === 403) &&
-            error.readsAsAuthRejection) ||
+          !error.showsVendEvidence &&
+          (error.status === 429 ||
+            ((error.status === 401 || error.status === 403) &&
+              error.readsAsAuthRejection) ||
             error.isKnownRefusal),
       };
     }

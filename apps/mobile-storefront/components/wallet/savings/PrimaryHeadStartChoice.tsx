@@ -35,6 +35,8 @@ export function PrimaryHeadStartChoice({
   disabled,
   onPayNowChange,
 }: Props) {
+  // A last-seen figure: only a hint. The fresh balance check at Create
+  // decides whether the plan can be made with this head start.
   const short = walletBalance < headStart;
   const { copyToClipboard, feedback } = useCopyToClipboard();
   return (
@@ -69,7 +71,8 @@ export function PrimaryHeadStartChoice({
             accessibilityRole="alert"
             style={[styles.note, { color: colors.text }]}
           >
-            Your wallet has {formatNgnCurrency(walletBalance)}. Send at least{' '}
+            Your wallet showed {formatNgnCurrency(walletBalance)} when you
+            opened this. Send at least{' '}
             {formatNgnCurrency(headStart - walletBalance)} to your wallet first,
             or untick to add it later.
           </Text>

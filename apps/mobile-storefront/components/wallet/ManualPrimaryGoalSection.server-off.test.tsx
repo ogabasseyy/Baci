@@ -163,6 +163,14 @@ describe('a head start ticked "pay now" when the plan was created', () => {
     takeWalletHeadStart('goal-a');
   });
 
+  it('does not promise the head start will move when plan setup failed', () => {
+    rememberWalletHeadStart('goal-a', 100);
+    mockPhase = 'error';
+    renderWith(jest.fn());
+    expect(screen.queryByText(/head start is ready to move/)).toBeNull();
+    takeWalletHeadStart('goal-a');
+  });
+
   it('offers one Move button instead of the amount entry once ready', () => {
     rememberWalletHeadStart('goal-a', 100);
     mockPhase = 'ready';

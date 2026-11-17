@@ -44,7 +44,7 @@ describe('PrimaryHeadStartChoice with PiggyVest off', () => {
   it('shows the wallet account number when the balance is short', () => {
     renderChoice({ walletBalance: 40 });
     expect(screen.getByRole('alert')).toHaveTextContent(
-      /Your wallet has ₦40\. Send at least ₦60/
+      /Your wallet showed ₦40 when you opened this\. Send at least ₦60/
     );
     expect(screen.getByText('0000000001')).toBeOnTheScreen();
     expect(screen.getByText('Test Bank')).toBeOnTheScreen();

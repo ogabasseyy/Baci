@@ -7,8 +7,9 @@ const MAX_PENDING_HEAD_STARTS = 16;
  * Head starts the customer chose to pay from their wallet when creating a
  * plan, keyed by goal. The money cannot move until the plan's own savings
  * wallet exists (about a minute after creation), so the plan sheet reads this
- * once the plan is ready and starts the PIN-confirmed transfer by itself,
- * instead of asking the customer to enter the amount again.
+ * once the plan is ready and offers one "Move ₦X from my wallet" button
+ * instead of the amount entry. Money moves only on the customer's tap, never
+ * by itself.
  *
  * It lives only for this app run and holds no money or personal data, just a
  * goal id and a whole-naira amount. Losing it (app restart) only means the

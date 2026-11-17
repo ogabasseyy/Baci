@@ -10,6 +10,9 @@ import { useSavingsPlanFunding } from './savings/use-savings-plan-funding';
 import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
 import type { ManualPrimaryGoalSectionProps } from './wallet-savings-funding-section.types';
 
+/** Phases where the plan is still being set up, not failed. */
+const SETTING_UP: readonly string[] = ['idle', 'loading', 'pending'];
+
 /** A manual goal on a confirmed-ready primary wallet. */
 export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
   const { colors, goal, merchantId, userId } = props;
@@ -45,7 +48,7 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
   const busy = props.isAdding || props.isFundPending;
   return (
     <>
-      {headStart.waiting !== null && phase !== 'ready' ? (
+      {headStart.waiting !== null && SETTING_UP.includes(phase) ? (
         <Text style={[styles.note, { color: colors.textSecondary }]}>
           Your {formatNgnCurrency(headStart.waiting)} head start is ready to
           move from your wallet as soon as your plan is ready.

@@ -1,4 +1,10 @@
-import { backoffDelay, randomDelay, withSpread } from './quiz-retry-timing';
+import {
+  backoffDelay,
+  isOverloadError,
+  randomDelay,
+  waitingRoomRetryDelay,
+  withSpread,
+} from './quiz-retry-timing';
 
 describe('withSpread', () => {
   it('returns the base value when the random source is centred', () => {
@@ -69,5 +75,38 @@ describe('randomDelay', () => {
   it('never exceeds the maximum when the random source returns 1', () => {
     expect(randomDelay(4_000, () => 1)).toBe(4_000);
     expect(randomDelay(0, () => 1)).toBe(0);
+  });
+});
+
+describe('isOverloadError', () => {
+  it('recognises rate limiting and overload by status', () => {
+    expect(isOverloadError({ status: 429 })).toBe(true);
+    expect(
+      isOverloadError(Object.assign(new Error('busy'), { status: 503 }))
+    ).toBe(true);
+  });
+
+  it('ignores other failures', () => {
+    expect(isOverloadError({ status: 500 })).toBe(false);
+    expect(isOverloadError(new Error('offline'))).toBe(false);
+    expect(isOverloadError(null)).toBe(false);
+    expect(isOverloadError('503')).toBe(false);
+  });
+});
+
+describe('waitingRoomRetryDelay', () => {
+  const centred = () => 0.5;
+
+  it('backs off 1, 2, 4 then 5 s for ordinary failures', () => {
+    const offline = new Error('offline');
+    expect(waitingRoomRetryDelay(1, offline, centred)).toBe(1_000);
+    expect(waitingRoomRetryDelay(2, offline, centred)).toBe(2_000);
+    expect(waitingRoomRetryDelay(3, offline, centred)).toBe(4_000);
+    expect(waitingRoomRetryDelay(4, offline, centred)).toBe(5_000);
+  });
+
+  it('waits at least 5 s once the server says it is overloaded', () => {
+    expect(waitingRoomRetryDelay(1, { status: 503 }, () => 0)).toBe(5_000);
+    expect(waitingRoomRetryDelay(1, { status: 429 }, centred)).toBe(5_000);
   });
 });

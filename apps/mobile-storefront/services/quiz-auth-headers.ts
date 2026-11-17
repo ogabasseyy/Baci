@@ -81,6 +81,7 @@ export async function getQuizAuthHeaders(): Promise<{
       }
       // A token without its user is storage that has only half loaded. Give
       // it the same single retry as a missing token before failing.
+      log.warn('Quiz auth session has a token but no user yet', { attempt });
       if (canRetry) {
         await waitForQuizAuthRetry();
         continue;

@@ -2,7 +2,12 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizResult } from '@/services/quiz-results';
 import type { QuizV2Result } from '@/services/quiz-types';
-import { backoffDelay, randomDelay, withSpread } from './quiz-retry-timing';
+import {
+  backoffDelay,
+  isOverloadError,
+  randomDelay,
+  withSpread,
+} from './quiz-retry-timing';
 import { useQuizResultRealtimeWakeup } from './use-quiz-result-realtime-wakeup';
 
 export const QUIZ_RESULT_POLL_INTERVAL_MS = 5_000;
@@ -12,6 +17,7 @@ const QUIZ_RESULT_POST_DEADLINE_FALLBACK_JITTER_MS = 4_000;
 // Spread of the realtime "results ready" wake-up so thousands of phones do
 // not all poll in the same instant.
 export const QUIZ_RESULT_WAKEUP_MAX_DELAY_MS = 4_000;
+const QUIZ_RESULT_OVERLOAD_RETRY_FLOOR_MS = 15_000;
 
 function getStableFallbackDelayMs(attemptId: string): number {
   let hash = 0;
@@ -55,12 +61,17 @@ function getPendingPollDelayMs(
 }
 
 // 5 s doubling to 30 s, with +/- 20% spread so phones that failed the same
-// request do not all retry in the same instant.
-function getFailedPollDelayMs(consecutiveFailures: number): number {
+// request do not all retry in the same instant, and never sooner than 15 s
+// once the server has said it is rate limiting or overloaded.
+function getFailedPollDelayMs(
+  consecutiveFailures: number,
+  error: unknown
+): number {
   return backoffDelay({
     baseMs: QUIZ_RESULT_POLL_INTERVAL_MS,
     failures: consecutiveFailures,
     capMs: QUIZ_RESULT_POLL_MAX_INTERVAL_MS,
+    floorMs: isOverloadError(error) ? QUIZ_RESULT_OVERLOAD_RETRY_FLOOR_MS : 0,
   });
 }
 
@@ -133,10 +144,10 @@ export function useQuizResultPolling({
           return;
         }
         onResult(result);
-      } catch {
+      } catch (error) {
         shouldContinue = true;
         consecutiveFailures += 1;
-        nextDelayMs = getFailedPollDelayMs(consecutiveFailures);
+        nextDelayMs = getFailedPollDelayMs(consecutiveFailures, error);
       } finally {
         inFlight = false;
         if (cancelled || !shouldContinue) {

@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
-import { backoffDelay, randomDelay, withSpread } from './quiz-retry-timing';
+import {
+  randomDelay,
+  waitingRoomRetryDelay,
+  withSpread,
+} from './quiz-retry-timing';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
 import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
@@ -191,7 +195,7 @@ export function useQuizWaitingRoom({
         stoppedRef.current = true;
         onExitRef.current();
       }
-    } catch {
+    } catch (error) {
       if (
         requestGeneration === refreshGenerationRef.current &&
         inFlightRequestRef.current === requestId
@@ -200,11 +204,7 @@ export function useQuizWaitingRoom({
         boundaryFailuresRef.current += 1;
         nextBoundaryRefreshAtRef.current =
           Date.now() +
-          backoffDelay({
-            baseMs: BOUNDARY_REFRESH_INTERVAL_MS,
-            failures: boundaryFailuresRef.current,
-            capMs: 5_000,
-          });
+          waitingRoomRetryDelay(boundaryFailuresRef.current, error);
       }
     } finally {
       if (inFlightRequestRef.current === requestId) {

@@ -208,4 +208,20 @@ describe('useQuizResultPolling wake-up and ordinary polls', () => {
     await advance(1);
     expect(fetchQuizResult).toHaveBeenCalledTimes(3);
   });
+
+  it('never retries sooner than 15 s once the server says it is overloaded', async () => {
+    // Lowest spread: an ordinary first failure would retry after 4 s.
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    jest
+      .mocked(fetchQuizResult)
+      .mockRejectedValueOnce(Object.assign(new Error('busy'), { status: 503 }))
+      .mockResolvedValue(pendingResult);
+    renderWakeupHook();
+    await advance(0);
+
+    await advance(14_999);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
+  });
 });

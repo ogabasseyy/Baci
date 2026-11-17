@@ -60,3 +60,31 @@ export function randomDelay(
 ): number {
   return Math.min(Math.floor(random() * (maxMs + 1)), maxMs);
 }
+
+/** True for a rate-limited (429) or overloaded (503) response error. */
+export function isOverloadError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { status } = error as { status?: unknown };
+  return status === 429 || status === 503;
+}
+
+const WAITING_ROOM_RETRY_BASE_MS = 1_000;
+const WAITING_ROOM_RETRY_CAP_MS = 5_000;
+
+/**
+ * Waiting-room refresh retry: 1, 2, 4 then 5 s (with spread), and never
+ * sooner than 5 s once the server has said it is rate limiting or overloaded.
+ */
+export function waitingRoomRetryDelay(
+  failures: number,
+  error: unknown,
+  random: RandomSource = Math.random
+): number {
+  return backoffDelay({
+    baseMs: WAITING_ROOM_RETRY_BASE_MS,
+    failures,
+    capMs: WAITING_ROOM_RETRY_CAP_MS,
+    floorMs: isOverloadError(error) ? WAITING_ROOM_RETRY_CAP_MS : 0,
+    random,
+  });
+}

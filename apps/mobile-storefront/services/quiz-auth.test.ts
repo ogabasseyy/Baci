@@ -144,6 +144,11 @@ describe('quiz service authentication and transport errors', () => {
     await expect(resultPromise).resolves.toEqual([]);
     expect(mockGetSession).toHaveBeenCalledTimes(2);
     expect(mockGetUser).not.toHaveBeenCalled();
+    // The retry leaves a breadcrumb, unlike a session that is simply missing.
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      'Quiz auth session has a token but no user yet',
+      { attempt: 1 }
+    );
   });
 
   it('propagates network-level fetch failures', async () => {

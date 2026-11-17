@@ -149,5 +149,23 @@ describe('useQuizWaitingRoom', () => {
       await advance(250);
       expect(refresh).toHaveBeenCalledTimes(2);
     });
+
+    it('waits 5 s before retrying when the server says it is overloaded', async () => {
+      // Lowest spread: an ordinary first failure would retry after 0.8 s.
+      const refresh = jest
+        .fn<() => Promise<QuizEvent[]>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('busy'), { status: 503 })
+        )
+        .mockResolvedValue([event({ serverNow: undefined })]);
+      renderAtCountdownZero(refresh);
+
+      await advance(60_000); // refresh at countdown zero fails with a 503
+      expect(refresh).toHaveBeenCalledTimes(1);
+      await advance(4_999);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      await advance(1);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
   });
 });

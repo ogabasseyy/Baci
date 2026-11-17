@@ -56,6 +56,63 @@ describe('useIdentityConfirmation', () => {
     expect(result.current.code).toBe('');
   });
 
+  it('bugfix: keeps the code dots filled while the code is checked', async () => {
+    jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
+    let settle: () => void = () => undefined;
+    jest.mocked(confirmIdentityCode).mockReturnValue(
+      new Promise<void>((resolve) => {
+        settle = resolve;
+      })
+    );
+    const onConfirmed = jest.fn();
+    const { result } = renderHook(() =>
+      useIdentityConfirmation({ expectedUserId: 'user-1', onConfirmed })
+    );
+    await act(() => result.current.send());
+    act(() => result.current.setCode('123456'));
+    let verifying: Promise<void> = Promise.resolve();
+    act(() => {
+      verifying = result.current.verify();
+    });
+    expect(result.current.busy).toBe(true);
+    expect(result.current.code).toBe('123456');
+    await act(async () => {
+      settle();
+      await verifying;
+    });
+    expect(onConfirmed).toHaveBeenCalledTimes(1);
+    expect(result.current.code).toBe('');
+  });
+
+  it("bugfix (Muse): an old account's check never wipes a code typed for a newer account", async () => {
+    jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
+    let settle: () => void = () => undefined;
+    jest.mocked(confirmIdentityCode).mockReturnValue(
+      new Promise<void>((resolve) => {
+        settle = resolve;
+      })
+    );
+    const onConfirmed = jest.fn();
+    const { result, rerender } = renderHook(() =>
+      useIdentityConfirmation({ expectedUserId: 'user-1', onConfirmed })
+    );
+    await act(() => result.current.send());
+    act(() => result.current.setCode('123456'));
+    let verifying: Promise<void> = Promise.resolve();
+    act(() => {
+      verifying = result.current.verify();
+    });
+    mockUser = { id: 'user-2', email: 'other@example.com' };
+    rerender({});
+    act(() => result.current.setCode('654321'));
+    await act(async () => {
+      settle();
+      await verifying;
+    });
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(result.current.code).toBe('654321');
+  });
+
   it('does not check a short code, and shows a refusal without handing back', async () => {
     jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
     jest

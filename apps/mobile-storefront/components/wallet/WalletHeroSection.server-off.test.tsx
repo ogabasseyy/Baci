@@ -80,7 +80,7 @@ describe('bugfix: server unreachable showed the goals total as the balance (walk
 });
 
 describe('bugfix: known PiggyVest customer looked new with the server unreachable (walk 11)', () => {
-  it('keeps the last-known account and Add money, with no balance figure', () => {
+  it('keeps the last-known account, with no balance figure and no Add money', () => {
     render(
       <WalletHeroSection
         canCreateFundingAccount
@@ -111,7 +111,7 @@ describe('bugfix: known PiggyVest customer looked new with the server unreachabl
     expect(
       screen.queryByRole('button', { name: 'Create account number' })
     ).toBeNull();
-    expect(screen.getByRole('button', { name: /Add money/ })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /Add money/ })).toBeNull();
     expect(screen.queryByText('Total Balance · NGN')).toBeNull();
   });
 });

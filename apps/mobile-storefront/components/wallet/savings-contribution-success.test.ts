@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import * as Haptics from 'expo-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { notifySavings } from './savings/savings-notice';
-import { buildSavingsSuccessMessage } from './savings-contribution-success';
+import {
+  buildSavingsSuccessMessage,
+  buildSavingsToastMessage,
+} from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.mock('./savings/savings-notice', () => {
@@ -239,5 +242,27 @@ describe('success feedback is bound to confirmed contributions', () => {
       rawAmount: '500',
     });
     expect(Haptics.notificationAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildSavingsToastMessage', () => {
+  it('names the amount and the plan', () => {
+    expect(
+      buildSavingsToastMessage({
+        amount: 100,
+        goalCompleted: false,
+        title: 'iPhone 13',
+      })
+    ).toBe('₦100 added to iPhone 13');
+  });
+
+  it('celebrates a reached goal and falls back when the plan has no title', () => {
+    expect(
+      buildSavingsToastMessage({
+        amount: 5000,
+        goalCompleted: true,
+        title: ' ',
+      })
+    ).toBe('₦5,000 added. You reached your goal!');
   });
 });

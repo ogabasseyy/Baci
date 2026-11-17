@@ -15,6 +15,8 @@ describe('mentionsMonnifyVendEvidence', () => {
     'order_id: 12345',
     'status=FAILED&responseMessage=Insufficient wallet balance',
     'status: pending',
+    'transactionStatus=FAILED&message=Insufficient wallet balance',
+    'payment_status=FAILED',
   ])('sees vend evidence in %s', (text) => {
     expect(mentionsMonnifyVendEvidence(text)).toBe(true);
   });

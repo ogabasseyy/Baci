@@ -13,6 +13,8 @@ describe('hasMonnifyVendEvidence', () => {
     { responseBody: { status: 'CANCELLED' } },
     { status: 'DECLINED' },
     { transactionStatus: 'FAILED', message: 'Insufficient wallet balance' },
+    { responseBody: { receiptNumber: 'RCPT-1' } },
+    { invoice_id: 'INV-9' },
     { responseBody: { payment_status: 'PENDING' } },
     { responseBody: { status: 'UNKNOWN' } },
     { status: 'PENDING_CONFIRMATION' },

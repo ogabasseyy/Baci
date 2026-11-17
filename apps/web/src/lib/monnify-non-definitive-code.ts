@@ -1,9 +1,9 @@
 /**
  * Response codes that never prove Monnify vended nothing: 99 ("unexpected
- * error, re-query"), 408 (timeout), 409 (conflict/duplicate) and 429
- * (throttle).
+ * error, re-query"), 408 (timeout), 409 (conflict/duplicate), 429
+ * (throttle) and any 5xx (upstream server error).
  */
-const NON_DEFINITIVE_CODE = /^0*(?:99|408|409|429)$/;
+const NON_DEFINITIVE_CODE = /^0*(?:99|408|409|429|5\d\d)$/;
 /**
  * Keys that carry a response code: code, responseCode, error_code, and a
  * generic status / statusCode (a numeric 408 there is a timeout, not data).

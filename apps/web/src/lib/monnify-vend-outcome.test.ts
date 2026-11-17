@@ -17,6 +17,8 @@ describe('isMonnifyVendOutcomeText', () => {
     'Vend queued',
     'Vend initiated',
     'Vend submitted: insufficient wallet balance',
+    'Transaction declined: insufficient wallet balance',
+    'Vend cancelled: insufficient wallet balance',
     'Airtime request accepted: insufficient wallet balance',
     'Airtime request has been accepted: insufficient wallet balance',
     'Vend request has been submitted',

@@ -58,9 +58,11 @@ export function useAutoWalletHeadStart({
     /** Starts the PIN-confirmed transfer for exactly the ticked amount. */
     move: () => {
       if (!ready || !matches || !fits) return;
-      takeWalletHeadStart(goalId);
+      // Only the tap that claims the entry starts the transfer: a second
+      // press before the re-render finds it gone and does nothing.
+      const claimed = takeWalletHeadStart(goalId);
       setWaiting(null);
-      onAddSavings();
+      if (claimed !== null) onAddSavings();
     },
     /** The customer wants a different amount: show the normal entry. */
     dismiss: () => {

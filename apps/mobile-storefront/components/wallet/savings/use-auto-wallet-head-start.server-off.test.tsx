@@ -93,6 +93,22 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
     });
   });
 
+  describe('bugfix (Muse): a fast double press could start the transfer twice', () => {
+    it('starts it once when Move is pressed twice before re-rendering', () => {
+      rememberWalletHeadStart('goal-7', 100);
+      const { onAddSavings, result } = setup('goal-7', {
+        ready: true,
+        addAmount: '100',
+      });
+      const { move } = result.current;
+      act(() => {
+        move();
+        move();
+      });
+      expect(onAddSavings).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('lets the customer choose a different amount instead', () => {
     rememberWalletHeadStart('goal-4', 100);
     const { onAddSavings, result } = setup('goal-4', {

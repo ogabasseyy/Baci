@@ -120,7 +120,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           </a>
           ,{' '}
           <a
-            href="https://dev.meta.ai/legal"
+            href="https://dev.meta.ai/legal/commitments"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
@@ -129,7 +129,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           </a>
           , or{' '}
           <a
-            href="https://en.deepseek.com/privacy"
+            href="https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
@@ -303,7 +303,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                 </a>
                 ,{' '}
                 <a
-                  href="https://dev.meta.ai/legal"
+                  href="https://dev.meta.ai/legal/commitments"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"
@@ -312,7 +312,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                 </a>
                 , and{' '}
                 <a
-                  href="https://en.deepseek.com/privacy"
+                  href="https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"

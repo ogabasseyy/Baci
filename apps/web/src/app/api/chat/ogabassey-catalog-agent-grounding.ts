@@ -20,7 +20,7 @@ const CLAUSE_SPLIT_PATTERN =
   /[.!?\n;]+|\b(?:but|however|although)\b|,\s*(?=(?:we|here|try|you|the|check)\b)/i;
 
 const PRICE_MENTION_PATTERN =
-  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?\s*(?:naira|ngn|₦)|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(million|thousand|[km])\b|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
+  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km])\b)?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km])\b)?\s*(?:naira|ngn|₦)|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(million|thousand|[km])\b|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
 
 // Only treat explicit currency, scaled, or budget-cued numbers from user turns
 // as valid budget references so model numbers (e.g. "iPhone 16") never enter.
@@ -397,8 +397,60 @@ function hasGroundedProductMentions(
   return true;
 }
 
-export function hasGroundedEmptyCatalogText(text: string): boolean {
-  if (UNGROUNDED_EMPTY_RESULT_CLAIM.test(text)) return false;
+export function hasGroundedEmptyCatalogText(
+  text: string,
+  userMessages: CatalogChatMessage[] = []
+): boolean {
+  const userAmounts = extractUserPriceMentions(userMessages);
+  const validatedSpans: Array<{ start: number; end: number }> = [];
+
+  for (const match of text.matchAll(PRICE_MENTION_PATTERN)) {
+    const rawNumber = match[2] ?? match[4] ?? match[6] ?? match[8];
+    const unit = match[3] ?? match[5] ?? match[7];
+    if (!rawNumber) continue;
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (
+      match[6] !== undefined &&
+      unit?.toLowerCase() === 'k' &&
+      RESOLUTION_SPEC_SUFFIX_PATTERN.test(text.slice(end, end + 24))
+    ) {
+      continue;
+    }
+    const amount = applyNumericScale(rawNumber, unit);
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    if (!isBudgetRestatement(text, start, end) || !userAmounts.has(amount)) {
+      return false;
+    }
+    validatedSpans.push({ start, end });
+  }
+
+  for (const match of text.matchAll(BARE_PRICE_CANDIDATE_PATTERN)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (validatedSpans.some((span) => start >= span.start && end <= span.end)) {
+      continue;
+    }
+    const amount = Number(match[1]);
+    if (isBareNonPriceSpec(text, start, end, amount)) continue;
+    if (!isBudgetRestatement(text, start, end) || !userAmounts.has(amount)) {
+      return false;
+    }
+    validatedSpans.push({ start, end });
+  }
+
+  let withoutBudgetRestatements = text;
+  for (let i = validatedSpans.length - 1; i >= 0; i -= 1) {
+    const { start, end } = validatedSpans[i];
+    withoutBudgetRestatements =
+      withoutBudgetRestatements.slice(0, start) +
+      ' ' +
+      withoutBudgetRestatements.slice(end);
+  }
+
+  if (UNGROUNDED_EMPTY_RESULT_CLAIM.test(withoutBudgetRestatements)) {
+    return false;
+  }
   if (!NEGATION_OR_ABSENCE_CUE.test(text)) return false;
 
   const clauses = text

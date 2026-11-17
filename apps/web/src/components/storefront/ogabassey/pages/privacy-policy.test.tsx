@@ -63,12 +63,17 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       expect(screen.getByText(/for storefront chat, we send your message text and recent conversation context/i)).toBeInTheDocument();
       expect(screen.getByText(/storefront chat prompts processed through OpenAI, Meta, or DeepSeek APIs/i)).toBeInTheDocument();
       for (const metaLink of screen.getAllByRole('link', { name: 'Meta' })) {
-        expect(metaLink).toHaveAttribute('href', 'https://dev.meta.ai/legal');
+        expect(metaLink).toHaveAttribute(
+          'href',
+          'https://dev.meta.ai/legal/commitments',
+        );
       }
-      expect(screen.getAllByRole('link', { name: 'DeepSeek' })[0]).toHaveAttribute(
-        'href',
-        'https://en.deepseek.com/privacy',
-      );
+      for (const deepseekLink of screen.getAllByRole('link', { name: 'DeepSeek' })) {
+        expect(deepseekLink).toHaveAttribute(
+          'href',
+          'https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html',
+        );
+      }
       expect(screen.getByText(/up to 55 days for abuse monitoring/)).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Your Privacy Choices' })).toBeInTheDocument();
       expect(screen.getByText(/If you cannot use that address, email us/)).toBeInTheDocument();

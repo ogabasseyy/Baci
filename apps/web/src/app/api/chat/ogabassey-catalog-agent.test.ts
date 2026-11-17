@@ -125,8 +125,8 @@ describe('runOgabasseyCatalogAgent', () => {
     const stopCondition = callOptions?.stopWhen as (ctx: {
       steps: unknown[];
     }) => boolean;
-    expect(stopCondition({ steps: [{}] })).toBe(false);
-    expect(stopCondition({ steps: [{}, {}, {}] })).toBe(true);
+    expect(stopCondition({ steps: [{}, {}, {}, {}] })).toBe(false);
+    expect(stopCondition({ steps: [{}, {}, {}, {}, {}] })).toBe(true);
   });
 
   it('falls back from GPT-6 Luna to Meta Muse Ember on provider failure', async () => {
@@ -896,5 +896,75 @@ describe('runOgabasseyCatalogAgent', () => {
     expect(mocks.generateText.mock.calls.at(-1)?.[0]?.model).toMatchObject({
       modelId: 'deepseek-flash',
     });
+  });
+
+  it('preserves contradictory minPrice floors instead of widening downward and allows honest empty budget restatements', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const rawSearchExecute = vi.fn(
+      async (_params: {
+        query: string;
+        minPrice?: number;
+        maxPrice?: number;
+      }) => {
+        const empty = { products: [], total: 0 };
+        reportToolResult?.('searchProducts', empty);
+        return JSON.stringify(empty);
+      }
+    );
+    mocks.createTools.mockImplementationOnce(
+      (
+        _sessionId: string,
+        options: { onToolResult?: typeof reportToolResult } = {}
+      ) => {
+        reportToolResult = options.onToolResult;
+        return {
+          searchProducts: {
+            description: 'searchProducts',
+            execute: rawSearchExecute,
+          },
+          getProductDetails: { description: 'getProductDetails' },
+        };
+      }
+    );
+
+    mocks.generateText.mockImplementationOnce(
+      async (options: {
+        tools?: {
+          searchProducts?: {
+            execute?: (params: {
+              query: string;
+              minPrice?: number;
+              maxPrice?: number;
+            }) => Promise<string>;
+          };
+        };
+      }) => {
+        await options.tools?.searchProducts?.execute?.({
+          query: 'MacBook',
+          minPrice: 2_500_000,
+        });
+        return {
+          text: 'Sorry, nothing under ₦2,000,000 matched your search.',
+        };
+      }
+    );
+
+    const emptyRestatement = await runOgabasseyCatalogAgent(baseOptions());
+    expect(rawSearchExecute).toHaveBeenCalledWith({
+      maxPrice: 2_000_000,
+      minPrice: 2_500_000,
+      query: 'MacBook',
+    });
+    expect(emptyRestatement).toEqual({
+      events: [],
+      text: 'Sorry, nothing under ₦2,000,000 matched your search.',
+    });
+
+    // Unmentioned amount in an empty-result reply must still be rejected
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', { products: [], total: 0 });
+      return { text: 'Nothing matched at ₦950,000.' };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
   });
 });

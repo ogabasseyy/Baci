@@ -34,7 +34,7 @@ import {
 
 const PER_PROVIDER_TIMEOUT_MS = 6_000;
 const MAX_CHAIN_TIMEOUT_MS = 12_000;
-const MAX_CATALOG_AGENT_STEPS = 3;
+const MAX_CATALOG_AGENT_STEPS = 5;
 
 const catalogAgentStopWhen: StopCondition<ToolSet> = ({ steps }) =>
   steps.length >= MAX_CATALOG_AGENT_STEPS;
@@ -219,7 +219,7 @@ export async function runOgabasseyCatalogAgent(options: {
         const events = presentationCollector.getEvents();
         if (events.length === 0) {
           return (
-            hasGroundedEmptyCatalogText(text) &&
+            hasGroundedEmptyCatalogText(text, conversationMessages) &&
             !OGABASSEY_UNVERIFIED_COMMERCE_ACTION.test(text) &&
             !OGABASSEY_UNVERIFIED_STORE_PURCHASE.test(text)
           );

@@ -126,15 +126,12 @@ export function constrainSearchParamsWithBudget<
     typeof params.maxPrice === 'number' && Number.isFinite(params.maxPrice)
       ? Math.min(params.maxPrice, budget.amount)
       : budget.amount;
-  const minPrice =
-    typeof params.minPrice === 'number' && params.minPrice > maxPrice
-      ? undefined
-      : params.minPrice;
 
+  // Keep any caller/model minPrice intact instead of widening downward when
+  // minPrice > maxPrice so contradictory ranges fail closed as empty results.
   return {
     ...params,
     maxPrice,
-    minPrice,
   };
 }
 

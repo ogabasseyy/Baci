@@ -109,7 +109,17 @@ export function resolveConversationBudgetLimit(
       activeGroup = priorGroup;
     }
     if (BUDGET_OVERRIDE_CUE.test(priorContent)) {
-      return undefined;
+      const overrideTurnBudget = analyzeFastCatalogBudget(
+        priorContent,
+        currencyCode
+      );
+      if (!overrideTurnBudget.hasBudget) return undefined;
+      if (overrideTurnBudget.invalid || !overrideTurnBudget.price) {
+        return undefined;
+      }
+      return hasContinuationCue || (latestGroup && latestGroup === priorGroup)
+        ? overrideTurnBudget.price
+        : undefined;
     }
 
     const budget = analyzeFastCatalogBudget(priorContent, currencyCode);

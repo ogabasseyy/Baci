@@ -3,6 +3,7 @@ import {
   findBoundProducts,
   NEGATION_OR_ABSENCE_CUE,
 } from './ogabassey-catalog-agent-product-matching';
+import { extractCapacitySpecRole } from './ogabassey-catalog-agent-spec-role';
 
 const SPEC_CLAIM_PATTERN =
   /\b(\d+(?:\.\d+)?)[\s-]*(gb|tb|mb|mah|hz|khz|mhz|ghz|nits|ppi|mp|mm|cm|watt|watts|hours?|hrs?|cores?|inch(?:es)?)\b|\b(1080p|720p|1440p|2160p|4k|5k|8k)\b/gi;
@@ -95,31 +96,6 @@ function extractNormalizedDurations(value: string): string[] {
   return normalized;
 }
 
-const RAM_ATTRIBUTE_ROLE = /\b(?:ram|unified\s+memory|memory|lpddr\d*)\b/i;
-const STORAGE_ATTRIBUTE_ROLE =
-  /\b(?:storage|ssd|hdd|nvme|rom|internal|flash|hard\s+drive|disk)\b/i;
-
-function extractSpecRole(
-  source: string,
-  start: number,
-  end: number
-): 'ram' | 'storage' | undefined {
-  const after =
-    source
-      .slice(end, Math.min(source.length, end + 18))
-      .split(/[.,;!?\n/\d]/)[0] ?? '';
-  if (RAM_ATTRIBUTE_ROLE.test(after)) return 'ram';
-  if (STORAGE_ATTRIBUTE_ROLE.test(after)) return 'storage';
-  const before =
-    source
-      .slice(Math.max(0, start - 18), start)
-      .split(/[.,;!?\n/]/)
-      .at(-1) ?? '';
-  if (RAM_ATTRIBUTE_ROLE.test(before)) return 'ram';
-  if (STORAGE_ATTRIBUTE_ROLE.test(before)) return 'storage';
-  return undefined;
-}
-
 function matchesSpecWithBoundary(
   corpus: string,
   rawNum: string | undefined,
@@ -128,6 +104,7 @@ function matchesSpecWithBoundary(
   claimedRole: 'ram' | 'storage' | undefined
 ): boolean {
   const claimedKey = normalizeSpecKey(rawNum, rawUnit, rawTag);
+  const unit = (rawUnit ?? '').toLowerCase();
   for (const corpusMatch of corpus.matchAll(SPEC_CLAIM_PATTERN)) {
     if (
       normalizeSpecKey(corpusMatch[1], corpusMatch[2], corpusMatch[3]) !==
@@ -138,7 +115,12 @@ function matchesSpecWithBoundary(
     if (!claimedRole) return true;
     const cStart = corpusMatch.index ?? 0;
     const cEnd = cStart + corpusMatch[0].length;
-    const corpusRole = extractSpecRole(corpus, cStart, cEnd);
+    const corpusRole = extractCapacitySpecRole(
+      corpus,
+      cStart,
+      cEnd,
+      corpusMatch[2]
+    );
     if (claimedRole === 'ram') {
       if (corpusRole === 'ram') return true;
       continue;
@@ -146,8 +128,8 @@ function matchesSpecWithBoundary(
     if (corpusRole === 'ram') continue;
     if (
       corpusRole === 'storage' ||
-      rawUnit?.toLowerCase() === 'tb' ||
-      Number(rawNum) >= 64
+      (!corpusRole &&
+        (unit === 'tb' || (unit === 'gb' && Number(rawNum) >= 64)))
     ) {
       return true;
     }
@@ -162,7 +144,12 @@ export function hasGroundedSpecAndPolicyClaims(
 ): boolean {
   for (const match of text.matchAll(SPEC_CLAIM_PATTERN)) {
     const offset = match.index ?? 0;
-    const claimedRole = extractSpecRole(text, offset, offset + match[0].length);
+    const claimedRole = extractCapacitySpecRole(
+      text,
+      offset,
+      offset + match[0].length,
+      match[2]
+    );
     const bound = findBoundProducts(text, offset, products);
     const hasMatch =
       bound.length > 0 &&

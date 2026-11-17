@@ -60,6 +60,19 @@ describe('ogabassey-catalog-agent-budget', () => {
         'NGN'
       )
     ).toBeUndefined();
+    expect(
+      resolveConversationBudgetLimit(
+        [
+          { role: 'user', content: 'Show laptops under ₦2m' },
+          {
+            role: 'user',
+            content: 'Ignore the budget; keep laptops under ₦3m',
+          },
+          { role: 'user', content: 'one for rendering' },
+        ],
+        'NGN'
+      )
+    ).toEqual({ amount: 3_000_000, exclusive: true });
 
     // Unrelated category shift and intervening category shifts drop prior caps
     expect(

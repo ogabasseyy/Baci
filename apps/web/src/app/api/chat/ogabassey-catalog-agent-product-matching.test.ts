@@ -104,6 +104,108 @@ describe('ogabassey-catalog-agent-product-matching', () => {
         makeEvent([iphone16, iphone15Pro])
       )
     ).toBe(false);
+
+    // Prose uses of tier tokens ("max budget", "studio use", "plus charger") must not overblock
+    expect(
+      hasGroundedProductMentions(
+        'Samsung Galaxy S25 fits your max budget.',
+        makeEvent([galaxyS25])
+      )
+    ).toBe(true);
+    const sonyHeadphones = makeProduct({
+      brand: 'Sony',
+      category: 'Audio',
+      id: 'sony-xm5',
+      name: 'Sony WH-1000XM5',
+      slug: 'sony-wh-1000xm5',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Sony WH-1000XM5 headphones for studio use are available.',
+        makeEvent([sonyHeadphones])
+      )
+    ).toBe(true);
+    const hpLaptop = makeProduct({
+      brand: 'HP',
+      category: 'Laptops',
+      id: 'hp-pavilion',
+      name: 'HP Pavilion Laptop',
+      slug: 'hp-pavilion-laptop',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'HP Pavilion Laptop plus charger is ₦850,000.',
+        makeEvent([hpLaptop])
+      )
+    ).toBe(true);
+
+    // Descriptive features & colors from a single product's description are valid
+    const macbookMidnight = makeProduct({
+      brand: 'Apple',
+      category: 'Laptops',
+      description: 'Midnight Black aluminum MacBook with Retina display',
+      id: 'mac-air',
+      name: 'Apple MacBook Air',
+      slug: 'apple-macbook-air',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Midnight Black MacBook Air is ₦1,450,000.',
+        makeEvent([macbookMidnight])
+      )
+    ).toBe(true);
+    const iphoneXdr = makeProduct({
+      ...iphone16,
+      description: 'Features Super Retina XDR display',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 has a Super Retina XDR display at ₦1,200,000.',
+        makeEvent([iphoneXdr])
+      )
+    ).toBe(true);
+    // Cross-product color/description synthesis and description-only model names still fail closed
+    expect(
+      hasGroundedProductMentions(
+        'Titanium Apple iPhone 16 is ₦1,200,000.',
+        makeEvent([
+          iphone16,
+          { ...iphone15Pro, description: 'Titanium frame finish' },
+        ])
+      )
+    ).toBe(false);
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16. Apple iPhone 15 Pro.',
+        makeEvent([
+          { ...iphone16, description: 'Compare with Apple iPhone 15 Pro' },
+        ])
+      )
+    ).toBe(false);
+
+    // Numeric display/spec features in description pass while cross-product features stay bound to clause product
+    const imac5k = makeProduct({
+      category: 'Desktops',
+      description: '27-inch Retina 5K display',
+      id: 'imac-1',
+      name: 'Apple iMac',
+      slug: 'apple-imac',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Apple iMac has a Retina 5K display at ₦1,200,000.',
+        makeEvent([imac5k])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 has a Super Retina XDR display.',
+        makeEvent([
+          iphone16,
+          { ...iphone15Pro, description: 'Super Retina XDR display' },
+        ])
+      )
+    ).toBe(false);
   });
 
   it('binds all products in a grouped comma-separated clause', () => {

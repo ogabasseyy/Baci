@@ -3,6 +3,12 @@ import type {
   StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
 import {
+  collectProductGroundingTokens,
+  isNumericFeatureToken,
+  type ProductGroundingTokenSet,
+  tokenizeIdentityWords,
+} from './ogabassey-catalog-agent-grounding-tokens';
+import {
   CAPITALIZED_PHRASE_IGNORE,
   GENERIC_PRODUCT_NAME_WORDS,
   KNOWN_BRAND_OR_LINE_TOKENS,
@@ -11,6 +17,7 @@ import {
   POSITIVE_AVAILABILITY_GENERIC_WORDS,
   VARIANT_TIER_TOKENS,
 } from './ogabassey-catalog-agent-lexicon';
+import { collectModelAttachedTierTokens } from './ogabassey-catalog-agent-tier-parser';
 
 export const POSITIVE_EMPTY_RESULT_CLAIM =
   /\b(?:in[\s-]+stock|available\s+now|available\s+for|we\s+(?:have|stock|carry|sell|offer)|(?:is|are)\s+available|available\s+in|comes?\s+in|you\s+can\s+(?:get|buy|order)|we\s+recommend|try\s+the|here\s+(?:is|are)|check\s+out)\b/i;
@@ -41,46 +48,6 @@ export function tokenizeLowerWords(value: string): string[] {
   );
 }
 
-function tokenizeIdentityWords(value: string): string[] {
-  return (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    (token) => token.length >= 2 || /^\d$/.test(token)
-  );
-}
-
-function collectPerProductIdentityTokens(
-  products: StorefrontAgentUiProduct[]
-): Set<string>[] {
-  return products.map(
-    (product) =>
-      new Set(
-        [product.name, product.brand, product.slug, product.variantModel]
-          .filter(Boolean)
-          .flatMap((field) => tokenizeIdentityWords(field ?? ''))
-      )
-  );
-}
-
-function collectReturnedProductTokens(
-  events: StorefrontAgentUiEvent[]
-): Set<string> {
-  return new Set(
-    events.flatMap((event) =>
-      event.products.flatMap((product) =>
-        [
-          product.name,
-          product.brand,
-          product.category,
-          product.description,
-          product.slug,
-          product.variantModel,
-        ]
-          .filter(Boolean)
-          .flatMap((field) => tokenizeIdentityWords(field ?? ''))
-      )
-    )
-  );
-}
-
 export function productMatchesSegment(
   product: StorefrontAgentUiProduct,
   segment: string
@@ -88,15 +55,19 @@ export function productMatchesSegment(
   const lowerSegment = segment.toLowerCase();
   const segmentTokens = new Set(tokenizeIdentityWords(segment));
 
-  // If the segment names any brand or variant tier/chip (e.g. "Apple iPhone 16 Pro"),
-  // the single candidate product must actually own every such token.
+  // If the segment names any brand or model-attached variant tier/chip,
+  // the candidate product must actually own every such token.
   const productIdentityTokens = new Set([
     ...tokenizeIdentityWords(product.brand ?? ''),
     ...tokenizeIdentityWords(product.name),
   ]);
+  const attachedTiers = collectModelAttachedTierTokens(
+    segment,
+    productIdentityTokens
+  );
   for (const token of segmentTokens) {
     if (
-      (KNOWN_BRAND_TOKENS.has(token) || VARIANT_TIER_TOKENS.has(token)) &&
+      (KNOWN_BRAND_TOKENS.has(token) || attachedTiers.has(token)) &&
       !productIdentityTokens.has(token)
     ) {
       return 0;
@@ -199,17 +170,33 @@ export function findBoundProducts(
 export function hasUnreturnedProductPhrase(
   clause: string,
   returnedTokens: Set<string>,
-  perProductTokens: Set<string>[] = []
+  perProductTokens: ProductGroundingTokenSet[] = []
 ): boolean {
-  const hasSingleProductMatch = (words: string[]) =>
+  const isModelIdentityToken = (token: string) =>
+    !isNumericFeatureToken(token) &&
+    (KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
+      VARIANT_TIER_TOKENS.has(token) ||
+      /\d/.test(token));
+
+  const hasSingleProductMatch = (words: string[], allowDescription = false) =>
     perProductTokens.length > 0
       ? perProductTokens.some((productSet) =>
-          words.every((token) => productSet.has(token))
+          allowDescription
+            ? words.every((token) => productSet.features.has(token)) &&
+              words
+                .filter(isModelIdentityToken)
+                .every((token) => productSet.identity.has(token))
+            : words.every((token) => productSet.identity.has(token))
         )
       : words.every((token) => returnedTokens.has(token));
 
   for (const token of tokenizeLowerWords(clause)) {
-    if (KNOWN_BRAND_OR_LINE_TOKENS.has(token) && !returnedTokens.has(token)) {
+    if (
+      KNOWN_BRAND_OR_LINE_TOKENS.has(token) &&
+      (perProductTokens.length > 0
+        ? !perProductTokens.some((productSet) => productSet.identity.has(token))
+        : !returnedTokens.has(token))
+    ) {
       return true;
     }
   }
@@ -229,7 +216,7 @@ export function hasUnreturnedProductPhrase(
         (token.length >= 2 || /^\d$/.test(token)) &&
         !CAPITALIZED_PHRASE_IGNORE.has(token)
     );
-    if (words.length >= 2 && !hasSingleProductMatch(words)) {
+    if (words.length >= 2 && !hasSingleProductMatch(words, true)) {
       return true;
     }
   }
@@ -242,7 +229,13 @@ export function hasUnreturnedProductPhrase(
         (token.length >= 2 || /^\d$/.test(token)) &&
         !CAPITALIZED_PHRASE_IGNORE.has(token)
     );
-    if (words.length > 0 && !hasSingleProductMatch(words)) {
+    const hasOnlyFeatureDigits =
+      words.length > 0 &&
+      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken);
+    if (
+      words.length > 0 &&
+      !hasSingleProductMatch(words, hasOnlyFeatureDigits)
+    ) {
       return true;
     }
   }
@@ -266,17 +259,28 @@ export function hasGroundedProductMentions(
   );
   if (!matchesReturnedProduct) return false;
 
-  const returnedTokens = collectReturnedProductTokens(events);
-  const perProductTokens = collectPerProductIdentityTokens(products);
+  const { returnedTokens, perProductTokens } =
+    collectProductGroundingTokens(products);
   const clauses = text
     .split(EMPTY_CLAUSE_SPLIT_CAPTURE)
     .filter((_, index) => index % 2 === 0)
     .map((clause) => clause.trim())
     .filter(Boolean);
 
+  let searchCursor = 0;
   for (const clause of clauses) {
+    const foundOffset = text.indexOf(clause, searchCursor);
+    const clauseOffset = foundOffset >= 0 ? foundOffset : searchCursor;
+    searchCursor = clauseOffset + clause.length;
     if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
-    if (hasUnreturnedProductPhrase(clause, returnedTokens, perProductTokens)) {
+
+    const boundSet = new Set(findBoundProducts(text, clauseOffset, products));
+    const clauseProductTokens = perProductTokens.filter((entry) =>
+      boundSet.has(entry.product)
+    );
+    if (
+      hasUnreturnedProductPhrase(clause, returnedTokens, clauseProductTokens)
+    ) {
       return false;
     }
     if (

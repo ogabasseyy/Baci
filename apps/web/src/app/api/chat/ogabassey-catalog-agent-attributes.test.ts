@@ -42,6 +42,48 @@ describe('ogabassey-catalog-agent-attributes', () => {
         [{ ...baseProduct, description: '128GB storage model' }]
       )
     ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2 has 256GB storage.',
+        [{ ...baseProduct, description: '256GB internal memory' }]
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 256GB RAM.', [
+        { ...baseProduct, description: '256GB internal memory' },
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8GB RAM.', [
+        { ...baseProduct, description: '8GB DDR4 RAM' },
+      ])
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2 has 8GB RAM and a 120Hz display.',
+        [{ ...baseProduct, description: '120Hz display with 8GB RAM' }]
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8GB storage.', [
+        { ...baseProduct, description: '8GB RAM with SSD storage' },
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8GB RAM.', [
+        { ...baseProduct, description: '8GB RAM with SSD storage' },
+      ])
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8GB storage.', [
+        { ...baseProduct, description: 'RAM: 8GB and storage: 256GB' },
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8GB RAM.', [
+        { ...baseProduct, description: 'RAM: 8GB and storage: 256GB' },
+      ])
+    ).toBe(true);
 
     // Contradictory warranty durations must not pass via bare stem match
     const oneYearProduct: StorefrontAgentUiProduct = {

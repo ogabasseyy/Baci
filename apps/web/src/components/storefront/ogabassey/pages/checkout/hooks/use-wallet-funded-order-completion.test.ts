@@ -36,6 +36,7 @@ describe('useWalletFundedOrderCompletion', () => {
         clearCheckoutSession: clearSession,
         clearPendingCheckoutOrder: clearPending,
         getHref: (path) => `/shop${path}`,
+        merchantSlug: 'shop',
         paymentMethod: 'bank_transfer',
       })
     );
@@ -64,8 +65,14 @@ describe('useWalletFundedOrderCompletion', () => {
     expect(clearKeyMock).toHaveBeenCalledWith('fingerprint-1');
     expect(clearSession).toHaveBeenCalledOnce();
     expect(pushMock).toHaveBeenCalledWith(
-      '/shop/order-success?orderId=order+%2F1&wallet=true&trackingToken=track+%2F%3F%26'
+      '/shop/order-success?orderId=order+%2F1&wallet=true'
     );
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem('baci:private-url-params-pending') ??
+          'null'
+      )?.entries
+    ).toEqual([['trackingToken', 'track /?&']]);
     expect(events).toEqual([
       'capture',
       'pending',
@@ -89,6 +96,7 @@ describe('useWalletFundedOrderCompletion', () => {
         clearCheckoutSession: vi.fn(),
         clearPendingCheckoutOrder: vi.fn(),
         getHref: (path) => path,
+        merchantSlug: 'shop',
         paymentMethod: 'bank_transfer',
       })
     );
@@ -124,6 +132,7 @@ describe('useWalletFundedOrderCompletion', () => {
         clearCheckoutSession: vi.fn(),
         clearPendingCheckoutOrder: vi.fn(),
         getHref: (path) => path,
+        merchantSlug: 'shop',
         paymentMethod: 'bank_transfer',
       })
     );

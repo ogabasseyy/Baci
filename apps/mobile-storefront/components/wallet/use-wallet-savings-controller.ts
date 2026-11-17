@@ -71,15 +71,16 @@ export function useWalletSavingsController(
       'info'
     );
   };
-  // A legacy-rail id is retried by its own add (same id, same rail), never
-  // by a status read, so it does not show the "awaiting confirmation" card.
   const hasPendingSavingsContribution =
-    recovery.ready &&
-    actions.hasPendingSavingsContribution &&
-    input.operationRailRef.current !== 'legacy';
+    recovery.ready && actions.hasPendingSavingsContribution;
+  // A legacy-rail id is never status-read: its card replays the same add
+  // (same id, same rail, same amount), so the amount can't be edited first.
+  const legacyRetry = input.operationRailRef.current === 'legacy';
   // Lives with the stored operation, not with the sheet or card on screen.
   usePendingSavingsStatusPolling(
-    hasPendingSavingsContribution ? input.idempotencyKeyRef.current : null,
+    hasPendingSavingsContribution && !legacyRetry
+      ? input.idempotencyKeyRef.current
+      : null,
     status.checkStatus
   );
   return {
@@ -91,8 +92,10 @@ export function useWalletSavingsController(
     walletContentSavingsProps: {
       hasPendingSavingsContribution,
       isCheckingSavingsContribution: status.isCheckingStatus,
-      // Status read only: never the submit path, a no-op without a stored id.
-      onCheckSavingsContribution: status.checkStatus,
+      // Primary: a status read only, never the submit path. Legacy: replay.
+      onCheckSavingsContribution: legacyRetry
+        ? actions.handleAddSavingsContribution
+        : status.checkStatus,
       // The card keeps "Complete goal" while the check is running or the
       // server is unreachable (walk 11): the same funded goal never flips to
       // "Start another plan". The sheet still waits for 'ready' to act.

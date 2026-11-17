@@ -243,26 +243,21 @@ describe('pending contribution status', () => {
     );
   });
 
-  it('does not show a legacy-rail id as awaiting confirmation', () => {
+  it('bugfix (Codex): a legacy-rail id keeps its card, whose button replays the same add', async () => {
     mockReady = true;
-    const idempotencyKeyRef: { current: string | null } = { current: null };
     const operationRailRef: { current: 'primary' | 'legacy' | null } = {
       current: null,
     };
     const { result, rerender } = renderHook(() =>
-      useWalletSavingsController({
-        ...input,
-        idempotencyKeyRef,
-        operationRailRef,
-      })
+      useWalletSavingsController({ ...input, operationRailRef })
     );
     // Stored after the scope is bound (the first render drops stale ids).
-    idempotencyKeyRef.current = 'primary-op';
-    operationRailRef.current = 'primary';
-    rerender({});
-    expect(result.current.hasPendingSavingsContribution).toBe(true);
     operationRailRef.current = 'legacy';
     rerender({});
-    expect(result.current.hasPendingSavingsContribution).toBe(false);
+    // The card stays, so the amount can't be edited before the retry.
+    expect(result.current.hasPendingSavingsContribution).toBe(true);
+    await result.current.walletContentSavingsProps.onCheckSavingsContribution();
+    // Same id, same rail, same amount: the original add, not a status read.
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
   });
 });

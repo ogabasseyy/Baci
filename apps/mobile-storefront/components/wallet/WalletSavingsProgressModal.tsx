@@ -55,9 +55,8 @@ export function WalletSavingsProgressModal({
   // Matches the wallet card: "View plan" there means not "Add to savings" here.
   const settingUp = usePlanStillSettingUp(goal);
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
-  // Every close, by the customer or by leaving the wallet, drops an unsent
-  // cancel/complete review, declines a funding question still waiting in this
-  // sheet (otherwise its funding never settles) and lets the parent reset.
+  // Every close drops an unsent cancel/complete review, declines a waiting
+  // funding question (else its funding never settles) and resets the parent.
   const closeSheet = () => {
     cancel.closed();
     answerWalletFundPrompt(false);
@@ -68,8 +67,7 @@ export function WalletSavingsProgressModal({
   const [swapHeight, setSwapHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
-  // An add in flight hides a few links (Change phone, Cancel/Complete); the
-  // sheet keeps its height meanwhile instead of shrinking under the PIN step.
+  // An add in flight hides a few links: keep the height under the PIN step.
   const mainHeight = useHeldWhileAdding(
     isAdding,
     headerHeight > 0 && bodyHeight > 0
@@ -254,8 +252,7 @@ export function WalletSavingsProgressModal({
             {hasPendingContribution ? (
               <WalletPendingSavingsContribution
                 colors={colors}
-                // Status read only: no "Adding…" cover, never a submit.
-                isChecking={isCheckingContribution}
+                isChecking={isCheckingContribution || isAdding}
                 onCheck={onCheckContribution}
               />
             ) : canAddToSavings ? (

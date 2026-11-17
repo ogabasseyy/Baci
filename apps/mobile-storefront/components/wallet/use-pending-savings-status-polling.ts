@@ -29,7 +29,7 @@ export function statusPollDelay(attempt: number): number {
  * minutes later was never picked up). Status reads only: `check` never
  * starts a transfer. Stops when the operation settles or is dropped, on
  * unmount, or after STATUS_POLL_WINDOW_MS; a return to the foreground while
- * the operation is still stored checks at once and starts a fresh window.
+ * the operation is still stored checks at once (a read still in flight answers busy and the next tick reads again) and starts a fresh window.
  */
 export function usePendingSavingsStatusPolling(
   operationId: string | null,

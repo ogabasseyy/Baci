@@ -1,5 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
@@ -68,7 +73,7 @@ const goal = {
 };
 
 describe('WalletSavingsProgressModal', () => {
-  it('checks a pending contribution even when the reserved funds leave a zero wallet balance', () => {
+  it('checks a pending contribution even when the reserved funds leave a zero wallet balance', async () => {
     const onAddSavings = jest.fn();
     const onCheckContribution = jest.fn();
     const onFundWallet = jest.fn();
@@ -93,7 +98,7 @@ describe('WalletSavingsProgressModal', () => {
       screen.getByRole('button', { name: 'Check contribution status' })
     );
     // A status read only: never the add/submit path.
-    expect(onCheckContribution).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCheckContribution).toHaveBeenCalledTimes(1));
     expect(onAddSavings).not.toHaveBeenCalled();
     expect(onFundWallet).not.toHaveBeenCalled();
     expect(

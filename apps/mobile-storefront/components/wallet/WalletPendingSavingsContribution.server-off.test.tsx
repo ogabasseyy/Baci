@@ -22,7 +22,8 @@ describe('pending contribution card with the server off', () => {
     expect(onCheck).not.toHaveBeenCalled();
   });
 
-  it('asks once per tap and swallows a failed check', () => {
+  it('asks once per tap and logs a failed check instead of throwing', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const onCheck = jest.fn(() => Promise.reject(new Error('server off')));
     const { getByRole } = render(
       <WalletPendingSavingsContribution
@@ -32,7 +33,33 @@ describe('pending contribution card with the server off', () => {
       />
     );
     fireEvent.press(getByRole('button', { name: 'Check contribution status' }));
+    await act(async () => {});
     expect(onCheck).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('also catches a check that throws synchronously', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const onCheck = jest.fn(() => {
+      throw new Error('boom');
+    });
+    const { getByRole } = render(
+      <WalletPendingSavingsContribution
+        colors={Colors.light}
+        isChecking={false}
+        onCheck={onCheck}
+      />
+    );
+    expect(() =>
+      fireEvent.press(
+        getByRole('button', { name: 'Check contribution status' })
+      )
+    ).not.toThrow();
+    await act(async () => {});
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it('shows Checking and ignores taps while a check runs', () => {

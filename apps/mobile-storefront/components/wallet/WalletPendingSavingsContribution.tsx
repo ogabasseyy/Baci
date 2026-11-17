@@ -17,8 +17,9 @@ export function WalletPendingSavingsContribution({
   return (
     <View style={{ gap: 16 }}>
       <Text style={{ color: colors.textSecondary }}>
-        Your contribution is awaiting confirmation. We'll keep checking; you can
-        also check now before starting another payment.
+        Your contribution is awaiting confirmation. We'll keep checking for a
+        few minutes, and again when you come back. You can also check now before
+        starting another payment.
       </Text>
       <Pressable
         accessibilityRole="button"
@@ -29,9 +30,12 @@ export function WalletPendingSavingsContribution({
           if (isChecking || !onCheck) return;
           // The check reports its own outcome in the wallet notice; only an
           // unexpected failure is logged, so real bugs stay visible.
-          void Promise.resolve(onCheck()).catch((error: unknown) => {
-            console.warn('[Savings] Status check failed unexpectedly', error);
-          });
+          // .then() also catches a synchronous throw from onCheck.
+          void Promise.resolve()
+            .then(onCheck)
+            .catch((error: unknown) => {
+              console.warn('[Savings] Status check failed unexpectedly', error);
+            });
         }}
         style={{
           padding: 16,

@@ -5,7 +5,7 @@ import { hasGroundedSpecAndPolicyClaims } from './ogabassey-catalog-agent-attrib
 const baseProduct: StorefrontAgentUiProduct = {
   brand: 'Apple',
   category: 'Laptops',
-  description: 'Apple MacBook Air M2 with 1080p webcam',
+  description: 'Apple MacBook Air M2 with 1080p webcam and 4K display support',
   hasVariants: false,
   id: 'mac-1',
   imageUrl: 'https://cdn.example.com/mac.jpg',
@@ -17,44 +17,62 @@ const baseProduct: StorefrontAgentUiProduct = {
 };
 
 describe('ogabassey-catalog-agent-attributes', () => {
-  it('accepts specs present in tool results and rejects fabricated specs, warranties, or conditions', () => {
+  it('enforces token boundaries on specs, exact policy terms, conditions, and promos', () => {
     expect(
       hasGroundedSpecAndPolicyClaims(
-        'Apple MacBook Air M2 with 1080p webcam is ₦1,450,000.',
+        'Apple MacBook Air M2 includes a 1080p webcam and 4K display.',
         [baseProduct]
       )
     ).toBe(true);
 
+    // Substring collision ("8GB" inside "128GB storage") must be rejected
     expect(
-      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 64 GB RAM.', [
-        baseProduct,
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8 GB RAM.', [
+        { ...baseProduct, description: '128GB storage model' },
       ])
     ).toBe(false);
 
+    // Contradictory warranty durations must not pass via bare stem match
+    const oneYearProduct: StorefrontAgentUiProduct = {
+      ...baseProduct,
+      description: 'Includes a one-year manufacturer warranty',
+    };
     expect(
       hasGroundedSpecAndPolicyClaims(
-        'Apple MacBook Air M2 includes a two-year warranty.',
+        'Apple MacBook Air M2 comes with a 1-year warranty.',
+        [oneYearProduct]
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2 has a 10-year warranty.',
+        [oneYearProduct]
+      )
+    ).toBe(false);
+
+    // Ungrounded promotions fail closed, while negated promos are allowed
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 is 20% off.', [
+        baseProduct,
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2 has no discount available.',
         [baseProduct]
       )
-    ).toBe(false);
+    ).toBe(true);
 
+    // Condition claims require grounded condition data
     expect(
-      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 is refurbished.', [
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 is UK used.', [
         baseProduct,
       ])
     ).toBe(false);
-
     expect(
-      hasGroundedSpecAndPolicyClaims(
-        'Apple MacBook Air M2 is brand new with 1-year warranty.',
-        [
-          {
-            ...baseProduct,
-            condition: 'new',
-            description: 'Brand new with 1-year warranty',
-          },
-        ]
-      )
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 is brand new.', [
+        { ...baseProduct, condition: 'Brand New' },
+      ])
     ).toBe(true);
   });
 });

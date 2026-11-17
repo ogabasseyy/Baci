@@ -182,6 +182,7 @@ describe('runOgabasseyCatalogAgent price and stock grounding', () => {
       'Apple MacBook Air M2 costs 1.9m.',
       'Apple MacBook Air M2 costs 1.9 million.',
       'Apple MacBook Air M2 is $1,450,000.',
+      'Apple MacBook Air M2 is USD 1,450,000.',
       'Apple MacBook Air M2 is ₦1,450,000—only 5 left.',
       'Apple MacBook Air M2 is out of stock.',
     ]) {
@@ -212,5 +213,31 @@ describe('runOgabasseyCatalogAgent price and stock grounding', () => {
     expect((await runOgabasseyCatalogAgent(baseOptions()))?.text).toBe(
       'Apple MacBook Air M2 supports a 4K display at ₦1,450,000.'
     );
+
+    // Numeric model numbers like "Nokia 3310" pass unless preceded by a price cue
+    const nokia3310 = {
+      ...sampleProduct,
+      brand: 'Nokia',
+      category: 'Phones',
+      description: 'Nokia 3310',
+      id: 'nokia-3310',
+      name: 'Nokia 3310',
+      price: 50_000,
+      slug: 'nokia-3310',
+    };
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', { products: [nokia3310], total: 1 });
+      return { text: 'Nokia 3310 is available for ₦50,000.' };
+    });
+    expect(
+      (
+        await runOgabasseyCatalogAgent({
+          ...baseOptions(),
+          messages: [
+            { role: 'user', content: 'Do you carry Nokia 3310 phone?' },
+          ],
+        })
+      )?.text
+    ).toBe('Nokia 3310 is available for ₦50,000.');
   });
 });

@@ -21,6 +21,12 @@ import {
   hasGroundedEmptyCatalogText,
 } from './ogabassey-catalog-agent-grounding';
 import {
+  AGENT_COURTESY_PATTERN,
+  READ_ONLY_AGENT_ACTION_CLAIM,
+  shouldAttemptCatalogAgent,
+} from './ogabassey-catalog-agent-lexicon';
+import { hasAlignedSearchForEmptyResult } from './ogabassey-catalog-agent-search-alignment';
+import {
   isIndependentTopic,
   resolveOgabasseyCommerceContext,
 } from './ogabassey-commerce-context';
@@ -41,34 +47,9 @@ const MAX_CATALOG_AGENT_STEPS = 5;
 const catalogAgentStopWhen: StopCondition<ToolSet> = ({ steps }) =>
   steps.length >= MAX_CATALOG_AGENT_STEPS;
 
-const COURTESY =
-  /^(?:hi|hello|hey|thanks|thank\s+you|how\s+are\s+you)[\s.!?]*$/i;
-
-const CATALOG_AGENT_CUE =
-  /[₦$€£]\s*\d|\b(?:(?:show|find|list|recommend|suggest|have|sell|stock|carry|cheap\w*|affordable|budget|apple|samsung|google|sony|dell|hp|lenovo|gaming|electronic|tech|your|store|catalog)\s+(?:\w+\s+){0,2}(?:products?|devices?)|(?:products?|devices?)\s+(?:under|below|within|around|in\s+stock|available|for\s+sale)|phones?|smartphones?|iphone\w*|ipad\w*|pixel\w*|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|(?:smart)?watches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|(?:gaming|video\s+editing|photo(?:graphy)?|editing)\s+(?:\w+\s+){0,2}(?:laptop\w*|pc|rig|setup|phone\w*|tablet\w*|camera\w*|monitor\w*|console\w*|headset\w*|gear|device\w*|spec\w*|option\w*)|(?:under|below|within|at\s+most|max(?:imum)?)\s+(?:₦|ngn\s*)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand)|(?:my\s+|a\s+)?budget\s+(?:of|is|for|phone\w*|laptop\w*|device\w*)|(?:cheap\w*|affordable)\s+(?:phone\w*|laptop\w*|tablet\w*|device\w*|option\w*|item\w*|product\w*)|(?:do\s+you\s+(?:stock|carry|sell)|in\s+stock|out\s+of\s+stock))\b/i;
-
-const FOLLOW_UP_CUE =
-  /[₦$€£]|\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around|over-ear|wireless)\b|(?:\b(?:under|below|within|up\s+to|at\s+most|around)\s+(?:₦|ngn\s*)?)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand|naira|ngn)\b/i;
-
-const READ_ONLY_AGENT_ACTION_CLAIM =
-  /\b(?:(?:i|we)(?:['’](?:ve|ll|m|re)|\s+(?:have|had|will|just|already))?\s+(?:added|removed|updated|cleared|ordered|purchased|bought|reserved|booked|placed|checked\s+out)|(?:added|removed)\b[^.!?\n]{0,60}\b(?:to|from)\s+(?:your\s+|the\s+)?cart|item\s+has\s+been\s+(?:added|ordered|purchased)|order\s+(?:has\s+been\s+)?placed)\b/i;
-
 export interface OgabasseyCatalogAgentResult {
   text: string;
   events: StorefrontAgentUiEvent[];
-}
-
-function shouldAttemptCatalogAgent(messages: CatalogChatMessage[]): boolean {
-  const userMessages = messages.filter((message) => message.role === 'user');
-  const last = userMessages.at(-1);
-  if (!last) return false;
-  if (CATALOG_AGENT_CUE.test(last.content)) return true;
-
-  const previousUsers = userMessages.slice(-4, -1);
-  return (
-    FOLLOW_UP_CUE.test(last.content) &&
-    previousUsers.some((message) => CATALOG_AGENT_CUE.test(message.content))
-  );
 }
 
 function buildBudgetEnforcedReadOnlyTools(
@@ -78,7 +59,8 @@ function buildBudgetEnforcedReadOnlyTools(
     toolName: string,
     filteredResult: unknown,
     context?: { quantity?: number }
-  ) => void
+  ) => void,
+  onSearchParams?: (params: { query?: string; category?: string }) => void
 ) {
   const readOnlyTools = createAiSdkAgenticChatTools(sessionId, {
     agenticCheckoutEnabled: false,
@@ -99,6 +81,14 @@ function buildBudgetEnforcedReadOnlyTools(
           execute: async (
             params: Parameters<typeof baseSearchTool.execute>[0]
           ) => {
+            onSearchParams?.({
+              query:
+                typeof params.query === 'string' ? params.query : undefined,
+              category:
+                typeof params.category === 'string'
+                  ? params.category
+                  : undefined,
+            });
             const rawJson = await baseSearchTool.execute(
               constrainSearchParamsWithBudget(params, budgetLimit)
             );
@@ -124,15 +114,7 @@ function buildBudgetEnforcedReadOnlyTools(
   return { searchProducts, getProductDetails };
 }
 
-/**
- * Fallback read-only catalog search agent for Ogabassey queries that the
- * deterministic fast-catalog regex path did not recognize.
- *
- * Exposes only `searchProducts` and `getProductDetails` so natural-language
- * shopping requests (e.g. use-cases, typos, plurals) still run against live
- * catalog data while keeping all prices, budgets, product cards, and commerce
- * actions strictly server-owned.
- */
+/** Fallback read-only catalog search agent when deterministic fast-catalog misses. */
 export async function runOgabasseyCatalogAgent(options: {
   abortSignal: AbortSignal;
   chatProvider: AiChatProvider;
@@ -152,7 +134,7 @@ export async function runOgabasseyCatalogAgent(options: {
     isBusinessFactRequest(last.content) ||
     OGABASSEY_NEGOTIATION.test(last.content) ||
     isIndependentTopic(last.content) ||
-    COURTESY.test(last.content.trim())
+    AGENT_COURTESY_PATTERN.test(last.content.trim())
   ) {
     return null;
   }
@@ -180,6 +162,7 @@ export async function runOgabasseyCatalogAgent(options: {
   let activeAttempt = {
     collector: createChatPresentationEventCollector(),
     searchCalls: 0,
+    searchParams: [] as Array<{ query?: string; category?: string }>,
     toolCalls: 0,
   };
 
@@ -187,6 +170,7 @@ export async function runOgabasseyCatalogAgent(options: {
     const attempt = {
       collector: createChatPresentationEventCollector(),
       searchCalls: 0,
+      searchParams: [] as Array<{ query?: string; category?: string }>,
       toolCalls: 0,
     };
     activeAttempt = attempt;
@@ -201,6 +185,11 @@ export async function runOgabasseyCatalogAgent(options: {
           attempt.searchCalls += 1;
         }
         attempt.collector.capture(toolName, filteredResult, context);
+      },
+      (params) => {
+        if (activeAttempt === attempt) {
+          attempt.searchParams.push(params);
+        }
       }
     );
   };
@@ -244,6 +233,14 @@ export async function runOgabasseyCatalogAgent(options: {
         const events = activeAttempt.collector.getEvents();
         if (events.length === 0) {
           if (activeAttempt.searchCalls === 0) return false;
+          if (
+            !hasAlignedSearchForEmptyResult(
+              conversationMessages,
+              activeAttempt.searchParams
+            )
+          ) {
+            return false;
+          }
           return (
             hasGroundedEmptyCatalogText(
               text,

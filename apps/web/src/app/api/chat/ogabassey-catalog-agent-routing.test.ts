@@ -97,6 +97,7 @@ describe('runOgabasseyCatalogAgent routing', () => {
     'What is your WhatsApp number?',
     'What is your last price for iPhone 16?',
     'Cancel my order',
+    'Why is my photo pixelated?',
   ])('skips non-catalog or guarded prompts without calling a model: %s', async (content) => {
     vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
 

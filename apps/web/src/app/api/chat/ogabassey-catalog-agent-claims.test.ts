@@ -140,6 +140,7 @@ describe('runOgabasseyCatalogAgent claim guards', () => {
       "I've added the Apple MacBook Air M2 to your cart.",
       'I ordered the Apple MacBook Air M2 for you.',
       'Apple MacBook Air M2 has 64 GB RAM and a two-year warranty for ₦1,450,000.',
+      'Apple MacBook Air M2 is 20% off today.',
     ]) {
       mocks.generateText.mockImplementationOnce(async () => {
         reportToolResult?.('searchProducts', {

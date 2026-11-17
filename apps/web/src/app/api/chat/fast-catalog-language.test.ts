@@ -106,5 +106,8 @@ describe('catalog conversation language', () => {
     expect(PHONE_SIGNAL.test('how many pixels does the camera have')).toBe(
       false
     );
+    expect(PHONE_SIGNAL.test('What is the pixel density of the screen?')).toBe(
+      false
+    );
   });
 });

@@ -220,5 +220,44 @@ describe('runOgabasseyCatalogAgent', () => {
       return { text: "Sorry, I couldn't find any laptops." };
     });
     expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Rejects empty-result reply when searchProducts searched an unrelated product
+    mocks.createTools.mockImplementationOnce(
+      (
+        _sessionId: string,
+        options: { onToolResult?: typeof reportToolResult } = {}
+      ) => {
+        reportToolResult = options.onToolResult;
+        return {
+          searchProducts: {
+            description: 'searchProducts',
+            execute: async () => {
+              const empty = { products: [], total: 0 };
+              reportToolResult?.('searchProducts', empty);
+              return JSON.stringify(empty);
+            },
+          },
+          getProductDetails: { description: 'getProductDetails' },
+        };
+      }
+    );
+    mocks.generateText.mockImplementationOnce(
+      async (options: {
+        tools?: {
+          searchProducts?: {
+            execute?: (params: { query: string }) => Promise<string>;
+          };
+        };
+      }) => {
+        await options.tools?.searchProducts?.execute?.({ query: 'iPhone' });
+        return { text: "Sorry, I couldn't find Fairphone 5 in our catalog." };
+      }
+    );
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [{ role: 'user', content: 'Do you carry Fairphone 5?' }],
+      })
+    ).toBeNull();
   });
 });

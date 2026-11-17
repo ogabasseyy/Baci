@@ -13,6 +13,32 @@ const WARRANTY_POLICY_COMPAT_PATTERN =
 const CONDITION_CLAIM_PATTERN =
   /\b(brand[\s-]*new|refurbished|uk[\s-]+used|open[\s-]*box|pre[\s-]*owned)\b/gi;
 
+const PROMOTION_CLAIM_PATTERN =
+  /\b(?:\d+(?:\.\d+)?%\s*(?:off|discount|cashback|rebate|savings?)|on\s+sale|flash\s+sale|promo(?:tion(?:al)?)?|clearance|price\s+drop|markdown|slashed|reduced\s+from|discounted|discount(?:s)?\s+(?:available|applied|code)|save\s+(?:\d+(?:\.\d+)?%|[₦$€£]\s*\d[\d,.]*))\b/gi;
+
+const TERM_DURATION_PATTERN =
+  /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|thirty|lifetime)\s*(?:-|\s)*(years?|yrs?|months?|mos?|weeks?|days?)\b|\b(lifetime)\b/gi;
+
+const WORD_NUMBERS: Readonly<Record<string, string>> = {
+  one: '1',
+  two: '2',
+  three: '3',
+  four: '4',
+  five: '5',
+  six: '6',
+  seven: '7',
+  eight: '8',
+  nine: '9',
+  ten: '10',
+  twelve: '12',
+  twenty: '20',
+  thirty: '30',
+};
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function buildProductAttributeCorpus(
   product: StorefrontAgentUiProduct
 ): string {
@@ -33,27 +59,71 @@ function normalizeSpecCompact(value: string): string {
   return value.toLowerCase().replace(/[\s-]+/g, '');
 }
 
-/** Rejects ungrounded hardware specs, conditions, compatibility, or policy claims. */
+function extractNormalizedDurations(value: string): string[] {
+  const normalized: string[] = [];
+  for (const match of value.matchAll(TERM_DURATION_PATTERN)) {
+    if (match[3]) {
+      normalized.push('lifetime');
+      continue;
+    }
+    const rawCount = match[1]?.toLowerCase() ?? '';
+    const count = WORD_NUMBERS[rawCount] ?? rawCount;
+    const rawUnit = match[2]?.toLowerCase() ?? '';
+    const unit =
+      rawUnit.startsWith('yr') || rawUnit.startsWith('year')
+        ? 'year'
+        : rawUnit.startsWith('mo')
+          ? 'month'
+          : rawUnit.replace(/s$/, '');
+    normalized.push(`${count}-${unit}`);
+  }
+  return normalized;
+}
+
+function matchesSpecWithBoundary(
+  corpus: string,
+  rawNum: string | undefined,
+  rawUnit: string | undefined,
+  rawTag: string | undefined
+): boolean {
+  if (rawTag) {
+    const tagPattern = new RegExp(
+      `(?<![0-9a-z])${escapeRegExp(rawTag)}(?![0-9a-z])`,
+      'i'
+    );
+    return tagPattern.test(corpus);
+  }
+  if (!rawNum || !rawUnit) return false;
+  const baseUnit = rawUnit.toLowerCase().replace(/s$/, '');
+  const unitGroup =
+    baseUnit === 'hr' || baseUnit === 'hour'
+      ? '(?:hours?|hrs?)'
+      : baseUnit === 'inch' || baseUnit === 'inche'
+        ? 'inch(?:es)?'
+        : `${escapeRegExp(baseUnit)}s?`;
+  const valuePattern = new RegExp(
+    `(?<![0-9.])${escapeRegExp(rawNum)}[\\s-]*${unitGroup}(?![0-9a-z])`,
+    'i'
+  );
+  return valuePattern.test(corpus);
+}
+
+/** Rejects ungrounded specs, policy terms, conditions, compatibility, or promos. */
 export function hasGroundedSpecAndPolicyClaims(
   text: string,
   products: StorefrontAgentUiProduct[]
 ): boolean {
   for (const match of text.matchAll(SPEC_CLAIM_PATTERN)) {
     const offset = match.index ?? 0;
-    const rawNum = match[1];
-    const rawUnit = match[2];
-    const rawTag = match[3];
-    const compactNeedle = rawTag
-      ? rawTag.toLowerCase()
-      : `${rawNum}${rawUnit?.toLowerCase().replace(/s$/, '') ?? ''}`;
-
     const bound = findBoundProducts(text, offset, products);
-    const hasMatch = bound.some((product) => {
-      const compactCorpus = normalizeSpecCompact(
-        buildProductAttributeCorpus(product)
-      );
-      return compactCorpus.includes(compactNeedle);
-    });
+    const hasMatch = bound.some((product) =>
+      matchesSpecWithBoundary(
+        buildProductAttributeCorpus(product),
+        match[1],
+        match[2],
+        match[3]
+      )
+    );
     if (!hasMatch) return false;
   }
 
@@ -68,10 +138,21 @@ export function hasGroundedSpecAndPolicyClaims(
       : keyword.startsWith('compat')
         ? 'compat'
         : keyword.slice(0, 6);
-    const bound = findBoundProducts(text, offset, products);
-    const hasMatch = bound.some((product) =>
-      buildProductAttributeCorpus(product).includes(stem)
+    const localContext = text.slice(
+      Math.max(0, offset - 32),
+      Math.min(text.length, offset + match[0].length + 28)
     );
+    const claimedDurations = extractNormalizedDurations(localContext);
+    const bound = findBoundProducts(text, offset, products);
+    const hasMatch = bound.some((product) => {
+      const corpus = buildProductAttributeCorpus(product);
+      if (!corpus.includes(stem)) return false;
+      if (claimedDurations.length === 0) return true;
+      const productDurations = extractNormalizedDurations(corpus);
+      return claimedDurations.every((duration) =>
+        productDurations.includes(duration)
+      );
+    });
     if (!hasMatch) return false;
   }
 
@@ -86,6 +167,21 @@ export function hasGroundedSpecAndPolicyClaims(
       normalizeSpecCompact(buildProductAttributeCorpus(product)).includes(
         normalizedClaim
       )
+    );
+    if (!hasMatch) return false;
+  }
+
+  for (const match of text.matchAll(PROMOTION_CLAIM_PATTERN)) {
+    const offset = match.index ?? 0;
+    const before = text.slice(Math.max(0, offset - 28), offset);
+    if (NEGATION_OR_ABSENCE_CUE.test(before)) continue;
+
+    const normalizedPromo = match[0].toLowerCase().replace(/\s+/g, ' ');
+    const bound = findBoundProducts(text, offset, products);
+    const hasMatch = bound.some((product) =>
+      buildProductAttributeCorpus(product)
+        .replace(/\s+/g, ' ')
+        .includes(normalizedPromo)
     );
     if (!hasMatch) return false;
   }

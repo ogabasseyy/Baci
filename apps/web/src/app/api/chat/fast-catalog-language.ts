@@ -8,7 +8,7 @@ export const uncheckedOption =
   /\b(?:brand[\s-]*new|new|used|refurbished|second[\s-]*hand|pre[\s-]*owned|open[\s-]*box|\d+(?:\.\d+)?\s*(?:gb|tb)|\d+(?:[.,]\d+)?[\s-]*(?:m\s*a\s*h|mp|megapixels?)|black|blue|red|green|purple|pink|white|gold|silver|gray|grey|titanium|e-?sim|physical\s+sim|dual[\s-]*sim|low[\s-]*light|all[\s-]*day\s+battery|\d+\s*(?:hours?|hrs?|days?)\s+(?:of\s+)?battery|battery\s+(?:that\s+)?(?:lasts?|lasting)\s+(?:for\s+)?(?:all[\s-]*day|\d+\s*(?:hours?|days?)))\b/i;
 
 export const PHONE_SIGNAL =
-  /^\s*pixels\s*$|\b(?:smartphones?|phones?|iphones?|google\s+pixels?|pixel(?:\s*(?:\d+[a-z]?|pro|fold|tablet|phones?|smartphones?|devices?|models?))?|(?:show|find|recommend|suggest|buy|shop|sell|carry|have|stock|cheap\w*|affordable)\s+(?:\w+\s+){0,2}pixels|pixels\s+(?:under|below|within|less\s+than|up\s+to|at\s+most|for|at|around|from|in\s+stock|available)|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+  /^\s*pixels\s*$|\b(?:smartphones?|phones?|iphones?|google\s+pixels?|pixel(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|art|shader)\b)(?:\s*(?:\d+[a-z]?|pro|fold|tablet|phones?|smartphones?|devices?|models?))?|(?:show|find|recommend|suggest|buy|shop|sell|carry|have|stock|cheap\w*|affordable)\s+(?:\w+\s+){0,2}pixels|pixels\s+(?:under|below|within|less\s+than|up\s+to|at\s+most|for|at|around|from|in\s+stock|available)|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 export const LAPTOP_SIGNAL = /\b(?:laptops?|macbooks?|notebooks?)\b/i;
 export const TABLET_SIGNAL = /\b(?:tablets?|ipads?)\b/i;
 export const ACCESSORY_SIGNAL =

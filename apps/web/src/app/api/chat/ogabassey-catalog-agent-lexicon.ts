@@ -228,3 +228,30 @@ export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
   'xm4',
   'xm5',
 ]);
+
+export const AGENT_COURTESY_PATTERN =
+  /^(?:hi|hello|hey|thanks|thank\s+you|how\s+are\s+you)[\s.!?]*$/i;
+
+export const CATALOG_AGENT_CUE =
+  /[₦$€£]\s*\d|^\s*pixels?\s*$|\b(?:(?:show|find|list|recommend|suggest|have|sell|stock|carry|best|good|top|any|cheap\w*|affordable|budget|apple|samsung|google|sony|dell|hp|lenovo|gaming|electronic|tech|your|store|catalog)\s+(?:\w+\s+){0,2}(?:products?|devices?|pixels?)|(?:products?|devices?|pixels?)\s+(?:under|below|within|around|in\s+stock|available|for\s+sale)|phones?|smartphones?|iphone\w*|ipad\w*|google\s+pixels?|pixel(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|art|shader)\b)(?:\s*(?:\d+[a-z]?|pro|fold|tablet|phones?|smartphones?|devices?|models?))?\b|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|(?:smart)?watches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|(?:gaming|video\s+editing|photo(?:graphy)?|editing)\s+(?:\w+\s+){0,2}(?:laptop\w*|pc|rig|setup|phone\w*|tablet\w*|camera\w*|monitor\w*|console\w*|headset\w*|gear|device\w*|spec\w*|option\w*)|(?:under|below|within|at\s+most|max(?:imum)?)\s+(?:₦|ngn\s*)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand)|(?:my\s+|a\s+)?budget\s+(?:of|is|for|phone\w*|laptop\w*|device\w*)|(?:cheap\w*|affordable)\s+(?:phone\w*|laptop\w*|tablet\w*|device\w*|option\w*|item\w*|product\w*)|(?:do\s+you\s+(?:stock|carry|sell)|in\s+stock|out\s+of\s+stock))\b/i;
+
+export const CATALOG_FOLLOW_UP_CUE =
+  /[₦$€£]|\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around|over-ear|wireless)\b|(?:\b(?:under|below|within|up\s+to|at\s+most|around)\s+(?:₦|ngn\s*)?)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand|naira|ngn)\b/i;
+
+export const READ_ONLY_AGENT_ACTION_CLAIM =
+  /\b(?:(?:i|we)(?:['’](?:ve|ll|m|re)|\s+(?:have|had|will|just|already))?\s+(?:added|removed|updated|cleared|ordered|purchased|bought|reserved|booked|placed|checked\s+out)|(?:added|removed)\b[^.!?\n]{0,60}\b(?:to|from)\s+(?:your\s+|the\s+)?cart|item\s+has\s+been\s+(?:added|ordered|purchased)|order\s+(?:has\s+been\s+)?placed)\b/i;
+
+export function shouldAttemptCatalogAgent(
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+): boolean {
+  const userMessages = messages.filter((message) => message.role === 'user');
+  const last = userMessages.at(-1);
+  if (!last) return false;
+  if (CATALOG_AGENT_CUE.test(last.content)) return true;
+
+  const previousUsers = userMessages.slice(-4, -1);
+  return (
+    CATALOG_FOLLOW_UP_CUE.test(last.content) &&
+    previousUsers.some((message) => CATALOG_AGENT_CUE.test(message.content))
+  );
+}

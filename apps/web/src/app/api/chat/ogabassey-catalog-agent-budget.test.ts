@@ -51,12 +51,22 @@ describe('ogabassey-catalog-agent-budget', () => {
       )
     ).toBeUndefined();
 
-    // Unrelated category shift drops prior phone budget
+    // Unrelated category shift and intervening category shifts drop prior caps
     expect(
       resolveConversationBudgetLimit(
         [
           { role: 'user', content: 'Show phones under ₦300k' },
           { role: 'user', content: 'Recommend a camera' },
+        ],
+        'NGN'
+      )
+    ).toBeUndefined();
+    expect(
+      resolveConversationBudgetLimit(
+        [
+          { role: 'user', content: 'Show phones under ₦300k' },
+          { role: 'user', content: 'Show laptops' },
+          { role: 'user', content: 'one for work' },
         ],
         'NGN'
       )

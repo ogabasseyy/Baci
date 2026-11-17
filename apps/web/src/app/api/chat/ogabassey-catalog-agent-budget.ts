@@ -98,16 +98,20 @@ export function resolveConversationBudgetLimit(
     latestUser.content
   );
 
+  let activeGroup = latestGroup;
   for (let i = userMessages.length - 2; i >= 0; i -= 1) {
     const priorContent = userMessages[i].content;
-    const budget = analyzeFastCatalogBudget(priorContent, currencyCode);
-    if (!budget.hasBudget) continue;
-    if (budget.invalid || !budget.price) continue;
-
     const priorGroup = detectProductTopicGroup(priorContent);
-    if (latestGroup && priorGroup && latestGroup !== priorGroup) {
+    if (activeGroup && priorGroup && activeGroup !== priorGroup) {
       return undefined;
     }
+    if (!activeGroup && priorGroup) {
+      activeGroup = priorGroup;
+    }
+
+    const budget = analyzeFastCatalogBudget(priorContent, currencyCode);
+    if (!budget.hasBudget) continue;
+    if (budget.invalid || !budget.price) return undefined;
 
     if (hasContinuationCue || (latestGroup && latestGroup === priorGroup)) {
       return budget.price;

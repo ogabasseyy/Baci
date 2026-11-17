@@ -5,7 +5,6 @@ import type { ImeiCheckerColors } from './imei-check.types';
 export function ImeiTicketNotch({ colors }: { colors: ImeiCheckerColors }) {
   return (
     <View
-      pointerEvents="none"
       style={[
         styles.notch,
         { backgroundColor: colors.background, borderColor: colors.border },
@@ -22,6 +21,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     height: 7,
+    // Decoration only: touches go through to the card. Kept in the style, not
+    // as a JSX prop: this app standardises on style.pointerEvents, and
+    // __tests__/config/expo-compliance.test.ts enforces it.
+    pointerEvents: 'none',
     position: 'absolute',
     right: 20,
     top: -1,

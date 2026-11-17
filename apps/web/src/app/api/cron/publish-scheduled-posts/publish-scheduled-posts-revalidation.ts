@@ -66,7 +66,6 @@ export async function revalidateScheduledPostsByMerchant(
         supabase,
         merchantId
       );
-      blogRevalidationByMerchant.set(merchantId, blogRevalidation);
       let edgePurgeOnly = false;
       try {
         revalidateBlogPosts({
@@ -127,6 +126,7 @@ export async function revalidateScheduledPostsByMerchant(
         }
         edgePurgeOnly = true;
       }
+      blogRevalidationByMerchant.set(merchantId, blogRevalidation);
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);
       console.log(
         edgePurgeOnly

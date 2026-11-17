@@ -57,12 +57,16 @@ export function buildCategoryCompareHubProductGroups(input: {
       }
       seenSlugs.add(categorySlug);
 
+      const inventoryPromise = input.signal
+        ? getCachedProductSemanticInventory(
+            input.merchantId,
+            categorySlug,
+            input.signal
+          )
+        : getCachedProductSemanticInventory(input.merchantId, categorySlug);
+
       return [
-        getCachedProductSemanticInventory(
-          input.merchantId,
-          categorySlug,
-          input.signal
-        ).then(
+        inventoryPromise.then(
           (products) => ({
             categoryName,
             categorySlug,

@@ -5,6 +5,7 @@ import {
   isValidPhoneNumber,
   NetworkProvider,
 } from '@/lib/kuda';
+import { assertKudaBillItemPriceCurrent } from '@/lib/kuda-bill-item-price';
 import { resolveKudaDataPlanForPurchase } from '@/lib/kuda-data-plans';
 import { logger } from '@/lib/logger';
 import {
@@ -749,6 +750,14 @@ export async function preparePendingVtuTransaction({
 
   if (!commissionProvider) {
     throw new Error('Biller name or provider key is required for bill payment');
+  }
+
+  if (!isTelco && resolvedProvider === 'kuda' && input.billItemIdentifier) {
+    await assertKudaBillItemPriceCurrent({
+      amount: purchaseAmount,
+      billItemIdentifier: input.billItemIdentifier,
+      type: input.type,
+    });
   }
 
   if (!isTelco && resolvedProvider === 'monnify') {

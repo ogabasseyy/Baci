@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearKudaBillItemPriceCacheForTests } from '@/lib/kuda-bill-item-price';
 import { clearKudaDataPlanCacheForTests } from '@/lib/kuda-data-plans';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 
@@ -7,6 +8,7 @@ const {
   mockIsValidPhoneNumber,
   mockGenerateRequestRef,
   mockGetDataProviders,
+  mockGetBillersByType,
   mockGetMonnifyBillers,
   mockGetMonnifyBillerProducts,
   mockVerifyMonnifyBillCustomer,
@@ -18,6 +20,7 @@ const {
   mockIsValidPhoneNumber: vi.fn(() => true),
   mockGenerateRequestRef: vi.fn(() => 'VTU-REF-123'),
   mockGetDataProviders: vi.fn(),
+  mockGetBillersByType: vi.fn(),
   mockGetMonnifyBillers: vi.fn(),
   mockGetMonnifyBillerProducts: vi.fn(),
   mockVerifyMonnifyBillCustomer: vi.fn(),
@@ -47,6 +50,7 @@ vi.mock('@/lib/kuda', () => ({
   isValidPhoneNumber: mockIsValidPhoneNumber,
   generateRequestRef: () => mockGenerateRequestRef(),
   getDataProviders: () => mockGetDataProviders(),
+  getBillersByType: (...args: unknown[]) => mockGetBillersByType(...args),
 }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -240,7 +244,9 @@ describe('preparePendingVtuTransaction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearKudaDataPlanCacheForTests();
+    clearKudaBillItemPriceCacheForTests();
     mockGetDataProviders.mockResolvedValue([]);
+    mockGetBillersByType.mockResolvedValue([]);
     mockGetMonnifyBillers.mockResolvedValue([
       {
         billerCategoryCode: 'AIRTIME',
@@ -1230,6 +1236,59 @@ describe('preparePendingVtuTransaction', () => {
             providerSource: 'kuda',
           })
         );
+      });
+
+      it('rejects a Kuda cable package sent at a stale 100x price before charging', async () => {
+        mockGetBillersByType.mockResolvedValueOnce([
+          {
+            billerId: 'dstv',
+            billerName: 'DSTV',
+            billerType: 'Cable',
+            categoryId: 'cable',
+            categoryName: 'CableTv',
+            billItems: [
+              {
+                amount: 5000,
+                isAmountFixed: true,
+                itemCode: 'dstv-compact',
+                itemCurrencySymbol: 'NGN',
+                itemFee: 0,
+                itemName: 'DStv Compact',
+              },
+            ],
+          },
+        ]);
+        const { insert, supabase } = createMockSupabase();
+
+        await expect(
+          preparePendingVtuTransaction({
+            supabase,
+            user: {
+              id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
+              email: 'customer@example.com',
+            } as unknown as Parameters<
+              typeof preparePendingVtuTransaction
+            >[0]['user'],
+            input: {
+              merchantSlug: 'ogabassey',
+              type: 'cable_tv',
+              amount: 500000,
+              billItemIdentifier: 'dstv-compact',
+              customerIdentifier: '12345678',
+              billerName: 'DSTV',
+              provider: 'kuda',
+              source: 'checkout',
+            } as unknown as Parameters<
+              typeof preparePendingVtuTransaction
+            >[0]['input'],
+            source: 'checkout',
+          })
+        ).rejects.toThrow(
+          'The price of DStv Compact has changed. Please refresh and choose your package again.'
+        );
+        expect(mockGetBillersByType).toHaveBeenCalledWith('CableTv');
+        expect(insert).not.toHaveBeenCalled();
       });
 
       it('routes and prices as Monnify when provider is omitted, both field sets exist, and Monnify is preferred', async () => {

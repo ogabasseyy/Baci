@@ -76,6 +76,45 @@ describe('Oxygen follow-up fetch', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
+  it('loads a large queue in bounded merchant-scoped batches', async () => {
+    const candidates = Array.from({ length: 120 }, (_, index) => ({
+      ...candidate,
+      order_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    }));
+    mocks.rpc.mockResolvedValue({ data: candidates, error: null });
+    mocks.in.mockImplementation((_column: string, ids: string[]) => ({
+      data: ids.map((id) => ({ ...order, id })),
+      error: null,
+    }));
+
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(mocks.in).toHaveBeenCalledTimes(3);
+    expect(mocks.in.mock.calls.map(([, ids]) => ids.length)).toEqual([
+      50, 50, 20,
+    ]);
+    expect(mocks.eq).toHaveBeenCalledTimes(3);
+    expect(result.map((item) => item.id)).toEqual(
+      candidates.map((item) => item.order_id)
+    );
+  });
+
+  it('reports an error rather than hiding a failed batch', async () => {
+    const candidates = Array.from({ length: 51 }, (_, index) => ({
+      ...candidate,
+      order_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    }));
+    mocks.rpc.mockResolvedValue({ data: candidates, error: null });
+    mocks.in.mockImplementation((_column: string, ids: string[]) =>
+      ids.length === 1
+        ? { data: null, error: { message: 'unavailable' } }
+        : { data: ids.map((id) => ({ ...order, id })), error: null }
+    );
+
+    await expect(fetchOxygenFollowUps(merchantId)).rejects.toThrow(
+      'Could not load Oxygen follow-up orders'
+    );
+  });
+
   it('fails visibly if order details cannot be loaded', async () => {
     mocks.in.mockResolvedValue({
       data: null,

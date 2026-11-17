@@ -26,6 +26,7 @@ const TERMINAL_OR_UNKNOWN = new Set([
   'cancelled',
   'unknown',
 ]);
+const ORDER_LOOKUP_BATCH_SIZE = 50;
 
 /** The RPC returns categories only; order/contact data still goes through orders RLS. */
 export async function fetchOxygenFollowUps(
@@ -39,19 +40,26 @@ export async function fetchOxygenFollowUps(
   const candidates = oxygenFollowUpCandidatesSchema.parse(data);
   if (candidates.length === 0) return [];
 
-  const result = await supabase
-    .from('orders')
-    .select(
-      'id,order_number,customer_id,customer_name,customer_email,customer_phone,total,payment_status,payment_method,created_at'
+  const ids = candidates.map((candidate) => candidate.order_id);
+  const batches: string[][] = [];
+  for (let offset = 0; offset < ids.length; offset += ORDER_LOOKUP_BATCH_SIZE) {
+    batches.push(ids.slice(offset, offset + ORDER_LOOKUP_BATCH_SIZE));
+  }
+  const results = await Promise.all(
+    batches.map((batch) =>
+      supabase
+        .from('orders')
+        .select(
+          'id,order_number,customer_id,customer_name,customer_email,customer_phone,total,payment_status,payment_method,created_at'
+        )
+        .eq('merchant_id', validatedMerchantId)
+        .in('id', batch)
     )
-    .eq('merchant_id', validatedMerchantId)
-    .in(
-      'id',
-      candidates.map((candidate) => candidate.order_id)
-    );
-  if (result.error) throw new Error('Could not load Oxygen follow-up orders');
-
-  const orders = oxygenFollowUpOrdersSchema.parse(result.data);
+  );
+  const orders = results.flatMap((result) => {
+    if (result.error) throw new Error('Could not load Oxygen follow-up orders');
+    return oxygenFollowUpOrdersSchema.parse(result.data);
+  });
   const byId = new Map(orders.map((order) => [order.id, order]));
   return candidates.flatMap((candidate) => {
     const order = byId.get(candidate.order_id);

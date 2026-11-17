@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BOOKED_SHIPMENT_NOT_SAVED_CODE } from '@/lib/shipping/order-shipment-booking-failure';
 import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
 import type { BookingRequest } from '@/lib/shipping/types';
 
@@ -70,7 +71,15 @@ describe('bugfix: Topship connection failure after the shipment was saved', () =
       .bookShipment(request)
       .catch((e: unknown) => e);
 
-    expect(error).toBeInstanceOf(Error);
+    // The second call must be the payment request for the saved shipment, so
+    // an uncoded save-shipment failure cannot satisfy these assertions.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('pay-from-wallet');
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      detail: { shipmentId: 'shipment-1' },
+    });
+    expect(error).toMatchObject({ code: BOOKED_SHIPMENT_NOT_SAVED_CODE });
+    expect((error as Error).message).toContain('T1');
     expect(shouldReleaseBookingLock(error)).toBe(false);
   });
 });

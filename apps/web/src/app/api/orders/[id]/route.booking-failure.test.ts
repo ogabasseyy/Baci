@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/api-auth', () => ({
@@ -111,6 +112,23 @@ import {
   type UpdatedOrderFixture,
 } from './route.cancelled-transition.test-support';
 
+/** The harness rejects unknown tables, so capture failure-row inserts here. */
+function captureFailureRows(supabase: SupabaseClient): unknown[] {
+  const rows: unknown[] = [];
+  const baseFrom = supabase.from.bind(supabase);
+  (supabase as unknown as { from: unknown }).from = vi.fn((table: string) =>
+    table === 'order_shipment_booking_failures'
+      ? {
+          insert: vi.fn(async (row: unknown) => {
+            rows.push(row);
+            return { error: null };
+          }),
+        }
+      : baseFrom(table)
+  );
+  return rows;
+}
+
 describe('PATCH shipped: booking failure responses and lock state', () => {
   beforeEach(() => {
     setupCancelledTransitionMocks();
@@ -139,6 +157,7 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
       existingOrder,
       updatedOrder
     );
+    const failureRows = captureFailureRows(supabase);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {
@@ -180,6 +199,12 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
     expect(payload).toMatchObject({ code: 'SHIPMENT_BOOKING_UNCONFIRMED' });
     expect(ordersUpdate).not.toHaveBeenCalled();
     expect(clearOrderShipmentBookingLock).not.toHaveBeenCalled();
+    expect(failureRows).toEqual([
+      expect.objectContaining({
+        outcome: 'provider_unconfirmed',
+        lock_retained: true,
+      }),
+    ]);
 
     consoleErrorSpy.mockRestore();
   });
@@ -207,6 +232,7 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
       existingOrder,
       updatedOrder
     );
+    const failureRows = captureFailureRows(supabase);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {
@@ -249,7 +275,18 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
     expect(response.status).toBe(503);
     expect(payload).toMatchObject({ code: 'PROVIDER_UNREACHABLE' });
     expect(ordersUpdate).not.toHaveBeenCalled();
-    expect(clearOrderShipmentBookingLock).toHaveBeenCalled();
+    expect(clearOrderShipmentBookingLock).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'order-1',
+      'lock-1'
+    );
+    expect(failureRows).toEqual([
+      expect.objectContaining({
+        outcome: 'not_submitted',
+        lock_retained: false,
+      }),
+    ]);
 
     consoleErrorSpy.mockRestore();
   });

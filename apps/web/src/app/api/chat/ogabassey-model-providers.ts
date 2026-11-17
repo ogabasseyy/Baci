@@ -24,6 +24,11 @@ export const OGABASSEY_MODEL_PROVIDER_OPTIONS: ChainProviderOptions = {
     store: false,
     service_tier: 'default',
   },
+  meta: {
+    // muse-ember-1.0 defaults to reasoning_effort="max" and rejects "none" (HTTP 400);
+    // "minimal" keeps latency and token budget bounded for customer chat.
+    reasoningEffort: 'minimal',
+  },
   deepseek: { thinking: { type: 'disabled' } },
 };
 
@@ -32,8 +37,7 @@ export function getOgabasseyPreferredProviders(
 ): TextProvider[] {
   const providers: TextProvider[] = [];
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const metaKey =
-    process.env.META_MODEL_API_KEY?.trim() || process.env.MODEL_API_KEY?.trim();
+  const metaKey = process.env.META_MODEL_API_KEY?.trim();
   const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
 
   if (openaiKey) {

@@ -38,6 +38,101 @@ const FOLLOW_UP_CUE =
 const UNGROUNDED_EMPTY_RESULT_CLAIM =
   /[₦$€£]|\b(?:naira|in[\s-]+stock|available\s+now)\b/i;
 
+const PRICE_MENTION_PATTERN =
+  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?\s*(?:naira|ngn|₦)|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
+
+const BUDGET_OR_PRICE_NUMBER_PATTERN =
+  /(?:(?:₦|ngn\s*|[$€£]\s*)?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(million|thousand|[km])?)/giu;
+
+const STOCK_COUNT_PATTERN =
+  /\b(\d+)\s+(?:in[\s-]+stock|units?\s+(?:left|available|remaining|in[\s-]+stock))\b/giu;
+
+function applyNumericScale(rawValue: string, unit?: string): number {
+  const numeric = Number(rawValue.replaceAll(',', ''));
+  if (!Number.isFinite(numeric)) return Number.NaN;
+  if (/^(?:m|million)$/i.test(unit ?? ''))
+    return Math.round(numeric * 1_000_000);
+  if (/^(?:k|thousand)$/i.test(unit ?? '')) return Math.round(numeric * 1_000);
+  return Math.round(numeric);
+}
+
+function extractUserPriceMentions(
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+): Set<number> {
+  const values = new Set<number>();
+  for (const message of messages) {
+    if (message.role !== 'user') continue;
+    for (const match of message.content.matchAll(
+      BUDGET_OR_PRICE_NUMBER_PATTERN
+    )) {
+      const parsed = applyNumericScale(match[1], match[2]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        values.add(parsed);
+      }
+    }
+  }
+  return values;
+}
+
+function hasGroundedCatalogResultText(
+  text: string,
+  events: StorefrontAgentUiEvent[],
+  userMessages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+  }>,
+  currencyCode: string
+): boolean {
+  const allowedPrices = new Set(
+    events.flatMap((event) =>
+      event.products
+        .map((product) => Math.round(product.price))
+        .filter((price) => Number.isFinite(price) && price > 0)
+    )
+  );
+  const userAmounts = extractUserPriceMentions(userMessages);
+
+  if (
+    currencyCode.toUpperCase() === 'NGN' &&
+    /[$€£]/.test(text) &&
+    !userMessages.some(
+      (message) => message.role === 'user' && /[$€£]/.test(message.content)
+    )
+  ) {
+    return false;
+  }
+
+  for (const match of text.matchAll(PRICE_MENTION_PATTERN)) {
+    const rawNumber = match[2] ?? match[4] ?? match[6];
+    const unit = match[3] ?? match[5];
+    if (!rawNumber) continue;
+    const amount = applyNumericScale(rawNumber, unit);
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    if (!allowedPrices.has(amount) && !userAmounts.has(amount)) {
+      return false;
+    }
+  }
+
+  const allowedStockCounts = new Set(
+    events.flatMap((event) =>
+      event.products
+        .map((product) => product.stock)
+        .filter(
+          (stock): stock is number =>
+            typeof stock === 'number' && Number.isFinite(stock)
+        )
+    )
+  );
+  for (const match of text.matchAll(STOCK_COUNT_PATTERN)) {
+    const claimedStock = Number(match[1]);
+    if (!allowedStockCounts.has(claimedStock)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export interface OgabasseyCatalogAgentResult {
   text: string;
   events: StorefrontAgentUiEvent[];
@@ -154,15 +249,19 @@ export async function runOgabasseyCatalogAgent(options: {
           return false;
         }
         const events = presentationCollector.getEvents();
-        if (
-          events.length === 0 &&
-          (UNGROUNDED_EMPTY_RESULT_CLAIM.test(text) ||
-            OGABASSEY_UNVERIFIED_COMMERCE_ACTION.test(text) ||
-            OGABASSEY_UNVERIFIED_STORE_PURCHASE.test(text))
-        ) {
-          return false;
+        if (events.length === 0) {
+          return (
+            !UNGROUNDED_EMPTY_RESULT_CLAIM.test(text) &&
+            !OGABASSEY_UNVERIFIED_COMMERCE_ACTION.test(text) &&
+            !OGABASSEY_UNVERIFIED_STORE_PURCHASE.test(text)
+          );
         }
-        return true;
+        return hasGroundedCatalogResultText(
+          text,
+          events,
+          conversationMessages,
+          options.currencyCode
+        );
       },
       onProviderError: (providerName, error) => {
         console.warn(

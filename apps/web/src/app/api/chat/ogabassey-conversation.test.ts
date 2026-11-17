@@ -257,6 +257,8 @@ describe('Ogabassey conversational providers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [secondUrl, secondInit] = fetchMock.mock.calls[1];
     expect(String(secondUrl)).toBe('https://api.meta.ai/v1/chat/completions');
-    expect(JSON.parse(String(secondInit.body)).model).toBe('muse-ember-1.0');
+    const secondBody = JSON.parse(String(secondInit.body));
+    expect(secondBody.model).toBe('muse-ember-1.0');
+    expect(secondBody.reasoning_effort).toBe('minimal');
   });
 });

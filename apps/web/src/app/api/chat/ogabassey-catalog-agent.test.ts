@@ -201,4 +201,53 @@ describe('runOgabasseyCatalogAgent', () => {
     expect(result).toBeNull();
     expect(mocks.generateText).not.toHaveBeenCalled();
   });
+
+  it('ignores generic MODEL_API_KEY so non-Meta keys are never routed to Meta', async () => {
+    vi.stubEnv('MODEL_API_KEY', 'unrelated-provider-key');
+
+    const result = await runOgabasseyCatalogAgent(baseOptions());
+
+    expect(result).toBeNull();
+    expect(mocks.generateText).not.toHaveBeenCalled();
+  });
+
+  it('accepts grounded price and stock counts matching tool results and rejects fabricated numbers', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 is ₦1,450,000 with 3 in stock.',
+      };
+    });
+    const grounded = await runOgabasseyCatalogAgent(baseOptions());
+    expect(grounded?.text).toBe(
+      'Apple MacBook Air M2 is ₦1,450,000 with 3 in stock.'
+    );
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 is ₦950,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 has 12 units available.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+  });
 });

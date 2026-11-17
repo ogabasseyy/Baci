@@ -43,22 +43,43 @@ BEGIN
   END IF;
 END $$;
 
--- The backfill's whitespace pattern (copied from the migration) must keep tokens that
--- start or end with the letter v (PostgreSQL reads E'\v' as a plain "v", not a vertical tab)
--- and must still trim real whitespace.
+-- Run the migration's real backfill functions. PostgreSQL reads E'\v' as the letter v, so a
+-- token that starts or ends with v must survive; whitespace-only candidates must fall through
+-- to a valid fallback; and every token key must be gone from the cleaned settings.
 DO $$
-DECLARE
-  v_pattern constant text :=
-    '^[[:space:]\u00a0\ufeff]+|[[:space:]\u00a0\ufeff]+$';
+DECLARE v_clean jsonb;
 BEGIN
-  IF pg_catalog.regexp_replace('vABCv', v_pattern, '', 'g') <> 'vABCv' THEN
-    RAISE EXCEPTION 'Zoho: trim pattern corrupts a token that starts or ends with v';
+  IF private.zoho_refresh_token_from_custom_settings_v1(
+       '{"zohoCampaigns":{"refreshToken":"vABCv"}}'::jsonb) IS DISTINCT FROM 'vABCv' THEN
+    RAISE EXCEPTION 'Zoho: backfill corrupts a token that starts or ends with v';
   END IF;
-  IF pg_catalog.regexp_replace(E'\t\n real-token \r', v_pattern, '', 'g') <> 'real-token' THEN
-    RAISE EXCEPTION 'Zoho: trim pattern does not remove surrounding whitespace';
+  IF private.zoho_refresh_token_from_custom_settings_v1(
+       jsonb_build_object('zohoCampaigns', jsonb_build_object(
+         'refreshToken', E' \t ', 'refresh_token', E'\t padded-v \n'))) IS DISTINCT FROM 'padded-v' THEN
+    RAISE EXCEPTION 'Zoho: backfill does not fall back from a blank token or trim padding';
   END IF;
-  IF pg_catalog.regexp_replace(E' \t ', v_pattern, '', 'g') <> '' THEN
-    RAISE EXCEPTION 'Zoho: whitespace-only token is not treated as blank';
+  IF private.zoho_refresh_token_from_custom_settings_v1(
+       '{"zohoCampaigns":{"refreshToken":7},"zoho_campaigns":{"refresh_token":"snake-ok"}}'::jsonb)
+       IS DISTINCT FROM 'snake-ok' THEN
+    RAISE EXCEPTION 'Zoho: backfill does not ignore non-string tokens';
+  END IF;
+  IF private.zoho_refresh_token_from_custom_settings_v1(
+       '{"zohoCampaigns":{"refreshToken":"   "}}'::jsonb) IS NOT NULL THEN
+    RAISE EXCEPTION 'Zoho: a whitespace-only token must not be backfilled';
+  END IF;
+
+  v_clean := private.strip_zoho_secrets_from_custom_settings_v1(
+    '{"zohoCampaigns":{"enabled":true,"listKey":"L","refreshToken":"a","accessToken":"b","clientSecret":"c"},
+      "zoho_campaigns":{"refresh_token":"d","access_token":"e","client_secret":"f"},"other":1}'::jsonb);
+  IF COALESCE((v_clean -> 'zohoCampaigns') ?| ARRAY[
+       'accessToken', 'access_token', 'clientSecret', 'client_secret', 'refreshToken', 'refresh_token'], false)
+     OR COALESCE((v_clean -> 'zoho_campaigns') ?| ARRAY[
+       'accessToken', 'access_token', 'clientSecret', 'client_secret', 'refreshToken', 'refresh_token'], false) THEN
+    RAISE EXCEPTION 'Zoho: cleanup left a token key behind: %', v_clean;
+  END IF;
+  IF v_clean -> 'zohoCampaigns' IS DISTINCT FROM '{"enabled":true,"listKey":"L"}'::jsonb
+     OR (v_clean ->> 'other') IS DISTINCT FROM '1' THEN
+    RAISE EXCEPTION 'Zoho: cleanup removed non-secret settings: %', v_clean;
   END IF;
 END $$;
 

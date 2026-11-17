@@ -27,41 +27,87 @@ REVOKE ALL ON TABLE public.merchant_zoho_campaign_credentials
   FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.merchant_zoho_campaign_credentials TO service_role;
 
--- Backfill: copy the first non-blank stored refresh token (either spelling, in either
--- settings object, the same precedence the API extractor uses), then strip every
--- token key from custom_settings.
+-- Backfill logic lives in two small functions so the replay test can run the real thing.
+-- (Do not use E'\v' to trim: PostgreSQL reads it as the letter v, which would corrupt
+-- tokens that start or end with v.)
+CREATE OR REPLACE FUNCTION private.zoho_refresh_token_from_custom_settings_v1(
+  p_custom_settings jsonb
+)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  -- First candidate that is a JSON string with non-whitespace content (ASCII whitespace,
+  -- no-break space and BOM trimmed, like JavaScript's trim for real tokens). Non-string
+  -- values are ignored, as in the API extractor.
+  SELECT x.token
+  FROM (VALUES
+    (1, p_custom_settings -> 'zohoCampaigns' -> 'refreshToken'),
+    (2, p_custom_settings -> 'zohoCampaigns' -> 'refresh_token'),
+    (3, p_custom_settings -> 'zoho_campaigns' -> 'refreshToken'),
+    (4, p_custom_settings -> 'zoho_campaigns' -> 'refresh_token')
+  ) AS cand (ord, val)
+  CROSS JOIN LATERAL (
+    SELECT NULLIF(
+      pg_catalog.regexp_replace(
+        CASE WHEN pg_catalog.jsonb_typeof(cand.val) = 'string' THEN cand.val #>> '{}' END,
+        '^[[:space:]\u00a0\ufeff]+|[[:space:]\u00a0\ufeff]+$',
+        '',
+        'g'
+      ),
+      ''
+    ) AS token
+  ) AS x
+  WHERE x.token IS NOT NULL
+  ORDER BY cand.ord
+  LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION private.strip_zoho_secrets_from_custom_settings_v1(
+  p_custom_settings jsonb
+)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT p_custom_settings
+    || CASE
+      WHEN pg_catalog.jsonb_typeof(p_custom_settings -> 'zohoCampaigns') = 'object'
+        THEN pg_catalog.jsonb_build_object(
+          'zohoCampaigns',
+          (p_custom_settings -> 'zohoCampaigns') - ARRAY[
+            'accessToken', 'access_token', 'clientSecret', 'client_secret',
+            'refreshToken', 'refresh_token'
+          ]
+        )
+      ELSE '{}'::jsonb
+    END
+    || CASE
+      WHEN pg_catalog.jsonb_typeof(p_custom_settings -> 'zoho_campaigns') = 'object'
+        THEN pg_catalog.jsonb_build_object(
+          'zoho_campaigns',
+          (p_custom_settings -> 'zoho_campaigns') - ARRAY[
+            'accessToken', 'access_token', 'clientSecret', 'client_secret',
+            'refreshToken', 'refresh_token'
+          ]
+        )
+      ELSE '{}'::jsonb
+    END;
+$$;
+
+REVOKE ALL ON FUNCTION private.zoho_refresh_token_from_custom_settings_v1(jsonb)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.strip_zoho_secrets_from_custom_settings_v1(jsonb)
+  FROM PUBLIC, anon, authenticated;
+
 INSERT INTO public.merchant_zoho_campaign_credentials (merchant_id, refresh_token)
 SELECT src.merchant_id, src.token
 FROM (
   SELECT
     fs.merchant_id,
-    -- First candidate that is a JSON string with non-whitespace content (ASCII whitespace,
-    -- no-break space and BOM trimmed, like JavaScript's trim for real tokens). Non-string
-    -- values are ignored, as in the API extractor. (Do not use E'\v': PostgreSQL reads
-    -- it as the letter v, which would corrupt tokens that start or end with v.)
-    (
-      SELECT x.token
-      FROM (VALUES
-        (1, fs.custom_settings -> 'zohoCampaigns' -> 'refreshToken'),
-        (2, fs.custom_settings -> 'zohoCampaigns' -> 'refresh_token'),
-        (3, fs.custom_settings -> 'zoho_campaigns' -> 'refreshToken'),
-        (4, fs.custom_settings -> 'zoho_campaigns' -> 'refresh_token')
-      ) AS cand (ord, val)
-      CROSS JOIN LATERAL (
-        SELECT NULLIF(
-          pg_catalog.regexp_replace(
-            CASE WHEN pg_catalog.jsonb_typeof(cand.val) = 'string' THEN cand.val #>> '{}' END,
-            '^[[:space:]\u00a0\ufeff]+|[[:space:]\u00a0\ufeff]+$',
-            '',
-            'g'
-          ),
-          ''
-        ) AS token
-      ) AS x
-      WHERE x.token IS NOT NULL
-      ORDER BY cand.ord
-      LIMIT 1
-    ) AS token
+    private.zoho_refresh_token_from_custom_settings_v1(fs.custom_settings) AS token
   FROM public.merchant_feature_settings AS fs
 ) AS src
 JOIN public.merchants AS m ON m.id = src.merchant_id
@@ -77,29 +123,7 @@ BEGIN
     'app.audit_actor_user_id', '00000000-0000-0000-0000-00000000a2e1', true
   );
   UPDATE public.merchant_feature_settings AS fs
-  SET custom_settings = fs.custom_settings
-    || CASE
-      WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zohoCampaigns') = 'object'
-        THEN pg_catalog.jsonb_build_object(
-          'zohoCampaigns',
-          (fs.custom_settings -> 'zohoCampaigns') - ARRAY[
-            'accessToken', 'access_token', 'clientSecret', 'client_secret',
-            'refreshToken', 'refresh_token'
-          ]
-        )
-      ELSE '{}'::jsonb
-    END
-    || CASE
-      WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zoho_campaigns') = 'object'
-        THEN pg_catalog.jsonb_build_object(
-          'zoho_campaigns',
-          (fs.custom_settings -> 'zoho_campaigns') - ARRAY[
-            'accessToken', 'access_token', 'clientSecret', 'client_secret',
-            'refreshToken', 'refresh_token'
-          ]
-        )
-      ELSE '{}'::jsonb
-    END
+  SET custom_settings = private.strip_zoho_secrets_from_custom_settings_v1(fs.custom_settings)
   WHERE (fs.custom_settings -> 'zohoCampaigns') ?| ARRAY[
       'accessToken', 'access_token', 'clientSecret', 'client_secret',
       'refreshToken', 'refresh_token'

@@ -57,6 +57,13 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
     expect(allowsDescriptionFeature(['samsung', 'galaxy', 'ultra', '7'])).toBe(
       false
     );
+    expect(allowsDescriptionFeature(['a17', 'pro'], ['an'], ['chip'])).toBe(
+      true
+    );
+    expect(allowsDescriptionFeature(['a17', 'pro'], [], [])).toBe(true);
+    expect(allowsDescriptionFeature(['galaxy', 'a17', 'pro'], [], [])).toBe(
+      false
+    );
     expect(isNumericFeatureToken('15')).toBe(false);
     expect(isFeatureVersionPhrase(['wi', 'fi', '6'])).toBe(true);
     expect(isFeatureVersionPhrase(['wi', 'fi', 'router'])).toBe(false);

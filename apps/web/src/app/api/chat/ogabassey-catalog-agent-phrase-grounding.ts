@@ -48,13 +48,14 @@ export function hasUnreturnedProductPhrase(
   const hasSingleProductMatch = (
     words: string[],
     allowDescription = false,
-    precedingWords: string[] = []
+    precedingWords: string[] = [],
+    followingWords: string[] = []
   ) =>
     perProductTokens.length > 0
       ? perProductTokens.some((productSet) =>
           allowDescription
             ? words.every((token) => productSet.features.has(token)) &&
-              (allowsDescriptionFeature(words, precedingWords)
+              (allowsDescriptionFeature(words, precedingWords, followingWords)
                 ? true
                 : words
                     .filter(isModelIdentityToken)
@@ -78,19 +79,40 @@ export function hasUnreturnedProductPhrase(
     if (!hasSingleProductMatch(tokenizeIdentityWords(match[0]))) return true;
   }
   for (const match of clause.matchAll(CAPITALIZED_PHRASE_PATTERN)) {
+    const matchIndex = match.index ?? 0;
+    const before = clause
+      .slice(0, matchIndex)
+      .split(/[.,;!?]/)
+      .pop();
+    const after = clause
+      .slice(matchIndex + match[0].length)
+      .split(/[.,;!?]/)[0];
     const words = extractPhraseWords(match[0]);
-    if (words.length >= 2 && !hasSingleProductMatch(words, true)) return true;
+    if (
+      words.length >= 2 &&
+      !hasSingleProductMatch(
+        words,
+        true,
+        extractPhraseWords(before ?? ''),
+        extractPhraseWords(after ?? '')
+      )
+    ) {
+      return true;
+    }
   }
   for (const match of clause.matchAll(LOWERCASE_MODEL_NUMBER_PATTERN)) {
     if (NON_PRODUCT_PREDECESSOR_WORDS.has(match[1]?.toLowerCase() ?? ''))
       continue;
+    const matchIndex = match.index ?? 0;
     const before = clause
-      .slice(0, match.index ?? 0)
+      .slice(0, matchIndex)
       .split(/[.,;!?]/)
       .pop();
+    const matchEnd = matchIndex + match[0].length;
+    const after = clause.slice(matchEnd).split(/[.,;!?]/)[0];
     const precedingWords = extractPhraseWords(before ?? '');
+    const followingWords = extractPhraseWords(after ?? '');
     const baseWords = extractPhraseWords(match[0]);
-    const matchEnd = (match.index ?? 0) + match[0].length;
     const trailingVersion =
       baseWords[0] === 'core' && baseWords[1] === 'ultra'
         ? clause
@@ -99,10 +121,14 @@ export function hasUnreturnedProductPhrase(
             ?.toLowerCase()
         : undefined;
     const words = trailingVersion ? [...baseWords, trailingVersion] : baseWords;
-    const isDesc = allowsDescriptionFeature(words, precedingWords);
+    const isDesc = allowsDescriptionFeature(
+      words,
+      precedingWords,
+      followingWords
+    );
     if (
       words.length > 0 &&
-      !hasSingleProductMatch(words, isDesc, precedingWords)
+      !hasSingleProductMatch(words, isDesc, precedingWords, followingWords)
     ) {
       return true;
     }

@@ -22,6 +22,71 @@ const FUSED_SPEC_CONTEXT_WORDS = new Set(
   )
 );
 
+const APPLE_CHIPSET_CODE = /^(?:a1[2-9]|a2\d|m[1-9])$/i;
+const APPLE_CHIPSET_TIERS = new Set(['bionic', 'pro', 'max', 'ultra']);
+const CHIPSET_TRAILING_CUE =
+  /^(?:chip|chipset|processor|soc|cpu|gpu|silicon|engine)$/i;
+
+function isAppleChipsetPhrase(
+  words: string[],
+  precedingWords: string[],
+  followingWords: string[]
+): boolean {
+  const hasOtherBrandBefore = precedingWords
+    .slice(-2)
+    .some(
+      (token) => KNOWN_BRAND_OR_LINE_TOKENS.has(token) && token !== 'apple'
+    );
+  if (hasOtherBrandBefore) return false;
+
+  const core = words[0] === 'apple' ? words.slice(1) : words;
+  if (core.length === 0 || !APPLE_CHIPSET_CODE.test(core[0])) return false;
+
+  const rest = core.slice(1).filter((t) => !CHIPSET_TRAILING_CUE.test(t));
+  if (rest.length !== 1 || !APPLE_CHIPSET_TIERS.has(rest[0])) return false;
+
+  const hasChipCue =
+    rest[0] === 'bionic' ||
+    CHIPSET_TRAILING_CUE.test(followingWords[0] ?? '') ||
+    core.some((t) => CHIPSET_TRAILING_CUE.test(t));
+  return (
+    hasChipCue || (/^a(?:1[2-9]|2\d)$/i.test(core[0]) && rest[0] === 'pro')
+  );
+}
+
+/** Returns true when numeric tokens in a phrase describe specs or versioned standards rather than model identity. */
+export function allowsDescriptionFeature(
+  words: string[],
+  precedingWords: string[] = [],
+  followingWords: string[] = []
+): boolean {
+  const hasFusedSpecPhrase =
+    words.some((token) => FUSED_SPEC_TECH_TOKEN.test(token)) &&
+    words.some((token) => FUSED_SPEC_CONTEXT_WORDS.has(token)) &&
+    words.every(
+      (token) =>
+        FUSED_SPEC_TECH_TOKEN.test(token) ||
+        FUSED_SPEC_CONTEXT_WORDS.has(token) ||
+        isNumericFeatureToken(token)
+    );
+  return (
+    hasFusedSpecPhrase ||
+    isAppleChipsetPhrase(words, precedingWords, followingWords) ||
+    (words.some((token) => /\d/.test(token)) &&
+      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
+    (isFeatureVersionPhrase(words, precedingWords) &&
+      !words.some(
+        (token, idx) =>
+          KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
+          (VARIANT_TIER_TOKENS.has(token) &&
+            !(
+              token === 'ultra' &&
+              (words[idx - 1] ?? precedingWords.at(-1)) === 'core'
+            ))
+      ))
+  );
+}
+
 const FEATURE_VERSION_PREFIXES = new Set(
   'wifi bluetooth usb hdmi pcie thunderbolt displayport ufs lpddr ddr emmc nvme magsafe ios ipados macos watchos android windows ip snapdragon dimensity exynos helio kirin tensor ryzen radeon geforce rtx gtx'.split(
     ' '
@@ -114,37 +179,6 @@ export function isFeatureVersionPhrase(
     hasMatchedVersionInWords = true;
   }
   return hasMatchedVersionInWords;
-}
-
-/** Returns true when numeric tokens in a phrase describe specs or versioned standards rather than model identity. */
-export function allowsDescriptionFeature(
-  words: string[],
-  precedingWords: string[] = []
-): boolean {
-  const hasFusedSpecPhrase =
-    words.some((token) => FUSED_SPEC_TECH_TOKEN.test(token)) &&
-    words.some((token) => FUSED_SPEC_CONTEXT_WORDS.has(token)) &&
-    words.every(
-      (token) =>
-        FUSED_SPEC_TECH_TOKEN.test(token) ||
-        FUSED_SPEC_CONTEXT_WORDS.has(token) ||
-        isNumericFeatureToken(token)
-    );
-  return (
-    hasFusedSpecPhrase ||
-    (words.some((token) => /\d/.test(token)) &&
-      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
-    (isFeatureVersionPhrase(words, precedingWords) &&
-      !words.some(
-        (token, idx) =>
-          KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
-          (VARIANT_TIER_TOKENS.has(token) &&
-            !(
-              token === 'ultra' &&
-              (words[idx - 1] ?? precedingWords.at(-1)) === 'core'
-            ))
-      ))
-  );
 }
 
 /** Builds separated per-product identity and descriptive feature token sets alongside the global union. */

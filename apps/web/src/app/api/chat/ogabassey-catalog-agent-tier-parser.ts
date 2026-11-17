@@ -23,6 +23,9 @@ const PROSE_PLUS_FOLLOWERS =
   /^(?:a|an|the|free|bonus|extra|accessories|earbuds|airpods|charger|chargers|case|cases|warranty|delivery|buds|cable|cables)$/i;
 
 const CONNECTIVITY_MODEL_TOKENS = new Set(['4g', '5g']);
+const CHIPSET_CODE_BEFORE_TIER = /^(?:a1[2-9]|a2\d|m[1-9]|core)$/i;
+const CHIPSET_TRAILING_CUE =
+  /^(?:chip|chipset|processor|soc|cpu|gpu|silicon|engine)$/i;
 
 interface ParsedToken {
   raw: string;
@@ -98,6 +101,15 @@ export function collectModelAttachedTierTokens(
     for (let i = 0; i < tokens.length; i++) {
       const { raw, lower } = tokens[i];
       if (!VARIANT_TIER_TOKENS.has(lower) || attachedIdx.has(i)) continue;
+      if (
+        isContiguousPair(segment, tokens, i - 1, i) &&
+        isContiguousPair(segment, tokens, i, i + 1) &&
+        CHIPSET_CODE_BEFORE_TIER.test(tokens[i - 1].lower) &&
+        !productIdentityTokens.has(tokens[i - 1].lower) &&
+        CHIPSET_TRAILING_CUE.test(tokens[i + 1].lower)
+      ) {
+        continue;
+      }
       const prevLinked =
         isContiguousPair(segment, tokens, i - 1, i) &&
         (attachedIdx.has(i - 1) ||

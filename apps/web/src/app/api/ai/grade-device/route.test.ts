@@ -74,6 +74,7 @@ describe('POST /api/ai/grade-device', () => {
     vi.clearAllMocks();
     mocks.verifyCsrf.mockResolvedValue(true);
     vi.stubEnv('GEMINI_API_KEY', 'test-key');
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'usebaci.com');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     aiAnswers({
       model: 'iPhone 13 Pro',

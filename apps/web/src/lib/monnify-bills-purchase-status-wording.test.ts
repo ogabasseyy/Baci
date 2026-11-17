@@ -120,3 +120,17 @@ describe('bugfix: numeric timeout status, transaction status and submitted wordi
     });
   });
 });
+
+describe('bugfix guard: a 5xx is never a refusal, whatever its body says', () => {
+  it.each([
+    500, 502, 503, 504,
+  ])('throws a transient (unknown-outcome) error for HTTP %i with refusal wording', async (status) => {
+    mockHttpError(
+      status,
+      'Server Error',
+      JSON.stringify({ responseMessage: 'Insufficient wallet balance' })
+    );
+
+    await expect(vend()).rejects.toThrow('Transient vend outcome');
+  });
+});

@@ -175,7 +175,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
         variantId: 'variant-256-8',
       })
     );
-    expect(cartMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+    expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
   });
 
   it('reports zero in-cart units for a fresh selection', () => {

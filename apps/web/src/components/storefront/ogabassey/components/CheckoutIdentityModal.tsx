@@ -31,8 +31,14 @@ export function CheckoutIdentityModal({
 }: CheckoutIdentityModalProps) {
   const router = useRouter();
   const merchantContext = useMerchantSafe();
-  const _merchant = merchantContext?.merchant;
-  const socialAvailable = typeof window !== 'undefined' && supportsCheckoutSocialSignIn(window.location.hostname, process.env.NODE_ENV === 'production');
+  const merchant = merchantContext?.merchant;
+  const socialAvailable =
+    typeof window !== 'undefined' &&
+    supportsCheckoutSocialSignIn(
+      window.location.hostname,
+      process.env.NODE_ENV === 'production',
+      merchant?.custom_domain
+    );
   const { checkoutUrl: normalizedCheckoutUrl } =
     buildCheckoutIdentityRoutes(checkoutUrl);
 
@@ -65,9 +71,9 @@ export function CheckoutIdentityModal({
         </div>
 
         <div className="space-y-5 px-6 pb-6 pt-6 sm:px-8">
-          {_merchant?.slug ? (
+          {merchant?.slug ? (
             <CheckoutCodeSignin
-              merchantSlug={_merchant.slug}
+              merchantSlug={merchant.slug}
               onSuccess={handleGuestCheckout}
               socialReturnTo={socialAvailable ? String(normalizedCheckoutUrl) : undefined}
             />

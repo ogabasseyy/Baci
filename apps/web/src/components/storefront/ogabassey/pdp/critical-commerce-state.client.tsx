@@ -1,14 +1,11 @@
 'use client';
 
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
+import { resolveCriticalDefaultAndDisplaySelection } from './resolve-critical-default-and-display-selection';
 import {
-  resolveDefaultVariantSelection,
-  resolveLowestPricedVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
 } from '@baci/shared/lib/product-default-variant';
 import { useEffect, useState } from 'react';
-import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { useCriticalAddToCartBlocker } from './critical-add-to-cart-blocker.client';
 import { resolveMissingCriticalVariantAxes } from './critical-missing-variant-axes';
@@ -65,37 +62,14 @@ export function OgabasseyPdpCriticalCommerceProvider({
     requiredAxes: [...requiredVariantAxes, ...renderableVariantAxes],
   });
   const explicitVariantCondition = initialVariantIntent.explicitCondition;
-  // PDP opens on the cheapest buyable variant unless the route supplied an
-  // explicit condition. Preserve URL intent first, then fall back to the
-  // PDP-only price-first default; feeds/cart keep the shared condition-first
-  // resolver.
-  const defaultSelectionProduct = {
-    ...selectionCartProduct,
-    variants: filterDefaultAdvertisedVariants(variants, selectionCartProduct),
-  };
-  const conditionDefaultVariantSelection =
-    selectionCartProduct.has_variants && explicitVariantCondition
-      ? resolveDefaultVariantSelection(defaultSelectionProduct, {
-          condition: explicitVariantCondition,
-        })
-      : null;
-  const priceDefaultVariantSelection = selectionCartProduct.has_variants
-    ? resolveLowestPricedVariantSelection(defaultSelectionProduct)
-    : null;
-  const defaultVariantSelection = selectionCartProduct.has_variants
-    ? (conditionDefaultVariantSelection ??
-      priceDefaultVariantSelection ??
-      resolveDefaultVariantSelection(defaultSelectionProduct, {
-        condition: explicitVariantCondition,
-      }))
-    : null;
-  const initialDisplayVariantSelection = selectionCartProduct.has_variants
-    ? (resolveVariantDisplaySelection(selectionCartProduct, {
-        attributes: initialVariantIntent.resolverAttributes,
-        condition: explicitVariantCondition,
-        variantId: initialVariantSelection?.variantId,
-      }) ?? defaultVariantSelection)
-    : null;
+  const { defaultVariantSelection, initialDisplayVariantSelection } =
+    resolveCriticalDefaultAndDisplaySelection({
+      explicitVariantCondition,
+      initialResolverAttributes: initialVariantIntent.resolverAttributes,
+      initialVariantSelection,
+      selectionCartProduct,
+      variants,
+    });
   const [selectedAttributes, setSelectedAttributes] = useState<
     Record<string, string>
   >(() =>
@@ -210,7 +184,6 @@ export function OgabasseyPdpCriticalCommerceProvider({
     });
   }
 
-  const isAtMaxQuantity = maxQuantity !== null && quantity >= maxQuantity;
   const canAddToCart =
     hasRequiredVariantSelection &&
     hasRequiredHiddenVariantSelection &&
@@ -219,14 +192,23 @@ export function OgabasseyPdpCriticalCommerceProvider({
     quantity >= 1 &&
     (maxQuantity === null || (maxQuantity > 0 && quantity <= maxQuantity));
 
-  const { handleAddToCart: submitAddToCart, quantityInCart } =
-    useCriticalCommerceCartActions({
-      activeRouteOffer,
-      canAddToCart,
-      effectivePurchasableVariantSelection,
-      productForCart,
-      quantity,
-    });
+  const {
+    handleAddToCart: submitAddToCart,
+    handleDecrementCartQuantity,
+    handleIncrementCartQuantity,
+    isAtMinCartQuantity,
+    quantityInCart,
+  } = useCriticalCommerceCartActions({
+    activeRouteOffer,
+    canAddToCart,
+    effectivePurchasableVariantSelection,
+    maxQuantity,
+    productForCart,
+    quantity,
+  });
+  const activeQuantity = quantityInCart > 0 ? quantityInCart : quantity;
+  const isAtMaxQuantity =
+    maxQuantity !== null && activeQuantity >= maxQuantity;
   const { clearAddToCartBlockedAttempt, ...addToCartControls } =
     useCriticalAddToCartBlocker({
     canAddToCart,
@@ -279,7 +261,10 @@ export function OgabasseyPdpCriticalCommerceProvider({
         currency,
         explicitSelectedAxes,
         handleAttributeSelection,
+        handleDecrementCartQuantity,
+        handleIncrementCartQuantity,
         isAtMaxQuantity,
+        isAtMinCartQuantity,
         maxQuantity,
         productForCart,
         quantity,

@@ -44,7 +44,10 @@ export interface OgabasseyPdpCriticalCommerceState {
   explicitSelectedAxes: string[];
   handleAddToCart: (event?: { currentTarget: Element }) => void;
   handleAttributeSelection: (axis: string, value: string) => void;
+  handleDecrementCartQuantity: () => void;
+  handleIncrementCartQuantity: () => void;
   isAtMaxQuantity: boolean;
+  isAtMinCartQuantity?: boolean;
   maxQuantity: number | null;
   productForCart: CartProduct;
   quantity: number;

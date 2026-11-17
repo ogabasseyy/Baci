@@ -137,6 +137,18 @@ describe('ChatWidget route visibility', () => {
     expect(toJSON()).toBeNull();
   });
 
+  it.each([
+    '/wallet',
+    '/wallet/savings/start',
+    '/wallet/manage-cards',
+  ])('returns null on the wallet (%s), where it covered the amounts', (path) => {
+    mockUsePathname.mockReturnValue(path);
+
+    const { toJSON } = render(<ChatWidget />);
+
+    expect(toJSON()).toBeNull();
+  });
+
   it('still shows on the rest of Settings', () => {
     mockUsePathname.mockReturnValue('/settings');
 

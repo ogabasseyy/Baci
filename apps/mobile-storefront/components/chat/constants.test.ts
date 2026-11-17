@@ -49,8 +49,8 @@ describe('chat constants', () => {
       expect(HIDDEN_ROUTES).toContain('/quiz');
     });
 
-    it('hides the AI button on savings setup so it never covers the main button', () => {
-      expect(HIDDEN_ROUTES).toContain('/wallet/savings/start');
+    it('hides the AI button on the whole wallet, savings setup included', () => {
+      expect(HIDDEN_ROUTES).toContain('/wallet');
     });
   });
 

@@ -12,7 +12,7 @@ import { resolveApiBaseUrl } from '@/lib/api-url';
  * - Auth screens (user not yet engaged)
  * - Order success (celebration screen, CTAs prominent)
  * - Modal screens (overlay stacking issues)
- * - Savings setup (the main button sits at the bottom of the form)
+ * - The wallet and savings setup (it covered amounts and the main button)
  */
 export const HIDDEN_ROUTES = [
   '/checkout',
@@ -30,8 +30,10 @@ export const HIDDEN_ROUTES = [
   '/search',
   '/account',
   '/quiz',
-  // Savings setup: the main button sits at the bottom of a long form.
-  '/wallet/savings/start',
+  // The whole wallet, savings setup included: the button covered the amounts
+  // in Wallet activity and the main button of the savings form (owner,
+  // 2026-11-17).
+  '/wallet',
   // The Wallet PIN pad and its button sit where the chat button floats; the
   // rest of Settings keeps chat for help.
   '/settings/wallet-pin',

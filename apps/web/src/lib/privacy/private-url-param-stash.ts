@@ -1,5 +1,6 @@
 import {
   canonicalSearch,
+  isEntryList,
   type PrivateEntry,
   partitionSensitiveSearch,
 } from './sensitive-url-params';
@@ -37,19 +38,6 @@ function nextSavedAt(): number {
 
 function stashKey(id: string): string {
   return `${STASH_KEY_PREFIX}${id}`;
-}
-
-function isEntryList(value: unknown): value is PrivateEntry[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (entry) =>
-        Array.isArray(entry) &&
-        entry.length === 2 &&
-        typeof entry[0] === 'string' &&
-        typeof entry[1] === 'string'
-    )
-  );
 }
 
 /** Not a secret: it only links a history entry to its record. */

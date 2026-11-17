@@ -119,6 +119,24 @@ describe('useCheckoutSuccessVerification', () => {
     ).toBeNull();
   });
 
+  it('bugfix: keeps the success state when blocked storage throws during cleanup', async () => {
+    mockVerify.mockImplementation(async (_params, handlers) => {
+      handlers.setStatus('success');
+    });
+    const removeItem = vi
+      .spyOn(Storage.prototype, 'removeItem')
+      .mockImplementation(() => {
+        throw new DOMException('denied', 'SecurityError');
+      });
+    const { props } = setup();
+
+    const { result } = renderHook(() => useCheckoutSuccessVerification(props));
+
+    await waitFor(() => expect(result.current.status).toBe('success'));
+    expect(removeItem).toHaveBeenCalled();
+    removeItem.mockRestore();
+  });
+
   it('re-polls while pending and stops once terminal', async () => {
     vi.useFakeTimers();
     mockVerify.mockResolvedValue(undefined);

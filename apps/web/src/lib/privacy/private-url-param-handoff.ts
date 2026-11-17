@@ -4,6 +4,7 @@ import {
 } from './private-url-param-stash';
 import {
   canonicalSearch,
+  isEntryList,
   type PrivateEntry,
   partitionSensitiveSearch,
 } from './sensitive-url-params';
@@ -21,16 +22,18 @@ interface PendingHandoff {
   expiresAt: number;
 }
 
-function isEntryList(value: unknown): value is PrivateEntry[] {
+function isPendingHandoff(value: unknown): value is PendingHandoff {
+  if (typeof value !== 'object' || value === null) return false;
+  const { paths, publicSearch, entries, expiresAt } = value as Record<
+    string,
+    unknown
+  >;
   return (
-    Array.isArray(value) &&
-    value.every(
-      (entry) =>
-        Array.isArray(entry) &&
-        entry.length === 2 &&
-        typeof entry[0] === 'string' &&
-        typeof entry[1] === 'string'
-    )
+    Array.isArray(paths) &&
+    paths.every((path) => typeof path === 'string') &&
+    typeof publicSearch === 'string' &&
+    typeof expiresAt === 'number' &&
+    isEntryList(entries)
   );
 }
 
@@ -55,16 +58,9 @@ function readPending(): PendingHandoff | null {
   }
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as Partial<PendingHandoff> | null;
-    if (
-      Array.isArray(parsed?.paths) &&
-      parsed.paths.every((path) => typeof path === 'string') &&
-      typeof parsed.publicSearch === 'string' &&
-      typeof parsed.expiresAt === 'number' &&
-      isEntryList(parsed.entries) &&
-      parsed.expiresAt > Date.now()
-    ) {
-      return parsed as PendingHandoff;
+    const parsed: unknown = JSON.parse(raw);
+    if (isPendingHandoff(parsed) && parsed.expiresAt > Date.now()) {
+      return parsed;
     }
   } catch {
     // Malformed: removed below.

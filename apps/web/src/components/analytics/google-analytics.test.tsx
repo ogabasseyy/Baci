@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAnalytics } from './google-analytics';
@@ -81,7 +81,8 @@ describe('bugfix: measurement id was interpolated into the inline script uncheck
   ])('renders no script for the invalid id %j', async (id) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { container } = render(<GoogleAnalytics measurementId={id} />);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Flush the initialization microtask before asserting nothing rendered.
+    await act(async () => {});
 
     expect(container.querySelector('script')).toBeNull();
     if (id) {

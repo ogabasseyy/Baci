@@ -78,6 +78,20 @@ export function redactPathTokens(url: string): string {
 
 export type PrivateEntry = [name: string, value: string];
 
+/** Validates untrusted (storage) JSON as a list of name/value pairs. */
+export function isEntryList(value: unknown): value is PrivateEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 2 &&
+        typeof entry[0] === 'string' &&
+        typeof entry[1] === 'string'
+    )
+  );
+}
+
 export function isSensitiveUrlParam(name: string): boolean {
   return SENSITIVE_LOWERCASE.has(name.toLowerCase());
 }

@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useEffect, useSyncExternalStore } from 'react';
-import { hydrateRoot } from 'react-dom/client';
+import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
@@ -56,7 +56,20 @@ beforeEach(() => {
   window.sessionStorage.clear();
 });
 
-afterEach(() => {
+const roots: Root[] = [];
+
+function hydrate(
+  ...args: Parameters<typeof hydrateRoot>
+): ReturnType<typeof hydrateRoot> {
+  const root = hydrateRoot(...args);
+  roots.push(root);
+  return root;
+}
+
+afterEach(async () => {
+  await act(async () => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
   vi.restoreAllMocks();
   document.body.innerHTML = '';
   visit('/');
@@ -82,7 +95,7 @@ describe('bugfix: reloaded scrubbed link hydrated with values the server never r
       .mockImplementation(() => undefined);
 
     await act(async () => {
-      hydrateRoot(container, <Probe log={log} />, { onRecoverableError });
+      hydrate(container, <Probe log={log} />, { onRecoverableError });
     });
 
     expect(log.renders[0]).toEqual({ token: null, isReady: false });
@@ -99,7 +112,7 @@ describe('bugfix: reloaded scrubbed link hydrated with values the server never r
     container.innerHTML = renderToString(<Probe log={{ ...log }} />);
 
     await act(async () => {
-      hydrateRoot(container, <Probe log={log} />);
+      hydrate(container, <Probe log={log} />);
     });
 
     expect(log.effects).toEqual(['abc']);
@@ -134,7 +147,7 @@ describe('bugfix: reloaded scrubbed link hydrated with values the server never r
     const onRecoverableError = vi.fn();
 
     await act(async () => {
-      hydrateRoot(container, <Probe log={log} />, { onRecoverableError });
+      hydrate(container, <Probe log={log} />, { onRecoverableError });
     });
 
     expect(onRecoverableError).not.toHaveBeenCalled();

@@ -288,7 +288,11 @@ export function useCheckoutSuccessVerification({
       return;
     }
 
-    sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
+    try {
+      sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
+    } catch {
+      // Blocked storage: cleanup is best-effort and must not break success.
+    }
   }, [status]);
 
   return { status, isVerifying, orderNumber, paymentMethod };

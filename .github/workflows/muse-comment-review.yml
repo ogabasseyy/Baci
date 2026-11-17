@@ -12,9 +12,14 @@ permissions:
   contents: read
 
 concurrency:
+  # GitHub evaluates concurrency before job `if:` and treats `''` as falsy in
+  # `cond && a || b`, so non-triggering comments take the truthy `-ignored`
+  # branch while legitimate triggers fall through to `''`. `startsWith` keeps
+  # mid-comment mentions from cancelling an active run (only leading extra text
+  # on line 1 remains a residual no-op cancellation).
   group: >-
-    muse-comment-review-${{ github.event.issue.number }}-attempt-${{ github.run_attempt }}${{ (github.event.issue.pull_request != null && contains(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR')) && '' || '-ignored' }}
-  cancel-in-progress: ${{ github.run_attempt == 1 && github.event.issue.pull_request != null && contains(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR') }}
+    muse-comment-review-${{ github.event.issue.number }}-attempt-${{ github.run_attempt }}${{ !(github.event.issue.pull_request != null && startsWith(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR')) && '-ignored' || '' }}
+  cancel-in-progress: ${{ github.run_attempt == 1 && github.event.issue.pull_request != null && startsWith(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR') }}
 
 jobs:
   muse-comment-review:
@@ -24,7 +29,7 @@ jobs:
       pull-requests: write
     if: >-
       github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '@muse review') &&
+      startsWith(github.event.comment.body, '@muse review') &&
       (github.event.comment.author_association == 'OWNER' ||
       github.event.comment.author_association == 'MEMBER' ||
       github.event.comment.author_association == 'COLLABORATOR')
@@ -44,7 +49,8 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
-          first_line="$(printf '%s\n' "${COMMENT_BODY}" | tr -d '\r' | awk 'NF { print; exit }')"
+          # Job `if:` enforces `startsWith(..., '@muse review')` because GitHub expressions lack trim/regex; normalize `\r` and trailing spaces here.
+          first_line="$(printf '%s\n' "${COMMENT_BODY}" | tr -d '\r' | awk 'NF { gsub(/[ \t]+$/, ""); print; exit }')"
           if [[ "${first_line}" != '@muse review' ]]; then
             echo "should_run=false" >> "${GITHUB_OUTPUT}"
             echo "::notice::Skipping Muse review because the first non-empty line is not '@muse review'."

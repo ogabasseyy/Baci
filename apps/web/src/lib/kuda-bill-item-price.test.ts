@@ -71,6 +71,19 @@ describe('assertKudaBillItemPriceCurrent', () => {
     ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   });
 
+  it('lets a listed electricity meter product through a partial list', async () => {
+    // Kuda answered with another biller only (e.g. cable): the meter
+    // product is customer-priced, so it cannot be stale.
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        amount: 5000,
+        billItemIdentifier: 'KUD-ELE-EKED-002',
+        billerName: 'EKEDC NG',
+        type: 'electricity',
+      })
+    ).resolves.toBeUndefined();
+  });
+
   it('rejects a named biller that does not list the package', async () => {
     await expect(
       assertKudaBillItemPriceCurrent({

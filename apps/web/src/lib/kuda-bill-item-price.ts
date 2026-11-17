@@ -211,6 +211,14 @@ export async function assertKudaBillItemPriceCurrent({
   // biller): the app's saved choice, and its price, are out of date.
   const chosen = billerName ? chosenListings(listing, billerName) : listing;
   if (chosen.length === 0) {
+    // Kuda's listed electricity meter products are always customer-priced,
+    // so a partial list that leaves out their biller cannot make them stale.
+    if (
+      type === 'electricity' &&
+      isKudaElectricityMeterItemCode(billItemIdentifier)
+    ) {
+      return;
+    }
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }
 

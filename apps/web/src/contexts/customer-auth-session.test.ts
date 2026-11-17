@@ -236,4 +236,58 @@ describe('customer-auth-session passive identity revocation', () => {
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setCustomer).toHaveBeenCalledWith(null);
   });
+
+  it('settles loading state when commitCustomerAuthSession supersedes an in-flight bootstrap', async () => {
+    let resolveBootstrap: ((res: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveBootstrap = resolve;
+          })
+      )
+    );
+
+    const setUser = vi.fn();
+    const setCustomer = vi.fn();
+    const setOtpState = vi.fn();
+    const setIsLoading = vi.fn();
+
+    const bootstrapPromise = loadCustomerSession('ogabassey', {
+      setCustomer,
+      setIsLoading,
+      setUser,
+    });
+
+    const committed = await commitCustomerAuthSession(
+      'ogabassey',
+      {
+        customer: {
+          email: 'ada@example.com',
+          first_name: 'Ada',
+          id: 'customer-1',
+          last_name: 'Lovelace',
+        },
+        user: {
+          email: 'ada@example.com',
+          id: 'user-1',
+          role: 'customer',
+        },
+      },
+      {
+        setCustomer,
+        setIsLoading,
+        setOtpState,
+        setUser,
+      }
+    );
+
+    expect(committed).toBe(true);
+    expect(setIsLoading).toHaveBeenCalledWith(false);
+
+    resolveBootstrap?.(Response.json({ authenticated: false }));
+    await bootstrapPromise;
+    expect(setUser).toHaveBeenCalledTimes(1);
+  });
 });

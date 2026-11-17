@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
+import { StyleSheet } from 'react-native';
+import Colors, { BRAND } from '@/constants/Colors';
 import { SavingsSelectedPhoneCard } from './SavingsSelectedPhoneCard';
 
 jest.mock('expo-image', () => ({ Image: () => null }));
@@ -48,5 +49,43 @@ describe('SavingsSelectedPhoneCard with PiggyVest off', () => {
     );
     expect(screen.getByText('Choose your options')).toBeOnTheScreen();
     expect(screen.queryByText('₦250,000')).toBeNull();
+  });
+
+  describe('bugfix: the "New" tag was white text on pale pink in dark mode', () => {
+    it('draws the condition tag as white text on solid brand red', () => {
+      render(
+        <SavingsSelectedPhoneCard
+          colors={Colors.dark}
+          product={product}
+          imageUri=""
+          loadingOptions={false}
+          onChange={jest.fn()}
+        />
+      );
+      const tag = StyleSheet.flatten(screen.getByText('New').props.style);
+      expect(tag.backgroundColor).toBe(BRAND.primary);
+      expect(tag.color).toBe('#FFFFFF');
+    });
+
+    it('draws Change as white text on solid brand red', () => {
+      render(
+        <SavingsSelectedPhoneCard
+          colors={Colors.dark}
+          product={product}
+          imageUri=""
+          loadingOptions={false}
+          onChange={jest.fn()}
+        />
+      );
+      const pill = screen.getByRole('button', {
+        name: 'Change savings device',
+      });
+      expect(StyleSheet.flatten(pill.props.style).backgroundColor).toBe(
+        BRAND.primary
+      );
+      expect(
+        StyleSheet.flatten(screen.getByText('Change').props.style).color
+      ).toBe('#FFFFFF');
+    });
   });
 });

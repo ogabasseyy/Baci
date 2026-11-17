@@ -3,6 +3,7 @@
 import { CircleDollarSign, Copy, Loader2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import {
+  MAX_USDT_POLL_ATTEMPTS,
   type UsdtFundingState,
   useUsdtWalletFundingPolling,
 } from './use-usdt-wallet-funding-polling';
@@ -147,7 +148,7 @@ export function UsdtWalletFundingPanel({
           {pollingExhausted && funding.status === 'pending' ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--store-border,#e5e7eb)] bg-[var(--store-surface,#fff)] px-3 py-2 text-xs">
               <span className="text-[var(--store-muted-text,#6b7280)]">
-                Auto-refresh paused after {60} checks.
+                Auto-refresh paused after {MAX_USDT_POLL_ATTEMPTS} checks.
               </span>
               <button
                 className="font-semibold text-[var(--store-primary,#dc2626)] underline disabled:opacity-60"

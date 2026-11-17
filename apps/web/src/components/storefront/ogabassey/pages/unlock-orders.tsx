@@ -109,7 +109,8 @@ export function OgabasseyUnlockOrders() {
           setError(null);
           setLoading(false);
         }
-      } catch {
+      } catch (err) {
+        console.error('[unlock-orders] Failed to refresh unlock orders', err);
         if (!cancelled && requestId === latestRequestId) {
           setError('Unable to refresh unlock orders right now.');
           setLoading(false);

@@ -84,8 +84,12 @@ export async function revalidateScheduledPostsByMerchant(
           nextRevalError instanceof Error
             ? nextRevalError.message
             : String(nextRevalError);
+        const isStandaloneWorker =
+          process.env.VPS_WORKER === '1' || process.env.VPS_WORKER === 'true';
         const isOutsideRequestContext =
-          msg.includes('static generation store') || msg.includes('Invariant:');
+          isStandaloneWorker ||
+          msg.includes('static generation store') ||
+          msg.includes('Invariant:');
         const purgeIdentifiers = Array.from(
           new Set(
             [

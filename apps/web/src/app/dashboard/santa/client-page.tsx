@@ -126,6 +126,7 @@ export default function SantaClientPage() {
 
   const restartPolling = () => {
     setPollingPaused(false);
+    setPollError(null);
     setPollGeneration((current) => current + 1);
   };
 

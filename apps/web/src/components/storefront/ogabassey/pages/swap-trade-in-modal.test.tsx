@@ -31,10 +31,18 @@ function renderModal(onClose = vi.fn()) {
   return onClose;
 }
 
-function chooseVideo(video: File) {
-  fireEvent.change(screen.getByLabelText(/upload a video/i), {
-    target: { files: [video] },
+function chooseFiles(files: File[]) {
+  fireEvent.change(screen.getByLabelText(/upload a video or photos/i), {
+    target: { files },
   });
+}
+
+function chooseVideo(video: File) {
+  chooseFiles([video]);
+}
+
+function photo(name: string): File {
+  return new File(['photo'], name, { type: 'image/jpeg' });
 }
 
 async function analyse() {
@@ -88,7 +96,7 @@ describe('TradeInModal', () => {
 
     expect(await screen.findByText('₦240,000')).toBeInTheDocument();
     expect(mocks.requestDeviceGrading).toHaveBeenCalledWith(
-      expect.any(File),
+      [expect.any(File)],
       'ogabassey'
     );
 
@@ -100,6 +108,45 @@ describe('TradeInModal', () => {
     expect(url).toContain('https://wa.me/2348000000000?text=');
     expect(url).toContain('Estimate: ₦240,000');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('grades photos instead of a video when the shopper picks photos', async () => {
+    mocks.requestDeviceGrading.mockResolvedValue(graded);
+    renderModal();
+    const photos = [photo('front.jpg'), photo('back.jpg')];
+
+    chooseFiles(photos);
+    expect(screen.getByText('2 photos selected')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /analyze device/i }));
+
+    expect(await screen.findByText('₦240,000')).toBeInTheDocument();
+    expect(mocks.requestDeviceGrading).toHaveBeenCalledWith(
+      photos,
+      'ogabassey'
+    );
+  });
+
+  it('refuses a mix of photos and a video and clears the notice once fixed', () => {
+    renderModal();
+
+    chooseFiles([
+      photo('front.jpg'),
+      new File(['video'], 'device.mp4', { type: 'video/mp4' }),
+    ]);
+
+    expect(
+      screen.getByText(/either one video or up to 6 photos/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /analyze device/i })
+    ).toBeDisabled();
+
+    chooseFiles([photo('front.jpg')]);
+
+    expect(
+      screen.queryByText(/either one video or up to 6 photos/i)
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('1 photo selected')).toBeInTheDocument();
   });
 
   it('builds support links from the digits of the phone number only', async () => {

@@ -1,11 +1,12 @@
 'use client';
 
-import { ArrowRight, Check, Upload, Video, X } from 'lucide-react';
+import { ArrowRight, Camera, Check, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
   type DeviceGradingResult,
   requestDeviceGrading,
 } from '@/lib/storefront/request-device-grading';
+import { selectDeviceMedia } from '@/lib/storefront/select-device-media';
 import { SparklesIcon } from './swap-sparkles-icon';
 
 /**
@@ -25,7 +26,7 @@ export function TradeInModal({
   merchantSlug?: string;
 }) {
   const [step, setStep] = useState<'upload' | 'analyzing' | 'result'>('upload');
-  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [media, setMedia] = useState<{ files: File[]; label: string } | null>(null);
   const [result, setResult] = useState<DeviceGradingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,26 +37,27 @@ export function TradeInModal({
   const supportDigits = supportPhone.replace(/\D/g, '');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Local cap only: the clip stays on the device and still frames are
-      // uploaded, so this is not the (much smaller) server upload budget.
-      if (file.size > 50 * 1024 * 1024) { // 50MB limit
-        setError("Video is too large. Please keep it under 50MB and 15 seconds.");
-        return;
-      }
-      setVideoFile(file);
-      setError(null);
+    const picked = Array.from(e.target.files ?? []);
+    // Let the same files be picked again after a refusal or a removal.
+    e.target.value = '';
+    if (picked.length === 0) return;
+
+    const selection = selectDeviceMedia(picked);
+    if (!selection.ok) {
+      setError(selection.error);
+      return;
     }
+    setMedia({ files: selection.files, label: selection.label });
+    setError(null);
   };
 
   const startAnalysis = async () => {
-    if (!videoFile) return;
+    if (!media) return;
 
     setStep('analyzing');
 
     try {
-      const analysis = await requestDeviceGrading(videoFile, merchantSlug);
+      const analysis = await requestDeviceGrading(media.files, merchantSlug);
       setResult(analysis);
       setStep('result');
     } catch (err: unknown) {
@@ -103,36 +105,40 @@ export function TradeInModal({
             <div className="text-center space-y-6">
               <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-xl p-8 transition-all hover:bg-blue-100/50">
                 <div className="size-16 bg-white text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                  <Video size={32} />
+                  <Camera size={32} />
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Upload a Video of Your Device</h4>
+                <h4 className="font-semibold text-gray-900 mb-2">Upload Photos or a Video of Your Device</h4>
                 <p className="text-sm text-gray-500 mb-6 max-w-xs mx-auto">
-                  Show the screen and back clearly. Keep it under 15 seconds.
+                  Show the screen and back clearly. Up to 6 photos, or one video under 15 seconds.
                 </p>
 
                 <input
                   type="file"
-                  accept="video/*"
+                  accept="image/*,video/*"
+                  multiple
                   className="hidden"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  aria-label="Upload a video of your device"
+                  aria-label="Upload a video or photos of your device"
                 />
 
-                {!videoFile ? (
+                {!media ? (
                   <button type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
                   >
-                    <Upload size={18} /> Select Video
+                    <Upload size={18} /> Select Photos or Video
                   </button>
                 ) : (
                   <div className="flex flex-col items-center gap-3">
                     <span className="text-sm font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full flex items-center gap-1">
-                      <Check size={14} /> {videoFile.name}
+                      <Check size={14} /> {media.label}
                     </span>
                     <button type="button"
-                      onClick={() => setVideoFile(null)}
+                      onClick={() => {
+                        setMedia(null);
+                        setError(null);
+                      }}
                       className="text-xs text-red-500 hover:text-red-700 underline"
                     >
                       Remove
@@ -157,7 +163,7 @@ export function TradeInModal({
 
               <button type="button"
                 onClick={startAnalysis}
-                disabled={!videoFile}
+                disabled={!media}
                 className="w-full bg-red-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-red-100 flex items-center justify-center gap-2"
               >
                 Analyze Device <ArrowRight size={20} />

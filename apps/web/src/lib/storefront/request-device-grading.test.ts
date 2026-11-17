@@ -3,11 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   fetchWithCsrf: vi.fn(),
   extractVideoFrames: vi.fn(),
+  resizeDevicePhoto: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetchWithCsrf }));
 vi.mock('@/lib/storefront/extract-video-frames', () => ({
   extractVideoFrames: mocks.extractVideoFrames,
+}));
+vi.mock('@/lib/storefront/resize-device-photo', () => ({
+  resizeDevicePhoto: mocks.resizeDevicePhoto,
 }));
 
 import { DEVICE_GRADING_MAX_UPLOAD_BYTES } from '@/schemas/device-grading';
@@ -48,7 +52,7 @@ describe('requestDeviceGrading', () => {
     });
 
     await expect(
-      requestDeviceGrading(smallVideo(), 'ogabassey')
+      requestDeviceGrading([smallVideo()], 'ogabassey')
     ).resolves.toEqual(result);
 
     const body = sentBody();
@@ -65,7 +69,7 @@ describe('requestDeviceGrading', () => {
     });
     const video = smallVideo();
 
-    await requestDeviceGrading(video);
+    await requestDeviceGrading([video]);
 
     const body = sentBody();
     expect((body.get('video') as File).name).toBe('device.mp4');
@@ -82,9 +86,46 @@ describe('requestDeviceGrading', () => {
       }
     );
 
-    await expect(requestDeviceGrading(largeVideo)).rejects.toThrow(
+    await expect(requestDeviceGrading([largeVideo])).rejects.toThrow(
       /could not read this video/i
     );
+    expect(mocks.fetchWithCsrf).not.toHaveBeenCalled();
+  });
+
+  it('uploads each photo as a resized still and never as a video', async () => {
+    const photos = [
+      new File(['front'], 'front.heic', { type: 'image/heic' }),
+      new File(['back'], 'back.jpg', { type: 'image/jpeg' }),
+    ];
+    mocks.resizeDevicePhoto.mockImplementation(
+      async () => new Blob(['small'], { type: 'image/jpeg' })
+    );
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: result }),
+    });
+
+    await expect(requestDeviceGrading(photos, 'ogabassey')).resolves.toEqual(
+      result
+    );
+
+    const frames = sentBody().getAll('frames') as File[];
+    expect(frames.map((frame) => [frame.name, frame.type])).toEqual([
+      ['frame-1.jpg', 'image/jpeg'],
+      ['frame-2.jpg', 'image/jpeg'],
+    ]);
+    expect(sentBody().get('video')).toBeNull();
+    expect(mocks.extractVideoFrames).not.toHaveBeenCalled();
+  });
+
+  it('stops without uploading when a photo cannot be read', async () => {
+    mocks.resizeDevicePhoto.mockRejectedValue(new Error('unsupported'));
+
+    await expect(
+      requestDeviceGrading([
+        new File(['front'], 'front.heic', { type: 'image/heic' }),
+      ])
+    ).rejects.toThrow(/could not read one of your photos/i);
     expect(mocks.fetchWithCsrf).not.toHaveBeenCalled();
   });
 
@@ -95,7 +136,7 @@ describe('requestDeviceGrading', () => {
       json: async () => ({ error: 'Video is unreadable' }),
     });
 
-    await expect(requestDeviceGrading(smallVideo())).rejects.toThrow(
+    await expect(requestDeviceGrading([smallVideo()])).rejects.toThrow(
       'Video is unreadable'
     );
   });
@@ -109,7 +150,7 @@ describe('requestDeviceGrading', () => {
       },
     });
 
-    await expect(requestDeviceGrading(smallVideo())).rejects.toThrow(
+    await expect(requestDeviceGrading([smallVideo()])).rejects.toThrow(
       'We could not check this device right now. Please try again.'
     );
   });

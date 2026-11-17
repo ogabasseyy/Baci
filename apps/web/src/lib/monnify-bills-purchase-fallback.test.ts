@@ -53,7 +53,7 @@ describe('Monnify vend failures handed to Kuda', () => {
     }
 
     it.each([
-      [401, 'Unauthorized', 'Access denied'],
+      [401, 'Unauthorized', 'Token expired'],
       [403, 'Forbidden', 'Invalid access token'],
     ])('marks an authentication rejection (%i) as definite', async (status, statusText, message) => {
       mockHttpError(status, statusText, message);
@@ -64,8 +64,12 @@ describe('Monnify vend failures handed to Kuda', () => {
       });
     });
 
-    it('keeps a 403 that only says "Access denied" off Kuda', async () => {
-      mockHttpError(403, 'Forbidden', 'Access denied');
+    it.each([
+      [401, 'Unauthorized', 'Unauthorized'],
+      [401, 'Unauthorized', 'Access denied'],
+      [403, 'Forbidden', 'Access denied'],
+    ])('keeps a %i whose body only says "%s" off Kuda', async (status, statusText, message) => {
+      mockHttpError(status, statusText, message);
 
       await expect(vend()).resolves.toMatchObject({
         providerDefiniteFailure: false,

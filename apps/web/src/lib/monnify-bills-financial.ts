@@ -211,10 +211,11 @@ export async function purchaseBill(
           !error.mentionsVendOutcome &&
           error.status !== 429 &&
           !error.showsVendEvidence &&
-          ((error.status === 401 && error.readsAsAuthRejection) ||
-            // A 403 needs wording that names a token, credential or header:
-            // a bare "Access denied"/"Forbidden" may be a post-routing deny.
-            (error.status === 403 && error.readsAsSpecificAuthRejection) ||
+          // A 401/403 needs wording that names a token, credential or header:
+          // a bare "Unauthorized"/"Access denied"/"Forbidden" may come from a
+          // gateway rather than the vend request's own bearer check.
+          (((error.status === 401 || error.status === 403) &&
+            error.readsAsSpecificAuthRejection) ||
             error.isKnownRefusal),
       };
     }

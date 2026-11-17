@@ -1,6 +1,7 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { readsAsMonnifyAuthRejection } from './monnify-auth-rejection';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
@@ -21,14 +22,14 @@ const SENSITIVE_GROUPED_PHONE_PATTERN =
  * 0) and runs to 10+ digits, e.g. foreign or unusual Nigerian ranges.
  */
 const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
-  /(?<!\d)(?:\+\(?|\(?0)\d(?:[\s./()-]{0,3}\d){9,}(?!\d)/g;
+  /(?<!\d)(?:\+\(?|\(?0)\d(?:\s*[./()-]{0,3}\s*\d){9,}(?!\d)/g;
 /**
  * Any grouped number of 11+ digits whatever its prefix, e.g. an international
  * number written without "+" ("44 20 7946 0958"). Shorter grouped references
  * stay readable.
  */
 const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
-  /(?<!\d)\d(?:[\s./()-]{0,3}\d){10,}(?!\d)/g;
+  /(?<!\d)\d(?:\s*[./()-]{0,3}\s*\d){10,}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -68,12 +69,28 @@ function parseJsonOrNull(text: string): unknown {
  * Auth wording is read from the body only: every 401/403 status line says
  * "Unauthorized" or "Forbidden", which proves nothing about the reason.
  */
-function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
+function readMonnifyAnswer(
+  statusLine: string,
+  body: string
+): MonnifyAnswerReading {
+  // A JSON body is read by its string values (not its keys) for wording.
+  const parsed = parseJsonOrNull(body);
+  const bodyText =
+    parsed && typeof parsed === 'object'
+      ? joinMonnifyAnswerStrings(parsed)
+      : body;
+  const text = `${statusLine} - ${bodyText}`;
   return {
-    isDuplicateReference: isMonnifyDuplicateReferenceText(text),
+    // Duplicates are read from the raw body too: a key such as
+    // `duplicate: true` still signals one.
+    isDuplicateReference: isMonnifyDuplicateReferenceText(
+      `${statusLine} - ${body}`
+    ),
     isKnownRefusal: isMonnifyKnownVendRefusalText(text),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
-    reportsUnexpectedError: reportsMonnifyUnexpectedError(body),
+    reportsUnexpectedError:
+      reportsMonnifyUnexpectedError(body) ||
+      hasMonnifyNonDefinitiveCode(parsed),
     readsAsAuthRejection: readsAsMonnifyAuthRejection(body),
     showsVendEvidence: showsVendEvidence(body),
   };
@@ -110,7 +127,7 @@ export class MonnifyHttpError extends Error {
     this.name = 'MonnifyHttpError';
     this.detail = detail;
     const body = rawDetail ?? detail ?? '';
-    this.#reading = readMonnifyAnswer(`${this.message} - ${body}`, body);
+    this.#reading = readMonnifyAnswer(this.message, body);
     this.status = status;
     this.statusText = statusText;
   }

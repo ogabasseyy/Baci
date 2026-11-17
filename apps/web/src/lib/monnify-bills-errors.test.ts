@@ -177,3 +177,11 @@ describe('bugfix: grouped numbers separated by tabs, newlines or wide spaces', (
     );
   });
 });
+
+describe('bugfix: dialled numbers with long whitespace runs', () => {
+  it('redacts "+44    20    7946    0958"', () => {
+    expect(
+      sanitizeMonnifyErrorDetail('Vend failed for +44    20    7946    0958')
+    ).toBe('Vend failed for [redacted]');
+  });
+});

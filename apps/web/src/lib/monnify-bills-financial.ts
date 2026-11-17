@@ -21,6 +21,7 @@ import {
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
 import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
@@ -147,14 +148,18 @@ export async function purchaseBill(
         // refusal out; a known refusal anywhere rules it in.
         providerDefiniteFailure:
           !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
-          // Timeout, conflict and throttle codes prove nothing was vended
-          // no more here than as HTTP statuses.
-          !/^\s*(?:408|409|429)\s*$/.test(parsedEnvelope.responseCode ?? '') &&
+          // Timeout, conflict, throttle and 99 codes, at any depth, prove
+          // nothing was vended no more here than as HTTP statuses.
+          !hasMonnifyNonDefinitiveCode(envelope) &&
           !reportsMonnifyUnexpectedError(envelopeText) &&
           !hasMonnifyVendEvidence(envelope) &&
           !mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(envelope)) &&
           isMonnifyKnownVendRefusalText(fullAnswer) &&
-          !isMonnifyVendOutcomeText(fullAnswer) &&
+          // Outcome wording is read from string values only: a key such as
+          // `processed: false` is not an outcome.
+          !isMonnifyVendOutcomeText(
+            `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
+          ) &&
           !isMonnifyDuplicateReferenceText(fullAnswer),
       };
     }

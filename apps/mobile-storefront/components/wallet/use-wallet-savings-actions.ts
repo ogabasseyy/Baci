@@ -27,6 +27,7 @@ const WALLET_RECLASSIFYING_MESSAGE =
 export function createWalletSavingsActions({
   activeMerchantId,
   activeMerchantSlug,
+  checkPendingStatus,
   goal,
   goalAwaitingSettlement = false,
   goalSettlementChecking = false,
@@ -48,6 +49,12 @@ export function createWalletSavingsActions({
 }: {
   activeMerchantId?: string;
   activeMerchantSlug?: string;
+  /**
+   * The screen's status read for the stored operation (its own busy flag,
+   * one read at a time). Given, a stored PiggyVest id is checked through it
+   * and never sets the "Adding…" flag.
+   */
+  checkPendingStatus?: () => Promise<unknown>;
   goal: WalletActiveSavingsGoal | null;
   /** Funded goal the database already marked completed; still completable. */
   goalAwaitingSettlement?: boolean;
@@ -164,6 +171,7 @@ export function createWalletSavingsActions({
       return;
     }
     if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {
+      if (checkPendingStatus) return checkPendingStatus();
       // A check answers only for the operation it started with. If the
       // stored id changed meanwhile (another account, merchant or goal took
       // over the screen), its late answer must not clear that newer

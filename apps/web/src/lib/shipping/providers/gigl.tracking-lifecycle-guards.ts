@@ -5,6 +5,8 @@ import {
 import type { TrackingEvent } from '../types';
 
 const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
+// Intentionally narrow: other in_transit scans at a destination-named centre
+// count as arriving. Missing an arrival beats a false one, so extend with care.
 const DEPARTURE_CODES = new Set(['DSC', 'DPC', 'DCC', 'DST', 'DTR', 'DIWN']);
 
 function placeWords(value: string | undefined): string[] {
@@ -124,7 +126,10 @@ export function applyLifecycleGuards(
     if (
       candidate.recognizedStatus === 'in_transit' ||
       candidate.recognizedStatus === 'out_for_delivery' ||
-      candidate.recognizedStatus === 'failed'
+      candidate.recognizedStatus === 'failed' ||
+      // A completed shipment already moved: a stale MSHC must not be rewritten.
+      (candidate.recognizedStatus !== null &&
+        TERMINAL_STATUSES.has(candidate.recognizedStatus))
     ) {
       movedThroughNetwork = true;
       // A scan without a location proves nothing about leaving the centre.

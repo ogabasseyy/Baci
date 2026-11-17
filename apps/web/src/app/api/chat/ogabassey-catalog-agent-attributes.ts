@@ -5,7 +5,7 @@ import {
 } from './ogabassey-catalog-agent-product-matching';
 
 const SPEC_CLAIM_PATTERN =
-  /\b(\d+(?:\.\d+)?)\s*(gb|tb|mb|mah|hz|khz|mhz|ghz|nits|ppi|mp|mm|cm|watt|watts|hours?|hrs?|cores?|inch(?:es)?)\b|\b(1080p|720p|1440p|2160p|4k|5k|8k)\b/gi;
+  /\b(\d+(?:\.\d+)?)[\s-]*(gb|tb|mb|mah|hz|khz|mhz|ghz|nits|ppi|mp|mm|cm|watt|watts|hours?|hrs?|cores?|inch(?:es)?)\b|\b(1080p|720p|1440p|2160p|4k|5k|8k)\b/gi;
 
 const WARRANTY_POLICY_COMPAT_PATTERN =
   /\b(warrant(?:y|ies)|guarantee[ds]?|returns?|refund(?:s|able)?|installments?|compatible|compatibility)\b/gi;
@@ -35,10 +35,6 @@ const WORD_NUMBERS: Readonly<Record<string, string>> = {
   thirty: '30',
 };
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function buildProductAttributeCorpus(
   product: StorefrontAgentUiProduct
 ): string {
@@ -57,6 +53,22 @@ function buildProductAttributeCorpus(
 
 function normalizeSpecCompact(value: string): string {
   return value.toLowerCase().replace(/[\s-]+/g, '');
+}
+
+function normalizeSpecKey(
+  rawNum: string | undefined,
+  rawUnit: string | undefined,
+  rawTag: string | undefined
+): string {
+  if (rawTag) return rawTag.toLowerCase();
+  const baseUnit = (rawUnit ?? '').toLowerCase().replace(/s$/, '');
+  const unit =
+    baseUnit === 'hour' || baseUnit === 'hr'
+      ? 'hr'
+      : baseUnit === 'inche' || baseUnit === 'inch'
+        ? 'inch'
+        : baseUnit;
+  return `${rawNum ?? ''}:${unit}`;
 }
 
 function extractNormalizedDurations(value: string): string[] {
@@ -86,26 +98,16 @@ function matchesSpecWithBoundary(
   rawUnit: string | undefined,
   rawTag: string | undefined
 ): boolean {
-  if (rawTag) {
-    const tagPattern = new RegExp(
-      `(?<![0-9a-z])${escapeRegExp(rawTag)}(?![0-9a-z])`,
-      'i'
-    );
-    return tagPattern.test(corpus);
+  const claimedKey = normalizeSpecKey(rawNum, rawUnit, rawTag);
+  for (const corpusMatch of corpus.matchAll(SPEC_CLAIM_PATTERN)) {
+    if (
+      normalizeSpecKey(corpusMatch[1], corpusMatch[2], corpusMatch[3]) ===
+      claimedKey
+    ) {
+      return true;
+    }
   }
-  if (!rawNum || !rawUnit) return false;
-  const baseUnit = rawUnit.toLowerCase().replace(/s$/, '');
-  const unitGroup =
-    baseUnit === 'hr' || baseUnit === 'hour'
-      ? '(?:hours?|hrs?)'
-      : baseUnit === 'inch' || baseUnit === 'inche'
-        ? 'inch(?:es)?'
-        : `${escapeRegExp(baseUnit)}s?`;
-  const valuePattern = new RegExp(
-    `(?<![0-9.])${escapeRegExp(rawNum)}[\\s-]*${unitGroup}(?![0-9a-z])`,
-    'i'
-  );
-  return valuePattern.test(corpus);
+  return false;
 }
 
 /** Rejects ungrounded specs, policy terms, conditions, compatibility, or promos. */

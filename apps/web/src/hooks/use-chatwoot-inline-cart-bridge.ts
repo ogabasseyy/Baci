@@ -5,11 +5,8 @@ import { authorizeChatwootBridgeSession } from '@/components/storefront/ogabasse
 import { isCurrentChatwootBridgeTarget } from '@/components/storefront/ogabassey/components/chat/chatwoot-bridge-target';
 import { readChatwootCommerceContextMessage } from '@/components/storefront/ogabassey/components/chat/chatwoot-commerce-context-message';
 import { readChatwootCommerceMessage } from '@/components/storefront/ogabassey/components/chat/chatwoot-commerce-message';
-import { handleChatwootInlineCartAdd } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-add';
 import { postChatwootCanonicalCartView } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-controls';
-import { handleChatwootInlineCartQuantity } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-quantity';
 import { handleChatwootInlineProductLookup } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-product-lookup';
-import { buildChatwootInlineReviewResponse } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-review-response';
 import { useCart } from '@/hooks/cart';
 import {
   createChatwootActionGenerations,
@@ -19,6 +16,7 @@ import {
 import { createChatwootInlineActionContext } from './chatwoot-inline-cart-action-context';
 import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
 import { handleChatwootInlineContextHandshake } from './chatwoot-inline-cart-context-handshake';
+import { dispatchChatwootInlineCartMutation } from './chatwoot-inline-cart-mutation-dispatch';
 import { rememberChatwootSessionToken } from './chatwoot-session-token-aliases';
 
 type ActiveCartState = ReturnType<typeof useCart>;
@@ -77,6 +75,8 @@ export function useChatwootInlineCartBridge(
       }
       const target = frame.contentWindow;
       if (!target) return;
+      const postToTarget = (prefix: string, value: unknown) =>
+        post(target, prefix, value);
 
       const contextMessage = readChatwootCommerceContextMessage(
         event,
@@ -88,7 +88,7 @@ export function useChatwootInlineCartBridge(
           message: contextMessage,
           storeSlug,
           widgetOrigin,
-          post: (prefix, value) => post(target, prefix, value),
+          post: postToTarget,
           isCurrent: (conversationId, requestId) =>
             isCurrentTarget(frame, target, conversationId) &&
             activeContextRequestId === requestId,
@@ -153,7 +153,7 @@ export function useChatwootInlineCartBridge(
         postChatwootInlineCartActionFailure({
           event: message.event,
           requestId,
-          post: (prefix, value) => post(target, prefix, value),
+          post: postToTarget,
         });
         return;
       }
@@ -204,7 +204,7 @@ export function useChatwootInlineCartBridge(
           postChatwootInlineCartActionFailure({
             event: message.event,
             requestId,
-            post: (prefix, value) => post(target, prefix, value),
+            post: postToTarget,
           });
         }
         return;
@@ -240,7 +240,7 @@ export function useChatwootInlineCartBridge(
         await handleChatwootInlineProductLookup({
           conversationId,
           isCurrentAction: actionContext.isCurrentLookup,
-          post: (prefix, value) => post(target, prefix, value),
+          post: postToTarget,
           requestId,
           sessionToken: actionSessionToken,
           slug: message.data.slug,
@@ -248,47 +248,19 @@ export function useChatwootInlineCartBridge(
         });
         return;
       }
-      if (message.event === 'baci-cart-quantity') {
-        await handleChatwootInlineCartQuantity({
-          ...actionContext,
-          conversationId,
-          lineTokens,
-          message,
-          post: (value) => post(target, 'baci-cart-quantity-result:', value),
-          refreshSharedCart: latestState.current.refreshSharedCart,
-          sessionExpiresAt,
-          sessionToken: actionSessionToken,
-          snapshot: authorized.snapshot,
-          storeSlug,
-        });
-        return;
-      }
-      if (message.event === 'baci-cart-add') {
-        await handleChatwootInlineCartAdd({
-          ...actionContext,
-          conversationId,
-          message,
-          post: (value) => post(target, 'baci-cart-add-result:', value),
-          refreshSharedCart: latestState.current.refreshSharedCart,
-          sessionExpiresAt,
-          sessionToken: actionSessionToken,
-          snapshot: authorized.snapshot,
-          storeSlug,
-        });
-        return;
-      }
-      if (message.event === 'baci-checkout-review-request') {
-        post(
-          target,
-          'baci-checkout-review:',
-          buildChatwootInlineReviewResponse(
-            requestId,
-            authorized.snapshot,
-            authorized.sessionExpiresAt
-          )
-        );
-        return;
-      }
+      await dispatchChatwootInlineCartMutation({
+        ...actionContext,
+        conversationId,
+        lineTokens,
+        message,
+        postRaw: postToTarget,
+        refreshSharedCart: latestState.current.refreshSharedCart,
+        requestId,
+        sessionExpiresAt,
+        sessionToken: actionSessionToken,
+        snapshot: authorized.snapshot,
+        storeSlug,
+      });
     }
 
     window.addEventListener('message', onMessage);

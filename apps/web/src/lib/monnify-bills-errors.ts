@@ -26,8 +26,20 @@ export class MonnifyHttpError extends Error {
     this.statusText = statusText;
   }
 
+  /**
+   * A 4xx that means Monnify refused the request, so nothing was vended.
+   * 408 (timed out) and 409 (duplicate vend reference) can follow a vend
+   * that went through, so they stay unknown outcomes to requery: treating
+   * them as failures would refund, or vend again through Kuda, while the
+   * customer may already have their airtime.
+   */
   get isClientError() {
-    return this.status >= 400 && this.status < 500;
+    return (
+      this.status >= 400 &&
+      this.status < 500 &&
+      this.status !== 408 &&
+      this.status !== 409
+    );
   }
 
   get diagnosticMessage() {

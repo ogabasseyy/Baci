@@ -18,7 +18,7 @@ vi.mock('@/lib/monnify-provider-config', () => ({
   getMonnifyBaseUrl: () => 'https://sandbox.monnify.com',
 }));
 
-import { purchaseBill } from './monnify-bills';
+import { MonnifyTransientVendError, purchaseBill } from './monnify-bills';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -81,6 +81,35 @@ describe('Monnify bill purchase errors', () => {
     );
     expect(result.providerErrorDetail).toContain('[redacted]');
     expect(result.providerErrorDetail).not.toContain('08012345678');
+  });
+
+  describe('bugfix: unclear 4xx vend outcomes were treated as definite failures', () => {
+    it.each([
+      [408, 'Request Timeout'],
+      [409, 'Conflict'],
+    ])('treats HTTP %i as an unknown outcome to requery, not a failure', async (status, statusText) => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status,
+        statusText,
+        text: vi
+          .fn()
+          .mockResolvedValue(
+            JSON.stringify({ responseMessage: 'Duplicate vend reference' })
+          ),
+      });
+
+      await expect(
+        purchaseBill(
+          'MTN',
+          '13',
+          '08012345678',
+          100,
+          'JANE DOE',
+          'BACI-REF-123'
+        )
+      ).rejects.toBeInstanceOf(MonnifyTransientVendError);
+    });
   });
 
   it('falls back to sanitized raw JSON when Monnify omits message fields', async () => {

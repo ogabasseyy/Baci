@@ -3675,7 +3675,7 @@ describe('fulfillPendingVtuTransaction', () => {
     ).toEqual([]);
   });
 
-  it('does not fall back to Kuda airtime for generic Monnify vend failures', async () => {
+  it('bugfix: falls back to Kuda airtime for any definite Monnify failure, not one error text', async () => {
     mockMonnifyPurchaseBill.mockResolvedValue({
       success: false,
       reference: 'VTU-123',
@@ -3728,22 +3728,28 @@ describe('fulfillPendingVtuTransaction', () => {
       transactionId: 'vtu-1',
     });
 
-    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(mockPurchaseAirtime).toHaveBeenCalledWith(
+      '08012345678',
+      100,
+      'MTN',
+      expect.any(String),
+      'VTU-123'
+    );
     expect(result).toMatchObject({
       amount: 100,
-      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
-      status: 'failed',
+      status: 'successful',
     });
     expect(updatePayloads).toContainEqual(
       expect.objectContaining({
-        error_message: 'Monnify business failure',
-        metadata: expect.not.objectContaining({
+        metadata: expect.objectContaining({
           fulfillmentProvider: 'kuda',
+          monnifyFallbackError: 'Monnify business failure',
+          originalProvider: 'monnify',
           providerFallback: 'monnify_airtime_to_kuda',
         }),
-        status: 'failed',
-        transaction_id: null,
+        status: 'successful',
+        transaction_id: 'kuda-airtime-1',
       })
     );
   });

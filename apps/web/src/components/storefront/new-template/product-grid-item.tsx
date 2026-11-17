@@ -9,12 +9,10 @@ import {
   Star,
 } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import type React from 'react';
 import { useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { asRoute } from '@/lib/routes';
-import { getStorefrontProductHref } from '@/lib/storefront-product-href';
+import { ProductGridItemLink } from './product-grid-item-link';
 import type { Product } from './types';
 
 interface ProductGridItemProps {
@@ -100,11 +98,7 @@ export const ProductGridItem: React.FC<ProductGridItemProps> = ({
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-3 md:p-4 shadow-sm md:hover:shadow-xl active:shadow-md active:scale-[0.99] transition-all duration-300 group flex flex-col h-full relative">
-      <Link
-        href={asRoute(getStorefrontProductHref(product, basePath))}
-        prefetch={false}
-        className="absolute inset-0 z-0"
-      />
+      <ProductGridItemLink product={product} basePath={basePath} />
 
       {/* Image Container - Gray Box with Overlapping Button */}
       {/* overflow-visible needed for the button to hang off the edge */}

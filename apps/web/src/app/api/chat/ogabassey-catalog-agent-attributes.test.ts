@@ -156,5 +156,35 @@ describe('ogabassey-catalog-agent-attributes', () => {
         [{ ...baseProduct, description: 'Midnight finish' }]
       )
     ).toBe(true);
+
+    const iphone256 = {
+      ...baseProduct,
+      category: 'Phones',
+      description: 'RAM 8GB; OLED display',
+      id: 'iphone-16-256',
+      name: 'Apple iPhone 16 256GB',
+      slug: 'apple-iphone-16-256gb',
+    };
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple iPhone 16 256GB has 8GB RAM.', [
+        iphone256,
+      ])
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple iPhone 16 256GB has 256GB storage.',
+        [iphone256]
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple iPhone 16 256GB has 256GB RAM.', [
+        iphone256,
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple iPhone 16 256GB has 8GB storage.', [
+        iphone256,
+      ])
+    ).toBe(false);
   });
 });

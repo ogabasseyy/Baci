@@ -258,3 +258,21 @@ describe('WalletSavingsContributionFlow', () => {
     ).toBeNull();
   });
 });
+
+describe('bugfix: a clear in-progress state while the contribution moves', () => {
+  it('covers the entry with "Moving ₦100 into your plan…" until the add settles', () => {
+    const props = {
+      ...createProps(),
+      addAmount: '100',
+      walletBalance: 500,
+      isAdding: true,
+    };
+    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
+    expect(screen.getByText('Moving ₦100 into your plan…')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('savings-contribution-progress')
+    ).toBeOnTheScreen();
+    rerender(<WalletSavingsContributionFlow {...props} isAdding={false} />);
+    expect(screen.queryByTestId('savings-contribution-progress')).toBeNull();
+  });
+});

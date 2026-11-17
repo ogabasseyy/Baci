@@ -56,6 +56,34 @@ describe('useIdentityConfirmation', () => {
     expect(result.current.code).toBe('');
   });
 
+  it('bugfix: keeps the code dots filled while the code is checked', async () => {
+    jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
+    let settle: () => void = () => undefined;
+    jest.mocked(confirmIdentityCode).mockReturnValue(
+      new Promise<void>((resolve) => {
+        settle = resolve;
+      })
+    );
+    const onConfirmed = jest.fn();
+    const { result } = renderHook(() =>
+      useIdentityConfirmation({ expectedUserId: 'user-1', onConfirmed })
+    );
+    await act(() => result.current.send());
+    act(() => result.current.setCode('123456'));
+    let verifying: Promise<void> = Promise.resolve();
+    act(() => {
+      verifying = result.current.verify();
+    });
+    expect(result.current.busy).toBe(true);
+    expect(result.current.code).toBe('123456');
+    await act(async () => {
+      settle();
+      await verifying;
+    });
+    expect(onConfirmed).toHaveBeenCalledTimes(1);
+    expect(result.current.code).toBe('');
+  });
+
   it('does not check a short code, and shows a refusal without handing back', async () => {
     jest.mocked(sendIdentityCode).mockResolvedValue(undefined);
     jest

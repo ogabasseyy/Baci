@@ -122,11 +122,61 @@ describe('resetting a PIN', () => {
       .mocked(fetchWalletPinStatus)
       .mockResolvedValue(status({ resetRequired: true }));
     jest.mocked(submitWalletPin).mockResolvedValue(undefined);
-    renderSheet();
+    jest.mocked(verifyFundPin).mockResolvedValue(proof);
+    const { onProof } = renderSheet();
     await screen.findByText('Reset your wallet PIN');
     chooseAndSave('Reset PIN', '4821', '4821');
-    await screen.findByText('Enter your wallet PIN');
+    await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
     expect(submitWalletPin).toHaveBeenCalledWith('reset', '4821', undefined);
+  });
+});
+
+describe('bugfix: no third, empty PIN pad after a new PIN', () => {
+  it('shows a working state, not "Enter your wallet PIN", while the new PIN approves', async () => {
+    jest
+      .mocked(fetchWalletPinStatus)
+      .mockResolvedValue(status({ hasPin: false }));
+    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
+    let finish: (value: string) => void = () => undefined;
+    jest.mocked(verifyFundPin).mockReturnValue(
+      new Promise<string>((resolve) => {
+        finish = resolve;
+      })
+    );
+    const { onProof } = renderSheet();
+    await screen.findByText('Create your wallet PIN');
+    chooseAndSave('Save PIN', '4821', '4821');
+    expect(
+      await screen.findByText('Saving your PIN and approving ₦2,500…')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('wallet-pin-working')).toBeOnTheScreen();
+    expect(screen.queryByText('Enter your wallet PIN')).toBeNull();
+    expect(screen.queryByRole('button', { name: '1' })).toBeNull();
+    finish(proof);
+    await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
+  });
+
+  it('still asks for the saved PIN when approving with it fails', async () => {
+    jest
+      .mocked(fetchWalletPinStatus)
+      .mockResolvedValue(status({ hasPin: false }));
+    jest.mocked(submitWalletPin).mockResolvedValue(undefined);
+    jest
+      .mocked(verifyFundPin)
+      .mockRejectedValue(
+        serverError('Wallet PIN is unavailable right now', 'PIN_UNAVAILABLE')
+      );
+    const { onProof } = renderSheet();
+    await screen.findByText('Create your wallet PIN');
+    chooseAndSave('Save PIN', '4821', '4821');
+    expect(await screen.findByText('Enter your wallet PIN')).toBeOnTheScreen();
+    expect(
+      screen.getByText(
+        'PIN saved. Enter it again to confirm this contribution.'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('wallet-pin-working')).toBeNull();
+    expect(onProof).not.toHaveBeenCalled();
   });
 });
 

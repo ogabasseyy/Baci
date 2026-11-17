@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { SavingsContributionProgress } from './SavingsContributionProgress';
 import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
 import { lastGoalSetupPhase } from './savings/goal-setup-memory';
 import { SavingsPlanStatusNote } from './savings/SavingsPlanStatusNote';
@@ -115,6 +116,12 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
               Choose a different amount
             </Text>
           </Pressable>
+          {props.isAdding ? (
+            <SavingsContributionProgress
+              amount={headStart.waiting}
+              colors={colors}
+            />
+          ) : null}
         </View>
       ) : phase === 'ready' ? (
         <WalletSavingsContributionFlow

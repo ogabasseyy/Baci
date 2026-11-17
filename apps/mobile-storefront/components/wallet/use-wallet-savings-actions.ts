@@ -253,6 +253,8 @@ export function createWalletSavingsActions({
       cancelSavingsReminder: cancelSavingsReminderNotification,
       clearIdempotencyKey: releaseOperation,
       clearSavingsContributionAmount: () => setSavingsContributionAmount(''),
+      // Confirmed: back to the wallet, which says so in a brief toast.
+      closeOnConfirmed: () => setShowSavingsProgressModal(false),
       createIdempotencyKey: () => {
         const key = idempotencyKeyRef.current ?? Crypto.randomUUID();
         idempotencyKeyRef.current = key;

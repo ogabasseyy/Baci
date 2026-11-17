@@ -19,7 +19,9 @@ export type WalletPinStep =
   | 'confirm'
   | 'set'
   | 'reset'
-  | 'enter';
+  | 'enter'
+  /** A new PIN was saved and is approving this request: a working state. */
+  | 'approving';
 
 type NewPinStep = 'set' | 'reset';
 
@@ -202,13 +204,24 @@ export function useWalletPinSheet({
         return newPinStep(kind, true);
       }
       if (code === 'PIN_ALREADY_SET') setStep('enter');
-      else setError(failureText(failure));
+      else {
+        // Back to choosing (the save may have started from the working state).
+        setStep(kind);
+        setError(failureText(failure));
+      }
       return;
     }
     if (!isCurrent()) return;
-    setStep('enter');
+    // A working state, never an empty "Enter your PIN" pad: the customer
+    // just typed the PIN twice and is not asked for it again unless this
+    // approval fails.
+    setStep('approving');
     if (await approve(value, isCurrent)) return;
-    if (isCurrent()) setNotice(isFund ? PIN_SAVED : PIN_SAVED_SHORT);
+    if (!isCurrent()) return;
+    // approve() may already have moved to set/reset; otherwise ask for the
+    // saved PIN.
+    setStep((current) => (current === 'approving' ? 'enter' : current));
+    setNotice(isFund ? PIN_SAVED : PIN_SAVED_SHORT);
   };
 
   const submitNewPin = (kind: NewPinStep) =>
@@ -232,14 +245,22 @@ export function useWalletPinSheet({
     });
 
   /** "Confirm it's you" succeeded: carry on where the customer was. */
-  const identityConfirmed = () =>
-    guarded(async (isCurrent) => {
-      const kind = resumeStep.current;
-      const value = pendingPin.current;
+  const identityConfirmed = () => {
+    const kind = resumeStep.current;
+    const value = pendingPin.current;
+    // Straight to choosing a PIN: no busy round trip, so the new step never
+    // flashes a spinner on its button first.
+    if (!value) {
+      setStep(kind);
+      return Promise.resolve();
+    }
+    return guarded(async (isCurrent) => {
       pendingPin.current = null;
-      if (!value) return setStep(kind);
+      // The PIN was already chosen: show the working state while it saves.
+      setStep('approving');
       await saveAndApprove(kind, value, isCurrent);
     });
+  };
 
   return {
     step,

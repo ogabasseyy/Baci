@@ -7,6 +7,7 @@ import {
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { getQuickAmountOptions } from './get-quick-amount-options';
+import { SavingsContributionProgress } from './SavingsContributionProgress';
 import { SavingsQuickAmounts } from './SavingsQuickAmounts';
 import { SavingsSheetTextInput } from './SavingsSheetTextInput';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
@@ -197,6 +198,13 @@ export function WalletSavingsContributionFlow({
             onPress={onAddSavings}
           />
         )
+      ) : null}
+      {/* From the tap, through the PIN, until the transfer settles. */}
+      {isAdding ? (
+        <SavingsContributionProgress
+          amount={validAmount ? amount : undefined}
+          colors={colors}
+        />
       ) : null}
     </View>
   );

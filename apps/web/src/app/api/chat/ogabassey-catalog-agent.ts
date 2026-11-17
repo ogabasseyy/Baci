@@ -179,12 +179,14 @@ export async function runOgabasseyCatalogAgent(options: {
   const sessionId = `catalog-readonly-${crypto.randomUUID()}`;
   let activeAttempt = {
     collector: createChatPresentationEventCollector(),
+    searchCalls: 0,
     toolCalls: 0,
   };
 
   const createToolsForAttempt = () => {
     const attempt = {
       collector: createChatPresentationEventCollector(),
+      searchCalls: 0,
       toolCalls: 0,
     };
     activeAttempt = attempt;
@@ -195,6 +197,9 @@ export async function runOgabasseyCatalogAgent(options: {
       (toolName, filteredResult, context) => {
         if (activeAttempt !== attempt) return;
         attempt.toolCalls += 1;
+        if (toolName === 'searchProducts') {
+          attempt.searchCalls += 1;
+        }
         attempt.collector.capture(toolName, filteredResult, context);
       }
     );
@@ -238,6 +243,7 @@ export async function runOgabasseyCatalogAgent(options: {
         }
         const events = activeAttempt.collector.getEvents();
         if (events.length === 0) {
+          if (activeAttempt.searchCalls === 0) return false;
           return (
             hasGroundedEmptyCatalogText(
               text,

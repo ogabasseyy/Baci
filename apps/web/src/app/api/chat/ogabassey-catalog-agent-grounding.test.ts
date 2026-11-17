@@ -152,5 +152,30 @@ describe('ogabassey-catalog-agent-grounding', () => {
         exclusive: true,
       })
     ).toBe(false);
+
+    // Mixed-stock grouped assertions fail closed for every named product
+    const mixedStockEvents: StorefrontAgentUiEvent[] = [
+      {
+        ...dualEvents[0],
+        products: [
+          { ...dualEvents[0].products[0], stock: 0 },
+          { ...dualEvents[0].products[1], stock: 4 },
+        ],
+      },
+    ];
+    expect(
+      hasGroundedCatalogResultText(
+        'Apple iPhone 16, Apple iPhone 15 are in stock.',
+        mixedStockEvents,
+        'NGN'
+      )
+    ).toBe(false);
+    expect(
+      hasGroundedCatalogResultText(
+        'Apple iPhone 16, Apple iPhone 15 are out of stock.',
+        mixedStockEvents,
+        'NGN'
+      )
+    ).toBe(false);
   });
 });

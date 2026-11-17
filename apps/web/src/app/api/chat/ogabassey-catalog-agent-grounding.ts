@@ -202,10 +202,11 @@ function hasGroundedStockClaims(
     if (/\b(?:not|never)\s+$/i.test(before)) continue;
     const bound = findBoundProducts(text, offset, products);
     if (
-      bound.every(
+      bound.length === 0 ||
+      !bound.every(
         (product) =>
-          !product.manageStock ||
-          (typeof product.stock === 'number' && product.stock > 0)
+          product.manageStock &&
+          (typeof product.stock !== 'number' || product.stock <= 0)
       )
     ) {
       return false;
@@ -218,10 +219,11 @@ function hasGroundedStockClaims(
     if (NEGATION_OR_ABSENCE_CUE.test(before)) continue;
     const bound = findBoundProducts(text, offset, products);
     if (
-      bound.every(
+      bound.length === 0 ||
+      !bound.every(
         (product) =>
-          product.manageStock &&
-          (typeof product.stock !== 'number' || product.stock <= 0)
+          !product.manageStock ||
+          (typeof product.stock === 'number' && product.stock > 0)
       )
     ) {
       return false;

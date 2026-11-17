@@ -98,6 +98,7 @@ export function useWalletFundingPolling({
   // transfer B and falsely mark B as paid.
   const activeIntentIdRef = useRef(intentId);
   const [prevIntentId, setPrevIntentId] = useState(intentId);
+  const [pollingExhausted, setPollingExhausted] = useState(false);
 
   // Render-phase reset so consumers never read the previous intent's status for
   // a frame after a new intent opens. React "adjusting state during render".
@@ -105,6 +106,7 @@ export function useWalletFundingPolling({
     setPrevIntentId(intentId);
     setIntent(null);
     setError(null);
+    setPollingExhausted(false);
   }
 
   useEffect(() => {
@@ -166,6 +168,7 @@ export function useWalletFundingPolling({
       }
       if (attempts >= maxAttempts) {
         stopPolling();
+        setPollingExhausted(true);
         return;
       }
       attempts += 1;
@@ -181,6 +184,9 @@ export function useWalletFundingPolling({
       }).finally(() => {
         if (!cancelled && attempts >= maxAttempts) {
           stopPolling();
+          if (isActive()) {
+            setPollingExhausted(true);
+          }
         }
       });
     };
@@ -213,6 +219,7 @@ export function useWalletFundingPolling({
     // changes before the request resolves, the callback is dropped so a stale
     // `completed` can never be applied to a different transfer.
     const requestedIntentId = intentId;
+    setPollingExhausted(false);
     void runPollAttempt({
       completedRef,
       fetchArgs: { intentId, merchantId, merchantSlug },
@@ -226,5 +233,5 @@ export function useWalletFundingPolling({
     });
   };
 
-  return { checkNow, error, intent, isChecking };
+  return { checkNow, error, intent, isChecking, pollingExhausted };
 }

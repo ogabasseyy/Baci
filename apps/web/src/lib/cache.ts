@@ -69,6 +69,14 @@ class InMemoryCache {
   set<T>(key: string, data: T, ttlSeconds: number): void {
     const now = Date.now();
     this.pruneExpired(now);
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= MAX_CACHE_ENTRIES) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
     const expiresAt = now + ttlSeconds * 1000;
     this.cache.set(key, { data, expiresAt });
   }

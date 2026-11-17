@@ -106,7 +106,8 @@ async function generateInsights(
         redis.get<InsightsPayload>(cacheKey)
       );
       return cached ?? null;
-    } catch {
+    } catch (error) {
+      console.warn('[analytics/insights] Redis cache read failed', error);
       return null;
     }
   }
@@ -118,8 +119,8 @@ async function generateInsights(
     if (!redis) return;
     try {
       await withRedisTimeout(redis.set(cacheKey, payload, { ex: ttlSeconds }));
-    } catch {
-      // Fail open: cache write failure should not fail insights response
+    } catch (error) {
+      console.warn('[analytics/insights] Redis cache write failed', error);
     }
   }
 

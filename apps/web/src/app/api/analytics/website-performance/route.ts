@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
         fallbackTruncated = true;
       }
       eventRows.push(...fetched.slice(0, remaining));
-      if (fetched.length < pageSize) break;
+      if (isFinalPage || fetched.length < pageSize) break;
     }
     if (fallbackTruncated) {
       console.warn('[website-performance] Fallback event scan reached limit', {

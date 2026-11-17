@@ -70,6 +70,7 @@ export function OgabasseyUnlockOrders() {
     let cancelled = false;
     let inFlight = false;
     let attempts = 0;
+    let latestRequestId = 0;
     let interval: ReturnType<typeof setInterval> | null = null;
 
     const stopPolling = () => {
@@ -97,23 +98,26 @@ export function OgabasseyUnlockOrders() {
       }
       attempts += 1;
       inFlight = true;
+      const requestId = ++latestRequestId;
       try {
         const result = await listWithTimeout(
           merchantSlug,
           UNLOCK_ORDERS_REQUEST_TIMEOUT_MS
         );
-        if (!cancelled) {
+        if (!cancelled && requestId === latestRequestId) {
           setOrders(result);
           setError(null);
           setLoading(false);
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && requestId === latestRequestId) {
           setError('Unable to refresh unlock orders right now.');
           setLoading(false);
         }
       } finally {
-        inFlight = false;
+        if (requestId === latestRequestId) {
+          inFlight = false;
+        }
         if (!cancelled && attempts >= MAX_UNLOCK_ORDERS_POLL_ATTEMPTS) {
           stopPolling();
           setPollingPaused(true);

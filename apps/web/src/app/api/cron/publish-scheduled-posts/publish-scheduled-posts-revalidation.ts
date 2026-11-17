@@ -110,7 +110,7 @@ export async function revalidateScheduledPostsByMerchant(
               .filter((slug): slug is string => Boolean(slug))
           )
         );
-        void purgeCloudflareUrls(
+        await purgeCloudflareUrls(
           buildStorefrontBlogPurgeUrls(
             purgeIdentifiers,
             purgeSlugs,

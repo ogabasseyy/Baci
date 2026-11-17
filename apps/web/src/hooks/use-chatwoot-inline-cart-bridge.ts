@@ -29,6 +29,7 @@ export function useChatwootInlineCartBridge(
   useEffect(() => {
     let active = true;
     let latestActionGeneration = 0;
+    let latestRenewedGeneration = 0;
     let activeConversationId: number | null = null;
     let activeContextRequestId: string | null = null;
     let challengeToken: string | null = null;
@@ -243,10 +244,15 @@ export function useChatwootInlineCartBridge(
           lineTokens,
           message,
           onSessionTokenRenewed: (sessionToken) => {
+            // Renewal is context state, not reply state: a superseded action
+            // still rotated the browser proof, so a queued retry must see it.
+            // Only a renewal from a newer action replaces an already applied
+            // one, so a late older response cannot roll the token back.
             if (
-              actionGeneration === latestActionGeneration &&
+              actionGeneration >= latestRenewedGeneration &&
               sessionTokenAliases.has(messageSessionToken)
             ) {
+              latestRenewedGeneration = actionGeneration;
               rememberChatwootSessionToken(
                 sessionTokenAliases,
                 sessionToken,

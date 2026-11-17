@@ -7,7 +7,7 @@ import { GoogleCustomerReviews } from '@/components/analytics/google-customer-re
 import { useStorefrontCustomerSession } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-storefront-customer-session';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
 import {
@@ -33,7 +33,9 @@ import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
 
 export function OrderSuccessContent() {
-  const searchParams = usePrivateSearchParams();
+  // `isReady` is false while hydrating a reloaded link, before the stashed
+  // order id/token are readable; showing "order not found" then is wrong.
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const orderId = searchParams.get('orderId');
   const orderToken =
     searchParams.get('trackingToken') || searchParams.get('token');
@@ -70,7 +72,7 @@ export function OrderSuccessContent() {
       : `${basePath || ''}${path === '/' ? '' : path}`;
 
   useEffect(() => {
-    if (!orderId) {
+    if (!isReady || !orderId) {
       return;
     }
 
@@ -106,7 +108,7 @@ export function OrderSuccessContent() {
     return () => {
       cancelled = true;
     };
-  }, [orderId, merchant?.slug, orderToken, lookupEmail]);
+  }, [isReady, orderId, merchant?.slug, orderToken, lookupEmail]);
 
   useBnplSettlement({
     checkoutType: _type,
@@ -121,7 +123,7 @@ export function OrderSuccessContent() {
   });
 
   // Without an order id there is nothing to fetch, so we are never loading.
-  const isLoading = loading && Boolean(orderId);
+  const isLoading = !isReady || (loading && Boolean(orderId));
   const hasValidatedOrder = Boolean(order);
   const hasRecoveryState = !isLoading && !hasValidatedOrder;
   const { isCancelled, isInvoice, isInvoiceMethod } =

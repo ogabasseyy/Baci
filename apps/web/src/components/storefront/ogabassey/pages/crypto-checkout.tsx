@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import {
   ShieldCheck,
   AlertCircle,
@@ -123,7 +123,7 @@ async function initializeCryptoPayment(
 
 export function CryptoCheckoutPage() {
   const router = useRouter();
-  const searchParams = usePrivateSearchParams();
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const { merchant, loading } = useMerchant();
 
   const orderId = searchParams.get('orderId');
@@ -170,7 +170,7 @@ export function CryptoCheckoutPage() {
   // Initialize payment on mount; the missing-params error is derived during
   // render instead of being set synchronously from this effect.
   useEffect(() => {
-    if (loading) return;
+    if (loading || !isReady) return;
     if (!orderId || !amount) return;
 
     initializeCryptoPayment(
@@ -200,6 +200,7 @@ export function CryptoCheckoutPage() {
     merchantSlugParam,
     trackingToken,
     loading,
+    isReady,
   ]);
 
   const verifyCryptoPayment = async () => {
@@ -301,7 +302,7 @@ export function CryptoCheckoutPage() {
     };
   }, []);
 
-  const missingOrderParams = !loading && (!orderId || !amount);
+  const missingOrderParams = !loading && isReady && (!orderId || !amount);
 
   if (status === 'error' || missingOrderParams) {
     return (

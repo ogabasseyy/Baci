@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react';
 import { applyStoredConsent, initializeConsentMode } from '@/lib/consent-mode';
 import { TRACKING_URL_INLINE_SANITIZER } from '@/lib/privacy/tracking-url-inline-sanitizer';
 
+// GA4 measurement ids look like G-XXXXXXXXXX. Anything else is never put into
+// the inline script.
+const GA4_MEASUREMENT_ID_PATTERN = /^G-[A-Za-z0-9]{4,20}$/;
+
 interface GoogleAnalyticsProps {
   measurementId: string;
 }
@@ -56,7 +60,7 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
   }, []);
 
   // Don't render scripts until consent mode is initialized
-  if (!measurementId || !isInitialized) {
+  if (!GA4_MEASUREMENT_ID_PATTERN.test(measurementId) || !isInitialized) {
     return null;
   }
 
@@ -76,7 +80,7 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
 
           // Configure GA4 with enhanced measurement. The page address and
           // referrer are sent without order tokens or shopper details.
-          gtag('config', '${measurementId}', {
+          gtag('config', ${JSON.stringify(measurementId)}, {
             page_location: baciSanitizeUrl(window.location.href),
             page_referrer: baciSanitizeUrl(document.referrer) || undefined,
             page_title: document.title,

@@ -67,3 +67,23 @@ describe('GoogleAnalytics inline config', () => {
     expect(config.page_referrer).toBeUndefined();
   });
 });
+
+describe('bugfix: measurement id was interpolated into the inline script unchecked', () => {
+  it.each([
+    "G-ABC123');alert(1);//",
+    'G-ABC`+1+`',
+    'UA-1234-5',
+    '',
+  ])('renders no script for the invalid id %j', async (id) => {
+    const { container } = render(<GoogleAnalytics measurementId={id} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(container.querySelector('script')).toBeNull();
+  });
+
+  it('still renders the config for a valid GA4 id', async () => {
+    const config = await runInlineConfigScript();
+
+    expect(config).toBeDefined();
+  });
+});

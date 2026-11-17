@@ -26,7 +26,7 @@ import {
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useMerchant } from '@/hooks/merchant';
-import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { formatCurrency as formatCurrencyByCountry } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import { OrderItemRow, type TrackOrderItem } from './order-item-row';
@@ -309,7 +309,7 @@ function OrderTrackContent() {
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchParams = usePrivateSearchParams();
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const params = useParams();
   const { merchant } = useMerchant();
   const merchantSlug = resolveTrackOrderMerchantSlug(
@@ -335,7 +335,7 @@ function OrderTrackContent() {
   // prop changes), avoiding a stale frame between commits.
   const [prevSearchKey, setPrevSearchKey] = useState<string | null>(null);
   const searchKey = searchParams.toString();
-  if (searchKey !== prevSearchKey) {
+  if (isReady && searchKey !== prevSearchKey) {
     setPrevSearchKey(searchKey);
 
     // Clear stale state when params are absent
@@ -372,6 +372,7 @@ function OrderTrackContent() {
   // Automatic tracking from URL params. The loading state is entered by the
   // render-time prev-compare above; results land via the async callback.
   useEffect(() => {
+    if (!isReady) return;
     const token = searchParams.get('token');
     const orderIdParam =
       searchParams.get('order_id') || searchParams.get('orderId');
@@ -401,7 +402,7 @@ function OrderTrackContent() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams, merchantSlug]);
+  }, [isReady, searchParams, merchantSlug]);
 
   const handleTrackOrder = async (e: React.FormEvent) => {
     e.preventDefault();

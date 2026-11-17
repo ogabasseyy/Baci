@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCustomerLoginForm } from './use-customer-login-form';
 
@@ -64,5 +64,19 @@ describe('bugfix: reloaded login link redirected and prefilled before the stash 
     expect(result.current.email).toBe('buyer@example.com');
     expect(mocks.push).toHaveBeenCalledTimes(1);
     expect(mocks.push).toHaveBeenCalledWith('/receipts/claim/token-1');
+  });
+
+  it('keeps an email the shopper typed before the stashed prefill arrived', () => {
+    mocks.state = { searchParams: new URLSearchParams(), isReady: false };
+    const { result, rerender } = renderHook(() => useCustomerLoginForm());
+    act(() => result.current.setEmail('typed@example.com'));
+
+    mocks.state = {
+      searchParams: new URLSearchParams({ email: 'stashed@example.com' }),
+      isReady: true,
+    };
+    rerender();
+
+    expect(result.current.email).toBe('typed@example.com');
   });
 });

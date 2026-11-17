@@ -40,7 +40,8 @@ export function useCustomerLoginForm() {
   const [prefillSeeded, setPrefillSeeded] = useState(isReady);
   if (isReady && !prefillSeeded) {
     setPrefillSeeded(true);
-    setEmail(prefillEmail);
+    // Never replace an address the shopper already typed.
+    setEmail((typed) => typed || prefillEmail);
   }
   const emailHint = useReceiptClaimLoginHint(
     isReady ? redirectTo : null,

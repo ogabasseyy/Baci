@@ -36,7 +36,8 @@ export async function refreshOxygenEligibility(
       : response.status === 'FAILED'
         ? 'failed'
         : 'pending';
-  // Retain only a known, customer-safe reason, never the provider's message.
+  // Match only the observed Oxygen prefix; unknown failures use the generic
+  // message. Never retain the provider's raw message.
   if (
     response.status === 'FAILED' &&
     /^your\s+financial\s+details\s+do\s+not\s+match\b/i.test(

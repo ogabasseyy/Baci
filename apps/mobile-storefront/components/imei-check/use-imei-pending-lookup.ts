@@ -28,7 +28,11 @@ type PendingTerminal = (
       tier: ImeiServiceTierKey;
     }
   | { error: string; kind: 'error'; tier: ImeiServiceTierKey }
-) & { scopeKey: string | null };
+) & {
+  scopeKey: string | null;
+  /** The saved key that started it: retired now the result is final. */
+  request?: PendingImeiLookup['request'];
+};
 
 /** Runs storage writes one at a time, in call order, on one queue. */
 function inOrder<T>(
@@ -155,6 +159,7 @@ export function useImeiPendingLookup({
         setPaused(false);
         setTerminal({
           scopeKey,
+          request: pending.request,
           ...(outcome.kind === 'complete'
             ? {
                 kind: 'complete',
@@ -198,11 +203,13 @@ export function useImeiPendingLookup({
       pollAfterMs,
       tier,
       device,
+      request,
     }: {
       lookupId: string;
       pollAfterMs: number;
       tier: ImeiServiceTierKey;
       device?: ImeiDeviceCategory;
+      request?: PendingImeiLookup['request'];
     }) {
       pendingMutation.current += 1;
       const next = {
@@ -212,6 +219,7 @@ export function useImeiPendingLookup({
         tier,
         device,
         ownerUserId: userId,
+        ...(request ? { request } : {}),
         scopeKey,
         canResume: false,
       };

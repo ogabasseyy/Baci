@@ -72,5 +72,12 @@ describe('ogabassey-catalog-agent-tier-parser', () => {
         new Set(['samsung', 'galaxy', 's25'])
       ),
     ]).toEqual([]);
+
+    expect([
+      ...collectModelAttachedTierTokens(
+        'Apple iPad Air has an M2 chip',
+        new Set(['apple', 'ipad', 'air'])
+      ),
+    ]).toEqual(['air']);
   });
 });

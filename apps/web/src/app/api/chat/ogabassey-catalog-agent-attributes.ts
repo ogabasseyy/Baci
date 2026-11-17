@@ -96,7 +96,44 @@ function extractNormalizedDurations(value: string): string[] {
   return normalized;
 }
 
+const MOBILE_OR_STORAGE_CATEGORY =
+  /\b(?:phone|phones|smartphone|smartphones|tablet|tablets|ipad|ipads|storage|flash|memory|ssd|hdd|drive|drives)\b/i;
+
+function isTitleEncodedStorageSpec(
+  product: StorefrontAgentUiProduct,
+  corpus: string,
+  cStart: number,
+  unit: string,
+  rawNum: string | undefined
+): boolean {
+  const num = Number(rawNum);
+  if (unit !== 'gb' || !Number.isFinite(num) || num < 16) return false;
+  if (cStart >= product.name.length) return false;
+  let hasSmallerRam = false;
+  for (const m of corpus.matchAll(SPEC_CLAIM_PATTERN)) {
+    const mUnit = (m[2] ?? '').toLowerCase();
+    const mNum = Number(m[1]);
+    const start = m.index ?? 0;
+    const role = extractCapacitySpecRole(
+      corpus,
+      start,
+      start + m[0].length,
+      m[2]
+    );
+    if (role !== 'ram' && (mUnit === 'tb' || (mUnit === 'gb' && mNum > num))) {
+      return false;
+    }
+    if (role === 'ram' && mUnit === 'gb' && mNum < num) {
+      hasSmallerRam = true;
+    }
+  }
+  return (
+    hasSmallerRam || MOBILE_OR_STORAGE_CATEGORY.test(product.category ?? '')
+  );
+}
+
 function matchesSpecWithBoundary(
+  product: StorefrontAgentUiProduct,
   corpus: string,
   rawNum: string | undefined,
   rawUnit: string | undefined,
@@ -129,7 +166,9 @@ function matchesSpecWithBoundary(
     if (
       corpusRole === 'storage' ||
       (!corpusRole &&
-        (unit === 'tb' || (unit === 'gb' && Number(rawNum) >= 64)))
+        (unit === 'tb' ||
+          (unit === 'gb' && Number(rawNum) >= 64) ||
+          isTitleEncodedStorageSpec(product, corpus, cStart, unit, rawNum)))
     ) {
       return true;
     }
@@ -155,6 +194,7 @@ export function hasGroundedSpecAndPolicyClaims(
       bound.length > 0 &&
       bound.every((product) =>
         matchesSpecWithBoundary(
+          product,
           buildProductAttributeCorpus(product),
           match[1],
           match[2],

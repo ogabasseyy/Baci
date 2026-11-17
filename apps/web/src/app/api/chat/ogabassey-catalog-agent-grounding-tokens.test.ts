@@ -64,6 +64,8 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
     expect(allowsDescriptionFeature(['galaxy', 'a17', 'pro'], [], [])).toBe(
       false
     );
+    expect(allowsDescriptionFeature(['apple', 'm2'], [], ['chip'])).toBe(true);
+    expect(allowsDescriptionFeature(['apple', 'm2'], [], [])).toBe(false);
     expect(isNumericFeatureToken('15')).toBe(false);
     expect(isFeatureVersionPhrase(['wi', 'fi', '6'])).toBe(true);
     expect(isFeatureVersionPhrase(['wi', 'fi', 'router'])).toBe(false);

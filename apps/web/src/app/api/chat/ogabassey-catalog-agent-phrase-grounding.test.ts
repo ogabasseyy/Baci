@@ -272,5 +272,25 @@ describe('ogabassey-catalog-agent-phrase-grounding', () => {
         makeEvent([iphone15ProMax])
       )
     ).toBe(false);
+
+    const ipadAir = makeProduct({
+      category: 'Tablets',
+      description: 'Apple M2 chip with 8GB RAM and 256GB storage',
+      id: 'ipad-air',
+      name: 'Apple iPad Air',
+      slug: 'apple-ipad-air',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPad Air has an M2 chip.',
+        makeEvent([ipadAir])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPad Air has an M3 chip.',
+        makeEvent([ipadAir])
+      )
+    ).toBe(false);
   });
 });

@@ -139,6 +139,13 @@ export function collectModelAttachedTierTokens(
       ) {
         continue;
       }
+      if (
+        /^m[1-9]$/i.test(lower) &&
+        isContiguousPair(segment, tokens, i, i + 1) &&
+        CHIPSET_TRAILING_CUE.test(tokens[i + 1].lower)
+      ) {
+        continue;
+      }
       if (CHIP_OR_CODE_TIER_TOKENS.has(lower) || prevLinked || nextLinked) {
         attached.add(lower);
         attachedIdx.add(i);

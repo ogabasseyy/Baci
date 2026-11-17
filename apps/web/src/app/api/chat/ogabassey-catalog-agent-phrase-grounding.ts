@@ -22,6 +22,9 @@ const CAPITALIZED_PHRASE_PATTERN =
 const LOWERCASE_MODEL_NUMBER_PATTERN =
   /\b([a-z][a-z0-9-]{2,20})\s+(?:([a-z]{0,2}\d{1,4}[a-z]?)|(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|spark|camon|phantom|xm\d))\b/gi;
 
+const CHIPSET_CLAIM_PATTERN =
+  /\b(?:m[1-9]|a1[2-9]|a2\d)(?:\s+(?:pro|max|ultra|bionic))?\s+(?:chip|chipset|processor|soc)\b/gi;
+
 function isModelIdentityToken(token: string): boolean {
   return (
     !isNumericFeatureToken(token) &&
@@ -77,6 +80,19 @@ export function hasUnreturnedProductPhrase(
   }
   for (const match of clause.matchAll(FAMILY_VARIANT_PATTERN)) {
     if (!hasSingleProductMatch(tokenizeIdentityWords(match[0]))) return true;
+  }
+  for (const match of clause.matchAll(CHIPSET_CLAIM_PATTERN)) {
+    const chipWords = extractPhraseWords(match[0]).slice(0, -1);
+    if (
+      chipWords.length > 0 &&
+      (perProductTokens.length > 0
+        ? !perProductTokens.some((productSet) =>
+            chipWords.every((token) => productSet.features.has(token))
+          )
+        : chipWords.some((token) => !returnedTokens.has(token)))
+    ) {
+      return true;
+    }
   }
   for (const match of clause.matchAll(CAPITALIZED_PHRASE_PATTERN)) {
     const matchIndex = match.index ?? 0;

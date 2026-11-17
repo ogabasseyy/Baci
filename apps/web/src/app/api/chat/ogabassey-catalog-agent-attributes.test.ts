@@ -186,5 +186,36 @@ describe('ogabassey-catalog-agent-attributes', () => {
         iphone256,
       ])
     ).toBe(false);
+
+    const iphone7_32gb = {
+      ...baseProduct,
+      category: 'Phones',
+      description: 'RAM 2GB; LCD display',
+      id: 'iphone-7-32',
+      name: 'Apple iPhone 7 32GB',
+      slug: 'apple-iphone-7-32gb',
+    };
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple iPhone 7 32GB has 32GB storage.', [
+        iphone7_32gb,
+      ])
+    ).toBe(true);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple iPhone 7 32GB has 32GB RAM.', [
+        iphone7_32gb,
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('ROG Phone 16GB 512GB has 16GB storage.', [
+        {
+          ...iphone7_32gb,
+          brand: 'Asus',
+          description: 'AMOLED display',
+          id: 'rog-16-512',
+          name: 'ROG Phone 16GB 512GB',
+          slug: 'rog-phone-16gb-512gb',
+        },
+      ])
+    ).toBe(false);
   });
 });

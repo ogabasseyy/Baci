@@ -43,14 +43,20 @@ function isAppleChipsetPhrase(
   if (core.length === 0 || !APPLE_CHIPSET_CODE.test(core[0])) return false;
 
   const rest = core.slice(1).filter((t) => !CHIPSET_TRAILING_CUE.test(t));
-  if (rest.length !== 1 || !APPLE_CHIPSET_TIERS.has(rest[0])) return false;
+  const validTier =
+    rest.length === 0 ||
+    (rest.length === 1 && APPLE_CHIPSET_TIERS.has(rest[0]));
+  if (!validTier) return false;
 
   const hasChipCue =
     rest[0] === 'bionic' ||
     CHIPSET_TRAILING_CUE.test(followingWords[0] ?? '') ||
     core.some((t) => CHIPSET_TRAILING_CUE.test(t));
   return (
-    hasChipCue || (/^a(?:1[2-9]|2\d)$/i.test(core[0]) && rest[0] === 'pro')
+    hasChipCue ||
+    (rest.length === 1 &&
+      /^a(?:1[2-9]|2\d)$/i.test(core[0]) &&
+      rest[0] === 'pro')
   );
 }
 

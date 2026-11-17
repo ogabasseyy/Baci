@@ -45,6 +45,8 @@ END $$;
 
 INSERT INTO auth.users (id, email)
 VALUES ('bbbbbbbb-6666-4666-8666-bbbbbbbbbbbb', 'zoho-owner@example.test');
+-- Feature-settings changes are audited and the audit writer needs an actor.
+SELECT set_config('app.audit_actor_user_id', 'bbbbbbbb-6666-4666-8666-bbbbbbbbbbbb', true);
 INSERT INTO public.merchants(id, user_id, email, business_name, slug)
 VALUES ('aaaaaaaa-5555-4555-8555-aaaaaaaaaaaa', 'bbbbbbbb-6666-4666-8666-bbbbbbbbbbbb',
         'zoho-owner@example.test', 'Zoho Test Store', 'zoho-test-store');

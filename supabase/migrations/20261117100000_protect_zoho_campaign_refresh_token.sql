@@ -47,62 +47,65 @@ JOIN public.merchants AS m ON m.id = src.merchant_id
 WHERE src.token IS NOT NULL
 ON CONFLICT (merchant_id) DO NOTHING;
 
-UPDATE public.merchant_feature_settings AS fs
-SET custom_settings = fs.custom_settings
-  || CASE
-    WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zohoCampaigns') = 'object'
-      THEN pg_catalog.jsonb_build_object(
-        'zohoCampaigns',
-        (fs.custom_settings -> 'zohoCampaigns') - ARRAY[
-          'accessToken', 'access_token', 'clientSecret', 'client_secret',
-          'refreshToken', 'refresh_token'
-        ]
-      )
-    ELSE '{}'::jsonb
-  END
-  || CASE
-    WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zoho_campaigns') = 'object'
-      THEN pg_catalog.jsonb_build_object(
-        'zoho_campaigns',
-        (fs.custom_settings -> 'zoho_campaigns') - ARRAY[
-          'accessToken', 'access_token', 'clientSecret', 'client_secret',
-          'refreshToken', 'refresh_token'
-        ]
-      )
-    ELSE '{}'::jsonb
-  END
-WHERE (fs.custom_settings -> 'zohoCampaigns') ?| ARRAY[
-    'accessToken', 'access_token', 'clientSecret', 'client_secret',
-    'refreshToken', 'refresh_token'
-  ]
-  OR (fs.custom_settings -> 'zoho_campaigns') ?| ARRAY[
-    'accessToken', 'access_token', 'clientSecret', 'client_secret',
-    'refreshToken', 'refresh_token'
-  ];
-
-CREATE OR REPLACE FUNCTION public.custom_settings_has_no_zoho_secrets(
-  p_custom_settings jsonb
-)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-  SELECT NOT (
-    COALESCE((p_custom_settings -> 'zohoCampaigns') ?| ARRAY[
-      'accessToken', 'access_token', 'clientSecret', 'client_secret',
-      'refreshToken', 'refresh_token'
-    ], false)
-    OR COALESCE((p_custom_settings -> 'zoho_campaigns') ?| ARRAY[
-      'accessToken', 'access_token', 'clientSecret', 'client_secret',
-      'refreshToken', 'refresh_token'
-    ], false)
+-- merchant_feature_settings changes are audited, and the audit writer rejects a database
+-- session that has no actor. Attribute this one-time cleanup to a fixed system principal
+-- (set in the same statement as the UPDATE so it holds even outside a wrapping transaction).
+DO $strip$
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'app.audit_actor_user_id', '00000000-0000-0000-0000-00000000a2e1', true
   );
-$$;
+  UPDATE public.merchant_feature_settings AS fs
+  SET custom_settings = fs.custom_settings
+    || CASE
+      WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zohoCampaigns') = 'object'
+        THEN pg_catalog.jsonb_build_object(
+          'zohoCampaigns',
+          (fs.custom_settings -> 'zohoCampaigns') - ARRAY[
+            'accessToken', 'access_token', 'clientSecret', 'client_secret',
+            'refreshToken', 'refresh_token'
+          ]
+        )
+      ELSE '{}'::jsonb
+    END
+    || CASE
+      WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zoho_campaigns') = 'object'
+        THEN pg_catalog.jsonb_build_object(
+          'zoho_campaigns',
+          (fs.custom_settings -> 'zoho_campaigns') - ARRAY[
+            'accessToken', 'access_token', 'clientSecret', 'client_secret',
+            'refreshToken', 'refresh_token'
+          ]
+        )
+      ELSE '{}'::jsonb
+    END
+  WHERE (fs.custom_settings -> 'zohoCampaigns') ?| ARRAY[
+      'accessToken', 'access_token', 'clientSecret', 'client_secret',
+      'refreshToken', 'refresh_token'
+    ]
+    OR (fs.custom_settings -> 'zoho_campaigns') ?| ARRAY[
+      'accessToken', 'access_token', 'clientSecret', 'client_secret',
+      'refreshToken', 'refresh_token'
+    ];
+END
+$strip$;
 
+-- Inline CHECK (no helper function): a CHECK function would need an explicit EXECUTE
+-- grant for every role that writes this table, and an expression needs none.
 ALTER TABLE public.merchant_feature_settings
   ADD CONSTRAINT merchant_feature_settings_no_zoho_secrets
-  CHECK (public.custom_settings_has_no_zoho_secrets(custom_settings));
+  CHECK (
+    NOT (
+      COALESCE((custom_settings -> 'zohoCampaigns') ?| ARRAY[
+        'accessToken', 'access_token', 'clientSecret', 'client_secret',
+        'refreshToken', 'refresh_token'
+      ], false)
+      OR COALESCE((custom_settings -> 'zoho_campaigns') ?| ARRAY[
+        'accessToken', 'access_token', 'clientSecret', 'client_secret',
+        'refreshToken', 'refresh_token'
+      ], false)
+    )
+  );
 
 CREATE OR REPLACE FUNCTION public.get_merchant_zoho_refresh_token(
   p_merchant_id uuid

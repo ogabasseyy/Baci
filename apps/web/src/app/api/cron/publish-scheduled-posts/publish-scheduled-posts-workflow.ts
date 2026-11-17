@@ -265,6 +265,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
           processed: scheduledPosts.length,
           published: Array.from(claimedPostIds),
           zohoCampaigns: campaignResults,
+          ...(reservationRecovery ? { reservationRecovery } : {}),
         },
         { status: 500 }
       );

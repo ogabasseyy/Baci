@@ -15,7 +15,7 @@ export function buildReleaseReservationPayloadDigest(
 ): string {
   const canonicalPayload = JSON.stringify({
     article_identity: input.article_identity,
-    category: input.category ?? null,
+    category: input.category?.trim() || null,
     daily_cap: input.daily_cap ?? DEFAULT_DAILY_CAP,
     event_published_at: input.event_published_at
       ? new Date(input.event_published_at).toISOString()
@@ -31,7 +31,7 @@ export function buildReleaseReservationPayloadDigest(
     post_id: postId,
     release_class: input.release_class,
     requested_publish_at: new Date(input.requested_publish_at).toISOString(),
-    task_type: input.task_type ?? null,
+    task_type: input.task_type?.trim() || null,
     window_end_hour: input.window_end_hour ?? DEFAULT_WINDOW_END_HOUR,
     window_start_hour: input.window_start_hour ?? DEFAULT_WINDOW_START_HOUR,
   });

@@ -49,5 +49,20 @@ describe('buildReleaseReservationPayloadDigest', () => {
         withExplicitDefaults
       )
     ).toBe(d1);
+    const withBlankOptionals = reserveBlogReleaseSchema.parse({
+      article_identity: 'e1000000-0000-4000-8000-000000000001',
+      category: '   ',
+      release_class: 'evergreen',
+      request_id: 'req-001',
+      requested_publish_at: '2026-11-20T10:00:00.000Z',
+      task_type: '',
+    });
+    expect(
+      buildReleaseReservationPayloadDigest(
+        'merchant-1',
+        'post-1',
+        withBlankOptionals
+      )
+    ).toBe(d1);
   });
 });

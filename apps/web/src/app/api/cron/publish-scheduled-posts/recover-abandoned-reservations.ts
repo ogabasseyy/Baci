@@ -62,15 +62,22 @@ export async function recoverMerchantBlogReleaseReservations(
       }
 
       const record = data as Record<string, unknown>;
-      if (typeof record.cancelled_abandoned_count === 'number') {
-        cancelledAbandonedCount += record.cancelled_abandoned_count;
+      if (
+        typeof record.cancelled_abandoned_count !== 'number' ||
+        typeof record.reconciled_published_count !== 'number' ||
+        typeof record.preserved_scheduled_count !== 'number'
+      ) {
+        console.error(
+          'Cron Warning: Unexpected blog release recovery payload shape:',
+          { merchantId, data }
+        );
+        failedMerchants.push(merchantId);
+        continue;
       }
-      if (typeof record.reconciled_published_count === 'number') {
-        reconciledPublishedCount += record.reconciled_published_count;
-      }
-      if (typeof record.preserved_scheduled_count === 'number') {
-        preservedScheduledCount += record.preserved_scheduled_count;
-      }
+
+      cancelledAbandonedCount += record.cancelled_abandoned_count;
+      reconciledPublishedCount += record.reconciled_published_count;
+      preservedScheduledCount += record.preserved_scheduled_count;
     }
   }
 

@@ -17,17 +17,21 @@ describe('recoverMerchantBlogReleaseReservations', () => {
       .mockResolvedValueOnce({
         data: null,
         error: { message: 'rpc timeout' },
+      })
+      .mockResolvedValueOnce({
+        data: {},
+        error: null,
       });
 
     try {
       const summary = await recoverMerchantBlogReleaseReservations(
         { rpc: mockRpc } as never,
-        ['merchant-1', 'merchant-2']
+        ['merchant-1', 'merchant-2', 'merchant-3']
       );
 
       expect(summary).toEqual({
         cancelledAbandonedCount: 2,
-        failedMerchants: ['merchant-2'],
+        failedMerchants: ['merchant-2', 'merchant-3'],
         preservedScheduledCount: 1,
         reconciledPublishedCount: 1,
       });

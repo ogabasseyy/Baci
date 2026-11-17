@@ -45,7 +45,14 @@ export function OrderSuccessTrackLink({
   };
 
   return (
-    <Link href={asRoute(href)} className={className} onClick={handleClick}>
+    // No prefetch: the href carries the order token, and Next.js would send it
+    // in a prefetch request as soon as the link is visible.
+    <Link
+      href={asRoute(href)}
+      className={className}
+      onClick={handleClick}
+      prefetch={false}
+    >
       {children}
     </Link>
   );

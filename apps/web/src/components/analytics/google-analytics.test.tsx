@@ -73,6 +73,10 @@ describe('bugfix: measurement id was interpolated into the inline script uncheck
     "G-ABC123');alert(1);//",
     'G-ABC`+1+`',
     'UA-1234-5',
+    'G-ABC 123',
+    'G-ABC"123',
+    'AW-ab',
+    `G-${'A'.repeat(41)}`,
     '',
   ])('renders no script for the invalid id %j', async (id) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -86,6 +90,23 @@ describe('bugfix: measurement id was interpolated into the inline script uncheck
     } else {
       expect(warn).not.toHaveBeenCalled();
     }
+  });
+
+  it.each([
+    'G-ABC12345',
+    'GT-ABC1234',
+    'AW-123456789',
+    'DC-1234567',
+    'G-ABC-123',
+  ])('renders the scripts for the Google tag id %s', async (id) => {
+    const { container } = render(<GoogleAnalytics measurementId={id} />);
+
+    await waitFor(() =>
+      expect(container.querySelector('script#google-analytics')).not.toBeNull()
+    );
+    expect(
+      container.querySelector('script#google-analytics')?.textContent
+    ).toContain(JSON.stringify(id));
   });
 
   it('still renders the config for a valid GA4 id', async () => {

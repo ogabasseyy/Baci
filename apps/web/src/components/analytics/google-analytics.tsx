@@ -5,9 +5,11 @@ import { useEffect, useState } from 'react';
 import { applyStoredConsent, initializeConsentMode } from '@/lib/consent-mode';
 import { TRACKING_URL_INLINE_SANITIZER } from '@/lib/privacy/tracking-url-inline-sanitizer';
 
-// GA4 measurement ids look like G-XXXXXXXXXX. Anything else is never put into
-// the inline script.
-const GA4_MEASUREMENT_ID_PATTERN = /^G-[A-Za-z0-9]{4,20}$/;
+// Google tag ids gtag.js accepts: G- (GA4), GT- (Google tag), AW- (Google Ads)
+// and DC- (Floodlight), then letters, digits and hyphens only. The settings
+// field is free text, so anything else (quotes, backticks, spaces, legacy UA-)
+// is never put into the inline script.
+const GOOGLE_TAG_ID_PATTERN = /^(?:G|GT|AW|DC)-[A-Za-z0-9-]{3,40}$/;
 
 interface GoogleAnalyticsProps {
   measurementId: string;
@@ -59,12 +61,12 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
     };
   }, []);
 
-  const isValidId = GA4_MEASUREMENT_ID_PATTERN.test(measurementId);
+  const isValidId = GOOGLE_TAG_ID_PATTERN.test(measurementId);
   useEffect(() => {
     // Silent for an unset id; a set but malformed id is a misconfiguration.
     if (measurementId && !isValidId) {
       console.warn(
-        'GoogleAnalytics: measurement id is not a GA4 id (expected G-XXXXXXXX); analytics is disabled.'
+        'GoogleAnalytics: measurement id is not a Google tag id (expected G-, GT-, AW- or DC- followed by letters, digits and hyphens); analytics is disabled.'
       );
     }
   }, [measurementId, isValidId]);

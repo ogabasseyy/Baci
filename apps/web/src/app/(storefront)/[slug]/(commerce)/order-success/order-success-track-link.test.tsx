@@ -11,13 +11,20 @@ vi.mock('next/link', () => ({
     href,
     onClick,
     className,
+    prefetch,
   }: {
     children: React.ReactNode;
     href: string;
     onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
     className?: string;
+    prefetch?: boolean;
   }) => (
-    <a href={href} onClick={onClick} className={className}>
+    <a
+      href={href}
+      onClick={onClick}
+      className={className}
+      data-prefetch={String(prefetch)}
+    >
       {children}
     </a>
   ),
@@ -42,6 +49,10 @@ describe('OrderSuccessTrackLink', () => {
 
   it('keeps the token in the href so open-in-new-tab still works', () => {
     expect(renderLink()).toHaveAttribute('href', HREF);
+  });
+
+  it('bugfix: never prefetches the token-bearing href', () => {
+    expect(renderLink()).toHaveAttribute('data-prefetch', 'false');
   });
 
   it('pushes a URL without the token on a plain click and hands the token over off the URL', () => {

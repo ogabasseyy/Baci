@@ -113,8 +113,9 @@ export function useIdentityConfirmation({
         });
       } finally {
         // Cleared in the same update as the next step (or the error), so
-        // the code never lingers and nothing flashes.
-        if (live.current) setCodeValue('');
+        // the code never lingers and nothing flashes. Only for the account
+        // that sent it: a code typed for a newer account is left alone.
+        if (isCurrent()) setCodeValue('');
       }
       if (isCurrent()) onConfirmed();
     });

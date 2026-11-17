@@ -264,6 +264,7 @@ export function OrderSuccessContent() {
               </Link>
             ) : hasValidatedOrder && order?.tracking_token ? (
               <OrderSuccessTrackLink
+                slug={merchant?.slug}
                 href={getHref(
                   `/track-order?token=${encodeURIComponent(order.tracking_token)}`
                 )}

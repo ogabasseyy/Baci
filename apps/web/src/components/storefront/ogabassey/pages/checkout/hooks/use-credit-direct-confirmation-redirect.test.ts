@@ -35,6 +35,7 @@ function options(overrides = {}) {
     trackingToken: 'track-1',
     lookupEmail: null,
     orderSuccessBasePath: '/test-store/order-success',
+    merchantSlug: 'test-store',
     router: router(),
     ...overrides,
   };

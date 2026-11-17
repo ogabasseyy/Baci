@@ -37,7 +37,7 @@ afterEach(() => {
 
 describe('arrival through an off-URL hand-off', () => {
   it('returns the handed-over values on the very first render, before Next.js writes the history entry', () => {
-    const cleaned = stashPrivateParamsForNavigation(TARGET);
+    const cleaned = stashPrivateParamsForNavigation(TARGET, 'shop');
     expect(cleaned).toBe('/shop/order-success?orderId=1');
     navigateTo('/shop/order-success', 'orderId=1');
     const seen: (string | null)[] = [];
@@ -62,7 +62,7 @@ describe('arrival through an off-URL hand-off', () => {
   });
 
   it('claims the hand-off for the new entry so a reload keeps the values', () => {
-    const cleaned = stashPrivateParamsForNavigation(TARGET);
+    const cleaned = stashPrivateParamsForNavigation(TARGET, 'shop');
     navigateTo('/shop/order-success', 'orderId=1');
     const first = renderHook(() => {
       useInsertionEffect(() => {
@@ -86,7 +86,7 @@ describe('arrival through an off-URL hand-off', () => {
   });
 
   it('never gives the hand-off to another path or query', () => {
-    stashPrivateParamsForNavigation(TARGET);
+    stashPrivateParamsForNavigation(TARGET, 'shop');
 
     navigateTo('/shop/track-order', 'orderId=1');
     expect(
@@ -104,7 +104,7 @@ describe('arrival through an off-URL hand-off', () => {
   });
 
   it('is consumed once: a later entry at the same URL does not inherit the values', () => {
-    const cleaned = stashPrivateParamsForNavigation(TARGET);
+    const cleaned = stashPrivateParamsForNavigation(TARGET, 'shop');
     navigateTo('/shop/order-success', 'orderId=1');
     const { result, rerender } = renderHook(() => {
       useInsertionEffect(() => {
@@ -120,5 +120,22 @@ describe('arrival through an off-URL hand-off', () => {
     rerender();
 
     expect(result.current.get('trackingToken')).toBeNull();
+  });
+
+  it('arrives with the values when the custom domain drops the slug prefix from the path', () => {
+    const cleaned = stashPrivateParamsForNavigation(TARGET, 'shop');
+    // The proxy redirected /shop/order-success to /order-success.
+    navigateTo('/order-success', 'orderId=1');
+
+    const { result } = renderHook(() => {
+      useInsertionEffect(() => {
+        window.history.pushState({}, '', '/order-success?orderId=1');
+      });
+      return usePrivateSearchParams();
+    });
+
+    expect(cleaned).toBe('/shop/order-success?orderId=1');
+    expect(result.current.get('trackingToken')).toBe('tok');
+    expect(currentPrivateParamsId()).not.toBeNull();
   });
 });

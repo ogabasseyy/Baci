@@ -14,7 +14,8 @@ const PENDING_KEY = 'baci:private-url-params-pending';
 export const PENDING_HANDOFF_TTL_MS = 60_000;
 
 interface PendingHandoff {
-  pathname: string;
+  /** Every pathname the destination may be shown under (see acceptedPaths). */
+  paths: string[];
   publicSearch: string;
   entries: PrivateEntry[];
   expiresAt: number;
@@ -39,7 +40,8 @@ function readPending(): PendingHandoff | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingHandoff> | null;
     if (
-      typeof parsed?.pathname !== 'string' ||
+      !Array.isArray(parsed?.paths) ||
+      !parsed.paths.every((path) => typeof path === 'string') ||
       typeof parsed.publicSearch !== 'string' ||
       typeof parsed.expiresAt !== 'number' ||
       !isEntryList(parsed.entries)
@@ -61,16 +63,38 @@ function clearPending(): void {
 }
 
 /**
+ * The paths one page can be visible under. On a merchant custom domain the
+ * proxy redirects `/<slug>/page` to `/page` (and serves `/page` through an
+ * internal rewrite), so the same page appears with or without the storefront
+ * slug prefix. Only that prefix is ignored: a different page never matches.
+ */
+function acceptedPaths(pathname: string, slug: string): string[] {
+  const prefix = `/${slug}`;
+  const hasPrefix =
+    pathname.toLowerCase() === prefix.toLowerCase() ||
+    pathname.toLowerCase().startsWith(`${prefix.toLowerCase()}/`);
+  if (hasPrefix) return [pathname, pathname.slice(prefix.length) || '/'];
+  return [pathname, `${prefix}${pathname === '/' ? '' : pathname}`];
+}
+
+/**
  * Prepares an in-app navigation that would otherwise put order tokens or
  * shopper details in the address bar. The private values are stored for the
  * destination (bound to its path and remaining query, valid for about a
  * minute) and the returned href has them removed: navigate to that instead.
  *
- * If the href has nothing private, points to another origin, or the values
- * cannot be stored (storage unavailable), the original href is returned
- * unchanged so the flow keeps working; the destination then scrubs on arrival.
+ * The clean href is only returned when the destination can be matched for
+ * certain: the storefront `slug` must be known (the destination may be shown
+ * with or without it). If the href has nothing private, points to another
+ * origin, the slug is unknown, or the values cannot be stored, the original
+ * href is returned unchanged so a paid order is never stranded without its
+ * token; the destination then scrubs on arrival.
  */
-export function stashPrivateParamsForNavigation(targetHref: string): string {
+export function stashPrivateParamsForNavigation(
+  targetHref: string,
+  slug: string | null | undefined
+): string {
+  if (!slug) return targetHref;
   if (typeof window === 'undefined') return targetHref;
   let url: URL;
   try {
@@ -82,7 +106,7 @@ export function stashPrivateParamsForNavigation(targetHref: string): string {
   const { privateEntries, publicSearch } = partitionSensitiveSearch(url.search);
   if (privateEntries.length === 0) return targetHref;
   const pending: PendingHandoff = {
-    pathname: url.pathname,
+    paths: acceptedPaths(url.pathname, slug),
     publicSearch: canonicalSearch(publicSearch),
     entries: privateEntries,
     expiresAt: Date.now() + PENDING_HANDOFF_TTL_MS,
@@ -110,7 +134,7 @@ export function readPendingPrivateParams(
   if (
     !pending ||
     pending.expiresAt <= Date.now() ||
-    pending.pathname !== pathname ||
+    !pending.paths.includes(pathname) ||
     pending.publicSearch !== canonicalSearch(publicSearch)
   ) {
     return [];

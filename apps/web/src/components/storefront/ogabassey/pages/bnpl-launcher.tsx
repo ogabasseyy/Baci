@@ -244,7 +244,10 @@ async function launchBnplPayment({
             // The token goes to the next page off the URL (see the hand-off helper).
             router.push(
                 stashPrivateParamsForNavigation(
-                    `/order-success?${successQuery.toString()}`
+                    `/order-success?${successQuery.toString()}`,
+                    merchantSlugParam ||
+                        contextMerchantSlug ||
+                        fallbackMerchantSlug
                 ) as Route
             );
             return;
@@ -578,6 +581,10 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
         confirmedTotal: creditDirectVerification.confirmedOrder?.total,
         confirmedCurrency: creditDirectVerification.confirmedOrder?.currency,
         orderSuccessBasePath: buildLauncherScopedPath('/order-success'),
+        merchantSlug:
+            merchantSlugParam ||
+            merchantContext?.merchant?.slug ||
+            merchantSlug,
         clearCart,
         router,
     });

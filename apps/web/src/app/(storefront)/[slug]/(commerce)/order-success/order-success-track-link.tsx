@@ -24,10 +24,12 @@ function isPlainPrimaryClick(event: MouseEvent<HTMLAnchorElement>): boolean {
  */
 export function OrderSuccessTrackLink({
   href,
+  slug,
   className,
   children,
 }: {
   href: string;
+  slug: string | null | undefined;
   className: string;
   children: ReactNode;
 }) {
@@ -35,7 +37,7 @@ export function OrderSuccessTrackLink({
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.defaultPrevented || !isPlainPrimaryClick(event)) return;
-    const cleaned = stashPrivateParamsForNavigation(href);
+    const cleaned = stashPrivateParamsForNavigation(href, slug);
     // Nothing was handed over (storage unavailable): let the link navigate.
     if (cleaned === href) return;
     event.preventDefault();

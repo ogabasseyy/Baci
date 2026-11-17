@@ -23,6 +23,7 @@ import {
  */
 export async function launchCredPalCheckout({
     order,
+    slug,
     trackingToken,
     checkoutCustomerEmail,
     checkoutCustomerPhone,
@@ -86,7 +87,8 @@ export async function launchCredPalCheckout({
             }
             router.push(
                 stashPrivateParamsForNavigation(
-                    `/order-success?${successQuery.toString()}`
+                    `/order-success?${successQuery.toString()}`,
+                    slug
                 ) as Route
             );
         },

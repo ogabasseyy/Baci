@@ -247,7 +247,8 @@ export function CryptoCheckoutPage() {
       router.push(
         asRoute(
           stashPrivateParamsForNavigation(
-            `/${slug}/order-success?${successQuery.toString()}`
+            `/${slug}/order-success?${successQuery.toString()}`,
+            slug
           )
         )
       );

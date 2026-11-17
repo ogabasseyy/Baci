@@ -27,7 +27,7 @@ const HREF = '/shop/track-order?token=secret-token';
 
 function renderLink() {
   render(
-    <OrderSuccessTrackLink href={HREF} className="x">
+    <OrderSuccessTrackLink href={HREF} slug="shop" className="x">
       Track My Order
     </OrderSuccessTrackLink>
   );
@@ -89,5 +89,20 @@ describe('OrderSuccessTrackLink', () => {
     expect(notPrevented).toBe(true);
     expect(push).not.toHaveBeenCalled();
     vi.restoreAllMocks();
+  });
+
+  it('lets the link navigate with its href when the merchant slug is unknown', () => {
+    render(
+      <OrderSuccessTrackLink href={HREF} slug={undefined} className="x">
+        Track My Order
+      </OrderSuccessTrackLink>
+    );
+
+    const notPrevented = fireEvent.click(
+      screen.getByRole('link', { name: 'Track My Order' })
+    );
+
+    expect(notPrevented).toBe(true);
+    expect(push).not.toHaveBeenCalled();
   });
 });

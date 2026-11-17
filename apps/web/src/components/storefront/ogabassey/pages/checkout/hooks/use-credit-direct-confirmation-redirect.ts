@@ -60,6 +60,8 @@ interface UseCreditDirectConfirmationRedirectOptions {
   confirmedTotal?: number;
   confirmedCurrency?: string;
   orderSuccessBasePath: string;
+  /** Storefront slug, so the off-URL hand-off matches with or without it. */
+  merchantSlug: string;
   clearCart?: () => void;
   router: ReturnType<typeof useRouter>;
 }
@@ -78,6 +80,7 @@ export function useCreditDirectConfirmationRedirect({
   confirmedTotal,
   confirmedCurrency,
   orderSuccessBasePath,
+  merchantSlug,
   clearCart,
   router,
 }: UseCreditDirectConfirmationRedirectOptions): void {
@@ -139,7 +142,8 @@ export function useCreditDirectConfirmationRedirect({
     clearCreditDirectPopupMarker(orderId);
     router.push(
       stashPrivateParamsForNavigation(
-        `${orderSuccessBasePath}?${successQuery.toString()}`
+        `${orderSuccessBasePath}?${successQuery.toString()}`,
+        merchantSlug
       ) as Route
     );
   }, [
@@ -151,6 +155,7 @@ export function useCreditDirectConfirmationRedirect({
     trackingToken,
     lookupEmail,
     orderSuccessBasePath,
+    merchantSlug,
     clearCart,
     router,
   ]);

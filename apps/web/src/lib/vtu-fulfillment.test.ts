@@ -3828,6 +3828,53 @@ describe('fulfillPendingVtuTransaction', () => {
     });
     warnSpy.mockRestore();
   });
+  it('does not log a Monnify refusal when Monnify was never called', async () => {
+    // e.g. an unrecognised vend status or a duplicate vend reference: Monnify
+    // may still deliver, so a Kuda vend could top the customer up twice.
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockMonnifyPurchaseBill).not.toHaveBeenCalled();
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      'Monnify airtime failure not handed to Kuda:',
+      expect.anything()
+    );
+    warnSpy.mockRestore();
+  });
 
   it('restores an airtime Monnify unknown outcome to pending without calling Kuda', async () => {
     const transientError = new Error('Transient vend outcome: timeout');

@@ -35,8 +35,10 @@ SELECT src.merchant_id, src.token
 FROM (
   SELECT
     fs.merchant_id,
-    -- First candidate that is a JSON string with non-whitespace content (spaces, tabs
-    -- and newlines trimmed). Non-string values are ignored, as in the API extractor.
+    -- First candidate that is a JSON string with non-whitespace content (ASCII whitespace,
+    -- no-break space and BOM trimmed, like JavaScript's trim for real tokens). Non-string
+    -- values are ignored, as in the API extractor. (Do not use E'\v': PostgreSQL reads
+    -- it as the letter v, which would corrupt tokens that start or end with v.)
     (
       SELECT x.token
       FROM (VALUES
@@ -47,9 +49,11 @@ FROM (
       ) AS cand (ord, val)
       CROSS JOIN LATERAL (
         SELECT NULLIF(
-          pg_catalog.btrim(
+          pg_catalog.regexp_replace(
             CASE WHEN pg_catalog.jsonb_typeof(cand.val) = 'string' THEN cand.val #>> '{}' END,
-            E' \t\r\n\f\v'
+            '^[[:space:]\u00a0\ufeff]+|[[:space:]\u00a0\ufeff]+$',
+            '',
+            'g'
           ),
           ''
         ) AS token

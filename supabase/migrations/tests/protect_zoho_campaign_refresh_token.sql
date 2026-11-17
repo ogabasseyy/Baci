@@ -43,6 +43,25 @@ BEGIN
   END IF;
 END $$;
 
+-- The backfill's whitespace pattern (copied from the migration) must keep tokens that
+-- start or end with the letter v (PostgreSQL reads E'\v' as a plain "v", not a vertical tab)
+-- and must still trim real whitespace.
+DO $$
+DECLARE
+  v_pattern constant text :=
+    '^[[:space:]\u00a0\ufeff]+|[[:space:]\u00a0\ufeff]+$';
+BEGIN
+  IF pg_catalog.regexp_replace('vABCv', v_pattern, '', 'g') <> 'vABCv' THEN
+    RAISE EXCEPTION 'Zoho: trim pattern corrupts a token that starts or ends with v';
+  END IF;
+  IF pg_catalog.regexp_replace(E'\t\n real-token \r', v_pattern, '', 'g') <> 'real-token' THEN
+    RAISE EXCEPTION 'Zoho: trim pattern does not remove surrounding whitespace';
+  END IF;
+  IF pg_catalog.regexp_replace(E' \t ', v_pattern, '', 'g') <> '' THEN
+    RAISE EXCEPTION 'Zoho: whitespace-only token is not treated as blank';
+  END IF;
+END $$;
+
 INSERT INTO auth.users (id, email)
 VALUES ('bbbbbbbb-6666-4666-8666-bbbbbbbbbbbb', 'zoho-owner@example.test');
 -- Feature-settings changes are audited and the audit writer needs an actor.

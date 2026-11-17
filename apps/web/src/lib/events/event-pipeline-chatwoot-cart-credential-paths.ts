@@ -27,5 +27,12 @@ export const eventPipelineChatwootCartCredentialPaths = [
     signingMaterial,
     environment,
   ],
+  [
+    'apps/web/src/app/api/storefront/chatwoot/context/delivery-options/route.ts',
+    cartContext,
+    cartClient,
+    signingMaterial,
+    environment,
+  ],
   [cartContext, cartClient, signingMaterial, environment],
 ] as const;

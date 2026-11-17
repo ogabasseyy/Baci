@@ -13,6 +13,15 @@ export interface ProductGroundingTokenSet {
 const NUMERIC_FEATURE_TOKEN =
   /^(?:\d+(?:\.\d+)?(?:gb|tb|mb|mah|k?hz|mhz|ghz|nits|ppi|mp|mm|cm|w|watts?)|1080p|720p|1440p|2160p|4k|5k|8k|5g|4g|wifi\d*)$/i;
 
+const FUSED_SPEC_TECH_TOKEN =
+  /^(?:(?:g?ddr|lpddr)\d+[a-z]*|usb\d+[a-z]?|ufs\d+|ip[56]\d)$/i;
+
+const FUSED_SPEC_CONTEXT_WORDS = new Set(
+  'ram memory vram sdram storage port ports slot slots water dust resistant resistance rating speed'.split(
+    ' '
+  )
+);
+
 const FEATURE_VERSION_PREFIXES = new Set(
   'wifi bluetooth usb hdmi pcie thunderbolt displayport ufs lpddr ddr emmc nvme magsafe ios ipados macos watchos android windows ip snapdragon dimensity exynos helio kirin tensor ryzen radeon geforce rtx gtx'.split(
     ' '
@@ -103,7 +112,17 @@ export function allowsDescriptionFeature(
   words: string[],
   precedingWords: string[] = []
 ): boolean {
+  const hasFusedSpecPhrase =
+    words.some((token) => FUSED_SPEC_TECH_TOKEN.test(token)) &&
+    words.some((token) => FUSED_SPEC_CONTEXT_WORDS.has(token)) &&
+    words.every(
+      (token) =>
+        FUSED_SPEC_TECH_TOKEN.test(token) ||
+        FUSED_SPEC_CONTEXT_WORDS.has(token) ||
+        isNumericFeatureToken(token)
+    );
   return (
+    hasFusedSpecPhrase ||
     (words.some((token) => /\d/.test(token)) &&
       words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
     (isFeatureVersionPhrase(words, precedingWords) &&

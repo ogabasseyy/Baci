@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StorefrontAgentUiProduct } from '@/schemas/storefront-agent-ui-contract';
 import {
+  allowsDescriptionFeature,
   collectProductGroundingTokens,
   isFeatureVersionPhrase,
   isNumericFeatureToken,
@@ -39,6 +40,13 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
 
     expect(isNumericFeatureToken('5k')).toBe(true);
     expect(isNumericFeatureToken('120hz')).toBe(true);
+    expect(isNumericFeatureToken('ddr4')).toBe(false);
+    expect(allowsDescriptionFeature(['ddr4', 'ram'])).toBe(true);
+    expect(allowsDescriptionFeature(['lpddr5x', 'memory'])).toBe(true);
+    expect(allowsDescriptionFeature(['kingston', 'fury', 'ddr4'])).toBe(false);
+    expect(allowsDescriptionFeature(['kingston', 'fury', 'ddr4', 'ram'])).toBe(
+      false
+    );
     expect(isNumericFeatureToken('15')).toBe(false);
     expect(isFeatureVersionPhrase(['wi', 'fi', '6'])).toBe(true);
     expect(isFeatureVersionPhrase(['wi', 'fi', 'router'])).toBe(false);

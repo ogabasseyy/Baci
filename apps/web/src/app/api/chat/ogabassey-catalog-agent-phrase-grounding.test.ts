@@ -177,5 +177,41 @@ describe('ogabassey-catalog-agent-phrase-grounding', () => {
         ])
       )
     ).toBe(true);
+
+    const macbookAirM2 = makeProduct({
+      brand: 'Apple',
+      category: 'Laptops',
+      description: '8GB DDR4 RAM and 256GB SSD',
+      id: 'mac-air-m2',
+      name: 'Apple MacBook Air M2',
+      slug: 'apple-macbook-air-m2',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Apple MacBook Air M2 has DDR4 RAM.',
+        makeEvent([macbookAirM2])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Apple MacBook Air M2 has LPDDR5 RAM.',
+        makeEvent([macbookAirM2])
+      )
+    ).toBe(false);
+
+    const kingstonDdr5 = makeProduct({
+      brand: 'Kingston',
+      category: 'Components',
+      description: 'Not compatible with DDR4 RAM',
+      id: 'kingston-ddr5',
+      name: 'Kingston Fury DDR5',
+      slug: 'kingston-fury-ddr5',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Kingston Fury DDR4 is available.',
+        makeEvent([kingstonDdr5])
+      )
+    ).toBe(false);
   });
 });

@@ -104,4 +104,17 @@ describe('POST /api/admin/blog/posts error paths', () => {
       error: 'Failed to create platform blog post',
     });
   });
+
+  it('rejects scheduled status on platform blog post creation', async () => {
+    const response = await POST(
+      postRequest({
+        ...validBody(),
+        published_at: '2026-11-20T10:00:00.000Z',
+        status: 'scheduled',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
 });

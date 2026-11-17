@@ -1,3 +1,4 @@
+import { ImeiResultSchema } from '@baci/shared/imei';
 import { z } from 'zod';
 import { NigerianPhoneSchema } from './auth-schemas';
 
@@ -198,55 +199,7 @@ export type MarkReviewHelpfulResponse = z.infer<
   typeof MarkReviewHelpfulResponseSchema
 >;
 
-export const ImeiResultSchema = z.object({
-  imei: z.string().min(1),
-  device: z.string().min(1),
-  modelNumber: z.string(),
-  status: z.enum(['Clean', 'Blacklisted', 'Unknown']),
-  icloud: z.string().min(1),
-  icloudLock: z.string().min(1),
-  simLock: z.string().min(1),
-  blacklistStatus: z.string().min(1),
-  carrier: z.string().min(1),
-  deviceImage: z.string(),
-  deviceProfile: z
-    .object({
-      version: z.literal(1),
-      brand: z.string().nullable(),
-      model: z.string().nullable(),
-      color: z.string().nullable(),
-      storage: z.string().nullable(),
-      catalogProductId: z.string().optional(),
-      imageMatch: z.enum(['color', 'model', 'none']),
-    })
-    .optional(),
-  score: z.number(),
-  activationStatus: z.string().optional(),
-  serialNumber: z.string().optional(),
-  purchaseDate: z.string().min(1).optional(),
-  purchaseCountry: z.string().optional(),
-  warranty: z.string().optional(),
-  refurbished: z.string().optional(),
-  demoUnit: z.string().optional(),
-  mdmStatus: z.string().optional(),
-  knoxGuardStatus: z.string().optional(),
-  miLockStatus: z.string().optional(),
-  miLostStatus: z.string().optional(),
-  partNumber: z.string().optional(),
-  repairEligibility: z.string().optional(),
-  gsxCoverage: z.string().optional(),
-  repairHistory: z.string().optional(),
-  replacementHistory: z.string().optional(),
-  esimCompatibility: z.string().optional(),
-  financeStatus: z.string().optional(),
-  knoxEnrollment: z.string().optional(),
-  soldBy: z.string().optional(),
-  wifiMac: z.string().optional(),
-  devicePhoto: z.string().optional(),
-  deviceType: z.enum(['apple', 'android', 'other']),
-  verdict: z.string().min(1),
-  verdictType: z.enum(['safe', 'caution', 'danger']),
-});
+export { ImeiResultSchema } from '@baci/shared/imei';
 
 export const ImeiCheckApiResponseSchema = z.object({
   success: z.boolean(),

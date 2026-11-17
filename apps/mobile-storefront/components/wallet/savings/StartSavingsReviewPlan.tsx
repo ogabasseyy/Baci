@@ -9,6 +9,7 @@ import { SavingsProductThumb } from './SavingsProductThumb';
 import { EARLY_CANCEL_INTEREST_NOTE } from './savings-interest-copy';
 import { savingsPaceWords } from './savings-pace-words';
 import { savingsProductImage } from './savings-product-image';
+import { timeToGo } from './savings-time-to-go';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 
@@ -43,7 +44,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
         />
         <View style={styles.phoneCopy}>
           <Text style={styles.phoneName} numberOfLines={2}>
-            {product?.name ?? 'Your phone'}
+            {product?.name ?? 'Your item'}
           </Text>
           <Text style={styles.goal}>
             {formatNgnCurrency(controller.targetValue)} goal
@@ -73,7 +74,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
         </View>
         <View style={styles.barLabels}>
           <DateLabel colors={colors} label="Start" date={startDate} />
-          <DateLabel colors={colors} label="Your phone" date={phoneDate} end />
+          <DateLabel colors={colors} label="It's yours" date={phoneDate} end />
         </View>
       </View>
       <View style={[styles.rows, { borderColor: colors.border }]}>
@@ -83,7 +84,7 @@ export function StartSavingsReviewPlan({ colors, controller }: Props) {
           text={
             auto
               ? 'Automatically, by card'
-              : 'From your wallet, whenever you like'
+              : 'Pay from your wallet, whenever you like'
           }
         />
         {controller.askInterest && controller.interestChoice !== null ? (
@@ -124,7 +125,7 @@ function headStartShare(
 }
 
 /**
- * "Yours today", "Yours in about 124 days", or the date when unknown. The
+ * "It's yours today", "It's yours in about 124 days", or the date when unknown. The
  * plan's end date is worked out from the full price, so with a partial head
  * start the line says the estimate does not count it (it will likely be sooner).
  */
@@ -133,12 +134,12 @@ function yoursLine(
   maturityDate: string,
   headStart: 'none' | 'part' | 'all' = 'none'
 ) {
-  if (headStart === 'all' || daysToGo === 0) return 'Yours today';
+  if (headStart === 'all' || daysToGo === 0) return "It's yours today";
   if (headStart === 'part' && daysToGo !== null)
-    return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}, not counting your head start`;
+    return `It's yours in about ${timeToGo(daysToGo)}, not counting your head start`;
   if (daysToGo === null)
-    return `Yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
-  return `Yours in about ${daysToGo} day${daysToGo === 1 ? '' : 's'}`;
+    return `It's yours by ${formatDateTimeDisplay(maturityDate, 'date')}`;
+  return `It's yours in about ${timeToGo(daysToGo)}`;
 }
 
 function timelineLabel(startDate: string, phoneDate: string) {

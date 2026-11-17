@@ -59,7 +59,7 @@ describe('Ogabassey help support contacts', () => {
     fireEvent.click(returnQuestion);
     expect(
       screen.getByText(
-        /Ogabassey accepts returns for devices with technical defects/i
+        /Report an undisclosed technical defect within 14 days of delivery/i
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/7-day return policy/i)).not.toBeInTheDocument();
@@ -69,7 +69,7 @@ describe('Ogabassey help support contacts', () => {
     });
     fireEvent.click(warrantyQuestion);
     expect(
-      screen.getByText(/one-year Ogabassey warranty/i)
+      screen.getByText(/one-year Ogabassey store warranty/i)
     ).toBeInTheDocument();
     expect(screen.queryByText(/3-month warranty/i)).not.toBeInTheDocument();
 
@@ -153,7 +153,7 @@ describe('Ogabassey help support contacts', () => {
     fireEvent.click(returnQuestion);
     expect(
       screen.getByText(
-        /Ogabassey accepts returns for devices with technical defects/i
+        /Report an undisclosed technical defect within 14 days of delivery/i
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/Old 7-day policy/i)).not.toBeInTheDocument();

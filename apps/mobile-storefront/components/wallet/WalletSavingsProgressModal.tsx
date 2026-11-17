@@ -10,6 +10,7 @@ import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
 import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
+import { clearSavingsNotice } from './savings/clear-savings-notice';
 import { GoalCancelStep } from './savings/GoalCancelStep';
 import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
@@ -166,6 +167,10 @@ export function WalletSavingsProgressModal({
         ? 'This savings goal is complete.'
         : 'Purchase requested. Your savings have moved to your order.'
       : 'This goal is funded by scheduled auto-debit.';
+  const changeDevice = () => {
+    clearSavingsNotice();
+    onChangeDevice();
+  };
 
   return (
     <SavingsBottomSheet
@@ -240,7 +245,7 @@ export function WalletSavingsProgressModal({
               // Not while an add is in flight: the Change phone step would
               // replace the sheet and drop the add's PIN prompt.
               onChangeDevice={
-                canChangeDevice && !isAdding ? onChangeDevice : undefined
+                canChangeDevice && !isAdding ? changeDevice : undefined
               }
               onResolveVariant={onResolveVariant}
             />

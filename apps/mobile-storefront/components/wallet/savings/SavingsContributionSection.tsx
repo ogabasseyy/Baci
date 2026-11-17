@@ -1,9 +1,11 @@
 import { Text, View } from 'react-native';
+import { daysUntil } from '../get-savings-pace';
 import { SavingsAmountInput } from './SavingsAmountInput';
 import { SavingsChoiceCards } from './SavingsChoiceCards';
 import { SavingsIconLabel } from './SavingsIconLabel';
 import { SavingsScheduleFields } from './SavingsScheduleFields';
 import { SavingsTimelinePreview } from './SavingsTimelinePreview';
+import { LONG_PLAN_DAYS, timeToGo } from './savings-time-to-go';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
@@ -46,6 +48,8 @@ export function SavingsContributionSection({
     Number.isFinite(controller.targetValue) &&
     controller.targetValue > 0 &&
     controller.effectiveInitialContribution > controller.targetValue;
+  const daysToGo = daysUntil(controller.maturityDate, new Date());
+  const longPlan = daysToGo !== null && daysToGo > LONG_PLAN_DAYS;
   return (
     <View style={styles.section}>
       <SavingsScheduleFields colors={colors} controller={controller} />
@@ -75,6 +79,14 @@ export function SavingsContributionSection({
           initialContributionEnabled={controller.initialContributionEnabled}
         />
       )}
+      {!tooBig && longPlan ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.subheading, { color: colors.textSecondary }]}
+        >
+          {`This plan takes about ${timeToGo(daysToGo)}. Saving more each time gets you the phone sooner.`}
+        </Text>
+      ) : null}
       <SavingsIconLabel
         icon="rocket-outline"
         text="Want to give it a head start?"

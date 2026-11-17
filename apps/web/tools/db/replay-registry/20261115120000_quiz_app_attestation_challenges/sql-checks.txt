@@ -1,0 +1,1 @@
+supabase/migrations/tests/quiz_app_attestation_challenges.sql

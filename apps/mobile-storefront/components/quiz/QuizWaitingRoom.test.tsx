@@ -208,4 +208,35 @@ describe('QuizWaitingRoom', () => {
     });
     expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
   });
+
+  it('bugfix: covers the room with an ad-break notice before the full-screen ad', async () => {
+    // The ad used to appear the instant it loaded, over live buttons.
+    mockMaybeShowQuizStartInterstitial.mockReturnValueOnce(
+      new Promise<'shown' | 'skipped'>(() => undefined)
+    );
+    render(
+      <QuizWaitingRoom
+        event={scheduled}
+        onExit={jest.fn()}
+        onStart={jest.fn()}
+        refresh={jest.fn(async () => [scheduled])}
+      />
+    );
+    expect(screen.queryByTestId('quiz-ad-break-notice')).toBeNull();
+    const options = mockMaybeShowQuizStartInterstitial.mock.calls.at(-1)?.[0];
+
+    act(() => {
+      void options?.beforePresent?.();
+    });
+
+    expect(screen.getByTestId('quiz-ad-break-notice')).toBeTruthy();
+    // Nothing requests a banner underneath the notice.
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(0);
+
+    act(() => {
+      options?.onClosed?.();
+    });
+    expect(screen.queryByTestId('quiz-ad-break-notice')).toBeNull();
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
+  });
 });

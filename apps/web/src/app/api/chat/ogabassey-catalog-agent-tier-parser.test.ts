@@ -37,5 +37,12 @@ describe('ogabassey-catalog-agent-tier-parser', () => {
         new Set(['apple', 'macbook', 'pro', 'm2'])
       ),
     ]).toEqual(['air', 'm2']);
+
+    expect([
+      ...collectModelAttachedTierTokens(
+        'Apple iPhone 16 offers 256GB plus 8GB RAM',
+        new Set(['apple', 'iphone', '16', '256gb'])
+      ),
+    ]).toEqual([]);
   });
 });

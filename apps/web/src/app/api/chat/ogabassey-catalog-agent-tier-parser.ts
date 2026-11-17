@@ -1,3 +1,4 @@
+import { isNumericFeatureToken } from './ogabassey-catalog-agent-grounding-tokens';
 import {
   GENERIC_PRODUCT_NAME_WORDS,
   KNOWN_BRAND_OR_LINE_TOKENS,
@@ -22,6 +23,7 @@ function isModelAnchorToken(
   token: string,
   productIdentityTokens: Set<string>
 ): boolean {
+  if (isNumericFeatureToken(token)) return false;
   if (/\d/.test(token) || KNOWN_BRAND_OR_LINE_TOKENS.has(token)) return true;
   return (
     productIdentityTokens.has(token) &&
@@ -56,7 +58,8 @@ export function collectModelAttachedTierTokens(
         lower === 'plus' &&
         raw === 'plus' &&
         contiguous(i, i + 1) &&
-        PROSE_PLUS_FOLLOWERS.test(tokens[i + 1].lower)
+        (PROSE_PLUS_FOLLOWERS.test(tokens[i + 1].lower) ||
+          isNumericFeatureToken(tokens[i + 1].lower))
       ) {
         continue;
       }

@@ -222,6 +222,12 @@ describe('ogabassey-catalog-agent-product-matching', () => {
         makeEvent([iphone16, iphone15Pro])
       )
     ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 offers 256GB plus 8GB RAM.',
+        makeEvent([{ ...iphone16, description: '8GB RAM and 256GB storage' }])
+      )
+    ).toBe(true);
   });
 
   it('binds all products in a grouped comma-separated clause', () => {

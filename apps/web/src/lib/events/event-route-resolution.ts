@@ -127,6 +127,13 @@ export type EventRouteResolution =
   | { kind: 'no_route'; destinations: [] }
   | { kind: 'route'; destinations: EventRouteDestination[] };
 
+/** Destinations a registered event name can ever route to (empty if unknown). */
+export function routeDestinationsFor(eventName: string): readonly string[] {
+  return Object.hasOwn(EVENT_ROUTES, eventName)
+    ? EVENT_ROUTES[eventName].destinations
+    : [];
+}
+
 export function resolveEventRoute(event: DomainEventV1): EventRouteResolution {
   if (CLIENT_OBSERVATION_ONLY_EVENTS.has(event.event_name)) {
     if (

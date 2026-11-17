@@ -159,5 +159,16 @@ describe('bugfix: shopper data stored regardless of consent', () => {
       expect(result).toHaveProperty('fbp');
       expect(result).not.toHaveProperty('ttp');
     });
+
+    it('bugfix: stores no personal fields for a google-only target, which no client route reaches', () => {
+      expect(
+        minimizeDeliveryData(
+          full(true, true),
+          'add_to_cart',
+          'tenant_verified_client',
+          ['google']
+        )
+      ).toEqual({ analytics_consent: true, marketing_consent: true });
+    });
   });
 });

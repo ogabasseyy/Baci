@@ -2,7 +2,10 @@ import type { DomainEventV1 } from '@baci/shared/contracts';
 import type { AdPlatformTarget } from '@/lib/analytics/ad-platform-target';
 import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
 import { toClientAnalyticsDomainEventName } from './event-route-registry';
-import { CLIENT_OBSERVATION_ONLY_EVENTS } from './event-route-resolution';
+import {
+  CLIENT_OBSERVATION_ONLY_EVENTS,
+  routeDestinationsFor,
+} from './event-route-resolution';
 
 /**
  * Shopper fields that exist only so an ad platform can match a conversion.
@@ -68,10 +71,17 @@ export function minimizeDeliveryData(
     // The caller narrowed the destinations: keep only what those platforms read,
     // and only for platforms whose consent was granted (facebook/google need
     // analytics consent, tiktok/snapchat need marketing consent).
-    const allowed = targets.filter((target) =>
-      target === 'facebook' || target === 'google'
-        ? data.analytics_consent
-        : data.marketing_consent
+    // They must also be destinations the event's route can really reach
+    // (google maps to ga4, which no client conversion route uses).
+    const routable = routeDestinationsFor(
+      toClientAnalyticsDomainEventName(eventType, trustLevel)
+    );
+    const allowed = targets.filter(
+      (target) =>
+        routable.includes(target === 'google' ? 'ga4' : target) &&
+        (target === 'facebook' || target === 'google'
+          ? data.analytics_consent
+          : data.marketing_consent)
     );
     if (allowed.length > 0) kept.push(...SHARED_FIELDS);
     for (const target of allowed) kept.push(...PLATFORM_FIELDS[target]);

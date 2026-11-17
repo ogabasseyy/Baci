@@ -112,6 +112,8 @@ BEGIN
   -- while active.
 
   -- Finished deliveries: remove the shopper block from the per-destination copy.
+  -- Age is the event's own (ledger) age, so a delivery created late by a replay
+  -- of an old event does not extend the period.
   v_deadline := clock_timestamp() + interval '4 seconds';
   LOOP
     WITH expired_deliveries AS (
@@ -119,7 +121,12 @@ BEGIN
       FROM public.event_deliveries AS delivery
       WHERE delivery.status IN
           ('delivered', 'skipped', 'shadowed', 'dead_letter', 'delivery_unknown')
-        AND delivery.created_at < now() - v_personal_data_retention
+        AND EXISTS (
+          SELECT 1
+          FROM public.domain_event_ledger AS event_ledger
+          WHERE event_ledger.domain_event_id = delivery.domain_event_id
+            AND event_ledger.created_at < now() - v_personal_data_retention
+        )
         AND ((jsonb_typeof(delivery.payload #> '{data,delivery_user_data}') = 'object'
           AND (delivery.payload #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
         OR delivery.payload #> '{data,event_data,user_agent}' IS NOT NULL)

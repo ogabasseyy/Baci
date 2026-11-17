@@ -19,6 +19,7 @@ DECLARE
   v_old_open uuid := '00000000-0000-4000-8000-00000000e102';
   v_recent uuid := '00000000-0000-4000-8000-00000000e103';
   v_old_queued uuid := '00000000-0000-4000-8000-00000000e104';
+  v_late_routed uuid := '00000000-0000-4000-8000-00000000e1f1';
   v_id uuid;
   v_status text;
   v_age interval;
@@ -40,6 +41,19 @@ BEGIN
       domain_event_id, destination, status, payload, created_at
     ) VALUES (v_id, 'facebook', v_status, v_pii, now() - v_age);
   END LOOP;
+
+  -- A 100 day old event whose delivery was only created yesterday (replay).
+  INSERT INTO public.domain_event_ledger (
+    domain_event_id, producer, trust_level, idempotency_key, event_name,
+    subject_type, subject_id, envelope, status, created_at
+  ) VALUES (
+    v_late_routed, 'sql-retention', 'server', 'retention-' || v_late_routed::text,
+    'analytics.add_to_cart.v1', 'event', v_late_routed::text, v_pii, 'routed',
+    now() - interval '100 days'
+  );
+  INSERT INTO public.event_deliveries (
+    domain_event_id, destination, status, payload, created_at
+  ) VALUES (v_late_routed, 'facebook', 'delivered', v_pii, now() - interval '1 day');
 
   INSERT INTO public.domain_event_failures (
     queue_message_id, original_envelope, failure_code, failure_message,
@@ -151,6 +165,11 @@ BEGIN
   IF (SELECT payload FROM public.event_deliveries WHERE domain_event_id = v_old_done)
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old finished delivery payload kept personal data';
+  END IF;
+
+  IF (SELECT payload FROM public.event_deliveries WHERE domain_event_id = v_late_routed)
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
+    RAISE EXCEPTION 'late-created delivery of an old event kept personal data';
   END IF;
 
   -- Old but still retrying: untouched.

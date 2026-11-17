@@ -103,3 +103,11 @@ describe('sanitizeMonnifyErrorDetail', () => {
     expect(result).not.toContain('9876');
   });
 });
+
+describe('bugfix: slash-separated phone numbers', () => {
+  it.each(['0801/234/5678', '+234/801/234/5678'])('redacts %s', (phone) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${phone}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+});

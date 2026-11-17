@@ -20,6 +20,8 @@ import {
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
+import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
@@ -137,7 +139,10 @@ export async function purchaseBill(
         // Code 99 is Monnify's "unexpected error, re-query" answer: never a
         // refusal, whatever its message says.
         providerDefiniteFailure:
-          parsedEnvelope.responseCode?.trim() !== '99' &&
+          !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
+          // A body showing a vend status or reference may have reached the
+          // network: never a pre-vend refusal.
+          !hasMonnifyVendEvidence(envelope) &&
           isMonnifyKnownVendRefusalText(rawMessage) &&
           !isMonnifyVendOutcomeText(rawMessage) &&
           // Read the whole answer (code, message and body), so a duplicate

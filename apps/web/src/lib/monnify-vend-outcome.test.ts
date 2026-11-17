@@ -19,6 +19,11 @@ describe('isMonnifyVendOutcomeText', () => {
     'Amount must be greater than zero',
     'Unauthorized',
     'Access denied',
+    'Request could not be processed',
+    'Airtime not delivered',
+    "Couldn't be completed",
+    'Cannot be processed',
+    'Has never been vended',
     '',
     null,
   ])('does not flag "%s"', (text) => {

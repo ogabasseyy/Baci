@@ -1,4 +1,5 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
@@ -6,11 +7,11 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
  * Nigerian phone numbers written in groups, e.g. "+234 801 234 5678",
  * "0801-234-5678", "0801.234.5678", "(0801) 234 5678" or
- * "+234 (801) 234 5678". Only phone-shaped groups: other long references stay
+ * "+234 (801) 234 5678" or "0801/234/5678". Only phone-shaped groups: other long references stay
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)\(?(?:\+?234\)?[ .-]?\(?|0)[789][01]\d\)?(?:[ .-]?\d){7}(?!\d)/g;
+  /(?<!\d)\(?(?:\+?234\)?[ ./-]?\(?|0)[789][01]\d\)?(?:[ ./-]?\d){7}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -20,16 +21,20 @@ interface MonnifyAnswerReading {
   readsAsAuthRejection: boolean;
 }
 
-function readMonnifyAnswer(text: string): MonnifyAnswerReading {
+/**
+ * `text` is the status line plus the body; `body` is Monnify's answer alone.
+ * Auth wording is read from the body only: every 401/403 status line says
+ * "Unauthorized" or "Forbidden", which proves nothing about the reason.
+ */
+function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
   return {
     isDuplicateReference: isMonnifyDuplicateReferenceText(text),
     isKnownRefusal: isMonnifyKnownVendRefusalText(text),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
-    // Code 99 in any shape: JSON, plain text or other key casing.
-    reportsUnexpectedError: /code["'\s:=]*"?99(?!\d)/i.test(text),
+    reportsUnexpectedError: reportsMonnifyUnexpectedError(body),
     readsAsAuthRejection:
       /unauthori[sz]ed|forbidden|access denied|invalid (?:access )?token|(?:expired|revoked) token|token (?:expired|revoked)|invalid credentials?|authenticat/i.test(
-        text
+        body
       ),
   };
 }
@@ -64,9 +69,8 @@ export class MonnifyHttpError extends Error {
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
     this.name = 'MonnifyHttpError';
     this.detail = detail;
-    this.#reading = readMonnifyAnswer(
-      `${this.message} - ${rawDetail ?? detail ?? ''}`
-    );
+    const body = rawDetail ?? detail ?? '';
+    this.#reading = readMonnifyAnswer(`${this.message} - ${body}`, body);
     this.status = status;
     this.statusText = statusText;
   }
@@ -129,7 +133,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
     /\d$/.test(boundedValue) &&
     /^\d/.test(value.slice(redactionBound, redactionBound + 1))
   ) {
-    boundedValue = boundedValue.replace(/[\d .()+-]+$/, '');
+    boundedValue = boundedValue.replace(/[\d ./()+-]+$/, '');
   }
 
   const redacted = boundedValue
@@ -141,7 +145,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
   // The cut may split a number: drop a trailing digit group it leaves.
   return redacted
     .slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH)
-    .replace(/[\d .()+-]*\d$/, '')
+    .replace(/[\d ./()+-]*\d$/, '')
     .trim();
 }
 

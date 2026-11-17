@@ -250,4 +250,64 @@ describe('runOgabasseyCatalogAgent', () => {
     });
     expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
   });
+
+  it('rejects budget-echo prices, model-number prices, and bare unformatted prices', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+
+    // Budget-echo presented as product price (tool returned 1,450,000, not 2,000,000)
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'The Apple MacBook Air M2 is ₦2,000,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Model number fragment ("iPhone 16") must not allow "₦16"
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'This iPhone 16 option is ₦16.',
+      };
+    });
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [{ role: 'user', content: 'Show me iPhone 16 options' }],
+      })
+    ).toBeNull();
+
+    // Bare-digit hallucinated price (no currency symbol or commas)
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 costs 950000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Legitimate release year and display spec are not treated as prices
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 (2025) with 1080p webcam is ₦1,450,000.',
+      };
+    });
+    const withSpec = await runOgabasseyCatalogAgent(baseOptions());
+    expect(withSpec?.text).toBe(
+      'Apple MacBook Air M2 (2025) with 1080p webcam is ₦1,450,000.'
+    );
+  });
 });

@@ -41,8 +41,21 @@ const UNGROUNDED_EMPTY_RESULT_CLAIM =
 const PRICE_MENTION_PATTERN =
   /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?\s*(?:naira|ngn|₦)|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
 
-const BUDGET_OR_PRICE_NUMBER_PATTERN =
-  /(?:(?:₦|ngn\s*|[$€£]\s*)?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(million|thousand|[km])?)/giu;
+// Only treat explicit currency, scaled, or budget-cued numbers from user turns
+// as valid budget references so model numbers (e.g. "iPhone 16") never enter.
+const USER_BUDGET_MENTION_PATTERN =
+  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:(million|thousand|[km])\b|(?=(?:\s*(?:naira|ngn|₦))))|(?:under|below|within|up\s+to|at\s+most|max(?:imum)?|budget(?:\s+(?:of|is))?)\s+((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?)/giu;
+
+const BARE_PRICE_CANDIDATE_PATTERN = /\b(\d{4,9})\b/gu;
+const NON_PRICE_SPEC_SUFFIX_PATTERN =
+  /^\s*(?:mah|hz|khz|mhz|ghz|nits|ppi|rpm|gb|tb|mb|kb|mp|mm|cm|w|p|x)\b/i;
+const MODEL_NUMBER_PREFIX_PATTERN =
+  /(?:rtx|gtx|rx|arc|ryzen|core|i\d-|snapdragon|dimensity|helio|exynos|tensor|model|gen)\s*$/i;
+const PRICE_CUE_PREFIX_PATTERN =
+  /(?:costs?|priced?\s+at|for|at|from|only|under|below|within|up\s+to|at\s+most|budget(?:\s+(?:of|is))?)\s*$/i;
+const BUDGET_FRAME_PREFIX_PATTERN =
+  /\b(?:under|below|within|up\s+to|at\s+most|max(?:imum)?|budget)\b[^.!?\n]{0,24}$/i;
+const BUDGET_FRAME_SUFFIX_PATTERN = /^[^.!?\n]{0,16}\b(?:budget|limit|cap)\b/i;
 
 const STOCK_COUNT_PATTERN =
   /\b(\d+)\s+(?:in[\s-]+stock|units?\s+(?:left|available|remaining|in[\s-]+stock))\b/giu;
@@ -62,16 +75,50 @@ function extractUserPriceMentions(
   const values = new Set<number>();
   for (const message of messages) {
     if (message.role !== 'user') continue;
-    for (const match of message.content.matchAll(
-      BUDGET_OR_PRICE_NUMBER_PATTERN
-    )) {
-      const parsed = applyNumericScale(match[1], match[2]);
+    for (const match of message.content.matchAll(USER_BUDGET_MENTION_PATTERN)) {
+      const rawNumber = match[2] ?? match[4] ?? match[6];
+      const unit = match[3] ?? match[5] ?? match[7];
+      if (!rawNumber) continue;
+      const parsed = applyNumericScale(rawNumber, unit);
       if (Number.isFinite(parsed) && parsed > 0) {
         values.add(parsed);
       }
     }
   }
   return values;
+}
+
+function isBudgetRestatement(
+  text: string,
+  start: number,
+  end: number
+): boolean {
+  const before = text.slice(Math.max(0, start - 32), start);
+  const after = text.slice(end, Math.min(text.length, end + 24));
+  return (
+    BUDGET_FRAME_PREFIX_PATTERN.test(before) ||
+    BUDGET_FRAME_SUFFIX_PATTERN.test(after)
+  );
+}
+
+function isBareNonPriceSpec(
+  text: string,
+  start: number,
+  end: number,
+  amount: number
+): boolean {
+  const before = text.slice(Math.max(0, start - 24), start);
+  const after = text.slice(end, Math.min(text.length, end + 16));
+  if (NON_PRICE_SPEC_SUFFIX_PATTERN.test(after)) return true;
+  if (MODEL_NUMBER_PREFIX_PATTERN.test(before)) return true;
+  if (
+    amount >= 2010 &&
+    amount <= 2035 &&
+    !PRICE_CUE_PREFIX_PATTERN.test(before)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function hasGroundedCatalogResultText(
@@ -102,13 +149,38 @@ function hasGroundedCatalogResultText(
     return false;
   }
 
+  const checkedSpans: Array<{ start: number; end: number }> = [];
   for (const match of text.matchAll(PRICE_MENTION_PATTERN)) {
     const rawNumber = match[2] ?? match[4] ?? match[6];
     const unit = match[3] ?? match[5];
     if (!rawNumber) continue;
     const amount = applyNumericScale(rawNumber, unit);
     if (!Number.isFinite(amount) || amount <= 0) return false;
-    if (!allowedPrices.has(amount) && !userAmounts.has(amount)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    checkedSpans.push({ start, end });
+    const budgetRestatement = isBudgetRestatement(text, start, end);
+    if (
+      !allowedPrices.has(amount) &&
+      !(budgetRestatement && userAmounts.has(amount))
+    ) {
+      return false;
+    }
+  }
+
+  for (const match of text.matchAll(BARE_PRICE_CANDIDATE_PATTERN)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (checkedSpans.some((span) => start >= span.start && end <= span.end)) {
+      continue;
+    }
+    const amount = Number(match[1]);
+    if (isBareNonPriceSpec(text, start, end, amount)) continue;
+    const budgetRestatement = isBudgetRestatement(text, start, end);
+    if (
+      !allowedPrices.has(amount) &&
+      !(budgetRestatement && userAmounts.has(amount))
+    ) {
       return false;
     }
   }

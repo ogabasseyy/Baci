@@ -38,7 +38,11 @@ export function PrimaryHeadStartChoice({
   // A last-seen figure: only a hint. The fresh balance check at Create
   // decides whether the plan can be made with this head start.
   const short = walletBalance < headStart;
-  const { copyToClipboard, feedback } = useCopyToClipboard();
+  // Short labels: the full feedback sentences do not fit the Copy slot.
+  const { copyToClipboard, feedback } = useCopyToClipboard({
+    successMessage: 'Copied',
+    failureMessage: 'Try again',
+  });
   return (
     <View style={[styles.card, { borderColor: colors.border }]}>
       <Pressable
@@ -76,6 +80,12 @@ export function PrimaryHeadStartChoice({
             {formatNgnCurrency(headStart - walletBalance)} to your wallet first,
             or untick to add it later.
           </Text>
+          {fundingAccount?.account_number ? null : (
+            // No account number yet: point at the wallet's own Add money.
+            <Text style={[styles.note, { color: colors.textSecondary }]}>
+              Use Add money on your wallet to top it up, then come back.
+            </Text>
+          )}
           {fundingAccount?.account_number ? (
             <Pressable
               accessibilityRole="button"

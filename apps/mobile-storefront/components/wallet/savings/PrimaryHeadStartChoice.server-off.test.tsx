@@ -50,6 +50,16 @@ describe('PrimaryHeadStartChoice with PiggyVest off', () => {
     expect(screen.getByText('Test Bank')).toBeOnTheScreen();
   });
 
+  describe('bugfix (Muse): short wallet with no account number was a dead end', () => {
+    it('points to Add money on the wallet instead', () => {
+      renderChoice({ walletBalance: 40, fundingAccount: null });
+      expect(screen.queryByText('0000000001')).toBeNull();
+      expect(
+        screen.getByText(/Use Add money on your wallet to top it up/)
+      ).toBeOnTheScreen();
+    });
+  });
+
   it('says the head start can be added later when unticked', () => {
     const onPayNowChange = renderChoice({ payNow: false, walletBalance: 0 });
     expect(

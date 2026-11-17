@@ -13,6 +13,7 @@ export async function handleChatwootInlineCartQuantity(input: {
   conversationId: number;
   isCurrentAction: () => boolean;
   isCurrentCartContext: () => boolean;
+  getSessionToken?: () => string;
   isCurrentContext: () => boolean;
   lineTokens: Map<string, string>;
   message: QuantityMessage;
@@ -63,7 +64,9 @@ export async function handleChatwootInlineCartQuantity(input: {
             lineId,
             quantity: message.data.quantity,
             requestId,
-            sessionToken: input.sessionToken,
+            // Read at POST time: an overlapping edit may have rotated the
+            // capability while this one waited for the cookie-write lock.
+            sessionToken: input.getSessionToken?.() ?? input.sessionToken,
           },
           input.storeSlug,
           signal,

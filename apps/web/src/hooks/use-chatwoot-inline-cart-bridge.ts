@@ -222,6 +222,7 @@ export function useChatwootInlineCartBridge(
       if (message.event === 'baci-cart-quantity') {
         await handleChatwootInlineCartQuantity({
           conversationId,
+          getSessionToken: () => authorizedSessionToken ?? actionSessionToken,
           isCurrentAction: () =>
             isCurrentTarget(frame, actionTarget, conversationId) &&
             actionGeneration === latestActionGeneration &&

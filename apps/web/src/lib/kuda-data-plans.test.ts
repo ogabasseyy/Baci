@@ -176,4 +176,34 @@ describe('resolveKudaDataPlanForPurchase', () => {
       'Data bundle not found for MTN at ₦9,999. Please refresh data bundles and select a package.'
     );
   });
+
+  it('cannot confirm a fixed plan price that could not be read', async () => {
+    mockGetDataProviders.mockResolvedValueOnce([
+      {
+        billerId: 'mtn',
+        billerName: 'MTN',
+        billerType: 'Internet Data',
+        categoryId: 'data',
+        categoryName: 'Internet Data',
+        billItems: [
+          {
+            amount: 0,
+            isAmountFixed: true,
+            itemCode: 'MTN-35GB-MONTHLY',
+            itemCurrencySymbol: 'NGN',
+            itemFee: 0,
+            itemName: 'MTN 3.5GB Monthly',
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 350000,
+        dataPlanCode: 'MTN-35GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
 });

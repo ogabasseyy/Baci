@@ -94,10 +94,34 @@ function normalizeBillerName(name: string) {
 }
 
 /** The purchase names this biller, as the billers list showed it. */
-function isChosenBiller(biller: Biller, billerName: string) {
-  const listed = normalizeBillerName(biller.billerName);
-  const sent = normalizeBillerName(billerName);
+function namesMatch(listed: string, sent: string) {
   return listed !== '' && (sent === listed || sent.startsWith(`${listed} - `));
+}
+
+function plainBillerName(name: string) {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * The listings under the biller the purchase names: an exact (case and
+ * space free) name match first, so two billers that only differ by a
+ * provider tag stay apart; the provider-stripped name (as the billers list
+ * shows it) only when nothing matches exactly.
+ */
+function chosenListings<T extends { biller: Biller }>(
+  listing: T[],
+  billerName: string
+): T[] {
+  const exact = listing.filter(({ biller }) =>
+    namesMatch(plainBillerName(biller.billerName), plainBillerName(billerName))
+  );
+  if (exact.length > 0) return exact;
+  return listing.filter(({ biller }) =>
+    namesMatch(
+      normalizeBillerName(biller.billerName),
+      normalizeBillerName(billerName)
+    )
+  );
 }
 
 /** Item codes compared like the data-plan check does: case and punctuation free. */
@@ -121,7 +145,7 @@ function collectBillItems(
 }
 
 function hasFixedPrice(item: BillItem) {
-  return item.isAmountFixed && item.amount > 0;
+  return item.isAmountFixed;
 }
 
 function priceMatches(item: BillItem, amount: number) {
@@ -139,8 +163,8 @@ function priceMatches(item: BillItem, amount: number) {
  * purchase names one), and its amount must match one of those listings, so
  * a different price at another biller never declines a valid purchase
  * while a stale 100x amount (which matches none) is caught. Open-amount
- * packages pass at any amount; an implausible fixed price (under ₦10) means
- * the list can't confirm anything. If no price list is available (Kuda
+ * packages pass at any amount; an implausible or unreadable fixed price
+ * (under ₦10, including 0) means the list can't confirm anything. If no price list is available (Kuda
  * down or empty, with no good list from the past day in this server
  * instance), every purchase fails closed except Kuda's listed electricity
  * meter products.
@@ -183,15 +207,15 @@ export async function assertKudaBillItemPriceCurrent({
     .filter(({ items }) => items.length > 0);
   // The current list no longer offers this package (or not under the named
   // biller): the app's saved choice, and its price, are out of date.
-  const chosen = billerName
-    ? listing.filter(({ biller }) => isChosenBiller(biller, billerName))
-    : listing;
+  const chosen = billerName ? chosenListings(listing, billerName) : listing;
   if (chosen.length === 0) {
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }
 
   const fixed = chosen.flatMap(({ items }) => items).filter(hasFixedPrice);
   if (fixed.length === 0) return; // sold at the customer's own amount
+  // Includes an unreadable fixed price (mapped to 0): never treated as an
+  // open amount that lets any price through.
   if (fixed.some((item) => item.amount < IMPLAUSIBLE_FIXED_PRICE_NAIRA)) {
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }

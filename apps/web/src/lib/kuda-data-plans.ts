@@ -224,9 +224,9 @@ export async function resolveKudaDataPlanForPurchase({
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );
   if (exactMatch) {
+    // Includes an unreadable fixed price (mapped to 0).
     if (
       exactMatch.item.isAmountFixed &&
-      exactMatch.item.amount > 0 &&
       exactMatch.item.amount < IMPLAUSIBLE_PLAN_PRICE_NAIRA
     ) {
       throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);

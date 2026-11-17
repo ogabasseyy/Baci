@@ -80,6 +80,34 @@ describe('assertKudaBillItemPriceCurrent', () => {
     ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   });
 
+  it('cannot confirm a fixed price that could not be read', async () => {
+    mockGetBillersByCategory.mockResolvedValue([
+      startimes({ billItems: [{ ...startimesSuper, amount: 0 }] }),
+    ]);
+
+    await expect(
+      assertKudaBillItemPriceCurrent({ ...superPackage, amount: 950000 })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
+
+  it('prefers the exact biller name over a provider-stripped match', async () => {
+    mockGetBillersByCategory.mockResolvedValue([
+      startimes({ billerName: 'STARTIMES NG (Kuda)' }),
+      startimes({
+        billerId: 'startimes-monnify',
+        billerName: 'STARTIMES NG (Monnify)',
+        billItems: [{ ...startimesSuper, amount: 9000 }],
+      }),
+    ]);
+
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        ...superPackage,
+        billerName: 'STARTIMES NG (Monnify)',
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  });
+
   it('cannot confirm an implausibly low fixed price', async () => {
     mockGetBillersByCategory.mockResolvedValue([
       startimes({ billItems: [{ ...startimesSuper, amount: 5 }] }),

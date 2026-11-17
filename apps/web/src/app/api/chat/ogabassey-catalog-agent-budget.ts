@@ -108,6 +108,9 @@ export function resolveConversationBudgetLimit(
     if (!activeGroup && priorGroup) {
       activeGroup = priorGroup;
     }
+    if (BUDGET_OVERRIDE_CUE.test(priorContent)) {
+      return undefined;
+    }
 
     const budget = analyzeFastCatalogBudget(priorContent, currencyCode);
     if (!budget.hasBudget) continue;

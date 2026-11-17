@@ -9,6 +9,7 @@ import {
   KNOWN_BRAND_TOKENS,
   NON_PRODUCT_PREDECESSOR_WORDS,
   POSITIVE_AVAILABILITY_GENERIC_WORDS,
+  VARIANT_TIER_TOKENS,
 } from './ogabassey-catalog-agent-lexicon';
 
 export const POSITIVE_EMPTY_RESULT_CLAIM =
@@ -40,31 +41,44 @@ export function tokenizeLowerWords(value: string): string[] {
   );
 }
 
+function tokenizeIdentityWords(value: string): string[] {
+  return (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    (token) => token.length >= 2 || /^\d$/.test(token)
+  );
+}
+
+function collectPerProductIdentityTokens(
+  products: StorefrontAgentUiProduct[]
+): Set<string>[] {
+  return products.map(
+    (product) =>
+      new Set(
+        [product.name, product.brand, product.slug, product.variantModel]
+          .filter(Boolean)
+          .flatMap((field) => tokenizeIdentityWords(field ?? ''))
+      )
+  );
+}
+
 function collectReturnedProductTokens(
   events: StorefrontAgentUiEvent[]
 ): Set<string> {
-  const tokens = new Set<string>();
-  for (const event of events) {
-    for (const product of event.products) {
-      const fields = [
-        product.name,
-        product.brand,
-        product.category,
-        product.description,
-        product.slug,
-        product.variantModel,
-      ];
-      for (const field of fields) {
-        if (!field) continue;
-        for (const token of field.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
-          if (token.length >= 2 || /^\d$/.test(token)) {
-            tokens.add(token);
-          }
-        }
-      }
-    }
-  }
-  return tokens;
+  return new Set(
+    events.flatMap((event) =>
+      event.products.flatMap((product) =>
+        [
+          product.name,
+          product.brand,
+          product.category,
+          product.description,
+          product.slug,
+          product.variantModel,
+        ]
+          .filter(Boolean)
+          .flatMap((field) => tokenizeIdentityWords(field ?? ''))
+      )
+    )
+  );
 }
 
 export function productMatchesSegment(
@@ -72,20 +86,19 @@ export function productMatchesSegment(
   segment: string
 ): number {
   const lowerSegment = segment.toLowerCase();
-  const segmentTokens = new Set(
-    lowerSegment
-      .match(/[a-z0-9]+/g)
-      ?.filter((token) => token.length >= 2 || /^\d$/.test(token)) ?? []
-  );
+  const segmentTokens = new Set(tokenizeIdentityWords(segment));
 
-  // If the segment names any brand (e.g. "Apple" in "Apple Galaxy S25"), every
-  // named brand must belong to this product so cross-brand synthesis fails.
+  // If the segment names any brand or variant tier/chip (e.g. "Apple iPhone 16 Pro"),
+  // the single candidate product must actually own every such token.
   const productIdentityTokens = new Set([
-    ...tokenizeLowerWords(product.brand ?? ''),
-    ...tokenizeLowerWords(product.name),
+    ...tokenizeIdentityWords(product.brand ?? ''),
+    ...tokenizeIdentityWords(product.name),
   ]);
   for (const token of segmentTokens) {
-    if (KNOWN_BRAND_TOKENS.has(token) && !productIdentityTokens.has(token)) {
+    if (
+      (KNOWN_BRAND_TOKENS.has(token) || VARIANT_TIER_TOKENS.has(token)) &&
+      !productIdentityTokens.has(token)
+    ) {
       return 0;
     }
   }
@@ -95,12 +108,8 @@ export function productMatchesSegment(
     return 100 + tokenizeLowerWords(fullName).length;
   }
 
-  const nameTokens = (
-    product.name.toLowerCase().match(/[a-z0-9]+/g) ?? []
-  ).filter(
-    (token) =>
-      (token.length >= 2 || /^\d$/.test(token)) &&
-      !GENERIC_PRODUCT_NAME_WORDS.has(token)
+  const nameTokens = tokenizeIdentityWords(product.name).filter(
+    (token) => !GENERIC_PRODUCT_NAME_WORDS.has(token)
   );
   const brandTokens = new Set(tokenizeLowerWords(product.brand ?? ''));
   const nonBrandTokens = nameTokens.filter((token) => !brandTokens.has(token));
@@ -189,8 +198,16 @@ export function findBoundProducts(
 
 export function hasUnreturnedProductPhrase(
   clause: string,
-  returnedTokens: Set<string>
+  returnedTokens: Set<string>,
+  perProductTokens: Set<string>[] = []
 ): boolean {
+  const hasSingleProductMatch = (words: string[]) =>
+    perProductTokens.length > 0
+      ? perProductTokens.some((productSet) =>
+          words.every((token) => productSet.has(token))
+        )
+      : words.every((token) => returnedTokens.has(token));
+
   for (const token of tokenizeLowerWords(clause)) {
     if (KNOWN_BRAND_OR_LINE_TOKENS.has(token) && !returnedTokens.has(token)) {
       return true;
@@ -198,20 +215,21 @@ export function hasUnreturnedProductPhrase(
   }
 
   for (const match of clause.matchAll(FAMILY_VARIANT_PATTERN)) {
-    const phraseTokens = tokenizeLowerWords(match[0]);
-    if (phraseTokens.some((token) => !returnedTokens.has(token))) {
+    const phraseTokens = (
+      match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []
+    ).filter((token) => token.length >= 2 || /^\d$/.test(token));
+    if (!hasSingleProductMatch(phraseTokens)) {
       return true;
     }
   }
 
   for (const match of clause.matchAll(CAPITALIZED_PHRASE_PATTERN)) {
     const words = (match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-      (token) => !CAPITALIZED_PHRASE_IGNORE.has(token)
+      (token) =>
+        (token.length >= 2 || /^\d$/.test(token)) &&
+        !CAPITALIZED_PHRASE_IGNORE.has(token)
     );
-    if (
-      words.length >= 2 &&
-      words.some((token) => !returnedTokens.has(token))
-    ) {
+    if (words.length >= 2 && !hasSingleProductMatch(words)) {
       return true;
     }
   }
@@ -220,9 +238,11 @@ export function hasUnreturnedProductPhrase(
     const leadWord = match[1]?.toLowerCase() ?? '';
     if (NON_PRODUCT_PREDECESSOR_WORDS.has(leadWord)) continue;
     const words = (match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-      (token) => !CAPITALIZED_PHRASE_IGNORE.has(token)
+      (token) =>
+        (token.length >= 2 || /^\d$/.test(token)) &&
+        !CAPITALIZED_PHRASE_IGNORE.has(token)
     );
-    if (words.some((token) => !returnedTokens.has(token))) {
+    if (words.length > 0 && !hasSingleProductMatch(words)) {
       return true;
     }
   }
@@ -247,6 +267,7 @@ export function hasGroundedProductMentions(
   if (!matchesReturnedProduct) return false;
 
   const returnedTokens = collectReturnedProductTokens(events);
+  const perProductTokens = collectPerProductIdentityTokens(products);
   const clauses = text
     .split(EMPTY_CLAUSE_SPLIT_CAPTURE)
     .filter((_, index) => index % 2 === 0)
@@ -255,7 +276,9 @@ export function hasGroundedProductMentions(
 
   for (const clause of clauses) {
     if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
-    if (hasUnreturnedProductPhrase(clause, returnedTokens)) return false;
+    if (hasUnreturnedProductPhrase(clause, returnedTokens, perProductTokens)) {
+      return false;
+    }
     if (
       POSITIVE_EMPTY_RESULT_CLAIM.test(clause) &&
       !products.some((product) => productMatchesSegment(product, clause) > 0)

@@ -25,12 +25,23 @@ describe('ogabassey-catalog-agent-attributes', () => {
       )
     ).toBe(true);
 
-    // Substring collision ("8GB" inside "128GB storage") must be rejected
+    // Substring collision ("8GB" inside "128GB storage") and role swaps ("128GB storage" -> "128GB RAM") must be rejected
     expect(
       hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 8 GB RAM.', [
         { ...baseProduct, description: '128GB storage model' },
       ])
     ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 has 128GB RAM.', [
+        { ...baseProduct, description: '128GB storage model' },
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2 has 128GB storage.',
+        [{ ...baseProduct, description: '128GB storage model' }]
+      )
+    ).toBe(true);
 
     // Contradictory warranty durations must not pass via bare stem match
     const oneYearProduct: StorefrontAgentUiProduct = {

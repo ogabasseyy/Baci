@@ -40,12 +40,22 @@ describe('ogabassey-catalog-agent-budget', () => {
       )
     ).toEqual({ amount: 2_000_000, exclusive: true });
 
-    // Explicit price override clears prior cap
+    // Explicit price override clears prior cap on current and subsequent continuation turns
     expect(
       resolveConversationBudgetLimit(
         [
           { role: 'user', content: 'Show laptops under ₦2m' },
           { role: 'user', content: 'Show laptops over ₦2m instead' },
+        ],
+        'NGN'
+      )
+    ).toBeUndefined();
+    expect(
+      resolveConversationBudgetLimit(
+        [
+          { role: 'user', content: 'Show laptops under ₦2m' },
+          { role: 'user', content: 'Show laptops at any price' },
+          { role: 'user', content: 'one for rendering' },
         ],
         'NGN'
       )

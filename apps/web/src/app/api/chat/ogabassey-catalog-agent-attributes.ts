@@ -95,17 +95,59 @@ function extractNormalizedDurations(value: string): string[] {
   return normalized;
 }
 
+const RAM_ATTRIBUTE_ROLE = /\b(?:ram|unified\s+memory|memory|lpddr\d*)\b/i;
+const STORAGE_ATTRIBUTE_ROLE =
+  /\b(?:storage|ssd|hdd|nvme|rom|internal|flash|hard\s+drive|disk)\b/i;
+
+function extractSpecRole(
+  source: string,
+  start: number,
+  end: number
+): 'ram' | 'storage' | undefined {
+  const after =
+    source
+      .slice(end, Math.min(source.length, end + 18))
+      .split(/[.,;!?\n/\d]/)[0] ?? '';
+  if (RAM_ATTRIBUTE_ROLE.test(after)) return 'ram';
+  if (STORAGE_ATTRIBUTE_ROLE.test(after)) return 'storage';
+  const before =
+    source
+      .slice(Math.max(0, start - 18), start)
+      .split(/[.,;!?\n/]/)
+      .at(-1) ?? '';
+  if (RAM_ATTRIBUTE_ROLE.test(before)) return 'ram';
+  if (STORAGE_ATTRIBUTE_ROLE.test(before)) return 'storage';
+  return undefined;
+}
+
 function matchesSpecWithBoundary(
   corpus: string,
   rawNum: string | undefined,
   rawUnit: string | undefined,
-  rawTag: string | undefined
+  rawTag: string | undefined,
+  claimedRole: 'ram' | 'storage' | undefined
 ): boolean {
   const claimedKey = normalizeSpecKey(rawNum, rawUnit, rawTag);
   for (const corpusMatch of corpus.matchAll(SPEC_CLAIM_PATTERN)) {
     if (
-      normalizeSpecKey(corpusMatch[1], corpusMatch[2], corpusMatch[3]) ===
+      normalizeSpecKey(corpusMatch[1], corpusMatch[2], corpusMatch[3]) !==
       claimedKey
+    ) {
+      continue;
+    }
+    if (!claimedRole) return true;
+    const cStart = corpusMatch.index ?? 0;
+    const cEnd = cStart + corpusMatch[0].length;
+    const corpusRole = extractSpecRole(corpus, cStart, cEnd);
+    if (claimedRole === 'ram') {
+      if (corpusRole === 'ram') return true;
+      continue;
+    }
+    if (corpusRole === 'ram') continue;
+    if (
+      corpusRole === 'storage' ||
+      rawUnit?.toLowerCase() === 'tb' ||
+      Number(rawNum) >= 64
     ) {
       return true;
     }
@@ -120,6 +162,7 @@ export function hasGroundedSpecAndPolicyClaims(
 ): boolean {
   for (const match of text.matchAll(SPEC_CLAIM_PATTERN)) {
     const offset = match.index ?? 0;
+    const claimedRole = extractSpecRole(text, offset, offset + match[0].length);
     const bound = findBoundProducts(text, offset, products);
     const hasMatch =
       bound.length > 0 &&
@@ -128,7 +171,8 @@ export function hasGroundedSpecAndPolicyClaims(
           buildProductAttributeCorpus(product),
           match[1],
           match[2],
-          match[3]
+          match[3],
+          claimedRole
         )
       );
     if (!hasMatch) return false;

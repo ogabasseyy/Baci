@@ -90,6 +90,20 @@ describe('ogabassey-catalog-agent-product-matching', () => {
         events
       )
     ).toBe(false);
+
+    // Cross-product variant synthesis ("iPhone 16" + "iPhone 15 Pro" -> "iPhone 16 Pro") must fail
+    const iphone15Pro = makeProduct({
+      id: 'iphone-15-pro',
+      name: 'Apple iPhone 15 Pro',
+      price: 1_100_000,
+      slug: 'apple-iphone-15-pro',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 Pro is ₦1,200,000.',
+        makeEvent([iphone16, iphone15Pro])
+      )
+    ).toBe(false);
   });
 
   it('binds all products in a grouped comma-separated clause', () => {

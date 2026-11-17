@@ -232,6 +232,12 @@ export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
   'steamdeck',
 ]);
 
+export const VARIANT_TIER_TOKENS = new Set(
+  'pro ultra max mini plus air studio fold flip fe se lite neo edge m1 m2 m3 m4 m5'.split(
+    ' '
+  )
+);
+
 export const POSITIVE_AVAILABILITY_GENERIC_WORDS = new Set(
   'it this that these those they them both one ones all each every either we you our your is are was were have has had can will get buy order try check out here there now too also currently available stock for and with without under below from the option options item items unit units left remaining budget price prices offer carry sell recommend find matching product products device devices model models laptop laptops phone phones tablet tablets camera cameras watch watches'.split(
     ' '

@@ -185,6 +185,8 @@ describe('runOgabasseyCatalogAgent', () => {
     'Can you recommend a restaurant?',
     'Are you available to help?',
     'What is the cost of living?',
+    'What products does photosynthesis create?',
+    'What devices are used in networking?',
     'What is your WhatsApp number?',
     'What is your last price for iPhone 16?',
     'Cancel my order',
@@ -966,5 +968,50 @@ describe('runOgabasseyCatalogAgent', () => {
       return { text: 'Nothing matched at ₦950,000.' };
     });
     expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+  });
+
+  it('rejects lowercase unreturned products, foreign-currency labels on NGN prices, and negated+positive empty clauses', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+
+    // Lowercase unreturned product alongside valid returned MacBook
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 or fairphone 5 is ₦1,450,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Foreign currency symbol on NGN catalog price even when user asked in USD
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 is $1,450,000.',
+      };
+    });
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [{ role: 'user', content: 'Show me MacBooks below $1000' }],
+      })
+    ).toBeNull();
+
+    // Mixed negated and positive empty-result clauses
+    for (const text of [
+      "We don't have MacBooks and Dell XPS 15 is available now.",
+      "We don't have MacBooks we have Dell XPS 15.",
+    ]) {
+      mocks.generateText.mockImplementationOnce(async () => {
+        reportToolResult?.('searchProducts', { products: [], total: 0 });
+        return { text };
+      });
+      expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+    }
   });
 });

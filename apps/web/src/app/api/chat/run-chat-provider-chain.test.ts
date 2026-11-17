@@ -359,5 +359,8 @@ describe('runChatProviderChain', () => {
     }) => boolean;
     expect(stopCondition({ steps: [{}] })).toBe(false);
     expect(stopCondition({ steps: [{}, {}, {}, {}, {}] })).toBe(true);
+
+    markSideEffect?.('cancelOrder');
+    expect(stopCondition({ steps: [{}] })).toBe(true);
   });
 });

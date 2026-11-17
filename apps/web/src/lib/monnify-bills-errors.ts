@@ -1,5 +1,6 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { readsAsMonnifyAuthRejection } from './monnify-auth-rejection';
+import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
@@ -81,11 +82,10 @@ function readMonnifyAnswer(
       : body;
   const text = `${statusLine} - ${bodyText}`;
   return {
-    // Duplicates are read from the raw body too: a key such as
-    // `duplicate: true` still signals one.
-    isDuplicateReference: isMonnifyDuplicateReferenceText(
-      `${statusLine} - ${body}`
-    ),
+    // Duplicate wording is read from values; a structured flag counts only
+    // when set (`duplicate: true`, not `duplicate: false`).
+    isDuplicateReference:
+      isMonnifyDuplicateReferenceText(text) || hasMonnifyDuplicateFlag(parsed),
     isKnownRefusal: isMonnifyKnownVendRefusalText(text),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
     reportsUnexpectedError:

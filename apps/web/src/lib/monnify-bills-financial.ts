@@ -7,7 +7,6 @@ import {
   vendRequestSchema,
   vendResponseBodySchema,
 } from '@/schemas/monnify-bills-schema';
-import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import {
   MonnifyHttpError,
   MonnifyTransientVendError,
@@ -20,14 +19,7 @@ import {
   MONNIFY_FINANCIAL_TIMEOUT_MS,
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
-import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
-import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
-import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
-import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
-import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
-import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
-import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
-import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
+import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
 
 export async function verifyBillCustomer(
   _billerCode: string,
@@ -131,36 +123,20 @@ export async function purchaseBill(
         responseCode: parsedEnvelope.responseCode,
         responseMessage: parsedEnvelope.responseMessage,
       });
-      const envelopeText = JSON.stringify(envelope);
-      const fullAnswer = `${parsedEnvelope.responseCode ?? ''} ${rawMessage} ${envelopeText}`;
       return {
         success: false,
         reference: requestReference,
         // Scrubbed like HTTP error details: Monnify may echo the customer's
         // number, and this text is persisted and logged. Classification
-        // below reads the full text, before it is cut short.
+        // reads the full answer, before it is cut short.
         message: sanitizeMonnifyErrorDetail(rawMessage),
         status: 'failed',
         amount,
-        // Every check reads the whole answer (code, message and body), so a
-        // signal nested anywhere in it counts. Code 99 ("unexpected error,
-        // re-query"), vend evidence, outcome wording and duplicates rule a
-        // refusal out; a known refusal anywhere rules it in.
-        providerDefiniteFailure:
-          !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
-          // Timeout, conflict, throttle and 99 codes, at any depth, prove
-          // nothing was vended no more here than as HTTP statuses.
-          !hasMonnifyNonDefinitiveCode(envelope) &&
-          !reportsMonnifyUnexpectedError(envelopeText) &&
-          !hasMonnifyVendEvidence(envelope) &&
-          !mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(envelope)) &&
-          isMonnifyKnownVendRefusalText(fullAnswer) &&
-          // Outcome wording is read from string values only: a key such as
-          // `processed: false` is not an outcome.
-          !isMonnifyVendOutcomeText(
-            `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
-          ) &&
-          !isMonnifyDuplicateReferenceText(fullAnswer),
+        providerDefiniteFailure: isMonnifyDefiniteBusinessRefusal({
+          envelope,
+          rawMessage,
+          responseCode: parsedEnvelope.responseCode,
+        }),
       };
     }
 

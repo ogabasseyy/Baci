@@ -45,9 +45,11 @@ describe('sanitizeMonnifyErrorDetail', () => {
   it('redacts phone numbers written in groups', () => {
     expect(
       sanitizeMonnifyErrorDetail(
-        'Insufficient wallet balance for +234 801 234 5678 or 0801-234-5678'
+        'Insufficient wallet balance for +234 801 234 5678, 0801-234-5678 or 0801.234.5678'
       )
-    ).toBe('Insufficient wallet balance for [redacted] or [redacted]');
+    ).toBe(
+      'Insufficient wallet balance for [redacted], [redacted] or [redacted]'
+    );
   });
 
   it('keeps grouped references that are not phone-shaped', () => {

@@ -2,12 +2,12 @@ import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
- * Nigerian phone numbers written in groups, e.g. "+234 801 234 5678" or
- * "0801-234-5678". Only phone-shaped groups: other long references stay
+ * Nigerian phone numbers written in groups, e.g. "+234 801 234 5678",
+ * "0801-234-5678" or "0801.234.5678". Only phone-shaped groups: other long references stay
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)(?:\+?234[ -]?|0)[789][01]\d(?:[ -]?\d){7}(?!\d)/g;
+  /(?<!\d)(?:\+?234[ .-]?|0)[789][01]\d(?:[ .-]?\d){7}(?!\d)/g;
 /** Unscrubbed Monnify bodies, kept off the error object entirely. */
 const rawDetailByError = new WeakMap<MonnifyHttpError, string | null>();
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;

@@ -139,12 +139,50 @@ describe('withSavingsVerifyRetry', () => {
   });
 
   it('honours injected delays as the attempt bound', async () => {
-    const query = vi.fn().mockResolvedValue(record('success'));
+    const query = vi.fn().mockResolvedValue(record('pending'));
     const { now, sleep } = clock();
     await withSavingsVerifyRetry(query, { now, sleep, delaysMs: [10] })(
       selection
     );
     expect(query).toHaveBeenCalledTimes(2);
     expect(sleep.mock.calls).toEqual([[10]]);
+  });
+
+  it("does not re-ask a 'success' record: the proof never settles it", async () => {
+    const query = vi.fn().mockResolvedValue(record('success'));
+    const { now, sleep } = clock();
+    expect(
+      await withSavingsVerifyRetry(query, { now, sleep })(selection)
+    ).toEqual(record('success'));
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('starts no try when a late timer overran the budget', async () => {
+    let time = 0;
+    const now = () => time;
+    // The first wait should take 1.5 s but the timer fires 10 s late.
+    const sleep = vi.fn(async (ms: number) => {
+      time += ms + 10_000;
+    });
+    const query = vi.fn().mockResolvedValue(record('pending'));
+    expect(
+      await withSavingsVerifyRetry(query, { now, sleep })(selection)
+    ).toEqual(record('pending'));
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows a 404 without a new try when a late timer overran the budget', async () => {
+    let time = 0;
+    const now = () => time;
+    const sleep = vi.fn(async (ms: number) => {
+      time += ms + 10_000;
+    });
+    const query = vi.fn().mockRejectedValue(notFound());
+    await expect(
+      withSavingsVerifyRetry(query, { now, sleep })(selection)
+    ).rejects.toThrow('PROVIDER_HTTP_ERROR');
+    expect(query).toHaveBeenCalledTimes(1);
   });
 });

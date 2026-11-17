@@ -29,19 +29,16 @@ export const SAVINGS_VERIFY_RETRY_BUDGET_MS = 8000;
 const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-// Worth re-asking = a well-formed TSQ record not yet 'successful' or
-// 'failed'. A terminal record (matching or not) will not change, and a
-// malformed body is not lag: both pass straight through to the proof.
-function isNonTerminalRecord(response: unknown): boolean {
+// Worth re-asking = a well-formed TSQ record still 'pending': the only state
+// the proof can later settle or release. 'successful'/'failed' will not
+// change, the proof never settles 'success', and a malformed body is not
+// lag: all of those pass straight through to the proof.
+function isPendingRecord(response: unknown): boolean {
   const parsed =
     piggyvestTransactionStatusSchemas.walletTransferResponse.safeParse(
       response
     );
-  return (
-    parsed.success &&
-    parsed.data.data.status !== 'successful' &&
-    parsed.data.data.status !== 'failed'
-  );
+  return parsed.success && parsed.data.data.status === 'pending';
 }
 
 // A TSQ 404 is "not indexed yet" as often as "never sent"; it is the lag
@@ -73,16 +70,21 @@ export function withSavingsVerifyRetry(
       const delay = delays[attempt];
       const canRetry = () =>
         delay !== undefined && now() - startedAt + delay <= budgetMs;
+      // A late timer (stalled event loop) must not start a try past the
+      // budget: re-check the clock after every wait.
+      const withinBudget = () => now() - startedAt <= budgetMs;
       let response: unknown;
       try {
         response = await query(selection);
       } catch (error) {
         if (!isNotIndexedYet(error) || !canRetry()) throw error;
         await sleep(delay as number);
+        if (!withinBudget()) throw error;
         continue;
       }
-      if (!isNonTerminalRecord(response) || !canRetry()) return response;
+      if (!isPendingRecord(response) || !canRetry()) return response;
       await sleep(delay as number);
+      if (!withinBudget()) return response;
     }
   };
 }

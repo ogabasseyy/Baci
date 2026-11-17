@@ -10,6 +10,11 @@ describe('hasMonnifyVendEvidence', () => {
     { vendStatus: 'FAILED', responseMessage: 'Insufficient wallet balance' },
     { responseBody: { status: 'FAILED' } },
     { responseBody: { paymentReference: 'MNFY-PAY-1' } },
+    { vend_reference: 'BACI-REF-123' },
+    { TransactionReference: 'MFBP-1' },
+    { response_body: { vend_status: 'FAILED' } },
+    { ResponseBody: { Status: 'PENDING' } },
+    { reference: 'MFBP-1' },
   ])('sees vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(true);
   });

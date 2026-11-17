@@ -101,6 +101,16 @@ describe('withSavingsVerifyRetry', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it('does not re-ask a malformed body: it is not lag', async () => {
+    const query = vi.fn().mockResolvedValue({ status: true, data: {} });
+    const { now, sleep } = clock();
+    expect(
+      await withSavingsVerifyRetry(query, { now, sleep })(selection)
+    ).toEqual({ status: true, data: {} });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it('does not re-ask a timeout or other provider error', async () => {
     const query = vi.fn().mockRejectedValue(new Error('PROVIDER_TIMEOUT'));
     const { now, sleep } = clock();

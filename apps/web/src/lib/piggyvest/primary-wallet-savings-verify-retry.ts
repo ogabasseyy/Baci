@@ -29,18 +29,18 @@ export const SAVINGS_VERIFY_RETRY_BUDGET_MS = 8000;
 const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-// Terminal = a well-formed TSQ record in 'successful' or 'failed'. Whether it
-// matches the reservation is still decided only by the proof; a terminal
-// mismatch is not retried (the record will not change).
-function isTerminalRecord(response: unknown): boolean {
+// Worth re-asking = a well-formed TSQ record not yet 'successful' or
+// 'failed'. A terminal record (matching or not) will not change, and a
+// malformed body is not lag: both pass straight through to the proof.
+function isNonTerminalRecord(response: unknown): boolean {
   const parsed =
     piggyvestTransactionStatusSchemas.walletTransferResponse.safeParse(
       response
     );
   return (
     parsed.success &&
-    (parsed.data.data.status === 'successful' ||
-      parsed.data.data.status === 'failed')
+    parsed.data.data.status !== 'successful' &&
+    parsed.data.data.status !== 'failed'
   );
 }
 
@@ -81,7 +81,7 @@ export function withSavingsVerifyRetry(
         await sleep(delay as number);
         continue;
       }
-      if (isTerminalRecord(response) || !canRetry()) return response;
+      if (!isNonTerminalRecord(response) || !canRetry()) return response;
       await sleep(delay as number);
     }
   };

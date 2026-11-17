@@ -8,6 +8,7 @@ import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-e
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
+import { withSavingsVerifyRetry } from './primary-wallet-savings-verify-retry';
 import { retrievePiggyvestWallet } from './wallets';
 import {
   emitPiggyvestWebhookAlert,
@@ -250,11 +251,15 @@ export async function runGoalCancelOutflowReconciliation(input: {
     if (!match) continue;
     const outcome = await reconcilePrimaryWalletSavings(match.operationId, {
       ...store,
-      queryProvider: createSavingsVerifyQueryProvider({
-        environment: configuration.environment,
-        token,
-        fetchImplementation: input.fetchImplementation,
-      }),
+      // The webhook can arrive seconds before the verify record turns
+      // terminal: re-ask briefly before leaving the delivery retryable.
+      queryProvider: withSavingsVerifyRetry(
+        createSavingsVerifyQueryProvider({
+          environment: configuration.environment,
+          token,
+          fetchImplementation: input.fetchImplementation,
+        })
+      ),
     });
     return outcome.status;
   }

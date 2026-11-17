@@ -34,10 +34,10 @@ SELECT src.merchant_id, src.token
 FROM (
   SELECT
     fs.merchant_id,
-    NULLIF(pg_catalog.btrim(COALESCE(
-      zoho.obj ->> 'refreshToken',
-      zoho.obj ->> 'refresh_token'
-    )), '') AS token
+    COALESCE(
+      NULLIF(pg_catalog.btrim(zoho.obj ->> 'refreshToken'), ''),
+      NULLIF(pg_catalog.btrim(zoho.obj ->> 'refresh_token'), '')
+    ) AS token
   FROM public.merchant_feature_settings AS fs
   CROSS JOIN LATERAL (
     SELECT CASE

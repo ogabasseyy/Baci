@@ -15,8 +15,8 @@
 --
 -- The dashboard shows "configured / not configured". That needs presence
 -- without value, so `get_merchant_integration_secret_presence` returns four
--- booleans to the owner, or to staff holding settings, marketing or dashboard
--- view permission for that exact merchant (the same gate as the settings route).
+-- booleans to the owner, or to staff holding settings view/edit, marketing or
+-- dashboard view permission for that exact merchant (the same gate as the settings route).
 --
 -- Not changed here (see PR description): `custom_settings` (holds Zoho
 -- Campaigns tokens) stays readable, and any column added to this table later
@@ -70,6 +70,7 @@ BEGIN
         WHERE m.id = p_merchant_id AND m.user_id = (SELECT auth.uid())
       )
       OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'settings', 'view')
+      OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'settings', 'edit')
       OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'marketing', 'view')
       OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'dashboard', 'view')
     ) THEN

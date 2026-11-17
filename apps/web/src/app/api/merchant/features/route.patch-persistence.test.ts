@@ -116,6 +116,39 @@ describe('PATCH /api/merchant/features persistence', () => {
       });
     });
 
+    it('clears the stored refresh token when the request sends it blank', async () => {
+      const { PATCH } = await import('./route');
+
+      const res = await PATCH(
+        makeRequest('PATCH', {
+          custom_settings: {
+            zohoCampaigns: { enabled: false, refreshToken: '' },
+          },
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(zohoCalls()).toEqual([
+        {
+          name: 'set_merchant_zoho_refresh_token',
+          args: { p_merchant_id: MERCHANT_ID, p_refresh_token: '' },
+        },
+      ]);
+    });
+
+    it('keeps the stored refresh token when the request does not mention it', async () => {
+      const { PATCH } = await import('./route');
+
+      const res = await PATCH(
+        makeRequest('PATCH', {
+          custom_settings: { zohoCampaigns: { enabled: false } },
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(zohoCalls()).toEqual([]);
+    });
+
     it('PUT also routes the refresh token to the protected function', async () => {
       const { PUT } = await import('./route');
       testState.upsertData = { id: 'settings-1', merchant_id: MERCHANT_ID };

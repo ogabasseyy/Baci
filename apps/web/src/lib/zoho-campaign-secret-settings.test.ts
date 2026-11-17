@@ -37,13 +37,34 @@ describe('extractZohoCampaignSecrets', () => {
     });
   });
 
-  it('ignores a blank refresh token but still strips it', () => {
-    const result = extractZohoCampaignSecrets({
+  it('treats a blank or null refresh token as an explicit clear', () => {
+    const blank = extractZohoCampaignSecrets({
       zohoCampaigns: { enabled: true, refreshToken: '   ' },
+    });
+    const nulled = extractZohoCampaignSecrets({
+      zoho_campaigns: { refresh_token: null },
+    });
+
+    expect(blank.refreshToken).toBeNull();
+    expect(blank.customSettings).toEqual({ zohoCampaigns: { enabled: true } });
+    expect(nulled.refreshToken).toBeNull();
+  });
+
+  it('leaves the stored token alone when the request does not mention it', () => {
+    const result = extractZohoCampaignSecrets({
+      zohoCampaigns: { enabled: false, listKey: 'L1' },
     });
 
     expect(result.refreshToken).toBeUndefined();
-    expect(result.customSettings).toEqual({ zohoCampaigns: { enabled: true } });
+  });
+
+  it('prefers a real token over a blank one under the other spelling', () => {
+    const result = extractZohoCampaignSecrets({
+      zohoCampaigns: { refreshToken: '' },
+      zoho_campaigns: { refresh_token: 'real' },
+    });
+
+    expect(result.refreshToken).toBe('real');
   });
 
   it('does not mutate its input and passes non-objects through', () => {

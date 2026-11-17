@@ -131,7 +131,7 @@ export function createPatchFeatureSettings(
             existingSettings?.custom_settings
           );
       }
-      let zohoRefreshToken: string | undefined;
+      let zohoRefreshToken: string | null | undefined;
       if ('custom_settings' in sanitizedUpdates) {
         const extracted = extractZohoCampaignSecrets(
           sanitizedUpdates.custom_settings

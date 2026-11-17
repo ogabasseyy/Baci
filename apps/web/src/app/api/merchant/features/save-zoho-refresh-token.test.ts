@@ -16,6 +16,17 @@ describe('saveZohoRefreshToken', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it('clears the stored token when told null (blank value to the function)', async () => {
+    const { client, rpc } = clientWith(null);
+    expect(await saveZohoRefreshToken(client, 'm1', null)).toEqual({
+      ok: true,
+    });
+    expect(rpc).toHaveBeenCalledWith('set_merchant_zoho_refresh_token', {
+      p_merchant_id: 'm1',
+      p_refresh_token: '',
+    });
+  });
+
   it('saves through the permission-checked function', async () => {
     const { client, rpc } = clientWith(null);
     expect(await saveZohoRefreshToken(client, 'm1', 'tok')).toEqual({

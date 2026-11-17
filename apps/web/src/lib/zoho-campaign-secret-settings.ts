@@ -23,8 +23,12 @@ function isRecord(value: unknown): value is JsonRecord {
 export interface ExtractedZohoSecrets<T> {
   /** custom_settings with every Zoho token key removed. */
   customSettings: T;
-  /** Non-blank refresh token that was supplied, to be saved through the RPC. */
-  refreshToken: string | undefined;
+  /**
+   * `string`: a new refresh token to save. `null`: the key was sent blank or null, which
+   * clears the stored token. `undefined`: the request did not mention the token, so the
+   * stored one is left alone.
+   */
+  refreshToken: string | null | undefined;
 }
 
 export function extractZohoCampaignSecrets<T>(
@@ -34,24 +38,27 @@ export function extractZohoCampaignSecrets<T>(
     return { customSettings, refreshToken: undefined };
 
   const cleaned: JsonRecord = { ...customSettings };
-  let refreshToken: string | undefined;
+  let refreshToken: string | null | undefined;
+  let sawBlankToken = false;
 
   for (const settingsKey of ZOHO_CUSTOM_SETTING_KEYS) {
     const zoho = cleaned[settingsKey];
     if (!isRecord(zoho)) continue;
 
     for (const tokenKey of ZOHO_REFRESH_TOKEN_KEYS) {
+      if (!(tokenKey in zoho)) continue;
       const value = zoho[tokenKey];
-      if (refreshToken === undefined && typeof value === 'string') {
-        const trimmed = value.trim();
-        if (trimmed) refreshToken = trimmed;
-      }
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (trimmed && typeof refreshToken !== 'string') refreshToken = trimmed;
+      else if (!trimmed) sawBlankToken = true;
     }
 
     const withoutSecrets = { ...zoho };
     for (const secretKey of ZOHO_SECRET_KEYS) delete withoutSecrets[secretKey];
     cleaned[settingsKey] = withoutSecrets;
   }
+
+  if (refreshToken === undefined && sawBlankToken) refreshToken = null;
 
   return { customSettings: cleaned as T, refreshToken };
 }

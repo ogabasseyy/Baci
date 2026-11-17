@@ -209,3 +209,6 @@ REVOKE ALL ON FUNCTION public.set_merchant_zoho_refresh_token(uuid, text)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_merchant_zoho_refresh_token(uuid, text)
   TO authenticated;
+
+COMMENT ON FUNCTION public.set_merchant_zoho_refresh_token(uuid, text) IS
+  'Owner or integrations.manage staff only (signed-in callers). Intentionally not executable by service_role: server tooling writes the table directly.';

@@ -248,7 +248,10 @@ export function OxygenGuidedVerification({
                             ? 'Getting Oxygen’s secure camera check ready for you.'
                             : 'We’re confirming your BVN with Oxygen.'
                       : eligibilityFailed
-                        ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
+                        ? state.eligibilityFailureReason ===
+                          'financial_details_mismatch'
+                          ? 'Oxygen says your financial details do not match. Please contact your bank to check and update your details, or contact support for help. Then try again.'
+                          : 'Oxygen couldn’t complete the check. Try again, or contact support for help. Your progress is saved.'
                         : review
                           ? 'Oxygen is still processing your check. Your details are saved, and you can check again when you’re ready.'
                           : selfieConfirmed

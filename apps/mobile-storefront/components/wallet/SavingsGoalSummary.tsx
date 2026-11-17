@@ -126,15 +126,18 @@ export function SavingsGoalSummary({
               onPress={onChangeDevice}
               style={[
                 styles.changePill,
-                { backgroundColor: colors.primaryLowOpacity },
+                // Solid red with light text: red-on-dark-red was unreadable.
+                { backgroundColor: colors.primary },
               ]}
             >
               <Ionicons
                 name="swap-horizontal-outline"
                 size={14}
-                color={colors.primary}
+                color={colors.primaryForeground}
               />
-              <Text style={[styles.changeText, { color: colors.primary }]}>
+              <Text
+                style={[styles.changeText, { color: colors.primaryForeground }]}
+              >
                 Change
               </Text>
             </Pressable>

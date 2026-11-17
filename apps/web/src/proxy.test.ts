@@ -750,15 +750,14 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('matches default PostHog relay paths in proxy matcher so credential stripping runs in-repo', () => {
-    const matcherRegexes = config.matcher.map(
-      (pattern) => new RegExp(`^${pattern}$`)
-    );
-    expect(matcherRegexes.some((re) => re.test('/baci-relay/e/capture/'))).toBe(
-      true
-    );
+  it('matches default PostHog relay paths in proxy matcher so credential stripping runs in-repo', async () => {
+    const { unstable_doesMiddlewareMatch: unstable_doesProxyMatch } =
+      await import('next/experimental/testing/server');
     expect(
-      matcherRegexes.some((re) => re.test('/baci-relay/static/recorder.js'))
+      unstable_doesProxyMatch({ config, url: '/baci-relay/e/capture/' })
+    ).toBe(true);
+    expect(
+      unstable_doesProxyMatch({ config, url: '/baci-relay/static/recorder.js' })
     ).toBe(true);
   });
 

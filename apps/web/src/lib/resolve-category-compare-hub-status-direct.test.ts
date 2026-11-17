@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockMaybeSingle = vi.fn();
+const mockReadStorefrontMerchantSnapshot = vi.fn();
 const mockCategoriesReturns = vi.fn();
 const mockGetCachedProductSemanticInventory = vi.fn();
 const mockGetMerchantByIdentifier = vi.fn();
@@ -13,15 +13,6 @@ vi.mock('@/lib/cached-data', () => ({
   getCachedCategories: (...args: unknown[]) => mockGetCachedCategories(...args),
   getPublicSupabaseClient: () => ({
     from: (table: string) => {
-      if (table === 'merchants') {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: mockMaybeSingle,
-            }),
-          }),
-        };
-      }
       if (table === 'categories') {
         return {
           select: () => ({
@@ -38,8 +29,9 @@ vi.mock('@/lib/cached-data', () => ({
   }),
 }));
 
-vi.mock('@/lib/domain-cache-simple', () => ({
-  getSlugForCustomDomain: vi.fn().mockResolvedValue('ogabassey'),
+vi.mock('@/lib/storefront-merchant-snapshot', () => ({
+  readStorefrontMerchantSnapshot: (...args: unknown[]) =>
+    mockReadStorefrontMerchantSnapshot(...args),
 }));
 
 vi.mock(
@@ -74,15 +66,20 @@ describe('resolveStorefrontCompareHubStatus direct proxy lookup', () => {
   });
 
   it('resolves empty via direct Supabase lookup without use-cache directives', async () => {
-    mockMaybeSingle.mockResolvedValue({
-      data: {
-        id: 'merchant-1',
-        slug: 'ogabassey',
-        is_published: true,
-        business_name: 'Ogabassey',
-        country: 'NG',
+    mockReadStorefrontMerchantSnapshot.mockResolvedValue({
+      status: 'found',
+      value: {
+        custom_domain: null,
+        feature_settings: null,
+        resolution_status: 'found',
+        merchant_data: {
+          id: 'merchant-1',
+          slug: 'ogabassey',
+          is_published: true,
+          business_name: 'Ogabassey',
+          country: 'NG',
+        },
       },
-      error: null,
     });
     mockCategoriesReturns.mockResolvedValue({
       data: [
@@ -108,15 +105,18 @@ describe('resolveStorefrontCompareHubStatus direct proxy lookup', () => {
     expect(resolution).toEqual({ kind: 'empty' });
   });
 
-  it('fails open when the merchant query errors without caching', async () => {
-    mockMaybeSingle
+  it('fails open when the merchant snapshot lookup errors without caching', async () => {
+    mockReadStorefrontMerchantSnapshot
       .mockResolvedValueOnce({
-        data: null,
-        error: new Error('db connection timeout'),
+        status: 'unavailable',
+        error: {
+          kind: 'timeout',
+          operation: 'merchant_snapshot',
+          retryable: true,
+        },
       })
       .mockResolvedValueOnce({
-        data: null,
-        error: null,
+        status: 'not_found',
       });
 
     await expect(
@@ -138,15 +138,24 @@ describe('resolveStorefrontCompareHubStatus direct proxy lookup', () => {
     ).resolves.toEqual({ kind: 'empty' });
   });
 
-  it('matches resolveCategoryCompareHubStatus across draft, empty, and degraded fixtures', async () => {
+  it('matches resolveCategoryCompareHubStatus across draft, empty-categories, and degraded fixtures', async () => {
     const draftMerchant = {
       id: 'merchant-1',
       slug: 'ogabassey',
       is_published: false,
       business_name: 'Ogabassey',
       country: 'NG',
+      custom_domain: null,
     };
-    mockMaybeSingle.mockResolvedValueOnce({ data: draftMerchant, error: null });
+    mockReadStorefrontMerchantSnapshot.mockResolvedValueOnce({
+      status: 'found',
+      value: {
+        custom_domain: null,
+        feature_settings: null,
+        resolution_status: 'found',
+        merchant_data: draftMerchant,
+      },
+    });
     mockGetMerchantByIdentifier.mockResolvedValueOnce(draftMerchant);
     await expect(
       resolveCategoryCompareHubStatusDirect({
@@ -161,8 +170,16 @@ describe('resolveStorefrontCompareHubStatus direct proxy lookup', () => {
     );
 
     const liveMerchant = { ...draftMerchant, is_published: true };
-    mockMaybeSingle.mockResolvedValueOnce({ data: liveMerchant, error: null });
-    mockCategoriesReturns.mockResolvedValueOnce([]);
+    mockReadStorefrontMerchantSnapshot.mockResolvedValueOnce({
+      status: 'found',
+      value: {
+        custom_domain: null,
+        feature_settings: null,
+        resolution_status: 'found',
+        merchant_data: liveMerchant,
+      },
+    });
+    mockCategoriesReturns.mockResolvedValueOnce({ data: [], error: null });
     mockGetMerchantByIdentifier.mockResolvedValueOnce(liveMerchant);
     mockGetCachedCategories.mockResolvedValueOnce([]);
     await expect(
@@ -177,16 +194,27 @@ describe('resolveStorefrontCompareHubStatus direct proxy lookup', () => {
       })
     );
 
-    mockMaybeSingle.mockResolvedValueOnce({ data: liveMerchant, error: null });
-    mockCategoriesReturns.mockResolvedValueOnce([
-      {
-        id: 'cat-1',
-        name: 'Printers',
-        slug: 'printers',
-        is_active: true,
-        parent_id: null,
+    mockReadStorefrontMerchantSnapshot.mockResolvedValueOnce({
+      status: 'found',
+      value: {
+        custom_domain: null,
+        feature_settings: null,
+        resolution_status: 'found',
+        merchant_data: liveMerchant,
       },
-    ]);
+    });
+    mockCategoriesReturns.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'cat-1',
+          name: 'Printers',
+          slug: 'printers',
+          is_active: true,
+          parent_id: null,
+        },
+      ],
+      error: null,
+    });
     mockGetCachedProductSemanticInventory.mockRejectedValueOnce(
       new Error('inventory degraded')
     );

@@ -91,6 +91,12 @@ describe('custom-domain routing', () => {
       domainPathSegments: ['phones', 'iphone-16'],
     };
 
+    vi.mocked(runStorefrontPreflight).mockImplementationOnce(
+      ({ onPdpConfirmedLive }) => {
+        onPdpConfirmedLive?.();
+        return Promise.resolve(null);
+      }
+    );
     const validRes = await runCustomDomainRouting(
       new NextRequest('https://shop.example/phones/iphone-16', {
         headers: { accept: 'text/html' },
@@ -193,6 +199,33 @@ describe('custom-domain routing', () => {
       '/old-shop/iphone-16',
       'shop.example',
       'Googlebot/2.1',
+      context
+    );
+
+    expect(runCustomDomainAliasRouting).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(301);
+  });
+
+  it('preserves retired-alias redirects on unchecked or fail-open 2-segment null preflight paths', async () => {
+    const context = {
+      domain: 'shop.example',
+      domainMerchantSlug: 'new-shop',
+      normalizedRequestHost: 'shop.example',
+      requestHostHadWww: false,
+      domainPathSegments: ['old-shop', 'cart'],
+    };
+    vi.mocked(runStorefrontPreflight).mockResolvedValueOnce(null);
+    vi.mocked(runCustomDomainAliasRouting).mockResolvedValueOnce(
+      NextResponse.redirect('https://shop.example/cart', 301)
+    );
+
+    const res = await runCustomDomainRouting(
+      new NextRequest('https://shop.example/old-shop/cart', {
+        headers: { accept: 'text/html' },
+      }),
+      '/old-shop/cart',
+      'shop.example',
+      'Mozilla',
       context
     );
 

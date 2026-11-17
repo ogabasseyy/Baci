@@ -1,22 +1,23 @@
-import { buildCategoryCompareHubLinks } from '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/category-compare-hub-links';
+import { z } from 'zod';
+import {
+  buildCategoryCompareHubLinks,
+  buildCategoryCompareHubProductGroups,
+  findVisibleCompareHubCategory,
+} from '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/category-compare-hub-links';
 import type { CategoryCompareHubStatus } from '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/resolve-category-compare-hub-status';
 import { getPublicSupabaseClient } from '@/lib/cached-data';
-import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
-import { getCachedProductSemanticInventory } from '@/lib/storefront-product/get-cached-product-semantic-inventory';
-import {
-  isDomainIdentifier,
-  isValidMerchantIdentifier,
-} from '@/lib/validation';
+import { readStorefrontMerchantSnapshot } from '@/lib/storefront-merchant-snapshot';
+import { isValidMerchantIdentifier } from '@/lib/validation';
 
-interface DirectMerchantRow {
-  id: string;
-  slug: string;
-  is_published: boolean | null;
-  business_name: string | null;
-  country: string | null;
-}
+const directMerchantDataSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  is_published: z.boolean().nullable().optional(),
+  business_name: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+});
 
 interface DirectCategoryRow {
   id: string;
@@ -40,32 +41,25 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
     return { kind: 'empty' };
   }
 
-  const isDomain = isDomainIdentifier(normalizedIdentifier);
-  const resolvedSlug = isDomain
-    ? await getSlugForCustomDomain(normalizedIdentifier)
-    : normalizedIdentifier;
-  if (!resolvedSlug) {
-    return { kind: 'empty' };
-  }
-
   const supabase = getPublicSupabaseClient();
-  const merchantQuery = supabase
-    .from('merchants')
-    .select('id, slug, is_published, business_name, country')
-    .eq('slug', resolvedSlug.toLowerCase());
-  const { data: merchant, error: merchantError } = await (input.signal &&
-  'abortSignal' in merchantQuery &&
-  typeof merchantQuery.abortSignal === 'function'
-    ? merchantQuery.abortSignal(input.signal)
-    : merchantQuery
-  ).maybeSingle<DirectMerchantRow>();
-
-  if (merchantError) {
-    throw merchantError;
+  const snapshot = await readStorefrontMerchantSnapshot(
+    supabase,
+    normalizedIdentifier
+  );
+  if (snapshot.status === 'unavailable') {
+    throw new Error(`Merchant snapshot unavailable: ${snapshot.error.kind}`);
   }
-  if (!merchant) {
+  if (snapshot.status === 'not_found') {
     return { kind: 'empty' };
   }
+
+  const parsedMerchant = directMerchantDataSchema.safeParse(
+    snapshot.value.merchant_data
+  );
+  if (!parsedMerchant.success) {
+    return { kind: 'unknown' };
+  }
+  const merchant = parsedMerchant.data;
 
   if (!merchant.is_published && process.env.NODE_ENV !== 'development') {
     return { kind: 'unknown' };
@@ -95,49 +89,19 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
     return { kind: 'unknown' };
   }
 
-  const category = categories.find(
-    (entry) =>
-      entry.is_active !== false &&
-      canonicalizeCategorySlug(entry.slug) === requestedCategorySlug
+  const category = findVisibleCompareHubCategory(
+    categories,
+    requestedCategorySlug
   );
   if (!category?.name) {
     return { kind: 'empty' };
   }
 
-  const scopedCategories = [
+  const productGroups = await buildCategoryCompareHubProductGroups({
+    categories,
     category,
-    ...categories.filter(
-      (entry) => entry.parent_id === category.id && entry.is_active === true
-    ),
-  ];
-  const seenSlugs = new Set<string>();
-  const productGroups = await Promise.all(
-    scopedCategories.flatMap((entry) => {
-      const categorySlug = canonicalizeCategorySlug(entry.slug);
-      const categoryName = entry.name?.trim();
-      if (!categorySlug || !categoryName || seenSlugs.has(categorySlug)) {
-        return [];
-      }
-      seenSlugs.add(categorySlug);
-
-      return [
-        getCachedProductSemanticInventory(merchant.id, categorySlug).then(
-          (products) => ({
-            categoryName,
-            categorySlug,
-            products,
-            inventoryLoadFailed: false,
-          }),
-          () => ({
-            categoryName,
-            categorySlug,
-            products: [],
-            inventoryLoadFailed: true,
-          })
-        ),
-      ];
-    })
-  );
+    merchantId: merchant.id,
+  });
 
   if (productGroups.some((group) => group.inventoryLoadFailed)) {
     return { kind: 'unknown' };
@@ -163,7 +127,7 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
     inventoryDegraded: false,
     storeUrl: buildStoreUrl({
       slug: merchant.slug,
-      custom_domain: isDomain ? normalizedIdentifier : undefined,
+      custom_domain: snapshot.value.custom_domain ?? undefined,
     }),
   });
 

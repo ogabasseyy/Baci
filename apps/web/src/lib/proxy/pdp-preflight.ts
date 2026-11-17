@@ -24,7 +24,8 @@ export async function resolveStorefrontPdpHardNotFound(
   pathname: string,
   hostname: string | undefined,
   userAgent: string,
-  identifier: string
+  identifier: string,
+  onPdpConfirmedLive?: () => void
 ): Promise<NextResponse | null> {
   if (!isStorefrontDocumentNavigation(request.method, request.headers)) {
     return null;
@@ -121,6 +122,7 @@ export async function resolveStorefrontPdpHardNotFound(
     identifier,
     productSlug,
     secret: getInternalApiSecret(),
+    onConfirmedLive: onPdpConfirmedLive,
   });
 
   if (resolution.kind === 'redirect') {

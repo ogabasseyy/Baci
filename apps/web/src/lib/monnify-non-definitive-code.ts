@@ -4,8 +4,12 @@
  * (throttle).
  */
 const NON_DEFINITIVE_CODE = /^0*(?:99|408|409|429)$/;
-/** Keys that carry a response code: code, responseCode, error_code… */
-const RESPONSE_CODE_KEY = /^(?:response|error|result|status)?code$/;
+/**
+ * Keys that carry a response code: code, responseCode, error_code, and a
+ * generic status / statusCode (a numeric 408 there is a timeout, not data).
+ */
+const RESPONSE_CODE_KEY =
+  /^(?:(?:response|error|result|status|http)?code|(?:http)?status(?:code)?)$/;
 const MAX_DEPTH = 6;
 
 function isNonDefinitiveValue(value: unknown): boolean {

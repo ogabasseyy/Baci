@@ -185,3 +185,11 @@ describe('bugfix: dialled numbers with long whitespace runs', () => {
     ).toBe('Vend failed for [redacted]');
   });
 });
+
+describe('bugfix: 3-3-4 grouped numbers without a prefix', () => {
+  it.each(['415 555 0132', '(415) 555-0132'])('redacts %s', (number) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${number}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+});

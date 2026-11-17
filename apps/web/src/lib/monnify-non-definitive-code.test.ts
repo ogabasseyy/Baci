@@ -7,6 +7,8 @@ describe('hasMonnifyNonDefinitiveCode', () => {
     { responseCode: '01', responseBody: { responseCode: '429' } },
     { responseBody: { data: { error_code: 408 } } },
     { responseBody: [{ code: '099' }] },
+    { status: 408, message: 'Insufficient wallet balance' },
+    { statusCode: '429' },
   ])('finds a non-definitive code in %j', (answer) => {
     expect(hasMonnifyNonDefinitiveCode(answer)).toBe(true);
   });
@@ -17,6 +19,7 @@ describe('hasMonnifyNonDefinitiveCode', () => {
     { responseCode: '01' },
     { responseBody: { productCode: '409' } },
     { responseBody: { amount: 429 } },
+    { status: 400 },
   ])('finds none in %j', (answer) => {
     expect(hasMonnifyNonDefinitiveCode(answer)).toBe(false);
   });

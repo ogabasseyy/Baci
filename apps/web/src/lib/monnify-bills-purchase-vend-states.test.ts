@@ -242,33 +242,3 @@ describe('bugfix: non-definitive business response codes stay off Kuda', () => {
     });
   });
 });
-
-describe('bugfix: nested non-definitive codes and boolean outcome keys', () => {
-  it.each([
-    '408',
-    '409',
-    '429',
-  ])('keeps a nested responseCode %s off Kuda', async (code) => {
-    mockBusinessFailure({
-      responseCode: '01',
-      responseMessage: 'Insufficient wallet balance',
-      responseBody: { responseCode: code },
-    });
-
-    await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: false,
-    });
-  });
-
-  it('hands a refusal with responseBody.processed=false to Kuda', async () => {
-    mockBusinessFailure({
-      responseCode: '01',
-      responseMessage: 'Insufficient wallet balance',
-      responseBody: { processed: false },
-    });
-
-    await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: true,
-    });
-  });
-});

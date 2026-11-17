@@ -31,6 +31,13 @@ const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
  */
 const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
   /(?<!\d)\d(?:\s*[./()-]{0,3}\s*\d){10,}(?!\d)/g;
+/**
+ * A 3-3-4 grouped local number with no prefix, e.g. "415 555 0132" or
+ * "(415) 555-0132". Other grouped references (e.g. "1234 5678 99") stay
+ * readable.
+ */
+const SENSITIVE_THREE_THREE_FOUR_PATTERN =
+  /(?<!\d)\(?\d{3}\)?[\s./-]+\d{3}[\s./-]+\d{4}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -202,7 +209,8 @@ export function sanitizeMonnifyErrorDetail(value: string) {
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
     .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]')
     .replace(SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN, '[redacted]')
-    .replace(SENSITIVE_LONG_GROUPED_NUMBER_PATTERN, '[redacted]');
+    .replace(SENSITIVE_LONG_GROUPED_NUMBER_PATTERN, '[redacted]')
+    .replace(SENSITIVE_THREE_THREE_FOUR_PATTERN, '[redacted]');
   if (redacted.length <= MONNIFY_ERROR_DETAIL_MAX_LENGTH) {
     return redacted.trim();
   }

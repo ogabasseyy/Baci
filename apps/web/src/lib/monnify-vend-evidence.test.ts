@@ -12,6 +12,8 @@ describe('hasMonnifyVendEvidence', () => {
     { status: 'In_Progress' },
     { responseBody: { status: 'CANCELLED' } },
     { status: 'DECLINED' },
+    { transactionStatus: 'FAILED', message: 'Insufficient wallet balance' },
+    { responseBody: { payment_status: 'PENDING' } },
     { responseBody: { status: 'UNKNOWN' } },
     { status: 'PENDING_CONFIRMATION' },
     { transactionId: 'MFBP-9' },

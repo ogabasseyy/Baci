@@ -27,7 +27,10 @@ const TOP_LEVEL_ECHO_KEYS = new Set(['reference', 'requestreference']);
 function isVendStatusKey(key: string): boolean {
   // A string status ("FAILED", "PENDING") is the vend's own status; a
   // numeric one is just an HTTP code and is ignored (isEvidenceValue).
-  return key === 'vendstatus' || key === STATUS_KEY;
+  return (
+    key === STATUS_KEY ||
+    /^(?:vend|transaction|txn|payment|order|purchase)status$/.test(key)
+  );
 }
 
 /**

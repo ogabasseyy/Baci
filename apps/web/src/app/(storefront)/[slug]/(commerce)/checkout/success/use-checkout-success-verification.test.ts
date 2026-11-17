@@ -37,6 +37,7 @@ function setup(overrides = {}) {
     clearCart,
     router: { push } as unknown as ReturnType<typeof useRouter>,
     basePath: '/test-store',
+    isReady: true,
     ...overrides,
   };
   return { push, clearCart, props };
@@ -74,6 +75,29 @@ describe('useCheckoutSuccessVerification', () => {
       })
     );
     expect(mockHasPendingRedvault).toHaveBeenCalledWith('order-1');
+  });
+
+  describe('bugfix: reloaded link verified once with the reference missing', () => {
+    it('waits for the stashed order details before verifying', async () => {
+      mockVerify.mockResolvedValue(undefined);
+      const { props } = setup({ isReady: false, reference: null });
+
+      const { rerender } = renderHook(
+        (hookProps) => useCheckoutSuccessVerification(hookProps),
+        { initialProps: props }
+      );
+      await act(async () => {});
+      expect(mockVerify).not.toHaveBeenCalled();
+      expect(mockCapture).not.toHaveBeenCalled();
+
+      rerender({ ...props, isReady: true, reference: 'ref-1' });
+
+      await waitFor(() => expect(mockVerify).toHaveBeenCalledTimes(1));
+      expect(mockVerify).toHaveBeenCalledWith(
+        expect.objectContaining({ reference: 'ref-1' }),
+        expect.anything()
+      );
+    });
   });
 
   it('exposes the verified order and clears the pending-order marker', async () => {

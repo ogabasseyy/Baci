@@ -1,34 +1,51 @@
 'use client'; // Reads the address bar and sessionStorage, so it can only run in the browser.
 
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import {
   readStashedPrivateParams,
   scrubPrivateParamsFromAddressBar,
 } from '@/lib/privacy/private-url-param-stash';
 import {
   canonicalSearch,
-  type PrivateEntry,
   partitionSensitiveSearch,
 } from '@/lib/privacy/sensitive-url-params';
 
-interface Stash {
-  key: string;
-  entries: PrivateEntry[];
+export interface PrivateSearchParamsState {
+  searchParams: URLSearchParams;
+  /**
+   * `false` only during the render that hydrates server HTML. Effects that act
+   * on the values (start a payment, verify an order, redirect, seed a form)
+   * must wait for `true`, otherwise they run once with the stashed values
+   * still missing and again with them present.
+   */
+  isReady: boolean;
 }
 
-function stashKeyFor(pathname: string, publicSearch: string): string {
-  return `${pathname}?${canonicalSearch(publicSearch)}`;
+function subscribeToHistoryTraversal(onChange: () => void): () => void {
+  window.addEventListener('popstate', onChange);
+  return () => window.removeEventListener('popstate', onChange);
 }
 
-function loadStash(pathname: string, liveSearch: string): Stash | null {
-  if (typeof window === 'undefined') return null;
+function subscribeToNothing(): () => void {
+  return () => {
+    // Nothing to unsubscribe from: the value never changes after hydration.
+  };
+}
+
+/**
+ * The private values stashed for the CURRENT history entry, as a query string
+ * (a primitive, so it is a stable external-store snapshot). It is empty unless
+ * `history.state` carries the id of a stash saved for this exact path and
+ * remaining query, so another entry at the same URL (a fresh link to the same
+ * page, a new `pushState`) never inherits an earlier order's token.
+ */
+function stashedQuery(pathname: string, liveSearch: string): string {
   const { privateEntries, publicSearch } = partitionSensitiveSearch(liveSearch);
-  if (privateEntries.length > 0) return null;
-  const entries = readStashedPrivateParams(pathname, publicSearch);
-  return entries.length > 0
-    ? { key: stashKeyFor(pathname, publicSearch), entries }
-    : null;
+  if (privateEntries.length > 0) return '';
+  return new URLSearchParams(
+    readStashedPrivateParams(pathname, publicSearch)
+  ).toString();
 }
 
 /**
@@ -43,69 +60,56 @@ function loadStash(pathname: string, liveSearch: string): Stash | null {
  * its contents are unchanged, so effects keyed on it do not re-run when the
  * address bar is rewritten.
  *
- * On a reload the address bar is already clean, so the stash is read
- * synchronously during the first client render (never on the server). That way
- * no consumer effect ever sees the token/email/phone/name as missing and then
- * present, which would run payment or lookup effects twice. The trade-off: the
- * server renders a reloaded page without the values, so markup that prints
- * them directly can differ at hydration (React recovers by client-rendering
- * it). Running payment effects with missing values is worse, so this was
- * chosen on purpose.
+ * Hydration: on a reload the address bar is already clean, so the server
+ * renders (at request time) without the values. The stash is therefore read
+ * through `useSyncExternalStore` with an empty server snapshot: the hydrating
+ * render matches the server HTML, and the next render, which happens before
+ * paint, switches to the stashed values. A render that is not hydrating (client
+ * navigation, tests) reads the stash on its first render. `isReady` is `false`
+ * only for the hydrating render; consumers gate value-driven effects on it.
  */
-function syncStash(
-  previous: Stash | null,
-  pathname: string,
-  liveSearch: string
-): Stash | null {
-  const next = loadStash(
-    pathname,
-    partitionSensitiveSearch(liveSearch).publicSearch
-  );
-  if (next === null) return previous === null ? previous : null;
-  const same =
-    previous?.key === next.key &&
-    JSON.stringify(previous.entries) === JSON.stringify(next.entries);
-  return same ? previous : next;
-}
-
-export function usePrivateSearchParams(): URLSearchParams {
+export function usePrivateSearchParamsState(): PrivateSearchParamsState {
   const pathname = usePathname();
   const liveSearch = useSearchParams().toString();
-  const [stash, setStash] = useState<Stash | null>(() =>
-    loadStash(pathname, liveSearch)
+
+  // Re-read on every render (and after every commit, which is when Next.js
+  // has written a same-URL `pushState` entry) so a stash is only returned
+  // while the current history entry still carries its id.
+  const stashed = useSyncExternalStore(
+    subscribeToHistoryTraversal,
+    () => stashedQuery(pathname, liveSearch),
+    () => ''
+  );
+  const isReady = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false
   );
 
-  const { privateEntries, publicSearch } = partitionSensitiveSearch(liveSearch);
   const merged = new URLSearchParams(liveSearch);
-  if (
-    privateEntries.length === 0 &&
-    stash &&
-    stash.key === stashKeyFor(pathname, publicSearch)
-  ) {
-    for (const [name, value] of stash.entries) merged.append(name, value);
+  for (const [name, value] of new URLSearchParams(stashed)) {
+    merged.append(name, value);
   }
 
   const mergedKey = canonicalSearch(merged);
   const [held, setHeld] = useState({ key: mergedKey, params: merged });
-  let params = held.params;
+  let searchParams = held.params;
   if (held.key !== mergedKey) {
     setHeld({ key: mergedKey, params: merged });
-    params = merged;
+    searchParams = merged;
   }
 
   // Layout effects run before passive effects in the same commit, so the
-  // address bar is clean before any page-view tracker fires.
+  // address bar is clean before any page-view tracker fires. (React 19 does not
+  // warn about layout effects during server rendering; they are simply skipped.)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname and liveSearch are the triggers; the scrub reads window.location
   useLayoutEffect(() => {
     scrubPrivateParamsFromAddressBar();
-    setStash((previous) => syncStash(previous, pathname, liveSearch));
-
-    // Back/forward can land on another history entry of the same page without
-    // changing the path or the query, so re-read that entry's stash.
-    const onPopState = () =>
-      setStash((previous) => syncStash(previous, pathname, liveSearch));
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
   }, [pathname, liveSearch]);
 
-  return params;
+  return { searchParams, isReady };
+}
+
+export function usePrivateSearchParams(): URLSearchParams {
+  return usePrivateSearchParamsState().searchParams;
 }

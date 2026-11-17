@@ -42,6 +42,11 @@ interface UseCheckoutSuccessVerificationInput {
   clearCart: () => void;
   router: ReturnType<typeof useRouter>;
   basePath: string;
+  /**
+   * False while the page hydrates a reloaded link, before the stashed order
+   * details are readable. Verifying then would report a missing reference.
+   */
+  isReady: boolean;
 }
 
 /**
@@ -58,6 +63,7 @@ export function useCheckoutSuccessVerification({
   clearCart,
   router,
   basePath,
+  isReady,
 }: UseCheckoutSuccessVerificationInput) {
   const [status, setStatus] = useState<CheckoutVerificationStatus>('pending');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -70,6 +76,7 @@ export function useCheckoutSuccessVerification({
   }, [status]);
 
   useEffect(() => {
+    if (!isReady) return;
     // Track the failed-redirect timer so navigating away from this page
     // cancels it — without the cleanup, a user who leaves within the 4s
     // window gets yanked back to /checkout.
@@ -283,6 +290,7 @@ export function useCheckoutSuccessVerification({
     clearCart,
     router,
     basePath,
+    isReady,
   ]);
 
   useEffect(() => {

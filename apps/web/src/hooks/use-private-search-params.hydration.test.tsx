@@ -1,0 +1,118 @@
+import { act, renderHook } from '@testing-library/react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  usePrivateSearchParams,
+  usePrivateSearchParamsState,
+} from './use-private-search-params';
+
+vi.mock('next/navigation', () => {
+  const subscribe = () => () => {};
+  return {
+    usePathname: () =>
+      useSyncExternalStore(
+        subscribe,
+        () => window.location.pathname,
+        () => '/'
+      ),
+    useSearchParams: () =>
+      new URLSearchParams(
+        useSyncExternalStore(
+          subscribe,
+          () => window.location.search,
+          () => ''
+        )
+      ),
+  };
+});
+
+const originalReplaceState = window.history.replaceState.bind(window.history);
+
+function visit(url: string) {
+  originalReplaceState(null, '', url);
+}
+
+interface ProbeLog {
+  renders: { token: string | null; isReady: boolean }[];
+  effects: (string | null)[];
+}
+
+function Probe({ log }: { log: ProbeLog }) {
+  const { searchParams, isReady } = usePrivateSearchParamsState();
+  const token = searchParams.get('token');
+  log.renders.push({ token, isReady });
+  useEffect(() => {
+    // What a payment/verification effect does: act only once ready.
+    if (isReady) log.effects.push(token);
+  }, [isReady, token, log]);
+  return <p>{token ?? 'no-token'}</p>;
+}
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  document.body.innerHTML = '';
+  visit('/');
+});
+
+describe('bugfix: reloaded scrubbed link hydrated with values the server never rendered', () => {
+  function reloadScrubbedLink() {
+    visit('/track-order?token=abc&orderId=1');
+    renderHook(() => usePrivateSearchParams()).unmount();
+    expect(window.location.search).toBe('?orderId=1');
+  }
+
+  it('matches the server HTML on the hydrating render, then shows the stashed token without a hydration error', async () => {
+    reloadScrubbedLink();
+    const log: ProbeLog = { renders: [], effects: [] };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    container.innerHTML = renderToString(<Probe log={{ ...log }} />);
+    expect(container.textContent).toBe('no-token');
+    const onRecoverableError = vi.fn();
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    await act(async () => {
+      hydrateRoot(container, <Probe log={log} />, { onRecoverableError });
+    });
+
+    expect(log.renders[0]).toEqual({ token: null, isReady: false });
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('abc');
+  });
+
+  it('lets a value-driven effect act only once, with the stashed values', async () => {
+    reloadScrubbedLink();
+    const log: ProbeLog = { renders: [], effects: [] };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    container.innerHTML = renderToString(<Probe log={{ ...log }} />);
+
+    await act(async () => {
+      hydrateRoot(container, <Probe log={log} />);
+    });
+
+    expect(log.effects).toEqual(['abc']);
+  });
+
+  it('is ready on the first render when the page is not hydrating', () => {
+    reloadScrubbedLink();
+    const seen: boolean[] = [];
+
+    renderHook(() => {
+      const state = usePrivateSearchParamsState();
+      seen.push(state.isReady);
+      return state;
+    });
+
+    expect(seen.every(Boolean)).toBe(true);
+  });
+});

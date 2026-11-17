@@ -22,7 +22,7 @@ import { Suspense } from 'react';
 import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
 import { CheckoutReconciliationView } from './checkout-reconciliation-view';
@@ -64,7 +64,7 @@ function CheckoutSuccessLoading() {
 }
 
 function CheckoutSuccessContent() {
-  const searchParams = usePrivateSearchParams();
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const router = useRouter();
   const reference = searchParams.get('reference');
   const orderId = searchParams.get('orderId');
@@ -88,6 +88,7 @@ function CheckoutSuccessContent() {
       clearCart,
       router,
       basePath,
+      isReady,
     });
 
   // Failed State

@@ -11,7 +11,7 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { Suspense, useEffect } from 'react';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
@@ -51,7 +51,9 @@ export function OgabasseyLoginPage() {
 
 function OgabasseyLoginPageContent() {
   const router = useRouter();
-  const searchParams = usePrivateSearchParams();
+  // `isReady` is false while hydrating a reloaded link, before the stashed
+  // redirect target and email are readable.
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const redirectTo = sanitizeRedirect(searchParams.get('redirect'));
   const initialEmail = sanitizeCustomerLoginEmailPrefill(
     searchParams.get('email')
@@ -88,14 +90,25 @@ function OgabasseyLoginPageContent() {
   // place it in the input — the OTP code must go to the real address.
   // Shared hook: clears the hint whenever the redirect target or prefill
   // changes so a stale masked address from a previous claim never lingers.
-  const emailHint = useReceiptClaimLoginHint(redirectTo, initialEmail || email);
+  const emailHint = useReceiptClaimLoginHint(
+    isReady ? redirectTo : null,
+    initialEmail || email
+  );
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!authLoading && isAuthenticated && !isVerifying && !verified) {
+    if (isReady && !authLoading && isAuthenticated && !isVerifying && !verified) {
       router.push(asRoute(redirectTo));
     }
-  }, [authLoading, isAuthenticated, isVerifying, verified, router, redirectTo]);
+  }, [
+    isReady,
+    authLoading,
+    isAuthenticated,
+    isVerifying,
+    verified,
+    router,
+    redirectTo,
+  ]);
 
   // Show loading screen while checking auth/merchant
   if (merchantLoading || authLoading) {

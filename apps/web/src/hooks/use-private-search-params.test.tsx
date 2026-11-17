@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useInsertionEffect, useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePrivateSearchParams } from './use-private-search-params';
 
@@ -212,6 +212,47 @@ describe('bugfix: Back to an earlier order restored the later order token', () =
     visit('/track-order'); // state is null: a new entry
 
     const { result } = renderHook(() => usePrivateSearchParams());
+    expect(result.current.get('token')).toBeNull();
+  });
+});
+
+describe('bugfix: same-URL navigation kept returning the previous order token', () => {
+  it('returns no token for a new history entry at the same URL without the stash id', () => {
+    visit('/track-order?token=A');
+    const { result, rerender } = renderHook(() => usePrivateSearchParams());
+    expect(window.location.search).toBe('');
+    expect(result.current.get('token')).toBe('A');
+
+    // Footer "Track Order" link: same path, empty query, a new history entry.
+    act(() => {
+      window.history.pushState({}, '', '/track-order');
+    });
+    rerender();
+
+    expect(result.current.get('token')).toBeNull();
+  });
+
+  it('drops the token when the entry changes in the same commit that re-rendered the page', () => {
+    visit('/track-order?token=A');
+    const navigation = { pending: false, done: false };
+    const { result, rerender } = renderHook(() => {
+      const params = usePrivateSearchParams();
+      // Next.js writes the new entry in an insertion effect, after the render
+      // that already read the old entry.
+      useInsertionEffect(() => {
+        if (navigation.pending && !navigation.done) {
+          navigation.done = true;
+          window.history.pushState({}, '', '/track-order');
+        }
+      });
+      return params;
+    });
+    expect(result.current.get('token')).toBe('A');
+
+    navigation.pending = true;
+    rerender();
+
+    expect(navigation.done).toBe(true);
     expect(result.current.get('token')).toBeNull();
   });
 });

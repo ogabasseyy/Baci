@@ -3,7 +3,7 @@
 import type { Route } from 'next';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { apiPost } from '@/lib/api-client';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -373,7 +373,10 @@ interface BnplLauncherProps {
 
 export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) {
     const router = useRouter();
-    const searchParams = usePrivateSearchParams();
+    // `isReady` is false while hydrating a reloaded page, before the stashed
+    // order token / email / phone are readable. Launching then would start the
+    // payment once with those values missing and again once they are present.
+    const { searchParams, isReady } = usePrivateSearchParamsState();
     const merchantContext = useMerchantSafe();
     const clearCart = useCartSafe()?.clearCart;
 
@@ -471,6 +474,9 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
     }, [creditDirectCompletionReference, gateway, klumpCallback, orderId]);
 
     useEffect(() => {
+        if (!isReady) {
+            return;
+        }
         // An error is terminal only for the launch request that produced it.
         // This prevents a same-request re-run from adopting a marker written
         // immediately before onError, while a new URL or explicit retry gets
@@ -538,6 +544,7 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
         creditDirectPopupMarker,
         creditDirectCompletionReference,
         launchRequestKey,
+        isReady,
     ]);
 
     const creditDirectVerification = useCreditDirectVerification({

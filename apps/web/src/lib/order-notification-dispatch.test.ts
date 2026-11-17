@@ -90,6 +90,31 @@ describe('dispatchOrderCreationNotifications', () => {
     );
   });
 
+  it('regression: does not announce an unpaid Pay for Me request as a new order', async () => {
+    await dispatchOrderCreationNotifications(
+      input({ paymentMethod: 'payforme', paymentStatus: 'pending' })
+    );
+
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    expect(mockNotifyNewInvoice).not.toHaveBeenCalled();
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+  });
+
+  it('still announces a pay-on-delivery order at creation', async () => {
+    await dispatchOrderCreationNotifications(
+      input({ paymentMethod: 'pay_on_delivery', paymentStatus: 'pending' })
+    );
+
+    expect(mockNotifyNewOrder).toHaveBeenCalledWith(
+      'merchant-1',
+      'order-1',
+      'ORD-001',
+      'Customer',
+      15000,
+      'NGN'
+    );
+  });
+
   it('regression: skips the payment-collection alert when wallet settles the invoice', async () => {
     await dispatchOrderCreationNotifications(
       input({

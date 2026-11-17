@@ -203,6 +203,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
         stuck_order_count: 1,
         total_amount: 250000,
         oldest_order_id: 'order-approved',
+        order_id: 'order-approved',
       }),
       'orders'
     );

@@ -101,6 +101,9 @@ export function buildStuckBnplAlert(
       stuck_order_count: orderCount,
       total_amount: totalAmount,
       oldest_order_id: oldest.id,
+      // One order: tapping the push opens it. Several: the app opens the
+      // orders list instead.
+      ...(single ? { order_id: oldest.id } : {}),
     },
   };
 }

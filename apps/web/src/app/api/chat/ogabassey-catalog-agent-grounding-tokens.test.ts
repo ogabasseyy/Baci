@@ -41,7 +41,9 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
     expect(isNumericFeatureToken('120hz')).toBe(true);
     expect(isNumericFeatureToken('15')).toBe(false);
     expect(isFeatureVersionPhrase(['wi', 'fi', '6'])).toBe(true);
+    expect(isFeatureVersionPhrase(['wi', 'fi', 'router'])).toBe(false);
     expect(isFeatureVersionPhrase(['bluetooth', '5', '3'])).toBe(true);
+    expect(isFeatureVersionPhrase(['android', 'phone'])).toBe(false);
     expect(isFeatureVersionPhrase(['iphone', '15', 'pro'])).toBe(false);
   });
 });

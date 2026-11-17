@@ -19,6 +19,13 @@ const SENSITIVE_GROUPED_PHONE_PATTERN =
  */
 const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
   /(?<!\d)(?:\+\(?|\(?0)\d(?:[ ./()-]{0,2}\d){8,}(?!\d)/g;
+/**
+ * Any grouped number of 11+ digits whatever its prefix, e.g. an international
+ * number written without "+" ("44 20 7946 0958"). Shorter grouped references
+ * stay readable.
+ */
+const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
+  /(?<!\d)\d(?:[ ./()-]{0,2}\d){10,}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -161,7 +168,8 @@ export function sanitizeMonnifyErrorDetail(value: string) {
   const redacted = boundedValue
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
     .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]')
-    .replace(SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN, '[redacted]');
+    .replace(SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN, '[redacted]')
+    .replace(SENSITIVE_LONG_GROUPED_NUMBER_PATTERN, '[redacted]');
   if (redacted.length <= MONNIFY_ERROR_DETAIL_MAX_LENGTH) {
     return redacted.trim();
   }

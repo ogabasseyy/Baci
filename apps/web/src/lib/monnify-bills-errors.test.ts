@@ -150,3 +150,17 @@ describe('bugfix: grouped national number without a trunk prefix', () => {
     );
   });
 });
+
+describe('bugfix: long grouped numbers without a prefix', () => {
+  it.each(['44 20 7946 0958', '1 415 555 0132 99'])('redacts %s', (number) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${number}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+
+  it('keeps a 10-digit grouped reference readable', () => {
+    expect(sanitizeMonnifyErrorDetail('Ref 1234 5678 99 failed')).toBe(
+      'Ref 1234 5678 99 failed'
+    );
+  });
+});

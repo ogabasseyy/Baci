@@ -216,8 +216,9 @@ export interface PurchaseResult {
   // Monnify-only: Monnify refused the vend before attempting it (401/403 from
   // the vend endpoint, the amount check, or Baci's Monnify float too low), so
   // nothing was delivered and another provider may safely vend it. Never set
-  // for FAILED vend statuses, "unavailable" answers, code 99, 408 timeouts
-  // or anything that may be a duplicate reference.
+  // for FAILED vend statuses, "unavailable" answers, code 99, 408 timeouts,
+  // 429 throttles, bodies showing a vend status or reference, or anything
+  // that may be a duplicate reference.
   providerDefiniteFailure?: boolean;
   // Units delivered for metered bills (e.g. prepaid electricity kWh).
   units?: string;

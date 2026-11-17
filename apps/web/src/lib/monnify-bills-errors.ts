@@ -27,7 +27,6 @@ interface MonnifyAnswerReading {
   reportsUnexpectedError: boolean;
   readsAsAuthRejection: boolean;
   showsVendEvidence: boolean;
-  readsAsRateLimit: boolean;
 }
 
 function parseJsonOrNull(text: string): unknown {
@@ -54,7 +53,6 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
         body
       ),
     showsVendEvidence: hasMonnifyVendEvidence(parseJsonOrNull(body)),
-    readsAsRateLimit: /rate[\s_-]*limit|too many requests|throttl/i.test(body),
   };
 }
 
@@ -113,11 +111,6 @@ export class MonnifyHttpError extends Error {
     return this.#reading.readsAsAuthRejection;
   }
 
-  /** Monnify's own body says the request was rate limited. */
-  get readsAsRateLimit() {
-    return this.#reading.readsAsRateLimit;
-  }
-
   /** The JSON body carries a vend status or reference: a vend may exist. */
   get showsVendEvidence() {
     return this.#reading.showsVendEvidence;
@@ -172,11 +165,15 @@ export function sanitizeMonnifyErrorDetail(value: string) {
   if (redacted.length <= MONNIFY_ERROR_DETAIL_MAX_LENGTH) {
     return redacted.trim();
   }
-  // The cut may split a number: drop a trailing digit group it leaves.
-  return redacted
-    .slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH)
-    .replace(/[\d ./()+-]*\d$/, '')
-    .trim();
+  // Drop a trailing digit group only when the cut split a number (the next
+  // character continues it), so a whole code such as "code 99" survives.
+  const cut = redacted.slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH);
+  const rest = redacted.slice(MONNIFY_ERROR_DETAIL_MAX_LENGTH);
+  const cutSplitANumber =
+    /\d[ ./()+-]?$/.test(cut) && /^[ ./()+-]?\d/.test(rest);
+  return (
+    cutSplitANumber ? cut.replace(/[\d ./()+-]*\d[ ./()+-]?$/, '') : cut
+  ).trim();
 }
 
 function getMonnifyErrorDetailFromBody(value: unknown): string | null {

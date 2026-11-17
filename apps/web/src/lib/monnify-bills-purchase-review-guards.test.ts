@@ -213,36 +213,14 @@ describe('bugfix: HTTP rejections showing a vend, or unsuccessful wording, stay 
   });
 });
 
-describe('bugfix: a 429 goes to Kuda only when Monnify says it rate limited', () => {
+describe('bugfix: a 429 throttle never goes to Kuda', () => {
   it.each([
     '',
     JSON.stringify({ responseMessage: 'Request blocked' }),
-  ])('keeps a 429 whose body does not say rate limited off Kuda (%j)', async (body) => {
+    JSON.stringify({ responseMessage: 'Rate limit exceeded' }),
+    JSON.stringify({ responseMessage: 'Insufficient wallet balance' }),
+  ])('keeps a 429 off Kuda (%j)', async (body) => {
     mockHttpError(429, 'Too Many Requests', body);
-
-    await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: false,
-    });
-  });
-
-  it('hands a plain 429 to Kuda', async () => {
-    mockHttpError(
-      429,
-      'Too Many Requests',
-      JSON.stringify({ responseMessage: 'Rate limit exceeded' })
-    );
-
-    await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: true,
-    });
-  });
-
-  it('keeps a 429 that reports code 99 off Kuda', async () => {
-    mockHttpError(
-      429,
-      'Too Many Requests',
-      JSON.stringify({ responseCode: '99', responseMessage: 'Rate limited' })
-    );
 
     await expect(vend()).resolves.toMatchObject({
       providerDefiniteFailure: false,

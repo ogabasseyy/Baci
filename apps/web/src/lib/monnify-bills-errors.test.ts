@@ -124,3 +124,17 @@ describe('bugfix: grouped numbers outside the 080x/090x/070x slice', () => {
     );
   });
 });
+
+describe('bugfix: the length cut keeps whole trailing codes', () => {
+  it('keeps "code 99" when the cut lands right after it', () => {
+    const text = `${'x'.repeat(232)} code 99 and more text after the cut`;
+
+    expect(sanitizeMonnifyErrorDetail(text)).toMatch(/code 99$/);
+  });
+
+  it('still drops a number the cut splits', () => {
+    const text = `${'x'.repeat(232)} ref 12 345 678 trailing`;
+
+    expect(sanitizeMonnifyErrorDetail(text)).not.toMatch(/\d$/);
+  });
+});

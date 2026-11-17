@@ -172,9 +172,9 @@ export function toBookingFailureResponseError(
   if (outcome === 'not_submitted') {
     if (options.walletFunded) {
       // The old quote cannot be reused after a wallet-funded attempt. Do not
-      // claim the refund finished: it is returned automatically.
+      // claim the refund finished: it is attempted automatically, not confirmed.
       return new OrderShipmentBookingError(
-        'We could not reach GIG just now. Nothing was booked. Any wallet charge for this attempt is returned automatically. Please get a new shipping quote and book again.',
+        'We could not reach GIG just now. Nothing was booked. Any wallet charge for this attempt should be returned automatically; check your wallet and contact support if it is missing. Please get a new shipping quote and book again.',
         503,
         'PROVIDER_UNREACHABLE'
       );

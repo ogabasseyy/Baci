@@ -26,16 +26,17 @@ export async function requestTopshipPaymentAfterSave({
   try {
     return await fetchPayment();
   } catch (error) {
+    const networkCode = (error as { code?: unknown } | null)?.code;
     log('error', 'Topship payment request failed after save', {
       trackingId,
       error: error instanceof Error ? error.message : String(error),
-      errorCode: (error as { code?: unknown } | null)?.code,
+      errorCode: networkCode,
       stack: error instanceof Error ? error.stack : undefined,
     });
     // A coded booking error keeps the lock (the code is not releasable) and
     // records outcome booked_not_saved, since the parcel exists at Topship.
     throw new OrderShipmentBookingError(
-      `The carrier saved the shipment but could not confirm payment (tracking ${trackingId ?? 'unknown'}). Check the shipment before booking again.`,
+      `The carrier saved the shipment but could not confirm payment (tracking ${trackingId ?? 'unknown'}). Check the shipment before booking again.${typeof networkCode === 'string' ? ` [${networkCode}]` : ''}`,
       503,
       BOOKED_SHIPMENT_NOT_SAVED_CODE
     );

@@ -28,6 +28,7 @@ describe('requestTopshipPaymentAfterSave', () => {
     }).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain('tracking T1');
+    expect((failure as Error).message).toContain('[ECONNREFUSED]');
     expect(classifyBookingFailure(failure).outcome).toBe('booked_not_saved');
     expect(shouldReleaseBookingLock(failure)).toBe(false);
     expect(log).toHaveBeenCalledWith(

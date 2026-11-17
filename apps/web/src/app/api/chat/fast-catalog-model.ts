@@ -1,7 +1,7 @@
 import {
   ACCESSORY_SIGNAL,
-  normalizeAccessoryNouns,
   normalizeCatalogModelPunctuation,
+  normalizeCatalogSearchNouns,
 } from './fast-catalog-language';
 
 // Unbound word-form models are only returned when extra name words are benign.
@@ -52,7 +52,7 @@ export function catalogMatchesModel(
   brand: string | null
 ): boolean {
   const words = (value: string) =>
-    normalizeAccessoryNouns(normalizeCatalogModelPunctuation(value))
+    normalizeCatalogSearchNouns(normalizeCatalogModelPunctuation(value))
       .toLowerCase()
       .replace(
         /(?<![\p{L}\p{N}])([\p{L}\p{N}]{0,11}\d[\p{L}\p{N}]{0,11})\+/gu,

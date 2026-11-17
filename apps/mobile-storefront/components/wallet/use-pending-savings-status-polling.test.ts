@@ -83,13 +83,24 @@ it.each([
   'cancelled',
   'not-found',
   'no-operation',
-  'blocked',
 ] as const)('stops once a check answers %s', async (outcome) => {
   const check = jest.fn(async (): Promise<SavingsStatusCheckResult> => outcome);
   poll(check);
   await advance(5000);
   await advance(60_000);
   expect(check).toHaveBeenCalledTimes(1);
+});
+
+it('keeps going while the rail is briefly blocked, then stops on confirmed', async () => {
+  const check = jest
+    .fn<Promise<SavingsStatusCheckResult>, []>()
+    .mockResolvedValueOnce('blocked')
+    .mockResolvedValue('confirmed');
+  poll(check);
+  await advance(5000);
+  await advance(10_000);
+  await advance(60_000);
+  expect(check).toHaveBeenCalledTimes(2);
 });
 
 it('keeps going after a timed-out (unavailable) or rejected check', async () => {

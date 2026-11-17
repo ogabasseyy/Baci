@@ -27,8 +27,11 @@ export function WalletPendingSavingsContribution({
         disabled={isChecking || !onCheck}
         onPress={() => {
           if (isChecking || !onCheck) return;
-          // The check reports its own outcome in the wallet notice.
-          void Promise.resolve(onCheck()).catch(() => undefined);
+          // The check reports its own outcome in the wallet notice; only an
+          // unexpected failure is logged, so real bugs stay visible.
+          void Promise.resolve(onCheck()).catch((error: unknown) => {
+            console.warn('[Savings] Status check failed unexpectedly', error);
+          });
         }}
         style={{
           padding: 16,

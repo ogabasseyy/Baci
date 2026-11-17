@@ -9,10 +9,13 @@ export const STATUS_POLL_INTERVAL_MS = 30_000;
 export const STATUS_POLL_WINDOW_MS = 5 * 60_000;
 
 /** Outcomes that leave the contribution unsettled, so the polling goes on. */
+// 'blocked' (the rail is briefly unavailable while the operation is kept)
+// keeps going too: nothing else would resume the checks if it comes back.
 const KEEP_POLLING: ReadonlySet<SavingsStatusCheckResult> = new Set([
   'pending',
   'unavailable',
   'busy',
+  'blocked',
 ]);
 
 export function statusPollDelay(attempt: number): number {

@@ -20,6 +20,7 @@ import {
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 export async function verifyBillCustomer(
@@ -138,6 +139,7 @@ export async function purchaseBill(
         providerDefiniteFailure:
           parsedEnvelope.responseCode?.trim() !== '99' &&
           isMonnifyKnownVendRefusalText(rawMessage) &&
+          !isMonnifyVendOutcomeText(rawMessage) &&
           // Read the whole answer (code, message and body), so a duplicate
           // signalled anywhere in it is caught.
           !isMonnifyDuplicateReferenceText(

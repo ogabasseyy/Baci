@@ -1,4 +1,5 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
@@ -22,10 +23,7 @@ function readMonnifyAnswer(text: string): MonnifyAnswerReading {
   return {
     isDuplicateReference: isMonnifyDuplicateReferenceText(text),
     isKnownRefusal: isMonnifyKnownVendRefusalText(text),
-    mentionsVendOutcome:
-      /unavailable|vend\w*\s+(?:request\s+)?fail|fail\w*\s+to\s+vend/i.test(
-        text
-      ),
+    mentionsVendOutcome: isMonnifyVendOutcomeText(text),
     reportsUnexpectedError: /"responseCode"\s*:\s*"?99"?(?!\d)/.test(text),
   };
 }

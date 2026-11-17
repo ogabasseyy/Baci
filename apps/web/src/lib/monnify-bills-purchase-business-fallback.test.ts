@@ -184,4 +184,19 @@ describe('Monnify business answers handed to Kuda', () => {
     expect(result.status).toBe('failed');
     expect(result.providerDefiniteFailure).toBeUndefined();
   });
+
+  it('never marks a business rejection that mentions a vend outcome as definite', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '01',
+        responseMessage: 'Insufficient wallet balance - Vend request failed',
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
 });

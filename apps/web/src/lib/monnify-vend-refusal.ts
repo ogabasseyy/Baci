@@ -13,5 +13,8 @@ const MONNIFY_KNOWN_REFUSAL_PATTERN =
 export function isMonnifyKnownVendRefusalText(
   text: string | null | undefined
 ): boolean {
-  return !!text && MONNIFY_KNOWN_REFUSAL_PATTERN.test(text);
+  // "_" and "-" read as spaces, so INSUFFICIENT_WALLET_BALANCE matches.
+  return (
+    !!text && MONNIFY_KNOWN_REFUSAL_PATTERN.test(text.replace(/[_-]+/g, ' '))
+  );
 }

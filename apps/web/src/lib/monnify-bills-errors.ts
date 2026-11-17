@@ -1,4 +1,5 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
+import { readsAsMonnifyAuthRejection } from './monnify-auth-rejection';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
@@ -73,10 +74,7 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
     isKnownRefusal: isMonnifyKnownVendRefusalText(text),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
     reportsUnexpectedError: reportsMonnifyUnexpectedError(body),
-    readsAsAuthRejection:
-      /unauthori[sz]ed|forbidden|access denied|invalid (?:access |bearer )?token|(?:bearer|access) token (?:is )?(?:invalid|missing|required)|missing (?:bearer|access) token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|(?:not |un)authenticated|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)|missing authori[sz]ation/i.test(
-        body
-      ),
+    readsAsAuthRejection: readsAsMonnifyAuthRejection(body),
     showsVendEvidence: showsVendEvidence(body),
   };
 }

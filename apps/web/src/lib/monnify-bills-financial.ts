@@ -147,6 +147,9 @@ export async function purchaseBill(
         // refusal out; a known refusal anywhere rules it in.
         providerDefiniteFailure:
           !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
+          // Timeout, conflict and throttle codes prove nothing was vended
+          // no more here than as HTTP statuses.
+          !/^\s*(?:408|409|429)\s*$/.test(parsedEnvelope.responseCode ?? '') &&
           !reportsMonnifyUnexpectedError(envelopeText) &&
           !hasMonnifyVendEvidence(envelope) &&
           !mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(envelope)) &&

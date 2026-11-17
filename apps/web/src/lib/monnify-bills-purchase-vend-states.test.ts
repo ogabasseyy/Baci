@@ -188,3 +188,57 @@ describe('bugfix: plain-text vend references in a business rejection', () => {
     });
   });
 });
+
+describe('bugfix: non-definitive business response codes stay off Kuda', () => {
+  it.each([
+    '408',
+    '409',
+    '429',
+  ])('keeps a business code %s off Kuda', async (responseCode) => {
+    mockBusinessFailure({
+      responseCode,
+      responseMessage: 'Insufficient wallet balance',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('keeps a plain-text 4xx with status=FAILED off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'status=FAILED&responseMessage=Insufficient wallet balance'
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('hands a machine-formatted INSUFFICIENT_WALLET_BALANCE refusal to Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'INSUFFICIENT_WALLET_BALANCE',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+
+  it('keeps a 403 whose body only mentions "forbidden" in passing off Kuda', async () => {
+    mockHttpError(
+      403,
+      'Forbidden',
+      JSON.stringify({
+        responseMessage: 'Gateway policy: forbidden region list updated',
+      })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

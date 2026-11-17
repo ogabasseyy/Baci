@@ -13,6 +13,8 @@ describe('mentionsMonnifyVendEvidence', () => {
     'Insufficient balance; reference=MFBP-3',
     'Insufficient wallet balance; transactionId=MFBP-1',
     'order_id: 12345',
+    'status=FAILED&responseMessage=Insufficient wallet balance',
+    'status: pending',
   ])('sees vend evidence in %s', (text) => {
     expect(mentionsMonnifyVendEvidence(text)).toBe(true);
   });
@@ -23,6 +25,9 @@ describe('mentionsMonnifyVendEvidence', () => {
     '{"vendReference":""}',
     'Invalid customer reference',
     'transaction reference not found',
+    'status=error&responseMessage=Insufficient wallet balance',
+    'status: Bad Request',
+    'status=400',
     '',
     null,
   ])('sees no vend evidence in %s', (text) => {

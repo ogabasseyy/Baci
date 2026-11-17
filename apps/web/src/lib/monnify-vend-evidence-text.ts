@@ -10,8 +10,14 @@
  */
 const KEY =
   '(?:vend[\\s_-]*status|(?:(?:transaction|vend|payment|order)[\\s_-]*)?reference|(?:transaction|txn|vend|order)[\\s_-]*id)';
+/**
+ * A generic "status=FAILED" pair: any non-numeric value except HTTP reason
+ * phrases and error labels ("error", "Bad Request"), like the JSON check.
+ */
+const GENERIC_STATUS =
+  '\\bstatus["\']?\\s*[:=]\\s*["\']?(?!(?:errors?|ok|bad|unauthori[sz]ed|forbidden|not|conflict|unprocessable|too|internal|gateway|service|invalid|validation|method|request)\\b)[A-Za-z][\\w-]*';
 const MONNIFY_VEND_EVIDENCE_TEXT = new RegExp(
-  `\\b${KEY}["']?\\s*[:=]\\s*["']?[A-Za-z0-9][\\w.-]*` +
+  `${GENERIC_STATUS}|\\b${KEY}["']?\\s*[:=]\\s*["']?[A-Za-z0-9][\\w.-]*` +
     `|\\b${KEY}\\s+(?=[\\w.-]*\\d)[A-Za-z0-9][\\w.-]*`,
   'i'
 );

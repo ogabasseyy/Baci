@@ -23,9 +23,15 @@ export async function checkPendingPrimarySavings(input: {
   setPending: (value: boolean) => void;
   /** False once the screen that asked has gone: "still waiting" news is dropped. */
   isLive?: () => boolean;
+  /** False once another operation (account, merchant or goal) took over. */
+  isOurs?: () => boolean;
 }): Promise<PendingSavingsCheckOutcome> {
-  // Captured before any await: a result never reaches another account.
-  const notify = savingsNotifier();
+  // Captured before any await: a result never reaches another account, and
+  // a late answer for an operation no longer on screen posts nothing.
+  const notifyScoped = savingsNotifier();
+  const notify: typeof notifyScoped = (...args) => {
+    if (input.isOurs?.() !== false) notifyScoped(...args);
+  };
   input.setPending(true);
   try {
     const result = await checkPiggyvestPrimarySavingsStatus({
@@ -35,7 +41,7 @@ export async function checkPendingPrimarySavings(input: {
     if (result.status === 'confirmed') {
       input.clearOperation();
       input.clearAmount();
-      triggerHaptic('success');
+      if (input.isOurs?.() !== false) triggerHaptic('success');
       const refreshFailed = !(await walletRefreshWorked(input.refetchWallet));
       // The status endpoint returns neither the amount nor the goal balance,
       // and the amount field may have been edited since the transfer began,

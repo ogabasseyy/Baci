@@ -150,6 +150,39 @@ it('an automatic read posts no "still waiting" notice; a tap does', async () => 
   );
 });
 
+it("answers busy, not no-operation, while this screen's own add is sending", async () => {
+  const { props, view } = setup();
+  props.submittingRef.current = true;
+  await act(async () => {
+    expect(await view.result.current.checkStatus()).toBe('busy');
+  });
+  expect(mockFetchJson).not.toHaveBeenCalled();
+});
+
+it('posts nothing when another operation took over before the answer came', async () => {
+  let answer: (value: unknown) => void = () => undefined;
+  mockFetchJson.mockReturnValue(
+    new Promise((resolve) => {
+      answer = resolve;
+    })
+  );
+  const { props, view } = setup();
+  let check: Promise<unknown> = Promise.resolve();
+  await act(async () => {
+    check = view.result.current.checkStatus();
+  });
+  // Another account, merchant or goal took over the screen meanwhile.
+  props.idempotencyKeyRef.current = '33333333-3333-4333-8333-333333333333';
+  await act(async () => {
+    answer({ status: 'confirmed', operationId: OPERATION });
+    await check;
+  });
+  expect(mockNotify).not.toHaveBeenCalled();
+  expect(props.idempotencyKeyRef.current).toBe(
+    '33333333-3333-4333-8333-333333333333'
+  );
+});
+
 it('runs one read at a time', async () => {
   let finish: (value: unknown) => void = () => undefined;
   mockFetchJson.mockImplementation(

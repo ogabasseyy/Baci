@@ -60,7 +60,9 @@ export function usePendingSavingsStatusCheck(input: {
     options: { automatic?: boolean } = {}
   ): Promise<SavingsStatusCheckResult> => {
     const operationId = input.idempotencyKeyRef.current;
-    if (!operationId || input.submittingRef?.current) return 'no-operation';
+    if (!operationId) return 'no-operation';
+    // This screen's own add is still sending it: try again on the next tick.
+    if (input.submittingRef?.current) return 'busy';
     if (inFlight.current) return 'busy';
     const { merchantId } = input;
     const plan = planWalletSavingsRail({
@@ -104,7 +106,9 @@ export function usePendingSavingsStatusCheck(input: {
         },
         refetchWallet: input.refetchWallet,
         setPending: setIsCheckingStatus,
-        isLive: () => live.current && !options.automatic,
+        isLive: () => live.current && !options.automatic && ours(),
+        // Still ours after this read settled it (released) or while stored.
+        isOurs: () => released || ours(),
       });
     } finally {
       inFlight.current = false;

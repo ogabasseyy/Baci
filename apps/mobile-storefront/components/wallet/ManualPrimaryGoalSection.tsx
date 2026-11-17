@@ -46,6 +46,13 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
     onAddSavings: props.onAddSavings,
   });
   const busy = props.isAdding || props.isFundPending;
+  // The one-tap button only when the head start still fits the wallet and
+  // the plan; otherwise the normal entry (prefilled with it) shows, which
+  // offers a top-up or a smaller amount like any other contribution.
+  const oneTap =
+    headStart.waiting !== null &&
+    headStart.waiting <= props.walletBalance &&
+    headStart.waiting <= props.remainingAmount;
   return (
     <>
       {headStart.waiting !== null && SETTING_UP.includes(phase) ? (
@@ -67,7 +74,7 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
       {/* The amount entry shows only once the plan's savings wallet is known
           to be ready (now, or on this app's last read of it). The transfer
           itself is refused server-side until that wallet exists. */}
-      {phase === 'ready' && headStart.waiting !== null ? (
+      {phase === 'ready' && oneTap && headStart.waiting !== null ? (
         <View style={styles.headStart}>
           <Pressable
             accessibilityRole="button"

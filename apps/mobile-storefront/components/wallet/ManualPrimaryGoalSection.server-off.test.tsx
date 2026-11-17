@@ -130,7 +130,7 @@ it('shows no amount entry for a plan still being set up', () => {
 });
 
 describe('a head start ticked "pay now" when the plan was created', () => {
-  function renderWith(onAddSavings: () => void) {
+  function renderWith(onAddSavings: () => void, walletBalance = 220) {
     render(
       <ManualPrimaryGoalSection
         addAmount="100"
@@ -146,7 +146,7 @@ describe('a head start ticked "pay now" when the plan was created', () => {
         usesPlanFunding={false}
         userId="customer-a"
         visible
-        walletBalance={220}
+        walletBalance={walletBalance}
       />
     );
   }
@@ -169,6 +169,21 @@ describe('a head start ticked "pay now" when the plan was created', () => {
     renderWith(jest.fn());
     expect(screen.queryByText(/head start is ready to move/)).toBeNull();
     takeWalletHeadStart('goal-a');
+  });
+
+  describe('bugfix (Muse): the Move button skipped the balance check at tap time', () => {
+    it('shows the normal entry, which offers a top-up, when the wallet no longer covers it', () => {
+      rememberWalletHeadStart('goal-a', 100);
+      mockPhase = 'ready';
+      const onAddSavings = jest.fn();
+      renderWith(onAddSavings, 40);
+      expect(
+        screen.queryByRole('button', { name: 'Move ₦100 from my wallet' })
+      ).toBeNull();
+      expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
+      expect(onAddSavings).not.toHaveBeenCalled();
+      takeWalletHeadStart('goal-a');
+    });
   });
 
   it('offers one Move button instead of the amount entry once ready', () => {

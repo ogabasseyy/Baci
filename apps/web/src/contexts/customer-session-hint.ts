@@ -1,4 +1,4 @@
-const CUSTOMER_SESSION_HINT_COOKIE = 'baci_customer_session_hint';
+export const CUSTOMER_SESSION_HINT_COOKIE = 'baci_customer_session_hint';
 const CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const CUSTOMER_GUEST_HINT_MAX_AGE_SECONDS = 60 * 60;
 const trackedHintPaths = new Set<string>(['/']);

@@ -52,7 +52,7 @@ function isExamPassRequiredError(error: unknown): boolean {
 }
 
 export async function postLegacyQuizStart(request: NextRequest) {
-  const auth = await requireQuizUser(request);
+  const auth = await requireQuizUser(request, { requireFreshSession: true });
   if (auth.response) return auth.response;
 
   const csrfResponse = await requireQuizCsrf(request);

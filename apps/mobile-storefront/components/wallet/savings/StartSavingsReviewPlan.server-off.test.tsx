@@ -22,11 +22,11 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
     expect(screen.getByText('Sandbox Test Phone')).toBeOnTheScreen();
     expect(screen.getByText('₦250,000 goal')).toBeOnTheScreen();
     expect(screen.getByText('₦2,000 a day')).toBeOnTheScreen();
-    expect(screen.getByText('Yours in about 125 days')).toBeOnTheScreen();
+    expect(screen.getByText("It's yours in about 125 days")).toBeOnTheScreen();
     expect(screen.getByText('Start')).toBeOnTheScreen();
-    expect(screen.getByText('Your phone')).toBeOnTheScreen();
+    expect(screen.getByText("It's yours")).toBeOnTheScreen();
     expect(
-      screen.getByText('From your wallet, whenever you like')
+      screen.getByText('Pay from your wallet, whenever you like')
     ).toBeOnTheScreen();
     // The legacy wallet asks no interest question.
     expect(screen.queryByText(/interest/i)).toBeNull();
@@ -44,7 +44,9 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           })}
         />
       );
-      expect(screen.getByText('Yours in about 42 years')).toBeOnTheScreen();
+      expect(
+        screen.getByText("It's yours in about 42 years")
+      ).toBeOnTheScreen();
       expect(screen.queryByText(/days/)).toBeNull();
     });
 
@@ -59,7 +61,9 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           })}
         />
       );
-      expect(screen.getByText('Yours in about 10 months')).toBeOnTheScreen();
+      expect(
+        screen.getByText("It's yours in about 10 months")
+      ).toBeOnTheScreen();
     });
   });
 
@@ -76,7 +80,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
         />
       );
       // 5 daily payments starting in a month: about 34 days, not 4.
-      expect(screen.getByText('Yours in about 34 days')).toBeOnTheScreen();
+      expect(screen.getByText("It's yours in about 34 days")).toBeOnTheScreen();
     });
 
     it('says today only when the plan ends today', () => {
@@ -90,7 +94,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           })}
         />
       );
-      expect(screen.getByText('Yours today')).toBeOnTheScreen();
+      expect(screen.getByText("It's yours today")).toBeOnTheScreen();
     });
   });
   describe('bugfix: the review date ignored the head start', () => {
@@ -103,7 +107,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           })}
         />
       );
-      expect(screen.getByText('Yours today')).toBeOnTheScreen();
+      expect(screen.getByText("It's yours today")).toBeOnTheScreen();
     });
 
     it('says the estimate does not count a partial head start', () => {
@@ -117,7 +121,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       );
       expect(
         screen.getByText(
-          'Yours in about 125 days, not counting your head start'
+          "It's yours in about 125 days, not counting your head start"
         )
       ).toBeOnTheScreen();
     });
@@ -139,7 +143,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
       );
       const today = formatDateTimeDisplay('2026-11-12', 'date');
       const later = formatDateTimeDisplay('2027-03-16', 'date');
-      expect(screen.getByText('Yours today')).toBeOnTheScreen();
+      expect(screen.getByText("It's yours today")).toBeOnTheScreen();
       // Start and phone both today: never a later start before its end.
       expect(screen.getAllByText(today)).toHaveLength(2);
       expect(screen.queryByText(later)).toBeNull();
@@ -164,7 +168,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           })}
         />
       );
-      expect(screen.queryByText('Yours today')).toBeNull();
+      expect(screen.queryByText("It's yours today")).toBeNull();
       expect(
         screen.getByText(formatDateTimeDisplay('2027-03-16', 'date'))
       ).toBeOnTheScreen();
@@ -186,7 +190,7 @@ describe('StartSavingsReviewPlan with PiggyVest off', () => {
           })}
         />
       );
-      expect(screen.queryByText('Yours today')).toBeNull();
+      expect(screen.queryByText("It's yours today")).toBeNull();
       expect(
         screen.getByText(formatDateTimeDisplay('2027-03-16', 'date'))
       ).toBeOnTheScreen();

@@ -865,7 +865,7 @@ describe('Middleware Proxy', () => {
 
     expect(res.headers.get('location')).toBeNull();
     expect(res.headers.get('x-middleware-rewrite')).toBe(
-      `https://ogabassey.${ROOT_DOMAIN}/ogabassey/checkout`
+      `https://ogabassey.${ROOT_DOMAIN}/ogabassey.${ROOT_DOMAIN}/checkout`
     );
     expect(res.headers.get('x-middleware-request-x-merchant-slug')).toBe(
       'ogabassey'
@@ -1422,7 +1422,7 @@ describe('Middleware Proxy', () => {
 
       expect(res.status).not.toBe(404);
       expect(res.headers.get('x-middleware-rewrite')).toContain(
-        '/ogabassey/smartphones/compare'
+        `/ogabassey.${ROOT_DOMAIN}/smartphones/compare`
       );
       expect(resolutionMock).not.toHaveBeenCalled();
       expect(canonicalRedirectMock).not.toHaveBeenCalled();
@@ -2220,7 +2220,9 @@ describe('Middleware Proxy', () => {
     expect(checkRateLimit).not.toHaveBeenCalled();
     expect(getCustomDomainForSlug).toHaveBeenCalledWith('ogabassey');
     expect(rewriteUrl.origin).toBe(`https://ogabassey.${ROOT_DOMAIN}`);
-    expect(rewriteUrl.pathname).toBe('/ogabassey/analytics/conversion');
+    expect(rewriteUrl.pathname).toBe(
+      `/ogabassey.${ROOT_DOMAIN}/analytics/conversion`
+    );
     expect(rewriteUrl.searchParams.get('ref')).toBe('organic');
     expect(rewriteUrl.searchParams.get('__baci_metadata_cache_bucket')).toBe(
       'streaming'
@@ -2934,14 +2936,14 @@ describe('Middleware Proxy', () => {
     [
       'subdomain category listing',
       `https://ogabassey.${ROOT_DOMAIN}/gaming-laptops`,
-      '/ogabassey/gaming-laptops',
+      `/ogabassey.${ROOT_DOMAIN}/gaming-laptops`,
       'streaming',
       'Mozilla/5.0 AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
     ],
     [
       'subdomain storefront home',
       `https://ogabassey.${ROOT_DOMAIN}/`,
-      '/ogabassey',
+      `/ogabassey.${ROOT_DOMAIN}`,
       'streaming',
       'Mozilla/5.0 AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
     ],

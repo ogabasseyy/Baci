@@ -30,6 +30,10 @@ describe('decodeOxygenResponse', () => {
   it.each([
     ['OXYGEN_ACTIVE_LOAN', oxygenActiveLoanMessage],
     ['OXYGEN_STATEMENT_REQUIRED', oxygenStatementRequiredMessage],
+    [
+      'OXYGEN_STATEMENT_LINK_SENT',
+      'Oxygen sent bank-statement linking instructions to the applicant’s email. Check your email, then return here to check your payment options. Your application is saved.',
+    ],
     ['OXYGEN_OTP_INVALID', oxygenInvalidOtpMessage],
   ])('maps %s to safe copy', async (code, message) => {
     const result = decodeOxygenResponse(

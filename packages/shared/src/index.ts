@@ -10,5 +10,7 @@ export * from './receipt';
 export * from './repairs';
 export * from './schemas';
 export * from './storefront';
+export * from './storefront/ogabassey-black-friday';
+export * from './storefront/ogabassey-care';
 export * from './types';
 export * from './vtu';

@@ -218,6 +218,7 @@ export function useChatwootInlineCartBridge(
         return;
       }
       const actionContext = createChatwootInlineActionContext({
+        canApplyRenewal: action.canApplyRenewal,
         getCartState: () => latestState.current,
         isCurrentGeneration: action.isCurrent,
         getSessionExpiresAt: () => sessionExpiresAt,
@@ -249,6 +250,7 @@ export function useChatwootInlineCartBridge(
       await dispatchChatwootInlineCartMutation({
         ...actionContext,
         conversationId,
+        getSessionToken: () => authorizedSessionToken ?? actionSessionToken,
         lineTokens,
         message,
         postRaw: postToTarget,

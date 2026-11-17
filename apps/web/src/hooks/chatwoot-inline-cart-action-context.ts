@@ -10,6 +10,7 @@ export function createChatwootInlineActionContext(input: {
     merchantSlug: string | null | undefined;
     sharedCartRef?: SharedCartRef;
   };
+  canApplyRenewal: () => boolean;
   getSessionExpiresAt: () => number;
   hasSessionAlias: () => boolean;
   isCurrentGeneration: () => boolean;
@@ -44,7 +45,7 @@ export function createChatwootInlineActionContext(input: {
       input.getSessionExpiresAt() > Date.now() &&
       input.getCartState().merchantSlug === input.requestedMerchantSlug,
     onSessionTokenRenewed: (sessionToken: string) => {
-      if (input.isCurrentGeneration() && input.hasSessionAlias()) {
+      if (input.hasSessionAlias() && input.canApplyRenewal()) {
         input.onSessionTokenRenewed(sessionToken);
       }
     },

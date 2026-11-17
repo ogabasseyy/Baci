@@ -7,6 +7,7 @@
 export function createChatwootActionGenerations() {
   let latest = 0;
   let context = 0;
+  let latestRenewed = 0;
   return {
     beginContext() {
       context += 1;
@@ -16,6 +17,17 @@ export function createChatwootActionGenerations() {
       const startedContext = context;
       const generation = independent ? latest : ++latest;
       return {
+        /**
+         * Session renewal is context state, not reply state: a superseded
+         * action still rotated the browser proof, so a queued retry must see
+         * it. Only a renewal from a newer-or-equal action replaces an applied
+         * one, so a late older response cannot roll the token back.
+         */
+        canApplyRenewal: () => {
+          if (generation < latestRenewed) return false;
+          latestRenewed = generation;
+          return true;
+        },
         isCurrent: () =>
           independent ? context === startedContext : generation === latest,
       };

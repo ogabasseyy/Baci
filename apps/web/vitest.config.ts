@@ -7,6 +7,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 import { escapeGlob } from './vitest.escape-glob';
 import { JSDOM_HOLDOUT_FILES } from './vitest.jsdom-holdouts';
 import { NODE_PROJECT_FOLDERS } from './vitest.node-folders';
+import { repositoryScanExcludes } from './vitest.repository-scans';
 import { SlowFilesFirstSequencer } from './vitest.sequencer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -158,6 +159,8 @@ export default defineConfig({
       'tests/experience-browser/**/*.test.ts',
       // These node:test suites run in the dedicated synthetic handoff workflow.
       'tools/chatwoot-handoff-ci/*.test.mjs',
+      // Whole-repository scans: CI runs them in their own job (vitest.repository-scans.ts).
+      ...repositoryScanExcludes(),
     ],
     globals: true,
     testTimeout: 10_000,

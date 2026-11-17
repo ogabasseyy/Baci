@@ -71,6 +71,8 @@ jobs:
         run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/android-release-sdk-platform.test.mjs .github/scripts/android-release-sdk-compat.test.mjs .github/scripts/android-admin-release-budget.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
+      - name: Test Muse comment review concurrency routing
+        run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening
@@ -217,6 +219,22 @@ jobs:
           else
             pnpm turbo typecheck
           fi
+
+  # Split out of "Quality Gate - Typecheck" (2026-11-15): the two compiler passes ran one after
+  # the other (~2 + ~2.5 min) and made Typecheck the slowest quick job. Same condition, same runner.
+  quality-typecheck-build:
+    name: Quality Gate - Production Typecheck
+    needs: [changes]
+    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
       # `build:ci` skips type checking, so only this step exercises the type-check path of the
       # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
       # Pull requests skip it only when they touch nothing in the production program (tests, docs,
@@ -246,6 +264,9 @@ jobs:
     # three consecutive 30m timeouts on cold caches. Keep headroom for Turbo
     # summary and Actions post-job cleanup.
     timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && 60 || 45 }}
+    env:
+      # The whole-repository scans run in quality-repo-scans (apps/web/vitest.repository-scans.ts).
+      BACI_VITEST_EXCLUDE_REPOSITORY_SCANS: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -338,10 +359,14 @@ jobs:
     timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && 45 || 25 }}
     env:
       BACI_FIXTURE_SCOPE: ${{ matrix.shard }}
+      # The whole-repository scans run in quality-repo-scans (apps/web/vitest.repository-scans.ts).
+      BACI_VITEST_EXCLUDE_REPOSITORY_SCANS: '1'
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        # Keep in step with --shard=N/10 in .github/scripts/run-ci-web-shard.sh. 6 -> 10 on 2026-11-15:
+        # the slowest of six shards took 9-12 min while the fastest took ~7.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -364,6 +389,31 @@ jobs:
         timeout-minutes: 2
         run: node .github/scripts/cleanup-builder-ci-containers.mjs
 
+  # Whole-repository scans (apps/web/vitest.repository-scans.ts) in their own job, with every blob
+  # checked out. In the blob:none "Quality Gate - Test" job the event-pipeline scan lazily fetched
+  # each historical blob and took 26-35 min (timed out on #4218); with full blobs it takes ~3 min.
+  # Runs on every web change in the full stage, so it covers at least what the test jobs did.
+  quality-repo-scans:
+    name: Quality Gate - Repository Scans
+    needs: [changes]
+    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.stage == 'full'
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # The event-pipeline scan reads immutable historical source bytes. Hydrate blobs during
+          # checkout: credentials are removed before tests and cannot service lazy fetches.
+          filter: ''
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Run whole-repository scan tests
+        run: |
+          pnpm --filter @baci/web exec vitest run \
+            tools/events/verify-event-pipeline-boundaries.live.test.ts \
+            tools/events/verify-analytics-delivery-authority.repository.test.ts
+
   quality-db-replay:
     name: Quality Gate - DB Replay
     needs: [changes]
@@ -384,6 +434,11 @@ jobs:
           SUPABASE_CLI_SHA256: 31ee8a152e9c8c8eddae072c6bc7c9119748a96c8cdaf21a6d31c9ce7e62cc18
           SUPABASE_CLI_VERSION: 2.111.0
         run: bash .github/scripts/install-supabase-replay-toolchain.sh
+      # The ~50 s pinned-image download runs while the PostgreSQL suites below run; the
+      # "Prepare pinned Supabase database image" step waits for it before the replay needs it.
+      - name: Start pinned Supabase database image download
+        id: replay-image-start
+        run: bash .github/scripts/background-step.sh start replay-image bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test reviewed commerce cart checkout product names
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Test shared cart validated-price order binding
@@ -396,8 +451,6 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_cart_provider_dispatch_fence.py
       - name: Test agentic DVA provider-success evidence boundary
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_dva_provider_success_evidence.py
-      - name: Prepare pinned Supabase database image
-        run: bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test loyalty checkout replay fixture against PostgreSQL
         env:
           PG_BINDIR: /usr/lib/postgresql/18/bin
@@ -437,6 +490,16 @@ jobs:
       # all surface here (e.g. the id_snapshot 23505 caught pre-merge),
       # so replay sql-check is sufficient for the order-offer and
       # product-request suites without a second disposable runner.
+      - name: Prepare pinned Supabase database image
+        # Also after an earlier step failed, so the download's output is always shown, but only
+        # when the download was started (as with the builder auth suite in quality-typecheck).
+        if: ${{ !cancelled() && steps.replay-image-start.outcome == 'success' }}
+        # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
+        run: bash .github/scripts/background-step.sh wait replay-image ${{ job.status == 'failure' && 60 || 900 }}
+      - name: Stop pinned Supabase database image download
+        # A cancelled job skips the wait above; stop the detached download so it cannot run on.
+        if: ${{ always() && steps.replay-image-start.outcome == 'success' }}
+        run: bash .github/scripts/background-step.sh stop replay-image
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological
@@ -565,6 +628,24 @@ jobs:
           IMEI_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: python3 supabase/tests/run_imei_access_boundary.py
 
+  # Split out of "Quality Gate - Misc" (2026-11-15): this one step took ~3.5 of Misc's ~7 min
+  # (scratch-PostgreSQL SQL contract suites). Same condition as Misc, so nothing runs less often.
+  quality-migration-applier:
+    name: Quality Gate - Migration Applier
+    needs: [changes]
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Test Migration Applier Collision Handling
+        run: bash .github/scripts/run-migration-applier-tests.sh
+
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
@@ -584,8 +665,6 @@ jobs:
         run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard
         run: bash .github/scripts/check-migration-versions.test.sh
-      - name: Test Migration Applier Collision Handling
-        run: bash .github/scripts/run-migration-applier-tests.sh
       - name: Verify Migration Versions
         run: bash .github/scripts/check-migration-versions.sh
       - name: Verify GIGL Enforcement Migration Names
@@ -594,6 +673,8 @@ jobs:
         run: bash .github/scripts/check-mobile-gem-floors.test.sh
       - name: Verify Mobile Gem Floors
         run: bash .github/scripts/check-mobile-gem-floors.sh
+      - name: Test background CI step helper
+        run: node --test .github/scripts/background-step.test.mjs
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
@@ -715,6 +796,7 @@ jobs:
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
           .github/scripts/coordinate-production-release.test.mjs
+          .github/scripts/coordinate-isolated-release.test.mjs
           .github/scripts/coordinate-publication.test.mjs
           .github/scripts/release-production.test.mjs
           .github/scripts/release-subprocess.test.mjs
@@ -850,7 +932,7 @@ jobs:
     # a skipped job named "Quality Gate" would count as a passed required check. The name and
     # the condition below must stay the same predicate (ci-workflow-contract.test.mjs).
     name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Quality Gate' || 'Quality Gate (deferred until Codex review)' }}
-    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, quality-disposable-sql, quality-quiz-approval, mobile-quality, silent-revert-guard]
+    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-typecheck-build, quality-test, quality-test-web, quality-repo-scans, quality-misc, quality-migration-applier, quality-db-replay, quality-disposable-sql, quality-quiz-approval, mobile-quality, silent-revert-guard]
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') }}
     # Aggregate must not depend on `changes` outputs: if `changes` fails it still has to report.
     runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
@@ -865,6 +947,9 @@ jobs:
           CWV_RUNNER_CONTRACTS_RESULT: ${{ needs['cwv-runner-contracts'].result }}
           LINT_RESULT: ${{ needs['quality-lint'].result }}
           TYPECHECK_RESULT: ${{ needs['quality-typecheck'].result }}
+          TYPECHECK_BUILD_RESULT: ${{ needs['quality-typecheck-build'].result }}
+          REPO_SCANS_RESULT: ${{ needs['quality-repo-scans'].result }}
+          MIGRATION_APPLIER_RESULT: ${{ needs['quality-migration-applier'].result }}
           TEST_RESULT: ${{ needs['quality-test'].result }}
           MISC_RESULT: ${{ needs['quality-misc'].result }}
           DB_REPLAY_RESULT: ${{ needs['quality-db-replay'].result }}

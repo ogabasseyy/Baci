@@ -15,4 +15,13 @@ describe('cancel step copy', () => {
     expect(COPY.interestForfeited).toMatch(/not refunded/);
     expect(COPY.forfeitNote).toMatch(/lose the interest/);
   });
+
+  it('bugfix: names the wallet the way the wallet card does ("Savings wallet")', () => {
+    const all = Object.values(COPY)
+      .filter((value) => typeof value === 'string')
+      .join(' ');
+    expect(all).not.toMatch(/main wallet/i);
+    expect(COPY.savedBody).toMatch(/savings wallet/);
+    expect(COPY.doneBody).toMatch(/savings wallet/);
+  });
 });

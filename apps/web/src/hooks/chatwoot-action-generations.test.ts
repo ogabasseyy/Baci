@@ -35,3 +35,15 @@ describe('createChatwootActionGenerations', () => {
     expect(cart.isCurrent()).toBe(false);
   });
 });
+
+describe('bugfix: a superseded cart action still applies its session renewal', () => {
+  it('lets a superseded action rotate the token but not roll back a newer one', () => {
+    const generations = createChatwootActionGenerations();
+    const first = generations.startAction(false);
+    const second = generations.startAction(false);
+    expect(first.isCurrent()).toBe(false);
+    expect(first.canApplyRenewal()).toBe(true);
+    expect(second.canApplyRenewal()).toBe(true);
+    expect(first.canApplyRenewal()).toBe(false);
+  });
+});

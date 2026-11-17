@@ -12,11 +12,13 @@ function build(overrides: Record<string, unknown> = {}) {
       } | null,
     },
     expiresAt: Date.now() + 60_000,
+    canRenew: true,
     generation: 1,
     target: true,
   };
   const renewed = vi.fn();
   const context = createChatwootInlineActionContext({
+    canApplyRenewal: () => state.canRenew,
     getCartState: () => state.cart,
     isCurrentGeneration: () => state.generation === 1,
     getSessionExpiresAt: () => state.expiresAt,
@@ -87,13 +89,13 @@ describe('createChatwootInlineActionContext', () => {
     expect(context.isCurrentContext()).toBe(false);
   });
 
-  it('forwards a renewed token only for the current action and alias', () => {
+  it('forwards a renewed token while the renewal is newer and the alias lives', () => {
     const { context, renewed, state } = build();
     context.onSessionTokenRenewed('t1');
     expect(renewed).toHaveBeenCalledWith('t1');
-    state.generation = 2;
+    state.canRenew = false;
     context.onSessionTokenRenewed('t2');
-    state.generation = 1;
+    state.canRenew = true;
     state.alias = false;
     context.onSessionTokenRenewed('t3');
     expect(renewed).toHaveBeenCalledTimes(1);

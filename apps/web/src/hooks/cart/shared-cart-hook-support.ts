@@ -39,6 +39,12 @@ export interface UseSharedCartOptions {
 export interface UseSharedCartResult {
   experienceCommandPort?: ExperienceCartHostPort;
   cart: SharedCartDisplayItem[];
+  /**
+   * This tab's own lines without a sibling tab's preview. Anything that
+   * issues a command or checks capacity reads this, never the previewed
+   * `cart`. Absent when it is the same list as `cart`.
+   */
+  ownCart?: SharedCartDisplayItem[];
   cartId: string | null;
   version: number | null;
   isTerminal: boolean;

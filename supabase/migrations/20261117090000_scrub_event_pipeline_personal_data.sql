@@ -104,7 +104,7 @@ BEGIN
   GET DIAGNOSTICS v_archive_deleted = ROW_COUNT;
 
   -- Each scrub works in batches of 10,000 until nothing is left or its own
-  -- 6 second budget is used (three scrubs plus the deletes above stay inside
+  -- 6 second budget is used (four scrubs plus the deletes above stay inside
   -- the 30 second statement limit). Anything left over carries to the next
   -- daily run, so a very large backlog drains over days, never in one rolled
   -- back run. Rows are locked (SKIP LOCKED) and the status test is repeated in

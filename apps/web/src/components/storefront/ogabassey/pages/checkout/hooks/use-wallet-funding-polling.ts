@@ -6,6 +6,7 @@ import { isTerminalWalletFundingIntentStatus } from '@/lib/order-wallet-funding-
 import type { WalletOrderFundingIntent } from '@/schemas/order-wallet-funding-intent';
 
 export const WALLET_FUNDING_POLL_INTERVAL_MS = 5000;
+const WALLET_FUNDING_REQUEST_TIMEOUT_MS = 15_000;
 
 interface UseWalletFundingPollingArgs {
   enabled: boolean;
@@ -43,8 +44,17 @@ async function runPollAttempt({
 }: PollAttemptContext) {
   inFlightRef.current = true;
   setIsChecking(true);
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
-    const nextIntent = await getOrderWalletFundingIntent(fetchArgs);
+    const nextIntent = await Promise.race([
+      getOrderWalletFundingIntent(fetchArgs),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('Wallet funding status request timed out')),
+          WALLET_FUNDING_REQUEST_TIMEOUT_MS
+        );
+      }),
+    ]);
     if (!isActive()) {
       return;
     }
@@ -63,6 +73,7 @@ async function runPollAttempt({
       );
     }
   } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
     inFlightRef.current = false;
     if (isActive()) {
       setIsChecking(false);

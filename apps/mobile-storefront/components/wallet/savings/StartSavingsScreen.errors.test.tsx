@@ -102,8 +102,7 @@ describe('StartSavingsScreen errors', () => {
       })
     );
     fireEvent.press(getSavingsButton('Continue savings setup'));
-    fireEvent.press(getSavingsButton('Choose savings funding option'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => {
       expect(Alert.alert).toHaveBeenCalledWith(

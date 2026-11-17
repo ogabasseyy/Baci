@@ -31,7 +31,8 @@ BEGIN
   PERFORM pg_temp.gc_assert((SELECT reference FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op2::uuid)
     = 'pvb-cancel-' || c_goal || '-1',
     'a never-dispatched release made its reference reusable');
-  PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op2::uuid, 'dispatch', 250000),
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op2::uuid, 250000) ->> 'status' = 'dispatched',
     'dispatch refused');
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.release_failed_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
@@ -44,9 +45,20 @@ BEGIN
     'the late success was not settled');
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op2) = 'needs_review', 'late success did not reach review');
   PERFORM pg_temp.gc_assert(piggyvest_primary.clear_goal_cancel_review(v_op2::uuid, 'checked'), 'clear failed');
+  -- Since 20261112190514 a cancel refunds only the recorded principal, so the
+  -- operator who cleared the review records what the goal still holds first
+  -- (with a principal of 0 the split dispatch answers needs_review).
+  v_op := pg_temp.gc_reserved('ref-zero');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, 700)
+      ->> 'status' = 'needs_review',
+    'a goal with no recorded principal was dispatched');
+  -- That refusal holds the goal; the operator clears the hold before retrying.
+  UPDATE piggyvest_primary.goal_cancel_operations SET held_reason = NULL WHERE id = v_op::uuid;
+  UPDATE public.customer_savings_goals SET current_amount = 2500 WHERE id = c_goal::uuid;
   v_text := pg_temp.gc_dispatched('ref2');
   PERFORM pg_temp.gc_assert((SELECT reference FROM piggyvest_primary.goal_cancel_operations WHERE id = v_text::uuid)
-    = 'pvb-cancel-' || c_goal || '-2',
+    = 'pvb-cancel-' || c_goal || '-3',
     'a cancel after a late success reused a reference');
   PERFORM pg_temp.gc_assert(
     (SELECT pg_catalog.count(DISTINCT reference) = pg_catalog.count(reference)

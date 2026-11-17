@@ -36,11 +36,16 @@ const RELEASE_ENTRYPOINTS = [
 ] as const;
 
 const DYNAMIC_ENTRYPOINTS = [
+  // Ogabassey Black Friday (#4252): awaits connection()/headers() and reads
+  // filter searchParams, falling back to the category listing elsewhere.
+  'black-friday/page.tsx',
   // Full-code profiles require the current trusted origin/runtime composition.
   '(catalog)/(listing)/collections/[handle]/page.tsx',
   '(content)/pages/[...experiencePath]/page.tsx',
   '(blog)/blog/[...catchAll]/route.ts',
+  '(blog)/blog/feed.xml/route.ts',
   '(blog)/blog/news-sitemap.xml/route.ts',
+  '(blog)/blog/rss.xml/route.ts',
   'sitemap/[id]/route.ts',
   '(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx',
   '(catalog)/(listing)/search/page.tsx',

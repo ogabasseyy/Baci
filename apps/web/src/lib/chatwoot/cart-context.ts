@@ -1,3 +1,4 @@
+import type { CartSnapshot } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { createAnonMerchantFeatureLookup } from '@/lib/cart/merchant-resolution';
@@ -24,6 +25,10 @@ export type ChatwootCartContextResult =
       ok: true;
       binding: ChatwootTenantBinding;
       state: ChatwootCommerceContextState;
+      /** Server-loaded cart; never serialized directly to Chatwoot. */
+      cart: CartSnapshot;
+      /** Merchant-scoped public catalog names for in-chat cart presentation. */
+      productNames?: Record<string, string>;
     }
   | {
       ok: false;
@@ -64,7 +69,8 @@ function cartContextError(
 }
 
 export async function loadChatwootCartContext(
-  request: NextRequest
+  request: NextRequest,
+  options: { includeProductNames?: boolean } = {}
 ): Promise<ChatwootCartContextResult> {
   if (process.env.EKAETTE_CHATWOOT_CONTEXT_ENABLED !== 'true') {
     return { ok: false, status: 404, code: 'disabled' };
@@ -133,9 +139,41 @@ export async function loadChatwootCartContext(
     return { ok: false, status: 403, code: 'cart_binding_mismatch' };
   }
 
+  let productNames: Record<string, string> | undefined;
+  if (options.includeProductNames && snapshot.cart.lines.length > 0) {
+    const productIds = [
+      ...new Set(snapshot.cart.lines.map((line) => line.item.productId)),
+    ];
+    try {
+      const { data, error } = await createAnonClient()
+        .from('products')
+        .select('id, name')
+        .eq('merchant_id', cartContext.merchant.id)
+        .in('id', productIds);
+      if (error || !data) return cartContextError('temporarily_unavailable');
+      productNames = Object.fromEntries(
+        data
+          .filter(
+            (row): row is typeof row & { id: string; name: string } =>
+              typeof row.id === 'string' &&
+              typeof row.name === 'string' &&
+              row.name.trim().length > 0
+          )
+          .map((row) => [row.id, row.name.trim().slice(0, 120)])
+      );
+      if (productIds.some((productId) => !productNames?.[productId])) {
+        return cartContextError('temporarily_unavailable');
+      }
+    } catch {
+      return cartContextError('temporarily_unavailable');
+    }
+  }
+
   return {
     ok: true,
     binding,
+    cart: snapshot.cart,
+    ...(productNames ? { productNames } : {}),
     state: {
       cartId: snapshot.cart.cartId,
       cartSessionSha256: hashCartSessionProof(verifiedProof),

@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
-import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import {
+  __resetCartMerchantLookupCacheForTesting,
+  __resetCartQuotaStoreForTesting,
+} from '@/lib/cart/request-context';
 import {
   issueCartSessionProof,
   verifyCartSessionProof,
@@ -132,6 +135,7 @@ const savedSecret = process.env.CART_SESSION_SECRET;
 beforeEach(() => {
   vi.clearAllMocks();
   __resetCartQuotaStoreForTesting();
+  __resetCartMerchantLookupCacheForTesting();
   mocks.alias = null;
   mocks.capturedPrincipal = null;
   mocks.cartError = null;

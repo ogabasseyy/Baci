@@ -5,6 +5,7 @@ import {
   oxygenStatementRequiredMessage,
 } from '@/lib/payments/oxygen/booking-rejection';
 import { oxygenPaymentOriginMessage } from '@/lib/payments/oxygen/payment-origin-error';
+import { oxygenStatementLinkSentMessage } from '@/lib/payments/oxygen/statement-linking';
 import type { OxygenRuntimeAction } from '@/schemas/oxygen-runtime';
 import { oxygenCheckFailureTitle } from './oxygen-check-failure-title';
 import { oxygenButtonClass as button } from './oxygen-checkout-styles';
@@ -42,6 +43,7 @@ export function OxygenApplicationError({
 }: Props) {
   const [retrying, setRetrying] = useState(false);
   const paymentOriginBlocked = error === oxygenPaymentOriginMessage;
+  const statementLinkSent = error === oxygenStatementLinkSentMessage;
   const locked = useRef(false);
   async function retry() {
     if (busy || locked.current) return;
@@ -62,11 +64,13 @@ export function OxygenApplicationError({
         <h3 className="text-xl font-bold text-gray-900">
           {activeLoan
             ? 'You already have an active Oxygen loan'
-            : retryEligibility
-              ? 'We couldn’t finish checking your payment options'
-              : stage === 'plan_required'
-                ? 'We couldn’t prepare your payment plan'
-                : oxygenCheckFailureTitle(action)}
+            : statementLinkSent
+              ? 'Check your email from Oxygen'
+              : retryEligibility
+                ? 'We couldn’t finish checking your payment options'
+                : stage === 'plan_required'
+                  ? 'We couldn’t prepare your payment plan'
+                  : oxygenCheckFailureTitle(action)}
         </h3>
       )}
       <p role="alert" className="text-sm leading-relaxed text-gray-600">
@@ -74,7 +78,8 @@ export function OxygenApplicationError({
           ? oxygenActiveLoanMessage
           : paymentOriginBlocked ||
               error === oxygenRateLimitMessage ||
-              error === oxygenStatementRequiredMessage
+              error === oxygenStatementRequiredMessage ||
+              statementLinkSent
             ? error
             : retryEligibility
               ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
@@ -101,7 +106,9 @@ export function OxygenApplicationError({
               : retryEligibility
                 ? busy || retrying
                   ? 'Checking your payment options…'
-                  : 'Try again'
+                  : statementLinkSent
+                    ? 'Check payment options again'
+                    : 'Try again'
                 : retryBreakdown
                   ? 'Retry payment breakdown'
                   : 'Check for an update'}

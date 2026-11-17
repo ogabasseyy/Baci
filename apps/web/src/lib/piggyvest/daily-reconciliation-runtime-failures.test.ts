@@ -26,10 +26,14 @@ describe('runPiggyvestDailyReconciliation failures and budget', () => {
         emailed: true,
         paged: true,
       });
+      // The wallet pay report is read on its own now, so a stub that answers
+      // every statement with the bad snapshot also reads as unreadable.
       expect(deps.emitAlert).toHaveBeenCalledWith(
         'PIGGYVEST_RECONCILIATION_MISMATCH',
         {
-          reason: 'reconciliation_failed:snapshot_invalid',
+          reason: expect.stringContaining(
+            'reconciliation_failed:snapshot_invalid'
+          ),
         }
       );
     }

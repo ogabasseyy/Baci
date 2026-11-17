@@ -7,7 +7,7 @@ const MIN_SLOTS = 4;
 const MAX_DIGITS = 6;
 
 /**
- * The PIN as dots: four boxes, growing to five or six as the customer types
+ * The PIN as dots: four boxes, growing to five or six as those digits are typed
  * (or a fixed count, for a code of known length). Only the count of digits is
  * shown or announced, never the digits.
  */
@@ -22,8 +22,9 @@ export function WalletPinDots({
   length: number;
   fixedSlots?: number;
 }) {
-  const slots =
-    fixedSlots ?? Math.min(MAX_DIGITS, Math.max(MIN_SLOTS, length + 1));
+  // Four boxes, growing only as a fifth or sixth digit is typed: an empty
+  // extra box after four read as "one more digit needed".
+  const slots = fixedSlots ?? Math.min(MAX_DIGITS, Math.max(MIN_SLOTS, length));
   return (
     <View
       accessible

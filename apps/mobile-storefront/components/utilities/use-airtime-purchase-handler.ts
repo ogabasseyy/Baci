@@ -31,6 +31,7 @@ import {
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 interface UseAirtimePurchaseHandlerProps {
   amount: string;
@@ -79,13 +80,11 @@ async function executeAirtimePurchase({
   request,
 }: ExecuteAirtimePurchaseInput): Promise<void> {
   try {
-    // Descriptor-keyed recall: remount retries reuse the SAME key so
-    // the route dedupes instead of debiting a second transaction.
+    // Descriptor-keyed recall: remount retries reuse the SAME key.
     const descriptor = payment.scopePendingVtuDescriptor(
       buildVtuPurchaseDescriptor(request)
     );
-    // The pass was already awaited above the retained peek in
-    // handlePurchase; the capture below recalls post-settle state.
+    // The pass was awaited in handlePurchase; this recalls post-settle state.
     const idempotencyKey = await payment.getWalletIdempotencyKey(descriptor);
     const submittingOwner = payment.captureSubmittingOwner();
     const submittingUserId = payment.captureSubmittingUserId();
@@ -106,14 +105,12 @@ async function executeAirtimePurchase({
           getIsActive
         )
       ) {
-        // Finalize the SUBMITTER's entry so switch-back repeats replay
-        // the original outcome instead of minting fresh.
+        // Finalize the SUBMITTER's entry: switch-back repeats replay it.
         await preserveSuppressedVtuSuccess(payment, descriptor, result, ownKey);
         return;
       }
       if (getIsActive && !getIsActive()) {
-        // Back-navigated mid-flight: preserve for SAME-key replay on
-        // reopen; suppress onSuccess/Alert (screen gone).
+        // Back-navigated mid-flight: keep for same-key replay; no alert.
         await preserveSuppressedVtuSuccess(payment, descriptor, result, ownKey);
         return;
       }
@@ -241,18 +238,23 @@ export function useAirtimePurchaseHandler({
       type: 'airtime' as const,
       walletAmount: numericAmount,
     };
-    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
-    // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Sync ref guard admits no second submit;
-    // shared helper re-checks the owner after the await (R103).
+    // Settle gate (R60) BEFORE the retained peek (R66); owner re-checked (R103).
     if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
       isSubmittingRef.current = false;
       return;
     }
-    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
-    // signs with — a charged-but-unanswered retry must bypass the
-    // balance gate instead of stranding behind top-up.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+    const handedOver = await payFromPiggyvest(
+      request,
+      onSuccess,
+      phoneNumber,
+      isRetainedReplay,
+      getIsActive
+    );
+    if (handedOver || (getIsActive && !getIsActive())) {
+      isSubmittingRef.current = false;
+      return;
+    }
     if (
       !ensureUtilityWalletReady({
         amount: numericAmount,

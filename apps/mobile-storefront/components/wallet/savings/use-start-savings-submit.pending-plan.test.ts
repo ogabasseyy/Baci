@@ -154,6 +154,21 @@ describe('a created plan whose head start has not moved yet', () => {
     );
   });
 
+  it('bugfix: never hands off the created plan after its interest answer changed', async () => {
+    const { result, rerender, input } = await createStalledPlan({
+      interestChoice: true,
+    });
+    rerender({ ...input, interestChoice: false } as typeof input);
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenLastCalledWith(
+      PLAN_ALREADY_CREATED_MESSAGE
+    );
+  });
+
   it.each([
     ['bank transfer', { deferInitialContribution: true }],
     ['no head start', undefined],

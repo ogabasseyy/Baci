@@ -32,7 +32,7 @@ CREATE TABLE public.commerce_cart_operations(
 );
 CREATE TABLE public.products(
   id uuid PRIMARY KEY, merchant_id uuid NOT NULL, slug text NOT NULL, status text NOT NULL DEFAULT 'active',
-  has_variants boolean NOT NULL DEFAULT false, has_condition_offers boolean NOT NULL DEFAULT false,
+  has_variants boolean NOT NULL DEFAULT false, variant_model text, has_condition_offers boolean NOT NULL DEFAULT false,
   manage_stock boolean, stock numeric, stock_quantity numeric, condition text, default_variant_id uuid,
   effective_policy text NOT NULL DEFAULT 'off'
 );
@@ -52,7 +52,7 @@ CREATE FUNCTION private.get_storefront_pdp_core_v2(uuid, text, uuid)
 RETURNS TABLE(resolution_status text, product_data jsonb) LANGUAGE sql STABLE AS $$
   SELECT 'found', jsonb_build_object(
     'id', p.id, 'merchant_id', p.merchant_id, 'slug', p.slug, 'status', p.status,
-    'has_variants', p.has_variants, 'has_condition_offers', CASE WHEN p.slug='malformed-condition' THEN 'not-a-boolean' ELSE p.has_condition_offers::text END,
+    'has_variants', p.has_variants, 'variant_model', p.variant_model, 'has_condition_offers', CASE WHEN p.slug='malformed-condition' THEN 'not-a-boolean' ELSE p.has_condition_offers::text END,
     'manage_stock', p.manage_stock, 'stock', p.stock, 'stock_quantity', p.stock_quantity,
     'condition', p.condition, 'default_variant_id', p.default_variant_id, 'effective_policy', p.effective_policy,
     'product_variants', coalesce((SELECT jsonb_agg(jsonb_build_object(
@@ -187,6 +187,17 @@ DO $$ DECLARE r jsonb; BEGIN
   END IF;
   r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','empty-1',7,'simple',NULL);
   IF r->>'code' <> 'invalid_item' THEN RAISE EXCEPTION 'tracked zero stock was accepted: %',r; END IF;
+END $$;
+
+-- bugfix: an sku_matrix product with a stale false has_variants flag is
+-- variant-bearing, so adding it without a variant id must fail closed.
+RESET ROLE;
+INSERT INTO public.products(id,merchant_id,slug,has_variants,variant_model,manage_stock,stock,stock_quantity)
+VALUES ('15151515-1515-4515-8515-151515151515','11111111-1111-4111-8111-111111111111','sku-matrix-stale',false,'sku_matrix',true,4,4);
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE r jsonb; BEGIN
+  r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','sku-matrix-1',7,'sku-matrix-stale',NULL);
+  IF r->>'code' IS DISTINCT FROM 'invalid_item' THEN RAISE EXCEPTION 'sku_matrix product with stale has_variants was added without a variant: %',r; END IF;
 END $$;
 
 -- A transaction rollback removes both the cart mutation and its add identity receipt.

@@ -1,30 +1,5 @@
 type CartRef = { cartId: string; version: number } | null;
 
-/**
- * Tracks which inline actions are still current. Cart actions supersede one
- * another (the newest wins). Product lookups are read-only and keyed by their
- * own request id, so they stay current until the conversation or session
- * context is replaced, even while other lookups or cart actions run.
- */
-export function createChatwootActionGenerations() {
-  let latest = 0;
-  let context = 0;
-  return {
-    beginContext() {
-      context += 1;
-      latest += 1;
-    },
-    startAction(independent: boolean) {
-      const startedContext = context;
-      const generation = independent ? latest : ++latest;
-      return {
-        isCurrent: () =>
-          independent ? context === startedContext : generation === latest,
-      };
-    },
-  };
-}
-
 /** Cart-ref and cart-version freshness for an authorized inline action. */
 export function evaluateChatwootActionCartFreshness(input: {
   authorizedVersion: number | null;
@@ -68,16 +43,4 @@ export function evaluateChatwootActionCartFreshness(input: {
       cartRefIsCurrent &&
       merchantIsCurrent,
   };
-}
-
-const ACTION_EVENTS = new Set([
-  'baci-cart-request',
-  'baci-cart-add',
-  'baci-cart-quantity',
-  'baci-product-request',
-  'baci-checkout-review-request',
-]);
-
-export function isChatwootInlineActionEvent(event: string) {
-  return ACTION_EVENTS.has(event);
 }

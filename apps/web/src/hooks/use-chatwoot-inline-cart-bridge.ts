@@ -8,11 +8,9 @@ import { readChatwootCommerceMessage } from '@/components/storefront/ogabassey/c
 import { postChatwootCanonicalCartView } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-controls';
 import { handleChatwootInlineProductLookup } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-product-lookup';
 import { useCart } from '@/hooks/cart';
-import {
-  createChatwootActionGenerations,
-  evaluateChatwootActionCartFreshness,
-  isChatwootInlineActionEvent,
-} from './chatwoot-inline-action-state';
+import { evaluateChatwootActionCartFreshness } from './chatwoot-action-cart-freshness';
+import { createChatwootActionGenerations } from './chatwoot-action-generations';
+import { isChatwootInlineActionEvent } from './chatwoot-inline-action-event';
 import { createChatwootInlineActionContext } from './chatwoot-inline-cart-action-context';
 import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
 import { handleChatwootInlineContextHandshake } from './chatwoot-inline-cart-context-handshake';

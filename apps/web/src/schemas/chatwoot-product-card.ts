@@ -1,11 +1,8 @@
 import { z } from 'zod';
+import { chatwootProductSlugSchema } from './chatwoot-product-slug';
 import { postgresUuidSchema } from './postgres-uuid';
 
-const productSlug = z
-  .string()
-  .min(1)
-  .max(160)
-  .regex(/^[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*$/);
+const productSlug = chatwootProductSlugSchema;
 const requestId = z
   .string()
   .min(1)

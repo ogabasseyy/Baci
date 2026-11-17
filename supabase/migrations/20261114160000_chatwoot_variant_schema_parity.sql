@@ -104,7 +104,8 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'code', 'invalid_item', 'state', null, 'currentVersion', v_cart_version, 'replayed', false);
   END IF;
 
-  IF coalesce((v_product->>'has_variants')::boolean, false) THEN
+  IF coalesce((v_product->>'has_variants')::boolean, false)
+    OR coalesce(v_product->>'variant_model', '') = 'sku_matrix' THEN
     IF p_variant_id IS NULL OR jsonb_typeof(v_product->'product_variants') IS DISTINCT FROM 'array' THEN
       RETURN jsonb_build_object('ok', false, 'code', 'invalid_item', 'state', null, 'currentVersion', v_cart_version, 'replayed', false);
     END IF;

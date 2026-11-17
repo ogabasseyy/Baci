@@ -83,9 +83,10 @@ export async function POST(request: NextRequest) {
     return unavailable(429, 'quota_exceeded', parsed.data.requestId);
   }
 
-  const client = createAnonClient();
+  let client: ReturnType<typeof createAnonClient>;
   let currency: string;
   try {
+    client = createAnonClient();
     const { data, error } = await client
       .from('merchants')
       .select('country, payout_currency')

@@ -245,4 +245,21 @@ describe('Chatwoot product lookup route', () => {
       requestId: body.requestId,
     });
   });
+
+  it('returns the correlated private 503 when the anon client cannot be constructed', async () => {
+    arrange();
+    mocks.createAnonClient.mockImplementationOnce(() => {
+      throw new Error('missing anon env');
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      code: 'temporarily_unavailable',
+      requestId: body.requestId,
+    });
+  });
 });

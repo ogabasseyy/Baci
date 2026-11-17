@@ -1,15 +1,12 @@
 import { z } from 'zod';
+import { chatwootProductSlugSchema } from './chatwoot-product-slug';
 import { postgresUuidSchema } from './postgres-uuid';
 
 export const chatwootCartAddMutationRequestSchema = z
   .object({
     cartVersion: z.number().int().positive().safe(),
     conversationId: z.number().int().positive().safe(),
-    productSlug: z
-      .string()
-      .min(1)
-      .max(160)
-      .regex(/^[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*$/),
+    productSlug: chatwootProductSlugSchema,
     requestId: z
       .string()
       .min(8)

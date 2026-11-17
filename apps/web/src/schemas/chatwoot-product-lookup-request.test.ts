@@ -50,11 +50,12 @@ describe('chatwootProductLookupRequestSchema', () => {
 
   it('enforces the slug length and shape boundaries', () => {
     expect(ok({ ...valid, slug: 'a' })).toBe(true);
-    expect(ok({ ...valid, slug: 'a'.repeat(160) })).toBe(true);
+    expect(ok({ ...valid, slug: 'a'.repeat(200) })).toBe(true);
+    expect(ok({ ...valid, slug: 'iphone-15.5-pro' })).toBe(true);
     expect(ok({ ...valid, slug: 'iphone_15-pro' })).toBe(true);
     expect(ok({ ...valid, slug: '' })).toBe(false);
-    expect(ok({ ...valid, slug: 'a'.repeat(161) })).toBe(false);
-    for (const slug of ['-a', 'a-', 'a--b', 'a b', 'a/b', 'a.b', '../x']) {
+    expect(ok({ ...valid, slug: 'a'.repeat(201) })).toBe(false);
+    for (const slug of ['-a', 'a-', 'a--b', 'a b', 'a/b', 'a..b', '../x']) {
       expect(ok({ ...valid, slug })).toBe(false);
     }
   });

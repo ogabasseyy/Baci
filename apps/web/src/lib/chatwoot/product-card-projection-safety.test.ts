@@ -80,3 +80,30 @@ describe('projectChatwootProductCard safety', () => {
     ).toEqual({ ok: false, code: 'product_unavailable' });
   });
 });
+
+describe('bugfix: catalog-valid products are not rejected', () => {
+  it('projects a 200 character product name with a truncated card name', () => {
+    const result = project(product({ name: 'n'.repeat(200) }));
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) expect(result.product.name).toHaveLength(120);
+  });
+
+  it('treats an sku_matrix product with a stale false has_variants flag as variant-bearing', () => {
+    const result = project(
+      product({
+        has_variants: false,
+        variant_model: 'sku_matrix',
+        product_variants: [
+          {
+            id: variantId,
+            product_id: productId,
+            attributes: { storage: '128GB' },
+            stock_quantity: 2,
+          },
+        ],
+      })
+    );
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) expect(result.product.variants).toHaveLength(1);
+  });
+});

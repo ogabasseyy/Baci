@@ -1,16 +1,14 @@
 import { isProductVariantPurchasable } from '@baci/shared/lib/is-product-variant-purchasable';
-import {
-  isPurchasableProduct,
-  isRecord,
-  MAX_NAME_LENGTH,
-  normalizedCondition,
-  numericStock,
-  parentEffectiveStock,
-  projectAttributes,
-  toImage,
-  toPrice,
-  UUID_PATTERN,
-} from './product-card-projection-fields';
+import { isPurchasableProduct } from './product-card-is-purchasable-product';
+import { isRecord } from './product-card-is-record';
+import { toCardName } from './product-card-name';
+import { normalizedCondition } from './product-card-normalized-condition';
+import { numericStock } from './product-card-numeric-stock';
+import { parentEffectiveStock } from './product-card-parent-effective-stock';
+import { projectAttributes } from './product-card-project-attributes';
+import { toImage } from './product-card-to-image';
+import { toPrice } from './product-card-to-price';
+import { UUID_PATTERN } from './product-card-uuid-pattern';
 
 export type ChatwootProductCard = {
   slug: string;
@@ -49,9 +47,7 @@ export function projectChatwootProductCard(input: {
     product.status !== 'active' ||
     typeof product.slug !== 'string' ||
     product.slug.toLowerCase() !== input.requestedSlug.toLowerCase() ||
-    typeof product.name !== 'string' ||
-    !product.name.trim() ||
-    product.name.length > MAX_NAME_LENGTH ||
+    toCardName(product.name) === null ||
     typeof product.has_variants !== 'boolean' ||
     product.has_condition_offers !== false
   ) {
@@ -63,7 +59,10 @@ export function projectChatwootProductCard(input: {
           : 'product_unavailable',
     };
   }
-  const hasVariants = product.has_variants;
+  // Canonical variant-bearing predicate: a stale false `has_variants` flag
+  // on an sku_matrix product still means the product has variants.
+  const hasVariants =
+    product.has_variants === true || product.variant_model === 'sku_matrix';
   const basePrice = toPrice(product.price);
   if (basePrice === null) return { ok: false, code: 'product_unavailable' };
 
@@ -195,7 +194,7 @@ export function projectChatwootProductCard(input: {
     ok: true,
     product: {
       slug: product.slug,
-      name: product.name.trim(),
+      name: toCardName(product.name) as string,
       price: cardPrice,
       currency: input.currency,
       availability: available ? 'in_stock' : 'out_of_stock',

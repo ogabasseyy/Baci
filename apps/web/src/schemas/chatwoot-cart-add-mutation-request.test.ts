@@ -52,11 +52,12 @@ describe('chatwootCartAddMutationRequestSchema', () => {
 
   it('enforces the product slug length and character rules', () => {
     expect(ok({ ...valid, productSlug: 'a' })).toBe(true);
-    expect(ok({ ...valid, productSlug: 'a'.repeat(160) })).toBe(true);
+    expect(ok({ ...valid, productSlug: 'a'.repeat(200) })).toBe(true);
+    expect(ok({ ...valid, productSlug: 'iphone-15.5-pro' })).toBe(true);
     expect(ok({ ...valid, productSlug: 'a_b-c_d' })).toBe(true);
     expect(ok({ ...valid, productSlug: '' })).toBe(false);
-    expect(ok({ ...valid, productSlug: 'a'.repeat(161) })).toBe(false);
-    for (const slug of ['-a', 'a-', 'a--b', 'a b', 'a/b', 'a.b', 'a%20b']) {
+    expect(ok({ ...valid, productSlug: 'a'.repeat(201) })).toBe(false);
+    for (const slug of ['-a', 'a-', 'a--b', 'a b', 'a/b', 'a..b', 'a%20b']) {
       expect(ok({ ...valid, productSlug: slug })).toBe(false);
     }
   });

@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isPurchasableProduct,
-  isRecord,
-  normalizedCondition,
-  numericStock,
-  parentEffectiveStock,
-  projectAttributes,
-  toImage,
-  toPrice,
-} from './product-card-projection-fields';
+import { isPurchasableProduct } from './product-card-is-purchasable-product';
+import { isRecord } from './product-card-is-record';
+import { toCardName } from './product-card-name';
+import { normalizedCondition } from './product-card-normalized-condition';
+import { numericStock } from './product-card-numeric-stock';
+import { parentEffectiveStock } from './product-card-parent-effective-stock';
+import { projectAttributes } from './product-card-project-attributes';
+import { toImage } from './product-card-to-image';
+import { toPrice } from './product-card-to-price';
 
 describe('product card projection fields', () => {
   it('recognises plain records only', () => {
@@ -101,5 +100,16 @@ describe('product card projection fields', () => {
     expect(isPurchasableProduct({ manage_stock: false })).toBe(true);
     expect(isPurchasableProduct({ stock_quantity: 0 })).toBe(false);
     expect(isPurchasableProduct({ stock_quantity: 1 })).toBe(true);
+  });
+});
+
+describe('bugfix: card name keeps catalog-valid 200 character names', () => {
+  it('truncates the display name to 120 characters instead of rejecting it', () => {
+    expect(toCardName(`  ${'a'.repeat(200)}  `)).toBe('a'.repeat(120));
+  });
+
+  it('returns null for blank or non-string names', () => {
+    expect(toCardName('   ')).toBeNull();
+    expect(toCardName(7)).toBeNull();
   });
 });

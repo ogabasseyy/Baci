@@ -210,7 +210,7 @@ export async function purchaseBill(
           !error.isDuplicateReference &&
           (error.status === 401 ||
             error.status === 403 ||
-            isMonnifyKnownVendRefusalText(error.classificationText)),
+            error.isKnownRefusal),
       };
     }
 

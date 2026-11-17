@@ -73,7 +73,8 @@ describe('sanitizeMonnifyErrorDetail', () => {
       statusText: 'Bad Request',
     });
 
-    expect(error.rawDetail).toBe('Balance low for 08012345678');
+    // The unscrubbed body only feeds classification; no property exposes it.
+    expect('rawDetail' in error).toBe(false);
     expect(JSON.stringify(error)).not.toContain('08012345678');
     expect(inspect(error, { showHidden: true, depth: 5 })).not.toContain(
       '08012345678'

@@ -1,4 +1,5 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
@@ -8,8 +9,16 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
   /(?<!\d)\(?(?:\+?234[ .-]?|0)[789][01]\d\)?(?:[ .-]?\d){7}(?!\d)/g;
-/** Unscrubbed Monnify bodies, kept off the error object entirely. */
+/**
+ * Unscrubbed Monnify bodies, kept off the error object entirely and only
+ * read inside this module to classify the answer: nothing outside it can
+ * log, store or serialise them.
+ */
 const rawDetailByError = new WeakMap<MonnifyHttpError, string | null>();
+
+function classificationText(error: MonnifyHttpError) {
+  return `${error.message} - ${rawDetailByError.get(error) ?? error.detail ?? ''}`;
+}
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
@@ -40,22 +49,16 @@ export class MonnifyHttpError extends Error {
     this.statusText = statusText;
   }
 
-  /**
-   * Monnify's full, unscrubbed error body, only for classifying the answer
-   * (duplicate, known refusal) before it is cut short. It lives outside the
-   * object, so logging, inspecting or serialising the error never shows it.
-   */
-  get rawDetail(): string | null {
-    return rawDetailByError.get(this) ?? null;
-  }
-
   get isClientError() {
     return this.status >= 400 && this.status < 500;
   }
 
-  /** The full answer, for classification only (see rawDetail). */
-  get classificationText() {
-    return `${this.message} - ${this.rawDetail ?? this.detail ?? ''}`;
+  /**
+   * Monnify refused the vend with a known pre-vend reason (amount check,
+   * low float), judged on its full answer before that is cut short.
+   */
+  get isKnownRefusal() {
+    return isMonnifyKnownVendRefusalText(classificationText(this));
   }
 
   /**
@@ -66,7 +69,7 @@ export class MonnifyHttpError extends Error {
   get isDuplicateReference() {
     return (
       this.status === 409 ||
-      isMonnifyDuplicateReferenceText(this.classificationText)
+      isMonnifyDuplicateReferenceText(classificationText(this))
     );
   }
 

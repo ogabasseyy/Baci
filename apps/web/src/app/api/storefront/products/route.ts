@@ -1,6 +1,6 @@
 import { formatSupabaseErrorLog } from '@baci/shared/lib';
 import { createClient as createStaticClient } from '@supabase/supabase-js';
-import { cacheLife, cacheTag, unstable_cache } from 'next/cache';
+import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { getPrimaryProductImage } from '@/lib/product-image';
@@ -19,13 +19,16 @@ import { createAnonClient } from '@/lib/supabase/anon';
 import { storefrontProductsQuerySchema } from '@/schemas/storefront-products-query';
 import type { StorefrontProductsQuery } from '@/schemas/storefront-products-query.types';
 import {
+  fetchProductRowsByIds,
+  fetchProductsByIds,
+} from './storefront-products-by-ids';
+import {
   type RawStorefrontProductRow,
   storefrontProductsRouteData,
 } from './storefront-products-route-data';
 
 type ProductFilters = StorefrontProductsQuery;
 
-const PRODUCT_ID_FETCH_CHUNK_SIZE = 100;
 const IN_MEMORY_FILTER_MIN_PAGE_SIZE = 48;
 const IN_MEMORY_FILTER_MAX_PAGE_SIZE = 200;
 const IN_MEMORY_FILTER_PAGE_SIZE_MULTIPLIER = 4;
@@ -280,62 +283,6 @@ function createCachedProductsFetcher(
       tags: buildStorefrontProductsCacheTags(merchantId),
     }
   );
-}
-
-async function fetchProductsByIds(
-  merchantId: string,
-  ids: string[],
-  options: { compact?: boolean } = {}
-) {
-  'use cache';
-
-  cacheLife('products');
-  cacheTag(...buildStorefrontProductsCacheTags(merchantId));
-
-  const products = await fetchProductRowsByIds(merchantId, ids, options);
-
-  return (await projectStandardListingRows(merchantId, products)).map(
-    storefrontProductsRouteData.mapProduct
-  );
-}
-
-async function fetchProductRowsByIds(
-  merchantId: string,
-  ids: string[],
-  options: { compact?: boolean } = {}
-) {
-  if (ids.length === 0) {
-    return [];
-  }
-
-  const supabase = createAnonClient();
-  const selectColumns: string =
-    options.compact === false
-      ? storefrontProductsRouteData.STOREFRONT_PRODUCTS_SELECT
-      : storefrontProductsRouteData.STOREFRONT_PRODUCTS_COMPACT_SELECT;
-
-  const products: RawStorefrontProductRow[] = [];
-  for (
-    let index = 0;
-    index < ids.length;
-    index += PRODUCT_ID_FETCH_CHUNK_SIZE
-  ) {
-    const idChunk = ids.slice(index, index + PRODUCT_ID_FETCH_CHUNK_SIZE);
-    const result = (await supabase
-      .from('products')
-      .select(selectColumns)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('id', idChunk)) as {
-      data: RawStorefrontProductRow[] | null;
-      error: unknown;
-    };
-
-    if (result.error) throw result.error;
-    products.push(...(result.data || []));
-  }
-
-  return products;
 }
 
 function hasActiveStorefrontFilter(value: string | undefined) {

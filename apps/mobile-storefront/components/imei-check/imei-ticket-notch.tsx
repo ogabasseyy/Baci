@@ -21,8 +21,9 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     height: 7,
-    // Decoration only: touches go through to the card. Set in the style, not
-    // as a JSX prop, which React Native has deprecated.
+    // Decoration only: touches go through to the card. Kept in the style, not
+    // as a JSX prop: this app standardises on style.pointerEvents, and
+    // __tests__/config/expo-compliance.test.ts enforces it.
     pointerEvents: 'none',
     position: 'absolute',
     right: 20,

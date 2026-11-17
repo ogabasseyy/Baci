@@ -28,13 +28,17 @@ function phoneIssue(phoneNumber: string, purpose: string) {
   }
   const error = phoneLengthError(digits);
   if (!error) return null;
-  return {
-    field: 'phone',
-    // A full-length number that is still wrong (not 0 and ten digits) is
-    // flagged at the field; a number still being typed only gets the hint.
-    inline: digits.length >= LOCAL_PHONE_DIGITS,
-    message: error.message,
-  } as const;
+  // A number still being typed only gets the gentle hint above Pay; a
+  // full-length number that is still wrong (not 0 and ten digits) is
+  // flagged at the field with the exact rule.
+  if (digits.length < LOCAL_PHONE_DIGITS) {
+    return {
+      field: 'phone',
+      inline: false,
+      message: `Enter the phone number ${purpose}.`,
+    } as const;
+  }
+  return { field: 'phone', inline: true, message: error.message } as const;
 }
 
 export function getAirtimeFormIssue({

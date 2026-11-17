@@ -17,9 +17,11 @@ import { UtilityFormNotice } from './UtilityFormNotice';
 import { UtilityPayButton } from './UtilityPayButton';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useAirtimeFormController } from './use-airtime-form-controller';
-import { useRetainsPiggyvest } from './use-retains-piggyvest';
 import { useUtilityPayGate } from './use-utility-pay-gate';
-import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
+import {
+  isRetainedForPay,
+  useUtilityRetainedAttempt,
+} from './use-utility-retained-attempt';
 import {
   getAirtimeFormIssue,
   getFieldIssuePointer,
@@ -51,7 +53,6 @@ export function AirtimeForm(props: AirtimeFormProps) {
     payment,
     phoneNumber,
     purchaseRequest,
-    retainedStoreCredit,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,
@@ -60,18 +61,18 @@ export function AirtimeForm(props: AirtimeFormProps) {
     setIsNetworkPickerExpanded,
     walletReturnToHref,
   } = useAirtimeFormController(props);
-  const retainedPiggyvest = useRetainsPiggyvest(purchaseRequest);
   const formIssue = getAirtimeFormIssue({
     numericAmount,
     phoneNumber,
     selectedProvider,
   });
+  // One kept-attempt lookup for both the payment section and the Pay gate.
   const retained = useUtilityRetainedAttempt(payment, purchaseRequest);
   const payGate = useUtilityPayGate({
     amount: numericAmount,
     formIssue: formIssue?.message ?? null,
     payment,
-    retained,
+    retained: isRetainedForPay(retained),
     returnToHref: walletReturnToHref,
   });
   const inlineIssue = formIssue?.inline ? formIssue : null;
@@ -264,8 +265,8 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletIsSettled={payment.isWalletSettled()}
             walletIsStoreCredit={payment.walletIsStoreCredit}
             walletPrimaryUnknown={payment.walletPrimaryUnknown}
-            retainedStoreCredit={retainedStoreCredit}
-            retainedPiggyvest={retainedPiggyvest}
+            retainedStoreCredit={retained.retainedStoreCredit}
+            retainedPiggyvest={retained.retainedPiggyvest}
           />
         </View>
       </ScrollView>

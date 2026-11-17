@@ -2,7 +2,11 @@ import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { useUtilityPayGate } from './use-utility-pay-gate';
-import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
+import {
+  isRetainedForPay,
+  type UtilityRetainedAttempt,
+  useUtilityRetainedAttempt,
+} from './use-utility-retained-attempt';
 import { getFieldIssuePointer } from './utility-form-issue';
 
 /**
@@ -27,6 +31,8 @@ export function useBillPayGate({
   returnToHref: WalletReturnHref;
 }): {
   blockedReason: string | null;
+  /** The one kept-attempt answer, shared with the payment section. */
+  retained: UtilityRetainedAttempt;
   notice: {
     action: { label: string; onPress: () => void } | null;
     message: string;
@@ -37,13 +43,14 @@ export function useBillPayGate({
     amount: numericAmount,
     formIssue: amountIssue,
     payment,
-    retained,
+    retained: isRetainedForPay(retained),
     returnToHref,
   });
   // An amount issue is shown under the amount field once something is typed.
   const amountIssueInline = Boolean(amountIssue && formattedAmount);
   return {
     blockedReason: gate.blockedReason,
+    retained,
     notice: amountIssueInline
       ? { action: null, message: getFieldIssuePointer('amount') }
       : gate.blockedReason

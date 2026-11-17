@@ -24,10 +24,12 @@ describe('getAirtimeFormIssue', () => {
     });
   });
 
-  it('only hints while a number is still being typed', () => {
-    expect(
-      getAirtimeFormIssue({ ...valid, phoneNumber: '0803' })
-    ).toMatchObject({ field: 'phone', inline: false });
+  it('keeps the gentle hint while a number is still being typed', () => {
+    expect(getAirtimeFormIssue({ ...valid, phoneNumber: '0803' })).toEqual({
+      field: 'phone',
+      inline: false,
+      message: 'Enter the phone number to top up.',
+    });
   });
 
   it('flags a full-length number that is not a local number at the field', () => {

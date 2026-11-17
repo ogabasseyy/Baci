@@ -49,7 +49,7 @@ describe('useBillPayGate', () => {
       })
     );
 
-    expect(result.current).toEqual({
+    expect(result.current).toMatchObject({
       blockedReason: 'Enter an amount to pay.',
       notice: { action: null, message: 'Enter an amount to pay.' },
     });
@@ -108,7 +108,10 @@ describe('useBillPayGate', () => {
     );
 
     await waitFor(() =>
-      expect(result.current).toEqual({ blockedReason: null, notice: null })
+      expect(result.current).toMatchObject({
+        blockedReason: null,
+        notice: null,
+      })
     );
   });
 });

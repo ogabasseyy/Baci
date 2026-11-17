@@ -60,8 +60,6 @@ export function DataForm({
   } = useVTUBillers('data');
   const scrollViewRef = useRef<ScrollViewInstance>(null);
 
-  const parsedInitialAmount = Number(initialAmount ?? 0);
-
   const {
     phoneNumber,
     selectedProvider,
@@ -84,7 +82,7 @@ export function DataForm({
     initialPhoneNumber,
     initialProvider,
     initialPlan,
-    parsedInitialAmount,
+    parsedInitialAmount: Number(initialAmount ?? 0),
     dataPlans,
     recentRecipients,
     onSelectRecentRecipient,
@@ -279,6 +277,7 @@ export function DataForm({
             selectedPlan={selectedPlan}
             selectedProvider={selectedProvider}
             phoneNumber={phoneNumber}
+            retained={payGate.retained}
             returnToHref={walletReturnToHref}
           />
         </View>

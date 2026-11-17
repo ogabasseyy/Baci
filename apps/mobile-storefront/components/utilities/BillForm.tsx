@@ -164,6 +164,7 @@ export function BillForm(props: BillFormProps) {
             payment={payment}
             returnToHref={walletReturnToHref}
             purchaseRequest={purchaseRequest}
+            retained={payGate.retained}
             setAmount={updateAmount}
           />
         ) : null}

@@ -1,7 +1,11 @@
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { useUtilityPayGate } from './use-utility-pay-gate';
-import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
+import {
+  isRetainedForPay,
+  type UtilityRetainedAttempt,
+  useUtilityRetainedAttempt,
+} from './use-utility-retained-attempt';
 import {
   getDataFormIssue,
   getFieldIssuePointer,
@@ -31,6 +35,8 @@ export function useDataPayGate({
 }): {
   blockedReason: string | null;
   inlineIssue: UtilityFormIssue | null;
+  /** The one kept-attempt answer, shared with the payment section. */
+  retained: UtilityRetainedAttempt;
   notice: {
     action: { label: string; onPress: () => void } | null;
     message: string;
@@ -59,13 +65,14 @@ export function useDataPayGate({
     amount: planAmount,
     formIssue: formIssue?.message ?? null,
     payment,
-    retained,
+    retained: isRetainedForPay(retained),
     returnToHref,
   });
   const inlineIssue = formIssue?.inline ? formIssue : null;
   return {
     blockedReason: gate.blockedReason,
     inlineIssue,
+    retained,
     notice: inlineIssue
       ? { action: null, message: getFieldIssuePointer(inlineIssue.field) }
       : gate.blockedReason

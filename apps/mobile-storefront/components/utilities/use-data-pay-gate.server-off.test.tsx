@@ -45,7 +45,7 @@ describe('useDataPayGate with the server keeping PiggyVest off', () => {
       useDataPayGate({ ...complete, payment: payment(1000) })
     );
 
-    expect(result.current).toEqual({
+    expect(result.current).toMatchObject({
       blockedReason: null,
       inlineIssue: null,
       notice: null,

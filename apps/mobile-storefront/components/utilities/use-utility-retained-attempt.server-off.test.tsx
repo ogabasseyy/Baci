@@ -1,5 +1,8 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
-import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
+import {
+  isRetainedForPay,
+  useUtilityRetainedAttempt,
+} from './use-utility-retained-attempt';
 import { useVtuWalletPayStore } from './vtu-wallet-pay-store';
 
 const request = {
@@ -21,16 +24,21 @@ describe('useUtilityRetainedAttempt with the server keeping PiggyVest off', () =
     const { result } = renderHook(() =>
       useUtilityRetainedAttempt({ hasRetainedVtuAttempt: () => true }, request)
     );
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current.lookupPending).toBe(false));
+    expect(result.current).toEqual({
+      lookupPending: false,
+      retainedPiggyvest: false,
+      retainedStoreCredit: true,
+    });
+    expect(isRetainedForPay(result.current)).toBe(true);
   });
 
-  it('reports nothing kept when the wallet keeps nothing', async () => {
-    const hasRetainedVtuAttempt = jest.fn(() => false);
+  it('reports nothing kept once the lookup answers', async () => {
     const { result } = renderHook(() =>
-      useUtilityRetainedAttempt({ hasRetainedVtuAttempt }, request)
+      useUtilityRetainedAttempt({ hasRetainedVtuAttempt: () => false }, request)
     );
-    await waitFor(() => expect(result.current).toBe(false));
-    expect(hasRetainedVtuAttempt).toHaveBeenCalled();
+    await waitFor(() => expect(isRetainedForPay(result.current)).toBe(false));
+    expect(result.current.retainedPiggyvest).toBe(false);
   });
 
   it('does not count as short while the lookup has not answered', () => {
@@ -38,13 +46,18 @@ describe('useUtilityRetainedAttempt with the server keeping PiggyVest off', () =
     const { result } = renderHook(() =>
       useUtilityRetainedAttempt({ hasRetainedVtuAttempt: () => false }, request)
     );
-    expect(result.current).toBe(true);
+    expect(result.current).toEqual({
+      lookupPending: true,
+      retainedPiggyvest: false,
+      retainedStoreCredit: false,
+    });
+    expect(isRetainedForPay(result.current)).toBe(true);
   });
 
   it('reports nothing kept without a purchase', () => {
     const { result } = renderHook(() =>
       useUtilityRetainedAttempt({ hasRetainedVtuAttempt: () => true }, null)
     );
-    expect(result.current).toBe(false);
+    expect(isRetainedForPay(result.current)).toBe(false);
   });
 });

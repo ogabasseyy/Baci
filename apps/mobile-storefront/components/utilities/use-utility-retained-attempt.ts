@@ -4,20 +4,39 @@ import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
 import { useVtuWalletPayStore } from './vtu-wallet-pay-store';
 
+/** One form's answer to "is an earlier attempt for this purchase kept?". */
+export interface UtilityRetainedAttempt {
+  /** The PiggyVest lookup has not answered for this purchase yet. */
+  lookupPending: boolean;
+  /** A PiggyVest attempt is kept (answered; a failed read counts as kept). */
+  retainedPiggyvest: boolean;
+  /** A store credit attempt is kept. */
+  retainedStoreCredit: boolean;
+}
+
 /**
- * Whether this exact purchase may have a kept attempt (store credit or
- * PiggyVest) whose answer was lost. The next submit replays it without a new
- * charge, so a short balance must not block Pay for it.
- *
- * The PiggyVest lookup is asynchronous. Until it answers for this purchase it
- * counts as kept, so Pay is never disabled by a lookup still in flight (the
- * submit makes the real decision); a failed lookup counts as kept, as the
- * submit treats it.
+ * Whether Pay must stay pressable whatever the balance says: a kept attempt
+ * replays without a new charge, and a lookup still in flight is not yet a
+ * "no" (the submit makes the real decision).
+ */
+export function isRetainedForPay(attempt: UtilityRetainedAttempt): boolean {
+  return (
+    attempt.retainedStoreCredit ||
+    attempt.retainedPiggyvest ||
+    attempt.lookupPending
+  );
+}
+
+/**
+ * The single kept-attempt lookup a utility form runs for its current
+ * purchase. The payment section (which rail is shown) and the Pay gate
+ * (whether a short balance blocks) both read this one answer, so they can
+ * never disagree and the PiggyVest key store is read once per change.
  */
 export function useUtilityRetainedAttempt(
   payment: Pick<ReturnType<typeof useUtilityPayment>, 'hasRetainedVtuAttempt'>,
   request: VtuWalletPayRequest | null
-): boolean {
+): UtilityRetainedAttempt {
   const retains = useVtuWalletPayStore((state) => state.retains);
   const key = request ? buildVtuPurchaseDescriptor({ ...request }) : null;
   const [answer, setAnswer] = useState<{ key: string; kept: boolean } | null>(
@@ -37,8 +56,18 @@ export function useUtilityRetainedAttempt(
     };
   }, [key, retains]);
 
-  if (request === null) return false;
-  if (payment.hasRetainedVtuAttempt?.({ ...request }) === true) return true;
-  // Not answered for this purchase yet: never treat as short meanwhile.
-  return answer === null || answer.key !== key || answer.kept;
+  if (request === null) {
+    return {
+      lookupPending: false,
+      retainedPiggyvest: false,
+      retainedStoreCredit: false,
+    };
+  }
+  const answered = answer !== null && answer.key === key;
+  return {
+    lookupPending: !answered,
+    retainedPiggyvest: answered && answer.kept,
+    retainedStoreCredit:
+      payment.hasRetainedVtuAttempt?.({ ...request }) === true,
+  };
 }

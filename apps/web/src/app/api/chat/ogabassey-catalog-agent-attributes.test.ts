@@ -74,5 +74,34 @@ describe('ogabassey-catalog-agent-attributes', () => {
         { ...baseProduct, condition: 'Brand New' },
       ])
     ).toBe(true);
+
+    // Grouped spec claims must hold for EVERY explicitly bound product
+    const dellXps: StorefrontAgentUiProduct = {
+      ...baseProduct,
+      brand: 'Dell',
+      description: 'Dell XPS 13',
+      id: 'dell-13',
+      name: 'Dell XPS 13',
+      slug: 'dell-xps-13',
+    };
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2, Dell XPS 13 both have 16 GB RAM.',
+        [{ ...baseProduct, description: '16 GB RAM MacBook' }, dellXps]
+      )
+    ).toBe(false);
+
+    // Color claims fail closed when ungrounded and pass when present in corpus
+    expect(
+      hasGroundedSpecAndPolicyClaims('Apple MacBook Air M2 comes in purple.', [
+        baseProduct,
+      ])
+    ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims(
+        'Apple MacBook Air M2 comes in midnight.',
+        [{ ...baseProduct, description: 'Midnight finish' }]
+      )
+    ).toBe(true);
   });
 });

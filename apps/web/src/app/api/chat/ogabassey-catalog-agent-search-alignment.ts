@@ -141,8 +141,9 @@ const FAMILY_TO_CATEGORY_GROUP: Readonly<Record<string, string>> = {
 
 function tokenizeNormalizedTerms(text: string): string[] {
   const tokens: string[] = [];
-  for (const raw of text.toLowerCase().matchAll(/[a-z0-9]{3,}/g)) {
+  for (const raw of text.toLowerCase().matchAll(/[a-z0-9]+/g)) {
     const token = PLURAL_CATEGORY_SINGULAR[raw[0]] ?? raw[0];
+    if (!/^(?:[a-z0-9]{3,}|\d{1,2}|[a-z]\d{1,2})$/.test(token)) continue;
     if (REQUEST_NOISE_WORDS.has(token)) continue;
     if (/^\d+(?:k|m)$/.test(token)) continue;
     tokens.push(token);
@@ -177,7 +178,7 @@ export function hasAlignedSearchForEmptyResult(
     const combined = `${params.query ?? ''} ${params.category ?? ''}`;
     const searchTokens = new Set(tokenizeNormalizedTerms(combined));
     if (specificTokens.length > 0) {
-      return specificTokens.some((token) => searchTokens.has(token));
+      return specificTokens.every((token) => searchTokens.has(token));
     }
     if (requestGroups.size > 0) {
       for (const token of searchTokens) {
@@ -186,6 +187,6 @@ export function hasAlignedSearchForEmptyResult(
       }
       return false;
     }
-    return requestTokens.some((token) => searchTokens.has(token));
+    return requestTokens.every((token) => searchTokens.has(token));
   });
 }

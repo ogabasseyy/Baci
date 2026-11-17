@@ -3,10 +3,10 @@ import type {
   StorefrontAgentUiEvent,
   StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
+import { hasPositiveEmptyClauseViolation } from './ogabassey-catalog-agent-grounding';
 import {
   findBoundProducts,
   hasGroundedProductMentions,
-  hasPositiveEmptyClauseViolation,
 } from './ogabassey-catalog-agent-product-matching';
 
 const makeProduct = (
@@ -82,6 +82,14 @@ describe('ogabassey-catalog-agent-product-matching', () => {
         events
       )
     ).toBe(true);
+
+    // Unreturned single-token product family in a positive clause must fail
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 is ₦1,200,000. Chromebook is available too.',
+        events
+      )
+    ).toBe(false);
   });
 
   it('binds all products in a grouped comma-separated clause', () => {
@@ -113,6 +121,11 @@ describe('ogabassey-catalog-agent-product-matching', () => {
     expect(
       hasPositiveEmptyClauseViolation(
         "Sorry, I couldn't find any matching laptops right now."
+      )
+    ).toBe(false);
+    expect(
+      hasPositiveEmptyClauseViolation(
+        "I couldn't find iPhone 16 and iPhone 15."
       )
     ).toBe(false);
   });

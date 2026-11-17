@@ -30,5 +30,17 @@ describe('ogabassey-catalog-agent-search-alignment', () => {
         [{ query: 'iPhone' }]
       )
     ).toBe(false);
+    expect(
+      hasAlignedSearchForEmptyResult(
+        [{ role: 'user', content: 'Do you carry iPhone 16?' }],
+        [{ query: 'iPhone 15' }]
+      )
+    ).toBe(false);
+    expect(
+      hasAlignedSearchForEmptyResult(
+        [{ role: 'user', content: 'Do you carry iPhone 16?' }],
+        [{ query: 'iPhone 16' }]
+      )
+    ).toBe(true);
   });
 });

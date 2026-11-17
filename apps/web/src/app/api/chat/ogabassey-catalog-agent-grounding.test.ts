@@ -177,5 +177,12 @@ describe('ogabassey-catalog-agent-grounding', () => {
         'NGN'
       )
     ).toBe(false);
+    expect(
+      hasGroundedCatalogResultText(
+        'Apple iPhone 16 is not cheap but in stock.',
+        mixedStockEvents,
+        'NGN'
+      )
+    ).toBe(false);
   });
 });

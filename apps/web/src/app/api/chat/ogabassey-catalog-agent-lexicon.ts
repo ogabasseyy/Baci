@@ -227,13 +227,22 @@ export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
   'homepod',
   'xm4',
   'xm5',
+  'chromebook',
+  'pixelbook',
+  'steamdeck',
 ]);
+
+export const POSITIVE_AVAILABILITY_GENERIC_WORDS = new Set(
+  'it this that these those they them both one ones all each every either we you our your is are was were have has had can will get buy order try check out here there now too also currently available stock for and with without under below from the option options item items unit units left remaining budget price prices offer carry sell recommend find matching product products device devices model models laptop laptops phone phones tablet tablets camera cameras watch watches'.split(
+    ' '
+  )
+);
 
 export const AGENT_COURTESY_PATTERN =
   /^(?:hi|hello|hey|thanks|thank\s+you|how\s+are\s+you)[\s.!?]*$/i;
 
 export const CATALOG_AGENT_CUE =
-  /[₦$€£]\s*\d|^\s*pixels?\s*$|\b(?:(?:show|find|list|recommend|suggest|have|sell|stock|carry|best|good|top|any|cheap\w*|affordable|budget|apple|samsung|google|sony|dell|hp|lenovo|gaming|electronic|tech|your|store|catalog)\s+(?:\w+\s+){0,2}(?:products?|devices?|pixels?)|(?:products?|devices?|pixels?)\s+(?:under|below|within|around|in\s+stock|available|for\s+sale)|phones?|smartphones?|iphone\w*|ipad\w*|google\s+pixels?|pixel(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|art|shader)\b)(?:\s*(?:\d+[a-z]?|pro|fold|tablet|phones?|smartphones?|devices?|models?))?\b|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|(?:smart)?watches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|(?:gaming|video\s+editing|photo(?:graphy)?|editing)\s+(?:\w+\s+){0,2}(?:laptop\w*|pc|rig|setup|phone\w*|tablet\w*|camera\w*|monitor\w*|console\w*|headset\w*|gear|device\w*|spec\w*|option\w*)|(?:under|below|within|at\s+most|max(?:imum)?)\s+(?:₦|ngn\s*)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand)|(?:my\s+|a\s+)?budget\s+(?:of|is|for|phone\w*|laptop\w*|device\w*)|(?:cheap\w*|affordable)\s+(?:phone\w*|laptop\w*|tablet\w*|device\w*|option\w*|item\w*|product\w*)|(?:do\s+you\s+(?:stock|carry|sell)|in\s+stock|out\s+of\s+stock))\b/i;
+  /[₦$€£]\s*\d|^\s*pixels?\s*$|\b(?:(?:show|find|list|recommend|suggest|have|sell|stock|carry|best|good|top|any|cheap\w*|affordable|budget|apple|samsung|google|sony|dell|hp|lenovo|gaming|electronic|tech|your|store|catalog)\s+(?:\w+\s+){0,2}(?:products?|devices?|pixels?(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|per\s+inch|ppi|art|shader)\b))|(?:products?|devices?|pixels?)\s+(?:under|below|within|around|in\s+stock|available|for\s+sale)|phones?|smartphones?|iphone\w*|ipad\w*|google\s+pixels?|pixel(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|per\s+inch|ppi|art|shader)\b)(?:\s*(?:\d+[a-z]?|pro|fold|tablet|phones?|smartphones?|devices?|models?))?\b|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|(?:smart)?watches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|(?:gaming|video\s+editing|photo(?:graphy)?|editing)\s+(?:\w+\s+){0,2}(?:laptop\w*|pc|rig|setup|phone\w*|tablet\w*|camera\w*|monitor\w*|console\w*|headset\w*|gear|device\w*|spec\w*|option\w*)|(?:under|below|within|at\s+most|max(?:imum)?)\s+(?:₦|ngn\s*)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand)|(?:my\s+|a\s+)?budget\s+(?:of|is|for|phone\w*|laptop\w*|device\w*)|(?:cheap\w*|affordable)\s+(?:phone\w*|laptop\w*|tablet\w*|device\w*|option\w*|item\w*|product\w*)|(?:do\s+you\s+(?:stock|carry|sell)|in\s+stock|out\s+of\s+stock))\b/i;
 
 export const CATALOG_FOLLOW_UP_CUE =
   /[₦$€£]|\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around|over-ear|wireless)\b|(?:\b(?:under|below|within|up\s+to|at\s+most|around)\s+(?:₦|ngn\s*)?)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand|naira|ngn)\b/i;

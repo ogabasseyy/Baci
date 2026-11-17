@@ -13,6 +13,9 @@ const WARRANTY_POLICY_COMPAT_PATTERN =
 const CONDITION_CLAIM_PATTERN =
   /\b(brand[\s-]*new|refurbished|uk[\s-]+used|open[\s-]*box|pre[\s-]*owned)\b/gi;
 
+const COLOR_CLAIM_PATTERN =
+  /\b(?:comes?\s+in|available\s+in|in)\s+(?:the\s+)?((?:matte\s+|space\s+|pacific\s+|sierra\s+|alpine\s+|phantom\s+|rose\s+)?(?:black|white|silver|gold|gray|grey|blue|red|green|purple|pink|yellow|orange|beige|brown|coral|violet|teal|navy|maroon|cream|midnight|starlight|graphite|titanium|burgundy))\b|\b(midnight|starlight|space\s+gray|space\s+grey|rose\s+gold|matte\s+black|pacific\s+blue|phantom\s+black|alpine\s+green|sierra\s+blue)\b/gi;
+
 const PROMOTION_CLAIM_PATTERN =
   /\b(?:\d+(?:\.\d+)?%\s*(?:off|discount|cashback|rebate|savings?)|on\s+sale|flash\s+sale|promo(?:tion(?:al)?)?|clearance|price\s+drop|markdown|slashed|reduced\s+from|discounted|discount(?:s)?\s+(?:available|applied|code)|save\s+(?:\d+(?:\.\d+)?%|[₦$€£]\s*\d[\d,.]*))\b/gi;
 
@@ -110,7 +113,7 @@ function matchesSpecWithBoundary(
   return false;
 }
 
-/** Rejects ungrounded specs, policy terms, conditions, compatibility, or promos. */
+/** Rejects ungrounded specs, policy terms, conditions, colors, compatibility, or promos. */
 export function hasGroundedSpecAndPolicyClaims(
   text: string,
   products: StorefrontAgentUiProduct[]
@@ -118,14 +121,16 @@ export function hasGroundedSpecAndPolicyClaims(
   for (const match of text.matchAll(SPEC_CLAIM_PATTERN)) {
     const offset = match.index ?? 0;
     const bound = findBoundProducts(text, offset, products);
-    const hasMatch = bound.some((product) =>
-      matchesSpecWithBoundary(
-        buildProductAttributeCorpus(product),
-        match[1],
-        match[2],
-        match[3]
-      )
-    );
+    const hasMatch =
+      bound.length > 0 &&
+      bound.every((product) =>
+        matchesSpecWithBoundary(
+          buildProductAttributeCorpus(product),
+          match[1],
+          match[2],
+          match[3]
+        )
+      );
     if (!hasMatch) return false;
   }
 
@@ -146,15 +151,17 @@ export function hasGroundedSpecAndPolicyClaims(
     );
     const claimedDurations = extractNormalizedDurations(localContext);
     const bound = findBoundProducts(text, offset, products);
-    const hasMatch = bound.some((product) => {
-      const corpus = buildProductAttributeCorpus(product);
-      if (!corpus.includes(stem)) return false;
-      if (claimedDurations.length === 0) return true;
-      const productDurations = extractNormalizedDurations(corpus);
-      return claimedDurations.every((duration) =>
-        productDurations.includes(duration)
-      );
-    });
+    const hasMatch =
+      bound.length > 0 &&
+      bound.every((product) => {
+        const corpus = buildProductAttributeCorpus(product);
+        if (!corpus.includes(stem)) return false;
+        if (claimedDurations.length === 0) return true;
+        const productDurations = extractNormalizedDurations(corpus);
+        return claimedDurations.every((duration) =>
+          productDurations.includes(duration)
+        );
+      });
     if (!hasMatch) return false;
   }
 
@@ -165,11 +172,33 @@ export function hasGroundedSpecAndPolicyClaims(
 
     const normalizedClaim = normalizeSpecCompact(match[1] ?? '');
     const bound = findBoundProducts(text, offset, products);
-    const hasMatch = bound.some((product) =>
-      normalizeSpecCompact(buildProductAttributeCorpus(product)).includes(
-        normalizedClaim
-      )
-    );
+    const hasMatch =
+      bound.length > 0 &&
+      bound.every((product) =>
+        normalizeSpecCompact(buildProductAttributeCorpus(product)).includes(
+          normalizedClaim
+        )
+      );
+    if (!hasMatch) return false;
+  }
+
+  for (const match of text.matchAll(COLOR_CLAIM_PATTERN)) {
+    const offset = match.index ?? 0;
+    const before = text.slice(Math.max(0, offset - 24), offset);
+    if (NEGATION_OR_ABSENCE_CUE.test(before)) continue;
+
+    const rawColor = (match[1] ?? match[2] ?? '').toLowerCase();
+    const colorWords = rawColor.match(/[a-z]+/g) ?? [];
+    if (colorWords.length === 0) continue;
+    const bound = findBoundProducts(text, offset, products);
+    const hasMatch =
+      bound.length > 0 &&
+      bound.every((product) => {
+        const corpusWords = new Set(
+          buildProductAttributeCorpus(product).match(/[a-z]+/g) ?? []
+        );
+        return colorWords.every((word) => corpusWords.has(word));
+      });
     if (!hasMatch) return false;
   }
 
@@ -180,11 +209,13 @@ export function hasGroundedSpecAndPolicyClaims(
 
     const normalizedPromo = match[0].toLowerCase().replace(/\s+/g, ' ');
     const bound = findBoundProducts(text, offset, products);
-    const hasMatch = bound.some((product) =>
-      buildProductAttributeCorpus(product)
-        .replace(/\s+/g, ' ')
-        .includes(normalizedPromo)
-    );
+    const hasMatch =
+      bound.length > 0 &&
+      bound.every((product) =>
+        buildProductAttributeCorpus(product)
+          .replace(/\s+/g, ' ')
+          .includes(normalizedPromo)
+      );
     if (!hasMatch) return false;
   }
 

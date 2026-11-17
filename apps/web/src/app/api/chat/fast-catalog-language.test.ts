@@ -109,5 +109,7 @@ describe('catalog conversation language', () => {
     expect(PHONE_SIGNAL.test('What is the pixel density of the screen?')).toBe(
       false
     );
+    expect(PHONE_SIGNAL.test('show pixels per inch')).toBe(false);
+    expect(PHONE_SIGNAL.test('pixels density')).toBe(false);
   });
 });

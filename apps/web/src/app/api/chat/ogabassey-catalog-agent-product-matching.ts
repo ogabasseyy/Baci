@@ -8,19 +8,17 @@ import {
   KNOWN_BRAND_OR_LINE_TOKENS,
   KNOWN_BRAND_TOKENS,
   NON_PRODUCT_PREDECESSOR_WORDS,
+  POSITIVE_AVAILABILITY_GENERIC_WORDS,
 } from './ogabassey-catalog-agent-lexicon';
 
-const POSITIVE_EMPTY_RESULT_CLAIM =
+export const POSITIVE_EMPTY_RESULT_CLAIM =
   /\b(?:in[\s-]+stock|available\s+now|available\s+for|we\s+(?:have|stock|carry|sell|offer)|(?:is|are)\s+available|available\s+in|comes?\s+in|you\s+can\s+(?:get|buy|order)|we\s+recommend|try\s+the|here\s+(?:is|are)|check\s+out)\b/i;
 
 export const NEGATION_OR_ABSENCE_CUE =
   /\b(?:no|not|don['’]?t|do\s+not|didn['’]?t|did\s+not|couldn['’]?t|could\s+not|can['’]?t|cannot|never|none|nothing|zero|unable|without|unavailable|out\s+of\s+stock|sold\s+out)\b/i;
 
-const POSITIVE_STORE_OFFERING_PHRASE =
-  /\b(?<!don['’]?t\s)(?<!do\s+not\s)(?<!not\s)(?<!never\s)(?:we|our\s+store)\s+(?:have|stock|carry|sell|offer)\b|\bavailable\s+now\b/i;
-
-export const EMPTY_CLAUSE_SPLIT_PATTERN =
-  /[.!?\n;]+|\b(?:and|but|however|although|while|though|yet)\b|,\s*/i;
+export const EMPTY_CLAUSE_SPLIT_CAPTURE =
+  /([.!?\n;]+|\b(?:and|but|however|although|while|though|yet)\b|,\s*)/i;
 
 const SEGMENT_SUB_SPLIT_PATTERN =
   /[.!?\n;—–]+|\b(?:and|but|or|while|versus|vs)\b|,\s+/gi;
@@ -189,7 +187,7 @@ export function findBoundProducts(
   return products;
 }
 
-function hasUnreturnedProductPhrase(
+export function hasUnreturnedProductPhrase(
   clause: string,
   returnedTokens: Set<string>
 ): boolean {
@@ -250,31 +248,26 @@ export function hasGroundedProductMentions(
 
   const returnedTokens = collectReturnedProductTokens(events);
   const clauses = text
-    .split(EMPTY_CLAUSE_SPLIT_PATTERN)
+    .split(EMPTY_CLAUSE_SPLIT_CAPTURE)
+    .filter((_, index) => index % 2 === 0)
     .map((clause) => clause.trim())
     .filter(Boolean);
 
   for (const clause of clauses) {
     if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
     if (hasUnreturnedProductPhrase(clause, returnedTokens)) return false;
+    if (
+      POSITIVE_EMPTY_RESULT_CLAIM.test(clause) &&
+      !products.some((product) => productMatchesSegment(product, clause) > 0)
+    ) {
+      const contentWords = (
+        clause.toLowerCase().match(/[a-z]{3,}/g) ?? []
+      ).filter((word) => !POSITIVE_AVAILABILITY_GENERIC_WORDS.has(word));
+      if (contentWords.some((word) => !returnedTokens.has(word))) {
+        return false;
+      }
+    }
   }
 
   return true;
-}
-
-export function hasPositiveEmptyClauseViolation(text: string): boolean {
-  const emptyReturnedTokens = new Set<string>();
-  const clauses = text
-    .split(EMPTY_CLAUSE_SPLIT_PATTERN)
-    .map((clause) => clause.trim())
-    .filter(Boolean);
-
-  for (const clause of clauses) {
-    if (POSITIVE_STORE_OFFERING_PHRASE.test(clause)) return true;
-    if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
-    if (POSITIVE_EMPTY_RESULT_CLAIM.test(clause)) return true;
-    if (hasUnreturnedProductPhrase(clause, emptyReturnedTokens)) return true;
-  }
-
-  return false;
 }

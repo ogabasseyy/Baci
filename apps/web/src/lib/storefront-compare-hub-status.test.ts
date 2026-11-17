@@ -46,11 +46,12 @@ describe('resolveStorefrontCompareHubStatus', () => {
     expect(resolverImpl).toHaveBeenCalledWith({
       merchantSlug: 'ogabassey',
       categorySlug: 'printers',
+      signal: expect.any(AbortSignal),
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('caches empty verdicts for 10 seconds and refreshes after expiry', async () => {
+  it('does not cache empty verdicts so a newly stocked hub serves 200 immediately', async () => {
     const resolverImpl = vi
       .fn()
       .mockResolvedValueOnce({ kind: 'empty' })
@@ -60,13 +61,6 @@ describe('resolveStorefrontCompareHubStatus', () => {
       resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
     ).resolves.toEqual({ kind: 'empty' });
 
-    vi.advanceTimersByTime(9_999);
-    await expect(
-      resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
-    ).resolves.toEqual({ kind: 'empty' });
-    expect(resolverImpl).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(2);
     await expect(
       resolveStorefrontCompareHubStatus(buildOptions(resolverImpl))
     ).resolves.toEqual({ kind: 'renderable-or-unknown' });
@@ -127,6 +121,7 @@ describe('resolveStorefrontCompareHubStatus', () => {
     expect(resolverImpl).toHaveBeenCalledWith({
       merchantSlug: 'ogabassey',
       categorySlug: 'printers',
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -164,6 +159,7 @@ describe('resolveStorefrontCompareHubStatus', () => {
     expect(resolverImpl).toHaveBeenCalledWith({
       merchantSlug: 'ogabassey',
       categorySlug: 'printers',
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -216,6 +212,8 @@ describe('resolveStorefrontCompareHubStatus', () => {
     await vi.advanceTimersByTimeAsync(101);
 
     await expect(pending).resolves.toEqual({ kind: 'renderable-or-unknown' });
+    const firstCallArg = resolverImpl.mock.calls[0]?.[0];
+    expect(firstCallArg?.signal?.aborted).toBe(true);
     expect(console.warn).toHaveBeenCalledWith(
       '[storefront-internal-preflight] fail-open',
       expect.objectContaining({ reason: 'timeout' })

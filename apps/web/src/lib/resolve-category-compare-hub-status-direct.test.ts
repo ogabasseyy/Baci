@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockMaybeSingle = vi.fn();
 const mockCategoriesReturns = vi.fn();
 const mockGetCachedProductSemanticInventory = vi.fn();
+const mockGetMerchantByIdentifier = vi.fn();
+const mockGetCachedCategories = vi.fn();
+const mockLoadCategoryCompareHubData = vi.fn();
 
 vi.mock('@/lib/cached-data', () => ({
+  getMerchantByIdentifier: (...args: unknown[]) =>
+    mockGetMerchantByIdentifier(...args),
+  getCachedCategories: (...args: unknown[]) => mockGetCachedCategories(...args),
   getPublicSupabaseClient: () => ({
     from: (table: string) => {
       if (table === 'merchants') {
@@ -44,6 +50,16 @@ vi.mock(
   })
 );
 
+vi.mock(
+  '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/load-category-compare-hub-data',
+  () => ({
+    loadCategoryCompareHubData: (...args: unknown[]) =>
+      mockLoadCategoryCompareHubData(...args),
+  })
+);
+
+import { resolveCategoryCompareHubStatus } from '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/resolve-category-compare-hub-status';
+import { resolveCategoryCompareHubStatusDirect } from './resolve-category-compare-hub-status-direct';
 import {
   clearStorefrontCompareHubStatusCache,
   resolveStorefrontCompareHubStatus,
@@ -120,5 +136,83 @@ describe('resolveStorefrontCompareHubStatus direct proxy lookup', () => {
         secret: 'test-secret',
       })
     ).resolves.toEqual({ kind: 'empty' });
+  });
+
+  it('matches resolveCategoryCompareHubStatus across draft, empty, and degraded fixtures', async () => {
+    const draftMerchant = {
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      is_published: false,
+      business_name: 'Ogabassey',
+      country: 'NG',
+    };
+    mockMaybeSingle.mockResolvedValueOnce({ data: draftMerchant, error: null });
+    mockGetMerchantByIdentifier.mockResolvedValueOnce(draftMerchant);
+    await expect(
+      resolveCategoryCompareHubStatusDirect({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'printers',
+      })
+    ).resolves.toEqual(
+      await resolveCategoryCompareHubStatus({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'printers',
+      })
+    );
+
+    const liveMerchant = { ...draftMerchant, is_published: true };
+    mockMaybeSingle.mockResolvedValueOnce({ data: liveMerchant, error: null });
+    mockCategoriesReturns.mockResolvedValueOnce([]);
+    mockGetMerchantByIdentifier.mockResolvedValueOnce(liveMerchant);
+    mockGetCachedCategories.mockResolvedValueOnce([]);
+    await expect(
+      resolveCategoryCompareHubStatusDirect({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'printers',
+      })
+    ).resolves.toEqual(
+      await resolveCategoryCompareHubStatus({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'printers',
+      })
+    );
+
+    mockMaybeSingle.mockResolvedValueOnce({ data: liveMerchant, error: null });
+    mockCategoriesReturns.mockResolvedValueOnce([
+      {
+        id: 'cat-1',
+        name: 'Printers',
+        slug: 'printers',
+        is_active: true,
+        parent_id: null,
+      },
+    ]);
+    mockGetCachedProductSemanticInventory.mockRejectedValueOnce(
+      new Error('inventory degraded')
+    );
+    mockGetMerchantByIdentifier.mockResolvedValueOnce(liveMerchant);
+    mockGetCachedCategories.mockResolvedValueOnce([
+      { id: 'cat-1', name: 'Printers', slug: 'printers' },
+    ]);
+    mockLoadCategoryCompareHubData.mockResolvedValueOnce({
+      categoryName: 'Printers',
+      categorySlug: 'printers',
+      merchant: liveMerchant,
+      productGroups: [],
+      products: [],
+      inventoryDegraded: true,
+      storeUrl: 'https://ogabassey.usebaci.com',
+    });
+    await expect(
+      resolveCategoryCompareHubStatusDirect({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'printers',
+      })
+    ).resolves.toEqual(
+      await resolveCategoryCompareHubStatus({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'printers',
+      })
+    );
   });
 });

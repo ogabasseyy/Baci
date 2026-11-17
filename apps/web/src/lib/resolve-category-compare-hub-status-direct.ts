@@ -33,6 +33,7 @@ interface DirectCategoryRow {
 export async function resolveCategoryCompareHubStatusDirect(input: {
   merchantSlug: string;
   categorySlug: string;
+  signal?: AbortSignal;
 }): Promise<CategoryCompareHubStatus> {
   const normalizedIdentifier = input.merchantSlug.trim().toLowerCase();
   if (!isValidMerchantIdentifier(normalizedIdentifier)) {
@@ -48,11 +49,16 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
   }
 
   const supabase = getPublicSupabaseClient();
-  const { data: merchant, error: merchantError } = await supabase
+  const merchantQuery = supabase
     .from('merchants')
     .select('id, slug, is_published, business_name, country')
-    .eq('slug', resolvedSlug.toLowerCase())
-    .maybeSingle<DirectMerchantRow>();
+    .eq('slug', resolvedSlug.toLowerCase());
+  const { data: merchant, error: merchantError } = await (input.signal &&
+  'abortSignal' in merchantQuery &&
+  typeof merchantQuery.abortSignal === 'function'
+    ? merchantQuery.abortSignal(input.signal)
+    : merchantQuery
+  ).maybeSingle<DirectMerchantRow>();
 
   if (merchantError) {
     throw merchantError;
@@ -70,12 +76,17 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
     return { kind: 'empty' };
   }
 
-  const { data: categories, error: categoriesError } = await supabase
+  const categoriesQuery = supabase
     .from('categories')
     .select('id, name, slug, is_active, parent_id')
     .eq('merchant_id', merchant.id)
-    .order('name', { ascending: true })
-    .returns<DirectCategoryRow[]>();
+    .order('name', { ascending: true });
+  const { data: categories, error: categoriesError } = await (input.signal &&
+  'abortSignal' in categoriesQuery &&
+  typeof categoriesQuery.abortSignal === 'function'
+    ? categoriesQuery.abortSignal(input.signal)
+    : categoriesQuery
+  ).returns<DirectCategoryRow[]>();
 
   if (categoriesError) {
     throw categoriesError;

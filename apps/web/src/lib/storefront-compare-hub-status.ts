@@ -6,12 +6,12 @@ import { storefrontInternalPreflight } from './storefront-internal-preflight';
 
 const DEFAULT_TIMEOUT_MS = 2_500;
 const RENDERABLE_CACHE_TTL_MS = 60_000;
-const EMPTY_CACHE_TTL_MS = 10_000;
 const MAX_CACHE_SIZE = 1_000;
 
 export type CompareHubStatusResolver = (input: {
   merchantSlug: string;
   categorySlug: string;
+  signal?: AbortSignal;
 }) => Promise<CategoryCompareHubStatus>;
 
 interface CompareHubStatusOptions {
@@ -98,15 +98,17 @@ class CompareHubLookupTimeoutError extends Error {
 }
 
 async function withTimeout<T>(
-  promise: Promise<T>,
+  run: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number
 ): Promise<T> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      promise,
+      run(controller.signal),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
+          controller.abort();
           reject(new CompareHubLookupTimeoutError());
         }, timeoutMs);
       }),
@@ -181,10 +183,12 @@ export function resolveStorefrontCompareHubStatus(
     let status: CategoryCompareHubStatus;
     try {
       status = await withTimeout(
-        resolverImpl({
-          merchantSlug: normalizedIdentifier,
-          categorySlug: normalizedCategorySlug,
-        }),
+        (signal) =>
+          resolverImpl({
+            merchantSlug: normalizedIdentifier,
+            categorySlug: normalizedCategorySlug,
+            signal,
+          }),
         timeoutMs
       );
     } catch (error) {
@@ -207,11 +211,9 @@ export function resolveStorefrontCompareHubStatus(
     }
 
     if (status.kind === 'empty') {
-      const resolution: StorefrontCompareHubStatusResolution = {
-        kind: 'empty',
-      };
-      setCachedResolution(cacheKey, resolution, EMPTY_CACHE_TTL_MS);
-      return resolution;
+      // Do not cache empty verdicts: a category that gains its first eligible
+      // product must serve 200 on the very next crawl (matching route no-store).
+      return { kind: 'empty' };
     }
 
     const resolution: StorefrontCompareHubStatusResolution = {

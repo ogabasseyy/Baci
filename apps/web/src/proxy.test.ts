@@ -750,8 +750,16 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('offloads default PostHog relay paths from proxy matcher to next.config.ts', () => {
-    expect(config.matcher).not.toContain('/baci-relay/:path*');
+  it('matches default PostHog relay paths in proxy matcher so credential stripping runs in-repo', () => {
+    const matcherRegexes = config.matcher.map(
+      (pattern) => new RegExp(`^${pattern}$`)
+    );
+    expect(matcherRegexes.some((re) => re.test('/baci-relay/e/capture/'))).toBe(
+      true
+    );
+    expect(
+      matcherRegexes.some((re) => re.test('/baci-relay/static/recorder.js'))
+    ).toBe(true);
   });
 
   it('does not force no-cache on default PostHog relay static assets', async () => {
@@ -799,7 +807,7 @@ describe('Middleware Proxy', () => {
         await import('./proxy');
 
       expect(configWithCustomRelay.matcher).toContain(
-        '/((?!_next/static(?:/|$)|baci-relay(?:/|$))(?:.+/)?(?:static|array)/.*)'
+        '/((?!_next/static(?:/|$))(?:.+/)?(?:static|array)/.*)'
       );
 
       const req = new NextRequest(

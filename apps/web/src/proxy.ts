@@ -174,17 +174,15 @@ export const config = {
   matcher: [
     '/agent-commerce.json',
     '/agent-trust.json',
-    // Offload `/baci-relay/:path*` to `next.config.ts` rewrites/headers (and
-    // Cloudflare Transform Rules for request-header stripping) so relay traffic
-    // does not invoke proxy.ts. Catch custom `/relay/static/*.js` and
-    // `/relay/array/*.js` assets, while keeping Next's own static chunks and
-    // `/baci-relay/*` out of middleware.
-    '/((?!_next/static(?:/|$)|baci-relay(?:/|$))(?:.+/)?(?:static|array)/.*)',
+    // Match relay `/static/*.js` and `/array/*.js` assets (including
+    // `/baci-relay/*`) so `buildPostHogRelayPassThroughResponse` strips
+    // sensitive request headers in-repo, while keeping Next's own static
+    // chunks out of middleware.
+    '/((?!_next/static(?:/|$))(?:.+/)?(?:static|array)/.*)',
     /*
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
-     * - baci-relay (PostHog relay handled by next.config.ts rewrites/headers)
      * - favicon.ico (favicon file)
      * - robots.txt (SEO file)
      * - ads.txt (host-aware Route Handler at app/ads.txt; bypasses middleware
@@ -192,6 +190,6 @@ export const config = {
      * - sitemap.xml (SEO file)
      * - Static files with extensions (.svg, .png, .jpg, etc.)
      */
-    '/((?!_next/image(?:/.*[^/])?$|_next/static(?:/.*[^/])?$|baci-relay(?:/.*)?$|manifest\\.webmanifest$|robots\\.txt$|ads\\.txt$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|woff|woff2|ttf|eot|css|js|json)$|(?!favicon\\.ico$)(?!favicon\\.ico/$).+\\.ico$).*)',
+    '/((?!_next/image(?:/.*[^/])?$|_next/static(?:/.*[^/])?$|manifest\\.webmanifest$|robots\\.txt$|ads\\.txt$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|woff|woff2|ttf|eot|css|js|json)$|(?!favicon\\.ico$)(?!favicon\\.ico/$).+\\.ico$).*)',
   ],
 };

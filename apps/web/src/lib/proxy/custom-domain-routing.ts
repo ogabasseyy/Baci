@@ -179,7 +179,7 @@ async function runCustomDomainRoutingInternal(
     merchantIdentifier: domainMerchantSlug ?? domain,
   });
   if (preflight) {
-    if (preflight.status === 404) {
+    if (preflight.status === 404 || preflight.status === 410) {
       const aliasResponse = await runCustomDomainAliasRouting(
         request,
         pathname,
@@ -190,6 +190,9 @@ async function runCustomDomainRoutingInternal(
     return preflight;
   }
 
+  // Live 2-segment storefront documents that passed preflight take precedence
+  // over retired-alias stripping so valid `/{category}/{product}` PDPs skip an
+  // extra alias lookup on every navigation (404/410 verdicts still check aliases above).
   const preflightCheckedTwoSegmentDoc =
     context.domainPathSegments.length === 2 &&
     isStorefrontDocumentNavigation(request.method, request.headers) &&

@@ -172,4 +172,31 @@ describe('custom-domain routing', () => {
     expect(runCustomDomainAliasRouting).toHaveBeenCalledTimes(2);
     expect(resPrefetch.status).toBe(301);
   });
+
+  it('still checks retired-alias redirects when preflight returns 410', async () => {
+    const context = {
+      domain: 'shop.example',
+      domainMerchantSlug: 'new-shop',
+      normalizedRequestHost: 'shop.example',
+      requestHostHadWww: false,
+      domainPathSegments: ['old-shop', 'iphone-16'],
+    };
+    vi.mocked(runStorefrontPreflight).mockResolvedValueOnce(
+      new NextResponse(null, { status: 410 })
+    );
+    vi.mocked(runCustomDomainAliasRouting).mockResolvedValueOnce(
+      NextResponse.redirect('https://shop.example/iphone-16', 301)
+    );
+
+    const res = await runCustomDomainRouting(
+      new NextRequest('https://shop.example/old-shop/iphone-16'),
+      '/old-shop/iphone-16',
+      'shop.example',
+      'Googlebot/2.1',
+      context
+    );
+
+    expect(runCustomDomainAliasRouting).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(301);
+  });
 });

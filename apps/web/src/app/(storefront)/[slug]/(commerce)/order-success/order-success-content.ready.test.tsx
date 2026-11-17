@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/use-private-search-params', () => ({
   usePrivateSearchParamsState: () => mocks.state,
 }));
-vi.mock('next/navigation', () => ({ usePathname: () => '/order-success' }));
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/order-success',
+  useRouter: () => ({ push: vi.fn() }),
+}));
 vi.mock('next/link', () => ({
   default: ({
     children,

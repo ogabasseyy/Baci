@@ -21,6 +21,12 @@ interface StashRecord {
   savedAt: number;
 }
 
+// Fallback when sessionStorage is unavailable (blocked, full, strict privacy
+// modes): the values then live in this page's memory, so they survive in-page
+// navigation but NOT a reload. Scrubbing the address bar still happens: a
+// token that is lost on reload is better than a token left in the address.
+const memoryRecords = new Map<string, StashRecord>();
+
 let lastSavedAt = 0;
 
 /** Strictly increasing, so records saved in the same millisecond keep their order. */
@@ -46,11 +52,35 @@ function isEntryList(value: unknown): value is PrivateEntry[] {
   );
 }
 
+/** Not a secret: it only links a history entry to its record. */
+function newStashId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    // Insecure context or missing API: try the next source.
+  }
+  try {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    // Fall through to the last resort.
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+
 function currentHistoryState(): Record<string, unknown> {
   const state: unknown = window.history.state;
   return typeof state === 'object' && state !== null
     ? { ...(state as Record<string, unknown>) }
     : {};
+}
+
+/** The stash id carried by the current history entry, if any. */
+export function currentPrivateParamsId(): string | null {
+  if (typeof window === 'undefined') return null;
+  const id = currentHistoryState()[PRIVATE_PARAMS_STATE_KEY];
+  return typeof id === 'string' && id !== '' ? id : null;
 }
 
 function pruneOldRecords(storage: Storage): void {
@@ -75,38 +105,51 @@ function pruneOldRecords(storage: Storage): void {
   }
 }
 
-/**
- * Moves sensitive query params (order tokens, shopper details) out of the
- * address bar so ad scripts reading `window.location.href` never see them.
- *
- * The values are kept in sessionStorage under a fresh id, and that id is put
- * on the current history entry (`history.state`), so every entry gets its own
- * stash: opening order A then order B in one tab, then going Back, still shows
- * A. If storage is not available the URL is left untouched so the page keeps
- * working.
- */
-export function scrubPrivateParamsFromAddressBar(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  const { pathname, search, hash } = window.location;
-  const { privateEntries, publicSearch } = partitionSensitiveSearch(search);
-  if (privateEntries.length === 0) return false;
-
-  let id: string;
+function saveRecord(id: string, record: StashRecord): void {
   try {
-    id = crypto.randomUUID();
-    const record: StashRecord = {
-      pathname,
-      publicSearch: canonicalSearch(publicSearch),
-      entries: privateEntries,
-      savedAt: nextSavedAt(),
-    };
     window.sessionStorage.setItem(stashKey(id), JSON.stringify(record));
     pruneOldRecords(window.sessionStorage);
   } catch {
-    return false;
+    memoryRecords.set(id, record);
   }
+}
 
+function removeRecord(id: string): void {
+  memoryRecords.delete(id);
+  try {
+    window.sessionStorage.removeItem(stashKey(id));
+  } catch {
+    // Nothing more to clean up.
+  }
+}
+
+function loadRecord(id: string): unknown {
+  try {
+    const raw = window.sessionStorage.getItem(stashKey(id));
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // Unreadable or blocked storage: look in memory.
+  }
+  return memoryRecords.get(id);
+}
+
+/**
+ * Saves `entries` for the CURRENT history entry (fresh id on `history.state`)
+ * and rewrites the address to `pathname` + `publicSearch`. Returns false, with
+ * the address untouched, only if the address itself cannot be rewritten.
+ */
+export function stashEntriesOnCurrentEntry(
+  entries: PrivateEntry[],
+  pathname: string,
+  publicSearch: string
+): boolean {
+  const id = newStashId();
+  saveRecord(id, {
+    pathname,
+    publicSearch: canonicalSearch(publicSearch),
+    entries,
+    savedAt: nextSavedAt(),
+  });
   try {
     window.history.replaceState(
       { ...currentHistoryState(), [PRIVATE_PARAMS_STATE_KEY]: id },
@@ -115,17 +158,30 @@ export function scrubPrivateParamsFromAddressBar(): boolean {
       // not receive tokens in fragments, and auth libraries may need them
       // (e.g. `#access_token=...`). `sanitizeTrackingUrl` drops fragments from
       // anything sent to analytics.
-      `${pathname}${publicSearch ? `?${publicSearch}` : ''}${hash}`
+      `${pathname}${publicSearch ? `?${publicSearch}` : ''}${window.location.hash}`
     );
   } catch {
-    try {
-      window.sessionStorage.removeItem(stashKey(id));
-    } catch {
-      // Nothing more to clean up.
-    }
+    removeRecord(id);
     return false;
   }
   return true;
+}
+
+/**
+ * Moves sensitive query params (order tokens, shopper details) out of the
+ * address bar so ad scripts reading `window.location.href` never see them.
+ *
+ * The values are kept in sessionStorage (or page memory when storage is not
+ * available) under a fresh id, and that id is put on the current history entry
+ * (`history.state`), so every entry gets its own stash: opening order A then
+ * order B in one tab, then going Back, still shows A.
+ */
+export function scrubPrivateParamsFromAddressBar(): boolean {
+  if (typeof window === 'undefined') return false;
+  const { pathname, search } = window.location;
+  const { privateEntries, publicSearch } = partitionSensitiveSearch(search);
+  if (privateEntries.length === 0) return false;
+  return stashEntriesOnCurrentEntry(privateEntries, pathname, publicSearch);
 }
 
 /**
@@ -138,30 +194,21 @@ export function readStashedPrivateParams(
   pathname: string,
   publicSearch: string
 ): PrivateEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const id: unknown = (
-      window.history.state as Record<string, unknown> | null
-    )?.[PRIVATE_PARAMS_STATE_KEY];
-    if (typeof id !== 'string' || id === '') return [];
-    const raw = window.sessionStorage.getItem(stashKey(id));
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return [];
-    const {
-      pathname: storedPath,
-      publicSearch: storedSearch,
-      entries,
-    } = parsed as Record<string, unknown>;
-    if (
-      storedPath !== pathname ||
-      typeof storedSearch !== 'string' ||
-      !isEntryList(entries)
-    ) {
-      return [];
-    }
-    return storedSearch === canonicalSearch(publicSearch) ? entries : [];
-  } catch {
+  const id = currentPrivateParamsId();
+  if (id === null) return [];
+  const parsed = loadRecord(id);
+  if (typeof parsed !== 'object' || parsed === null) return [];
+  const {
+    pathname: storedPath,
+    publicSearch: storedSearch,
+    entries,
+  } = parsed as Record<string, unknown>;
+  if (
+    storedPath !== pathname ||
+    typeof storedSearch !== 'string' ||
+    !isEntryList(entries)
+  ) {
     return [];
   }
+  return storedSearch === canonicalSearch(publicSearch) ? entries : [];
 }

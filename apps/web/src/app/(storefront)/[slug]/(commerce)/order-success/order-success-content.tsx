@@ -25,6 +25,7 @@ import {
   resolveInvoicePresentation,
 } from './order-success-presentation';
 import { OrderSuccessStatusIcon } from './order-success-status-icon';
+import { OrderSuccessTrackLink } from './order-success-track-link';
 import { useBnplSettlement } from './use-bnpl-settlement';
 import { useInvoiceGeneratedCapture } from './use-invoice-generated-capture';
 import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
@@ -262,16 +263,14 @@ export function OrderSuccessContent() {
                 View My Orders
               </Link>
             ) : hasValidatedOrder && order?.tracking_token ? (
-              <Link
-                href={asRoute(
-                  getHref(
-                    `/track-order?token=${encodeURIComponent(order.tracking_token)}`
-                  )
+              <OrderSuccessTrackLink
+                href={getHref(
+                  `/track-order?token=${encodeURIComponent(order.tracking_token)}`
                 )}
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-store-background text-store-background-text font-bold rounded-xl border border-store-border hover:bg-store-secondary hover:text-store-secondary-text transition-colors w-full"
               >
                 Track My Order
-              </Link>
+              </OrderSuccessTrackLink>
             ) : null}
 
             {hasValidatedOrder && (

@@ -4,6 +4,7 @@ import type { Route } from 'next';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { apiPost } from '@/lib/api-client';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -240,7 +241,12 @@ async function launchBnplPayment({
                 type: 'klump',
             });
             successQuery.set('trackingToken', trackingToken);
-            router.push(`/order-success?${successQuery.toString()}` as Route);
+            // The token goes to the next page off the URL (see the hand-off helper).
+            router.push(
+                stashPrivateParamsForNavigation(
+                    `/order-success?${successQuery.toString()}`
+                ) as Route
+            );
             return;
         }
 

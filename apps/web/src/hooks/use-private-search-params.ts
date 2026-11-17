@@ -3,6 +3,10 @@
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import {
+  claimPendingPrivateParams,
+  readPendingPrivateParams,
+} from '@/lib/privacy/private-url-param-handoff';
+import {
   readStashedPrivateParams,
   scrubPrivateParamsFromAddressBar,
 } from '@/lib/privacy/private-url-param-stash';
@@ -43,8 +47,15 @@ function subscribeToNothing(): () => void {
 function stashedQuery(pathname: string, liveSearch: string): string {
   const { privateEntries, publicSearch } = partitionSensitiveSearch(liveSearch);
   if (privateEntries.length > 0) return '';
+  // A hand-off made by the page that navigated here is read first: the
+  // destination renders before Next.js writes its history entry, so the entry
+  // (and its stash id) does not exist yet. It only matches this exact path and
+  // query, and is claimed (consumed) by the layout effect below.
+  const handedOff = readPendingPrivateParams(pathname, publicSearch);
   return new URLSearchParams(
-    readStashedPrivateParams(pathname, publicSearch)
+    handedOff.length > 0
+      ? handedOff
+      : readStashedPrivateParams(pathname, publicSearch)
   ).toString();
 }
 
@@ -105,6 +116,7 @@ export function usePrivateSearchParamsState(): PrivateSearchParamsState {
   // biome-ignore lint/correctness/useExhaustiveDependencies: pathname and liveSearch are the triggers; the scrub reads window.location
   useLayoutEffect(() => {
     scrubPrivateParamsFromAddressBar();
+    claimPendingPrivateParams();
   }, [pathname, liveSearch]);
 
   return { searchParams, isReady };

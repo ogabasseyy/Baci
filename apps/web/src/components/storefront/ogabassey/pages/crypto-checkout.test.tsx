@@ -530,8 +530,15 @@ describe('CryptoCheckoutPage', () => {
       });
 
       expect(mockPush).toHaveBeenCalledWith(
-        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456&trackingToken=track-token-123'
+        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456'
       );
+      // The token travels off the URL, in the one-shot hand-off.
+      expect(
+        JSON.parse(
+          window.sessionStorage.getItem('baci:private-url-params-pending') ??
+            'null'
+        )?.entries
+      ).toEqual([['trackingToken', 'track-token-123']]);
     } finally {
       vi.useRealTimers();
     }
@@ -588,7 +595,7 @@ describe('CryptoCheckoutPage', () => {
       });
 
       expect(mockPush).toHaveBeenCalledWith(
-        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456&trackingToken=snake-track-token-123'
+        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456'
       );
     } finally {
       vi.useRealTimers();

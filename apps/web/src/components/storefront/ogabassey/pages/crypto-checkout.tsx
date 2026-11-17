@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import {
   ShieldCheck,
   AlertCircle,
@@ -242,7 +243,11 @@ export function CryptoCheckoutPage() {
       if (cryptoData?.trackingToken) {
         successQuery.set('trackingToken', cryptoData.trackingToken);
       }
-      router.push(`/${slug}/order-success?${successQuery.toString()}`);
+      router.push(
+        stashPrivateParamsForNavigation(
+          `/${slug}/order-success?${successQuery.toString()}`
+        )
+      );
     };
 
     // Poll every 10 seconds, max 30 attempts (5 minutes)

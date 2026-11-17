@@ -1,6 +1,7 @@
 import type { Route } from 'next';
 import type { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { captureBnplPaymentCompleted } from '../capture-bnpl-payment-completed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
 import {
@@ -137,7 +138,9 @@ export function useCreditDirectConfirmationRedirect({
     }
     clearCreditDirectPopupMarker(orderId);
     router.push(
-      `${orderSuccessBasePath}?${successQuery.toString()}` as Route
+      stashPrivateParamsForNavigation(
+        `${orderSuccessBasePath}?${successQuery.toString()}`
+      ) as Route
     );
   }, [
     phase,

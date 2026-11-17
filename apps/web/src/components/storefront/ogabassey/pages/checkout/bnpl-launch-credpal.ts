@@ -1,5 +1,6 @@
 import type { Route } from 'next';
 import { openCredPalCheckout } from '@/lib/credpal';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { toCurrencyAmount } from '@/lib/klump-utils';
 import { captureBnplPaymentCompleted } from './capture-bnpl-payment-completed';
 import {
@@ -83,7 +84,11 @@ export async function launchCredPalCheckout({
             if (order.tracking_token) {
                 successQuery.set('trackingToken', order.tracking_token);
             }
-            router.push(`/order-success?${successQuery.toString()}` as Route);
+            router.push(
+                stashPrivateParamsForNavigation(
+                    `/order-success?${successQuery.toString()}`
+                ) as Route
+            );
         },
         onClose: () => {
             if (notifyNativeBnplClose('credpal')) {

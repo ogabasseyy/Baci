@@ -35,20 +35,35 @@ describe('scrubPrivateParamsFromAddressBar', () => {
     ]);
   });
 
-  it('bugfix: leaves the URL untouched and does not throw when id generation fails', () => {
+  it('bugfix: still scrubs the address when crypto.randomUUID throws, using getRandomValues', () => {
     visit('/track-order?token=abc');
     vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
       throw new Error('no crypto');
     });
 
-    let scrubbed: boolean | undefined;
-    expect(() => {
-      scrubbed = scrubPrivateParamsFromAddressBar();
-    }).not.toThrow();
+    expect(scrubPrivateParamsFromAddressBar()).toBe(true);
 
-    expect(scrubbed).toBe(false);
-    expect(window.location.search).toBe('?token=abc');
-    expect(window.sessionStorage.length).toBe(0);
+    expect(window.location.search).toBe('');
+    expect(readStashedPrivateParams('/track-order', '')).toEqual([
+      ['token', 'abc'],
+    ]);
+  });
+
+  it('bugfix: still scrubs the address when no crypto source exists, using Math.random', () => {
+    visit('/track-order?token=abc');
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      throw new Error('no crypto');
+    });
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(() => {
+      throw new Error('no crypto');
+    });
+
+    expect(scrubPrivateParamsFromAddressBar()).toBe(true);
+
+    expect(window.location.search).toBe('');
+    expect(readStashedPrivateParams('/track-order', '')).toEqual([
+      ['token', 'abc'],
+    ]);
   });
 
   it('keeps the hash', () => {
@@ -70,16 +85,33 @@ describe('scrubPrivateParamsFromAddressBar', () => {
     expect(window.location.search).toBe('?orderId=1');
   });
 
-  it('leaves the URL untouched when storage fails', () => {
+  it('bugfix: scrubs the address and keeps the values in memory when storage fails', () => {
     visit('/track-order?token=abc');
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('denied', 'SecurityError');
     });
 
     const scrubbed = scrubPrivateParamsFromAddressBar();
 
-    expect(scrubbed).toBe(false);
+    expect(scrubbed).toBe(true);
+    expect(window.location.search).toBe('');
+    expect(readStashedPrivateParams('/track-order', '')).toEqual([
+      ['token', 'abc'],
+    ]);
+  });
+
+  it('leaves the URL untouched only when the address itself cannot be rewritten', () => {
+    visit('/track-order?token=abc');
+    vi.spyOn(window.history, 'replaceState').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+
+    expect(scrubPrivateParamsFromAddressBar()).toBe(false);
     expect(window.location.search).toBe('?token=abc');
+    expect(window.sessionStorage.length).toBe(0);
   });
 });
 

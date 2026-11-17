@@ -83,8 +83,14 @@ describe('useCreditDirectConfirmationRedirect', () => {
     expect(clearCheckoutIdempotencyKey).toHaveBeenCalledWith('fp-1');
     expect(clearCreditDirectPopupMarker).toHaveBeenCalledWith('order-1');
     expect(push).toHaveBeenCalledWith(
-      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct&trackingToken=track-1'
+      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct'
     );
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem('baci:private-url-params-pending') ??
+          'null'
+      )?.entries
+    ).toEqual([['trackingToken', 'track-1']]);
   });
 
   it('passes the lookup email when no tracking token exists', () => {
@@ -101,7 +107,7 @@ describe('useCreditDirectConfirmationRedirect', () => {
     );
 
     expect(push).toHaveBeenCalledWith(
-      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct&email=guest%40example.com'
+      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct'
     );
   });
 

@@ -116,15 +116,19 @@ describe('usePrivateSearchParams', () => {
     expect(result.current.get('orderId')).toBe('2');
   });
 
-  it('keeps working with the URL untouched when storage is unavailable', () => {
+  it('bugfix: still cleans the address and returns the values when storage is unavailable', () => {
     visit('/track-order?token=abc');
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('denied', 'SecurityError');
     });
 
     const { result } = renderHook(() => usePrivateSearchParams());
 
-    expect(window.location.search).toBe('?token=abc');
+    // Values are kept in page memory then: they survive in-page navigation, not a reload.
+    expect(window.location.search).toBe('');
     expect(result.current.get('token')).toBe('abc');
   });
 });

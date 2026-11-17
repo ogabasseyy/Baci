@@ -22,7 +22,10 @@ const mockVerifyBnplSettlementProof = vi.hoisted(() =>
   vi.fn(async (..._args: unknown[]) => true)
 );
 
+const mockRouterPush = vi.hoisted(() => vi.fn());
+
 vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockRouterPush }),
   usePathname: () => '/order-success',
   useSearchParams: () => mockSearchParams(),
 }));

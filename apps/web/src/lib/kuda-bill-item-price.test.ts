@@ -90,6 +90,24 @@ describe('assertKudaBillItemPriceCurrent', () => {
     ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
 
+  it('skips a broken duplicate listing when another confirms the price', async () => {
+    mockGetBillersByCategory.mockResolvedValue([
+      startimes({
+        billItems: [startimesSuper, { ...startimesSuper, amount: 0 }],
+      }),
+    ]);
+
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        ...superPackage,
+        billerName: 'STARTIMES NG',
+      })
+    ).resolves.toBeUndefined();
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ billItemIdentifier: 'KUD-CAB-STT-SUPER' })
+    );
+  });
+
   it('prefers the exact biller name over a provider-stripped match', async () => {
     mockGetBillersByCategory.mockResolvedValue([
       startimes({ billerName: 'STARTIMES NG (Kuda)' }),

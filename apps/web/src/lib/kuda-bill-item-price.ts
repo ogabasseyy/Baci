@@ -214,17 +214,28 @@ export async function assertKudaBillItemPriceCurrent({
 
   const fixed = chosen.flatMap(({ items }) => items).filter(hasFixedPrice);
   if (fixed.length === 0) return; // sold at the customer's own amount
-  // Includes an unreadable fixed price (mapped to 0): never treated as an
-  // open amount that lets any price through.
-  if (fixed.some((item) => item.amount < IMPLAUSIBLE_FIXED_PRICE_NAIRA)) {
+  // An unreadable (mapped to 0) or implausible (under ₦10) fixed price is
+  // never treated as an open amount. It is skipped when another listing can
+  // still confirm the price, and fails closed when none can.
+  const plausible = fixed.filter(
+    (item) => item.amount >= IMPLAUSIBLE_FIXED_PRICE_NAIRA
+  );
+  if (plausible.length === 0) {
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
+  if (plausible.length < fixed.length) {
+    logger.warn({
+      message: 'Kuda price list has an unreadable or implausible listing',
+      billItemIdentifier,
+      type,
+    });
   }
   // Under a named biller one of its listings must match; with no biller
   // named, every listing must agree, so the cheapest of two billers' prices
   // can never pass for the other.
   const isCurrent = billerName
-    ? fixed.some((item) => priceMatches(item, amount))
-    : fixed.every((item) => priceMatches(item, amount));
+    ? plausible.some((item) => priceMatches(item, amount))
+    : plausible.every((item) => priceMatches(item, amount));
   if (!isCurrent) {
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }

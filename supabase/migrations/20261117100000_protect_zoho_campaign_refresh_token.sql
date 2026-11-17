@@ -231,3 +231,78 @@ GRANT EXECUTE ON FUNCTION public.set_merchant_zoho_refresh_token(uuid, text)
 
 COMMENT ON FUNCTION public.set_merchant_zoho_refresh_token(uuid, text) IS
   'Owner or integrations.manage staff only (signed-in callers). Intentionally not executable by service_role: server tooling writes the table directly.';
+
+-- Audit trail. Before this change a token rotation changed custom_settings, which the
+-- feature-settings audit trigger records (presence only). The token now lives in its own
+-- table, so it gets its own trigger: configure / rotate / clear, attribution from the
+-- canonical writer, and presence flags only (never the token). Created last so the
+-- one-time backfill above is not double-audited (its custom_settings cleanup already is).
+CREATE OR REPLACE FUNCTION private.audit_merchant_zoho_credential_change_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_merchant_id uuid := COALESCE(NEW.merchant_id, OLD.merchant_id);
+  v_merchant_label text;
+  v_writer_capability uuid;
+  v_action text;
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.refresh_token IS NOT DISTINCT FROM NEW.refresh_token THEN
+    RETURN NEW;
+  END IF;
+
+  v_action := CASE TG_OP
+    WHEN 'INSERT' THEN 'merchant.zoho_credential.configure'
+    WHEN 'DELETE' THEN 'merchant.zoho_credential.clear'
+    ELSE 'merchant.zoho_credential.rotate'
+  END;
+
+  SELECT NULLIF(pg_catalog.btrim(COALESCE(m.business_name, m.slug)), '')
+    INTO v_merchant_label
+  FROM public.merchants AS m
+  WHERE m.id = v_merchant_id;
+  IF v_merchant_label IS NOT NULL AND pg_catalog.char_length(v_merchant_label) > 160 THEN
+    v_merchant_label := NULL;
+  END IF;
+
+  SELECT capability.capability INTO v_writer_capability
+  FROM private.audit_event_writer_capabilities AS capability
+  WHERE capability.capability_name = 'canonical_audit_event_writer_v1';
+  IF v_writer_capability IS NULL THEN
+    RAISE EXCEPTION 'audit_merchant_zoho_credential_writer_capability_unavailable'
+      USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM private.write_audit_event_v1(
+    v_merchant_id, v_merchant_label, v_action, 'merchant_zoho_credential'::text,
+    v_merchant_id::text, ARRAY['refresh_token']::text[],
+    pg_catalog.jsonb_build_object(
+      'refresh_token', pg_catalog.jsonb_build_object('present', TG_OP <> 'INSERT')
+    ),
+    pg_catalog.jsonb_build_object(
+      'refresh_token', pg_catalog.jsonb_build_object('present', TG_OP <> 'DELETE')
+    ),
+    NULL::uuid, NULL::uuid, 1::smallint,
+    pg_catalog.jsonb_build_object(
+      'category', 'merchant_zoho_credential',
+      'operation', pg_catalog.lower(TG_OP)
+    ),
+    v_writer_capability
+  );
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+ALTER FUNCTION private.audit_merchant_zoho_credential_change_v1() OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.audit_merchant_zoho_credential_change_v1()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS audit_merchant_zoho_credential_change_v1
+  ON public.merchant_zoho_campaign_credentials;
+CREATE TRIGGER audit_merchant_zoho_credential_change_v1
+  AFTER INSERT OR DELETE OR UPDATE ON public.merchant_zoho_campaign_credentials
+  FOR EACH ROW
+  EXECUTE FUNCTION private.audit_merchant_zoho_credential_change_v1();
+

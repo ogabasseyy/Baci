@@ -151,5 +151,23 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- Token changes leave canonical audit events that carry presence only, never the token.
+DO $$
+DECLARE v_actions text[]; v_text text;
+BEGIN
+  SELECT pg_catalog.array_agg(e.action ORDER BY e.occurred_at, e.action),
+         pg_catalog.string_agg(pg_catalog.concat_ws(' ', e.before_values::text, e.after_values::text, e.metadata::text), ' ')
+    INTO v_actions, v_text
+  FROM public.audit_events AS e
+  WHERE e.merchant_id = 'aaaaaaaa-5555-4555-8555-aaaaaaaaaaaa'
+    AND e.resource_type = 'merchant_zoho_credential';
+  IF v_actions IS DISTINCT FROM ARRAY['merchant.zoho_credential.configure', 'merchant.zoho_credential.clear'] THEN
+    RAISE EXCEPTION 'Zoho: expected configure then clear audit events, got %', v_actions;
+  END IF;
+  IF pg_catalog.strpos(v_text, 'synthetic-refresh') > 0 THEN
+    RAISE EXCEPTION 'Zoho: audit event leaks the token value';
+  END IF;
+END $$;
+
 SELECT 'protect_zoho_campaign_refresh_token_passed';
 ROLLBACK;

@@ -1,5 +1,6 @@
 import 'server-only';
 import { piggyvestTransactionStatusSchemas } from '@/schemas/piggyvest-transaction-status';
+import { SAVINGS_VERIFY_RETRY_POLICY } from './primary-wallet-savings-verify-retry-policy';
 
 type VerifyQuery = (selection: {
   reference: string;
@@ -15,16 +16,6 @@ export interface SavingsVerifyRetryOptions {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
-
-// Production incident 2026-11-17: PiggyVest's verify record lagged its own
-// outflow webhook by a few seconds, so the first re-query read non-terminal,
-// the webhook answered 503 and the customer's savings stayed pending until
-// the ~2 minute redelivery. Three short extra tries cover that lag. Worst
-// case (each try near its 10 s request timeout) stays near 20 s: the budget
-// stops new tries after 8 s. The route sets no maxDuration, so the platform
-// default applies, far above this.
-export const SAVINGS_VERIFY_RETRY_DELAYS_MS = [1500, 2000, 2000] as const;
-export const SAVINGS_VERIFY_RETRY_BUDGET_MS = 8000;
 
 const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -48,7 +39,8 @@ function isNotIndexedYet(error: unknown): boolean {
   return (
     error instanceof Error &&
     error.message === 'PROVIDER_HTTP_ERROR' &&
-    (error as Error & { httpStatus?: unknown }).httpStatus === 404
+    'httpStatus' in error &&
+    error.httpStatus === 404
   );
 }
 
@@ -60,16 +52,19 @@ export function withSavingsVerifyRetry(
   query: VerifyQuery,
   options: SavingsVerifyRetryOptions = {}
 ): VerifyQuery {
-  const delays = options.delaysMs ?? SAVINGS_VERIFY_RETRY_DELAYS_MS;
-  const budgetMs = options.budgetMs ?? SAVINGS_VERIFY_RETRY_BUDGET_MS;
+  const delays = options.delaysMs ?? SAVINGS_VERIFY_RETRY_POLICY.delaysMs;
+  const budgetMs = options.budgetMs ?? SAVINGS_VERIFY_RETRY_POLICY.budgetMs;
   const sleep = options.sleep ?? defaultSleep;
   const now = options.now ?? Date.now;
   return async (selection) => {
     const startedAt = now();
     for (let attempt = 0; ; attempt += 1) {
       const delay = delays[attempt];
-      const canRetry = () =>
-        delay !== undefined && now() - startedAt + delay <= budgetMs;
+      // The wait before another try, or undefined when no try may start.
+      const nextDelay = () =>
+        delay !== undefined && now() - startedAt + delay <= budgetMs
+          ? delay
+          : undefined;
       // A late timer (stalled event loop) must not start a try past the
       // budget: re-check the clock after every wait.
       const withinBudget = () => now() - startedAt <= budgetMs;
@@ -77,13 +72,15 @@ export function withSavingsVerifyRetry(
       try {
         response = await query(selection);
       } catch (error) {
-        if (!isNotIndexedYet(error) || !canRetry()) throw error;
-        await sleep(delay as number);
+        const wait = isNotIndexedYet(error) ? nextDelay() : undefined;
+        if (wait === undefined) throw error;
+        await sleep(wait);
         if (!withinBudget()) throw error;
         continue;
       }
-      if (!isPendingRecord(response) || !canRetry()) return response;
-      await sleep(delay as number);
+      const wait = isPendingRecord(response) ? nextDelay() : undefined;
+      if (wait === undefined) return response;
+      await sleep(wait);
       if (!withinBudget()) return response;
     }
   };

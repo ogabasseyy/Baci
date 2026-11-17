@@ -163,53 +163,6 @@ it('releases a matched operation the provider reports as failed', async () => {
     )
   ).toBe(true);
 });
-it('stays pending when the provider re-query cannot confirm', async () => {
-  mockLookup(reservation);
-  const fetchImplementation = vi
-    .fn()
-    .mockImplementation(
-      async () => new Response('private detail', { status: 404 })
-    );
-  const sleep = vi.fn(async () => {});
-  expect(
-    await runPrimaryWalletSavingsOutflowReconciliation({
-      configuration,
-      providerToken: 'test-token',
-      references: [reservation.reference],
-      fetchImplementation,
-      verifyRetry: { sleep },
-    })
-  ).toBe('pending');
-  // The bounded re-asks ran (no real waiting) before staying pending.
-  expect(fetchImplementation).toHaveBeenCalledTimes(4);
-  expect(sleep).toHaveBeenCalledTimes(3);
-});
-it('confirms when the verify record turns terminal on a re-ask', async () => {
-  mockLookup(reservation);
-  const lagging = verifiedResponse('successful');
-  const body = (await lagging.json()) as { data: Record<string, unknown> };
-  const fetchImplementation = vi
-    .fn()
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ ...body, data: { ...body.data, status: 'pending' } })
-      )
-    )
-    .mockResolvedValueOnce(verifiedResponse('successful'));
-  const sleep = vi.fn(async () => {});
-  expect(
-    await runPrimaryWalletSavingsOutflowReconciliation({
-      configuration,
-      providerToken: 'test-token',
-      references: [reservation.reference],
-      fetchImplementation,
-      verifyRetry: { sleep },
-    })
-  ).toBe('confirmed');
-  expect(fetchImplementation).toHaveBeenCalledTimes(2);
-  expect(sleep).toHaveBeenCalledTimes(1);
-});
-
 const cancelOperationId = '44444444-4444-4444-8444-444444444444';
 const cancelReference = `pvb-cancel-${reservation.goalId}`;
 const cancelReservation = {

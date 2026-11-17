@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  SAVINGS_VERIFY_RETRY_BUDGET_MS,
-  SAVINGS_VERIFY_RETRY_DELAYS_MS,
-  withSavingsVerifyRetry,
-} from './primary-wallet-savings-verify-retry';
+import { withSavingsVerifyRetry } from './primary-wallet-savings-verify-retry';
+import { SAVINGS_VERIFY_RETRY_POLICY } from './primary-wallet-savings-verify-retry-policy';
 
 const selection = { reference: 'pvb-save-reference', walletId: 'source' };
 
@@ -75,11 +72,11 @@ describe('withSavingsVerifyRetry', () => {
       await withSavingsVerifyRetry(query, { now, sleep })(selection)
     ).toEqual(record('pending'));
     expect(query).toHaveBeenCalledTimes(
-      SAVINGS_VERIFY_RETRY_DELAYS_MS.length + 1
+      SAVINGS_VERIFY_RETRY_POLICY.delaysMs.length + 1
     );
     const waited = sleep.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
     expect(waited).toBe(5500);
-    expect(waited).toBeLessThanOrEqual(SAVINGS_VERIFY_RETRY_BUDGET_MS);
+    expect(waited).toBeLessThanOrEqual(SAVINGS_VERIFY_RETRY_POLICY.budgetMs);
   });
 
   it('rethrows the last 404 after the bounded tries', async () => {

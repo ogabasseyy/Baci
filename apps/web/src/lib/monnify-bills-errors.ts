@@ -13,7 +13,7 @@ export class MonnifyHttpError extends Error {
    * Monnify's full, unscrubbed error body. Only for classifying the answer
    * (duplicate, known refusal) before it is cut short; never log or store it.
    */
-  readonly rawDetail: string | null;
+  declare readonly rawDetail: string | null;
   readonly status: number;
   readonly statusText: string;
 

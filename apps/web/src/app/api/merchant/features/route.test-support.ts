@@ -51,6 +51,8 @@ interface TestState {
   insertPayload: unknown;
   presenceData: unknown;
   presenceError: unknown;
+  rpcCalls: Array<{ name: string; args: unknown }>;
+  rpcError: { code?: string; message: string } | null;
   selectColumns: string | null;
   selectFilter: { column: string; value: unknown } | null;
   settingsData: unknown;
@@ -83,6 +85,8 @@ function createInitialTestState(): TestState {
       ga4_api_secret: false,
     },
     presenceError: null,
+    rpcCalls: [],
+    rpcError: null,
     selectColumns: null,
     selectFilter: null,
     settingsData: {
@@ -182,13 +186,15 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 
 function createMockSupabase() {
   return {
-    rpc: vi.fn((name: string) => {
-      if (name !== 'get_merchant_integration_secret_presence')
-        throw new Error(`Unexpected rpc ${name}`);
-      return Promise.resolve({
-        data: testState.presenceData,
-        error: testState.presenceError,
-      });
+    rpc: vi.fn((name: string, args: unknown) => {
+      testState.rpcCalls.push({ name, args });
+      if (name === 'get_merchant_integration_secret_presence') {
+        return Promise.resolve({
+          data: testState.presenceData,
+          error: testState.presenceError,
+        });
+      }
+      return Promise.resolve({ data: null, error: testState.rpcError });
     }),
     from: vi.fn((table: string) => {
       if (table === 'merchant_feature_settings') {

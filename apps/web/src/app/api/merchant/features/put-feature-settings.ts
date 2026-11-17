@@ -13,6 +13,7 @@ import {
   preserveZohoCampaignSecretCustomSettings,
   redactMerchantFeatureSettingsResponse,
 } from '@/lib/merchant-feature-settings-redaction';
+import { extractZohoCampaignSecrets } from '@/lib/zoho-campaign-secret-settings';
 import { merchantFeatureSettingsPatchSchema } from '@/schemas/merchant-features';
 import { attachIntegrationSecretPresence } from './attach-integration-secret-presence';
 import type { MerchantFeatureCacheRevalidator } from './feature-settings-handler-utils';
@@ -24,6 +25,7 @@ import {
 } from './merchant-feature-settings-contract';
 import { parseMerchantFeatureSettingsPatchBody } from './parse-feature-settings-patch-body';
 import { resolveFeatureSettingsAccess } from './resolve-feature-settings-access';
+import { saveZohoRefreshToken } from './save-zoho-refresh-token';
 
 export function createPutFeatureSettings(
   revalidateMerchantFeatureCaches: MerchantFeatureCacheRevalidator
@@ -120,6 +122,21 @@ export function createPutFeatureSettings(
           sanitizedSettings.custom_settings,
           existingSettings?.custom_settings
         );
+      const extractedZoho = extractZohoCampaignSecrets(
+        sanitizedSettings.custom_settings
+      );
+      sanitizedSettings.custom_settings = extractedZoho.customSettings;
+      const zohoSave = await saveZohoRefreshToken(
+        auth.supabase,
+        access.merchantId,
+        extractedZoho.refreshToken
+      );
+      if (!zohoSave.ok) {
+        return jsonNoStore(
+          { error: 'Failed to save settings' },
+          { status: zohoSave.status }
+        );
+      }
       const completeSettings = {
         ...defaultMerchantFeatureSettings,
         ...sanitizedSettings,

@@ -15,7 +15,8 @@
 --
 -- The dashboard shows "configured / not configured". That needs presence
 -- without value, so `get_merchant_integration_secret_presence` returns four
--- booleans to the owner or an active staff member of that exact merchant.
+-- booleans to the owner, or to staff holding settings, marketing or dashboard
+-- view permission for that exact merchant (the same gate as the settings route).
 --
 -- Not changed here (see PR description): `custom_settings` (holds Zoho
 -- Campaigns tokens) stays readable, and any column added to this table later
@@ -63,7 +64,15 @@ BEGIN
   IF COALESCE((SELECT auth.role()), '') <> 'authenticated'
     OR (SELECT auth.uid()) IS NULL
     OR p_merchant_id IS NULL
-    OR public.has_merchant_access(p_merchant_id) IS NOT TRUE THEN
+    OR NOT (
+      EXISTS (
+        SELECT 1 FROM public.merchants AS m
+        WHERE m.id = p_merchant_id AND m.user_id = (SELECT auth.uid())
+      )
+      OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'settings', 'view')
+      OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'marketing', 'view')
+      OR public.check_staff_permission((SELECT auth.uid()), p_merchant_id, 'dashboard', 'view')
+    ) THEN
     RETURN NULL;
   END IF;
 
@@ -97,9 +106,9 @@ ALTER FUNCTION public.get_merchant_integration_secret_presence(uuid)
   OWNER TO postgres;
 
 COMMENT ON FUNCTION public.get_merchant_integration_secret_presence(uuid) IS
-  'Returns only whether each ad-platform secret is set (booleans) for the owner or an active staff member of the merchant; never the values.';
+  'Returns only whether each ad-platform secret is set (booleans) for the owner or staff with settings, marketing or dashboard view permission; never the values.';
 
 REVOKE ALL ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
-  TO authenticated, service_role;
+  TO authenticated;

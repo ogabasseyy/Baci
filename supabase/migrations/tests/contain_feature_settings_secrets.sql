@@ -70,8 +70,7 @@ BEGIN
   -- Presence RPC: authenticated only.
   IF has_function_privilege('anon', 'public.get_merchant_integration_secret_presence(uuid)', 'EXECUTE')
      OR has_function_privilege('public', 'public.get_merchant_integration_secret_presence(uuid)', 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', 'public.get_merchant_integration_secret_presence(uuid)', 'EXECUTE')
-     OR NOT has_function_privilege('service_role', 'public.get_merchant_integration_secret_presence(uuid)', 'EXECUTE') THEN
+     OR NOT has_function_privilege('authenticated', 'public.get_merchant_integration_secret_presence(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'R2: presence RPC grants are wrong';
   END IF;
 END $$;

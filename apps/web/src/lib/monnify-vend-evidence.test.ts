@@ -14,7 +14,7 @@ describe('hasMonnifyVendEvidence', () => {
     { TransactionReference: 'MFBP-1' },
     { response_body: { vend_status: 'FAILED' } },
     { ResponseBody: { Status: 'PENDING' } },
-    { reference: 'MFBP-1' },
+    { responseBody: { reference: 'MFBP-1' } },
   ])('sees vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(true);
   });
@@ -27,6 +27,7 @@ describe('hasMonnifyVendEvidence', () => {
     { responseBody: { reason: 'Low balance' } },
     { responseBody: { vendStatus: '  ', vendReference: null } },
     { status: 400, error: 'Bad Request' },
+    { reference: 'BACI-REF-123', responseMessage: 'Insufficient balance' },
   ])('sees no vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(false);
   });

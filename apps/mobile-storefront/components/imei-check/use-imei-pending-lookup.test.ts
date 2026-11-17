@@ -64,6 +64,35 @@ describe('useImeiPendingLookup', () => {
     ).resolves.toBeNull();
   });
 
+  it('hands the saved key that started the lookup to its final answer', async () => {
+    mockPollImeiLookup.mockResolvedValue({ kind: 'error', error: 'Failed' });
+    const request = {
+      key: '22222222-2222-4222-8222-222222222222',
+      purchase: 'imei-credit|user-1||smartphone|blacklist|abc',
+    };
+    const { result } = renderHook(() =>
+      useImeiPendingLookup({
+        accessToken: 'token',
+        apiBaseUrl: 'https://shop.example.com',
+        customerId: 'customer-1',
+        merchantId: 'merchant-1',
+        userId: 'user-1',
+      })
+    );
+
+    await act(async () => {
+      await result.current.start({
+        lookupId: '11111111-1111-4111-8111-111111111111',
+        pollAfterMs: 0,
+        tier: 'blacklist',
+        request,
+      });
+    });
+
+    await waitFor(() => expect(result.current.terminal?.kind).toBe('error'));
+    expect(result.current.terminal?.request).toEqual(request);
+  });
+
   it('continues low-frequency polling for a stale restored lookup', async () => {
     jest.useFakeTimers();
     const key = pendingImeiStorageKey('merchant-1', 'customer-1');

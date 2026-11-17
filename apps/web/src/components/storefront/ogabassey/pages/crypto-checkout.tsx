@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
+import { asRoute } from '@/lib/routes';
 import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import {
   ShieldCheck,
@@ -244,8 +245,10 @@ export function CryptoCheckoutPage() {
         successQuery.set('trackingToken', cryptoData.trackingToken);
       }
       router.push(
-        stashPrivateParamsForNavigation(
-          `/${slug}/order-success?${successQuery.toString()}`
+        asRoute(
+          stashPrivateParamsForNavigation(
+            `/${slug}/order-success?${successQuery.toString()}`
+          )
         )
       );
     };

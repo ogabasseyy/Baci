@@ -30,6 +30,7 @@ import {
   OGABASSEY_UNVERIFIED_COMMERCE_ACTION,
   OGABASSEY_UNVERIFIED_MUTATION_ACTION,
   OGABASSEY_UNVERIFIED_STORE_PURCHASE,
+  resolveChainPerProviderTimeoutMs,
 } from './ogabassey-model-providers';
 
 const PER_PROVIDER_TIMEOUT_MS = 6_000;
@@ -201,7 +202,11 @@ export async function runOgabasseyCatalogAgent(options: {
           content: message.content.slice(0, 4_000),
         })),
       overallTimeoutMs: Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
-      perProviderTimeoutMs: PER_PROVIDER_TIMEOUT_MS,
+      perProviderTimeoutMs: resolveChainPerProviderTimeoutMs(
+        Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
+        providers.length,
+        PER_PROVIDER_TIMEOUT_MS
+      ),
       providerOptions: OGABASSEY_MODEL_PROVIDER_OPTIONS,
       stopWhen: catalogAgentStopWhen,
       system:

@@ -11,7 +11,7 @@ export type CatalogChatMessage = {
 };
 
 const BUDGET_OVERRIDE_CUE =
-  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|more\s+expensive|over\s+(?:my\s+|the\s+)?budget|above\s+(?:my\s+|the\s+)?budget|(?:over|above)\s+(?:₦|ngn\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|thousand|[km]))?)\b/i;
+  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|more\s+expensive|over\s+(?:my\s+|the\s+)?budget|above\s+(?:my\s+|the\s+)?budget|(?:over|above)\s+(?:(?:₦|ngn\s*)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|thousand|[km])\b)?|(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:million|thousand|[km]|naira|ngn)\b|\d{1,3}(?:,\d{3})+(?:\.\d+)?(?=\s|$|[.,!?])))/i;
 
 const CONTINUATION_FOLLOW_UP_CUE =
   /\b(?:it|this|that|these|those|one|ones|same|still|instead|cheaper|less|more|better|over-ear|wireless|options?|another|what\s+about|how\s+about)\b/i;
@@ -181,11 +181,7 @@ export function filterSerializedSearchResultByBudget(
     const filtered = filterToolResultByBudget('searchProducts', parsed, budget);
     return JSON.stringify(filtered);
   } catch {
-    return JSON.stringify({
-      products: [],
-      total: 0,
-      error: 'Unable to validate tool results against budget',
-    });
+    return JSON.stringify({ products: [], total: 0 });
   }
 }
 
@@ -202,12 +198,10 @@ export function filterSerializedDetailsResultByBudget(
       budget
     );
     if (filtered === null) {
-      return JSON.stringify({ error: 'Product exceeds user budget' });
+      return JSON.stringify({ available: false });
     }
     return rawJson;
   } catch {
-    return JSON.stringify({
-      error: 'Unable to validate product against budget',
-    });
+    return JSON.stringify({ available: false });
   }
 }

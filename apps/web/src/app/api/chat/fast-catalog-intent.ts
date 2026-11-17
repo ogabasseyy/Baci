@@ -67,7 +67,7 @@ function searchText(text: string): string {
     .replace(/\ball\s+(?:brands?|models?)\b/gi, ' ')
     .replace(/\bbrands\b/gi, ' ')
     .replace(
-      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|sell|carry|best|good|great|cheap|affordable|gaming|camera|with|under|actually|instead|about|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|got|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
+      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|sell|carry|best|good|great|cheap|affordable|gaming|camera|with|under|actually|instead|about|smartphones?|phones?|laptops?|notebooks?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|got|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
       ' '
     )
     .replace(/\bbattery\b(?!\s+(?:charger|case)\b)/gi, ' ')

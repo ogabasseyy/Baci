@@ -688,10 +688,9 @@ describe('runOgabasseyCatalogAgent', () => {
     expect(searchSerialized).toEqual({
       products: [],
       total: 0,
-      error: 'Unable to validate tool results against budget',
     });
     expect(detailsSerialized).toEqual({
-      error: 'Unable to validate product against budget',
+      available: false,
     });
   });
 
@@ -1013,5 +1012,69 @@ describe('runOgabasseyCatalogAgent', () => {
       });
       expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
     }
+  });
+
+  it('rejects short bare prices after price cues, preserves budget across non-price over filters, and reserves time for DeepSeek fallback', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const overBudgetLaptop = {
+      ...sampleProduct,
+      id: 'mac-over-spec',
+      name: 'Apple MacBook Pro M3 512GB',
+      price: 2_600_000,
+      slug: 'apple-macbook-pro-m3-512gb',
+    };
+
+    // Short (<4 digit) cued bare price like "costs 999" must fail closed
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return { text: 'Apple MacBook Air M2 costs 999.' };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Non-price "over 512GB" follow-up preserves existing 2m cap
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct, overBudgetLaptop],
+        total: 2,
+      });
+      return { text: 'Apple MacBook Air M2 is ₦1,450,000.' };
+    });
+    const specFollowUpResult = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [
+        { role: 'user', content: 'Show laptops under ₦2m' },
+        { role: 'assistant', content: 'Checking laptops under ₦2,000,000.' },
+        { role: 'user', content: 'Show laptops with storage over 512GB' },
+      ],
+    });
+    expect(specFollowUpResult?.events[0]?.products.map((p) => p.id)).toEqual([
+      'mac-1',
+    ]);
+
+    // Three-provider chain divides overall budget evenly so DeepSeek stays reachable
+    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+    vi.stubEnv('DEEPSEEK_API_KEY', 'test-deepseek-key');
+    mocks.generateText.mockImplementation(
+      async (options: { model: { modelId: string } }) => {
+        if (options.model.modelId !== 'deepseek-flash') {
+          throw new Error(`${options.model.modelId} timed out`);
+        }
+        reportToolResult?.('searchProducts', {
+          products: [sampleProduct],
+          total: 1,
+        });
+        return { text: 'Apple MacBook Air M2 is ₦1,450,000.' };
+      }
+    );
+    const threeProviderResult = await runOgabasseyCatalogAgent(baseOptions());
+    expect(threeProviderResult?.text).toBe(
+      'Apple MacBook Air M2 is ₦1,450,000.'
+    );
+    expect(
+      mocks.generateText.mock.calls.slice(-3).map(([c]) => c.model.modelId)
+    ).toEqual(['gpt-6-luna', 'muse-ember-1.0', 'deepseek-flash']);
   });
 });

@@ -84,3 +84,14 @@ export function getOgabasseyPreferredProviders(
 
   return providers;
 }
+
+export function resolveChainPerProviderTimeoutMs(
+  overallTimeoutMs: number,
+  providerCount: number,
+  maxPerProviderTimeoutMs = 6_000
+): number {
+  if (overallTimeoutMs <= 0) return 0;
+  const count = Math.max(1, providerCount);
+  const share = Math.max(1_000, Math.floor(overallTimeoutMs / count));
+  return Math.min(overallTimeoutMs, maxPerProviderTimeoutMs, share);
+}

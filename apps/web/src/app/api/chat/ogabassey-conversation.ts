@@ -9,6 +9,7 @@ import {
   OGABASSEY_NEGOTIATION,
   OGABASSEY_UNVERIFIED_COMMERCE_ACTION,
   OGABASSEY_UNVERIFIED_STORE_PURCHASE,
+  resolveChainPerProviderTimeoutMs,
 } from './ogabassey-model-providers';
 import { createStaticChatFallbackResponse } from './route-helpers';
 
@@ -133,7 +134,11 @@ export async function runOgabasseyConversation(options: {
         'Do not claim to have performed an action. For current details or offers, direct ' +
         'the customer to the storefront or store support.',
       maxOutputTokens: 256,
-      perProviderTimeoutMs: PER_PROVIDER_TIMEOUT_MS,
+      perProviderTimeoutMs: resolveChainPerProviderTimeoutMs(
+        Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
+        providers.length,
+        PER_PROVIDER_TIMEOUT_MS
+      ),
       overallTimeoutMs: Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
       providerOptions: OGABASSEY_MODEL_PROVIDER_OPTIONS,
       acceptResult: (text) => {

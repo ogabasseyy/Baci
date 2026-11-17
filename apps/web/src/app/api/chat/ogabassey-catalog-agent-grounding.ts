@@ -25,6 +25,8 @@ const USER_BUDGET_MENTION_PATTERN =
   /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:(million|thousand|[km])\b|(?=(?:\s*(?:naira|ngn|₦))))|(?:under|below|within|up\s+to|at\s+most|max(?:imum)?|budget(?:\s+(?:of|is))?)\s+((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?)/giu;
 
 const BARE_PRICE_CANDIDATE_PATTERN = /\b(\d{4,9})\b/gu;
+const SHORT_CUED_PRICE_PATTERN =
+  /\b(?:costs?|priced?\s+at|retails?\s+(?:at|for)|selling\s+(?:at|for)|yours\s+for)\s+(\d{1,3}(?:\.\d+)?)\b/giu;
 const NON_PRICE_SPEC_SUFFIX_PATTERN =
   /^\s*(?:mah|hz|khz|mhz|ghz|nits|ppi|rpm|gb|tb|mb|kb|mp|mm|cm|w|p|x)\b/i;
 const RESOLUTION_SPEC_SUFFIX_PATTERN =
@@ -161,6 +163,28 @@ function validatePriceSpans(
     if (isBareNonPriceSpec(text, start, end, amount)) continue;
     spans.push({ start, end });
 
+    if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
+      continue;
+    }
+    if (!onMatchedAmount(start, amount)) {
+      return { valid: false, spans };
+    }
+  }
+
+  for (const match of text.matchAll(SHORT_CUED_PRICE_PATTERN)) {
+    const rawNumber = match[1];
+    if (!rawNumber) continue;
+    const numberOffset = match[0].lastIndexOf(rawNumber);
+    const start = (match.index ?? 0) + Math.max(0, numberOffset);
+    const end = start + rawNumber.length;
+    if (spans.some((span) => start >= span.start && end <= span.end)) {
+      continue;
+    }
+    const amount = Math.round(Number(rawNumber));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { valid: false, spans };
+    }
+    spans.push({ start, end });
     if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
       continue;
     }

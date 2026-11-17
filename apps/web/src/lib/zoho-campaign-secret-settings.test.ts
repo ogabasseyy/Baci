@@ -92,6 +92,6 @@ describe('extractZohoCampaignSecrets', () => {
       customSettings: undefined,
       refreshToken: undefined,
     });
-    expect(extractZohoCampaignSecrets(null).customSettings).toBeNull();
+    expect(extractZohoCampaignSecrets({}).customSettings).toEqual({});
   });
 });

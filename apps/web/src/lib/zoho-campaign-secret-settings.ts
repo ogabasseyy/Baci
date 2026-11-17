@@ -20,7 +20,7 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export type ZohoCustomSettings = Record<string, unknown> | null | undefined;
+export type ZohoCustomSettings = Record<string, unknown> | undefined;
 
 export interface ExtractedZohoSecrets {
   /** custom_settings with every Zoho token key removed. */

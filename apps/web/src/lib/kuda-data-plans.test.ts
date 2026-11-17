@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkProvider } from './kuda';
+import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from './kuda-bill-item-price-messages';
 import {
   clearKudaDataPlanCacheForTests,
   resolveKudaDataPlanForPurchase,
@@ -64,21 +65,55 @@ describe('resolveKudaDataPlanForPurchase', () => {
     });
   });
 
-  it('keeps the submitted package code when provider refresh fails', async () => {
-    mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout'));
+  describe('bugfix: a saved 100x data price was trusted when Kuda was down', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-    await expect(
-      resolveKudaDataPlanForPurchase({
+    it.each([
+      [
+        'fails',
+        () =>
+          mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout')),
+      ],
+      ['is empty', () => mockGetDataProviders.mockResolvedValueOnce([])],
+    ])('fails closed with no recent plan list when Kuda %s', async (_label, breakKuda) => {
+      breakKuda();
+
+      await expect(
+        resolveKudaDataPlanForPurchase({
+          amount: 350000,
+          dataPlanCode: 'MTN-35GB-MONTHLY',
+          networkProvider: NetworkProvider.MTN,
+        })
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    });
+
+    it('keeps rejecting stale prices with the last good plan list', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      await resolveKudaDataPlanForPurchase({
         amount: 3500,
         dataPlanCode: 'MTN-35GB-MONTHLY',
         networkProvider: NetworkProvider.MTN,
-      })
-    ).resolves.toMatchObject({
-      amount: 3500,
-      itemCode: 'MTN-35GB-MONTHLY',
-      originalDataPlanCode: 'MTN-35GB-MONTHLY',
-      providerName: 'MTN',
-      resolvedFrom: 'exact_item_code',
+      });
+      vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+      mockGetDataProviders.mockRejectedValue(new Error('Kuda timeout'));
+
+      await expect(
+        resolveKudaDataPlanForPurchase({
+          amount: 350000,
+          dataPlanCode: 'MTN-35GB-MONTHLY',
+          networkProvider: NetworkProvider.MTN,
+        })
+      ).rejects.toThrow('Data bundle amount changed');
+      await expect(
+        resolveKudaDataPlanForPurchase({
+          amount: 3500,
+          dataPlanCode: 'MTN-35GB-MONTHLY',
+          networkProvider: NetworkProvider.MTN,
+        })
+      ).resolves.toMatchObject({ amount: 3500 });
     });
   });
 

@@ -246,7 +246,18 @@ describe('preparePendingVtuTransaction', () => {
     clearKudaDataPlanCacheForTests();
     clearKudaBillItemPriceCacheForTests();
     mockGetDataProviders.mockResolvedValue([]);
-    mockGetBillersByType.mockResolvedValue([]);
+    // A reachable Kuda price list without the tested items: the price
+    // recheck passes (an empty list now fails closed).
+    mockGetBillersByType.mockResolvedValue([
+      {
+        billerId: 'other',
+        billerName: 'Other biller',
+        billerType: 'Other',
+        categoryId: 'other',
+        categoryName: 'Other',
+        billItems: [],
+      },
+    ]);
     mockGetMonnifyBillers.mockResolvedValue([
       {
         billerCategoryCode: 'AIRTIME',

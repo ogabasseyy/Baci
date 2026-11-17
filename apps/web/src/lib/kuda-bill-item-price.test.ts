@@ -224,28 +224,39 @@ describe('assertKudaBillItemPriceCurrent', () => {
       );
     });
 
-    it('fails closed for every bill type except open-amount electricity', async () => {
+    it.each([
+      ['betting', 'KUD-BET-1'],
+      ['electricity', 'KUD-ELE-EKED-002'],
+    ])('fails %s closed with no list from the past day', async (type, code) => {
       mockGetBillersByCategory.mockResolvedValue([]);
 
       await expect(
         assertKudaBillItemPriceCurrent({
           amount: 1000,
-          billItemIdentifier: 'KUD-BET-1',
-          type: 'betting',
+          billItemIdentifier: code,
+          type,
         })
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
-    it('lets open-amount bill types continue with no list', async () => {
-      mockGetBillersByCategory.mockResolvedValue([]);
-
+    it('waits 30 seconds before asking Kuda again after a failure', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
       await expect(
-        assertKudaBillItemPriceCurrent({
-          amount: 5000,
-          billItemIdentifier: 'KUD-ELE-EKED-002',
-          type: 'electricity',
-        })
+        assertKudaBillItemPriceCurrent(superPackage)
+      ).rejects.toThrow();
+      await expect(
+        assertKudaBillItemPriceCurrent(superPackage)
+      ).rejects.toThrow();
+      expect(mockGetBillersByCategory).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date('2026-11-17T10:00:31Z'));
+      mockGetBillersByCategory.mockResolvedValue([startimes()]);
+      await expect(
+        assertKudaBillItemPriceCurrent(superPackage)
       ).resolves.toBeUndefined();
+      expect(mockGetBillersByCategory).toHaveBeenCalledTimes(2);
     });
 
     it('ignores a last good list older than a day', async () => {

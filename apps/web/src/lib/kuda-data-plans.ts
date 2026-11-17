@@ -5,6 +5,7 @@ import {
   getDataProviders,
   type NetworkProvider,
 } from '@/lib/kuda';
+import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-messages';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -23,9 +24,13 @@ export interface ResolvedKudaDataPlan {
   resolvedFrom: 'exact_item_code' | 'provider_amount';
 }
 
+/** Same window as the bill price recheck: apps cache plan lists a day. */
+const DATA_PLAN_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
+
 let dataProvidersCache:
   | {
       expiresAt: number;
+      loadedAt: number;
       providers: Biller[];
     }
   | undefined;
@@ -101,15 +106,35 @@ function providerMatchesNetwork(
   return normalizedProviderName.includes(normalizedNetwork);
 }
 
-async function loadDataProviders() {
+/**
+ * The current Kuda data plans, or the last good list from the past day when
+ * Kuda fails or answers with an empty list. Null when neither exists: the
+ * caller must not trust the client's amount then, since apps may still hold
+ * plan prices from before Kuda's kobo amounts were converted (100x).
+ */
+async function loadDataProviders(): Promise<Biller[] | null> {
   const now = Date.now();
   if (dataProvidersCache && dataProvidersCache.expiresAt > now) {
     return dataProvidersCache.providers;
   }
+  const lastGood =
+    dataProvidersCache &&
+    now - dataProvidersCache.loadedAt < DATA_PLAN_LAST_GOOD_MS
+      ? dataProvidersCache.providers
+      : null;
 
-  const providers = await getDataProviders();
+  let providers: Biller[];
+  try {
+    providers = await getDataProviders();
+  } catch {
+    return lastGood;
+  }
+  if (providers.length === 0) {
+    return lastGood;
+  }
   dataProvidersCache = {
     expiresAt: now + DATA_PLAN_CACHE_TTL_MS,
+    loadedAt: now,
     providers,
   };
   return providers;
@@ -170,15 +195,12 @@ export async function resolveKudaDataPlanForPurchase({
     throw new Error('Data plan code is required for data purchases');
   }
 
-  let providers: Biller[];
-  try {
-    providers = await loadDataProviders();
-  } catch {
-    return mapUnverifiedDataPlan({
-      amount,
-      originalDataPlanCode,
-      providerName: networkProvider,
-    });
+  const providers = await loadDataProviders();
+  if (providers === null) {
+    // Data bundles are only sold through Kuda, so with its plan list down
+    // the purchase could not go through anyway; failing here stops a saved
+    // 100x price from being charged.
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   const selectedProviderByCode =

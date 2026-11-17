@@ -15,16 +15,18 @@ const PRICE_LIST_CACHE_TTL_MS = 60_000;
  * instance has no last good list; it then fails closed below.
  */
 const PRICE_LIST_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
-/** Kuda bill types whose customers type their own amount. */
-const OPEN_AMOUNT_BILL_TYPES = new Set(['electricity']);
+/** After a failed or empty fetch, wait this long before asking Kuda again. */
+const PRICE_LIST_RETRY_AFTER_MS = 30_000;
 
 const priceListCache = new Map<
   string,
   { billers: Biller[]; expiresAt: number; loadedAt: number }
 >();
+const lastFailedFetchAt = new Map<string, number>();
 
 export function clearKudaBillItemPriceCacheForTests() {
   priceListCache.clear();
+  lastFailedFetchAt.clear();
 }
 
 /**
@@ -42,11 +44,16 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
     cached && now - cached.loadedAt < PRICE_LIST_LAST_GOOD_MS
       ? cached.billers
       : null;
+  const failedAt = lastFailedFetchAt.get(type);
+  if (failedAt !== undefined && now - failedAt < PRICE_LIST_RETRY_AFTER_MS) {
+    return lastGood;
+  }
 
   let billers: Biller[];
   try {
     billers = await getBillersByCategory(type);
   } catch (error) {
+    lastFailedFetchAt.set(type, now);
     logger.warn({
       message: 'Kuda price list unavailable',
       error: error instanceof Error ? error.message : String(error),
@@ -56,6 +63,7 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
     return lastGood;
   }
   if (billers.length === 0) {
+    lastFailedFetchAt.set(type, now);
     logger.warn({
       message: 'Kuda price list came back empty',
       hasLastGoodList: lastGood !== null,
@@ -64,6 +72,7 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
     return lastGood;
   }
 
+  lastFailedFetchAt.delete(type);
   priceListCache.set(type, {
     billers,
     expiresAt: now + PRICE_LIST_CACHE_TTL_MS,
@@ -116,8 +125,8 @@ function priceMatches(item: BillItem, amount: number) {
  * while a stale 100x amount (which matches none) is still caught.
  * Open-amount and unknown items pass. If no price list is available (Kuda
  * down or empty, with no good list from the past day in this server
- * instance), every bill type fails closed except open-amount electricity,
- * which continues as the data check does.
+ * instance), every bill type fails closed, as the data check now does.
+ * After a failed fetch Kuda is not asked again for 30 seconds.
  */
 export async function assertKudaBillItemPriceCurrent({
   amount,
@@ -132,10 +141,9 @@ export async function assertKudaBillItemPriceCurrent({
 }): Promise<void> {
   const billers = await loadPriceList(type);
   if (billers === null) {
-    if (!OPEN_AMOUNT_BILL_TYPES.has(type)) {
-      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
-    }
-    return;
+    // Every Kuda bill type fails closed: these purchases go through Kuda,
+    // so with its price list down they would most likely fail anyway.
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   const listing = billers

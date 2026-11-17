@@ -82,15 +82,15 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
       'apps/web/src/scripts/process-merchant-onboarding-emails.ts',
+      'apps/web/src/scripts/process-order-cancellation-side-effects.ts',
+      'apps/web/src/scripts/process-order-notifications.ts',
+      'apps/web/src/scripts/publish-scheduled-posts.ts',
     ]);
     expect(manifest.authority.servicePaths).toEqual([
       ...eventPipelineAuthorityServicePaths,
     ]);
     expect(manifest.authority.operationalServiceImporters).toEqual([
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
-      'apps/web/src/scripts/process-order-cancellation-side-effects.ts',
-      'apps/web/src/scripts/process-order-notifications.ts',
-      'apps/web/src/scripts/publish-scheduled-posts.ts',
     ]);
   });
 

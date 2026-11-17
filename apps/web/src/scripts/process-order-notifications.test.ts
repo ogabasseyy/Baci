@@ -31,9 +31,9 @@ import { runOrderNotificationsCli } from './process-order-notifications';
 describe('process-order-notifications CLI', () => {
   it('returns 1 when claim RPC fails and 0 when no rows are claimed', async () => {
     mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
-    await expect(runOrderNotificationsCli([])).resolves.toBe(1);
+    await expect(runOrderNotificationsCli(5)).resolves.toBe(1);
 
     mockRpc.mockResolvedValueOnce({ data: [], error: null });
-    await expect(runOrderNotificationsCli([])).resolves.toBe(0);
+    await expect(runOrderNotificationsCli(5)).resolves.toBe(0);
   });
 });

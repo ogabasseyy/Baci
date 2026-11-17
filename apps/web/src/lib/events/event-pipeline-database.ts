@@ -180,10 +180,11 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
       onboardingEmailWorkerAuthority.worker,
+      ...vpsCronWorkerAuthority.serviceImporters,
     ],
     servicePaths: eventPipelineAuthorityServicePaths,
-    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    operationalServiceImporters: ['apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts', ...vpsCronWorkerAuthority.serviceImporters],
+    // biome-ignore format: compact list preserves the 300-line module gate.
+    operationalServiceImporters: ['apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts'],
   },
   callers: runtimeCallers,
   frozenAuthoritySources: frozenEventPipelineAuthoritySources,

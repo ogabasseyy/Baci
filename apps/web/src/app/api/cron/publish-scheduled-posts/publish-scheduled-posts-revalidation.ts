@@ -23,6 +23,37 @@ export type RevalidationResult = {
   failedMerchants: string[];
 };
 
+function chunkArray<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function resolveStandaloneRevalidationUrl(): string {
+  const rawBaseUrl =
+    process.env.BACI_WEB_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!rawBaseUrl) {
+    throw new Error(
+      'BACI_WEB_BASE_URL or NEXT_PUBLIC_APP_URL is required for standalone blog revalidation'
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(rawBaseUrl);
+  } catch {
+    throw new Error('Standalone revalidation app URL is invalid');
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    throw new Error(
+      'Standalone revalidation app URL must be credential-free HTTPS'
+    );
+  }
+  return `${parsed.origin}/api/internal/revalidate-blog`;
+}
+
 export function groupPostsByMerchant(scheduledPosts: ScheduledPost[]) {
   const postsByMerchant = new Map<string, MerchantScheduledPosts>();
 
@@ -72,34 +103,48 @@ export async function revalidateScheduledPostsByMerchant(
         // trigger the authenticated /api/internal/revalidate-blog endpoint so
         // Next.js 'use cache' entries revalidate, then purge Cloudflare edge URLs.
         const internalSecret = process.env.INTERNAL_API_SECRET?.trim();
-        const appUrl =
-          process.env.NEXT_PUBLIC_APP_URL?.trim() || 'https://usebaci.com';
         if (!internalSecret) {
           throw new Error(
             'INTERNAL_API_SECRET is required for standalone blog revalidation'
           );
         }
-        const internalUrl = `${appUrl.replace(/\/$/, '')}/api/internal/revalidate-blog`;
-        const internalResponse = await fetch(internalUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${internalSecret}`,
-          },
-          body: JSON.stringify({
-            merchantId,
-            identifiers: blogRevalidation.identifiers,
-            canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
-            listingCategories: Array.from(merchantPosts.categories),
-            listingPages: merchantPosts.listingPages,
-            postSlugs: merchantPosts.postSlugs,
-          }),
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (!internalResponse.ok) {
-          throw new Error(
-            `Internal blog revalidation failed with status ${internalResponse.status}`
-          );
+        const internalUrl = resolveStandaloneRevalidationUrl();
+        const identifierChunks = chunkArray(blogRevalidation.identifiers, 20);
+        const categoryChunks = chunkArray(
+          Array.from(merchantPosts.categories),
+          50
+        );
+        const pageChunks = chunkArray(merchantPosts.listingPages, 50);
+        const slugChunks = chunkArray(merchantPosts.postSlugs, 250);
+        const batchCount = Math.max(
+          1,
+          identifierChunks.length,
+          categoryChunks.length,
+          pageChunks.length,
+          slugChunks.length
+        );
+        for (let i = 0; i < batchCount; i++) {
+          const internalResponse = await fetch(internalUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${internalSecret}`,
+            },
+            body: JSON.stringify({
+              merchantId,
+              identifiers: identifierChunks[i] ?? identifierChunks[0],
+              canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
+              listingCategories: categoryChunks[i] ?? [],
+              listingPages: pageChunks[i] ?? [],
+              postSlugs: slugChunks[i] ?? slugChunks[0],
+            }),
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!internalResponse.ok) {
+            throw new Error(
+              `Internal blog revalidation failed with status ${internalResponse.status}`
+            );
+          }
         }
 
         const purgeIdentifiers = Array.from(

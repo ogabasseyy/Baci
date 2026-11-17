@@ -87,6 +87,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
         published: [],
         skipped,
         warnings,
+        ...(reservationRecovery ? { reservationRecovery } : {}),
       });
     }
 
@@ -232,6 +233,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
         published: [],
         skipped,
         warnings,
+        ...(reservationRecovery ? { reservationRecovery } : {}),
       });
     }
 

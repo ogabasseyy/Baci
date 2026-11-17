@@ -6,12 +6,12 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getMerchantBlogRevalidationContext } from '@/lib/get-merchant-blog-cache-identifiers';
 import {
   blogReleasePostParamsSchema,
-  buildReleaseReservationPayloadDigest,
   cancelBlogReleaseSchema,
   reserveBlogReleaseSchema,
 } from '@/schemas/blog-release-reservation';
 import { readRpcMutationError } from '../../persist-blog-post-mutation';
 import type { RouteParams } from '../route-params';
+import { buildReleaseReservationPayloadDigest } from './payload-digest';
 
 async function authorizeMerchantBlogReleaseRequest(
   request: NextRequest,

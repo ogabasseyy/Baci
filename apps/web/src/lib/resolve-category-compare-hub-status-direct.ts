@@ -101,6 +101,7 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
     categories,
     category,
     merchantId: merchant.id,
+    signal: input.signal,
   });
 
   if (productGroups.some((group) => group.inventoryLoadFailed)) {
@@ -110,12 +111,6 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
   const compareLinks = buildCategoryCompareHubLinks({
     categoryName: category.name,
     categorySlug: requestedCategorySlug,
-    merchant: {
-      id: merchant.id,
-      slug: merchant.slug,
-      business_name: merchant.business_name ?? merchant.slug,
-      country: merchant.country ?? undefined,
-    } as Parameters<typeof buildCategoryCompareHubLinks>[0]['merchant'],
     productGroups: productGroups.map(
       ({ categoryName, categorySlug, products }) => ({
         categoryName,
@@ -124,7 +119,6 @@ export async function resolveCategoryCompareHubStatusDirect(input: {
       })
     ),
     products: productGroups.flatMap((group) => group.products),
-    inventoryDegraded: false,
     storeUrl: buildStoreUrl({
       slug: merchant.slug,
       custom_domain: snapshot.value.custom_domain ?? undefined,

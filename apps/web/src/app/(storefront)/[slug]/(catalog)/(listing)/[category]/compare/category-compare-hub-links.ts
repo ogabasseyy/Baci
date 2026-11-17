@@ -37,6 +37,7 @@ export function buildCategoryCompareHubProductGroups(input: {
   categories: readonly CompareHubCategoryEntry[];
   category: CompareHubCategoryEntry;
   merchantId: string;
+  signal?: AbortSignal;
 }): Promise<CategoryCompareHubProductGroup[]> {
   const scopedCategories = [
     input.category,
@@ -57,7 +58,11 @@ export function buildCategoryCompareHubProductGroups(input: {
       seenSlugs.add(categorySlug);
 
       return [
-        getCachedProductSemanticInventory(input.merchantId, categorySlug).then(
+        getCachedProductSemanticInventory(
+          input.merchantId,
+          categorySlug,
+          input.signal
+        ).then(
           (products) => ({
             categoryName,
             categorySlug,
@@ -93,7 +98,14 @@ const CATEGORY_COMPARE_HUB_MIN_LINKS_PER_GROUP = 6;
  * "which links does this hub have" — the hard-404 preflight must never judge
  * emptiness by a different criterion than the page that renders (or 404s) it.
  */
-export function buildCategoryCompareHubLinks(data: CategoryCompareHubData) {
+export type CategoryCompareHubLinksInput = Pick<
+  CategoryCompareHubData,
+  'categoryName' | 'categorySlug' | 'productGroups' | 'products' | 'storeUrl'
+>;
+
+export function buildCategoryCompareHubLinks(
+  data: CategoryCompareHubLinksInput
+) {
   const productGroups =
     data.productGroups?.length > 0
       ? data.productGroups

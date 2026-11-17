@@ -1,6 +1,7 @@
 import type { CategoryCompareHubStatus } from '@/app/(storefront)/[slug]/(catalog)/(listing)/[category]/compare/resolve-category-compare-hub-status';
 import { resolveCategoryCompareHubStatusDirect } from '@/lib/resolve-category-compare-hub-status-direct';
 import { SingleFlight } from '@/lib/single-flight';
+import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
 
@@ -163,7 +164,9 @@ export function resolveStorefrontCompareHubStatus(
   }
 
   const normalizedIdentifier = opts.identifier.trim().toLowerCase();
-  const normalizedCategorySlug = opts.categorySlug.trim().toLowerCase();
+  const normalizedCategorySlug =
+    canonicalizeCategorySlug(opts.categorySlug) ??
+    opts.categorySlug.trim().toLowerCase();
   const cacheKey = getCacheKey(normalizedIdentifier, normalizedCategorySlug);
   const cached = getCachedResolution(cacheKey);
   if (cached) {

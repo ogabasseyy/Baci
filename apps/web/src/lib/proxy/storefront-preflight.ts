@@ -278,7 +278,10 @@ export async function runStorefrontPreflight({
     homePathPrefix
   );
   if (canonical.response) return canonical.response;
-  if (canonical.skipHardNotFound) return null;
+  if (canonical.skipHardNotFound) {
+    onPdpConfirmedLive?.();
+    return null;
+  }
 
   return resolveStorefrontPdpHardNotFound(
     request,

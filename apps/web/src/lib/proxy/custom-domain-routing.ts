@@ -163,6 +163,13 @@ async function runCustomDomainRoutingInternal(
     );
   }
   if (pathname.endsWith('.md') && domainMerchantSlug) {
+    const aliasResponse = await runCustomDomainAliasRouting(
+      request,
+      pathname,
+      context
+    );
+    if (aliasResponse) return aliasResponse;
+
     const url = request.nextUrl.clone();
     url.pathname = toLlmApiPath(pathname, domainMerchantSlug);
     return NextResponse.rewrite(url, {
@@ -181,14 +188,12 @@ async function runCustomDomainRoutingInternal(
     },
   });
   if (preflight) {
-    if (preflight.status === 404 || preflight.status === 410) {
-      const aliasResponse = await runCustomDomainAliasRouting(
-        request,
-        pathname,
-        context
-      );
-      if (aliasResponse) return aliasResponse;
-    }
+    const aliasResponse = await runCustomDomainAliasRouting(
+      request,
+      pathname,
+      context
+    );
+    if (aliasResponse) return aliasResponse;
     return preflight;
   }
 

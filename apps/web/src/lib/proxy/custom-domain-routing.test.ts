@@ -232,4 +232,33 @@ describe('custom-domain routing', () => {
     expect(runCustomDomainAliasRouting).toHaveBeenCalledTimes(1);
     expect(res.status).toBe(301);
   });
+
+  it('prefers retired-alias 301 over non-404 preflight redirects such as 308', async () => {
+    const context = {
+      domain: 'shop.example',
+      domainMerchantSlug: 'new-shop',
+      normalizedRequestHost: 'shop.example',
+      requestHostHadWww: false,
+      domainPathSegments: ['old-shop', 'iphone-16'],
+    };
+    vi.mocked(runStorefrontPreflight).mockResolvedValueOnce(
+      NextResponse.redirect('https://shop.example/phones/iphone-16', 308)
+    );
+    vi.mocked(runCustomDomainAliasRouting).mockResolvedValueOnce(
+      NextResponse.redirect('https://shop.example/iphone-16', 301)
+    );
+
+    const res = await runCustomDomainRouting(
+      new NextRequest('https://shop.example/old-shop/iphone-16', {
+        headers: { accept: 'text/html' },
+      }),
+      '/old-shop/iphone-16',
+      'shop.example',
+      'Mozilla',
+      context
+    );
+
+    expect(runCustomDomainAliasRouting).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(301);
+  });
 });

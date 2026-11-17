@@ -1,3 +1,4 @@
+import { isSettledPrizeOrder } from './is-settled-prize-order';
 import { runCheckoutFinalization } from './run-checkout-finalization';
 import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
 
@@ -11,14 +12,23 @@ export interface CompleteSubmittedOrderParams
 
 /**
  * Runs the REDVAULT post-order branch when it claims the order, then
- * the standard checkout finalization. Returns true when the REDVAULT
+ * the standard checkout finalization. A settled quiz prize skips REDVAULT. Returns true when the REDVAULT
  * branch handled completion and the caller must stop.
  */
 export async function completeSubmittedOrder(
   params: CompleteSubmittedOrderParams
 ): Promise<boolean> {
+  // A settled quiz prize has nothing to pay, so the REDVAULT payment review
+  // must not open for it even when that method was selected on the payment
+  // step; the standard finalization routes it straight to success.
+  const settledPrize = isSettledPrizeOrder({
+    amountDueToGateway: params.orderResponse?.amountDueToGateway,
+    itemsSnapshot: params.itemsSnapshot,
+    paymentStatus: params.order?.payment_status,
+  });
   if (
-    await runRedvaultPostOrderBranch({
+    !settledPrize &&
+    (await runRedvaultPostOrderBranch({
       accountPassword: params.accountPassword,
       address: params.address,
       checkoutGeneration: params.checkoutGeneration,
@@ -38,7 +48,7 @@ export async function completeSubmittedOrder(
       selectedPayment: params.selectedPayment,
       selectedSavedAddressId: params.selectedSavedAddressId,
       snapshot: params.snapshot,
-    })
+    }))
   ) {
     return true;
   }

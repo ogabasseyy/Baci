@@ -165,12 +165,6 @@ export function WalletHeroSection({
                   primaryReady ? (savingsWalletBalance ?? 0) : totalBalance
                 )}
           </Text>
-          {/* A ready PiggyVest wallet shows its own balance only (owner,
-              2026-11-14): refunds mirror into the older store credit, so a
-              second line would count the same money twice. */}
-          {savingsView && !(primaryReady && balanceReady && !primaryUnknown) ? (
-            <WalletHeroStoreCredit balance={storeCredit} />
-          ) : null}
           {primaryUnknown ? (
             <Text style={styles.accountUnavailableMessage}>
               Can’t check your savings balance right now.
@@ -210,6 +204,13 @@ export function WalletHeroSection({
           />
         )}
       </View>
+      {/* A ready PiggyVest wallet shows its own balance only (owner,
+          2026-11-14): refunds mirror into the older store credit, so a
+          second line would count the same money twice. Full width under the
+          row so it stays on one straight line (owner, 2026-11-16). */}
+      {savingsView && !(primaryReady && balanceReady && !primaryUnknown) ? (
+        <WalletHeroStoreCredit balance={storeCredit} />
+      ) : null}
       {lastKnownAccount ? (
         // Under the row, not in the account column, so the balance label
         // keeps its one line (walk 15).

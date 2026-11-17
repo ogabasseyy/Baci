@@ -161,4 +161,10 @@ test('installs the exact worker release before any readiness verification', asyn
   );
   assert.equal(sync.steps[guard].env.COORDINATION_ID, '${{ inputs.coordination_id }}');
   assert.match(readiness.if, /needs\.vps-worker-sync\.result == 'success'/);
+  const migrations = workflow.jobs['db-migrations'];
+  const publication = workflow.jobs['deploy-production'];
+  assert.ok(migrations.needs.includes('vps-drain-readiness'));
+  assert.match(migrations.if, /needs\.vps-drain-readiness\.result == 'success'/);
+  assert.ok(publication.needs.includes('db-migrations'));
+  assert.match(publication.if, /needs\.db-migrations\.result == 'success'/);
 });

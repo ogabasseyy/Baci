@@ -1,7 +1,6 @@
 import { QUIZ_DEFAULT_TIME_PER_QUESTION_SECONDS } from '@baci/shared/constants';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
 import type { QuizEvent } from '@/services/quiz-types';
 import { GadgetPatternBackground } from '../storefront/GadgetPatternBackground';
 import type { createQuizLobbyStyles } from './QuizLobby.styles';
@@ -9,6 +8,7 @@ import { QuizLobbyEventCard } from './QuizLobbyEventCard';
 import { QuizMissionHero } from './QuizMissionHero';
 import { QuizRulesModal } from './QuizRulesModal';
 import { QuizWaitingRoom } from './QuizWaitingRoom';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 type QuizStyles = ReturnType<typeof createQuizLobbyStyles>;
 
@@ -52,7 +52,8 @@ export function QuizEventsList({
   const [rules, setRules] = useState<RulesState>(null);
   const [waitingEvent, setWaitingEvent] = useState<QuizEvent | null>(null);
   const [displayEvents, setDisplayEvents] = useState(events);
-  const { colors, isDark } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
+  const isDark = true;
 
   useEffect(() => {
     setDisplayEvents(events);
@@ -126,27 +127,23 @@ export function QuizEventsList({
             ) : null}
           </View>
         }
+        ListFooterComponent={<QuizMissionHero />}
         ListHeaderComponent={
-          <>
-            <QuizMissionHero />
-            {isSignedIn &&
-            resumeEventId &&
-            onResume &&
-            !displayEvents.some((event) => event.id === resumeEventId) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Recover quiz attempt"
-                accessibilityState={{ disabled: isStarting }}
-                disabled={isStarting}
-                onPress={() => onResume(resumeEventId)}
-                style={[styles.primaryButtonBox, styles.primaryButton]}
-              >
-                <Text style={styles.primaryButtonText}>
-                  Recover quiz attempt
-                </Text>
-              </Pressable>
-            ) : null}
-          </>
+          isSignedIn &&
+          resumeEventId &&
+          onResume &&
+          !displayEvents.some((event) => event.id === resumeEventId) ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Recover quiz attempt"
+              accessibilityState={{ disabled: isStarting }}
+              disabled={isStarting}
+              onPress={() => onResume(resumeEventId)}
+              style={[styles.primaryButtonBox, styles.primaryButton]}
+            >
+              <Text style={styles.primaryButtonText}>Recover quiz attempt</Text>
+            </Pressable>
+          ) : undefined
         }
         onRefresh={onRefresh}
         refreshing={false}

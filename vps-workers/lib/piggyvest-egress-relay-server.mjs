@@ -23,6 +23,10 @@ export const PRODUCTION_UPSTREAM = Object.freeze({
   hostname: 'api.piggyvest.business',
   port: 443,
   readyEvent: 'secureConnect',
+  // PiggyVest allowlists only the VPS IPv4 address, but the API also has AAAA
+  // records: an unpinned connection can leave over IPv6 and be refused with
+  // 401 "Unrecognized Ip Address" (owner, 2026-11-16).
+  family: 4,
 });
 
 const FORWARD_REQUEST_HEADERS = [
@@ -167,6 +171,7 @@ export function createRelayServer({
       const outgoing = upstream.request({
         hostname: upstream.hostname,
         port: upstream.port,
+        family: upstream.family,
         path: target,
         method: request.method,
         headers,

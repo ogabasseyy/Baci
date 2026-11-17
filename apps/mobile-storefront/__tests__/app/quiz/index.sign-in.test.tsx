@@ -9,6 +9,7 @@ jest.mock('expo-router/react-navigation', () => ({
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
+  useIsFocused: () => true,
   useRouter: () => ({ push: mockPush }),
 }));
 jest.mock('@/components/quiz/QuizRouteBackButton', () => ({

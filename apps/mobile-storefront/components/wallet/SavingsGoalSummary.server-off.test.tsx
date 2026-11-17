@@ -183,4 +183,25 @@ describe('SavingsGoalSummary', () => {
     expect(screen.getByText('Goal reached!')).toBeOnTheScreen();
     expect(screen.queryByText(/until|to finish by/)).toBeNull();
   });
+
+  describe('bugfix: the Change pill was red text on dark red and unreadable', () => {
+    it('draws Change as light text on solid red in dark mode', () => {
+      render(
+        <SavingsGoalSummary
+          colors={Colors.dark}
+          goal={goal}
+          onChangeDevice={jest.fn()}
+        />
+      );
+      const pill = screen.getByRole('button', {
+        name: 'Change savings device',
+      });
+      expect(StyleSheet.flatten(pill.props.style).backgroundColor).toBe(
+        Colors.dark.primary
+      );
+      expect(
+        StyleSheet.flatten(screen.getByText('Change').props.style).color
+      ).toBe(Colors.dark.primaryForeground);
+    });
+  });
 });

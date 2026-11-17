@@ -73,11 +73,29 @@ describe('ogabassey-catalog-agent-grounding', () => {
     expect(
       hasGroundedCatalogResultText(
         'Apple MacBook Air M2 supports a 4K display at ₦1,450,000.',
-        macbookEvent,
+        [
+          {
+            ...macbookEvent[0],
+            products: [
+              {
+                ...macbookEvent[0].products[0],
+                description: 'Apple MacBook Air M2 with 4K display support',
+              },
+            ],
+          },
+        ],
         'NGN',
         activeBudget
       )
     ).toBe(true);
+    expect(
+      hasGroundedCatalogResultText(
+        'Apple MacBook Air M2 has 64 GB RAM and a two-year warranty at ₦1,450,000.',
+        macbookEvent,
+        'NGN',
+        activeBudget
+      )
+    ).toBe(false);
   });
 
   it('rejects grouped multi-product price mismatches and validates stock and empty-result budget restatements', () => {

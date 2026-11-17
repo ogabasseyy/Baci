@@ -2,6 +2,7 @@ import type {
   StorefrontAgentUiEvent,
   StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
+import { hasGroundedSpecAndPolicyClaims } from './ogabassey-catalog-agent-attributes';
 import {
   type CatalogBudgetLimit,
   isProductWithinBudget,
@@ -282,6 +283,7 @@ export function hasGroundedCatalogResultText(
   if (!priceCheck.valid) return false;
 
   if (!hasGroundedStockClaims(text, products)) return false;
+  if (!hasGroundedSpecAndPolicyClaims(text, products)) return false;
 
   return true;
 }

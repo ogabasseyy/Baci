@@ -4,6 +4,7 @@ import {
   filterSerializedDetailsResultByBudget,
   filterSerializedSearchResultByBudget,
   filterToolResultByBudget,
+  hasInvalidLatestBudget,
   isProductWithinBudget,
   resolveConversationBudgetLimit,
 } from './ogabassey-catalog-agent-budget';
@@ -50,7 +51,7 @@ describe('ogabassey-catalog-agent-budget', () => {
       )
     ).toBeUndefined();
 
-    // Invalid budget follow-up retains prior valid cap
+    // Invalid budget follow-up returns undefined instead of re-applying a stale cap
     expect(
       resolveConversationBudgetLimit(
         [
@@ -59,7 +60,16 @@ describe('ogabassey-catalog-agent-budget', () => {
         ],
         'NGN'
       )
-    ).toEqual({ amount: 2_000_000, exclusive: true });
+    ).toBeUndefined();
+    expect(
+      hasInvalidLatestBudget(
+        [
+          { role: 'user', content: 'Show laptops below 2m' },
+          { role: 'user', content: 'Can I get one under $500?' },
+        ],
+        'NGN'
+      )
+    ).toBe(true);
   });
 
   it('enforces budget bounds cleanly and fails closed without sentinel leaks on malformed JSON', () => {

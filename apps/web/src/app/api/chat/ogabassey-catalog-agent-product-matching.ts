@@ -22,9 +22,6 @@ const POSITIVE_STORE_OFFERING_PHRASE =
 export const EMPTY_CLAUSE_SPLIT_PATTERN =
   /[.!?\n;]+|\b(?:and|but|however|although|while|though|yet)\b|,\s*/i;
 
-const CLAUSE_SPLIT_PATTERN =
-  /[.!?\n;]+|\b(?:but|however|although)\b|,\s*(?=(?:we|here|try|you|the|check)\b)/i;
-
 const SEGMENT_SUB_SPLIT_PATTERN =
   /[.!?\n;—–]+|\b(?:and|but|or|while|versus|vs)\b|,\s+/gi;
 
@@ -253,7 +250,7 @@ export function hasGroundedProductMentions(
 
   const returnedTokens = collectReturnedProductTokens(events);
   const clauses = text
-    .split(CLAUSE_SPLIT_PATTERN)
+    .split(EMPTY_CLAUSE_SPLIT_PATTERN)
     .map((clause) => clause.trim())
     .filter(Boolean);
 

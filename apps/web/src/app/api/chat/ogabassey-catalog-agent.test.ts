@@ -54,6 +54,8 @@ let reportToolResult:
 describe('runOgabasseyCatalogAgent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.generateText.mockReset();
+    mocks.createTools.mockReset();
     resetProviderCooldowns();
     reportToolResult = undefined;
     mocks.createTools.mockImplementation(
@@ -302,10 +304,15 @@ describe('runOgabasseyCatalogAgent', () => {
     });
     expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
 
-    // Legitimate release year and display spec are not treated as prices
+    // Legitimate release year and tool-verified display spec are not treated as prices
     mocks.generateText.mockImplementationOnce(async () => {
       reportToolResult?.('searchProducts', {
-        products: [sampleProduct],
+        products: [
+          {
+            ...sampleProduct,
+            description: 'Apple MacBook Air M2 with 1080p webcam',
+          },
+        ],
         total: 1,
       });
       return {
@@ -732,10 +739,15 @@ describe('runOgabasseyCatalogAgent', () => {
       expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
     }
 
-    // Display resolution ("4K display") is not flagged as a price
+    // Tool-verified display resolution ("4K display") passes without acting as a price
     mocks.generateText.mockImplementationOnce(async () => {
       reportToolResult?.('searchProducts', {
-        products: [sampleProduct],
+        products: [
+          {
+            ...sampleProduct,
+            description: 'Apple MacBook Air M2 with 4K display support',
+          },
+        ],
         total: 1,
       });
       return {
@@ -827,7 +839,7 @@ describe('runOgabasseyCatalogAgent', () => {
     expect(result?.events[0]?.products[0]?.id).toBe('canon-r10');
   });
 
-  it('requires exact model identity, retains prior valid budgets over invalid follow-ups, and supports DeepSeek-only fallback', async () => {
+  it('requires exact model identity, fails closed on invalid budget follow-ups, and supports DeepSeek-only fallback', async () => {
     const iphone16 = {
       ...sampleProduct,
       category: 'Phones',
@@ -837,13 +849,6 @@ describe('runOgabasseyCatalogAgent', () => {
       price: 1_200_000,
       slug: 'apple-iphone-16',
       stock: 3,
-    };
-    const overBudgetLaptop = {
-      ...sampleProduct,
-      id: 'mac-over',
-      name: 'Apple MacBook Pro M3',
-      price: 2_600_000,
-      slug: 'apple-macbook-pro-m3',
     };
 
     // Returned Apple iPhone 16 must not validate a fabricated "Apple iPhone 15" reply
@@ -862,25 +867,17 @@ describe('runOgabasseyCatalogAgent', () => {
       })
     ).toBeNull();
 
-    // Invalid budget follow-up ("under $500") retains prior valid "below 2m" cap
-    mocks.generateText.mockImplementationOnce(async () => {
-      reportToolResult?.('searchProducts', {
-        products: [sampleProduct, overBudgetLaptop],
-        total: 2,
-      });
-      return { text: 'Apple MacBook Air M2 is ₦1,450,000.' };
-    });
-    const retainedBudgetResult = await runOgabasseyCatalogAgent({
-      ...baseOptions(),
-      messages: [
-        { role: 'user', content: 'Show me laptops below 2m' },
-        { role: 'assistant', content: 'Checking laptops under ₦2,000,000.' },
-        { role: 'user', content: 'Can I get one under $500?' },
-      ],
-    });
-    expect(retainedBudgetResult?.events[0]?.products.map((p) => p.id)).toEqual([
-      'mac-1',
-    ]);
+    // Invalid budget follow-up ("under $500") fails closed without reusing stale cap
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [
+          { role: 'user', content: 'Show me laptops below 2m' },
+          { role: 'assistant', content: 'Checking laptops under ₦2,000,000.' },
+          { role: 'user', content: 'Can I get one under $500?' },
+        ],
+      })
+    ).toBeNull();
 
     // DeepSeek-only configuration uses deepseek:deepseek-flash for read-only search
     vi.unstubAllEnvs();
@@ -1131,5 +1128,30 @@ describe('runOgabasseyCatalogAgent', () => {
         messages: [{ role: 'user', content: 'Show me iPhone options' }],
       })
     ).toBeNull();
+
+    // Ungrounded RAM/warranty attributes fail closed
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 has 64 GB RAM and a two-year warranty for ₦1,450,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Late tool callback from a timed-out attempt does not pollute next attempt
+    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+    let staleAttemptCallback: typeof reportToolResult;
+    mocks.generateText.mockImplementationOnce(async () => {
+      staleAttemptCallback = reportToolResult;
+      throw new Error('OpenAI attempt timed out');
+    });
+    mocks.generateText.mockImplementationOnce(async () => {
+      staleAttemptCallback?.('searchProducts', { products: [], total: 0 });
+      return { text: "Sorry, I couldn't find any laptops." };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
   });
 });

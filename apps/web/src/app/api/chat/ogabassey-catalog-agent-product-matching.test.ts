@@ -67,6 +67,14 @@ describe('ogabassey-catalog-agent-product-matching', () => {
       )
     ).toBe(false);
 
+    // Mixed negated + positive unreturned product joined with "and" must fail
+    expect(
+      hasGroundedProductMentions(
+        "We don't have Apple iPhone 16 and Fairphone 5 is available for ₦1,200,000.",
+        events
+      )
+    ).toBe(false);
+
     // Valid comparison mentioning both genuine products passes
     expect(
       hasGroundedProductMentions(

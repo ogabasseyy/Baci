@@ -59,6 +59,18 @@ function detectProductTopicGroup(text: string): string | undefined {
   return undefined;
 }
 
+export function hasInvalidLatestBudget(
+  messages: CatalogChatMessage[],
+  currencyCode: string
+): boolean {
+  const latestUser = messages
+    .filter((message) => message.role === 'user')
+    .at(-1);
+  if (!latestUser) return false;
+  const parsed = analyzeFastCatalogBudget(latestUser.content, currencyCode);
+  return parsed.hasBudget && (parsed.invalid || !parsed.price);
+}
+
 export function resolveConversationBudgetLimit(
   messages: CatalogChatMessage[],
   currencyCode: string
@@ -71,8 +83,10 @@ export function resolveConversationBudgetLimit(
     latestUser.content,
     currencyCode
   );
-  if (latestBudget.hasBudget && !latestBudget.invalid && latestBudget.price) {
-    return latestBudget.price;
+  if (latestBudget.hasBudget) {
+    return !latestBudget.invalid && latestBudget.price
+      ? latestBudget.price
+      : undefined;
   }
 
   if (BUDGET_OVERRIDE_CUE.test(latestUser.content)) {
@@ -95,11 +109,7 @@ export function resolveConversationBudgetLimit(
       return undefined;
     }
 
-    if (
-      latestBudget.hasBudget ||
-      hasContinuationCue ||
-      (latestGroup && latestGroup === priorGroup)
-    ) {
+    if (hasContinuationCue || (latestGroup && latestGroup === priorGroup)) {
       return budget.price;
     }
 

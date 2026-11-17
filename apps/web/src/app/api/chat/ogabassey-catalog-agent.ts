@@ -13,6 +13,7 @@ import {
   filterSerializedDetailsResultByBudget,
   filterSerializedSearchResultByBudget,
   filterToolResultByBudget,
+  hasInvalidLatestBudget,
   resolveConversationBudgetLimit,
 } from './ogabassey-catalog-agent-budget';
 import {
@@ -166,6 +167,9 @@ export async function runOgabasseyCatalogAgent(options: {
 
   const providers = getOgabasseyPreferredProviders({ includeDeepSeek: true });
   if (providers.length === 0 || options.timeoutMs <= 0) return null;
+  if (hasInvalidLatestBudget(conversationMessages, options.currencyCode)) {
+    return null;
+  }
 
   const budgetLimit = resolveConversationBudgetLimit(
     conversationMessages,
@@ -173,20 +177,25 @@ export async function runOgabasseyCatalogAgent(options: {
   );
 
   const sessionId = `catalog-readonly-${crypto.randomUUID()}`;
-  let presentationCollector = createChatPresentationEventCollector();
-  let toolCallsInAttempt = 0;
+  let activeAttempt = {
+    collector: createChatPresentationEventCollector(),
+    toolCalls: 0,
+  };
 
   const createToolsForAttempt = () => {
-    const collector = createChatPresentationEventCollector();
-    presentationCollector = collector;
-    toolCallsInAttempt = 0;
+    const attempt = {
+      collector: createChatPresentationEventCollector(),
+      toolCalls: 0,
+    };
+    activeAttempt = attempt;
 
     return buildBudgetEnforcedReadOnlyTools(
       sessionId,
       budgetLimit,
       (toolName, filteredResult, context) => {
-        toolCallsInAttempt += 1;
-        collector.capture(toolName, filteredResult, context);
+        if (activeAttempt !== attempt) return;
+        attempt.toolCalls += 1;
+        attempt.collector.capture(toolName, filteredResult, context);
       }
     );
   };
@@ -220,14 +229,14 @@ export async function runOgabasseyCatalogAgent(options: {
         'Never invent products, prices, or stock levels that were not returned by searchProducts or getProductDetails. ' +
         'Never claim to add items to cart, cancel orders, or generate bank accounts. Keep replies brief.',
       acceptResult: (text) => {
-        if (toolCallsInAttempt === 0) return false;
+        if (activeAttempt.toolCalls === 0) return false;
         if (
           OGABASSEY_UNVERIFIED_MUTATION_ACTION.test(text) ||
           READ_ONLY_AGENT_ACTION_CLAIM.test(text)
         ) {
           return false;
         }
-        const events = presentationCollector.getEvents();
+        const events = activeAttempt.collector.getEvents();
         if (events.length === 0) {
           return (
             hasGroundedEmptyCatalogText(
@@ -271,7 +280,7 @@ export async function runOgabasseyCatalogAgent(options: {
 
     return {
       text: result.text,
-      events: presentationCollector.getEvents(),
+      events: activeAttempt.collector.getEvents(),
     };
   } catch (error) {
     if (options.abortSignal.aborted) throw error;

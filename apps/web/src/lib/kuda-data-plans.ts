@@ -6,6 +6,7 @@ import {
   type NetworkProvider,
 } from '@/lib/kuda';
 import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-messages';
+import { logger } from '@/lib/logger';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -142,12 +143,23 @@ async function loadDataProviders(): Promise<Biller[] | null> {
   let providers: Biller[];
   try {
     providers = await getDataProviders();
-  } catch {
+  } catch (error) {
     lastFailedDataPlanFetchAt = now;
+    logger.warn({
+      message: 'Kuda data plan list unavailable',
+      error: error instanceof Error ? error.message : String(error),
+      hasLastGoodList: lastGood !== null,
+      type: 'data',
+    });
     return lastGood;
   }
   if (collectDataPlanCandidates(providers).length === 0) {
     lastFailedDataPlanFetchAt = now;
+    logger.warn({
+      message: 'Kuda data plan list came back without packages',
+      hasLastGoodList: lastGood !== null,
+      type: 'data',
+    });
     return lastGood;
   }
   lastFailedDataPlanFetchAt = undefined;
@@ -259,6 +271,10 @@ export async function resolveKudaDataPlanForPurchase({
   );
 
   if (amountMatchesForProvider.length === 1) {
+    const { item } = amountMatchesForProvider[0];
+    if (item.isAmountFixed && item.amount < IMPLAUSIBLE_PLAN_PRICE_NAIRA) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     return mapResolvedCandidate(
       amountMatchesForProvider[0],
       originalDataPlanCode,

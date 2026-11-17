@@ -9,6 +9,11 @@ import {
 type KudaModule = typeof import('./kuda');
 
 const mockGetDataProviders = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/logger', () => ({
+  logger: { warn: (...args: unknown[]) => mockLoggerWarn(...args) },
+}));
 
 vi.mock('./kuda', async (importOriginal) => {
   const actual = await importOriginal<KudaModule>();
@@ -72,6 +77,9 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
           networkProvider: NetworkProvider.MTN,
         })
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ hasLastGoodList: false, type: 'data' })
+      );
     });
 
     it('fails closed when Kuda answers with billers but no packages', async () => {

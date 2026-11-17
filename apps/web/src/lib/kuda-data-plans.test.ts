@@ -206,4 +206,34 @@ describe('resolveKudaDataPlanForPurchase', () => {
       })
     ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
+
+  it('cannot confirm an implausibly low price matched by provider and amount', async () => {
+    mockGetDataProviders.mockResolvedValueOnce([
+      {
+        billerId: '2082751a-89c7-4862-86c5-5498194b32f3',
+        billerName: 'MTN',
+        billerType: 'Internet Data',
+        categoryId: 'data',
+        categoryName: 'Internet Data',
+        billItems: [
+          {
+            amount: 5,
+            isAmountFixed: true,
+            itemCode: 'MTN-35GB-MONTHLY',
+            itemCurrencySymbol: 'NGN',
+            itemFee: 0,
+            itemName: 'MTN 3.5GB Monthly',
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 5,
+        dataPlanCode: '2082751a-89c7-4862-86c5-5498194b32f3',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
 });

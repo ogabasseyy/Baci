@@ -110,6 +110,29 @@ describe('Monnify bill purchase errors', () => {
       );
     }
 
+    it.each([
+      [401, 'Unauthorized'],
+      [403, 'Forbidden'],
+    ])('marks an authentication rejection (%i) as definite', async (status, statusText) => {
+      mockHttpError(status, statusText, 'Access denied');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: true,
+        status: 'failed',
+      });
+    });
+
+    it.each([
+      [401, 'Unauthorized'],
+      [403, 'Forbidden'],
+    ])('never marks an authentication answer (%i) that reports a duplicate as definite', async (status, statusText) => {
+      mockHttpError(status, statusText, 'Duplicate vendReference');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
     it('never hands a 408 timeout to Kuda', async () => {
       mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 

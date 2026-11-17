@@ -3730,6 +3730,7 @@ describe('fulfillPendingVtuTransaction', () => {
       updatePayloads,
     });
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await fulfillPendingVtuTransaction({
       supabase,
       transactionId: 'vtu-1',
@@ -3759,6 +3760,14 @@ describe('fulfillPendingVtuTransaction', () => {
         transaction_id: 'kuda-airtime-1',
       })
     );
+    // No provider text in logs, only a fixed label and the row id.
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(
+      'Monnify business failure'
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), {
+      transactionId: 'vtu-1',
+    });
+    warnSpy.mockRestore();
   });
 
   it('does not fall back to Kuda for a Monnify failure it did not explicitly refuse', async () => {
@@ -3802,6 +3811,7 @@ describe('fulfillPendingVtuTransaction', () => {
       updatePayloads,
     });
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await fulfillPendingVtuTransaction({
       supabase,
       transactionId: 'vtu-1',
@@ -3809,6 +3819,14 @@ describe('fulfillPendingVtuTransaction', () => {
 
     expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     expect(result).toMatchObject({ reference: 'VTU-123', status: 'failed' });
+    // No provider text in logs, only a fixed label and the row id.
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(
+      'Vend request failed'
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), {
+      transactionId: 'vtu-1',
+    });
+    warnSpy.mockRestore();
   });
 
   it('restores an airtime Monnify unknown outcome to pending without calling Kuda', async () => {

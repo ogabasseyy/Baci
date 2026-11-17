@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { ManualPrimaryGoalSection } from './ManualPrimaryGoalSection';
@@ -6,6 +6,10 @@ import {
   rememberGoalSetupPhase,
   resetGoalSetupMemory,
 } from './savings/goal-setup-memory';
+import {
+  rememberWalletHeadStart,
+  takeWalletHeadStart,
+} from './savings/pending-wallet-head-start';
 import type { SavingsPlanFundingPhase } from './savings/use-savings-plan-funding';
 
 let mockPhase: SavingsPlanFundingPhase = 'loading';
@@ -123,4 +127,53 @@ it('shows no amount entry for a plan still being set up', () => {
   mockPhase = 'pending';
   renderSection();
   expect(screen.queryByText('contribution-actions')).toBeNull();
+});
+
+describe('a head start ticked "pay now" when the plan was created', () => {
+  function renderWith(onAddSavings: () => void) {
+    render(
+      <ManualPrimaryGoalSection
+        addAmount="100"
+        colors={Colors.dark}
+        goal={goal}
+        isAdding={false}
+        isFundPending={false}
+        merchantId="merchant-a"
+        onAddAmountChange={jest.fn()}
+        onAddSavings={onAddSavings}
+        onFundWallet={jest.fn()}
+        remainingAmount={250000}
+        usesPlanFunding={false}
+        userId="customer-a"
+        visible
+        walletBalance={220}
+      />
+    );
+  }
+
+  it('says it is waiting while the plan gets ready, and moves nothing', () => {
+    rememberWalletHeadStart('goal-a', 100);
+    mockPhase = 'pending';
+    const onAddSavings = jest.fn();
+    renderWith(onAddSavings);
+    expect(
+      screen.getByText(/Your ₦100 head start is ready to move/)
+    ).toBeOnTheScreen();
+    expect(onAddSavings).not.toHaveBeenCalled();
+    takeWalletHeadStart('goal-a');
+  });
+
+  it('offers one Move button instead of the amount entry once ready', () => {
+    rememberWalletHeadStart('goal-a', 100);
+    mockPhase = 'ready';
+    const onAddSavings = jest.fn();
+    renderWith(onAddSavings);
+    expect(screen.queryByText('contribution-actions')).toBeNull();
+    expect(onAddSavings).not.toHaveBeenCalled();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Move ₦100 from my wallet' })
+    );
+    expect(onAddSavings).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
+  });
 });

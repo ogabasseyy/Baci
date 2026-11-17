@@ -1,4 +1,4 @@
-import { Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
 import { lastGoalSetupPhase } from './savings/goal-setup-memory';
@@ -33,22 +33,22 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
     // Setup starts with the plan, so "slow" counts from its creation.
     pendingSince: goal.created_at ? Date.parse(goal.created_at) : null,
   });
-  // A head start the customer chose to pay now: started here, once, as soon
-  // as the plan is ready, so they only confirm their PIN.
-  const waitingHeadStart = useAutoWalletHeadStart({
+  // A head start the customer ticked "pay now" for: one tap moves exactly
+  // that amount once the plan is ready, instead of the amount entry.
+  const headStart = useAutoWalletHeadStart({
     goalId: goal.id,
     ready: phase === 'ready',
     addAmount: props.addAmount,
-    busy: props.isAdding || props.isFundPending,
+    onAddAmountChange: props.onAddAmountChange,
     onAddSavings: props.onAddSavings,
   });
+  const busy = props.isAdding || props.isFundPending;
   return (
     <>
-      {waitingHeadStart !== null && phase !== 'ready' ? (
-        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-          Your {formatNgnCurrency(waitingHeadStart)} head start moves from your
-          wallet once your plan is ready. Keep this open to confirm with your
-          PIN.
+      {headStart.waiting !== null && phase !== 'ready' ? (
+        <Text style={[styles.note, { color: colors.textSecondary }]}>
+          Your {formatNgnCurrency(headStart.waiting)} head start is ready to
+          move from your wallet as soon as your plan is ready.
         </Text>
       ) : null}
       <SavingsPlanStatusNote
@@ -64,7 +64,43 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
       {/* The amount entry shows only once the plan's savings wallet is known
           to be ready (now, or on this app's last read of it). The transfer
           itself is refused server-side until that wallet exists. */}
-      {phase === 'ready' ? (
+      {phase === 'ready' && headStart.waiting !== null ? (
+        <View style={styles.headStart}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Move ${formatNgnCurrency(headStart.waiting)} from my wallet`}
+            accessibilityState={{ disabled: busy || !headStart.canMove }}
+            disabled={busy || !headStart.canMove}
+            onPress={headStart.move}
+            style={[
+              styles.moveButton,
+              { backgroundColor: colors.primary },
+              busy || !headStart.canMove ? styles.disabled : null,
+            ]}
+          >
+            <Text
+              style={[styles.moveText, { color: colors.primaryForeground }]}
+            >
+              Move {formatNgnCurrency(headStart.waiting)} from my wallet
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={headStart.dismiss}
+            disabled={busy}
+          >
+            <Text
+              style={[
+                styles.note,
+                styles.center,
+                { color: colors.textSecondary },
+              ]}
+            >
+              Choose a different amount
+            </Text>
+          </Pressable>
+        </View>
+      ) : phase === 'ready' ? (
         <WalletSavingsContributionFlow
           addAmount={props.addAmount}
           colors={colors}
@@ -84,3 +120,12 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  note: { fontSize: 13, lineHeight: 18 },
+  center: { textAlign: 'center' },
+  headStart: { gap: 12 },
+  moveButton: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
+  moveText: { fontSize: 17, fontWeight: '700' },
+  disabled: { opacity: 0.5 },
+});

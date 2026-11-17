@@ -5,36 +5,55 @@ import {
 } from './pending-wallet-head-start';
 
 /**
- * Starts the wallet transfer for a head start the customer ticked "pay now"
- * for when creating the plan. It fires once, only when the plan's savings
- * wallet is ready, nothing is already moving, and the prefilled amount is
- * still exactly the head start (an edited amount is left to the customer).
- * The transfer itself asks for the wallet PIN and is checked server-side.
+ * A head start the customer ticked "pay now" for when creating the plan.
+ * Once the plan's savings wallet is ready the sheet offers a single
+ * "Move ₦X from my wallet" button instead of the amount entry, so the
+ * customer never re-enters the amount. Money only moves on that tap (then
+ * the wallet PIN where required, checked server-side), never by itself.
  *
- * Returns the head start still waiting to move, or null.
+ * The remembered entry is kept until the customer taps, so a sheet that
+ * closes, a wallet still loading, or an amount that needs re-prefilling
+ * never drops the head start silently.
  */
 export function useAutoWalletHeadStart({
   goalId,
   ready,
   addAmount,
-  busy,
+  onAddAmountChange,
   onAddSavings,
 }: {
   goalId: string;
   ready: boolean;
   addAmount: string;
-  busy: boolean;
+  onAddAmountChange: (value: string) => void;
   onAddSavings: () => void;
-}): number | null {
+}) {
   const [waiting, setWaiting] = useState(() => pendingWalletHeadStart(goalId));
   useEffect(() => {
     setWaiting(pendingWalletHeadStart(goalId));
   }, [goalId]);
+  const matches = waiting !== null && Number(addAmount) === waiting;
+  // Keep the sheet's amount on the head start the customer ticked.
   useEffect(() => {
-    if (waiting === null || !ready || busy) return;
-    const amount = takeWalletHeadStart(goalId);
-    setWaiting(null);
-    if (amount !== null && Number(addAmount) === amount) onAddSavings();
-  }, [waiting, ready, busy, goalId, addAmount, onAddSavings]);
-  return waiting;
+    if (ready && waiting !== null && Number(addAmount) !== waiting)
+      onAddAmountChange(String(waiting));
+  }, [ready, waiting, addAmount, onAddAmountChange]);
+  return {
+    /** The head start still waiting for the customer's tap, or null. */
+    waiting,
+    /** True once the button may start the transfer. */
+    canMove: ready && matches,
+    /** Starts the PIN-confirmed transfer for exactly the ticked amount. */
+    move: () => {
+      if (!ready || !matches) return;
+      takeWalletHeadStart(goalId);
+      setWaiting(null);
+      onAddSavings();
+    },
+    /** The customer wants a different amount: show the normal entry. */
+    dismiss: () => {
+      takeWalletHeadStart(goalId);
+      setWaiting(null);
+    },
+  };
 }

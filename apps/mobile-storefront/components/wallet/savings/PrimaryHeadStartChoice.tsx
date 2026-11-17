@@ -20,9 +20,9 @@ type Props = {
 };
 
 /**
- * PiggyVest head start on the review step. Ticked, it moves from the wallet
- * as soon as the plan is ready (the customer only confirms their PIN), so
- * there is no separate amount screen. When the wallet holds less than the
+ * PiggyVest head start on the review step. Ticked, the plan sheet offers a
+ * single "Move ₦X from my wallet" button once the plan is ready, so there is
+ * no amount to enter again. When the wallet holds less than the
  * head start, the wallet's account number shows here so the customer can top
  * up first, or untick to add the head start later.
  */
@@ -58,7 +58,7 @@ export function PrimaryHeadStartChoice({
           </Text>
           <Text style={[styles.note, { color: colors.textSecondary }]}>
             {payNow
-              ? `${formatNgnCurrency(walletBalance)} available. You'll confirm with your PIN once your plan is ready.`
+              ? `${formatNgnCurrency(walletBalance)} available. Once your plan is ready (about a minute), one tap moves it.`
               : 'You can add it later from your wallet.'}
           </Text>
         </View>

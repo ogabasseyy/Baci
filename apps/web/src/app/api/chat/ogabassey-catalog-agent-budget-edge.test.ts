@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('ai', () => ({ generateText: mocks.generateText }));
-vi.mock('./chat-tool-runtime', () => ({
-  createAiSdkAgenticChatTools: mocks.createTools,
+vi.mock('./chat-catalog-tools', () => ({
+  createReadOnlyCatalogTools: mocks.createTools,
 }));
 
 import { runOgabasseyCatalogAgent } from './ogabassey-catalog-agent';

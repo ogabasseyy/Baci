@@ -146,3 +146,16 @@ describe('bugfix: copular token-expiry wording and bare "authentication" text', 
     });
   });
 });
+
+describe('bugfix: business rejection naming a vend reference in text stays off Kuda', () => {
+  it('keeps "Insufficient wallet balance; vendReference=MFBP-1" off Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Insufficient wallet balance; vendReference=MFBP-1',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

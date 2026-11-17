@@ -23,6 +23,7 @@ import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
+import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
@@ -147,6 +148,7 @@ export async function purchaseBill(
           !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
           !reportsMonnifyUnexpectedError(envelopeText) &&
           !hasMonnifyVendEvidence(envelope) &&
+          !mentionsMonnifyVendEvidence(fullAnswer) &&
           isMonnifyKnownVendRefusalText(fullAnswer) &&
           !isMonnifyVendOutcomeText(fullAnswer) &&
           !isMonnifyDuplicateReferenceText(fullAnswer),

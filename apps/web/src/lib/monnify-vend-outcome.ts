@@ -9,9 +9,21 @@
 const MONNIFY_VEND_OUTCOME_PATTERN =
   /unavailable|\bunsuccessful|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)\s+(?:be\s+|been\s+)?)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress)\b/i;
 
-/** Whether a Monnify answer mentions a vend outcome or an unavailable service. */
+/**
+ * Whether a Monnify answer mentions a vend outcome or an unavailable service.
+ * Machine-style wording ("transaction_failed", "vend-in-progress") is read
+ * with its "_" and "-" separators turned into spaces as well. camelCase is
+ * deliberately not split: envelope keys such as requestSuccessful would
+ * then read as an outcome.
+ */
 export function isMonnifyVendOutcomeText(
   text: string | null | undefined
 ): boolean {
-  return !!text && MONNIFY_VEND_OUTCOME_PATTERN.test(text);
+  if (!text) {
+    return false;
+  }
+  return (
+    MONNIFY_VEND_OUTCOME_PATTERN.test(text) ||
+    MONNIFY_VEND_OUTCOME_PATTERN.test(text.replace(/[_-]+/g, ' '))
+  );
 }

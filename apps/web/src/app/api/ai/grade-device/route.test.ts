@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   generateContent: vi.fn(),
-  checkCsrf: vi.fn(),
+  verifyCsrf: vi.fn(),
   resolveMerchant: vi.fn(),
   productQuery: {
     eq: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock('@google/generative-ai', () => ({
 
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 
-vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.checkCsrf }));
+vi.mock('@/lib/csrf', () => ({ verifyCsrfToken: mocks.verifyCsrf }));
 
 vi.mock('@/lib/storefront-merchant', () => ({
   resolveStorefrontMerchantFromRequest: mocks.resolveMerchant,
@@ -74,7 +74,7 @@ function aiAnswers(answer: unknown) {
 describe('POST /api/ai/grade-device', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.checkCsrf.mockResolvedValue({ valid: true });
+    mocks.verifyCsrf.mockResolvedValue(true);
     vi.stubEnv('GEMINI_API_KEY', 'test-key');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     aiAnswers({
@@ -98,7 +98,7 @@ describe('POST /api/ai/grade-device', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.checkCsrf).not.toHaveBeenCalled();
+    expect(mocks.verifyCsrf).not.toHaveBeenCalled();
     expect(body).toEqual({
       success: true,
       data: {
@@ -114,7 +114,7 @@ describe('POST /api/ai/grade-device', () => {
   });
 
   it('rejects a browser request that carries cookies but no valid CSRF token', async () => {
-    mocks.checkCsrf.mockResolvedValue({ valid: false });
+    mocks.verifyCsrf.mockResolvedValue(false);
     const request = postWithCookies(videoUpload());
 
     const response = await POST(request);
@@ -124,13 +124,24 @@ describe('POST /api/ai/grade-device', () => {
     expect(mocks.generateContent).not.toHaveBeenCalled();
   });
 
+  it('does not let an Authorization header waive CSRF for a cookie-carrying request', async () => {
+    mocks.verifyCsrf.mockResolvedValue(false);
+    const request = postWithCookies(videoUpload());
+    request.headers.set('authorization', 'Bearer anything');
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(403);
+    expect(mocks.generateContent).not.toHaveBeenCalled();
+  });
+
   it('grades a browser request whose CSRF token is valid', async () => {
     const request = postWithCookies(videoUpload());
 
     const response = await POST(request);
 
     expect(response.status).toBe(200);
-    expect(mocks.checkCsrf).toHaveBeenCalledWith(request);
+    expect(mocks.verifyCsrf).toHaveBeenCalledWith(request);
   });
 
   it('prices only against the resolved store’s active products', async () => {

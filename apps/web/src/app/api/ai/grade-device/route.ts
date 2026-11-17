@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { type NextRequest, NextResponse } from 'next/server';
-import { checkCsrfProtection } from '@/lib/csrf';
+import { verifyCsrfToken } from '@/lib/csrf';
 import { deviceGradingAiResultSchema } from '@/schemas/device-grading';
 import { estimateTradeInValue } from './estimate-trade-in-value';
 import {
@@ -69,16 +69,14 @@ function parseGrading(text: string): unknown {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Double-submit CSRF only when the request carries cookies, mirroring
+    // Double-submit CSRF whenever the request carries cookies, mirroring
     // /api/search/assist: the native app posts no cookies and has no ambient
     // authority to abuse, while a cross-site page must not deputize a
-    // shopper's browser into spending the AI budget. The web page sends the
-    // token via fetchWithCsrf.
-    if (request.headers.get('cookie')) {
-      const { valid, response } = await checkCsrfProtection(request);
-      if (!valid) {
-        return response ?? errorResponse('CSRF validation failed', 403);
-      }
+    // shopper's browser into spending the AI budget. The token is verified
+    // directly, so an Authorization header cannot waive it for a
+    // cookie-carrying request. The web page sends it via fetchWithCsrf.
+    if (request.headers.get('cookie') && !(await verifyCsrfToken(request))) {
+      return errorResponse('CSRF validation failed', 403);
     }
 
     let formData: FormData;

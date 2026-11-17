@@ -91,9 +91,16 @@ describe('savings contribution actions', () => {
       />
     );
 
-    expect(screen.getByText('Adding...')).toBeOnTheScreen();
+    // The progress cover is announced; the busy button under it is hidden
+    // from screen readers but still disabled.
+    expect(screen.getByText('Adding ₦500 to your plan…')).toBeOnTheScreen();
     expect(
-      screen.getByRole('button', { name: 'Confirm savings top-up' })
+      screen.getByText('Adding...', { includeHiddenElements: true })
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByLabelText('Confirm savings top-up', {
+        includeHiddenElements: true,
+      })
     ).toHaveAccessibilityState({ disabled: true, busy: true });
   });
 });

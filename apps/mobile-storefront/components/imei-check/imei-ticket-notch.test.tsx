@@ -8,4 +8,9 @@ describe('ImeiTicketNotch', () => {
     const { toJSON } = render(<ImeiTicketNotch colors={Colors.light} />);
     expect(JSON.stringify(toJSON())).toContain(Colors.light.background);
   });
+
+  it('lets touches through to the card under it', () => {
+    const { toJSON } = render(<ImeiTicketNotch colors={Colors.light} />);
+    expect(JSON.stringify(toJSON())).toContain('"pointerEvents":"none"');
+  });
 });
